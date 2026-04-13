@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pydantic
+pandas
+numpy
+pyyaml
+python-dotenv
+pytest
