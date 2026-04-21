@@ -1,0 +1,30 @@
+/*
+ * NavRail — left column of the persistent frame.
+ * Default width 64px (collapsed). Widens automatically inside /screener
+ * because the vertical stepper labels need more room.
+ */
+
+.rail {
+  grid-area: navrail;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: var(--frame-navrail-w);
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.railExpanded {
+  width: 220px;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}

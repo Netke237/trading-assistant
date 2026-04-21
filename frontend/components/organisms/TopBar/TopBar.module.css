@@ -1,0 +1,78 @@
+/*
+ * TopBar — spec §4. 48px, --bg-surface, bottom border.
+ * Drift log Screen 0 #2/#3, Screen 1 #1, Screen 5 #2, Screen 6 #3.
+ */
+
+.bar {
+  grid-area: topbar;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--frame-topbar-h);
+  padding: 0 var(--space-5);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.scanContext {
+  /* center-left zone */
+  justify-self: start;
+  min-width: 0;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-family: var(--font-dm), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+
+.pillIdle {
+  background: var(--neutral-bg);
+  color: var(--neutral);
+  border-color: var(--neutral);
+}
+
+.pillScanning {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  animation: pulse 1400ms ease-in-out infinite;
+}
+
+.pillCompleted {
+  background: var(--pass-bg);
+  color: var(--pass);
+  border-color: var(--pass-border);
+}
+
+.pillFailed {
+  background: var(--reject-bg);
+  color: var(--reject);
+  border-color: var(--reject-border);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.65; }
+}
+
+.regimeGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}

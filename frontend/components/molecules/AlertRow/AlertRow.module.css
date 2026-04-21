@@ -1,0 +1,37 @@
+/*
+ * AlertRow — compact left-border colored row for dashboard alerts.
+ * Spec §Screen 1 ALERTS card.
+ */
+
+.row {
+  display: grid;
+  grid-template-columns: 16px auto 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--border-subtle);
+  background: transparent;
+  min-height: 36px;
+}
+
+.row + .row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.info     { border-left-color: var(--accent); }
+.action   { border-left-color: var(--caution); }
+.critical { border-left-color: var(--reject); }
+
+.icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-secondary);
+}
+
+.info    .icon { color: var(--accent); }
+.action  .icon { color: var(--caution); }
+.critical .icon { color: var(--reject); }
+
+.time {
+  text-align: right;
+}

@@ -1,0 +1,232 @@
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  max-width: 1500px;
+  position: relative;
+  padding-bottom: 80px; /* leave room for sticky footer */
+}
+
+.heading {
+  display: flex;
+  align-items: baseline;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.subnav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.subnavItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  text-align: left;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.subnavItem:hover { background: var(--bg-surface-2); }
+.subnavActive     { background: var(--bg-surface-2); box-shadow: inset 0 0 0 1px var(--accent); }
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3);
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--accent);
+}
+
+.defaultTag {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 6px;
+  font-family: var(--font-dm);
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.sumRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-md);
+}
+
+.sumRow > :first-child { flex: 1; }
+
+.btnInline {
+  height: 28px;
+  padding: 0 var(--space-3);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-dm);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.btnInline:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.row:last-child { border-bottom: 0; }
+
+.rowLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowControl {
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  width: 100%;
+  max-width: 360px;
+  height: 34px;
+  padding: 0 var(--space-3);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-dm);
+  font-size: 13px;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.slider {
+  flex: 1 1 auto;
+  max-width: 260px;
+}
+
+.sliderRow {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+}
+
+.sliderValue { min-width: 32px; text-align: right; }
+
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--bg-surface-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+
+.toggleOn {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggleDot {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-primary);
+  border-radius: 50%;
+  transition: left 120ms;
+}
+
+.toggleOn .toggleDot {
+  left: 20px;
+  background: #fff;
+}
+
+.footer {
+  position: sticky;
+  bottom: 0;
+  margin: 0 calc(-1 * var(--space-6));
+  padding: var(--space-3) var(--space-6);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.btn {
+  height: 34px;
+  padding: 0 var(--space-4);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-dm);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--bg-surface-2);
+  border-color: var(--border-strong);
+}
+
+.btnPrimary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.btnPrimary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}

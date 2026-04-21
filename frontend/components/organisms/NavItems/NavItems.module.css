@@ -1,0 +1,43 @@
+/*
+ * NavItems — the 6 nav links displayed when NOT inside /screener.
+ * Spec §4 Left Nav Rail: 56px item height, 3px left accent border when active.
+ */
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 56px;
+  border-left: 3px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.item:hover {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+
+.itemActive {
+  border-left-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.itemActive:hover {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+}

@@ -1,0 +1,15 @@
+/*
+ * Title — Sora Bold ONLY. Reserved for the BAMENDJOU wordmark and H1 page titles.
+ * Drift log G1, Screen 0 #5.
+ */
+
+.title {
+  font-family: var(--font-sora), system-ui, sans-serif;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.s20 { font-size: 20px; line-height: 1.2; }
+.s24 { font-size: 24px; line-height: 1.2; }
+.s32 { font-size: 32px; line-height: 1.15; }

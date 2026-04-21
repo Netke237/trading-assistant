@@ -1,0 +1,26 @@
+.star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 120ms, background 120ms;
+}
+
+.star:hover {
+  color: var(--text-secondary);
+  background: var(--bg-surface-2);
+}
+
+.starOn {
+  color: var(--caution);
+}
+
+.starOn:hover {
+  color: var(--caution);
+}

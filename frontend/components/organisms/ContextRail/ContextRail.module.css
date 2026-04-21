@@ -1,0 +1,25 @@
+/*
+ * ContextRail — right column. 300px wide. Per-page content via parallel route slot.
+ * Section headers: DM Sans 10 SemiBold uppercase 0.08em.
+ */
+
+.rail {
+  grid-area: contextrail;
+  width: var(--frame-contextrail-w);
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-subtle);
+  overflow-y: auto;
+}
+
+.section {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sectionHeader {
+  padding: 12px var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sectionBody {
+  padding: var(--space-3) var(--space-4);
+}

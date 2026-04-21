@@ -1,0 +1,50 @@
+/*
+ * StatusBadge — spec §5 STATUS BADGE.
+ * Pill, 4px radius, DM Sans 11px SemiBold uppercase, 2px 8px padding, 1px border.
+ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-family: var(--font-dm), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.pass {
+  background: var(--pass-bg);
+  color: var(--pass);
+  border-color: var(--pass-border);
+}
+
+.caution {
+  background: var(--caution-bg);
+  color: var(--caution);
+  border-color: var(--caution-border);
+}
+
+.reject {
+  background: var(--reject-bg);
+  color: var(--reject);
+  border-color: var(--reject-border);
+}
+
+.pending {
+  background: var(--neutral-bg);
+  color: var(--neutral);
+  border-color: var(--neutral);
+}
+
+.noData {
+  background: var(--neutral-bg);
+  color: var(--text-dim);
+  border-color: var(--border-subtle);
+}

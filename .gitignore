@@ -24,3 +24,10 @@ pnpm-lock.yaml
 # IDE
 .vscode/
 .idea/
+
+# Build artifacts
+*.tsbuildinfo
+
+# Session / tool metadata
+.claude/
+.superpowers/

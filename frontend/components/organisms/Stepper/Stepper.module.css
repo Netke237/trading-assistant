@@ -1,0 +1,42 @@
+/*
+ * Stepper — vertical 7-step workflow. Drift log G4, Screen 2 #2/#3/#5, Screen 3 #1/#2.
+ * Connecting vertical line + 7 StepIndicator items + Exit Workflow link.
+ */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4) var(--space-2);
+  gap: var(--space-1);
+  position: relative;
+}
+
+.stepRow {
+  position: relative;
+}
+
+/* Vertical line connects circles — offset to align with circle center (22/2 = 11) */
+.stepRow + .stepRow::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-3) + 11px); /* padding-left of step item (12px) + half-circle (11px) */
+  top: -6px;
+  width: 1px;
+  height: 6px;
+  background: var(--border-subtle);
+  pointer-events: none;
+}
+
+.exit {
+  margin-top: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+
+.exit:hover {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}

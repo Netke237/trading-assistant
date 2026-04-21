@@ -1,0 +1,58 @@
+/*
+ * SectionCard — bento card. Spec §5 SECTION CARD.
+ */
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.titleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.countBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.actionLink {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.actionLink:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.body {
+  padding: 0 var(--space-4) var(--space-4);
+}

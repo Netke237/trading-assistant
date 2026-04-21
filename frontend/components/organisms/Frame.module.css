@@ -1,0 +1,56 @@
+/*
+ * Frame — CSS grid layout for the persistent shell.
+ * Spec §4 Persistent Frame.
+ *
+ * Grid:
+ *   topbar        topbar       topbar
+ *   navrail       workspace    contextrail
+ */
+
+.frame {
+  display: grid;
+  grid-template-areas:
+    "topbar      topbar        topbar"
+    "navrail     workspace     contextrail";
+  grid-template-rows: var(--frame-topbar-h) 1fr;
+  grid-template-columns: auto 1fr auto;
+  height: 100vh;
+  min-width: 1280px; /* spec: desktop-only ≥1280 */
+  background: var(--bg-base);
+}
+
+.workspace {
+  grid-area: workspace;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.workspace:focus-visible {
+  outline: none;
+}
+
+/* Skip link — visible only when focused via keyboard (a11y). */
+.skipLink {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1000;
+  padding: 8px 12px;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: var(--radius-md);
+  font-family: var(--font-dm);
+  font-size: 13px;
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 120ms;
+}
+
+.skipLink:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}

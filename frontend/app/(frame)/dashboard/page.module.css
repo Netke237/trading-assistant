@@ -1,0 +1,184 @@
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  max-width: none;
+}
+
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+/* ---------- regime banner ---------- */
+
+.regime {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+
+.regime_PASS    { border-left: 3px solid var(--pass);    }
+.regime_CAUTION { border-left: 3px solid var(--caution); }
+.regime_REJECT  { border-left: 3px solid var(--reject);  }
+
+.regimeLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.regimeMetrics {
+  display: flex;
+  gap: var(--space-5);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 96px;
+}
+
+/* ---------- bento row ---------- */
+
+.bento {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.tableHeader {
+  display: grid;
+  align-items: center;
+  padding: 0 var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-1);
+}
+
+.portfolioStats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: var(--space-2) 0;
+}
+
+.positions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.posRow {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.alertList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ---------- second bento row (news + contracts) ---------- */
+
+.bento2 {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+/* News */
+
+.newsList {
+  display: flex;
+  flex-direction: column;
+}
+
+.newsItem {
+  display: grid;
+  grid-template-columns: 6px 60px 1fr auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.newsItem:last-child { border-bottom: 0; }
+
+.newsDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 7px;
+}
+
+.newsDot_bull    { background: var(--pass); }
+.newsDot_bear    { background: var(--reject); }
+.newsDot_neutral { background: var(--text-dim); }
+
+.newsMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Contracts overview */
+
+.contractsList {
+  display: flex;
+  flex-direction: column;
+}
+
+.contractRow {
+  display: grid;
+  grid-template-columns: 56px 1fr 52px 64px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.contractRow:last-child { border-bottom: 0; }
+
+.contractCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.contractCell > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contractRight {
+  text-align: right;
+}

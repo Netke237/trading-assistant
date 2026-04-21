@@ -1,0 +1,8 @@
+.chart {
+  width: 100%;
+  position: relative;
+}
+
+.chart > div {
+  width: 100% !important;
+}

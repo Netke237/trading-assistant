@@ -1,0 +1,49 @@
+/*
+ * SymbolHeader — ticker + company + price + status badge + direction pill.
+ * Used in Screener Step 4 right panel and TradeCard. Drift log Screen 2 #8.
+ */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.leftGroup {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ticker {
+  /* Size is driven by the `size` prop via Data's own class. */
+}
+
+.direction {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-2);
+  font-family: var(--font-dm), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+}
+
+.bullish {
+  color: var(--pass);
+  border-color: var(--pass-border);
+  background: var(--pass-bg);
+}
+
+.bearish {
+  color: var(--reject);
+  border-color: var(--reject-border);
+  background: var(--reject-bg);
+}

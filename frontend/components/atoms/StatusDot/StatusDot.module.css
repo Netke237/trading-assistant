@@ -1,0 +1,15 @@
+.dot {
+  display: inline-block;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sm { width: 8px;  height: 8px; }
+.md { width: 12px; height: 12px; }
+
+.pass    { background: var(--pass); }
+.caution { background: var(--caution); }
+.reject  { background: var(--reject); }
+.pending { background: var(--neutral); }
+.noData  { background: var(--text-dim); }
+.accent  { background: var(--accent); }

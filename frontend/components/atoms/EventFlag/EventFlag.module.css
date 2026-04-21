@@ -1,0 +1,20 @@
+.flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-dm), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.distant  { color: var(--text-dim); }
+.near     { color: var(--caution); }
+.imminent { color: var(--reject); }

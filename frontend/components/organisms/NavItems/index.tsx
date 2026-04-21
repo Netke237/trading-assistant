@@ -1,0 +1,119 @@
+'use client';
+
+/*
+ * NavItems — 6 nav links (Dashboard · Screener · Watchlist · Portfolio · Calendar · Settings).
+ * Active state derived from pathname. Drift log Screen 0 #2, Screen 5 #5, Screen 6 #5.
+ */
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Text } from '@/components/primitives';
+import styles from './NavItems.module.css';
+
+interface NavItemDef {
+  label: string;
+  /** base path prefix — matches itself and any nested route. */
+  match: string;
+  href: string;
+  Icon: React.ComponentType;
+}
+
+const ITEMS: NavItemDef[] = [
+  { label: 'Dashboard', match: '/dashboard', href: '/dashboard', Icon: DashboardIcon },
+  { label: 'Screener',  match: '/screener',  href: '/screener',  Icon: ScreenerIcon  },
+  { label: 'Watchlist', match: '/watchlist', href: '/watchlist', Icon: WatchlistIcon },
+  { label: 'Portfolio', match: '/portfolio', href: '/portfolio', Icon: PortfolioIcon },
+  { label: 'Calendar',  match: '/calendar',  href: '/calendar',  Icon: CalendarIcon  },
+  { label: 'Settings',  match: '/settings',  href: '/settings',  Icon: SettingsIcon  },
+];
+
+export function NavItems() {
+  const pathname = usePathname() ?? '';
+
+  return (
+    <nav className={styles.list} aria-label="Primary">
+      {ITEMS.map((it) => {
+        const active = pathname.startsWith(it.match);
+        return (
+          <Link
+            key={it.label}
+            href={it.href}
+            className={[styles.item, active ? styles.itemActive : null].filter(Boolean).join(' ')}
+            aria-current={active ? 'page' : undefined}
+          >
+            <span className={styles.icon}><it.Icon /></span>
+            <Text size={10} tone={active ? 'accent' : 'secondary'}>
+              {it.label}
+            </Text>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+/* ─────────── Icons (single-color, stroke via currentColor) ─────────── */
+
+function svgProps() {
+  return {
+    viewBox: '0 0 24 24',
+    fill: 'none' as const,
+    stroke: 'currentColor',
+    strokeWidth: 1.75,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true as const,
+    style: { width: '100%', height: '100%' },
+  };
+}
+
+function DashboardIcon() {
+  return (
+    <svg {...svgProps()}>
+      <rect x="3"  y="3"  width="7" height="9" rx="1" />
+      <rect x="14" y="3"  width="7" height="5" rx="1" />
+      <rect x="14" y="12" width="7" height="9" rx="1" />
+      <rect x="3"  y="16" width="7" height="5" rx="1" />
+    </svg>
+  );
+}
+function ScreenerIcon() {
+  return (
+    <svg {...svgProps()}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.35-4.35" />
+    </svg>
+  );
+}
+function WatchlistIcon() {
+  return (
+    <svg {...svgProps()}>
+      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+function PortfolioIcon() {
+  return (
+    <svg {...svgProps()}>
+      <rect x="3" y="6" width="18" height="15" rx="2" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+function CalendarIcon() {
+  return (
+    <svg {...svgProps()}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  );
+}
+function SettingsIcon() {
+  return (
+    <svg {...svgProps()}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}

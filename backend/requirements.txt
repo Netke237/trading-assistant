@@ -6,3 +6,4 @@ numpy
 pyyaml
 python-dotenv
 pytest
+claude-agent-sdk

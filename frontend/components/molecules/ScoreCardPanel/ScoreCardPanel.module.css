@@ -1,0 +1,38 @@
+/*
+ * ScoreCardPanel — title + N ScoreBars + total + confidence badge.
+ * Spec §5 TRADE CARD / Stock + Contract Scorecards.
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.totalGroup {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}

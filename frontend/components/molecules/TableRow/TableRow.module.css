@@ -1,0 +1,58 @@
+/*
+ * TableRow — status-tinted row. Drift log G3, Screen 1 watchlist/portfolio.
+ * Spec §5 TABLE ROW: 44px, bottom border, 2px left border colored by status.
+ */
+
+.row {
+  display: grid;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: 0 var(--space-3) 0 10px; /* left padding accounts for 2px border */
+  border-bottom: 1px solid var(--border-subtle);
+  border-left: 2px solid var(--border-subtle);
+  background: transparent;
+  cursor: pointer;
+  transition: background 100ms ease;
+  color: var(--text-primary);
+}
+
+.row:hover {
+  background: var(--bg-surface-2);
+}
+
+.pass {
+  background: var(--pass-bg);
+  border-left-color: var(--pass);
+}
+.pass:hover { background: var(--bg-surface-2); }
+
+.caution {
+  background: var(--caution-bg);
+  border-left-color: var(--caution);
+}
+.caution:hover { background: var(--bg-surface-2); }
+
+.reject {
+  background: transparent;
+  border-left-color: var(--border-subtle);
+  opacity: 0.6;
+}
+.reject:hover { background: var(--bg-surface-2); opacity: 0.85; }
+
+.pending {
+  background: var(--neutral-bg);
+  border-left-color: var(--neutral);
+}
+.pending:hover { background: var(--bg-surface-2); }
+
+.noData {
+  background: transparent;
+  border-left-color: var(--border-subtle);
+  color: var(--text-dim);
+}
+
+.selected {
+  background: var(--bg-surface-3);
+}
+.selected:hover { background: var(--bg-surface-3); }

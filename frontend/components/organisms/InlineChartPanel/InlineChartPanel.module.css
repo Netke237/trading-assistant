@@ -1,0 +1,29 @@
+.panel {
+  overflow: hidden;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.titleGroup {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.chartArea {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}

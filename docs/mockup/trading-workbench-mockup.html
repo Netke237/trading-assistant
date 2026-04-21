@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Options Screener — Trading Workbench</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0e11;
+      --surface:   #141820;
+      --surface2:  #1c2230;
+      --border:    #252d3a;
+      --border2:   #2e3a4e;
+      --text:      #d1d9e6;
+      --text-dim:  #6b7a96;
+      --text-faint:#3e4e66;
+      --pass:      #1db954;
+      --pass-bg:   #0d2e1c;
+      --caution:   #f5a623;
+      --caution-bg:#2e2009;
+      --fail:      #e84040;
+      --fail-bg:   #2e0f0f;
+      --notrun:    #4a5568;
+      --notrun-bg: #1a202c;
+      --accent:    #3b82f6;
+      --accent-dim:#1e3a5f;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ─── TOP CONTROL BAR ─────────────────────────────────────── */
+    .topbar {
+      height: 46px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px;
+      flex-shrink: 0;
+    }
+
+    .topbar-brand {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.04em;
+      margin-right: 12px;
+      white-space: nowrap;
+    }
+
+    .topbar-brand span { color: var(--accent); }
+
+    .topbar-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--border);
+      margin: 0 4px;
+    }
+
+    .ctrl-label {
+      font-size: 9px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-right: 4px;
+    }
+
+    .ctrl-select {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .ctrl-select:focus { border-color: var(--accent); }
+
+    .direction-toggle {
+      display: flex;
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .dir-btn {
+      padding: 3px 10px;
+      font-family: inherit;
+      font-size: 11px;
+      cursor: pointer;
+      border: none;
+      background: var(--surface2);
+      color: var(--text-dim);
+      transition: background 0.15s;
+    }
+
+    .dir-btn.active-bull { background: var(--pass-bg); color: var(--pass); }
+    .dir-btn.active-bear { background: var(--fail-bg); color: var(--fail); }
+
+    .topbar-spacer { flex: 1; }
+
+    .scan-meta {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-right: 10px;
+    }
+
+    .scan-meta b { color: var(--text); }
+
+    .btn-scan {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 18px;
+      border-radius: 3px;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      transition: background 0.15s;
+    }
+
+    .btn-scan:hover { background: #2563eb; }
+
+    .scan-status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--pass);
+      box-shadow: 0 0 6px var(--pass);
+      margin-left: 6px;
+    }
+
+    /* ─── BODY LAYOUT ─────────────────────────────────────────── */
+    .body-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ─── LEFT QUEUE ──────────────────────────────────────────── */
+    .queue {
+      width: 240px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .queue-header {
+      padding: 10px 12px 6px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .queue-title {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .queue-count {
+      font-size: 10px;
+      color: var(--text-dim);
+      background: var(--surface2);
+      padding: 1px 6px;
+      border-radius: 8px;
+      border: 1px solid var(--border2);
+    }
+
+    .queue-group-label {
+      padding: 6px 12px 4px;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-faint);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .queue-scroll { overflow-y: auto; flex: 1; }
+    .queue-scroll::-webkit-scrollbar { width: 4px; }
+    .queue-scroll::-webkit-scrollbar-track { background: transparent; }
+    .queue-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    .queue-item {
+      display: flex;
+      align-items: center;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s;
+      gap: 8px;
+    }
+
+    .queue-item:hover { background: var(--surface2); }
+
+    .queue-item.selected {
+      background: var(--surface2);
+      border-left: 3px solid var(--pass);
+      padding-left: 9px;
+    }
+
+    .queue-item.selected-caution { border-left-color: var(--caution); }
+    .queue-item.selected-fail    { border-left-color: var(--fail); }
+
+    .q-ticker {
+      font-weight: 700;
+      font-size: 12px;
+      color: #fff;
+      min-width: 40px;
+    }
+
+    .q-score {
+      font-size: 11px;
+      color: var(--text-dim);
+      flex: 1;
+    }
+
+    .q-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 2px;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-pass    { background: var(--pass-bg);    color: var(--pass); }
+    .badge-caution { background: var(--caution-bg); color: var(--caution); }
+    .badge-fail    { background: var(--fail-bg);    color: var(--fail); }
+    .badge-notrun  { background: var(--notrun-bg);  color: var(--notrun); }
+
+    .q-dots { display: flex; gap: 3px; }
+
+    .dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+    }
+
+    .dot-pass    { background: var(--pass); }
+    .dot-caution { background: var(--caution); }
+    .dot-fail    { background: var(--fail); }
+    .dot-notrun  { background: var(--notrun); }
+
+    .queue-footer {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .btn-export {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text-dim);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 5px;
+      border-radius: 3px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .btn-export:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ─── RIGHT WORKBENCH ─────────────────────────────────────── */
+    .workbench {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .symbol-header {
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .sym-ticker { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: 0.02em; }
+    .sym-name   { font-size: 11px; color: var(--text-dim); }
+
+    .sym-price-block { margin-left: 8px; }
+    .sym-price  { font-size: 18px; font-weight: 700; color: #fff; }
+    .sym-change { font-size: 11px; color: var(--pass); margin-left: 6px; }
+    .sym-change.neg { color: var(--fail); }
+
+    .sym-meta { display: flex; gap: 16px; margin-left: 12px; }
+
+    .sym-meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .sym-meta-label { font-size: 9px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.08em; }
+    .sym-meta-val   { font-size: 11px; color: var(--text); }
+
+    .sym-spacer { flex: 1; }
+
+    .overall-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 3px;
+      letter-spacing: 0.06em;
+    }
+
+    /* ─── PIPELINE ────────────────────────────────────────────── */
+    .pipeline {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 20px 20px;
+    }
+
+    .pipeline::-webkit-scrollbar { width: 5px; }
+    .pipeline::-webkit-scrollbar-track { background: transparent; }
+    .pipeline::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    /* Stage card */
+    .stage {
+      margin-bottom: 6px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .stage-header {
+      display: flex;
+      align-items: center;
+      padding: 8px 14px;
+      cursor: pointer;
+      gap: 10px;
+      user-select: none;
+    }
+
+    .stage-header:hover { background: var(--surface2); }
+
+    .stage-num {
+      font-size: 9px;
+      color: var(--text-faint);
+      min-width: 18px;
+    }
+
+    .stage-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      flex: 1;
+      letter-spacing: 0.02em;
+    }
+
+    .stage-locked { color: var(--text-faint); font-style: italic; font-weight: 400; }
+
+    .stage-hint { font-size: 10px; color: var(--text-faint); font-style: italic; }
+
+    .stage-chevron { font-size: 10px; color: var(--text-faint); margin-left: 4px; }
+
+    /* Stage body */
+    .stage-body {
+      padding: 12px 14px 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Regime stage */
+    .regime-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .regime-card {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      padding: 8px 10px;
+    }
+
+    .regime-card-label { font-size: 9px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
+    .regime-card-val   { font-size: 13px; font-weight: 700; color: var(--text); }
+    .regime-card-sub   { font-size: 10px; color: var(--text-dim); margin-top: 1px; }
+    .regime-card-pass  { border-left: 3px solid var(--pass); }
+    .regime-card-caution { border-left: 3px solid var(--caution); }
+
+    .regime-summary { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+
+    /* Setup stage */
+    .rule-badges { display: flex; gap: 8px; margin-bottom: 12px; }
+
+    .rule-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid transparent;
+    }
+
+    .rb-pass    { background: var(--pass-bg);    color: var(--pass);    border-color: #1a4d2e; }
+    .rb-caution { background: var(--caution-bg); color: var(--caution); border-color: #5a3c0e; }
+    .rb-fail    { background: var(--fail-bg);    color: var(--fail);    border-color: #5a1e1e; }
+
+    /* Mini chart placeholder */
+    .chart-area {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      height: 160px;
+      margin-bottom: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .chart-canvas { width: 100%; height: 100%; }
+
+    .chart-overlay-label {
+      position: absolute;
+      top: 6px; left: 10px;
+      font-size: 9px;
+      color: var(--text-faint);
+    }
+
+    /* MA lines legend */
+    .chart-legend {
+      position: absolute;
+      top: 6px; right: 10px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .legend-item { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--text-dim); }
+    .legend-dot  { width: 20px; height: 2px; border-radius: 1px; }
+
+    .diagnostic-bullets { list-style: none; }
+    .diagnostic-bullets li {
+      font-size: 11px;
+      color: var(--text-dim);
+      padding: 2px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .bullet-icon { font-size: 10px; }
+
+    /* Volatility stage */
+    .ivr-track {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      height: 24px;
+      margin-bottom: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ivr-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--pass) 0%, var(--caution) 70%, var(--fail) 100%);
+      opacity: 0.3;
+      position: absolute;
+      left: 0; top: 0;
+      width: 38%;
+    }
+
+    .ivr-pointer {
+      position: absolute;
+      top: 2px; bottom: 2px;
+      width: 2px;
+      background: var(--caution);
+      left: 38%;
+      border-radius: 1px;
+    }
+
+    .ivr-label {
+      position: absolute;
+      left: 40%;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--caution);
+    }
+
+    .ivr-tick-low  { position: absolute; left: 20%; bottom: 2px; font-size: 8px; color: var(--text-faint); }
+    .ivr-tick-high { position: absolute; left: 70%; bottom: 2px; font-size: 8px; color: var(--text-faint); }
+
+    .ivr-meta { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; }
+    .ivr-meta b { color: var(--caution); }
+
+    .event-checklist { list-style: none; }
+    .event-checklist li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-dim);
+      padding: 3px 0;
+    }
+
+    .evt-ok   { color: var(--pass); }
+    .evt-warn { color: var(--caution); }
+
+    /* Locked stage */
+    .stage-locked-body {
+      padding: 6px 14px 8px;
+      border-top: 1px solid var(--border);
+      font-size: 10px;
+      color: var(--text-faint);
+      font-style: italic;
+    }
+
+    /* Action rail */
+    .action-rail {
+      padding: 8px 20px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .btn-action {
+      font-family: inherit;
+      font-size: 11px;
+      padding: 5px 14px;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--text-dim);
+      transition: all 0.15s;
+    }
+
+    .btn-action:hover { border-color: var(--accent); color: var(--accent); }
+
+    .btn-evaluate {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+      margin-left: auto;
+    }
+
+    .btn-evaluate:hover { background: var(--accent); color: #fff; }
+
+    /* Scrollbar for queue group */
+    .group-pass-section    { border-left: 2px solid var(--pass);    margin-left: 0; }
+    .group-caution-section { border-left: 2px solid var(--caution); margin-left: 0; }
+    .group-fail-section    { border-left: 2px solid var(--fail);    margin-left: 0; }
+
+    /* Scan progress bar (visible during scan) */
+    .scan-progress {
+      height: 2px;
+      background: var(--surface2);
+      flex-shrink: 0;
+    }
+
+    .scan-progress-bar {
+      height: 100%;
+      width: 65%;
+      background: linear-gradient(90deg, var(--accent), #60a5fa);
+      animation: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- ZONE 1: TOP CONTROL BAR                                     -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <header class="topbar">
+    <div class="topbar-brand">OPTIONS<span>SCREENER</span></div>
+    <div class="topbar-divider"></div>
+
+    <span class="ctrl-label">Universe</span>
+    <select class="ctrl-select">
+      <option>S&amp;P 500</option>
+      <option>NASDAQ 100</option>
+      <option>My Watchlist</option>
+      <option>Custom CSV</option>
+    </select>
+
+    <div class="topbar-divider"></div>
+
+    <span class="ctrl-label">Direction</span>
+    <div class="direction-toggle">
+      <button class="dir-btn active-bull">▲ Bullish</button>
+      <button class="dir-btn">▼ Bearish</button>
+    </div>
+
+    <div class="topbar-divider"></div>
+
+    <span class="ctrl-label">Horizon</span>
+    <select class="ctrl-select">
+      <option>Swing 5–15d</option>
+      <option>Short 1–5d</option>
+      <option>Extended 15–30d</option>
+    </select>
+
+    <div class="topbar-spacer"></div>
+
+    <div class="scan-meta">Last scan: <b>Today 09:42</b> · 487 symbols · 23 passed</div>
+    <button class="btn-scan">▶ Run Scan</button>
+    <div class="scan-status-dot" title="Last scan completed"></div>
+  </header>
+
+  <!-- thin progress bar (shown during scan) -->
+  <div class="scan-progress">
+    <div class="scan-progress-bar" style="width:0%"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- BODY                                                         -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="body-layout">
+
+    <!-- ═════════════════════════════════════════════════════════ -->
+    <!-- ZONE 2: LEFT CANDIDATE QUEUE                              -->
+    <!-- ═════════════════════════════════════════════════════════ -->
+    <aside class="queue">
+      <div class="queue-header">
+        <span class="queue-title">Candidates</span>
+        <span class="queue-count">23 results</span>
+      </div>
+      <div class="queue-scroll">
+
+        <!-- PASS group -->
+        <div class="queue-group-label group-pass-section">▸ PASS &nbsp;(8)</div>
+
+        <div class="queue-item selected">
+          <div class="q-ticker">NVDA</div>
+          <div class="q-score">82</div>
+          <div class="q-dots">
+            <div class="dot dot-pass" title="Regime: Pass"></div>
+            <div class="dot dot-pass" title="Setup: Pass"></div>
+          </div>
+          <span class="q-badge badge-pass">PASS</span>
+        </div>
+
+        <div class="queue-item">
+          <div class="q-ticker">MSFT</div>
+          <div class="q-score">79</div>
+          <div class="q-dots">
+            <div class="dot dot-pass"    title="Regime: Pass"></div>
+            <div class="dot dot-pass"    title="Setup: Pass"></div>
+          </div>
+          <span class="q-badge badge-pass">PASS</span>
+        </div>
+
+        <div class="queue-item">
+          <div class="q-ticker">AAPL</div>
+          <div class="q-score">74</div>
+          <div class="q-dots">
+            <div class="dot dot-pass"    title="Regime: Pass"></div>
+            <div class="dot dot-pass"    title="Setup: Pass"></div>
+          </div>
+          <span class="q-badge badge-pass">PASS</span>
+        </div>
+
+        <div class="queue-item">
+          <div class="q-ticker">META</div>
+          <div class="q-score">71</div>
+          <div class="q-dots">
+            <div class="dot dot-pass"    title="Regime: Pass"></div>
+            <div class="dot dot-caution" title="Setup: Caution"></div>
+          </div>
+          <span class="q-badge badge-pass">PASS</span>
+        </div>
+
+        <div class="queue-item">
+          <div class="q-ticker">AMD</div>
+          <div class="q-score">68</div>
+          <div class="q-dots">
+            <div class="dot dot-pass"    title="Regime: Pass"></div>
+            <div class="dot dot-pass"    title="Setup: Pass"></div>
+          </div>
+          <span class="q-badge badge-pass">PASS</span>
+        </div>
+
+        <!-- CAUTION group -->
+        <div class="queue-group-label group-caution-section">▸ CAUTION (9)</div>
+
+        <div class="queue-item">
+          <div class="q-ticker">TSLA</div>
+          <div class="q-score">58</div>
+          <div class="q-dots">
+            <div class="dot dot-pass"    title="Regime: Pass"></div>
+            <div class="dot dot-caution" title="Setup: Caution"></div>
+          </div>
+          <span class="q-badge badge-caution">CAUT</span>
+        </div>
+
+        <div class="queue-item">
+          <div class="q-ticker">GOOGL</div>
+          <div class="q-score">55</div>
+          <div class="q-dots">
+            <div class="dot dot-caution" title="Regime: Caution"></div>
+            <div class="dot dot-caution" title="Setup: Caution"></div>
+          </div>
+          <span class="q-badge badge-caution">CAUT</span>
+        </div>
+
+        <div class="queue-item">
+          <div class="q-ticker">AMZN</div>
+          <div class="q-score">52</div>
+          <div class="q-dots">
+            <div class="dot dot-pass"    title="Regime: Pass"></div>
+            <div class="dot dot-caution" title="Setup: Caution"></div>
+          </div>
+          <span class="q-badge badge-caution">CAUT</span>
+        </div>
+
+        <!-- FAIL group -->
+        <div class="queue-group-label group-fail-section">▸ FAIL &nbsp;(6)</div>
+
+        <div class="queue-item">
+          <div class="q-ticker">NFLX</div>
+          <div class="q-score">28</div>
+          <div class="q-dots">
+            <div class="dot dot-fail"    title="Regime: Fail"></div>
+            <div class="dot dot-fail"    title="Setup: Fail"></div>
+          </div>
+          <span class="q-badge badge-fail">FAIL</span>
+        </div>
+
+        <div class="queue-item">
+          <div class="q-ticker">CRM</div>
+          <div class="q-score">22</div>
+          <div class="q-dots">
+            <div class="dot dot-pass"    title="Regime: Pass"></div>
+            <div class="dot dot-fail"    title="Setup: Fail"></div>
+          </div>
+          <span class="q-badge badge-fail">FAIL</span>
+        </div>
+
+      </div><!-- /queue-scroll -->
+
+      <div class="queue-footer">
+        <button class="btn-export">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export to Excel (.xlsx)
+        </button>
+      </div>
+    </aside>
+
+    <!-- ═════════════════════════════════════════════════════════ -->
+    <!-- ZONE 3: RIGHT DECISION WORKBENCH                         -->
+    <!-- ═════════════════════════════════════════════════════════ -->
+    <main class="workbench">
+
+      <!-- Symbol header -->
+      <div class="symbol-header">
+        <div>
+          <div class="sym-ticker">NVDA</div>
+          <div class="sym-name">NVIDIA Corporation</div>
+        </div>
+        <div class="sym-price-block">
+          <span class="sym-price">$875.40</span>
+          <span class="sym-change">+2.14%</span>
+        </div>
+        <div class="sym-meta">
+          <div class="sym-meta-item">
+            <span class="sym-meta-label">Score</span>
+            <span class="sym-meta-val">82 / 100</span>
+          </div>
+          <div class="sym-meta-item">
+            <span class="sym-meta-label">Confidence</span>
+            <span class="sym-meta-val" style="color:var(--pass)">HIGH</span>
+          </div>
+          <div class="sym-meta-item">
+            <span class="sym-meta-label">Direction</span>
+            <span class="sym-meta-val" style="color:var(--pass)">▲ Bullish</span>
+          </div>
+          <div class="sym-meta-item">
+            <span class="sym-meta-label">Horizon</span>
+            <span class="sym-meta-val">5–15d</span>
+          </div>
+        </div>
+        <div class="sym-spacer"></div>
+        <span class="overall-badge badge-pass">✔ PASS</span>
+      </div>
+
+      <!-- Pipeline stages -->
+      <div class="pipeline">
+
+        <!-- ── STAGE 01: Market Regime ── -->
+        <div class="stage">
+          <div class="stage-header" onclick="toggleStage(this)">
+            <span class="stage-num">01</span>
+            <span class="stage-label">Market Regime</span>
+            <span class="q-badge badge-pass">PASS</span>
+            <span class="stage-chevron">▼</span>
+          </div>
+          <div class="stage-body">
+            <div class="regime-grid">
+              <div class="regime-card regime-card-pass">
+                <div class="regime-card-label">SPY Trend</div>
+                <div class="regime-card-val" style="color:var(--pass)">BULLISH</div>
+                <div class="regime-card-sub">Above 50MA &amp; 200MA</div>
+              </div>
+              <div class="regime-card regime-card-pass">
+                <div class="regime-card-label">VIX Level</div>
+                <div class="regime-card-val">14.2</div>
+                <div class="regime-card-sub">Low — conducive to calls</div>
+              </div>
+              <div class="regime-card regime-card-caution">
+                <div class="regime-card-label">Market Breadth</div>
+                <div class="regime-card-val" style="color:var(--caution)">NEUTRAL</div>
+                <div class="regime-card-sub">AD line flattening</div>
+              </div>
+            </div>
+            <div class="regime-summary">
+              Regime is broadly supportive. SPY is above both moving averages and VIX is in the low zone. Breadth has flattened slightly but does not trigger a hard regime fail. Swing setups remain valid.
+            </div>
+          </div>
+        </div>
+
+        <!-- ── STAGE 02: Stock Setup ── -->
+        <div class="stage">
+          <div class="stage-header" onclick="toggleStage(this)">
+            <span class="stage-num">02</span>
+            <span class="stage-label">Stock Setup</span>
+            <span class="q-badge badge-pass">PASS</span>
+            <span class="stage-chevron">▼</span>
+          </div>
+          <div class="stage-body">
+            <!-- Rule badges -->
+            <div class="rule-badges">
+              <span class="rule-badge rb-pass">✔ Trend</span>
+              <span class="rule-badge rb-pass">✔ Pullback</span>
+              <span class="rule-badge rb-caution">~ Trigger</span>
+            </div>
+
+            <!-- Chart area (SVG mini-chart) -->
+            <div class="chart-area">
+              <div class="chart-overlay-label">NVDA · Daily · 3 months</div>
+              <div class="chart-legend">
+                <div class="legend-item"><div class="legend-dot" style="background:#f5a623"></div>50MA</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>200MA</div>
+              </div>
+              <svg class="chart-canvas" viewBox="0 0 700 140" preserveAspectRatio="none">
+                <!-- pullback zone shading -->
+                <rect x="390" y="30" width="120" height="70" fill="#f5a623" fill-opacity="0.06" />
+
+                <!-- 200MA -->
+                <polyline
+                  points="0,105 80,100 160,95 240,90 320,88 400,85 480,82 560,80 640,78 700,76"
+                  fill="none" stroke="#3b82f6" stroke-width="1.2" stroke-opacity="0.7" />
+
+                <!-- 50MA -->
+                <polyline
+                  points="0,95 80,88 160,80 240,75 320,72 400,65 480,58 560,52 640,48 700,44"
+                  fill="none" stroke="#f5a623" stroke-width="1.2" stroke-opacity="0.7" />
+
+                <!-- Candlestick bodies (simplified bars) -->
+                <rect x="20"  y="88" width="8" height="14" fill="#e84040" rx="1"/>
+                <rect x="40"  y="82" width="8" height="10" fill="#1db954" rx="1"/>
+                <rect x="60"  y="78" width="8" height="12" fill="#1db954" rx="1"/>
+                <rect x="80"  y="80" width="8" height="8"  fill="#e84040" rx="1"/>
+                <rect x="100" y="74" width="8" height="10" fill="#1db954" rx="1"/>
+                <rect x="120" y="68" width="8" height="12" fill="#1db954" rx="1"/>
+                <rect x="140" y="64" width="8" height="10" fill="#1db954" rx="1"/>
+                <rect x="160" y="70" width="8" height="8"  fill="#e84040" rx="1"/>
+                <rect x="180" y="66" width="8" height="10" fill="#1db954" rx="1"/>
+                <rect x="200" y="60" width="8" height="12" fill="#1db954" rx="1"/>
+                <rect x="220" y="58" width="8" height="8"  fill="#e84040" rx="1"/>
+                <rect x="240" y="54" width="8" height="10" fill="#1db954" rx="1"/>
+                <!-- pullback section -->
+                <rect x="260" y="60" width="8" height="14" fill="#e84040" rx="1"/>
+                <rect x="280" y="66" width="8" height="12" fill="#e84040" rx="1"/>
+                <rect x="300" y="64" width="8" height="10" fill="#e84040" rx="1"/>
+                <rect x="320" y="62" width="8" height="8"  fill="#1db954" rx="1"/>
+                <rect x="340" y="60" width="8" height="10" fill="#e84040" rx="1"/>
+                <rect x="360" y="58" width="8" height="8"  fill="#1db954" rx="1"/>
+                <!-- recovery -->
+                <rect x="380" y="54" width="8" height="10" fill="#1db954" rx="1"/>
+                <rect x="400" y="50" width="8" height="12" fill="#1db954" rx="1"/>
+                <rect x="420" y="46" width="8" height="10" fill="#1db954" rx="1"/>
+                <rect x="440" y="44" width="8" height="8"  fill="#e84040" rx="1"/>
+                <rect x="460" y="42" width="8" height="10" fill="#1db954" rx="1"/>
+                <rect x="480" y="38" width="8" height="12" fill="#1db954" rx="1"/>
+                <rect x="500" y="36" width="8" height="10" fill="#1db954" rx="1"/>
+                <rect x="520" y="34" width="8" height="8"  fill="#e84040" rx="1"/>
+                <rect x="540" y="32" width="8" height="10" fill="#1db954" rx="1"/>
+                <rect x="560" y="28" width="8" height="12" fill="#1db954" rx="1"/>
+                <rect x="580" y="26" width="8" height="10" fill="#1db954" rx="1"/>
+                <!-- volume bars at bottom -->
+                <rect x="20"  y="120" width="8" height="14" fill="#e84040" fill-opacity="0.4" rx="1"/>
+                <rect x="40"  y="122" width="8" height="12" fill="#1db954" fill-opacity="0.4" rx="1"/>
+                <rect x="60"  y="120" width="8" height="14" fill="#1db954" fill-opacity="0.4" rx="1"/>
+                <rect x="80"  y="124" width="8" height="10" fill="#e84040" fill-opacity="0.4" rx="1"/>
+                <rect x="100" y="122" width="8" height="12" fill="#1db954" fill-opacity="0.4" rx="1"/>
+                <rect x="120" y="118" width="8" height="16" fill="#1db954" fill-opacity="0.4" rx="1"/>
+                <rect x="140" y="120" width="8" height="14" fill="#1db954" fill-opacity="0.4" rx="1"/>
+                <rect x="260" y="116" width="8" height="18" fill="#e84040" fill-opacity="0.5" rx="1"/>
+                <rect x="280" y="118" width="8" height="16" fill="#e84040" fill-opacity="0.5" rx="1"/>
+                <rect x="400" y="114" width="8" height="20" fill="#1db954" fill-opacity="0.5" rx="1"/>
+                <rect x="480" y="116" width="8" height="18" fill="#1db954" fill-opacity="0.5" rx="1"/>
+                <rect x="560" y="114" width="8" height="20" fill="#1db954" fill-opacity="0.5" rx="1"/>
+
+                <!-- volume divider line -->
+                <line x1="0" y1="112" x2="700" y2="112" stroke="#252d3a" stroke-width="1"/>
+              </svg>
+            </div>
+
+            <!-- Diagnostic bullets -->
+            <ul class="diagnostic-bullets">
+              <li><span class="bullet-icon" style="color:var(--pass)">✔</span> Above 50DMA — uptrend intact, price extended from pullback low</li>
+              <li><span class="bullet-icon" style="color:var(--pass)">✔</span> Pullback depth 4.2% — within the 3–8% accepted range</li>
+              <li><span class="bullet-icon" style="color:var(--caution)">~</span> Reversal trigger not yet confirmed — monitoring for candle close</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- ── STAGE 03: Volatility + Events ── -->
+        <div class="stage">
+          <div class="stage-header" onclick="toggleStage(this)">
+            <span class="stage-num">03</span>
+            <span class="stage-label">Volatility + Events</span>
+            <span class="q-badge badge-caution">CAUTION</span>
+            <span class="stage-chevron">▼</span>
+          </div>
+          <div class="stage-body">
+            <!-- IV Rank bar -->
+            <div class="ivr-track">
+              <div class="ivr-fill"></div>
+              <div class="ivr-pointer"></div>
+              <div class="ivr-label">38</div>
+              <div class="ivr-tick-low">LOW</div>
+              <div class="ivr-tick-high">HIGH</div>
+            </div>
+            <div class="ivr-meta" style="margin-bottom:10px;">
+              IV Rank <b>38</b> — within acceptable range (20–50). Options are not overpriced.
+            </div>
+
+            <ul class="event-checklist">
+              <li><span class="evt-ok">✔</span> No earnings within 14 days</li>
+              <li><span class="evt-ok">✔</span> No ex-dividend date in range</li>
+              <li><span class="evt-warn">~</span> Fed rate decision in 8 days — minor event risk flagged</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- ── STAGE 04: Option Contract (LOCKED) ── -->
+        <div class="stage" style="opacity:0.55">
+          <div class="stage-header">
+            <span class="stage-num">04</span>
+            <span class="stage-label stage-locked">Option Contract</span>
+            <span class="q-badge badge-notrun">NOT RUN</span>
+            <span class="stage-hint">— available after stock validation</span>
+          </div>
+          <div class="stage-locked-body">Awaiting stock validation completion before contract evaluation is enabled.</div>
+        </div>
+
+        <!-- ── STAGE 05: Trade Card (LOCKED) ── -->
+        <div class="stage" style="opacity:0.45">
+          <div class="stage-header">
+            <span class="stage-num">05</span>
+            <span class="stage-label stage-locked">Trade Card</span>
+            <span class="q-badge badge-notrun">NOT RUN</span>
+            <span class="stage-hint">— awaits contract selection</span>
+          </div>
+          <div class="stage-locked-body">Contract must be selected and scored before a trade card can be generated.</div>
+        </div>
+
+        <!-- ── STAGE 06: Human Approval (LOCKED) ── -->
+        <div class="stage" style="opacity:0.35">
+          <div class="stage-header">
+            <span class="stage-num">06</span>
+            <span class="stage-label stage-locked">Human Approval</span>
+            <span class="q-badge badge-notrun">NOT RUN</span>
+            <span class="stage-hint">— awaits trade card</span>
+          </div>
+          <div class="stage-locked-body">Review and approve the trade card before this stage activates.</div>
+        </div>
+
+        <!-- ── STAGE 07: Monitoring + Alerts (LOCKED) ── -->
+        <div class="stage" style="opacity:0.25">
+          <div class="stage-header">
+            <span class="stage-num">07</span>
+            <span class="stage-label stage-locked">Monitoring + Alerts</span>
+            <span class="q-badge badge-notrun">NOT RUN</span>
+            <span class="stage-hint">— active after approval</span>
+          </div>
+          <div class="stage-locked-body">Monitoring activates once the trade is approved and entered.</div>
+        </div>
+
+      </div><!-- /pipeline -->
+
+      <!-- Action rail -->
+      <div class="action-rail">
+        <button class="btn-action">+ Watchlist</button>
+        <button class="btn-action">⏸ Defer</button>
+        <button class="btn-action btn-evaluate">→ Evaluate Contract</button>
+      </div>
+
+    </main><!-- /workbench -->
+  </div><!-- /body-layout -->
+
+  <script>
+    function toggleStage(header) {
+      const body = header.nextElementSibling;
+      const chevron = header.querySelector('.stage-chevron');
+      if (!body || !chevron) return;
+      const isOpen = body.style.display !== 'none';
+      body.style.display = isOpen ? 'none' : '';
+      chevron.textContent = isOpen ? '▶' : '▼';
+    }
+
+    // Queue item selection
+    document.querySelectorAll('.queue-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.queue-item').forEach(i => i.classList.remove('selected'));
+        item.classList.add('selected');
+      });
+    });
+
+    // Simulate scan on button click
+    const scanBtn = document.querySelector('.btn-scan');
+    const progressBar = document.querySelector('.scan-progress-bar');
+    let scanning = false;
+    scanBtn.addEventListener('click', () => {
+      if (scanning) return;
+      scanning = true;
+      scanBtn.textContent = '⏸ Scanning...';
+      scanBtn.style.background = '#374151';
+      let width = 0;
+      const interval = setInterval(() => {
+        width += 2;
+        progressBar.style.width = width + '%';
+        if (width >= 100) {
+          clearInterval(interval);
+          scanBtn.textContent = '▶ Run Scan';
+          scanBtn.style.background = '';
+          progressBar.style.width = '0%';
+          scanning = false;
+        }
+      }, 40);
+    });
+  </script>
+</body>
+</html>

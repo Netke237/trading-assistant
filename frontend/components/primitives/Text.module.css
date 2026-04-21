@@ -1,0 +1,30 @@
+/*
+ * Text — DM Sans ONLY. For all UI: nav, labels, body, buttons, form fields.
+ * Drift log G1.
+ */
+
+.text {
+  font-family: var(--font-dm), system-ui, sans-serif;
+  color: var(--text-primary);
+  line-height: 1.45;
+}
+
+/* Sizes — spec §2 size scale */
+.s10 { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+.s11 { font-size: 11px; }
+.s12 { font-size: 12px; }
+.s13 { font-size: 13px; }
+.s14 { font-size: 14px; }
+.s16 { font-size: 16px; line-height: 1.35; }
+
+.w400 { font-weight: 400; }
+.w500 { font-weight: 500; }
+.w600 { font-weight: 600; }
+
+/* Tone shortcuts — optional override of default --text-primary */
+.toneSecondary { color: var(--text-secondary); }
+.toneDim       { color: var(--text-dim); }
+.toneAccent    { color: var(--accent); }
+.tonePass      { color: var(--pass); }
+.toneCaution   { color: var(--caution); }
+.toneReject    { color: var(--reject); }

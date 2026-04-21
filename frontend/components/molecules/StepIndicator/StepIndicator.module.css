@@ -1,0 +1,62 @@
+/*
+ * StepIndicator — one of 3 states. Spec §4 Screener Mode Exception.
+ * Drift log Screen 2 #4, Screen 3 #1/#2.
+ */
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.item:hover {
+  background: var(--bg-surface-2);
+}
+
+.circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.completed {
+  background: var(--pass);
+  border-color: var(--pass);
+  color: var(--bg-base);
+}
+
+.current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.future {
+  /* default circle */
+}
+
+.indexText {
+  /* used by future/completed circle when no check icon */
+}
+
+.check {
+  width: 12px;
+  height: 12px;
+}

@@ -1,0 +1,67 @@
+/*
+ * ScoreCardPanel — title + list of ScoreBars + total score + confidence badge.
+ * Used in TradeCard (Stock Scorecard, Contract Scorecard) and the right rail.
+ */
+
+import { Text, Data } from '@/components/primitives';
+import { ScoreBar } from '@/components/atoms/ScoreBar';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import type { Status } from '@/lib/status';
+import styles from './ScoreCardPanel.module.css';
+
+export interface ScoreBarData {
+  label: string;
+  value: number;
+  max?: number;
+  displayValue?: string;
+}
+
+interface ScoreCardPanelProps {
+  title: string;
+  bars: ScoreBarData[];
+  total: number;
+  totalMax?: number;
+  confidence: Status;
+  className?: string;
+}
+
+export function ScoreCardPanel({
+  title,
+  bars,
+  total,
+  totalMax = 100,
+  confidence,
+  className,
+}: ScoreCardPanelProps) {
+  return (
+    <div className={[styles.panel, className].filter(Boolean).join(' ')}>
+      <div className={styles.header}>
+        <Text size={14} weight={600}>
+          {title}
+        </Text>
+      </div>
+      <div className={styles.bars}>
+        {bars.map((b) => (
+          <ScoreBar
+            key={b.label}
+            label={b.label}
+            value={b.value}
+            max={b.max}
+            displayValue={b.displayValue}
+          />
+        ))}
+      </div>
+      <div className={styles.footer}>
+        <div className={styles.totalGroup}>
+          <Text size={12} tone="secondary">
+            Score
+          </Text>
+          <Data size={18} weight={500}>
+            {total}/{totalMax}
+          </Data>
+        </div>
+        <StatusBadge status={confidence} />
+      </div>
+    </div>
+  );
+}

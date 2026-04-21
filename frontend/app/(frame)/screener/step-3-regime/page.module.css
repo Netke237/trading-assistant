@@ -1,0 +1,126 @@
+.banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.banner_PASS    { border-left: 3px solid var(--pass);    }
+.banner_CAUTION { border-left: 3px solid var(--caution); }
+.banner_REJECT  { border-left: 3px solid var(--reject);  }
+
+.bannerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* ---------- Explainer ---------- */
+
+.explainer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.explainerBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* ---------- Metric grid ---------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+
+.metricCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.metricCard > :last-child { align-self: flex-start; }
+
+/* ---------- Mini index charts ---------- */
+
+.indices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--space-3);
+}
+
+.indexCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.indexHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 var(--space-2);
+}
+
+.indexChart {
+  height: 180px;
+}
+
+/* ---------- Sector heatmap ---------- */
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 var(--space-1);
+}
+
+.sectors {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.sectorTile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-2);
+  border-left: 3px solid transparent;
+}
+
+.sectorTile_PASS    { border-left-color: var(--pass);    background: color-mix(in srgb, var(--pass)    10%, var(--bg-surface-2)); }
+.sectorTile_CAUTION { border-left-color: var(--caution); background: color-mix(in srgb, var(--caution) 10%, var(--bg-surface-2)); }
+.sectorTile_REJECT  { border-left-color: var(--reject);  background: color-mix(in srgb, var(--reject)  10%, var(--bg-surface-2)); }
+
+.sectorRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-2);
+}
