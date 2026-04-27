@@ -28,9 +28,15 @@ import styles from './TradeCard.module.css';
 
 interface TradeCardProps {
   data: TradeCardData;
+  /** Override the Send-to-broker button handler. */
+  onSendToBroker?: () => void;
+  /** Custom label — used by Step 7 to show basket count. */
+  sendLabel?:    string;
+  /** Disable the send button (e.g. empty basket). */
+  sendDisabled?: boolean;
 }
 
-export function TradeCard({ data }: TradeCardProps) {
+export function TradeCard({ data, onSendToBroker, sendLabel, sendDisabled }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
 
   const stockBars = [
@@ -80,6 +86,23 @@ export function TradeCard({ data }: TradeCardProps) {
           confidence={data.contractConfidence}
         />
 
+        {/* 3b. Contract Details (optional) */}
+        {data.contractDetails && (
+          <section className={styles.detailsCard}>
+            <Text size={14} weight={600}>Contract Details</Text>
+            <div className={styles.detailsGrid}>
+              <DetailCell label="Strike"  value={`$${data.contractDetails.strike}`} />
+              <DetailCell label="Expiry"  value={data.contractDetails.expiry} />
+              <DetailCell label="Right"   value={data.contractDetails.right === 'C' ? 'Call' : 'Put'} />
+              <DetailCell label="Mid"     value={`$${data.contractDetails.mid.toFixed(2)}`} />
+              <DetailCell label="Δ"       value={data.contractDetails.delta.toFixed(2)} mono />
+              <DetailCell label="Θ / day" value={`$${data.contractDetails.theta.toFixed(2)}`} mono />
+              <DetailCell label="IV rank" value={`${data.contractDetails.ivRank}`} mono />
+              <DetailCell label="DTE"     value={`${data.contractDetails.dte}d`} mono />
+            </div>
+          </section>
+        )}
+
         {/* 4. Entry plan */}
         <section className={styles.planCard}>
           <Text size={14} weight={600}>Entry Plan</Text>
@@ -119,8 +142,13 @@ export function TradeCard({ data }: TradeCardProps) {
 
       {/* 8. Actions */}
       <div className={styles.actions}>
-        <button type="button" className={`${styles.btn} ${styles.btnPrimary}`}>
-          <Text size={13} weight={500}>Send to broker</Text>
+        <button
+          type="button"
+          className={`${styles.btn} ${styles.btnPrimary}`}
+          onClick={onSendToBroker}
+          disabled={sendDisabled || !onSendToBroker}
+        >
+          <Text size={13} weight={500}>{sendLabel ?? 'Send to broker'}</Text>
         </button>
         <button
           type="button"
@@ -160,6 +188,17 @@ function KV({
       <Text size={12} tone="secondary">{label}</Text>
       {mono
         ? <Data size={13} weight={500} tone={tone}>{value}</Data>
+        : <Text size={13} weight={500}>{value}</Text>}
+    </div>
+  );
+}
+
+function DetailCell({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className={styles.detailsCell}>
+      <Text size={10} tone="dim">{label.toUpperCase()}</Text>
+      {mono
+        ? <Data size={13} weight={500}>{value}</Data>
         : <Text size={13} weight={500}>{value}</Text>}
     </div>
   );

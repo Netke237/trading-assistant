@@ -1,11 +1,9 @@
 /*
  * Watchlist store — Zustand with localStorage persistence.
  *
- * Tracks user-added symbols on top of MOCK_WATCHLIST. Anywhere in the app
- * we can call `addSymbol(sym)` / `removeSymbol(sym)` / read `isWatched(sym)`.
- *
- * v1 stores just the symbol. Enrichment (company name, score, etc.) stays
- * with MOCK_WATCHLIST until there's a backend.
+ * Single source of truth for which symbols the user is watching. On first run
+ * we seed with MOCK_WATCHLIST symbols so the UI shows a populated list, but
+ * after that the user is free to add or remove any symbol — base or not.
  */
 
 import { create } from 'zustand';
@@ -14,25 +12,23 @@ import { MOCK_WATCHLIST } from '@/mocks/watchlist';
 
 export const WATCHLIST_STORAGE_KEY = 'bamendjou:watchlist';
 
+const SEED_SYMBOLS = MOCK_WATCHLIST.map((r) => r.symbol.toUpperCase());
+
 interface WatchlistState {
-  /** User-added symbols, uppercased. */
+  /** All watched symbols, uppercased. Seeded on first run. */
   added: string[];
   addSymbol:    (sym: string) => void;
   removeSymbol: (sym: string) => void;
-  /** True for both the bundled mock list and user-added symbols. */
   isWatched:    (sym: string) => boolean;
 }
-
-const BASE_SYMBOLS = new Set(MOCK_WATCHLIST.map((r) => r.symbol.toUpperCase()));
 
 export const useWatchlistStore = create<WatchlistState>()(
   persist(
     (set, get) => ({
-      added: [],
+      added: SEED_SYMBOLS,
       addSymbol: (sym) => {
         const s = sym.trim().toUpperCase();
         if (!s) return;
-        if (BASE_SYMBOLS.has(s)) return;
         const list = get().added;
         if (list.includes(s)) return;
         set({ added: [...list, s] });
@@ -43,12 +39,24 @@ export const useWatchlistStore = create<WatchlistState>()(
       },
       isWatched: (sym) => {
         const s = sym.trim().toUpperCase();
-        return BASE_SYMBOLS.has(s) || get().added.includes(s);
+        return get().added.includes(s);
       },
     }),
     {
       name: WATCHLIST_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
+      version: 1,
+      migrate: (persistedState, version) => {
+        const prev = (persistedState as Partial<WatchlistState> | null) ?? {};
+        if (version < 1) {
+          const prevAdded = Array.isArray(prev.added)
+            ? prev.added.map((s) => String(s).toUpperCase())
+            : [];
+          const merged = Array.from(new Set([...SEED_SYMBOLS, ...prevAdded]));
+          return { ...prev, added: merged } as WatchlistState;
+        }
+        return prev as WatchlistState;
+      },
     }
   )
 );

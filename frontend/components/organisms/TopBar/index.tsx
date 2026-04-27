@@ -8,6 +8,7 @@
  * Right:       regime dot + "Regime: PASS" + ModeToggle
  */
 
+import { useEffect, useState } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
@@ -22,16 +23,47 @@ const PILL_CLASS: Record<ScanState, string> = {
   FAILED:    styles.pillFailed,
 };
 
-function pillLabel(state: ScanState, time: string | null): string {
-  if (state === 'COMPLETED' && time) return `COMPLETED ${time}`;
+/** Deterministic HH:mm slice from the stored local-ISO string. Safe during SSR. */
+function hhmmFrom(iso: string): string {
+  return iso.slice(11, 16);
+}
+
+function startOfDay(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/** Client-only label with date prefix when the scan isn't today. */
+function labelWithDate(iso: string): string {
+  const hhmm = hhmmFrom(iso);
+  const scan = new Date(iso);
+  const now  = new Date();
+  const diffDays = Math.round((startOfDay(now) - startOfDay(scan)) / 86_400_000);
+  if (diffDays === 0) return hhmm;
+  if (diffDays === 1) return `Yesterday ${hhmm}`;
+  const sameYear = scan.getFullYear() === now.getFullYear();
+  const mon = scan.toLocaleString(undefined, { month: 'short' });
+  const day = scan.getDate();
+  return sameYear
+    ? `${mon} ${day} ${hhmm}`
+    : `${mon} ${day} ${scan.getFullYear()} ${hhmm}`;
+}
+
+function pillLabel(state: ScanState, iso: string | null, mounted: boolean): string {
+  if (state === 'COMPLETED' && iso) {
+    // Before mount we render just HH:mm to avoid SSR/client timezone mismatch.
+    return `COMPLETED ${mounted ? labelWithDate(iso) : hhmmFrom(iso)}`;
+  }
   return state;
 }
 
 export function TopBar() {
   const scanState = useScanStore((s) => s.scanState);
-  const scanTime  = useScanStore((s) => s.scanTime);
+  const scanAt    = useScanStore((s) => s.scanAt);
   const context   = useScanStore((s) => s.context);
   const regime    = useScanStore((s) => s.regime);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <header className={styles.bar}>
@@ -49,7 +81,7 @@ export function TopBar() {
       </div>
 
       <span className={[styles.pill, PILL_CLASS[scanState]].join(' ')}>
-        {pillLabel(scanState, scanTime)}
+        {pillLabel(scanState, scanAt, mounted)}
       </span>
 
       <div className={styles.regimeGroup}>

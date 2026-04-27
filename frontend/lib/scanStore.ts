@@ -20,20 +20,22 @@ export interface ScanContext {
 
 interface ScanStoreState {
   scanState:  ScanState;
-  scanTime:   string | null;    // e.g. "09:42" — set when state becomes COMPLETED
+  /** ISO-ish local timestamp, e.g. "2026-04-21T09:42:00" (no TZ suffix). */
+  scanAt:     string | null;
   context:    ScanContext | null;
   regime:     Status;
-  setScanState: (s: ScanState, time?: string) => void;
+  setScanState: (s: ScanState, at?: string) => void;
   setContext:   (c: ScanContext | null) => void;
   setRegime:    (r: Status) => void;
 }
 
 export const useScanStore = create<ScanStoreState>((set) => ({
   scanState:  'COMPLETED',
-  scanTime:   '09:42',
+  // Seeded as yesterday so the TopBar date-prefix behaviour is visible on load.
+  scanAt:     '2026-04-20T09:42:00',
   context:    { universe: 'SP500', direction: 'Bullish', horizon: 'Swing (5–15d)' },
   regime:     'PASS',
-  setScanState: (s, time) => set({ scanState: s, scanTime: time ?? null }),
+  setScanState: (s, at) => set({ scanState: s, scanAt: at ?? null }),
   setContext:   (c) => set({ context: c }),
   setRegime:    (r) => set({ regime: r }),
 }));

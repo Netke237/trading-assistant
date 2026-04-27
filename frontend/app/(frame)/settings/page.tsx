@@ -167,6 +167,8 @@ function ThemeForm() {
 
 /* ---------- Weights ---------- */
 
+type WeightHorizon = 'Intraday' | 'Swing' | 'Position' | 'Custom';
+
 const WEIGHT_DEFAULTS = {
   Trend: 25, Pullback: 20, Trigger: 20, Event: 15, Volatility: 20,
 } as const;
@@ -179,46 +181,273 @@ const WEIGHT_HINTS: Record<keyof typeof WEIGHT_DEFAULTS, string> = {
   Volatility: 'IV-rank sweet-spot — rich enough to earn premium, not blown-out.',
 };
 
+type WeightKey = keyof typeof WEIGHT_DEFAULTS;
+type WeightMap  = Record<WeightKey, number>;
+
+const WEIGHT_PRESETS: Record<Exclude<WeightHorizon, 'Custom'>, WeightMap> = {
+  Intraday: { Trend: 10, Pullback: 15, Trigger: 40, Event: 25, Volatility: 10 },
+  Swing:    { Trend: 25, Pullback: 20, Trigger: 20, Event: 15, Volatility: 20 },
+  Position: { Trend: 35, Pullback: 25, Trigger: 10, Event: 10, Volatility: 20 },
+};
+
+const HORIZON_TABS: { key: WeightHorizon; label: string; hint: string }[] = [
+  { key: 'Intraday', label: 'Intraday', hint: '0–2 days'    },
+  { key: 'Swing',    label: 'Swing',    hint: '5–15 days'   },
+  { key: 'Position', label: 'Position', hint: '15–45 days'  },
+  { key: 'Custom',   label: 'Custom',   hint: 'Your profile' },
+];
+
+interface ParamSpec {
+  key:   string;
+  label: string;
+  unit:  string;
+  min:   number;
+  max:   number;
+  step:  number;
+}
+
+interface MetricDef {
+  name:     string;
+  desc:     string;
+  param?:   ParamSpec;
+  presets?: Record<Exclude<WeightHorizon, 'Custom'>, number>;
+}
+
+type CustomParams = Record<WeightKey, Record<string, number>>;
+
+const METRICS_DEF: Record<WeightKey, MetricDef[]> = {
+  Trend: [
+    {
+      name: 'Long-term MA',
+      desc: 'Price above = bullish structural context',
+      param:   { key: 'longMa', label: 'Period', unit: 'days', min: 20, max: 500, step: 5 },
+      presets: { Intraday: 50, Swing: 200, Position: 200 },
+    },
+    {
+      name: 'Medium-term MA slope',
+      desc: 'Positive slope confirms trend momentum',
+      param:   { key: 'medMa', label: 'Period', unit: 'days', min: 10, max: 200, step: 5 },
+      presets: { Intraday: 20, Swing: 50, Position: 50 },
+    },
+    {
+      name: 'ADX',
+      desc: '>25 = trending, <20 = ranging',
+      param:   { key: 'adxPeriod', label: 'Period', unit: 'days', min: 5, max: 30, step: 1 },
+      presets: { Intraday: 7, Swing: 14, Position: 14 },
+    },
+    { name: 'Higher-highs pattern', desc: 'Swing structure confirms uptrend' },
+  ],
+  Pullback: [
+    {
+      name: 'Short-term MA proximity',
+      desc: 'Close near MA = healthy retracement zone',
+      param:   { key: 'shortMa', label: 'MA period', unit: 'days', min: 5, max: 100, step: 5 },
+      presets: { Intraday: 5, Swing: 20, Position: 50 },
+    },
+    {
+      name: 'RSI',
+      desc: 'Momentum check — not overbought, not broken',
+      param:   { key: 'rsiPeriod', label: 'Period', unit: 'days', min: 5, max: 30, step: 1 },
+      presets: { Intraday: 7, Swing: 14, Position: 14 },
+    },
+    { name: 'Long MA buffer',    desc: 'Price must remain above the structural MA' },
+    { name: 'Volume on retrace', desc: 'Below-avg volume = weak selling pressure'  },
+  ],
+  Trigger: [
+    { name: 'Candle pattern', desc: 'Engulfing, hammer, inside-bar breakout' },
+    {
+      name: 'Volume vs avg',
+      desc: 'Confirms institutional interest on the move',
+      param:   { key: 'volLookback', label: 'Avg lookback', unit: 'days', min: 5, max: 100, step: 5 },
+      presets: { Intraday: 5, Swing: 20, Position: 50 },
+    },
+    {
+      name: 'Volume threshold',
+      desc: 'Minimum multiple of the lookback average',
+      param:   { key: 'volMultiplier', label: 'Min multiple', unit: '×', min: 1.0, max: 3.0, step: 0.1 },
+      presets: { Intraday: 2.0, Swing: 1.5, Position: 1.3 },
+    },
+    { name: 'Breakout close', desc: 'Close above prior swing high' },
+  ],
+  Event: [
+    {
+      name: 'Earnings buffer',
+      desc: 'Score penalised inside this window',
+      param:   { key: 'earningsBuffer', label: 'Min days out', unit: 'days', min: 0, max: 30, step: 1 },
+      presets: { Intraday: 1, Swing: 7, Position: 14 },
+    },
+    {
+      name: 'FOMC buffer',
+      desc: 'Fed meetings add market-wide uncertainty',
+      param:   { key: 'fomcBuffer', label: 'Min days out', unit: 'days', min: 0, max: 14, step: 1 },
+      presets: { Intraday: 1, Swing: 3, Position: 5 },
+    },
+    {
+      name: 'Ex-dividend buffer',
+      desc: 'Options pricing distorts near the div date',
+      param:   { key: 'divBuffer', label: 'Min days out', unit: 'days', min: 0, max: 10, step: 1 },
+      presets: { Intraday: 1, Swing: 3, Position: 5 },
+    },
+  ],
+  Volatility: [
+    {
+      name: 'IV Rank',
+      desc: '40–70 = premium-selling sweet spot',
+      param:   { key: 'ivRankLookback', label: 'Lookback', unit: 'days', min: 30, max: 365, step: 5 },
+      presets: { Intraday: 30, Swing: 252, Position: 252 },
+    },
+    { name: 'IV Percentile', desc: 'Confirms rank using percentile calculation' },
+    {
+      name: 'Historical vol ratio',
+      desc: 'IV / HV > threshold = premium over realised vol',
+      param:   { key: 'hvLookback', label: 'HV period', unit: 'days', min: 5, max: 120, step: 5 },
+      presets: { Intraday: 10, Swing: 20, Position: 60 },
+    },
+    { name: 'Term structure', desc: 'Front > back = contango; earns on roll' },
+  ],
+};
+
+function initCustomParams(): CustomParams {
+  const out = {} as CustomParams;
+  for (const compKey of Object.keys(METRICS_DEF) as WeightKey[]) {
+    out[compKey] = {};
+    for (const m of METRICS_DEF[compKey]) {
+      if (m.param && m.presets) {
+        out[compKey][m.param.key] = m.presets.Swing;
+      }
+    }
+  }
+  return out;
+}
+
 function WeightsForm() {
-  const [w, setW] = useState<typeof WEIGHT_DEFAULTS>({ ...WEIGHT_DEFAULTS });
+  const [horizon,  setHorizon]  = useState<WeightHorizon>('Swing');
+  const [customW,  setCustomW]  = useState<WeightMap>({ ...WEIGHT_DEFAULTS });
+  const [customP,  setCustomP]  = useState<CustomParams>(initCustomParams);
+
+  const isCustom = horizon === 'Custom';
+  const w: WeightMap = isCustom ? customW : WEIGHT_PRESETS[horizon];
+
   const sum = Object.values(w).reduce((a, b) => a + b, 0);
   const sumTone: 'pass' | 'caution' | 'reject' =
     sum === 100 ? 'pass' : Math.abs(sum - 100) <= 5 ? 'caution' : 'reject';
 
-  const reset = () => setW({ ...WEIGHT_DEFAULTS });
+  function handleWeightChange(key: WeightKey, val: number) {
+    setCustomW((prev) => ({ ...prev, [key]: val }));
+  }
+
+  function handleParamChange(compKey: WeightKey, paramKey: string, val: number) {
+    setCustomP((prev) => ({ ...prev, [compKey]: { ...prev[compKey], [paramKey]: val } }));
+  }
+
+  function resetCustom() {
+    setCustomW({ ...WEIGHT_DEFAULTS });
+    setCustomP(initCustomParams());
+  }
+
+  function getParamValue(compKey: WeightKey, m: MetricDef): number | undefined {
+    if (!m.param) return undefined;
+    if (isCustom) return customP[compKey]?.[m.param.key];
+    return m.presets?.[horizon as Exclude<WeightHorizon, 'Custom'>];
+  }
 
   return (
     <>
       <SectionIntro
-        title="Score weights"
-        blurb="Each candidate gets a 0–100 score per component. These weights decide how the components combine into the final rank shown in Step 4."
+        title="Score weights & parameters"
+        blurb="Each horizon has preset indicator parameters (SMA periods, volume lookbacks, event buffers). Switch to Custom to define your own."
       />
 
-      <div className={styles.sumRow}>
-        <Text size={12} tone="secondary">Live sum (must equal 100)</Text>
-        <Data size={16} weight={500} tone={sumTone}>{sum}</Data>
-        <button type="button" className={styles.btnInline} onClick={reset}>Reset to defaults</button>
+      {/* Horizon tab strip */}
+      <div className={styles.horizonTabs}>
+        {HORIZON_TABS.map((h) => (
+          <button
+            key={h.key}
+            type="button"
+            onClick={() => setHorizon(h.key)}
+            className={`${styles.horizonTab} ${h.key === horizon ? styles.horizonTabActive : ''}`}
+          >
+            <Text size={13} weight={500}>{h.label}</Text>
+            <Text size={11} tone="secondary">{h.hint}</Text>
+          </button>
+        ))}
       </div>
 
-      {(Object.keys(WEIGHT_DEFAULTS) as (keyof typeof WEIGHT_DEFAULTS)[]).map((key) => (
-        <Row
-          key={key}
-          label={key}
-          hint={WEIGHT_HINTS[key]}
-          defaultValue={`${WEIGHT_DEFAULTS[key]}`}
-        >
-          <div className={styles.sliderRow}>
-            <input
-              type="range"
-              min={0}
-              max={60}
-              value={w[key]}
-              onChange={(e) => setW({ ...w, [key]: Number(e.target.value) })}
-              className={styles.slider}
-            />
-            <Data size={13} weight={500} className={styles.sliderValue}>{w[key]}</Data>
-          </div>
-        </Row>
+      {/* Preset notice or live-sum row */}
+      {isCustom ? (
+        <div className={styles.sumRow}>
+          <Text size={12} tone="secondary">Weight sum (must equal 100)</Text>
+          <Data size={16} weight={500} tone={sumTone}>{sum}</Data>
+          <button type="button" className={styles.btnInline} onClick={resetCustom}>Reset to Swing defaults</button>
+        </div>
+      ) : (
+        <div className={styles.presetNotice}>
+          <Text size={12} tone="secondary">
+            Preset weights and parameters for <strong>{horizon}</strong> ({HORIZON_TABS.find(h => h.key === horizon)!.hint}) trading — read only.
+            Switch to <strong>Custom</strong> to define your own profile.
+          </Text>
+        </div>
+      )}
+
+      {(Object.keys(WEIGHT_DEFAULTS) as WeightKey[]).map((compKey) => (
+        <div key={compKey} className={styles.weightBlock}>
+          <Row
+            label={compKey}
+            hint={WEIGHT_HINTS[compKey]}
+            defaultValue={isCustom ? `${WEIGHT_DEFAULTS[compKey]}` : undefined}
+          >
+            <div className={styles.sliderRow}>
+              <input
+                type="range"
+                min={0}
+                max={60}
+                value={w[compKey]}
+                disabled={!isCustom}
+                onChange={(e) => handleWeightChange(compKey, Number(e.target.value))}
+                className={`${styles.slider} ${!isCustom ? styles.sliderReadOnly : ''}`}
+              />
+              <Data size={13} weight={500} className={styles.sliderValue}>{w[compKey]}</Data>
+            </div>
+          </Row>
+
+          <details className={styles.metricsDetails}>
+            <summary className={styles.metricsSummary}>Metrics & parameters</summary>
+            <ul className={styles.metricsList}>
+              {METRICS_DEF[compKey].map((m) => {
+                const pVal = getParamValue(compKey, m);
+                return (
+                  <li key={m.name} className={styles.metricItem}>
+                    <div className={styles.metricRow}>
+                      <div className={styles.metricText}>
+                        <Text size={12} weight={500}>{m.name}</Text>
+                        <Text size={11} tone="secondary">{m.desc}</Text>
+                      </div>
+                      {m.param && pVal !== undefined && (
+                        <div className={styles.metricParam}>
+                          <Text size={10} tone="dim">{m.param.label}</Text>
+                          {isCustom ? (
+                            <input
+                              type="number"
+                              className={styles.paramInput}
+                              value={pVal}
+                              min={m.param.min}
+                              max={m.param.max}
+                              step={m.param.step}
+                              onChange={(e) => handleParamChange(compKey, m.param!.key, Number(e.target.value))}
+                            />
+                          ) : (
+                            <Data size={12} weight={500}>{pVal}</Data>
+                          )}
+                          <Text size={10} tone="dim">{m.param.unit}</Text>
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
+        </div>
       ))}
     </>
   );

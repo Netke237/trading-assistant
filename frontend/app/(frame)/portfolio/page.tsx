@@ -12,7 +12,7 @@ import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
-import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
+import { usePortfolioStore } from '@/lib/portfolioStore';
 import type { PortfolioPosition } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -26,8 +26,10 @@ function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | und
 const COLUMNS = '72px 1.6fr 72px 1fr 110px 104px 60px 56px 60px 90px 40px';
 
 export default function PortfolioPage() {
-  const [positions, setPositions] = useState<PortfolioPosition[]>(MOCK_PORTFOLIO);
-  const [editing, setEditing]     = useState<string | null>(null);
+  const positions      = usePortfolioStore((s) => s.positions);
+  const updatePosition = usePortfolioStore((s) => s.updatePosition);
+  const closeInStore   = usePortfolioStore((s) => s.closePosition);
+  const [editing, setEditing] = useState<string | null>(null);
 
   const deployed = positions.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
   const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
@@ -35,11 +37,8 @@ export default function PortfolioPage() {
   const winners = positions.filter((p) => p.pnlDollar > 0).length;
   const losers  = positions.filter((p) => p.pnlDollar < 0).length;
 
-  const updatePosition = (contract: string, patch: Partial<PortfolioPosition>) => {
-    setPositions((rows) => rows.map((r) => (r.contract === contract ? { ...r, ...patch } : r)));
-  };
   const closePosition = (contract: string) => {
-    setPositions((rows) => rows.filter((r) => r.contract !== contract));
+    closeInStore(contract);
     setEditing(null);
   };
 
@@ -70,7 +69,10 @@ export default function PortfolioPage() {
             <div key={p.contract} className={styles.rowWrap}>
               <TableRow status={p.status} columns={COLUMNS}>
                 <Data size={13} weight={500}>{p.symbol}</Data>
-                <Text size={12} tone="secondary">{p.contract}</Text>
+                <span className={styles.contractCell}>
+                  <Text size={12} tone="secondary">{p.contract}</Text>
+                  {p.source === 'manual' && <span className={styles.srcManual}>MANUAL</span>}
+                </span>
                 <span className={p.direction === 'Bullish' ? styles.dirBull : styles.dirBear}>
                   {p.direction === 'Bullish' ? 'Bull' : 'Bear'}
                 </span>

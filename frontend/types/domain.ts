@@ -36,6 +36,7 @@ export interface WatchlistRow {
   horizon:      Horizon;
   score:        number;        // 0–100
   rankDelta:    number;        // +2 / -1 / 0
+  scoreDelta?:  number;        // score pts vs previous scan
   status:       Status;
   breakdown:    ScoreBreakdown;
   nextEventDays?: number;      // days until earnings / fed / etc
@@ -63,6 +64,10 @@ export interface PortfolioPosition {
   theta?:        number;       // $/day time decay (negative for longs)
   vega?:         number;       // $/vol point
   contracts?:    number;       // number of option contracts held
+  /** How the order was placed. Missing = legacy/seed data, treated as broker. */
+  source?:       'broker' | 'manual';
+  /** ISO timestamp of when the order was created (from Step 7). */
+  orderedAt?:    string;
 }
 
 export interface AlertItem {
@@ -93,6 +98,17 @@ export interface TradeCardData {
   contractScore: number;
   contractConfidence: Status;
   contractBreakdown: ContractScoreBreakdown;
+  /** Resolved contract fields for the TradeCard contract-detail block. */
+  contractDetails?: {
+    strike: number;
+    expiry: string;              // YYYY-MM-DD
+    right:  'C' | 'P';
+    mid:    number;              // premium, $
+    delta:  number;
+    theta:  number;              // $/day
+    ivRank: number;              // 0–100
+    dte:    number;
+  };
   entry:  { limit: number; maxFill: number; orderType: OrderType };
   exit:   { invalidation: number; premiumStop: number; timeStopDays: number; target: number };
   rrRatio:  number;

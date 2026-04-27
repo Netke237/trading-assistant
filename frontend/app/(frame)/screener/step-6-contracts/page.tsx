@@ -2,42 +2,58 @@
 
 /*
  * Screener Step 6 — Contracts. Phase 5.
- * Scored option contracts for the currently-selected symbol. Clicking a row
- * "selects" that contract (no store wiring yet — Phase 6 persists choice and
- * pre-fills Step 7 TradeCard).
+ * Scored option contracts for the currently-selected symbol, enriched with
+ * PRICE, IV RANK, IV PCTL, Θ/DAY and VOLUME. Clickable column headers sort
+ * the table. Each row has a star that writes to useWatchedContractsStore,
+ * and the selection radio at the right marks the contract feeding Step 7.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
+import { ContractStar } from '@/components/atoms/ContractStar';
 import { statusForScore } from '@/lib/status';
+import { MOCK_CONTRACTS, contractLabel, type OptionContract } from '@/mocks/contracts';
 import styles from '../screener.module.css';
+import tbl from './contracts.module.css';
 
-const COLUMNS = 'minmax(200px, 1fr) 140px 80px 72px 90px 120px 56px';
+const COLUMNS = '28px minmax(200px, 1fr) 120px 64px 70px 70px 70px 72px 64px 70px 104px 48px';
 
-interface ContractRow {
-  contract: string;
-  dte: number;
-  dteTotal: number;
-  delta: number;
-  iv:    number;
-  spread: number;   // $
-  score: number;
-}
+type SortKey =
+  | 'contract' | 'dte' | 'delta' | 'price'
+  | 'ivRank' | 'ivPercentile' | 'theta'
+  | 'spread' | 'volume' | 'score';
 
-const MOCK_CONTRACTS: ContractRow[] = [
-  { contract: 'AAPL 190C 05/16', dte: 28, dteTotal: 38, delta: 0.45, iv: 26, spread: 0.05, score: 82 },
-  { contract: 'AAPL 195C 05/16', dte: 28, dteTotal: 38, delta: 0.38, iv: 27, spread: 0.06, score: 78 },
-  { contract: 'AAPL 190C 06/20', dte: 63, dteTotal: 71, delta: 0.48, iv: 24, spread: 0.08, score: 73 },
-  { contract: 'AAPL 200C 05/16', dte: 28, dteTotal: 38, delta: 0.32, iv: 28, spread: 0.07, score: 67 },
-  { contract: 'AAPL 185C 04/25', dte:  7, dteTotal: 17, delta: 0.58, iv: 32, spread: 0.04, score: 54 },
-  { contract: 'AAPL 210C 05/16', dte: 28, dteTotal: 38, delta: 0.22, iv: 30, spread: 0.12, score: 42 },
-];
+type SortDir = 'asc' | 'desc';
 
 export default function Step6Page() {
-  const [pick, setPick] = useState(MOCK_CONTRACTS[0]!.contract);
+  const [pick, setPick] = useState<string>(MOCK_CONTRACTS[0]!.id);
+  const [sortKey, setSortKey] = useState<SortKey>('score');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  const sorted = useMemo<OptionContract[]>(() => {
+    const rows = [...MOCK_CONTRACTS];
+    const mul = sortDir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      switch (sortKey) {
+        case 'contract':
+          return contractLabel(a).localeCompare(contractLabel(b)) * mul;
+        default:
+          return ((a[sortKey] as number) - (b[sortKey] as number)) * mul;
+      }
+    });
+    return rows;
+  }, [sortKey, sortDir]);
+
+  const toggleSort = (k: SortKey) => {
+    if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(k);
+      setSortDir(k === 'contract' ? 'asc' : 'desc');
+    }
+  };
 
   return (
     <div className={styles.main}>
@@ -45,53 +61,85 @@ export default function Step6Page() {
         <Text size={11} tone="dim" weight={500}>STEP 6 OF 7</Text>
         <Title as="h1" size={24}>Contracts — AAPL</Title>
         <Text size={13} tone="secondary">
-          Scored by DTE fit, delta, IV attractiveness, liquidity and spread. Click a row to select.
+          Scored by DTE fit, delta, IV attractiveness, liquidity and spread. Click a column to sort,
+          star a contract to track it in the Watchlist.
         </Text>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: COLUMNS, gap: 12, padding: '0 4px' }}>
-        <Text size={11} tone="dim">CONTRACT</Text>
-        <Text size={11} tone="dim">DTE</Text>
-        <Text size={11} tone="dim">DELTA</Text>
-        <Text size={11} tone="dim">IV%</Text>
-        <Text size={11} tone="dim">SPREAD</Text>
-        <Text size={11} tone="dim">SCORE</Text>
+      <div className={tbl.headerRow} style={{ gridTemplateColumns: COLUMNS }}>
+        <span aria-hidden />
+        <SortBtn label="CONTRACT" k="contract" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+        <SortBtn label="DTE"      k="dte"      sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+        <SortBtn label="DELTA"    k="delta"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+        <SortBtn label="PRICE"    k="price"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+        <SortBtn label="IV RANK"  k="ivRank"   sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+        <SortBtn label="IV PCTL"  k="ivPercentile" sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+        <SortBtn label="Θ/DAY"    k="theta"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+        <SortBtn label="SPREAD"   k="spread"   sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+        <SortBtn label="VOL"      k="volume"   sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+        <SortBtn label="SCORE"    k="score"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
         <Text size={11} tone="dim">PICK</Text>
       </div>
 
-      {MOCK_CONTRACTS.map((c) => {
+      {sorted.map((c) => {
         const status = statusForScore(c.score);
         return (
           <TableRow
-            key={c.contract}
+            key={c.id}
             status={status}
             columns={COLUMNS}
-            selected={c.contract === pick}
-            onClick={() => setPick(c.contract)}
+            selected={c.id === pick}
+            onClick={() => setPick(c.id)}
           >
-            <Data size={13} weight={500}>{c.contract}</Data>
+            <ContractStar contractId={c.id} size="sm" />
+            <Data size={13} weight={500}>{contractLabel(c)}</Data>
             <DTEProgressBar daysRemaining={c.dte} totalDays={c.dteTotal} />
-            <Data size={12}>{c.delta.toFixed(2)}</Data>
-            <Data size={12}>{c.iv}</Data>
-            <Data size={12}>${c.spread.toFixed(2)}</Data>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
+            <Data size={12} className={tbl.right}>${c.price.toFixed(2)}</Data>
+            <Data size={12} className={tbl.right}>{c.ivRank}</Data>
+            <Data size={12} className={tbl.right}>{c.ivPercentile}</Data>
+            <Data size={12} className={tbl.right}>{c.theta.toFixed(2)}</Data>
+            <Data size={12} className={tbl.right}>${c.spread.toFixed(2)}</Data>
+            <Data size={12} className={tbl.right}>{c.volume.toLocaleString()}</Data>
+            <div className={tbl.scoreCell}>
               <Data size={13} weight={500}>{c.score}</Data>
               <StatusBadge status={status} />
             </div>
             <span
-              aria-label={c.contract === pick ? 'Selected' : 'Select'}
-              style={{
-                display: 'inline-block',
-                width: 14,
-                height: 14,
-                borderRadius: '50%',
-                border: '2px solid var(--border-strong)',
-                background: c.contract === pick ? 'var(--accent)' : 'transparent',
-              }}
+              aria-label={c.id === pick ? 'Selected' : 'Select'}
+              className={tbl.pickDot}
+              data-selected={c.id === pick ? 'true' : 'false'}
             />
           </TableRow>
         );
       })}
     </div>
+  );
+}
+
+function SortBtn({
+  label,
+  k,
+  sortKey,
+  dir,
+  onClick,
+  align,
+}: {
+  label:   string;
+  k:       SortKey;
+  sortKey: SortKey;
+  dir:     SortDir;
+  onClick: (k: SortKey) => void;
+  align?:  'left' | 'right';
+}) {
+  const active = sortKey === k;
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(k)}
+      className={`${tbl.sortBtn} ${align === 'right' ? tbl.sortRight : ''} ${active ? tbl.sortActive : ''}`}
+    >
+      {label} {active ? (dir === 'asc' ? '↑' : '↓') : ''}
+    </button>
   );
 }

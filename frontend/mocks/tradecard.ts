@@ -32,6 +32,10 @@ export const MOCK_TRADE_CARD: TradeCardData = {
     liquidity:        84,
     spread:           78,
   },
+  contractDetails: {
+    strike: 220, expiry: '2026-05-15', right: 'C',
+    mid:    4.25, delta: 0.42, theta: -0.10, ivRank: 44, dte: 24,
+  },
 
   entry: {
     limit:     4.25,

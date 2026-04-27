@@ -65,6 +65,27 @@
 .dirBull { color: var(--pass);   background: var(--pass-bg);   }
 .dirBear { color: var(--reject); background: var(--reject-bg); }
 
+.contractCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.srcManual {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--caution-bg);
+  color: var(--caution);
+  border: 1px solid var(--caution-border, var(--caution));
+  font-family: var(--font-dm);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
 .footer {
   display: flex;
   justify-content: flex-end;

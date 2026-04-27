@@ -10,7 +10,7 @@
  * Event / Volatility) with raw, weight, weighted points and signal.
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
@@ -20,10 +20,11 @@ import { EventFlag } from '@/components/atoms/EventFlag';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { MOCK_WATCHLIST } from '@/mocks/watchlist';
+import type { WatchlistRow } from '@/types/domain';
 import { candlesFor } from '@/mocks/candles';
 import styles from './page.module.css';
 
-const COLUMNS = '28px 1fr 56px 70px 72px';
+const COLUMNS = '28px 1fr 46px 54px 64px 68px';
 
 // Mirrors the Settings → Score weights defaults. Will read from store later.
 const DEFAULT_WEIGHTS = {
@@ -56,9 +57,74 @@ function signalLabel(s: Signal): string {
   return s === 'pos' ? 'Positive' : s === 'neg' ? 'Negative' : 'Neutral';
 }
 
+type SortKey = 'symbol' | 'rankDelta' | 'scoreDelta' | 'score' | 'nextEventDays';
+type SortDir = 'asc' | 'desc';
+
+const DEFAULT_SORT: Record<SortKey, SortDir> = {
+  symbol:       'asc',
+  rankDelta:    'desc',
+  scoreDelta:   'desc',
+  score:        'desc',
+  nextEventDays: 'asc',
+};
+
+function sortRows(rows: WatchlistRow[], key: SortKey, dir: SortDir): WatchlistRow[] {
+  return [...rows].sort((a, b) => {
+    let av: number | string;
+    let bv: number | string;
+    switch (key) {
+      case 'symbol':        av = a.symbol;              bv = b.symbol;              break;
+      case 'rankDelta':     av = a.rankDelta;           bv = b.rankDelta;           break;
+      case 'scoreDelta':    av = a.scoreDelta ?? 0;     bv = b.scoreDelta ?? 0;     break;
+      case 'score':         av = a.score;               bv = b.score;               break;
+      case 'nextEventDays': av = a.nextEventDays ?? 9999; bv = b.nextEventDays ?? 9999; break;
+    }
+    if (av < bv) return dir === 'asc' ? -1 : 1;
+    if (av > bv) return dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+}
+
+interface SortHeaderProps {
+  label: string;
+  sortKey: SortKey;
+  currentKey: SortKey;
+  dir: SortDir;
+  onSort: (key: SortKey) => void;
+}
+
+function SortHeader({ label, sortKey, currentKey, dir, onSort }: SortHeaderProps) {
+  const active = currentKey === sortKey;
+  return (
+    <button className={styles.sortBtn} onClick={() => onSort(sortKey)}>
+      <span>{label}</span>
+      <span className={active ? styles.sortIndActive : styles.sortInd}>
+        {active ? (dir === 'asc' ? '▲' : '▼') : '⇅'}
+      </span>
+    </button>
+  );
+}
+
 export default function Step4Page() {
   const [selectedSym, setSelectedSym] = useState(MOCK_WATCHLIST[0]!.symbol);
-  const selected = MOCK_WATCHLIST.find((r) => r.symbol === selectedSym) ?? MOCK_WATCHLIST[0]!;
+  const [sortKey, setSortKey] = useState<SortKey>('score');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  const sorted = useMemo(
+    () => sortRows(MOCK_WATCHLIST, sortKey, sortDir),
+    [sortKey, sortDir],
+  );
+
+  const selected = sorted.find((r) => r.symbol === selectedSym) ?? sorted[0]!;
+
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(DEFAULT_SORT[key]);
+    }
+  }
 
   const contributions = COMPONENTS.map((c) => {
     const raw    = selected.breakdown[c.key];
@@ -83,13 +149,14 @@ export default function Step4Page() {
           </header>
           <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
             <span aria-hidden />
-            <Text size={11} tone="dim">SYMBOL</Text>
-            <Text size={11} tone="dim">Δ</Text>
-            <Text size={11} tone="dim">SCORE</Text>
-            <Text size={11} tone="dim">NEXT</Text>
+            <SortHeader label="SYMBOL"   sortKey="symbol"        currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+            <SortHeader label="Δ RNK"    sortKey="rankDelta"     currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+            <SortHeader label="Δ SCR"    sortKey="scoreDelta"    currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+            <SortHeader label="SCORE"    sortKey="score"         currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+            <SortHeader label="NEXT"     sortKey="nextEventDays" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
           </div>
           <div className={styles.tableBody}>
-            {MOCK_WATCHLIST.map((row) => (
+            {sorted.map((row) => (
               <TableRow
                 key={row.symbol}
                 status={row.status}
@@ -102,7 +169,8 @@ export default function Step4Page() {
                   <Data size={12} weight={500}>{row.symbol}</Data>
                   <Text size={11} tone="secondary">{row.company}</Text>
                 </div>
-                <RankDelta value={row.rankDelta} />
+                <RankDelta value={row.rankDelta}          context="rank"     />
+                <RankDelta value={row.scoreDelta ?? 0}    context="score pt" />
                 <Data size={13} weight={500}>{row.score}</Data>
                 {row.nextEventDays !== undefined
                   ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel} />

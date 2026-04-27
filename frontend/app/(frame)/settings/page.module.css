@@ -116,6 +116,152 @@
 }
 .row:last-child { border-bottom: 0; }
 
+/* Horizon tab strip */
+.horizonTabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+}
+
+.horizonTab {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  text-align: left;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 100ms;
+}
+
+.horizonTab:hover {
+  border-color: var(--border-strong);
+}
+
+.horizonTabActive {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-base));
+}
+
+/* Read-only notice for preset horizons */
+.presetNotice {
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--border-subtle);
+}
+
+/* Disabled (read-only) slider */
+.sliderReadOnly {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Weight block: wraps one row + its metrics collapsible */
+.weightBlock {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.weightBlock:last-child { border-bottom: 0; }
+.weightBlock .row {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Collapsible metrics section */
+.metricsDetails {
+  padding-bottom: var(--space-3);
+}
+
+.metricsSummary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  font-family: var(--font-dm);
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.metricsSummary::-webkit-details-marker { display: none; }
+
+.metricsSummary::before {
+  content: '▶';
+  font-size: 7px;
+  transition: transform 140ms ease;
+  display: inline-block;
+}
+
+.metricsDetails[open] .metricsSummary::before {
+  transform: rotate(90deg);
+}
+
+.metricsSummary:hover {
+  color: var(--text-secondary);
+}
+
+.metricsList {
+  margin: 0;
+  padding: var(--space-1) 0 0 var(--space-4);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.metricItem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.metricRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.metricText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.metricParam {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.paramInput {
+  width: 54px;
+  height: 22px;
+  padding: 0 var(--space-2);
+  background: var(--bg-base);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.paramInput:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 .rowLabel {
   display: flex;
   flex-direction: column;
