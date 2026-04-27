@@ -19,7 +19,7 @@ import { MOCK_CONTRACTS, contractLabel, type OptionContract } from '@/mocks/cont
 import styles from '../screener.module.css';
 import tbl from './contracts.module.css';
 
-const COLUMNS = '28px minmax(200px, 1fr) 120px 64px 70px 70px 70px 72px 64px 70px 104px 48px';
+const COLUMNS = '28px minmax(120px, 1fr) 90px 56px 60px 60px 60px 64px 56px 60px 96px 44px';
 
 type SortKey =
   | 'contract' | 'dte' | 'delta' | 'price'

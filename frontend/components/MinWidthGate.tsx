@@ -1,7 +1,7 @@
 'use client';
 
 /*
- * MinWidthGate — spec §6.3 risk #6: desktop-only (≥1200px).
+ * MinWidthGate — spec §6.3 risk #6: desktop-only (≥1280px).
  * Rather than adding responsive breakpoints, block the app under the threshold
  * with a friendly explainer. Uses matchMedia so it responds to window resizes.
  */
@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 import { Title, Text } from '@/components/primitives';
 import styles from './MinWidthGate.module.css';
 
-const MIN_WIDTH = 1200;
+const MIN_WIDTH = 1280;
 
 export function MinWidthGate({ children }: { children: React.ReactNode }) {
   const [tooNarrow, setTooNarrow] = useState(false);
@@ -32,7 +32,7 @@ export function MinWidthGate({ children }: { children: React.ReactNode }) {
             <Title as="h2" size={20}>Desktop required</Title>
             <Text size={13} tone="secondary">
               Bamendjou is designed for a trading desktop. Please use a window at least
-              1200&nbsp;pixels wide. Current width: {typeof window !== 'undefined' ? window.innerWidth : '—'}&nbsp;px.
+              1280&nbsp;pixels wide. Current width: {typeof window !== 'undefined' ? window.innerWidth : '—'}&nbsp;px.
             </Text>
           </div>
         </div>
