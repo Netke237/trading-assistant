@@ -73,7 +73,10 @@
   border-radius: var(--radius-lg);
   max-width: 440px;
   width: calc(100vw - var(--space-8));
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+.dialogTitle {
+  margin: 0;
 }
 
 .dialogIcon {

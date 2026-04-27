@@ -63,7 +63,7 @@ export function StepNavBar() {
         <div className={styles.overlay} role="dialog" aria-modal aria-labelledby="regime-dialog-title">
           <div className={styles.dialog}>
             <div className={styles.dialogIcon}>⚠</div>
-            <p id="regime-dialog-title" style={{ margin: 0 }}>
+            <p id="regime-dialog-title" className={styles.dialogTitle}>
               <Text size={14} weight={600}>Regime flagged as REJECT</Text>
             </p>
             <Text size={13} tone="secondary">

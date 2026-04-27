@@ -8,9 +8,10 @@
 
 import { RailSection } from '@/components/organisms/ContextRail';
 import { Text, Data } from '@/components/primitives';
-import { StatusDot } from '@/components/atoms/StatusDot';
+import { QuickLookRow } from '@/components/molecules/QuickLookRow';
 import { MOCK_WATCHLIST } from '@/mocks/watchlist';
 import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
+import styles from './QuickLook.module.css';
 
 export function RailQuickLook() {
   const top = [...MOCK_WATCHLIST].sort((a, b) => b.score - a.score).slice(0, 5);
@@ -25,27 +26,20 @@ export function RailQuickLook() {
   return (
     <>
       <RailSection title="Watchlist · Top 5">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className={styles.watchlistStack}>
           {top.map((r) => (
-            <div
+            <QuickLookRow
               key={r.symbol}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '10px 1fr auto',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <StatusDot tone={r.status} size="sm" />
-              <Data size={12} weight={500}>{r.symbol}</Data>
-              <Data size={12} tone="secondary">{r.score}</Data>
-            </div>
+              symbol={r.symbol}
+              score={r.score}
+              status={r.status}
+            />
           ))}
         </div>
       </RailSection>
 
       <RailSection title="Portfolio">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className={styles.portfolioStack}>
           <Row><Text size={12} tone="secondary">Positions</Text><Data size={12}>{MOCK_PORTFOLIO.length}</Data></Row>
           <Row><Text size={12} tone="secondary">Deployed</Text><Data size={12}>${Math.round(deployed).toLocaleString()}</Data></Row>
           <Row>
@@ -65,9 +59,5 @@ export function RailQuickLook() {
 }
 
 function Row({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      {children}
-    </div>
-  );
+  return <div className={styles.row}>{children}</div>;
 }

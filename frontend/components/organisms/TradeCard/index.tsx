@@ -21,7 +21,7 @@ import { useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
-import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import type { TradeCardData } from '@/types/domain';
 import styles from './TradeCard.module.css';
@@ -135,8 +135,7 @@ export function TradeCard({ data, onSendToBroker, sendLabel, sendDisabled }: Tra
 
         {/* 7. Final status */}
         <section className={`${styles.finalCard} ${styles[`final_${data.finalStatus}`]}`}>
-          <Text size={14} weight={600}>Final Status</Text>
-          <StatusBadge status={data.finalStatus} />
+          <LabeledStatusBadge label="Final Status" status={data.finalStatus} />
         </section>
       </div>
 

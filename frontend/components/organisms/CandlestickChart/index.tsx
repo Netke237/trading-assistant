@@ -141,7 +141,7 @@ export function CandlestickChart({ data, height = 320, className }: CandlestickC
     <div
       ref={containerRef}
       className={`${styles.chart} ${className ?? ''}`}
-      style={autoFill ? { height: '100%', flex: 1, minHeight: 0 } : undefined}
+      data-autofill={autoFill ? 'true' : undefined}
     />
   );
 }

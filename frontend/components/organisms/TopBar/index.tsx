@@ -10,8 +10,8 @@
 
 import { useEffect, useState } from 'react';
 import { Title, Text } from '@/components/primitives';
-import { StatusDot } from '@/components/atoms/StatusDot';
-import { ModeToggle } from '@/components/atoms/ModeToggle';
+import { RegimeIndicator } from '@/components/molecules/RegimeIndicator';
+import { TopBarActions } from '@/components/molecules/TopBarActions';
 import { useScanStore } from '@/lib/scanStore';
 import type { ScanState } from '@/lib/scanStore';
 import styles from './TopBar.module.css';
@@ -84,12 +84,9 @@ export function TopBar() {
         {pillLabel(scanState, scanAt, mounted)}
       </span>
 
-      <div className={styles.regimeGroup}>
-        <StatusDot tone={regime} />
-        <Text size={12}>Regime: {regime === 'NO_DATA' ? 'NO DATA' : regime}</Text>
-      </div>
+      <RegimeIndicator status={regime} />
 
-      <ModeToggle />
+      <TopBarActions />
     </header>
   );
 }

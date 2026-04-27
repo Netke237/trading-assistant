@@ -1,7 +1,7 @@
 /*
  * Theme store — Zustand with localStorage persistence.
  *
- * The actual <html data-theme="..."> sync lives in components/ThemeProvider.tsx
+ * The actual <html data-theme="..."> sync lives in components/ThemeProvider/index.tsx
  * (client component). This file only owns the state.
  *
  * An inline no-flash script in app/layout.tsx reads the same localStorage key

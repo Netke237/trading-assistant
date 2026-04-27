@@ -1,0 +1,17 @@
+.watchlistStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.portfolioStack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
