@@ -7,6 +7,31 @@
 
 import type { UpcomingEvent } from '@/types/domain';
 
+/** Reference date for deterministic mock data (matches scanStore.scanAt). */
+const REFERENCE_DATE = '2026-04-20';
+
+export function daysUntil(eventDate: string, from = REFERENCE_DATE): number {
+  const fromMs = new Date(from).getTime();
+  const toMs = new Date(eventDate).getTime();
+  return Math.ceil((toMs - fromMs) / (1000 * 60 * 60 * 24));
+}
+
+/** Find the next upcoming event for a symbol. */
+export function nextEventFor(
+  symbol: string,
+  from = REFERENCE_DATE,
+): { days: number; label: string } | null {
+  const matches = MOCK_EVENTS.filter((e) => e.symbol === symbol || e.symbol === '—');
+  let best: { days: number; label: string } | null = null;
+  for (const e of matches) {
+    const d = daysUntil(e.date, from);
+    if (d >= 0 && (!best || d < best.days)) {
+      best = { days: d, label: e.label };
+    }
+  }
+  return best;
+}
+
 export const MOCK_EVENTS: UpcomingEvent[] = [
   // --- April 2026 (near-term) ---
   { date: '2026-04-20', symbol: 'TSLA',  label: 'Earnings',           status: 'REJECT'  },
