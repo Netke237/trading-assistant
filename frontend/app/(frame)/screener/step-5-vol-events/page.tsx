@@ -14,7 +14,7 @@ import { EventFlag } from '@/components/atoms/EventFlag';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { MOCK_WATCHLIST } from '@/mocks/watchlist';
 import { eventProximity } from '@/lib/date';
-import type { Status } from '@/lib/status';
+import { worstStatus, type Status } from '@/lib/status';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
 
@@ -68,10 +68,11 @@ export default function Step5Page() {
           const pctl = ivPctlFor(r.symbol);
           const ivSt = ivStatus(rank);
           const prox = r.nextEventDays !== undefined ? eventProximity(r.nextEventDays) : 'distant';
-          const gate: Status =
+          const proxStatus: Status =
             prox === 'imminent' ? 'REJECT'
             : prox === 'near'   ? 'CAUTION'
-            : ivSt;
+            : 'PASS';
+          const gate: Status = worstStatus(ivSt, proxStatus);
 
           return (
             <TableRow key={r.symbol} status={gate} columns={COLUMNS}>

@@ -27,3 +27,15 @@ export function statusForScore(value: number, max = 100): Status {
   if (pct >= 50) return 'CAUTION';
   return 'REJECT';
 }
+
+/**
+ * Returns the "worst" (most restrictive) status from a list.
+ * Priority: REJECT > CAUTION > PENDING > PASS > NO_DATA
+ */
+export function worstStatus(...statuses: Status[]): Status {
+  if (statuses.includes('REJECT')) return 'REJECT';
+  if (statuses.includes('CAUTION')) return 'CAUTION';
+  if (statuses.includes('PENDING')) return 'PENDING';
+  if (statuses.includes('PASS')) return 'PASS';
+  return 'NO_DATA';
+}

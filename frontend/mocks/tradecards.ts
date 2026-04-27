@@ -97,7 +97,10 @@ function tradeCardFor(row: typeof MOCK_WATCHLIST[number]): TradeCardData {
       timeStopDays: Math.max(3, Math.round(contract.dte * 0.4)),
       target,
     },
-    rrRatio:  +((Math.abs(target - row.price)) / (Math.abs(row.price - invalidation) || 1)).toFixed(1),
+    rrRatio:  (() => {
+      const denominator = Math.abs(row.price - invalidation);
+      return denominator === 0 ? 0 : +(Math.abs(target - row.price) / denominator).toFixed(1);
+    })(),
     rrModel:  'Heston repriced',
 
     finalStatus: row.status,
