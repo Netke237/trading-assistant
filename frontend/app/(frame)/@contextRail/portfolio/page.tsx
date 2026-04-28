@@ -6,6 +6,7 @@ import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { Text, Data } from '@/components/primitives';
 import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
+import styles from './page.module.css';
 
 export default function PortfolioContextRail() {
   const deployed = MOCK_PORTFOLIO.reduce((s, p) => s + p.currentPrice * 100, 0);
@@ -18,7 +19,7 @@ export default function PortfolioContextRail() {
   return (
     <>
       <RailSection title="Totals">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className={styles.statStack}>
           <Row><Text size={12} tone="secondary">Deployed</Text><Data size={12}>${Math.round(deployed).toLocaleString()}</Data></Row>
           <Row>
             <Text size={12} tone="secondary">Open P&amp;L</Text>
@@ -31,7 +32,7 @@ export default function PortfolioContextRail() {
       </RailSection>
 
       <RailSection title="Aggregate Greeks">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className={styles.statStack}>
           <Row><Text size={12} tone="secondary">Δ Delta</Text><Data size={12}>{delta}</Data></Row>
           <Row><Text size={12} tone="secondary">Θ Theta / day</Text><Data size={12} tone="reject">{theta}</Data></Row>
           <Row><Text size={12} tone="secondary">ν Vega</Text><Data size={12}>{vega}</Data></Row>
@@ -44,5 +45,5 @@ export default function PortfolioContextRail() {
 }
 
 function Row({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>{children}</div>;
+  return <div className={styles.row}>{children}</div>;
 }

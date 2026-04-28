@@ -141,7 +141,7 @@ export default function CalendarPage() {
           <Text size={11} tone="dim">–</Text>
           <Data size={14} weight={500}>{monthLabel(monthViews[5]!.date)}</Data>
         </div>
-        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+        <div className={styles.navBtnGroup}>
           <button
             type="button"
             className={styles.navBtn}

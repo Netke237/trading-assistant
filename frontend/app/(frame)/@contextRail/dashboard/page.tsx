@@ -8,6 +8,7 @@ import { Text, Data } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
 import { MOCK_EVENTS } from '@/mocks/events';
 import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
+import styles from './page.module.css';
 
 function shortDate(iso: string): string {
   const d = new Date(iso);
@@ -21,9 +22,9 @@ export default function DashboardContextRail() {
   return (
     <>
       <RailSection title="Upcoming Events (14d)">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className={styles.eventStack}>
           {MOCK_EVENTS.slice(0, 5).map((e) => (
-            <div key={`${e.date}-${e.symbol}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div key={`${e.date}-${e.symbol}`} className={styles.eventRow}>
               <StatusDot tone={e.status} size="sm" />
               <Data size={11} tone="secondary">{shortDate(e.date)}</Data>
               <Data size={11} weight={500}>{e.symbol}</Data>
@@ -34,18 +35,18 @@ export default function DashboardContextRail() {
       </RailSection>
 
       <RailSection title="Portfolio Risk">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div className={styles.riskStack}>
+          <div className={styles.riskRow}>
             <Text size={12} tone="secondary">Deployed</Text>
             <Data size={12}>${Math.round(deployed).toLocaleString()}</Data>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div className={styles.riskRow}>
             <Text size={12} tone="secondary">Open P&amp;L</Text>
             <Data size={12} tone={openPnL >= 0 ? 'pass' : 'reject'}>
               {openPnL >= 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
             </Data>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div className={styles.riskRow}>
             <Text size={12} tone="secondary">Positions</Text>
             <Data size={12}>{MOCK_PORTFOLIO.length}</Data>
           </div>

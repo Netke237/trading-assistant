@@ -46,6 +46,11 @@
   border-color: var(--border-strong);
 }
 
+.navBtnGroup {
+  display: flex;
+  gap: var(--space-2);
+}
+
 .navTitle {
   display: flex;
   align-items: center;
