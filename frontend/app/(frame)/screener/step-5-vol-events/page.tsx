@@ -52,7 +52,7 @@ export default function Step5Page() {
         </Text>
       </div>
 
-      <div className={styles.stepBody} style={{ padding: 0 }}>
+      <div className={`${styles.stepBody} ${styles.stepBody_noPad}`}>
         <div className={pageStyles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
           <span aria-hidden />
           <Text size={11} tone="dim">SYMBOL</Text>

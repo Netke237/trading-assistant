@@ -182,9 +182,9 @@ export default function Step4Page() {
 
         {/* RIGHT — selected symbol detail */}
         <section className={styles.rightPanel}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          <div className={styles.rightPanelHeader}>
             <WatchStar symbol={selected.symbol} />
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div>
               <SymbolHeader
                 ticker={selected.symbol}
                 company={selected.company}

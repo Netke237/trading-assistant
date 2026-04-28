@@ -35,6 +35,17 @@
   /* chartBox grows to fill the freed space; totalCard sits at the bottom. */
 }
 
+.rightPanelHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rightPanelHeader > :last-child {
+  flex: 1;
+  min-width: 0;
+}
+
 .panelHeader {
   display: flex;
   justify-content: space-between;

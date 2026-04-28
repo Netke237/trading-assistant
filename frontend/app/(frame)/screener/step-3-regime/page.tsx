@@ -91,7 +91,7 @@ export default function Step3Page() {
         <div className={pageStyles.indexCard}>
           <header className={pageStyles.indexHeader}>
             <Text size={13} weight={600}>S&amp;P 500 (SPX)</Text>
-            <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'baseline' }}>
+            <div className={pageStyles.indexPriceGroup}>
               <Data size={14} weight={500}>{spx.close.toFixed(2)}</Data>
               <Data size={11} tone={spx.changePct >= 0 ? 'pass' : 'reject'}>
                 {spx.changePct >= 0 ? '+' : ''}{spx.changePct.toFixed(2)}%
@@ -105,7 +105,7 @@ export default function Step3Page() {
         <div className={pageStyles.indexCard}>
           <header className={pageStyles.indexHeader}>
             <Text size={13} weight={600}>Nasdaq 100 (NDX)</Text>
-            <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'baseline' }}>
+            <div className={pageStyles.indexPriceGroup}>
               <Data size={14} weight={500}>{ndx.close.toFixed(2)}</Data>
               <Data size={11} tone={ndx.changePct >= 0 ? 'pass' : 'reject'}>
                 {ndx.changePct >= 0 ? '+' : ''}{ndx.changePct.toFixed(2)}%
