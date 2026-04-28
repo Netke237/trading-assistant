@@ -44,8 +44,8 @@ export function RailQuickLook() {
           <Row><Text size={12} tone="secondary">Deployed</Text><Data size={12}>${Math.round(deployed).toLocaleString()}</Data></Row>
           <Row>
             <Text size={12} tone="secondary">Open P&amp;L</Text>
-            <Data size={12} tone={openPnL >= 0 ? 'pass' : 'reject'}>
-              {openPnL >= 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
+            <Data size={12} tone={openPnL > 0 ? 'pass' : openPnL < 0 ? 'reject' : undefined}>
+              {openPnL > 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
             </Data>
           </Row>
           <Row>

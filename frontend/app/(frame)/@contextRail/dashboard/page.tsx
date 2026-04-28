@@ -1,14 +1,26 @@
+'use client';
+
 /*
- * Dashboard right-rail. Spec §4: Upcoming events + Portfolio risk summary.
+ * Dashboard right-rail.
+ * Spec: Last Scan summary · Latest Alert · Portfolio Risk · QuickLook.
  */
 
 import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { Text, Data } from '@/components/primitives';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { StatusDot } from '@/components/atoms/StatusDot';
+import { useScanStore } from '@/lib/scanStore';
+import { MOCK_ALERTS } from '@/mocks/alerts';
 import { MOCK_EVENTS } from '@/mocks/events';
 import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
 import styles from './page.module.css';
+
+function formatTime(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
 
 function shortDate(iso: string): string {
   const d = new Date(iso);
@@ -16,11 +28,42 @@ function shortDate(iso: string): string {
 }
 
 export default function DashboardContextRail() {
-  const deployed = MOCK_PORTFOLIO.reduce((s, p) => s + p.currentPrice * 100, 0);
+  const { scanState, context, scanAt } = useScanStore();
+
+  const deployed = MOCK_PORTFOLIO.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
   const openPnL  = MOCK_PORTFOLIO.reduce((s, p) => s + p.pnlDollar, 0);
+
+  const contextStr = context
+    ? `${context.universe} · ${context.direction} · ${context.horizon}`
+    : '—';
+
+  const latestAlert = MOCK_ALERTS[0];
 
   return (
     <>
+      <RailSection title="Last Scan">
+        <div className={styles.scanStack}>
+          <div className={styles.scanTop}>
+            <StatusBadge status={scanState === 'COMPLETED' ? 'PASS' : scanState === 'FAILED' ? 'REJECT' : 'PENDING'} label={scanState} />
+            <Text size={12} tone="secondary">{formatTime(scanAt)}</Text>
+          </div>
+          <Text size={12} tone="secondary">{contextStr}</Text>
+        </div>
+      </RailSection>
+
+      <RailSection title="Latest Alert">
+        {latestAlert && (
+          <div className={styles.alertBlock}>
+            <div className={styles.alertTop}>
+              <StatusBadge status={alertKindToStatus(latestAlert.kind)} label={latestAlert.kind.toUpperCase()} />
+              <Data size={12} weight={500}>{latestAlert.symbol}</Data>
+            </div>
+            <Text size={12}>{latestAlert.reason}</Text>
+            <Text size={11} tone="dim">{latestAlert.timestamp}</Text>
+          </div>
+        )}
+      </RailSection>
+
       <RailSection title="Upcoming Events (14d)">
         <div className={styles.eventStack}>
           {MOCK_EVENTS.slice(0, 5).map((e) => (
@@ -42,8 +85,8 @@ export default function DashboardContextRail() {
           </div>
           <div className={styles.riskRow}>
             <Text size={12} tone="secondary">Open P&amp;L</Text>
-            <Data size={12} tone={openPnL >= 0 ? 'pass' : 'reject'}>
-              {openPnL >= 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
+            <Data size={12} tone={openPnL > 0 ? 'pass' : openPnL < 0 ? 'reject' : undefined}>
+              {openPnL > 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
             </Data>
           </div>
           <div className={styles.riskRow}>
@@ -56,4 +99,10 @@ export default function DashboardContextRail() {
       <RailQuickLook />
     </>
   );
+}
+
+function alertKindToStatus(kind: string): 'PASS' | 'CAUTION' | 'REJECT' {
+  if (kind === 'Critical') return 'REJECT';
+  if (kind === 'Action')   return 'CAUTION';
+  return 'PASS';
 }

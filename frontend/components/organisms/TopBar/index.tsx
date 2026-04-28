@@ -60,8 +60,6 @@ export function TopBar() {
   const scanState = useScanStore((s) => s.scanState);
   const scanAt    = useScanStore((s) => s.scanAt);
   const context   = useScanStore((s) => s.context);
-  const regime    = useScanStore((s) => s.regime);
-
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -84,7 +82,7 @@ export function TopBar() {
         {pillLabel(scanState, scanAt, mounted)}
       </span>
 
-      <RegimeIndicator status={regime} />
+      <RegimeIndicator />
 
       <TopBarActions />
     </header>

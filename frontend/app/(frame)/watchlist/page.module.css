@@ -131,7 +131,7 @@
 }
 
 .tabActive .tabCount {
-  background: var(--accent-bg, var(--bg-surface-2));
+  background: var(--accent-dim);
   color: var(--text-secondary);
 }
 

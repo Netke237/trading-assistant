@@ -27,7 +27,7 @@ export default function WatchlistContextRail() {
 
       <RailSection title="Flags">
         <div className={styles.statStack}>
-          <Row><Text size={12} tone="secondary">Earnings ≤ 7d</Text><Data size={12}>{evtSoon}</Data></Row>
+          <Row><Text size={12} tone="secondary">Events ≤ 7d</Text><Data size={12}>{evtSoon}</Data></Row>
           <Row><Text size={12} tone="secondary">Total</Text><Data size={12}>{MOCK_WATCHLIST.length}</Data></Row>
         </div>
       </RailSection>

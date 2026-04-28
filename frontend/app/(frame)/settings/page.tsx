@@ -14,6 +14,8 @@
 import { useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
+import { useSettingsStore } from '@/lib/settingsStore';
+import type { WeightKey, CustomWeights, CustomParams } from '@/lib/settingsStore';
 import styles from './page.module.css';
 
 type Section = 'broker' | 'theme' | 'weights' | 'alerts';
@@ -27,6 +29,7 @@ const SECTIONS: { key: Section; label: string; desc: string }[] = [
 
 export default function SettingsPage() {
   const [active, setActive] = useState<Section>('broker');
+  const { resetToDefaults } = useSettingsStore();
 
   return (
     <div className={styles.main}>
@@ -59,7 +62,7 @@ export default function SettingsPage() {
 
       {/* Sticky footer */}
       <footer className={styles.footer}>
-        <button type="button" className={styles.btn}>Reset</button>
+        <button type="button" className={styles.btn} onClick={resetToDefaults}>Reset</button>
         <button type="button" className={`${styles.btn} ${styles.btnPrimary}`}>Save changes</button>
       </footer>
     </div>
@@ -181,8 +184,7 @@ const WEIGHT_HINTS: Record<keyof typeof WEIGHT_DEFAULTS, string> = {
   Volatility: 'IV-rank sweet-spot — rich enough to earn premium, not blown-out.',
 };
 
-type WeightKey = keyof typeof WEIGHT_DEFAULTS;
-type WeightMap  = Record<WeightKey, number>;
+type WeightMap = CustomWeights;
 
 const WEIGHT_PRESETS: Record<Exclude<WeightHorizon, 'Custom'>, WeightMap> = {
   Intraday: { Trend: 10, Pullback: 15, Trigger: 40, Event: 25, Volatility: 10 },
@@ -212,8 +214,6 @@ interface MetricDef {
   param?:   ParamSpec;
   presets?: Record<Exclude<WeightHorizon, 'Custom'>, number>;
 }
-
-type CustomParams = Record<WeightKey, Record<string, number>>;
 
 const METRICS_DEF: Record<WeightKey, MetricDef[]> = {
   Trend: [
@@ -322,8 +322,7 @@ function initCustomParams(): CustomParams {
 
 function WeightsForm() {
   const [horizon,  setHorizon]  = useState<WeightHorizon>('Swing');
-  const [customW,  setCustomW]  = useState<WeightMap>({ ...WEIGHT_DEFAULTS });
-  const [customP,  setCustomP]  = useState<CustomParams>(initCustomParams);
+  const { customW, customParams, setCustomW, setCustomParams, resetToDefaults } = useSettingsStore();
 
   const isCustom = horizon === 'Custom';
   const w: WeightMap = isCustom ? customW : WEIGHT_PRESETS[horizon];
@@ -333,21 +332,16 @@ function WeightsForm() {
     sum === 100 ? 'pass' : Math.abs(sum - 100) <= 5 ? 'caution' : 'reject';
 
   function handleWeightChange(key: WeightKey, val: number) {
-    setCustomW((prev) => ({ ...prev, [key]: val }));
+    setCustomW({ ...customW, [key]: val });
   }
 
   function handleParamChange(compKey: WeightKey, paramKey: string, val: number) {
-    setCustomP((prev) => ({ ...prev, [compKey]: { ...prev[compKey], [paramKey]: val } }));
-  }
-
-  function resetCustom() {
-    setCustomW({ ...WEIGHT_DEFAULTS });
-    setCustomP(initCustomParams());
+    setCustomParams({ ...customParams, [compKey]: { ...customParams[compKey], [paramKey]: val } });
   }
 
   function getParamValue(compKey: WeightKey, m: MetricDef): number | undefined {
     if (!m.param) return undefined;
-    if (isCustom) return customP[compKey]?.[m.param.key];
+    if (isCustom) return customParams[compKey]?.[m.param.key];
     return m.presets?.[horizon as Exclude<WeightHorizon, 'Custom'>];
   }
 
@@ -378,7 +372,7 @@ function WeightsForm() {
         <div className={styles.sumRow}>
           <Text size={12} tone="secondary">Weight sum (must equal 100)</Text>
           <Data size={16} weight={500} tone={sumTone}>{sum}</Data>
-          <button type="button" className={styles.btnInline} onClick={resetCustom}>Reset to Swing defaults</button>
+          <button type="button" className={styles.btnInline} onClick={resetToDefaults}>Reset to Swing defaults</button>
         </div>
       ) : (
         <div className={styles.presetNotice}>

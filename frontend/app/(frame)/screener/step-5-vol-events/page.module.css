@@ -17,6 +17,7 @@
 }
 
 .ivTrack {
+  width: 120px;
   height: 3px;
   background: var(--bg-surface-2);
   border-radius: 2px;

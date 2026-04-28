@@ -6,16 +6,20 @@ import styles from './ChartPanelHeader.module.css';
 interface ChartPanelHeaderProps {
   symbol: string;
   onClose: () => void;
+  /** Panel title. @default "Chart" */
+  label?: string;
+  /** Timeframe descriptor. @default "1D · 120 bars" */
+  timeframe?: string;
 }
 
-export function ChartPanelHeader({ symbol, onClose }: ChartPanelHeaderProps) {
+export function ChartPanelHeader({ symbol, onClose, label = 'Chart', timeframe = '1D · 120 bars' }: ChartPanelHeaderProps) {
   return (
     <header className={styles.root}>
       <div className={styles.titleGroup}>
-        <Text size={14} weight={600}>Chart</Text>
+        <Text size={14} weight={500}>{label}</Text>
         <Data size={13} weight={500}>{symbol}</Data>
         {symbol && <WatchStar symbol={symbol} size="sm" />}
-        <Text size={11} tone="dim">1D · 120 bars</Text>
+        <Text size={11} tone="dim">{timeframe}</Text>
       </div>
       <IconButton aria-label="Close chart" onClick={onClose}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">

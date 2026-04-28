@@ -86,7 +86,7 @@ export default function Step5Page() {
                 <div className={pageStyles.ivTrack}>
                   <div
                     className={`${pageStyles.ivFill} ${pageStyles[`ivFill_${ivSt}`]}`}
-                    style={{ width: `${rank}%` }}
+                    style={{ width: `${(rank / 100) * 120}px` }}
                   />
                 </div>
               </div>

@@ -1,18 +1,18 @@
+'use client';
+
 import { Text } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
-import type { Status } from '@/lib/status';
+import { useScanStore } from '@/lib/scanStore';
+import { STATUS_LABEL } from '@/lib/status';
 import styles from './RegimeIndicator.module.css';
 
-interface RegimeIndicatorProps {
-  status: Status;
-  label?: string;
-}
+export function RegimeIndicator() {
+  const regime = useScanStore((s) => s.regime);
 
-export function RegimeIndicator({ status, label }: RegimeIndicatorProps) {
   return (
     <div className={styles.root}>
-      <StatusDot tone={status} size="sm" />
-      <Text size={12} tone="secondary">{label ?? 'Regime'}</Text>
+      <StatusDot tone={regime} size="sm" />
+      <Text size={12} tone="secondary">{STATUS_LABEL[regime]}</Text>
     </div>
   );
 }

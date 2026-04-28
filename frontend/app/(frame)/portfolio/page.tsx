@@ -83,11 +83,11 @@ export default function PortfolioPage() {
                   <Data size={12} weight={500}>${p.currentPrice.toFixed(2)}</Data>
                 </div>
                 <div className={styles.pnlCell}>
-                  <Data size={13} weight={500} tone={p.pnlDollar >= 0 ? 'pass' : 'reject'}>
-                    {p.pnlDollar >= 0 ? '+' : ''}${Math.round(p.pnlDollar)}
+                  <Data size={13} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                    {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
                   </Data>
-                  <Data size={11} tone={p.pnlDollar >= 0 ? 'pass' : 'reject'}>
-                    {p.pnlPct >= 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
+                  <Data size={11} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                    {p.pnlPct > 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
                   </Data>
                 </div>
                 <Data size={12} className={styles.right} tone={ivRankTone(p.ivRank)}>
@@ -132,14 +132,14 @@ export default function PortfolioPage() {
           </div>
           <div className={styles.footerGroup}>
             <Text size={11} tone="secondary">Open P&amp;L</Text>
-            <Data size={14} weight={500} tone={openPnL >= 0 ? 'pass' : 'reject'}>
-              {openPnL >= 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
+            <Data size={14} weight={500} tone={openPnL > 0 ? 'pass' : openPnL < 0 ? 'reject' : undefined}>
+              {openPnL > 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
             </Data>
           </div>
           <div className={styles.footerGroup}>
             <Text size={11} tone="secondary">Return</Text>
-            <Data size={14} weight={500} tone={openPnLPct >= 0 ? 'pass' : 'reject'}>
-              {openPnLPct >= 0 ? '+' : ''}{openPnLPct.toFixed(2)}%
+            <Data size={14} weight={500} tone={openPnLPct > 0 ? 'pass' : openPnLPct < 0 ? 'reject' : undefined}>
+              {openPnLPct > 0 ? '+' : ''}{openPnLPct.toFixed(2)}%
             </Data>
           </div>
           <div className={styles.footerGroup}>
@@ -172,7 +172,7 @@ function EditDrawer({
   return (
     <div className={styles.editDrawer}>
       <div className={styles.editHeader}>
-        <Text size={12} weight={600}>Edit {position.contract}</Text>
+        <Text size={12} weight={400}>Edit {position.contract}</Text>
         <button type="button" className={styles.editClose} onClick={onClose} aria-label="Close editor">×</button>
       </div>
 

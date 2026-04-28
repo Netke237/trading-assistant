@@ -93,8 +93,8 @@ export default function Step3Page() {
             <Text size={13} weight={600}>S&amp;P 500 (SPX)</Text>
             <div className={pageStyles.indexPriceGroup}>
               <Data size={14} weight={500}>{spx.close.toFixed(2)}</Data>
-              <Data size={11} tone={spx.changePct >= 0 ? 'pass' : 'reject'}>
-                {spx.changePct >= 0 ? '+' : ''}{spx.changePct.toFixed(2)}%
+              <Data size={11} tone={spx.changePct > 0 ? 'pass' : spx.changePct < 0 ? 'reject' : undefined}>
+                {spx.changePct > 0 ? '+' : ''}{spx.changePct.toFixed(2)}%
               </Data>
             </div>
           </header>
@@ -107,8 +107,8 @@ export default function Step3Page() {
             <Text size={13} weight={600}>Nasdaq 100 (NDX)</Text>
             <div className={pageStyles.indexPriceGroup}>
               <Data size={14} weight={500}>{ndx.close.toFixed(2)}</Data>
-              <Data size={11} tone={ndx.changePct >= 0 ? 'pass' : 'reject'}>
-                {ndx.changePct >= 0 ? '+' : ''}{ndx.changePct.toFixed(2)}%
+              <Data size={11} tone={ndx.changePct > 0 ? 'pass' : ndx.changePct < 0 ? 'reject' : undefined}>
+                {ndx.changePct > 0 ? '+' : ''}{ndx.changePct.toFixed(2)}%
               </Data>
             </div>
           </header>
@@ -154,7 +154,7 @@ export default function Step3Page() {
             <div className={pageStyles.sectorRow}>
               <Data size={12} weight={500}>{s.key}</Data>
               <Data size={12} weight={500} tone={toneFor(s.status)}>
-                {s.changePct >= 0 ? '+' : ''}{s.changePct.toFixed(2)}%
+                {s.changePct > 0 ? '+' : ''}{s.changePct.toFixed(2)}%
               </Data>
             </div>
             <Text size={11} tone="secondary">{s.name}</Text>

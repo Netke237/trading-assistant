@@ -25,10 +25,11 @@ import type { WatchlistRow } from '@/types/domain';
 import styles from './page.module.css';
 
 type Tab     = 'stocks' | 'contracts';
-type SortKey = 'score' | 'symbol' | 'price' | 'rank';
+type SortKey = 'score' | 'symbol' | 'price' | 'rank' | 'scoreDelta';
 type SortDir = 'asc' | 'desc';
+type ContractSortKey = 'score' | 'dte' | 'price';
 
-const COLUMNS          = '32px 72px 1.4fr 90px 80px 80px 90px 80px 90px';
+const COLUMNS          = '32px 72px 1.4fr 90px 80px 80px 90px 80px 60px 90px';
 const CONTRACT_COLUMNS = '28px 72px 1.3fr 120px 80px 72px 80px 80px 100px';
 
 export default function WatchlistPage() {
@@ -36,17 +37,20 @@ export default function WatchlistPage() {
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<string | null>(null);
+  const [contractSortKey, setContractSortKey] = useState<ContractSortKey>('score');
+  const [contractSortDir, setContractSortDir] = useState<SortDir>('desc');
 
   const sorted = useMemo<WatchlistRow[]>(() => {
     const rows = [...MOCK_WATCHLIST];
     rows.sort((a, b) => {
       const mul = sortDir === 'asc' ? 1 : -1;
       switch (sortKey) {
-        case 'symbol': return a.symbol.localeCompare(b.symbol) * mul;
-        case 'price':  return (a.price - b.price) * mul;
-        case 'rank':   return (a.rankDelta - b.rankDelta) * mul;
+        case 'symbol':     return a.symbol.localeCompare(b.symbol) * mul;
+        case 'price':      return (a.price - b.price) * mul;
+        case 'rank':       return (a.rankDelta - b.rankDelta) * mul;
+        case 'scoreDelta': return ((a.scoreDelta ?? 0) - (b.scoreDelta ?? 0)) * mul;
         case 'score':
-        default:       return (a.score - b.score) * mul;
+        default:           return (a.score - b.score) * mul;
       }
     });
     return rows;
@@ -57,6 +61,25 @@ export default function WatchlistPage() {
     () => watchedIds.map((id) => MOCK_CONTRACT_INDEX[id]).filter((c): c is OptionContract => !!c),
     [watchedIds],
   );
+
+  const sortedContracts = useMemo<OptionContract[]>(() => {
+    const list = [...watchedContracts];
+    list.sort((a, b) => {
+      const mul = contractSortDir === 'asc' ? 1 : -1;
+      switch (contractSortKey) {
+        case 'price': return (a.price - b.price) * mul;
+        case 'dte':   return (a.dte - b.dte) * mul;
+        case 'score':
+        default:      return (a.score - b.score) * mul;
+      }
+    });
+    return list;
+  }, [watchedContracts, contractSortKey, contractSortDir]);
+
+  const toggleContractSort = (k: ContractSortKey) => {
+    if (k === contractSortKey) setContractSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setContractSortKey(k); setContractSortDir('desc'); }
+  };
 
   const toggleSort = (k: SortKey) => {
     if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -74,7 +97,7 @@ export default function WatchlistPage() {
         <Text size={13} tone="secondary">
           {tab === 'stocks'
             ? `${MOCK_WATCHLIST.length} candidates · sorted by ${sortKey} ${sortDir === 'asc' ? '↑' : '↓'}`
-            : `${watchedContracts.length} starred contract${watchedContracts.length === 1 ? '' : 's'}`}
+            : `${sortedContracts.length} starred contract${sortedContracts.length === 1 ? '' : 's'} · sorted by ${contractSortKey} ${contractSortDir === 'asc' ? '↑' : '↓'}`}
         </Text>
       </div>
 
@@ -111,6 +134,7 @@ export default function WatchlistPage() {
               <Text size={11} tone="dim">HORIZON</Text>
               <SortBtn label="SCORE"      active={sortKey === 'score'}  dir={sortDir} onClick={() => toggleSort('score')}  align="right" />
               <SortBtn label="RANK Δ"     active={sortKey === 'rank'}   dir={sortDir} onClick={() => toggleSort('rank')} />
+              <SortBtn label="SCORE Δ"    active={sortKey === 'scoreDelta'} dir={sortDir} onClick={() => toggleSort('scoreDelta')} />
               <Text size={11} tone="dim">NEXT EVENT</Text>
             </div>
 
@@ -132,10 +156,18 @@ export default function WatchlistPage() {
                   </span>
                   <Text size={11} tone="secondary">{row.horizon}</Text>
                   <div className={styles.scoreCell}>
+                    {/*
+                     * ScoreBar (label + track + value, 3-col grid) is designed for the
+                     * ContextRail or detail panels.  Embedding it in the 90px score column
+                     * would require hiding label & value text and shrinking the track to
+                     * ~50px — the result is too cramped to add meaningful visual signal.
+                     * The StatusBadge + numeric score already communicate the score quality.
+                     */}
                     <Data size={13} weight={500}>{row.score}</Data>
                     <StatusBadge status={row.status} />
                   </div>
-                  <RankDelta value={row.rankDelta} />
+                  <RankDelta value={row.rankDelta} context="rank" />
+                  <RankDelta value={row.scoreDelta ?? 0} context="score pt" />
                   {row.nextEventDays !== undefined
                     ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel} />
                     : <Text size={11} tone="dim">—</Text>}
@@ -151,13 +183,28 @@ export default function WatchlistPage() {
           />
         </>
       ) : (
-        <ContractsTab contracts={watchedContracts} />
+        <ContractsTab
+          contracts={sortedContracts}
+          sortKey={contractSortKey}
+          sortDir={contractSortDir}
+          onSort={toggleContractSort}
+        />
       )}
     </div>
   );
 }
 
-function ContractsTab({ contracts }: { contracts: OptionContract[] }) {
+function ContractsTab({
+  contracts,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  contracts: OptionContract[];
+  sortKey: ContractSortKey;
+  sortDir: SortDir;
+  onSort: (k: ContractSortKey) => void;
+}) {
   if (contracts.length === 0) {
     return (
       <div className={styles.empty}>
@@ -175,12 +222,12 @@ function ContractsTab({ contracts }: { contracts: OptionContract[] }) {
         <span aria-hidden />
         <Text size={11} tone="dim">SYMBOL</Text>
         <Text size={11} tone="dim">CONTRACT</Text>
-        <Text size={11} tone="dim">DTE</Text>
-        <Text size={11} tone="dim" className={styles.right}>PRICE</Text>
+        <SortBtn label="DTE"   active={sortKey === 'dte'}   dir={sortDir} onClick={() => onSort('dte')} />
+        <SortBtn label="PRICE" active={sortKey === 'price'} dir={sortDir} onClick={() => onSort('price')} align="right" />
         <Text size={11} tone="dim" className={styles.right}>DELTA</Text>
         <Text size={11} tone="dim" className={styles.right}>IV RANK</Text>
         <Text size={11} tone="dim" className={styles.right}>Θ/DAY</Text>
-        <Text size={11} tone="dim" className={styles.right}>SCORE</Text>
+        <SortBtn label="SCORE" active={sortKey === 'score'} dir={sortDir} onClick={() => onSort('score')} align="right" />
       </div>
 
       <div className={styles.tableBody}>
