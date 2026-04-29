@@ -2,19 +2,21 @@
  * Portfolio right-rail. Spec §4: Aggregate Greeks / risk summary.
  */
 
+'use client';
+
+import { usePortfolioStore } from '@/lib/portfolioStore';
 import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { Text, Data } from '@/components/primitives';
-import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
 import styles from './page.module.css';
 
 export default function PortfolioContextRail() {
-  const deployed = MOCK_PORTFOLIO.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
-  const openPnL  = MOCK_PORTFOLIO.reduce((s, p) => s + p.pnlDollar, 0);
-  // Mock aggregate Greeks — Phase 6 will compute properly.
-  const delta = MOCK_PORTFOLIO.reduce((s, p) => s + (p.direction === 'Bullish' ? 0.45 : -0.42), 0).toFixed(2);
-  const theta = (-(MOCK_PORTFOLIO.length * 3.8)).toFixed(1);
-  const vega  = (MOCK_PORTFOLIO.length * 5.4).toFixed(1);
+  const positions = usePortfolioStore((s) => s.positions);
+  const deployed = positions.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
+  const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
+  const delta = positions.reduce((s, p) => s + (p.direction === 'Bullish' ? 0.45 : -0.42), 0).toFixed(2);
+  const theta = (-(positions.length * 3.8)).toFixed(1);
+  const vega  = (positions.length * 5.4).toFixed(1);
 
   return (
     <>
@@ -27,7 +29,7 @@ export default function PortfolioContextRail() {
               {openPnL > 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
             </Data>
           </Row>
-          <Row><Text size={12} tone="secondary">Positions</Text><Data size={12}>{MOCK_PORTFOLIO.length}</Data></Row>
+          <Row><Text size={12} tone="secondary">Positions</Text><Data size={12}>{positions.length}</Data></Row>
         </div>
       </RailSection>
 

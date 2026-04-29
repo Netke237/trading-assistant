@@ -9,11 +9,13 @@
  * data from /mocks/candles.ts.
  */
 
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 import { ChartPanelHeader } from '@/components/molecules/ChartPanelHeader';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
-import { candlesFor } from '@/mocks/candles';
+import { api } from '@/lib/api';
+import type { Candle } from '@/types/chart';
 import styles from './InlineChartPanel.module.css';
 
 interface InlineChartPanelProps {
@@ -23,6 +25,13 @@ interface InlineChartPanelProps {
 }
 
 export function InlineChartPanel({ open, symbol, onClose }: InlineChartPanelProps) {
+  const [candles, setCandles] = useState<Candle[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    api.getCandles(symbol).then(setCandles).catch(() => {});
+  }, [open, symbol]);
+
   return (
     <AnimatePresence initial={false}>
       {open && (
@@ -37,7 +46,7 @@ export function InlineChartPanel({ open, symbol, onClose }: InlineChartPanelProp
         >
           <ChartPanelHeader symbol={symbol} onClose={onClose} />
           <div className={styles.chartArea}>
-            <CandlestickChart data={candlesFor(symbol)} height={360} />
+            <CandlestickChart data={candles} height={360} />
           </div>
         </motion.section>
       )}

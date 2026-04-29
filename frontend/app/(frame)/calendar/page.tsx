@@ -8,11 +8,11 @@
  * Prev / Next cycles months; Today jumps back to current.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
 import { EventFlag } from '@/components/atoms/EventFlag';
-import { MOCK_EVENTS } from '@/mocks/events';
+import { api } from '@/lib/api';
 import type { UpcomingEvent } from '@/types/domain';
 import type { Status } from '@/lib/status';
 import styles from './page.module.css';
@@ -86,19 +86,21 @@ function monthLabel(d: Date): string {
 }
 
 export default function CalendarPage() {
-  // Anchor for the left-hand month. Default to the current month.
   const [anchor, setAnchor] = useState<Date>(new Date(Date.UTC(TODAY.getUTCFullYear(), TODAY.getUTCMonth(), 1)));
   const [selected, setSelected] = useState<string | null>(isoForUTC(TODAY));
+  const [events, setEvents] = useState<UpcomingEvent[]>([]);
+
+  useEffect(() => { api.getEvents().then(setEvents).catch(() => {}); }, []);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, UpcomingEvent[]>();
-    for (const ev of MOCK_EVENTS) {
+    for (const ev of events) {
       const list = map.get(ev.date) ?? [];
       list.push(ev);
       map.set(ev.date, list);
     }
     return map;
-  }, []);
+  }, [events]);
 
   // Six months side-by-side (responsive: wraps to 2–3 cols on narrower screens).
   const monthViews = useMemo(() => {

@@ -8,22 +8,17 @@
  * Successful submits surface a bottom-right toast with a Portfolio link.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text } from '@/components/primitives';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
-import {
-  MOCK_CANDIDATE_CARDS,
-  MOCK_CANDIDATE_INDEX,
-} from '@/mocks/tradecards';
+import { api } from '@/lib/api';
 import type { PortfolioPosition, TradeCardData } from '@/types/domain';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
-
-const SYMBOLS = MOCK_CANDIDATE_CARDS.map((c) => c.symbol);
 
 function nowISOLocal(): string {
   const d = new Date();
@@ -76,27 +71,38 @@ interface ToastState {
 }
 
 export default function Step7Page() {
-  const [active, setActive] = useState<string>(SYMBOLS[0]!);
-  const [basket, setBasket] = useState<string[]>([]);
+  const [cards, setCards]         = useState<TradeCardData[]>([]);
+  const [active, setActive]       = useState<string>('');
+  const [basket, setBasket]       = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [toast, setToast] = useState<ToastState | null>(null);
+  const [toast, setToast]         = useState<ToastState | null>(null);
+
+  useEffect(() => {
+    api.getTradecards().then((data) => {
+      setCards(data);
+      if (data[0]) setActive(data[0].symbol);
+    }).catch(() => {});
+  }, []);
 
   const addPosition = usePortfolioStore((s) => s.addPosition);
 
-  const card = useMemo(
-    () => MOCK_CANDIDATE_INDEX[active] ?? MOCK_CANDIDATE_CARDS[0]!,
-    [active],
+  const cardIndex = useMemo(
+    () => Object.fromEntries(cards.map((c) => [c.symbol, c])),
+    [cards],
   );
+  const symbols = cards.map((c) => c.symbol);
+
+  const card = cardIndex[active] ?? cards[0];
 
   const basketCards = useMemo<TradeCardData[]>(
-    () => basket.map((s) => MOCK_CANDIDATE_INDEX[s]).filter((c): c is TradeCardData => !!c),
-    [basket],
+    () => basket.map((s) => cardIndex[s]).filter((c): c is TradeCardData => !!c),
+    [basket, cardIndex],
   );
 
-  const idx = SYMBOLS.indexOf(active);
+  const idx = symbols.indexOf(active);
 
-  const goPrev = () => { if (idx > 0) setActive(SYMBOLS[idx - 1]!); };
-  const goNext = () => { if (idx >= 0 && idx < SYMBOLS.length - 1) setActive(SYMBOLS[idx + 1]!); };
+  const goPrev = () => { if (idx > 0) setActive(symbols[idx - 1]!); };
+  const goNext = () => { if (idx >= 0 && idx < symbols.length - 1) setActive(symbols[idx + 1]!); };
 
   const togglePin = () =>
     setBasket((b) => (b.includes(active) ? b.filter((s) => s !== active) : [...b, active]));
@@ -129,7 +135,7 @@ export default function Step7Page() {
       </div>
 
       <CandidateNav
-        symbols={SYMBOLS}
+        symbols={symbols}
         activeSymbol={active}
         basket={basket}
         onPrev={goPrev}
@@ -139,12 +145,14 @@ export default function Step7Page() {
         onRemovePin={removePin}
       />
 
-      <TradeCard
-        data={card}
-        onSendToBroker={() => !basketEmpty && setDialogOpen(true)}
-        sendLabel={sendLabel}
-        sendDisabled={basketEmpty}
-      />
+      {card && (
+        <TradeCard
+          data={card}
+          onSendToBroker={() => !basketEmpty && setDialogOpen(true)}
+          sendLabel={sendLabel}
+          sendDisabled={basketEmpty}
+        />
+      )}
 
       {dialogOpen && (
         <SendToBrokerDialog

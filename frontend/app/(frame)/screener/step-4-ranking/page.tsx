@@ -10,7 +10,7 @@
  * Event / Volatility) with raw, weight, weighted points and signal.
  */
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
@@ -19,9 +19,9 @@ import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { WatchStar } from '@/components/atoms/WatchStar';
-import { MOCK_WATCHLIST } from '@/mocks/watchlist';
+import { api } from '@/lib/api';
 import type { WatchlistRow } from '@/types/domain';
-import { candlesFor } from '@/mocks/candles';
+import type { Candle } from '@/types/chart';
 import styles from './page.module.css';
 
 const COLUMNS = '28px 1fr 46px 54px 64px 68px';
@@ -106,16 +106,25 @@ function SortHeader({ label, sortKey, currentKey, dir, onSort }: SortHeaderProps
 }
 
 export default function Step4Page() {
-  const [selectedSym, setSelectedSym] = useState(MOCK_WATCHLIST[0]!.symbol);
+  const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
+  const [candles, setCandles]     = useState<Candle[]>([]);
+  const [selectedSym, setSelectedSym] = useState<string>('AAPL');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
+  useEffect(() => { api.getWatchlist().then(setWatchlist).catch(() => {}); }, []);
+
   const sorted = useMemo(
-    () => sortRows(MOCK_WATCHLIST, sortKey, sortDir),
-    [sortKey, sortDir],
+    () => sortRows(watchlist, sortKey, sortDir),
+    [watchlist, sortKey, sortDir],
   );
 
-  const selected = sorted.find((r) => r.symbol === selectedSym) ?? sorted[0]!;
+  const selected = sorted.find((r) => r.symbol === selectedSym) ?? sorted[0];
+
+  useEffect(() => {
+    if (!selected) return;
+    api.getCandles(selected.symbol).then(setCandles).catch(() => {});
+  }, [selected?.symbol]);
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -124,6 +133,18 @@ export default function Step4Page() {
       setSortKey(key);
       setSortDir(DEFAULT_SORT[key]);
     }
+  }
+
+  if (!selected) {
+    return (
+      <div className={styles.main}>
+        <div className={styles.stepHeader}>
+          <Text size={11} tone="dim" weight={500}>STEP 4 OF 7</Text>
+          <Title as="h1" size={24}>Stock Ranking</Title>
+        </div>
+        <Text size={13} tone="dim">Loading candidates…</Text>
+      </div>
+    );
   }
 
   const contributions = COMPONENTS.map((c) => {
@@ -145,7 +166,7 @@ export default function Step4Page() {
         <section className={styles.leftPanel}>
           <header className={styles.panelHeader}>
             <Text size={13} weight={600}>Candidates</Text>
-            <Text size={11} tone="secondary">{MOCK_WATCHLIST.length} ranked</Text>
+            <Text size={11} tone="secondary">{watchlist.length} ranked</Text>
           </header>
           <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
             <span aria-hidden />
@@ -196,7 +217,7 @@ export default function Step4Page() {
             </div>
           </div>
           <div className={styles.chartBox}>
-            <CandlestickChart data={candlesFor(selected.symbol)} height="auto" />
+            <CandlestickChart data={candles} height="auto" />
           </div>
 
           {/* Compact total-score card */}

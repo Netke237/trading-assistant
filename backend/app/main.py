@@ -27,7 +27,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.DEBUG else [],
+        allow_origins=["*"] if settings.DEBUG else ["http://localhost:3001", "http://localhost:3003"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

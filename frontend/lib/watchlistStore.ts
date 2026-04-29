@@ -8,11 +8,10 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { MOCK_WATCHLIST } from '@/mocks/watchlist';
 
 export const WATCHLIST_STORAGE_KEY = 'bamendjou:watchlist';
 
-const SEED_SYMBOLS = MOCK_WATCHLIST.map((r) => r.symbol.toUpperCase());
+const SEED_SYMBOLS = ['AAPL', 'NVDA', 'MSFT', 'META', 'GOOGL', 'AMZN', 'AMD', 'TSLA', 'NFLX', 'INTC'];
 
 interface WatchlistState {
   /** All watched symbols, uppercased. Seeded on first run. */

@@ -8,6 +8,7 @@
  * Right context rail (events + portfolio risk) comes from the parallel slot.
  */
 
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { SectionCard } from '@/components/molecules/SectionCard';
@@ -17,12 +18,11 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
 import { useScanStore } from '@/lib/scanStore';
-import { MOCK_WATCHLIST } from '@/mocks/watchlist';
-import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
-import { MOCK_ALERTS } from '@/mocks/alerts';
-import { MOCK_REGIME } from '@/mocks/regime';
+import { api } from '@/lib/api';
 import { MOCK_NEWS } from '@/mocks/news';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
+import type { WatchlistRow, PortfolioPosition, AlertItem } from '@/types/domain';
+import type { MarketRegime } from '@/mocks/regime';
 import styles from './page.module.css';
 
 const WL_COLUMNS = '60px 1fr 60px 64px 64px';
@@ -38,14 +38,26 @@ function formatScanAt(iso: string | null): string {
 export default function DashboardPage() {
   const router = useRouter();
   const { context, scanAt } = useScanStore();
-  const top5 = MOCK_WATCHLIST.slice(0, 5);
 
-  const deployed = MOCK_PORTFOLIO.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
-  const openPnL  = MOCK_PORTFOLIO.reduce((s, p) => s + p.pnlDollar, 0);
-  const openPnLPct = (openPnL / deployed) * 100;
+  const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
+  const [portfolio, setPortfolio] = useState<PortfolioPosition[]>([]);
+  const [alerts, setAlerts]       = useState<AlertItem[]>([]);
+  const [regime, setRegime]       = useState<MarketRegime | null>(null);
 
-  // News filtered down to what's relevant to the user's watchlist.
-  const wlSet = new Set(MOCK_WATCHLIST.map((r) => r.symbol));
+  useEffect(() => {
+    api.getWatchlist().then(setWatchlist).catch(() => {});
+    api.getPortfolio().then(setPortfolio).catch(() => {});
+    api.getAlerts().then(setAlerts).catch(() => {});
+    api.getRegime().then(setRegime).catch(() => {});
+  }, []);
+
+  const top5 = watchlist.slice(0, 5);
+
+  const deployed = portfolio.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
+  const openPnL  = portfolio.reduce((s, p) => s + p.pnlDollar, 0);
+  const openPnLPct = deployed > 0 ? (openPnL / deployed) * 100 : 0;
+
+  const wlSet = new Set(watchlist.map((r) => r.symbol));
   const watchlistNews = MOCK_NEWS.filter((n) => wlSet.has(n.symbol));
 
   return (
@@ -63,13 +75,13 @@ export default function DashboardPage() {
       </div>
 
       {/* Regime banner */}
-      <section className={`${styles.regime} ${styles[`regime_${MOCK_REGIME.overall}`]}`}>
+      <section className={`${styles.regime} ${styles[`regime_${regime?.overall ?? 'PENDING'}`]}`}>
         <div className={styles.regimeLeft}>
-          <StatusBadge status={MOCK_REGIME.overall} label={`REGIME ${MOCK_REGIME.overall}`} />
-          <Text size={13} weight={500}>{MOCK_REGIME.headline}</Text>
+          <StatusBadge status={regime?.overall ?? 'PENDING'} label={`REGIME ${regime?.overall ?? '…'}`} />
+          <Text size={13} weight={500}>{regime?.headline ?? ''}</Text>
         </div>
         <div className={styles.regimeMetrics}>
-          {MOCK_REGIME.metrics.map((m) => (
+          {(regime?.metrics ?? []).map((m) => (
             <div key={m.label} className={styles.metric}>
               <Text size={11} tone="secondary">{m.label}</Text>
               <Data size={13} weight={500} tone={toneFor(m.status)}>{m.value}</Data>
@@ -82,7 +94,7 @@ export default function DashboardPage() {
       <div className={styles.bento}>
         <SectionCard
           title="Watchlist (Top 5)"
-          count={MOCK_WATCHLIST.length}
+          count={watchlist.length}
           action={{ label: 'View all →', onClick: () => router.push('/watchlist') }}
         >
           <div className={styles.tableHeader} style={{ gridTemplateColumns: WL_COLUMNS }}>
@@ -112,7 +124,7 @@ export default function DashboardPage() {
 
         <SectionCard
           title="Portfolio"
-          count={MOCK_PORTFOLIO.length}
+          count={portfolio.length}
           action={{ label: 'View all →', onClick: () => router.push('/portfolio') }}
         >
           <div className={styles.portfolioStats}>
@@ -127,11 +139,11 @@ export default function DashboardPage() {
               value={`${openPnLPct > 0 ? '+' : ''}${openPnLPct.toFixed(2)}%`}
               tone={openPnLPct > 0 ? 'pass' : openPnLPct < 0 ? 'reject' : undefined}
             />
-            <Stat label="Positions" value={`${MOCK_PORTFOLIO.length}`} />
+            <Stat label="Positions" value={`${portfolio.length}`} />
           </div>
           <div className={styles.divider} />
           <div className={styles.positions}>
-            {MOCK_PORTFOLIO.slice(0, 3).map((p) => (
+            {portfolio.slice(0, 3).map((p) => (
               <div key={p.contract} className={styles.posRow}>
                 <Data size={12} weight={500}>{p.symbol}</Data>
                 <Text size={11} tone="secondary">{p.contract}</Text>
@@ -143,9 +155,9 @@ export default function DashboardPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Alerts" count={MOCK_ALERTS.length}>
+        <SectionCard title="Alerts" count={alerts.length}>
           <div className={styles.alertList}>
-            {MOCK_ALERTS.slice(0, 5).map((a) => (
+            {alerts.slice(0, 5).map((a) => (
               <AlertRow
                 key={a.id}
                 kind={a.kind}
@@ -182,11 +194,11 @@ export default function DashboardPage() {
 
         <SectionCard
           title="Contracts"
-          count={MOCK_PORTFOLIO.length}
+          count={portfolio.length}
           action={{ label: 'View all →', onClick: () => router.push('/portfolio') }}
         >
           <div className={styles.contractsList}>
-            {MOCK_PORTFOLIO.map((p) => (
+            {portfolio.map((p) => (
               <div key={p.contract} className={styles.contractRow}>
                 <div className={styles.contractCell}>
                   <Data size={12} weight={500}>{p.symbol}</Data>

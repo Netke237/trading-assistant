@@ -5,15 +5,16 @@
  * Spec: Last Scan summary · Latest Alert · Portfolio Risk · QuickLook.
  */
 
+import { useEffect, useState } from 'react';
 import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
-import { MOCK_ALERTS } from '@/mocks/alerts';
-import { MOCK_EVENTS } from '@/mocks/events';
-import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { api } from '@/lib/api';
+import type { AlertItem, UpcomingEvent } from '@/types/domain';
 import styles from './page.module.css';
 
 function formatTime(iso: string | null): string {
@@ -29,15 +30,23 @@ function shortDate(iso: string): string {
 
 export default function DashboardContextRail() {
   const { scanState, context, scanAt } = useScanStore();
+  const positions = usePortfolioStore((s) => s.positions);
+  const [alerts, setAlerts]   = useState<AlertItem[]>([]);
+  const [events, setEvents]   = useState<UpcomingEvent[]>([]);
 
-  const deployed = MOCK_PORTFOLIO.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
-  const openPnL  = MOCK_PORTFOLIO.reduce((s, p) => s + p.pnlDollar, 0);
+  useEffect(() => {
+    api.getAlerts().then(setAlerts).catch(() => {});
+    api.getEvents().then(setEvents).catch(() => {});
+  }, []);
+
+  const deployed = positions.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
+  const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
 
   const contextStr = context
     ? `${context.universe} · ${context.direction} · ${context.horizon}`
     : '—';
 
-  const latestAlert = MOCK_ALERTS[0];
+  const latestAlert = alerts[0];
 
   return (
     <>
@@ -66,7 +75,7 @@ export default function DashboardContextRail() {
 
       <RailSection title="Upcoming Events (14d)">
         <div className={styles.eventStack}>
-          {MOCK_EVENTS.slice(0, 5).map((e) => (
+          {events.slice(0, 5).map((e) => (
             <div key={`${e.date}-${e.symbol}`} className={styles.eventRow}>
               <StatusDot tone={e.status} size="sm" />
               <Data size={11} tone="secondary">{shortDate(e.date)}</Data>
@@ -91,7 +100,7 @@ export default function DashboardContextRail() {
           </div>
           <div className={styles.riskRow}>
             <Text size={12} tone="secondary">Positions</Text>
-            <Data size={12}>{MOCK_PORTFOLIO.length}</Data>
+            <Data size={12}>{positions.length}</Data>
           </div>
         </div>
       </RailSection>
