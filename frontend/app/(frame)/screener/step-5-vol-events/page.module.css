@@ -1,26 +1,35 @@
-.star {
-  display: inline-flex;
+/* Step 5 — Volatility + Events */
+
+.tableHeader {
+  display: grid;
   align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: color 120ms, background 120ms;
+  gap: var(--space-3);
+  padding: 0 var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.star:hover {
-  color: var(--text-secondary);
+/* IV rank cell: number + mini horizontal bar stacked vertically */
+.ivRankCell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ivTrack {
+  width: 120px;
+  height: 3px;
   background: var(--bg-surface-2);
+  border-radius: 2px;
+  overflow: hidden;
 }
 
-.starOn {
-  color: var(--caution);
+.ivFill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 160ms ease-out;
 }
 
-.starOn:hover {
-  color: var(--caution);
-}
+.ivFill_PASS    { background: var(--pass);    }
+.ivFill_CAUTION { background: var(--caution); }
+.ivFill_REJECT  { background: var(--reject);  }

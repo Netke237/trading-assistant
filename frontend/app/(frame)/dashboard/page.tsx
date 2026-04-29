@@ -4,7 +4,7 @@
  * Dashboard — Phase 5.
  * Bento layout: regime banner across top, then 3-column row
  * (Watchlist preview | Portfolio summary | Alerts).
- * Upcoming events card spans across the bottom.
+ * Second bento row: News tied to watchlist + Contracts overview.
  * Right context rail (events + portfolio risk) comes from the parallel slot.
  */
 
@@ -16,6 +16,7 @@ import { AlertRow } from '@/components/molecules/AlertRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
+import { useScanStore } from '@/lib/scanStore';
 import { MOCK_WATCHLIST } from '@/mocks/watchlist';
 import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
 import { MOCK_ALERTS } from '@/mocks/alerts';
@@ -26,11 +27,20 @@ import styles from './page.module.css';
 
 const WL_COLUMNS = '60px 1fr 60px 64px 64px';
 
+function formatScanAt(iso: string | null): string {
+  if (!iso) return 'No scan yet';
+  const d = new Date(iso);
+  const day = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit', year: 'numeric' });
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  return `${day} · ${time}`;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
+  const { context, scanAt } = useScanStore();
   const top5 = MOCK_WATCHLIST.slice(0, 5);
 
-  const deployed = MOCK_PORTFOLIO.reduce((s, p) => s + p.currentPrice * 100, 0);
+  const deployed = MOCK_PORTFOLIO.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
   const openPnL  = MOCK_PORTFOLIO.reduce((s, p) => s + p.pnlDollar, 0);
   const openPnLPct = (openPnL / deployed) * 100;
 
@@ -41,8 +51,15 @@ export default function DashboardPage() {
   return (
     <div className={styles.main}>
       <div className={styles.heading}>
-        <Title as="h1" size={24}>Dashboard</Title>
-        <Text size={13} tone="secondary">Today, 18 Apr 2026 · Pre-market</Text>
+        <div>
+          <Title as="h1" size={24}>Dashboard</Title>
+          <Text size={13} tone="secondary">{formatScanAt(scanAt)}</Text>
+        </div>
+        {context && (
+          <div className={styles.contextPill}>
+            <Text size={12} tone="secondary">{context.universe} · {context.direction} · {context.horizon}</Text>
+          </div>
+        )}
       </div>
 
       {/* Regime banner */}
@@ -102,13 +119,13 @@ export default function DashboardPage() {
             <Stat label="Deployed"   value={`$${Math.round(deployed).toLocaleString()}`} />
             <Stat
               label="Open P&L"
-              value={`${openPnL >= 0 ? '+' : ''}$${Math.round(openPnL).toLocaleString()}`}
-              tone={openPnL >= 0 ? 'pass' : 'reject'}
+              value={`${openPnL > 0 ? '+' : ''}$${Math.round(openPnL).toLocaleString()}`}
+              tone={openPnL > 0 ? 'pass' : openPnL < 0 ? 'reject' : undefined}
             />
             <Stat
               label="Return"
-              value={`${openPnLPct >= 0 ? '+' : ''}${openPnLPct.toFixed(2)}%`}
-              tone={openPnLPct >= 0 ? 'pass' : 'reject'}
+              value={`${openPnLPct > 0 ? '+' : ''}${openPnLPct.toFixed(2)}%`}
+              tone={openPnLPct > 0 ? 'pass' : openPnLPct < 0 ? 'reject' : undefined}
             />
             <Stat label="Positions" value={`${MOCK_PORTFOLIO.length}`} />
           </div>
@@ -118,8 +135,8 @@ export default function DashboardPage() {
               <div key={p.contract} className={styles.posRow}>
                 <Data size={12} weight={500}>{p.symbol}</Data>
                 <Text size={11} tone="secondary">{p.contract}</Text>
-                <Data size={12} weight={500} tone={p.pnlDollar >= 0 ? 'pass' : 'reject'}>
-                  {p.pnlDollar >= 0 ? '+' : ''}${Math.round(p.pnlDollar)}
+                <Data size={12} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                  {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
                 </Data>
               </div>
             ))}
@@ -142,6 +159,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Second bento row — news tied to watchlist + open contracts overview */}
+      {/* NOTE: Not in the original spec; kept from existing Phase 5 implementation. Documented for QA/DA review. */}
       <div className={styles.bento2}>
         <SectionCard title="News — watchlist" count={watchlistNews.length}>
           <div className={styles.newsList}>
@@ -179,8 +197,8 @@ export default function DashboardPage() {
                   <Text size={10} tone="dim">IV {p.ivRank ?? '—'} · Θ {p.theta?.toFixed(2) ?? '—'}</Text>
                 </div>
                 <Data size={12} className={styles.contractRight}>${p.currentPrice.toFixed(2)}</Data>
-                <Data size={12} weight={500} className={styles.contractRight} tone={p.pnlDollar >= 0 ? 'pass' : 'reject'}>
-                  {p.pnlDollar >= 0 ? '+' : ''}${Math.round(p.pnlDollar)}
+                <Data size={12} weight={500} className={styles.contractRight} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                  {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
                 </Data>
               </div>
             ))}

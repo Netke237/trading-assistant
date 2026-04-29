@@ -1,0 +1,49 @@
+# Alembic Migrations
+
+## Setup
+
+Migrations are managed using Alembic with async SQLAlchemy support.
+
+## Commands
+
+### Create a new migration
+
+```bash
+alembic revision --autogenerate -m "description_of_changes"
+```
+
+### Run migrations (upgrade to latest)
+
+```bash
+alembic upgrade head
+```
+
+### Run migrations (upgrade one step)
+
+```bash
+alembic upgrade +1
+```
+
+### Downgrade one migration
+
+```bash
+alembic downgrade -1
+```
+
+### View current revision
+
+```bash
+alembic current
+```
+
+### View history
+
+```bash
+alembic history --verbose
+```
+
+## Configuration
+
+- Database URL is read from the `DATABASE_URL` environment variable
+- Target metadata is set from `app.models.base.Base.metadata`
+- Async engine is used for online migrations

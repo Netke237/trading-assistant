@@ -1,0 +1,14 @@
+.root {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.titleGroup {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}

@@ -7,6 +7,7 @@ import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { MOCK_WATCHLIST } from '@/mocks/watchlist';
+import styles from './page.module.css';
 
 export default function WatchlistContextRail() {
   const pass    = MOCK_WATCHLIST.filter((r) => r.status === 'PASS').length;
@@ -17,7 +18,7 @@ export default function WatchlistContextRail() {
   return (
     <>
       <RailSection title="Status breakdown">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className={styles.statStack}>
           <Row><StatusBadge status="PASS"    /><Data size={12}>{pass}</Data></Row>
           <Row><StatusBadge status="CAUTION" /><Data size={12}>{caution}</Data></Row>
           <Row><StatusBadge status="REJECT"  /><Data size={12}>{reject}</Data></Row>
@@ -25,8 +26,8 @@ export default function WatchlistContextRail() {
       </RailSection>
 
       <RailSection title="Flags">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <Row><Text size={12} tone="secondary">Earnings ≤ 7d</Text><Data size={12}>{evtSoon}</Data></Row>
+        <div className={styles.statStack}>
+          <Row><Text size={12} tone="secondary">Events ≤ 7d</Text><Data size={12}>{evtSoon}</Data></Row>
           <Row><Text size={12} tone="secondary">Total</Text><Data size={12}>{MOCK_WATCHLIST.length}</Data></Row>
         </div>
       </RailSection>
@@ -37,5 +38,5 @@ export default function WatchlistContextRail() {
 }
 
 function Row({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>{children}</div>;
+  return <div className={styles.row}>{children}</div>;
 }

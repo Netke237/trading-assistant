@@ -12,7 +12,7 @@ import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
-import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
+import { usePortfolioStore } from '@/lib/portfolioStore';
 import type { PortfolioPosition } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -26,8 +26,10 @@ function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | und
 const COLUMNS = '72px 1.6fr 72px 1fr 110px 104px 60px 56px 60px 90px 40px';
 
 export default function PortfolioPage() {
-  const [positions, setPositions] = useState<PortfolioPosition[]>(MOCK_PORTFOLIO);
-  const [editing, setEditing]     = useState<string | null>(null);
+  const positions      = usePortfolioStore((s) => s.positions);
+  const updatePosition = usePortfolioStore((s) => s.updatePosition);
+  const closeInStore   = usePortfolioStore((s) => s.closePosition);
+  const [editing, setEditing] = useState<string | null>(null);
 
   const deployed = positions.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
   const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
@@ -35,11 +37,8 @@ export default function PortfolioPage() {
   const winners = positions.filter((p) => p.pnlDollar > 0).length;
   const losers  = positions.filter((p) => p.pnlDollar < 0).length;
 
-  const updatePosition = (contract: string, patch: Partial<PortfolioPosition>) => {
-    setPositions((rows) => rows.map((r) => (r.contract === contract ? { ...r, ...patch } : r)));
-  };
   const closePosition = (contract: string) => {
-    setPositions((rows) => rows.filter((r) => r.contract !== contract));
+    closeInStore(contract);
     setEditing(null);
   };
 
@@ -70,7 +69,10 @@ export default function PortfolioPage() {
             <div key={p.contract} className={styles.rowWrap}>
               <TableRow status={p.status} columns={COLUMNS}>
                 <Data size={13} weight={500}>{p.symbol}</Data>
-                <Text size={12} tone="secondary">{p.contract}</Text>
+                <span className={styles.contractCell}>
+                  <Text size={12} tone="secondary">{p.contract}</Text>
+                  {p.source === 'manual' && <span className={styles.srcManual}>MANUAL</span>}
+                </span>
                 <span className={p.direction === 'Bullish' ? styles.dirBull : styles.dirBear}>
                   {p.direction === 'Bullish' ? 'Bull' : 'Bear'}
                 </span>
@@ -81,11 +83,11 @@ export default function PortfolioPage() {
                   <Data size={12} weight={500}>${p.currentPrice.toFixed(2)}</Data>
                 </div>
                 <div className={styles.pnlCell}>
-                  <Data size={13} weight={500} tone={p.pnlDollar >= 0 ? 'pass' : 'reject'}>
-                    {p.pnlDollar >= 0 ? '+' : ''}${Math.round(p.pnlDollar)}
+                  <Data size={13} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                    {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
                   </Data>
-                  <Data size={11} tone={p.pnlDollar >= 0 ? 'pass' : 'reject'}>
-                    {p.pnlPct >= 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
+                  <Data size={11} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                    {p.pnlPct > 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
                   </Data>
                 </div>
                 <Data size={12} className={styles.right} tone={ivRankTone(p.ivRank)}>
@@ -130,14 +132,14 @@ export default function PortfolioPage() {
           </div>
           <div className={styles.footerGroup}>
             <Text size={11} tone="secondary">Open P&amp;L</Text>
-            <Data size={14} weight={500} tone={openPnL >= 0 ? 'pass' : 'reject'}>
-              {openPnL >= 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
+            <Data size={14} weight={500} tone={openPnL > 0 ? 'pass' : openPnL < 0 ? 'reject' : undefined}>
+              {openPnL > 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
             </Data>
           </div>
           <div className={styles.footerGroup}>
             <Text size={11} tone="secondary">Return</Text>
-            <Data size={14} weight={500} tone={openPnLPct >= 0 ? 'pass' : 'reject'}>
-              {openPnLPct >= 0 ? '+' : ''}{openPnLPct.toFixed(2)}%
+            <Data size={14} weight={500} tone={openPnLPct > 0 ? 'pass' : openPnLPct < 0 ? 'reject' : undefined}>
+              {openPnLPct > 0 ? '+' : ''}{openPnLPct.toFixed(2)}%
             </Data>
           </div>
           <div className={styles.footerGroup}>
@@ -170,7 +172,7 @@ function EditDrawer({
   return (
     <div className={styles.editDrawer}>
       <div className={styles.editHeader}>
-        <Text size={12} weight={600}>Edit {position.contract}</Text>
+        <Text size={12} weight={400}>Edit {position.contract}</Text>
         <button type="button" className={styles.editClose} onClick={onClose} aria-label="Close editor">×</button>
       </div>
 

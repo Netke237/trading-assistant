@@ -14,7 +14,7 @@
 
 .split {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: minmax(320px, 40%) 1fr;
   gap: var(--space-4);
   align-items: stretch;
 }
@@ -35,6 +35,17 @@
   /* chartBox grows to fill the freed space; totalCard sits at the bottom. */
 }
 
+.rightPanelHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rightPanelHeader > :last-child {
+  flex: 1;
+  min-width: 0;
+}
+
 .panelHeader {
   display: flex;
   justify-content: space-between;
@@ -44,9 +55,42 @@
 .tableHeader {
   display: grid;
   align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-2) var(--space-2);
+  gap: var(--space-3);
+  padding: 0 var(--space-3) var(--space-2);
   border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Sortable column header button */
+.sortBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: inherit;
+  font-family: inherit;
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sortBtn:hover {
+  color: var(--text-primary);
+}
+
+.sortInd {
+  font-size: 8px;
+  opacity: 0.4;
+}
+
+.sortIndActive {
+  font-size: 8px;
+  color: var(--text-primary);
 }
 
 .tableBody {
@@ -107,12 +151,6 @@
   gap: var(--space-3);
 }
 
-/* Wrap gracefully on narrow screens. */
-@media (max-width: 1200px) {
-  .components {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  }
-}
 
 .compCard {
   display: flex;

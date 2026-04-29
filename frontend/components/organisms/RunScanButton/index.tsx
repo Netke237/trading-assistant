@@ -15,9 +15,13 @@ import { useCallback } from 'react';
 import { useScanStore } from '@/lib/scanStore';
 import styles from './index.module.css';
 
-function nowHHMM(): string {
+function nowLocalISO(): string {
   const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
 }
 
 export function RunScanButton() {
@@ -30,7 +34,7 @@ export function RunScanButton() {
     if (scanning) return;
     setScanState('SCANNING');
     setTimeout(() => {
-      setScanState('COMPLETED', nowHHMM());
+      setScanState('COMPLETED', nowLocalISO());
     }, 1500);
   }, [scanning, setScanState]);
 

@@ -13,9 +13,11 @@
  *   5. Sector heatmap (11 GICS sectors, 1-day change)
  */
 
+import { useEffect } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
+import { useScanStore } from '@/lib/scanStore';
 import { MOCK_REGIME } from '@/mocks/regime';
 import { MOCK_SECTORS } from '@/mocks/sectors';
 import { candlesFor } from '@/mocks/candles';
@@ -38,6 +40,9 @@ function lastClose(symbol: string): { close: number; changePct: number } {
 }
 
 export default function Step3Page() {
+  const setRegime = useScanStore((s) => s.setRegime);
+  useEffect(() => { setRegime(MOCK_REGIME.overall); }, [setRegime]);
+
   const spx = lastClose('SPX');
   const ndx = lastClose('NDX');
 
@@ -86,10 +91,10 @@ export default function Step3Page() {
         <div className={pageStyles.indexCard}>
           <header className={pageStyles.indexHeader}>
             <Text size={13} weight={600}>S&amp;P 500 (SPX)</Text>
-            <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'baseline' }}>
+            <div className={pageStyles.indexPriceGroup}>
               <Data size={14} weight={500}>{spx.close.toFixed(2)}</Data>
-              <Data size={11} tone={spx.changePct >= 0 ? 'pass' : 'reject'}>
-                {spx.changePct >= 0 ? '+' : ''}{spx.changePct.toFixed(2)}%
+              <Data size={11} tone={spx.changePct > 0 ? 'pass' : spx.changePct < 0 ? 'reject' : undefined}>
+                {spx.changePct > 0 ? '+' : ''}{spx.changePct.toFixed(2)}%
               </Data>
             </div>
           </header>
@@ -100,10 +105,10 @@ export default function Step3Page() {
         <div className={pageStyles.indexCard}>
           <header className={pageStyles.indexHeader}>
             <Text size={13} weight={600}>Nasdaq 100 (NDX)</Text>
-            <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'baseline' }}>
+            <div className={pageStyles.indexPriceGroup}>
               <Data size={14} weight={500}>{ndx.close.toFixed(2)}</Data>
-              <Data size={11} tone={ndx.changePct >= 0 ? 'pass' : 'reject'}>
-                {ndx.changePct >= 0 ? '+' : ''}{ndx.changePct.toFixed(2)}%
+              <Data size={11} tone={ndx.changePct > 0 ? 'pass' : ndx.changePct < 0 ? 'reject' : undefined}>
+                {ndx.changePct > 0 ? '+' : ''}{ndx.changePct.toFixed(2)}%
               </Data>
             </div>
           </header>
@@ -122,7 +127,11 @@ export default function Step3Page() {
         {MOCK_REGIME.metrics.map((m) => (
           <div key={m.label} className={pageStyles.metricCard}>
             <Text size={12} tone="secondary">{m.label}</Text>
-            <Data size={18} weight={500} tone={toneFor(m.status)}>{m.value}</Data>
+            <div className={pageStyles.metricValueRow}>
+              <Data size={18} weight={500} tone={toneFor(m.status)}>{m.value}</Data>
+              {m.trend === 'up'   && <span className={pageStyles.trendUp}>↑</span>}
+              {m.trend === 'down' && <span className={pageStyles.trendDown}>↓</span>}
+            </div>
             <StatusBadge status={m.status} />
           </div>
         ))}
@@ -145,7 +154,7 @@ export default function Step3Page() {
             <div className={pageStyles.sectorRow}>
               <Data size={12} weight={500}>{s.key}</Data>
               <Data size={12} weight={500} tone={toneFor(s.status)}>
-                {s.changePct >= 0 ? '+' : ''}{s.changePct.toFixed(2)}%
+                {s.changePct > 0 ? '+' : ''}{s.changePct.toFixed(2)}%
               </Data>
             </div>
             <Text size={11} tone="secondary">{s.name}</Text>

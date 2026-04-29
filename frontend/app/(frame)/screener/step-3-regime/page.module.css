@@ -56,6 +56,15 @@
 
 .metricCard > :last-child { align-self: flex-start; }
 
+.metricValueRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.trendUp   { font-size: 13px; color: var(--pass);   line-height: 1; }
+.trendDown { font-size: 13px; color: var(--reject);  line-height: 1; }
+
 /* ---------- Mini index charts ---------- */
 
 .indices {
@@ -79,6 +88,12 @@
   justify-content: space-between;
   align-items: baseline;
   padding: 0 var(--space-2);
+}
+
+.indexPriceGroup {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
 }
 
 .indexChart {

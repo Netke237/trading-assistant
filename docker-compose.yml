@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ritter-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations/init-scripts:/docker-entrypoint-initdb.d:ro
+    networks:
+      - ritter-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ritter-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS}
+      DEBUG: ${DEBUG}
+      HOST: ${HOST}
+      PORT: ${PORT}
+    ports:
+      - "8000:8000"
+    networks:
+      - ritter-network
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "/app/scripts/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - ./backend/app:/app/app:ro
+
+volumes:
+  postgres_data:
+    name: ritter_postgres_data
+
+networks:
+  ritter-network:
+    driver: bridge
+    name: ritter-network

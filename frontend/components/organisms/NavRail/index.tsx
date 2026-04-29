@@ -9,33 +9,21 @@
  */
 
 import { usePathname } from 'next/navigation';
-import { Text } from '@/components/primitives';
-import { StatusDot } from '@/components/atoms/StatusDot';
+
+import { ScanIndicator } from '@/components/molecules/ScanIndicator';
 import { NavItems } from '@/components/organisms/NavItems';
 import { Stepper } from '@/components/organisms/Stepper';
-import { useScanStore } from '@/lib/scanStore';
-import type { ScanState } from '@/lib/scanStore';
-import type { Status } from '@/lib/status';
 import styles from './NavRail.module.css';
-
-const SCAN_DOT: Record<ScanState, Status | 'ACCENT'> = {
-  IDLE:      'PENDING',
-  SCANNING:  'ACCENT',
-  COMPLETED: 'PASS',
-  FAILED:    'REJECT',
-};
 
 export function NavRail() {
   const pathname  = usePathname() ?? '';
-  const scanState = useScanStore((s) => s.scanState);
   const inScreener = pathname.startsWith('/screener');
 
   return (
     <aside className={[styles.rail, inScreener ? styles.railExpanded : null].filter(Boolean).join(' ')}>
       {inScreener ? <Stepper /> : <NavItems />}
       <div className={styles.footer}>
-        <StatusDot tone={SCAN_DOT[scanState]} size="sm" />
-        <Text size={10} tone="secondary">Scan</Text>
+        <ScanIndicator />
       </div>
     </aside>
   );

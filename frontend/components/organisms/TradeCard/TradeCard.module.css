@@ -19,7 +19,8 @@
 
 .planCard,
 .rrCard,
-.finalCard {
+.finalCard,
+.detailsCard {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -27,6 +28,22 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
+}
+
+.detailsCard {
+  grid-column: 1 / -1;
+}
+
+.detailsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: var(--space-3);
+}
+
+.detailsCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .kvList {
@@ -93,4 +110,16 @@
 .btnPrimary:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+}
+
+.btn:disabled,
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover,
+.btnPrimary:disabled:hover {
+  background: var(--accent);
+  border-color: var(--accent);
 }
