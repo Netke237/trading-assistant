@@ -1,0 +1,166 @@
+# backend/config/scoring_rules.yaml
+# Generated from SCORING_RULES.md — 2026-04-30
+
+score_thresholds:
+  pass: 70
+  caution: 50
+
+horizons:
+  swing:
+    weights:
+      trend: 0.30
+      pullback: 0.20
+      trigger: 0.25
+      event: 0.15
+      vol: 0.10
+    trend:
+      fast_ema: 50
+      slow_ema: 200
+      slow_slope_required: true
+      fast_slope_required: false      # CAUTION if flat, not REJECT
+    pullback:
+      fib_shallow_min: 0.236
+      fib_shallow_max: 0.382
+      fib_standard_min: 0.382
+      fib_standard_max: 0.500
+      fib_golden_min: 0.500
+      fib_golden_max: 0.618
+      swing_high_lookback_bars: 40
+      swing_high_min_bars_ago: 5
+      max_days_in_pullback: 20
+      theta_caution_days: 15
+      atr_period: 14
+      atr_pass_min: 1.0
+      atr_pass_max: 2.0
+      atr_caution_max: 2.5
+    trigger:
+      macd_fast: 8
+      macd_slow: 21
+      macd_signal: 5
+      macd_histogram_rising: true
+      rsi_period: 14
+      rsi_floor: 44
+      rsi_div_window_bars: 15
+      stoch_k: 14
+      stoch_d: 3
+      stoch_smooth: 3
+      stoch_oversold: 30
+      stoch_tolerance_pct: 5
+      setup_window_bars: 8
+      momentum_signals_for_pass: 2
+      volume_lookback_bars: 20
+      volume_multiplier: 1.20
+      volume_bonus_pts: 10
+    event:
+      reject_days: 7
+      caution_days: 21
+    vol:
+      iv_rank_compressed_caution: 5
+      iv_rank_pass_max: 34
+      iv_rank_caution_max: 55
+
+  intraday:
+    weights:
+      trend: 0.35
+      pullback: 0.20
+      trigger: 0.30
+      event: 0.05
+      vol: 0.10
+    trend:
+      fast_ema: 20
+      slow_ema: 50
+      slow_slope_required: true
+      fast_slope_required: false
+    pullback:
+      fib_shallow_min: 0.236
+      fib_shallow_max: 0.382
+      fib_standard_min: 0.382
+      fib_standard_max: 0.500
+      fib_golden_min: 0.500
+      fib_golden_max: 0.618
+      swing_high_lookback_bars: 20
+      swing_high_min_bars_ago: 5
+      max_days_in_pullback: 3
+      theta_caution_days: 2
+      atr_period: 14
+      atr_pass_min: 1.0
+      atr_pass_max: 2.0
+      atr_caution_max: 2.5
+    trigger:
+      macd_fast: 5
+      macd_slow: 13
+      macd_signal: 3
+      macd_histogram_rising: true
+      rsi_period: 14
+      rsi_floor: 44
+      rsi_div_window_bars: 10
+      stoch_k: 14
+      stoch_d: 3
+      stoch_smooth: 3
+      stoch_oversold: 30
+      stoch_tolerance_pct: 5
+      setup_window_bars: 10
+      momentum_signals_for_pass: 1
+      volume_lookback_bars: 20
+      volume_multiplier: 1.20
+      volume_bonus_pts: 10
+    event:
+      reject_days: 1
+      caution_days: 3
+    vol:
+      iv_rank_compressed_caution: null   # not scored for intraday
+      iv_rank_pass_max: null
+      iv_rank_caution_max: null
+
+  position:
+    weights:
+      trend: 0.30
+      pullback: 0.20
+      trigger: 0.20
+      event: 0.20
+      vol: 0.10
+    trend:
+      fast_ema: 50
+      slow_ema: 200
+      slow_slope_required: true
+      fast_slope_required: true          # both required on weekly
+    pullback:
+      fib_shallow_min: 0.236
+      fib_shallow_max: 0.382
+      fib_standard_min: 0.382
+      fib_standard_max: 0.500
+      fib_golden_min: 0.500
+      fib_golden_max: 0.618
+      swing_high_lookback_bars: 15
+      swing_high_min_bars_ago: 3
+      max_days_in_pullback: 60
+      theta_caution_days: 45
+      atr_period: 14
+      atr_pass_min: 1.0
+      atr_pass_max: 2.0
+      atr_caution_max: 2.5
+    trigger:
+      macd_fast: 12
+      macd_slow: 26
+      macd_signal: 9
+      macd_histogram_rising: true
+      rsi_period: 14
+      rsi_floor: 48
+      rsi_div_window_bars: 20
+      stoch_k: 14
+      stoch_d: 3
+      stoch_smooth: 3
+      stoch_oversold: 30
+      stoch_tolerance_pct: 5
+      setup_window_bars: 5
+      momentum_signals_for_pass: 2
+      volume_lookback_bars: 20
+      volume_multiplier: 1.20
+      volume_bonus_pts: 10
+    event:
+      reject_days: 30
+      caution_days: 60
+    vol:
+      iv_rank_compressed_caution: 5
+      iv_rank_pass_max: 44
+      iv_rank_caution_max: 65
