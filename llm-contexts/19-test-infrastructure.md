@@ -396,6 +396,9 @@ npm run typecheck
 ## Section 9 — Copy/paste prompt
 
 ```
+Use the superpowers:using-git-worktrees skill to create your worktree first,
+branching from feature/1-api-integration, branch name feature/ws-19-test-infra.
+
 Read `llm-contexts/19-test-infrastructure.md` fully before writing any code.
 It is your single source of truth.
 

@@ -206,6 +206,9 @@ npm run dev   # localhost:3001
 ## Section 9 — Copy/paste prompt
 
 ```
+Use the superpowers:using-git-worktrees skill to create your worktree first,
+branching from feature/1-api-integration, branch name feature/ws-16-responsive-audit.
+
 Read `llm-contexts/16-responsive-audit.md` fully before touching any file.
 It is your single source of truth.
 

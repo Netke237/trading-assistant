@@ -336,6 +336,9 @@ Manual verification: navigate to Step 2, select "Bearish" → TopBar should imme
 ## Section 13 — Copy/paste prompt
 
 ```
+Use the superpowers:using-git-worktrees skill to create your worktree first,
+branching from feature/1-api-integration, branch name feature/ws-12-direction-wiring.
+
 Read `llm-contexts/12-step2-direction-wiring.md` fully before writing any code.
 It is your single source of truth.
 

@@ -274,6 +274,9 @@ python -c "from app.models.black_scholes import bs_price, bs_delta, bs_theta, bs
 ## Section 9 — Copy/paste prompt
 
 ```
+Use the superpowers:using-git-worktrees skill to create your worktree first,
+branching from feature/1-api-integration, branch name feature/ws-14-black-scholes.
+
 Read `llm-contexts/14-black-scholes.md` fully before writing any code.
 It is your single source of truth.
 

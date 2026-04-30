@@ -174,6 +174,9 @@ python -c "from app.services.audit import new_rec_id, log_event; print('OK')"
 ## Section 8 — Copy/paste prompt
 
 ```
+Use the superpowers:using-git-worktrees skill to create your worktree first,
+branching from feature/1-api-integration, branch name feature/ws-18-audit-trail.
+
 Read `llm-contexts/18-audit-trail.md` fully before writing any code.
 It is your single source of truth.
 

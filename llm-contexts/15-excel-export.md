@@ -245,6 +245,9 @@ npm run dev   # verify at http://localhost:3001/screener/step-4-ranking
 ## Section 10 — Copy/paste prompt
 
 ```
+Use the superpowers:using-git-worktrees skill to create your worktree first,
+branching from feature/1-api-integration, branch name feature/ws-15-excel-export.
+
 Read `llm-contexts/15-excel-export.md` fully before writing any code.
 It is your single source of truth.
 

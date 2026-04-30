@@ -272,6 +272,9 @@ python -c "from app.data.market import fetch_candles, fetch_price, fetch_option_
 ## Section 9 — Copy/paste prompt
 
 ```
+Use the superpowers:using-git-worktrees skill to create your worktree first,
+branching from feature/1-api-integration, branch name feature/ws-13-market-data.
+
 Read `llm-contexts/13-market-data-client.md` fully before writing any code.
 It is your single source of truth.
 

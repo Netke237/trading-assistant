@@ -310,6 +310,9 @@ After editing, navigate to Step 1, select a universe, type a filter value, navig
 ## Section 13 — Copy/paste prompt
 
 ```
+Use the superpowers:using-git-worktrees skill to create your worktree first,
+branching from feature/1-api-integration, branch name feature/ws-11-universe-store.
+
 Read `llm-contexts/11-step1-universe-wiring.md` fully before writing any code.
 It is your single source of truth.
 

@@ -250,6 +250,9 @@ python -c "from app.main import app; print('App loaded OK')"
 ## Section 9 — Copy/paste prompt
 
 ```
+Use the superpowers:using-git-worktrees skill to create your worktree first,
+branching from feature/1-api-integration, branch name feature/ws-17-alerts-ws.
+
 Read `llm-contexts/17-alerts-websocket.md` fully before writing any code.
 It is your single source of truth.
 
