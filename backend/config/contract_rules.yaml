@@ -1,0 +1,35 @@
+# backend/config/contract_rules.yaml
+
+score_thresholds:
+  pass: 65
+  caution: 45
+
+# Hard-reject rules (FR-24) — any one triggers REJECT, score = 0
+hard_reject:
+  min_volume: 50                # contracts per day — below this = illiquid
+  min_open_interest: 200        # open interest — below this = illiquid
+  max_bid_ask_spread_pct: 0.20  # spread / mid-price — above this = too wide
+  min_delta: 0.20               # absolute delta — below this = too far OTM
+  max_delta: 0.85               # absolute delta — above this = too deep ITM
+  min_dte: 14                   # calendar days to expiry — below this = too short
+  max_dte: 90                   # calendar days to expiry — above this = too long
+  max_soft_fail_count: 3        # reject if this many soft rules fail
+
+# Soft-rank rules (FR-25) — penalise score but do not block
+soft_rank:
+  preferred_volume_min: 200          # below this = soft penalty
+  preferred_oi_min: 1000             # below this = soft penalty
+  preferred_spread_pct_max: 0.08     # above this = soft penalty
+  preferred_delta_min: 0.30          # below this = soft penalty (edge of golden zone)
+  preferred_delta_max: 0.70          # above this = soft penalty
+  preferred_dte_min: 21              # below this = soft penalty
+  preferred_dte_max: 60              # above this = soft penalty
+  preferred_iv_rank_max: 55          # above this = soft penalty (expensive premium)
+
+# Weights for scoring (must sum to 1.0)
+weights:
+  liquidity: 0.25    # volume + OI combined
+  spread: 0.25       # bid-ask spread tightness
+  delta: 0.20        # delta in preferred zone
+  dte: 0.15          # DTE in preferred band
+  iv_rank: 0.15      # IV rank acceptability
