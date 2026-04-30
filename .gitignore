@@ -54,3 +54,4 @@ Thumbs.db
 # Session / tool metadata
 .claude/
 .superpowers/
+.worktrees/
