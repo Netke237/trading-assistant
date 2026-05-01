@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-from app.models.black_scholes import bs_price
 from app.models.heston import HestonParams, heston_price
 
 RrModel = Literal["Heston repriced", "Delta approximation"]
