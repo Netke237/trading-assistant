@@ -1,0 +1,271 @@
+from __future__ import annotations
+
+import yaml
+from dataclasses import dataclass, field
+from datetime import date
+from functools import lru_cache
+from pathlib import Path
+from typing import Literal
+
+Status = Literal["PASS", "CAUTION", "REJECT"]
+
+CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "contract_rules.yaml"
+
+
+@dataclass
+class ContractScoreBreakdown:
+    liquidity_score: int        # 0–100
+    spread_score: int           # 0–100
+    delta_score: int            # 0–100
+    dte_score: int              # 0–100
+    iv_rank_score: int          # 0–100
+    oi_score: int               # 0–100
+
+
+@dataclass
+class ContractScoreCard:
+    contract_id: str            # canonical ID: SYMBOL|STRIKE|EXPIRY|C/P
+    symbol: str
+    strike: float
+    expiry: str
+    is_call: bool
+    score: int                  # 0–100 aggregate
+    status: Status
+    reject_reasons: list[str] = field(default_factory=list)  # hard-reject labels
+    soft_flags: list[str] = field(default_factory=list)       # soft-rank labels
+    breakdown: ContractScoreBreakdown = field(
+        default_factory=lambda: ContractScoreBreakdown(0, 0, 0, 0, 0, 0)
+    )
+
+
+@lru_cache(maxsize=1)
+def _load_config() -> dict:
+    with open(CONFIG_PATH) as f:
+        return yaml.safe_load(f)
+
+
+def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
+    """Return list of hard-reject reason strings. Empty = no hard reject."""
+    hr = cfg["hard_reject"]
+    reasons = []
+
+    volume = contract.get("volume") or 0
+    oi = contract.get("open_interest") or 0
+    bid = contract.get("bid") or 0
+    ask = contract.get("ask") or 0
+    mid = (bid + ask) / 2 if (bid + ask) > 0 else 0
+    spread_pct = (ask - bid) / mid if mid > 0 else 1.0
+    delta = abs(contract.get("delta") or 0)
+
+    expiry_str = contract.get("expiry", "")
+    try:
+        expiry_date = date.fromisoformat(expiry_str)
+        dte = (expiry_date - date.today()).days
+    except (ValueError, TypeError):
+        dte = 0
+
+    if volume < hr["min_volume"]:
+        reasons.append("volume_too_low")
+    if oi < hr["min_open_interest"]:
+        reasons.append("open_interest_too_low")
+    if spread_pct > hr["max_bid_ask_spread_pct"]:
+        reasons.append("spread_too_wide")
+    if delta < hr["min_delta"]:
+        reasons.append("delta_too_low_far_otm")
+    if delta > hr["max_delta"]:
+        reasons.append("delta_too_high_deep_itm")
+    if dte < hr["min_dte"]:
+        reasons.append("dte_too_short")
+    if dte > hr["max_dte"]:
+        reasons.append("dte_too_long")
+
+    return reasons
+
+
+def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, list[str]]:
+    sr = cfg["soft_rank"]
+    flags = []
+    volume = contract.get("volume") or 0
+    oi = contract.get("open_interest") or 0
+
+    vol_score = min(100, int(volume / sr["preferred_volume_min"] * 60))
+    oi_score = min(100, int(oi / sr["preferred_oi_min"] * 60))
+    score = (vol_score + oi_score) // 2
+
+    if volume < sr["preferred_volume_min"]:
+        flags.append("low_volume")
+    if oi < sr["preferred_oi_min"]:
+        flags.append("low_open_interest")
+    return score, flags
+
+
+def _score_spread(contract: dict, cfg: dict) -> tuple[int, list[str]]:
+    sr = cfg["soft_rank"]
+    bid = contract.get("bid") or 0
+    ask = contract.get("ask") or 0
+    mid = (bid + ask) / 2 if (bid + ask) > 0 else 0
+    spread_pct = (ask - bid) / mid if mid > 0 else 1.0
+    flags = []
+
+    max_pct = sr["preferred_spread_pct_max"]
+    score = max(0, int((1 - spread_pct / max_pct) * 100)) if spread_pct < max_pct else 0
+    score = min(score, 100)
+
+    if spread_pct > max_pct:
+        flags.append("spread_elevated")
+    return score, flags
+
+
+def _score_delta(contract: dict, cfg: dict) -> tuple[int, list[str]]:
+    sr = cfg["soft_rank"]
+    delta = abs(contract.get("delta") or 0)
+    flags = []
+    d_min = sr["preferred_delta_min"]
+    d_max = sr["preferred_delta_max"]
+
+    if d_min <= delta <= d_max:
+        # Linear score peaking at 0.50
+        centre = (d_min + d_max) / 2
+        half_range = (d_max - d_min) / 2
+        score = int(100 * (1 - abs(delta - centre) / half_range))
+    else:
+        score = 20
+        flags.append("delta_outside_preferred")
+    return score, flags
+
+
+def _score_dte(contract: dict, cfg: dict) -> tuple[int, list[str]]:
+    sr = cfg["soft_rank"]
+    expiry_str = contract.get("expiry", "")
+    flags = []
+    try:
+        dte = (date.fromisoformat(expiry_str) - date.today()).days
+    except (ValueError, TypeError):
+        return 0, ["dte_parse_error"]
+
+    d_min = sr["preferred_dte_min"]
+    d_max = sr["preferred_dte_max"]
+
+    if d_min <= dte <= d_max:
+        centre = (d_min + d_max) / 2
+        half_range = (d_max - d_min) / 2
+        score = int(100 * (1 - abs(dte - centre) / half_range))
+    else:
+        score = 25
+        flags.append("dte_outside_preferred")
+    return score, flags
+
+
+def _score_iv_rank(contract: dict, cfg: dict) -> tuple[int, list[str]]:
+    sr = cfg["soft_rank"]
+    iv_rank = contract.get("iv_rank")
+    flags = []
+
+    if iv_rank is None:
+        return 50, ["no_iv_rank_data"]  # neutral
+
+    max_pref = sr["preferred_iv_rank_max"]
+    if iv_rank <= max_pref:
+        score = int(100 * (1 - iv_rank / max_pref))
+    else:
+        score = max(0, int(20 * (1 - (iv_rank - max_pref) / (100 - max_pref))))
+        flags.append("iv_rank_elevated")
+    return score, flags
+
+
+def _contract_id(contract: dict) -> str:
+    side = "C" if contract.get("is_call", True) else "P"
+    return f"{contract.get('symbol', '')}|{contract.get('strike', '')}|{contract.get('expiry', '')}|{side}"
+
+
+def validate_contract(
+    contract: dict,
+    stock_score: int,
+) -> ContractScoreCard:
+    """
+    Validate and score an option contract.
+
+    Args:
+        contract:    Option contract dict (see Section 3 for shape)
+        stock_score: Aggregate stock score from StockScoreCard (0–100).
+                     Contracts are only recommended when stock_score >= 50.
+
+    Returns:
+        ContractScoreCard with score, status, hard-reject reasons, soft flags,
+        and score breakdown.
+    """
+    cfg = _load_config()
+    contract_id = _contract_id(contract)
+
+    reject_reasons = _hard_reject_reasons(contract, cfg)
+
+    liq_score, liq_flags = _score_liquidity(contract, cfg)
+    spread_score, spread_flags = _score_spread(contract, cfg)
+    delta_score, delta_flags = _score_delta(contract, cfg)
+    dte_score, dte_flags = _score_dte(contract, cfg)
+    iv_score, iv_flags = _score_iv_rank(contract, cfg)
+
+    soft_flags = liq_flags + spread_flags + delta_flags + dte_flags + iv_flags
+    soft_fail_count = len(soft_flags)
+
+    if soft_fail_count >= cfg["hard_reject"]["max_soft_fail_count"]:
+        reject_reasons.append("too_many_soft_failures")
+
+    if reject_reasons:
+        return ContractScoreCard(
+            contract_id=contract_id,
+            symbol=contract.get("symbol", ""),
+            strike=float(contract.get("strike", 0)),
+            expiry=contract.get("expiry", ""),
+            is_call=contract.get("is_call", True),
+            score=0,
+            status="REJECT",
+            reject_reasons=reject_reasons,
+            soft_flags=soft_flags,
+            breakdown=ContractScoreBreakdown(
+                liquidity_score=liq_score,
+                spread_score=spread_score,
+                delta_score=delta_score,
+                dte_score=dte_score,
+                iv_rank_score=iv_score,
+                oi_score=0,
+            ),
+        )
+
+    weights = cfg["weights"]
+    weighted = (
+        liq_score * weights["liquidity"]
+        + spread_score * weights["spread"]
+        + delta_score * weights["delta"]
+        + dte_score * weights["dte"]
+        + iv_score * weights["iv_rank"]
+    )
+    score = round(weighted)
+    thresholds = cfg["score_thresholds"]
+
+    if score >= thresholds["pass"]:
+        status: Status = "PASS"
+    elif score >= thresholds["caution"]:
+        status = "CAUTION"
+    else:
+        status = "REJECT"
+
+    return ContractScoreCard(
+        contract_id=contract_id,
+        symbol=contract.get("symbol", ""),
+        strike=float(contract.get("strike", 0)),
+        expiry=contract.get("expiry", ""),
+        is_call=contract.get("is_call", True),
+        score=score,
+        status=status,
+        reject_reasons=[],
+        soft_flags=soft_flags,
+        breakdown=ContractScoreBreakdown(
+            liquidity_score=liq_score,
+            spread_score=spread_score,
+            delta_score=delta_score,
+            dte_score=dte_score,
+            iv_rank_score=iv_score,
+            oi_score=0,
+        ),
+    )
