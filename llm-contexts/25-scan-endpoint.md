@@ -92,9 +92,9 @@ class ScanResult(BaseModel):
 ### Step 1 — Fetch market data
 ```python
 candles = fetch_candles(symbol)          # list[dict] with time/open/high/low/close/volume
-price   = fetch_price(symbol)            # float, current close
+price   = fetch_price(symbol)            # float | None — returns None on failure, not 0.0
 ```
-If `price <= 0` or `candles` is empty → append `RejectedCandidate(symbol, "no market data")` and skip.
+If `not price` or `not candles` → append `RejectedCandidate(symbol, "no market data")` and skip.
 
 ### Step 2 — Score the stock
 ```python
@@ -108,20 +108,58 @@ chain = fetch_option_chain(symbol)       # list[dict]
 ```
 If `chain` is empty → append `RejectedCandidate(symbol, "no option chain")` and skip.
 
-Pick the **best contract**: call `validate_contract(contract_dict, card.score)` for each contract in `chain`. Take the one with the highest `ContractScoreCard.score`. If all contracts are REJECT, append `RejectedCandidate(symbol, "all contracts rejected")` and skip.
+**Important:** `fetch_option_chain` returns dicts with `price` (mid) and `spread`, but NOT `bid`, `ask`, or `open_interest`. `validate_contract` reads all three. Reconstruct them before scoring:
+
+```python
+def _augment(c: dict) -> dict:
+    mid    = float(c.get("price", 0))
+    spread = float(c.get("spread", 0))
+    return {
+        **c,
+        "bid":           round(max(0.01, mid - spread / 2), 2),
+        "ask":           round(mid + spread / 2, 2),
+        "open_interest": c.get("volume", 0),   # proxy — yfinance OI not in chain dict
+    }
+
+augmented = [_augment(c) for c in chain]
+scored = [(validate_contract(c, card.score), c) for c in augmented]
+```
+
+Take the pair with the highest `ContractScoreCard.score`:
+```python
+best_score, contract = max(scored, key=lambda x: x[0].score)
+contract_card = best_score
+```
+
+If **all** contracts are REJECT → append `RejectedCandidate(symbol, "all contracts rejected")` and skip.
 
 ### Step 4 — Calibrate Heston (optional, best-effort)
+
+`calibrate_heston` expects a list of dicts with keys `strike` (float), `expiry_years` (float), `mid_price` (float), `is_call` (bool) — **not** the raw fetch_option_chain shape. Transform before calling:
+
 ```python
-heston_result = calibrate_heston(chain, price, r=0.05)
+heston_chain = [
+    {
+        "strike":       float(c.get("strike", 0)),
+        "expiry_years": c.get("dte", 30) / 365.0,
+        "mid_price":    float(c.get("price", 0)),
+        "is_call":      c.get("right", "C") == "C",
+    }
+    for c in chain
+    if float(c.get("price", 0)) > 0
+]
+heston_result = calibrate_heston(heston_chain, price, r=0.05)
 heston_params = heston_result.params   # may be a fallback — still usable
 ```
-This never fails (calibrate_heston handles thin chains). Use `heston_params` for R:R estimation.
+This never fails (calibrate_heston handles thin/empty chains). Use `heston_params` for R:R estimation.
 
 ### Step 5 — Assess entry quality
+
+Use the augmented contract (bid/ask already computed in Step 3):
 ```python
-bid = contract.get("bid", contract.get("price", 0) * 0.98)
-ask = contract.get("ask", contract.get("price", 0) * 1.02)
-mid = contract.get("price", (bid + ask) / 2)
+bid   = float(contract.get("bid", 0))
+ask   = float(contract.get("ask", 0))
+mid   = float(contract.get("price", 0))
 entry = assess_entry(bid=bid, ask=ask, mid=mid)
 ```
 
@@ -186,7 +224,7 @@ trade_card = TradeCardData(
         mid=round(premium, 2),
         delta=float(contract.get("delta", 0.45)),
         theta=float(contract.get("theta", -0.05)),
-        ivRank=int(contract.get("iv_rank", 50)),
+        ivRank=int(contract.get("ivRank", 50)),   # camelCase — matches fetch_option_chain key
         dte=int(contract.get("dte", 30)),
     ),
     entry=TradeEntry(
@@ -325,7 +363,8 @@ curl -s -X POST http://localhost:8000/api/scan \
 3. `backend/app/main.py` — only add the import line and `include_router` call.
 4. The pipeline must never raise an unhandled exception — wrap each symbol's processing in a try/except that appends to `rejected`.
 5. No pandas, no numpy — all scoring modules handle their own math.
-6. `yfinance` may fail for unknown symbols — `fetch_candles` and `fetch_price` handle this gracefully (return empty list / 0.0); the pipeline's Step 1 guard catches it.
+6. `fetch_price` returns `None` (not `0.0`) on failure — the Step 1 guard uses `if not price`, not `if price <= 0`.
+7. `fetch_option_chain` dicts do not include `bid`, `ask`, or `open_interest` — always use `_augment()` (Step 3) before passing a contract to `validate_contract` or `assess_entry`.
 
 ---
 
