@@ -20,6 +20,7 @@ import { EventFlag } from '@/components/atoms/EventFlag';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { api } from '@/lib/api';
+import { exportToXlsx } from '@/lib/export';
 import type { WatchlistRow } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import styles from './page.module.css';
@@ -167,6 +168,13 @@ export default function Step4Page() {
           <header className={styles.panelHeader}>
             <Text size={13} weight={600}>Candidates</Text>
             <Text size={11} tone="secondary">{watchlist.length} ranked</Text>
+            <button
+              className={styles.exportBtn}
+              onClick={() => exportToXlsx(sorted, 'bamendjou-rankings')}
+              disabled={sorted.length === 0}
+            >
+              Export .xlsx
+            </button>
           </header>
           <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
             <span aria-hidden />

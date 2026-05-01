@@ -64,6 +64,29 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  gap: var(--space-3);
+}
+
+.exportBtn {
+  margin-left: auto;
+  padding: 3px var(--space-3);
+  font-size: 11px;
+  font-family: var(--font-dm);
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.exportBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.exportBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .tableHeader {
