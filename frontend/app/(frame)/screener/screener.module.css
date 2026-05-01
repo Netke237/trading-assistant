@@ -9,6 +9,8 @@
   gap: var(--space-4);
   padding: var(--space-6);
   max-width: none;
+  overflow-x: auto;
+  min-width: 0;
 }
 
 .stepHeader {
@@ -26,6 +28,8 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   min-height: 280px;
+  overflow-x: auto;
+  min-width: 0;
 }
 
 .stepBody_noPad {

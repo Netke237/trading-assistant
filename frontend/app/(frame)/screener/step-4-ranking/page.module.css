@@ -17,9 +17,23 @@
   grid-template-columns: minmax(320px, 40%) 1fr;
   gap: var(--space-4);
   align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.leftPanel,
+.leftPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  min-height: 0;
+  overflow-x: auto;
+  min-width: 0;
+}
+
 .rightPanel {
   display: flex;
   flex-direction: column;
