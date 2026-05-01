@@ -13,6 +13,7 @@ from app.routers.tradecards import router as tradecards_router
 from app.routers.portfolio  import router as portfolio_router
 from app.routers.alerts     import router as alerts_router
 from app.routers.events     import router as events_router
+from app.routers.ws_alerts  import router as ws_alerts_router
 
 
 def create_app() -> FastAPI:
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(portfolio_router)
     app.include_router(alerts_router)
     app.include_router(events_router)
+    app.include_router(ws_alerts_router)
 
     return app
 
