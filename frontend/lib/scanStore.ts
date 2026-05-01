@@ -8,7 +8,7 @@
 
 import { create } from 'zustand';
 import type { Status } from './status';
-import type { Direction } from '@/types/domain';
+import type { Direction, TradeCardData } from '@/types/domain';
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED';
 
@@ -24,9 +24,11 @@ interface ScanStoreState {
   scanAt:     string | null;
   context:    ScanContext | null;
   regime:     Status;
+  scanResult: { scan_id: string; timestamp: string; candidates: TradeCardData[] } | null;
   setScanState: (s: ScanState, at?: string) => void;
   setContext:   (c: ScanContext | null) => void;
   setRegime:    (r: Status) => void;
+  setScanResult: (r: { scan_id: string; timestamp: string; candidates: TradeCardData[] } | null) => void;
 }
 
 export const useScanStore = create<ScanStoreState>((set) => ({
@@ -38,4 +40,6 @@ export const useScanStore = create<ScanStoreState>((set) => ({
   setScanState: (s, at) => set({ scanState: s, scanAt: at ?? null }),
   setContext:   (c) => set({ context: c }),
   setRegime:    (r) => set({ regime: r }),
+  scanResult: null,
+  setScanResult: (r) => set({ scanResult: r }),
 }));
