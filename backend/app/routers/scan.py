@@ -8,7 +8,11 @@ from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
 )
-from app.data.market import fetch_candles, fetch_price, fetch_option_chain
+from typing import Literal
+from app.data.market import (
+    fetch_candles, fetch_price, fetch_option_chain,
+    fetch_earnings_date, fetch_dividend_date,
+)
 from app.scoring.stock_scorer import score_stock, StockScoreCard
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.entry_quality import assess_entry
@@ -62,15 +66,31 @@ async def run_scan(req: ScanRequest) -> ScanResult:
                 log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no market data"})
                 continue
 
-            # Step 2 — Score the stock
-            card: StockScoreCard = score_stock(symbol, req.direction, req.horizon, candles)
+            # Step 2 — Fetch option chain (before scoring so we can derive iv_rank)
+            option_type: Literal["C", "P"] = "C" if req.direction == "Bullish" else "P"
+            chain = fetch_option_chain(symbol, option_type=option_type)
+
+            # Derive IV rank proxy from ATM contract (current IV as approximation)
+            atm = sorted(chain, key=lambda c: abs(float(c.get("strike", 0)) - price)) if chain else []
+            iv_rank: float | None = float(atm[0]["ivRank"]) if atm else None
+
+            # Step 3 — Fetch event dates (best-effort; None if Tradier fundamentals unavailable)
+            earnings_date = fetch_earnings_date(symbol)
+            dividend_date = fetch_dividend_date(symbol)
+
+            # Step 4 — Score the stock with full context
+            card: StockScoreCard = score_stock(
+                symbol, req.direction, req.horizon, candles,
+                earnings_date=earnings_date,
+                dividend_date=dividend_date,
+                iv_rank=iv_rank,
+            )
             if card.status == "REJECT":
                 rejected.append(RejectedCandidate(symbol=symbol, reason=f"stock REJECT (score {card.score})"))
                 log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": f"stock REJECT (score {card.score})"})
                 continue
 
-            # Step 3 — Fetch and validate contracts
-            chain = fetch_option_chain(symbol)
+            # Step 5 — Validate contracts (chain already fetched above)
             if not chain:
                 rejected.append(RejectedCandidate(symbol=symbol, reason="no option chain"))
                 log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
@@ -89,7 +109,7 @@ async def run_scan(req: ScanRequest) -> ScanResult:
             best_score, contract = max(valid_scores, key=lambda x: x[0].score)
             contract_card: ContractScoreCard = best_score
 
-            # Step 4 — Calibrate Heston (best-effort)
+            # Step 6 — Calibrate Heston (best-effort)
             heston_chain = [
                 {
                     "strike": float(c.get("strike", 0)),
@@ -103,13 +123,13 @@ async def run_scan(req: ScanRequest) -> ScanResult:
             heston_result = calibrate_heston(heston_chain, price, r=0.05)
             heston_params = heston_result.params
 
-            # Step 5 — Assess entry quality
+            # Step 7 — Assess entry quality
             bid = float(contract.get("bid", 0))
             ask = float(contract.get("ask", 0))
             mid = float(contract.get("price", 0))
             entry = assess_entry(bid=bid, ask=ask, mid=mid)
 
-            # Step 6 — Estimate reward-risk
+            # Step 8 — Estimate reward-risk
             target_price = price * (1.08 if req.direction == "Bullish" else 0.92)
             invalidation_price = price * (0.97 if req.direction == "Bullish" else 1.03)
             strike = float(contract.get("strike", price))
@@ -127,7 +147,7 @@ async def run_scan(req: ScanRequest) -> ScanResult:
                 heston_params=heston_params,
             )
 
-            # Step 7 — Build TradeCardData
+            # Step 9 — Build TradeCardData
             trade_card = TradeCardData(
                 symbol=symbol,
                 company=symbol,
