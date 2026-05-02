@@ -13,14 +13,15 @@
  *   5. Sector heatmap (11 GICS sectors, 1-day change)
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { useScanStore } from '@/lib/scanStore';
-import { MOCK_REGIME } from '@/mocks/regime';
-import { MOCK_SECTORS } from '@/mocks/sectors';
-import { candlesFor } from '@/mocks/candles';
+import { api } from '@/lib/api';
+import type { MarketRegime } from '@/mocks/regime';
+import type { SectorTile } from '@/mocks/sectors';
+import type { Candle } from '@/types/chart';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
 
@@ -31,23 +32,32 @@ function toneFor(status: string): 'pass' | 'caution' | 'reject' | undefined {
   return undefined;
 }
 
-function lastClose(symbol: string): { close: number; changePct: number } {
-  const c = candlesFor(symbol);
-  const last = c[c.length - 1];
-  const prev = c[c.length - 2];
+function lastClose(candles: Candle[]): { close: number; changePct: number } {
+  const last = candles[candles.length - 1];
+  const prev = candles[candles.length - 2];
   if (!last || !prev) return { close: 0, changePct: 0 };
   return { close: last.close, changePct: ((last.close - prev.close) / prev.close) * 100 };
 }
 
 export default function Step3Page() {
   const setRegime = useScanStore((s) => s.setRegime);
-  useEffect(() => { setRegime(MOCK_REGIME.overall); }, [setRegime]);
+  const [regime, setRegimeData]   = useState<MarketRegime | null>(null);
+  const [sectors, setSectors]     = useState<SectorTile[]>([]);
+  const [spxCandles, setSpxCandles] = useState<Candle[]>([]);
+  const [ndxCandles, setNdxCandles] = useState<Candle[]>([]);
 
-  const spx = lastClose('SPX');
-  const ndx = lastClose('NDX');
+  useEffect(() => {
+    api.getRegime().then((r) => { setRegimeData(r); setRegime(r.overall); }).catch(() => {});
+    api.getSectors().then(setSectors).catch(() => {});
+    api.getCandles('SPX').then(setSpxCandles).catch(() => {});
+    api.getCandles('NDX').then(setNdxCandles).catch(() => {});
+  }, [setRegime]);
 
-  const sectorsUp   = MOCK_SECTORS.filter((s) => s.changePct >   0.05).length;
-  const sectorsDown = MOCK_SECTORS.filter((s) => s.changePct <  -0.05).length;
+  const spx = lastClose(spxCandles);
+  const ndx = lastClose(ndxCandles);
+
+  const sectorsUp   = sectors.filter((s) => s.changePct >   0.05).length;
+  const sectorsDown = sectors.filter((s) => s.changePct <  -0.05).length;
 
   return (
     <div className={styles.main}>
@@ -60,10 +70,10 @@ export default function Step3Page() {
       </div>
 
       {/* 1. Overall banner */}
-      <section className={`${pageStyles.banner} ${pageStyles[`banner_${MOCK_REGIME.overall}`]}`}>
+      <section className={`${pageStyles.banner} ${pageStyles[`banner_${regime?.overall ?? 'PENDING'}`]}`}>
         <div className={pageStyles.bannerLeft}>
-          <StatusBadge status={MOCK_REGIME.overall} label={`REGIME ${MOCK_REGIME.overall}`} />
-          <Text size={14} weight={500}>{MOCK_REGIME.headline}</Text>
+          <StatusBadge status={regime?.overall ?? 'PENDING'} label={`REGIME ${regime?.overall ?? '…'}`} />
+          <Text size={14} weight={500}>{regime?.headline ?? ''}</Text>
         </div>
       </section>
 
@@ -99,7 +109,7 @@ export default function Step3Page() {
             </div>
           </header>
           <div className={pageStyles.indexChart}>
-            <CandlestickChart data={candlesFor('SPX')} height="auto" />
+            <CandlestickChart data={spxCandles} height="auto" />
           </div>
         </div>
         <div className={pageStyles.indexCard}>
@@ -113,7 +123,7 @@ export default function Step3Page() {
             </div>
           </header>
           <div className={pageStyles.indexChart}>
-            <CandlestickChart data={candlesFor('NDX')} height="auto" />
+            <CandlestickChart data={ndxCandles} height="auto" />
           </div>
         </div>
       </div>
@@ -124,7 +134,7 @@ export default function Step3Page() {
         <Text size={12} tone="secondary">Each gate contributes to the overall call</Text>
       </div>
       <div className={pageStyles.grid}>
-        {MOCK_REGIME.metrics.map((m) => (
+        {(regime?.metrics ?? []).map((m) => (
           <div key={m.label} className={pageStyles.metricCard}>
             <Text size={12} tone="secondary">{m.label}</Text>
             <div className={pageStyles.metricValueRow}>
@@ -145,7 +155,7 @@ export default function Step3Page() {
         </Text>
       </div>
       <div className={pageStyles.sectors}>
-        {MOCK_SECTORS.map((s) => (
+        {sectors.map((s) => (
           <div
             key={s.key}
             className={`${pageStyles.sectorTile} ${pageStyles[`sectorTile_${s.status}`]}`}

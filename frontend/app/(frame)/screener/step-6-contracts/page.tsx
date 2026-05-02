@@ -8,14 +8,15 @@
  * and the selection radio at the right marks the contract feeding Step 7.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { statusForScore } from '@/lib/status';
-import { MOCK_CONTRACTS, contractLabel, type OptionContract } from '@/mocks/contracts';
+import { api } from '@/lib/api';
+import { contractLabel, type OptionContract } from '@/mocks/contracts';
 import styles from '../screener.module.css';
 import tbl from './contracts.module.css';
 
@@ -29,12 +30,20 @@ type SortKey =
 type SortDir = 'asc' | 'desc';
 
 export default function Step6Page() {
-  const [pick, setPick] = useState<string>(MOCK_CONTRACTS[0]!.id);
-  const [sortKey, setSortKey] = useState<SortKey>('score');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [contracts, setContracts] = useState<OptionContract[]>([]);
+  const [pick, setPick]           = useState<string>('');
+  const [sortKey, setSortKey]     = useState<SortKey>('score');
+  const [sortDir, setSortDir]     = useState<SortDir>('desc');
+
+  useEffect(() => {
+    api.getContracts().then((data) => {
+      setContracts(data);
+      if (data[0]) setPick(data[0].id);
+    }).catch(() => {});
+  }, []);
 
   const sorted = useMemo<OptionContract[]>(() => {
-    const rows = [...MOCK_CONTRACTS];
+    const rows = [...contracts];
     const mul = sortDir === 'asc' ? 1 : -1;
     rows.sort((a, b) => {
       switch (sortKey) {
@@ -45,7 +54,7 @@ export default function Step6Page() {
       }
     });
     return rows;
-  }, [sortKey, sortDir]);
+  }, [contracts, sortKey, sortDir]);
 
   const toggleSort = (k: SortKey) => {
     if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));

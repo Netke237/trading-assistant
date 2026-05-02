@@ -7,12 +7,14 @@
  * Gate = worst of (IV status, event proximity status).
  */
 
+import { useEffect, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { EventFlag } from '@/components/atoms/EventFlag';
 import { WatchStar } from '@/components/atoms/WatchStar';
-import { MOCK_WATCHLIST } from '@/mocks/watchlist';
+import { api } from '@/lib/api';
+import type { WatchlistRow } from '@/types/domain';
 import { eventProximity } from '@/lib/date';
 import { worstStatus, type Status } from '@/lib/status';
 import styles from '../screener.module.css';
@@ -41,6 +43,9 @@ function ivStatus(rank: number): Status {
 }
 
 export default function Step5Page() {
+  const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
+  useEffect(() => { api.getWatchlist().then(setWatchlist).catch(() => {}); }, []);
+
   return (
     <div className={styles.main}>
       <div className={styles.stepHeader}>
@@ -63,7 +68,7 @@ export default function Step5Page() {
           <Text size={11} tone="dim">GATE</Text>
         </div>
 
-        {MOCK_WATCHLIST.map((r) => {
+        {watchlist.map((r) => {
           const rank = ivRankFor(r.symbol);
           const pctl = ivPctlFor(r.symbol);
           const ivSt = ivStatus(rank);

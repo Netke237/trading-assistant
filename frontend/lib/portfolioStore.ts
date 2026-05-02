@@ -8,18 +8,19 @@
  */
 
 import { create } from 'zustand';
-import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
 import type { PortfolioPosition } from '@/types/domain';
 
 interface PortfolioStoreState {
   positions: PortfolioPosition[];
+  hydrate:        (positions: PortfolioPosition[]) => void;
   addPosition:    (p: PortfolioPosition) => void;
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   closePosition:  (contract: string) => void;
 }
 
 export const usePortfolioStore = create<PortfolioStoreState>((set) => ({
-  positions: MOCK_PORTFOLIO,
+  positions: [],
+  hydrate: (positions) => set({ positions }),
   addPosition: (p) => set((s) => {
     const existingIdx = s.positions.findIndex((x) => x.contract === p.contract);
     if (existingIdx >= 0) {

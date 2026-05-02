@@ -6,22 +6,33 @@
  * score, and a single number on the right.
  */
 
+'use client';
+
+import { useEffect, useState } from 'react';
 import { RailSection } from '@/components/organisms/ContextRail';
 import { Text, Data } from '@/components/primitives';
 import { QuickLookRow } from '@/components/molecules/QuickLookRow';
-import { MOCK_WATCHLIST } from '@/mocks/watchlist';
-import { MOCK_PORTFOLIO } from '@/mocks/portfolio';
+import { api } from '@/lib/api';
+import type { WatchlistRow, PortfolioPosition } from '@/types/domain';
 import styles from './QuickLook.module.css';
 
 export function RailQuickLook() {
-  const top = [...MOCK_WATCHLIST].sort((a, b) => b.score - a.score).slice(0, 5);
+  const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
+  const [portfolio, setPortfolio] = useState<PortfolioPosition[]>([]);
 
-  const deployed = MOCK_PORTFOLIO.reduce(
+  useEffect(() => {
+    api.getWatchlist().then(setWatchlist).catch(() => {});
+    api.getPortfolio().then(setPortfolio).catch(() => {});
+  }, []);
+
+  const top = [...watchlist].sort((a, b) => b.score - a.score).slice(0, 5);
+
+  const deployed = portfolio.reduce(
     (s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1),
     0,
   );
-  const openPnL = MOCK_PORTFOLIO.reduce((s, p) => s + p.pnlDollar, 0);
-  const winners = MOCK_PORTFOLIO.filter((p) => p.pnlDollar > 0).length;
+  const openPnL = portfolio.reduce((s, p) => s + p.pnlDollar, 0);
+  const winners = portfolio.filter((p) => p.pnlDollar > 0).length;
 
   return (
     <>
@@ -40,7 +51,7 @@ export function RailQuickLook() {
 
       <RailSection title="Portfolio">
         <div className={styles.portfolioStack}>
-          <Row><Text size={12} tone="secondary">Positions</Text><Data size={12}>{MOCK_PORTFOLIO.length}</Data></Row>
+          <Row><Text size={12} tone="secondary">Positions</Text><Data size={12}>{portfolio.length}</Data></Row>
           <Row><Text size={12} tone="secondary">Deployed</Text><Data size={12}>${Math.round(deployed).toLocaleString()}</Data></Row>
           <Row>
             <Text size={12} tone="secondary">Open P&amp;L</Text>
@@ -50,7 +61,7 @@ export function RailQuickLook() {
           </Row>
           <Row>
             <Text size={12} tone="secondary">Winners</Text>
-            <Data size={12} tone="pass">{winners} / {MOCK_PORTFOLIO.length}</Data>
+            <Data size={12} tone="pass">{winners} / {portfolio.length}</Data>
           </Row>
         </div>
       </RailSection>

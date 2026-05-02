@@ -7,7 +7,7 @@
  *   - Contracts: every option contract the user has starred on Step 6.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
@@ -18,8 +18,8 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { statusForScore } from '@/lib/status';
-import { MOCK_WATCHLIST } from '@/mocks/watchlist';
-import { MOCK_CONTRACT_INDEX, contractLabel, type OptionContract } from '@/mocks/contracts';
+import { api } from '@/lib/api';
+import { contractLabel, type OptionContract } from '@/mocks/contracts';
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
 import type { WatchlistRow } from '@/types/domain';
 import styles from './page.module.css';
@@ -39,9 +39,16 @@ export default function WatchlistPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [contractSortKey, setContractSortKey] = useState<ContractSortKey>('score');
   const [contractSortDir, setContractSortDir] = useState<SortDir>('desc');
+  const [watchlist, setWatchlist]   = useState<WatchlistRow[]>([]);
+  const [contracts, setContracts]   = useState<OptionContract[]>([]);
+
+  useEffect(() => {
+    api.getWatchlist().then(setWatchlist).catch(() => {});
+    api.getContracts().then(setContracts).catch(() => {});
+  }, []);
 
   const sorted = useMemo<WatchlistRow[]>(() => {
-    const rows = [...MOCK_WATCHLIST];
+    const rows = [...watchlist];
     rows.sort((a, b) => {
       const mul = sortDir === 'asc' ? 1 : -1;
       switch (sortKey) {
@@ -54,12 +61,15 @@ export default function WatchlistPage() {
       }
     });
     return rows;
-  }, [sortKey, sortDir]);
+  }, [watchlist, sortKey, sortDir]);
 
   const watchedIds = useWatchedContractsStore((s) => s.ids);
   const watchedContracts = useMemo<OptionContract[]>(
-    () => watchedIds.map((id) => MOCK_CONTRACT_INDEX[id]).filter((c): c is OptionContract => !!c),
-    [watchedIds],
+    () => {
+      const idx = Object.fromEntries(contracts.map((c) => [c.id, c]));
+      return watchedIds.map((id) => idx[id]).filter((c): c is OptionContract => !!c);
+    },
+    [contracts, watchedIds],
   );
 
   const sortedContracts = useMemo<OptionContract[]>(() => {
@@ -96,7 +106,7 @@ export default function WatchlistPage() {
         <Title as="h1" size={24}>Watchlist</Title>
         <Text size={13} tone="secondary">
           {tab === 'stocks'
-            ? `${MOCK_WATCHLIST.length} candidates · sorted by ${sortKey} ${sortDir === 'asc' ? '↑' : '↓'}`
+            ? `${watchlist.length} candidates · sorted by ${sortKey} ${sortDir === 'asc' ? '↑' : '↓'}`
             : `${sortedContracts.length} starred contract${sortedContracts.length === 1 ? '' : 's'} · sorted by ${contractSortKey} ${contractSortDir === 'asc' ? '↑' : '↓'}`}
         </Text>
       </div>
@@ -109,7 +119,7 @@ export default function WatchlistPage() {
           className={`${styles.tab} ${tab === 'stocks' ? styles.tabActive : ''}`}
           onClick={() => setTab('stocks')}
         >
-          Stocks <span className={styles.tabCount}>{MOCK_WATCHLIST.length}</span>
+          Stocks <span className={styles.tabCount}>{watchlist.length}</span>
         </button>
         <button
           type="button"
