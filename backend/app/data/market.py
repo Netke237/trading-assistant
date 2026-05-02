@@ -182,6 +182,35 @@ def fetch_option_chain(
         return []
 
 
+def fetch_quotes(symbols: list[str]) -> dict[str, dict]:
+    """
+    Batch-fetch latest quotes for a list of symbols.
+    Returns dict keyed by symbol: {"last": float, "prevclose": float}
+    Returns {} on any error.
+    """
+    try:
+        resp = httpx.get(
+            f"{TRADIER_BASE_URL}/v1/markets/quotes",
+            headers=_headers(),
+            params={"symbols": ",".join(symbols)},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        quote_data = resp.json().get("quotes", {}).get("quote", [])
+        if isinstance(quote_data, dict):
+            quote_data = [quote_data]
+        result = {}
+        for q in quote_data:
+            sym = q.get("symbol", "")
+            last = q.get("last") or q.get("close") or 0
+            prev = q.get("prevclose") or last
+            if sym and last:
+                result[sym] = {"last": float(last), "prevclose": float(prev)}
+        return result
+    except Exception:
+        return {}
+
+
 def fetch_earnings_date(symbol: str) -> Optional[date]:
     """
     Returns the next earnings report date for `symbol`, or None if unavailable.
