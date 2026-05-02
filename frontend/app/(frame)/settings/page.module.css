@@ -54,6 +54,8 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .intro {

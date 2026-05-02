@@ -16,6 +16,7 @@ import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { api } from '@/lib/api';
+import { useScanStore } from '@/lib/scanStore';
 import type { PortfolioPosition, TradeCardData } from '@/types/domain';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
@@ -77,12 +78,19 @@ export default function Step7Page() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [toast, setToast]         = useState<ToastState | null>(null);
 
+  const scanResult = useScanStore((s) => s.scanResult);
+
   useEffect(() => {
+    if (scanResult?.candidates?.length) {
+      setCards(scanResult.candidates);
+      if (scanResult.candidates[0]) setActive(scanResult.candidates[0].symbol);
+      return;
+    }
     api.getTradecards().then((data) => {
       setCards(data);
       if (data[0]) setActive(data[0].symbol);
     }).catch(() => {});
-  }, []);
+  }, [scanResult]);
 
   const addPosition = usePortfolioStore((s) => s.addPosition);
 

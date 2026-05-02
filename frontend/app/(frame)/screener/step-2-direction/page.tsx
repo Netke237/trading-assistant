@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { Title, Text } from '@/components/primitives';
 import type { Direction } from '@/types/domain';
+import { useScanStore } from '@/lib/scanStore';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
 
@@ -23,11 +24,62 @@ const HORIZON_PRESETS: { key: HorizonKey; label: string; hint: string }[] = [
   { key: 'Custom',   label: 'Custom',   hint: 'Set range' },
 ];
 
+function horizonLabel(hz: HorizonKey, minDays: number, maxDays: number): string {
+  if (hz === 'Intraday') return 'Intraday (0–2d)';
+  if (hz === 'Swing')    return 'Swing (5–15d)';
+  if (hz === 'Position') return 'Position (15–45d)';
+  return `Custom (${minDays}–${maxDays}d)`;
+}
+
+function parseHorizonKey(h: string | undefined): HorizonKey {
+  if (!h) return 'Swing';
+  if (h.startsWith('Intraday')) return 'Intraday';
+  if (h.startsWith('Swing'))    return 'Swing';
+  if (h.startsWith('Position')) return 'Position';
+  if (h.startsWith('Custom'))   return 'Custom';
+  return 'Swing';
+}
+
+function parseCustomDays(h: string | undefined): [number, number] {
+  if (!h?.startsWith('Custom')) return [5, 15];
+  const m = h.match(/(\d+)–(\d+)/);
+  return m ? [Number(m[1]), Number(m[2])] : [5, 15];
+}
+
 export default function Step2Page() {
-  const [dir, setDir] = useState<Direction>('Bullish');
-  const [hz,  setHz]  = useState<HorizonKey>('Swing');
-  const [minDays, setMinDays] = useState(5);
-  const [maxDays, setMaxDays] = useState(15);
+  const context    = useScanStore((s) => s.context);
+  const setContext = useScanStore((s) => s.setContext);
+
+  const [dir,     setDir]     = useState<Direction>(() => context?.direction ?? 'Bullish');
+  const [hz,      setHz]      = useState<HorizonKey>(() => parseHorizonKey(context?.horizon));
+  const [minDays, setMinDays] = useState<number>(() => parseCustomDays(context?.horizon)[0]);
+  const [maxDays, setMaxDays] = useState<number>(() => parseCustomDays(context?.horizon)[1]);
+
+  function syncToStore(newDir: Direction, newHz: HorizonKey, newMin: number, newMax: number) {
+    setContext({
+      universe:  context?.universe ?? 'SP500',
+      direction: newDir,
+      horizon:   horizonLabel(newHz, newMin, newMax),
+    });
+  }
+
+  const handleDirChange = (d: Direction) => {
+    setDir(d);
+    syncToStore(d, hz, minDays, maxDays);
+  };
+  const handleHzChange = (h: HorizonKey) => {
+    setHz(h);
+    syncToStore(dir, h, minDays, maxDays);
+  };
+  const handleMinChange = (v: number) => {
+    setMinDays(v);
+    syncToStore(dir, hz, v, maxDays);
+  };
+  const handleMaxChange = (v: number) => {
+    const clamped = Math.max(minDays, v);
+    setMaxDays(clamped);
+    syncToStore(dir, hz, minDays, clamped);
+  };
 
   const custom = hz === 'Custom';
 
@@ -46,7 +98,7 @@ export default function Step2Page() {
             <button
               key={d}
               type="button"
-              onClick={() => setDir(d)}
+              onClick={() => handleDirChange(d)}
               className={`${formStyles.seg} ${dir === d ? formStyles.segActive : ''}`}
               aria-pressed={dir === d}
             >
@@ -63,7 +115,7 @@ export default function Step2Page() {
             <button
               key={h.key}
               type="button"
-              onClick={() => setHz(h.key)}
+              onClick={() => handleHzChange(h.key)}
               className={`${formStyles.seg} ${hz === h.key ? formStyles.segActive : ''}`}
               aria-pressed={hz === h.key}
             >
@@ -83,7 +135,7 @@ export default function Step2Page() {
               min={0}
               max={365}
               disabled={!custom}
-              onChange={(e) => setMinDays(Math.max(0, Number(e.target.value)))}
+              onChange={(e) => handleMinChange(Math.max(0, Number(e.target.value)))}
               aria-label="Minimum days"
             />
             <Text size={12} tone="dim">to</Text>
@@ -94,7 +146,7 @@ export default function Step2Page() {
               min={0}
               max={365}
               disabled={!custom}
-              onChange={(e) => setMaxDays(Math.max(minDays, Number(e.target.value)))}
+              onChange={(e) => handleMaxChange(Number(e.target.value))}
               aria-label="Maximum days"
             />
           </div>

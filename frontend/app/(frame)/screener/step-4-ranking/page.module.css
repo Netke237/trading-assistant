@@ -17,9 +17,23 @@
   grid-template-columns: minmax(320px, 40%) 1fr;
   gap: var(--space-4);
   align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.leftPanel,
+.leftPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  min-height: 0;
+  overflow-x: auto;
+  min-width: 0;
+}
+
 .rightPanel {
   display: flex;
   flex-direction: column;
@@ -50,6 +64,29 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  gap: var(--space-3);
+}
+
+.exportBtn {
+  margin-left: auto;
+  padding: 3px var(--space-3);
+  font-size: 11px;
+  font-family: var(--font-dm);
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.exportBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.exportBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .tableHeader {

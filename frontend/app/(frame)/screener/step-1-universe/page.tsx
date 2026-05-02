@@ -7,8 +7,10 @@
  * market-cap filters that apply to any selected universe.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
+import { useUniverseStore } from '@/lib/universeStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
 
@@ -23,17 +25,6 @@ type Universe =
   | 'Custom';
 
 type CapUnit = 'M' | 'B';
-
-const OPTIONS: { key: Universe; label: string; count: number | string; desc: string }[] = [
-  { key: 'SP500',       label: 'S&P 500',      count: 503,  desc: 'Large-cap US equities. Recommended for most users.' },
-  { key: 'NDX100',      label: 'Nasdaq-100',   count: 100,  desc: 'Tech-heavy large caps. Higher vol, higher signal.' },
-  { key: 'DOW30',       label: 'Dow 30',       count: 30,   desc: 'Blue-chip US industrials. Narrow but liquid.' },
-  { key: 'RUSSELL2000', label: 'Russell 2000', count: 2000, desc: 'US small caps. Broader breadth, thinner liquidity.' },
-  { key: 'STOXX600',    label: 'STOXX 600',    count: 600,  desc: 'European large/mid caps.' },
-  { key: 'DAX40',       label: 'DAX 40',       count: 40,   desc: 'German blue chips. Liquid European single-stock options.' },
-  { key: 'Watchlist',   label: 'My Watchlist', count: 10,   desc: 'Only symbols on your personal watchlist.' },
-  { key: 'Custom',      label: 'Custom list',  count: '—',  desc: 'Paste or type your own tickers (stocks / ETFs).' },
-];
 
 /** Parse raw textarea → unique upper-cased tickers (1–6 chars A–Z + digits). */
 function parseSymbols(raw: string): string[] {
@@ -68,18 +59,26 @@ function rangeSummary<T>(
 }
 
 export default function Step1Page() {
-  const [pick, setPick] = useState<Universe>('SP500');
-  const [raw, setRaw]   = useState('');
+  const {
+    pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit,
+    setPick, setCustomRaw, setMinPriceRaw, setMaxPriceRaw, setMinCapRaw, setMaxCapRaw,
+    setCapUnit, clearFilters,
+  } = useUniverseStore();
 
-  // Filters — kept local for now, lifted into a shared scan store when the
-  // backend lands and we need them to survive step navigation.
-  const [minPriceRaw, setMinPriceRaw] = useState<string>('');
-  const [maxPriceRaw, setMaxPriceRaw] = useState<string>('');
-  const [minCapRaw,   setMinCapRaw]   = useState<string>('');
-  const [maxCapRaw,   setMaxCapRaw]   = useState<string>('');
-  const [capUnit,     setCapUnit]     = useState<CapUnit>('B');
+  const watchlistCount = useWatchlistStore((s) => s.added.length);
 
-  const symbols  = useMemo(() => parseSymbols(raw), [raw]);
+  const OPTIONS: { key: Universe; label: string; count: number | string; desc: string }[] = [
+    { key: 'SP500',       label: 'S&P 500',      count: 503,  desc: 'Large-cap US equities. Recommended for most users.' },
+    { key: 'NDX100',      label: 'Nasdaq-100',   count: 100,  desc: 'Tech-heavy large caps. Higher vol, higher signal.' },
+    { key: 'DOW30',       label: 'Dow 30',       count: 30,   desc: 'Blue-chip US industrials. Narrow but liquid.' },
+    { key: 'RUSSELL2000', label: 'Russell 2000', count: 2000, desc: 'US small caps. Broader breadth, thinner liquidity.' },
+    { key: 'STOXX600',    label: 'STOXX 600',    count: 600,  desc: 'European large/mid caps.' },
+    { key: 'DAX40',       label: 'DAX 40',       count: 40,   desc: 'German blue chips. Liquid European single-stock options.' },
+    { key: 'Watchlist',   label: 'My Watchlist', count: watchlistCount, desc: 'Only symbols on your personal watchlist.' },
+    { key: 'Custom',      label: 'Custom list',  count: '—',  desc: 'Paste or type your own tickers (stocks / ETFs).' },
+  ];
+
+  const symbols  = useMemo(() => parseSymbols(customRaw), [customRaw]);
   const isCustom = pick === 'Custom';
 
   const minPrice = parseNumOrNull(minPriceRaw);
@@ -93,13 +92,6 @@ export default function Step1Page() {
   const priceSummary = rangeSummary(minPrice, maxPrice, fmtPrice);
   const capSummary   = rangeSummary(minCap,   maxCap,   (v) => fmtCap(v, capUnit));
   const hasFilters   = priceSummary !== null || capSummary !== null;
-
-  const clearFilters = () => {
-    setMinPriceRaw('');
-    setMaxPriceRaw('');
-    setMinCapRaw('');
-    setMaxCapRaw('');
-  };
 
   return (
     <div className={styles.main}>
@@ -274,8 +266,8 @@ export default function Step1Page() {
         <textarea
           className={formStyles.symInput}
           placeholder="AAPL NVDA TSLA SPY QQQ IWM …"
-          value={raw}
-          onChange={(e) => setRaw(e.target.value)}
+          value={customRaw}
+          onChange={(e) => setCustomRaw(e.target.value)}
           disabled={!isCustom}
           aria-label="Custom ticker list"
         />
@@ -290,7 +282,7 @@ export default function Step1Page() {
                   aria-label={`Remove ${s}`}
                   onClick={() => {
                     // Rewrite the raw textarea minus this symbol.
-                    setRaw(symbols.filter((x) => x !== s).join(' '));
+                    setCustomRaw(symbols.filter((x) => x !== s).join(' '));
                   }}
                 >
                   ×

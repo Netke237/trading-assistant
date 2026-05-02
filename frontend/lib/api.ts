@@ -21,6 +21,16 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
 export const api = {
   getWatchlist:  () => get<WatchlistRow[]>('/api/watchlist').catch(() => MOCK_WATCHLIST),
   getPortfolio:  () => get<PortfolioPosition[]>('/api/portfolio').catch(() => MOCK_PORTFOLIO),
@@ -31,4 +41,9 @@ export const api = {
   getContracts:  () => get<OptionContract[]>('/api/contracts').catch(() => MOCK_CONTRACTS),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards').catch(() => MOCK_CANDIDATE_CARDS),
   getCandles:    (symbol: string) => get<Candle[]>(`/api/candles/${encodeURIComponent(symbol)}`).catch(() => candlesFor(symbol)),
+  postScan: (universe: string[], direction: string, horizon: string) =>
+    post<{ scan_id: string; timestamp: string; candidates: TradeCardData[]; rejected: { symbol: string; reason: string }[] }>(
+      '/api/scan',
+      { universe, direction, horizon, overrides: {} },
+    ),
 };

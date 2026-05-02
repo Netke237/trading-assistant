@@ -208,3 +208,24 @@ class TradeCardData(BaseModel):
     rrRatio: float
     rrModel: RrModel
     finalStatus: Status
+
+
+# ── Scan ─────────────────────────────────────────────────────────────────────
+
+class ScanRequest(BaseModel):
+    universe: list[str]
+    direction: Direction
+    horizon: Horizon
+    overrides: dict = {}
+
+
+class RejectedCandidate(BaseModel):
+    symbol: str
+    reason: str
+
+
+class ScanResult(BaseModel):
+    scan_id: str
+    timestamp: str
+    candidates: list[TradeCardData]
+    rejected: list[RejectedCandidate]
