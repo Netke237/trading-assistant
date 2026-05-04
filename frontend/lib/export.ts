@@ -1,8 +1,8 @@
 import * as XLSX from 'xlsx';
 import type { WatchlistRow } from '@/types/domain';
 
-function buildSheetData(rows: WatchlistRow[]): Record<string, unknown>[] {
-  return rows.map((r, i) => ({
+export function exportToXlsx(rows: WatchlistRow[], filename: string): void {
+  const data = rows.map((r, i) => ({
     Rank:         i + 1,
     Symbol:       r.symbol,
     Company:      r.company,
@@ -20,24 +20,9 @@ function buildSheetData(rows: WatchlistRow[]): Record<string, unknown>[] {
       ? `${r.nextEventDays}d${r.nextEventLabel ? ` (${r.nextEventLabel})` : ''}`
       : '—',
   }));
-}
 
-export function exportToXlsx(
-  ranked: WatchlistRow[],
-  rejected: WatchlistRow[],
-  filename: string
-): void {
+  const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
-
-  if (ranked.length > 0) {
-    const wsRanked = XLSX.utils.json_to_sheet(buildSheetData(ranked));
-    XLSX.utils.book_append_sheet(wb, wsRanked, 'Rankings');
-  }
-
-  if (rejected.length > 0) {
-    const wsRejected = XLSX.utils.json_to_sheet(buildSheetData(rejected));
-    XLSX.utils.book_append_sheet(wb, wsRejected, 'Rejected');
-  }
-
+  XLSX.utils.book_append_sheet(wb, ws, 'Rankings');
   XLSX.writeFile(wb, filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`);
 }

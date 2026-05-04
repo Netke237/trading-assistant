@@ -15,15 +15,16 @@ from app.routers.alerts     import router as alerts_router
 from app.routers.events     import router as events_router
 from app.routers.ws_alerts  import router as ws_alerts_router
 from app.routers.scan       import router as scan_router
+from app.routers.news       import router as news_router
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="Ritter Nroetschen API",
+        title="Trading Assistant API",
         version="0.1.0",
-        description="Backend API for the Ritter Nroetschen child time management platform.",
+        description="Backend API for the Trading Assistant options screener.",
         debug=settings.DEBUG,
     )
 
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(events_router)
     app.include_router(ws_alerts_router)
     app.include_router(scan_router)
+    app.include_router(news_router)
 
     return app
 

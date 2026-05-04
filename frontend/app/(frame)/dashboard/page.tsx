@@ -19,10 +19,8 @@ import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
 import { useScanStore } from '@/lib/scanStore';
 import { api } from '@/lib/api';
-import { MOCK_NEWS } from '@/mocks/news';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
-import type { WatchlistRow, PortfolioPosition, AlertItem } from '@/types/domain';
-import type { MarketRegime } from '@/mocks/regime';
+import type { WatchlistRow, PortfolioPosition, AlertItem, MarketRegime, NewsItem } from '@/types/domain';
 import styles from './page.module.css';
 
 const WL_COLUMNS = '60px 1fr 60px 64px 64px';
@@ -43,22 +41,26 @@ export default function DashboardPage() {
   const [portfolio, setPortfolio] = useState<PortfolioPosition[]>([]);
   const [alerts, setAlerts]       = useState<AlertItem[]>([]);
   const [regime, setRegime]       = useState<MarketRegime | null>(null);
+  const [news, setNews]           = useState<NewsItem[]>([]);
+  const [offline, setOffline]     = useState(false);
 
   useEffect(() => {
-    api.getWatchlist().then(setWatchlist).catch(() => {});
-    api.getPortfolio().then(setPortfolio).catch(() => {});
-    api.getAlerts().then(setAlerts).catch(() => {});
-    api.getRegime().then(setRegime).catch(() => {});
+    api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
+    api.getPortfolio().then(setPortfolio).catch(() => setOffline(true));
+    api.getAlerts().then(setAlerts).catch(() => setOffline(true));
+    api.getRegime().then(setRegime).catch(() => setOffline(true));
   }, []);
+
+  useEffect(() => {
+    if (watchlist.length === 0) return;
+    api.getNews(watchlist.map((r) => r.symbol)).then(setNews).catch(() => {});
+  }, [watchlist]);
 
   const top5 = watchlist.slice(0, 5);
 
   const deployed = portfolio.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
   const openPnL  = portfolio.reduce((s, p) => s + p.pnlDollar, 0);
   const openPnLPct = deployed > 0 ? (openPnL / deployed) * 100 : 0;
-
-  const wlSet = new Set(watchlist.map((r) => r.symbol));
-  const watchlistNews = MOCK_NEWS.filter((n) => wlSet.has(n.symbol));
 
   return (
     <div className={styles.main}>
@@ -73,6 +75,10 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {offline && (
+        <Text size={13} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
+      )}
 
       {/* Regime banner */}
       <section className={`${styles.regime} ${styles[`regime_${regime?.overall ?? 'PENDING'}`]}`}>
@@ -170,12 +176,15 @@ export default function DashboardPage() {
         </SectionCard>
       </div>
 
-      {/* Second bento row — news tied to watchlist + open contracts overview */}
-      {/* NOTE: Not in the original spec; kept from existing Phase 5 implementation. Documented for QA/DA review. */}
+      {/* Second bento row — news + open contracts overview */}
       <div className={styles.bento2}>
-        <SectionCard title="News — watchlist" count={watchlistNews.length}>
+        <SectionCard title="News — watchlist" count={news.length}>
           <div className={styles.newsList}>
-            {watchlistNews.slice(0, 6).map((n) => (
+            {offline ? (
+              <Text size={12} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
+            ) : news.length === 0 ? (
+              <Text size={12} tone="dim">No news for your watchlist right now.</Text>
+            ) : news.slice(0, 6).map((n) => (
               <article key={n.id} className={styles.newsItem}>
                 <span className={`${styles.newsDot} ${styles[`newsDot_${n.sentiment}`]}`} aria-hidden />
                 <Data size={12} weight={500}>{n.symbol}</Data>
@@ -186,9 +195,6 @@ export default function DashboardPage() {
                 </div>
               </article>
             ))}
-            {watchlistNews.length === 0 && (
-              <Text size={12} tone="dim">No news for your watchlist right now.</Text>
-            )}
           </div>
         </SectionCard>
 

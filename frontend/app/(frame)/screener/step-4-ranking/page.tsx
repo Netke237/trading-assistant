@@ -144,13 +144,10 @@ export default function Step4Page() {
     }
   }, [candidates, setSelectedSymbol]);
 
-  const { ranked, rejected } = useMemo(() => {
-    const rj = watchlist.filter((w) => w.status === 'REJECT');
-    const rd = watchlist.filter((w) => w.status !== 'REJECT');
-    return { ranked: sortRows(rd, sortKey, sortDir), rejected: rj };
-  }, [watchlist, sortKey, sortDir]);
-
-  const sorted = ranked;
+  const sorted = useMemo(
+    () => sortRows(watchlist, sortKey, sortDir),
+    [watchlist, sortKey, sortDir],
+  );
 
   const selected = sorted.find((r) => r.symbol === selectedSym) ?? sorted[0];
 
@@ -199,13 +196,11 @@ export default function Step4Page() {
         <section className={styles.leftPanel}>
           <header className={styles.panelHeader}>
             <Text size={13} weight={600}>Candidates</Text>
-            <Text size={11} tone="secondary">{ranked.length} ranked · {rejected.length} rejected</Text>
+            <Text size={11} tone="secondary">{watchlist.length} ranked</Text>
             <button
               className={styles.exportBtn}
-              onClick={() =>
-                exportToXlsx(ranked, rejected, 'bamendjou-rankings')
-              }
-              disabled={watchlist.length === 0}
+              onClick={() => exportToXlsx(sorted, 'bamendjou-rankings')}
+              disabled={sorted.length === 0}
             >
               Export .xlsx
             </button>

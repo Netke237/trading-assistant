@@ -19,7 +19,7 @@ import { ContractStar } from '@/components/atoms/ContractStar';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { statusForScore } from '@/lib/status';
 import { api } from '@/lib/api';
-import { contractLabel, type OptionContract } from '@/mocks/contracts';
+import { contractLabel, type OptionContract } from '@/types/domain';
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
 import type { WatchlistRow } from '@/types/domain';
 import styles from './page.module.css';
@@ -41,10 +41,11 @@ export default function WatchlistPage() {
   const [contractSortDir, setContractSortDir] = useState<SortDir>('desc');
   const [watchlist, setWatchlist]   = useState<WatchlistRow[]>([]);
   const [contracts, setContracts]   = useState<OptionContract[]>([]);
+  const [offline, setOffline]       = useState(false);
 
   useEffect(() => {
-    api.getWatchlist().then(setWatchlist).catch(() => {});
-    api.getContracts().then(setContracts).catch(() => {});
+    api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
+    api.getContracts().then(setContracts).catch(() => setOffline(true));
   }, []);
 
   const sorted = useMemo<WatchlistRow[]>(() => {
@@ -109,6 +110,9 @@ export default function WatchlistPage() {
             ? `${watchlist.length} candidates · sorted by ${sortKey} ${sortDir === 'asc' ? '↑' : '↓'}`
             : `${sortedContracts.length} starred contract${sortedContracts.length === 1 ? '' : 's'} · sorted by ${contractSortKey} ${contractSortDir === 'asc' ? '↑' : '↓'}`}
         </Text>
+        {offline && (
+          <Text size={13} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
+        )}
       </div>
 
       <div className={styles.tabs} role="tablist" aria-label="Watchlist views">
