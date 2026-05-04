@@ -15,7 +15,6 @@ import { TradeCard } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
-import { api } from '@/lib/api';
 import { useScanStore } from '@/lib/scanStore';
 import type { PortfolioPosition, TradeCardData } from '@/types/domain';
 import styles from '../screener.module.css';
@@ -78,19 +77,22 @@ export default function Step7Page() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [toast, setToast]         = useState<ToastState | null>(null);
 
-  const scanResult = useScanStore((s) => s.scanResult);
+  const scanResult        = useScanStore((s) => s.scanResult);
+  const setSelectedSymbol = useScanStore((s) => s.setSelectedSymbol);
 
   useEffect(() => {
     if (scanResult?.candidates?.length) {
       setCards(scanResult.candidates);
       if (scanResult.candidates[0]) setActive(scanResult.candidates[0].symbol);
-      return;
+    } else {
+      setCards([]);
+      setActive('');
     }
-    api.getTradecards().then((data) => {
-      setCards(data);
-      if (data[0]) setActive(data[0].symbol);
-    }).catch(() => {});
   }, [scanResult]);
+
+  useEffect(() => {
+    if (active) setSelectedSymbol(active);
+  }, [active, setSelectedSymbol]);
 
   const addPosition = usePortfolioStore((s) => s.addPosition);
 
@@ -152,6 +154,10 @@ export default function Step7Page() {
         onTogglePin={togglePin}
         onRemovePin={removePin}
       />
+
+      {cards.length === 0 && (
+        <Text size={13} tone="dim">Run a scan to generate trade cards.</Text>
+      )}
 
       {card && (
         <TradeCard

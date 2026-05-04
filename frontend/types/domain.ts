@@ -104,6 +104,7 @@ export interface TradeCardData {
     delta:  number;
     theta:  number;              // $/day
     ivRank: number;              // 0–100
+    ivPercentile?: number;       // 0–100
     dte:    number;
   };
   entry:  { limit: number; maxFill: number; orderType: OrderType };

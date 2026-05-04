@@ -170,6 +170,7 @@ class ContractDetails(BaseModel):
     delta: float
     theta: float
     ivRank: int
+    ivPercentile: Optional[int] = None
     dte: int
 
 

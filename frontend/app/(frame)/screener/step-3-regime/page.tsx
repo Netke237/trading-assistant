@@ -17,10 +17,10 @@ import { useEffect, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
+import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { useScanStore } from '@/lib/scanStore';
 import { api } from '@/lib/api';
-import type { MarketRegime } from '@/mocks/regime';
-import type { SectorTile } from '@/mocks/sectors';
+import type { MarketRegime, SectorTile } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
@@ -45,12 +45,13 @@ export default function Step3Page() {
   const [sectors, setSectors]     = useState<SectorTile[]>([]);
   const [spxCandles, setSpxCandles] = useState<Candle[]>([]);
   const [ndxCandles, setNdxCandles] = useState<Candle[]>([]);
+  const [offline, setOffline]     = useState(false);
 
   useEffect(() => {
-    api.getRegime().then((r) => { setRegimeData(r); setRegime(r.overall); }).catch(() => {});
-    api.getSectors().then(setSectors).catch(() => {});
-    api.getCandles('SPX').then(setSpxCandles).catch(() => {});
-    api.getCandles('NDX').then(setNdxCandles).catch(() => {});
+    api.getRegime().then((r) => { setRegimeData(r); setRegime(r.overall); }).catch(() => setOffline(true));
+    api.getSectors().then(setSectors).catch(() => setOffline(true));
+    api.getCandles('SPY').then(setSpxCandles).catch(() => setOffline(true));
+    api.getCandles('QQQ').then(setNdxCandles).catch(() => setOffline(true));
   }, [setRegime]);
 
   const spx = lastClose(spxCandles);
@@ -68,6 +69,10 @@ export default function Step3Page() {
           Macro snapshot — advisory. REJECT prompts confirmation before proceeding.
         </Text>
       </div>
+
+      {offline && (
+        <Text size={13} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
+      )}
 
       {/* 1. Overall banner */}
       <section className={`${pageStyles.banner} ${pageStyles[`banner_${regime?.overall ?? 'PENDING'}`]}`}>
@@ -171,6 +176,8 @@ export default function Step3Page() {
           </div>
         ))}
       </div>
+
+      <RunScanButton />
     </div>
   );
 }

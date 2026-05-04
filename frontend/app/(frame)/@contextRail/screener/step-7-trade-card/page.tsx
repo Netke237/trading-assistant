@@ -1,62 +1,131 @@
+'use client';
+
 /*
- * Trade Card right-rail. Spec §4: Pre-trade checklist + historical analogs.
- * The checklist is scoped to a SINGLE stock (the candidate being planned).
- * QuickLook below keeps watchlist + portfolio totals one glance away.
+ * Trade Card right-rail — Pre-trade checklist.
+ * Gates are computed from live TradeCardData + WatchlistRow for the
+ * candidate currently active in Step 7 (tracked via scanStore.selectedSymbol).
  */
 
 import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
-import { Text, Data } from '@/components/primitives';
+import { Text } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
+import { useScanStore } from '@/lib/scanStore';
+import type { TradeCardData, WatchlistRow } from '@/types/domain';
+import type { Status } from '@/lib/status';
 import styles from './page.module.css';
 
-// Mock — will be driven by the selected candidate symbol once the screener store is wired.
-const SCOPE_SYMBOL = 'AAPL';
+interface Gate {
+  label:  string;
+  status: 'PASS' | 'CAUTION' | 'REJECT';
+}
 
-const CHECKLIST: { label: string; status: 'PASS' | 'CAUTION' | 'REJECT' }[] = [
-  { label: 'Regime PASS',            status: 'PASS'    },
-  { label: 'IV rank acceptable',     status: 'PASS'    },
-  { label: 'Earnings > 7d away',     status: 'CAUTION' },
-  { label: 'Spread < 5% of price',   status: 'PASS'    },
-  { label: 'Score ≥ 70',             status: 'PASS'    },
-  { label: 'R:R ≥ 2.0',              status: 'PASS'    },
-  { label: 'Position sizing in limits', status: 'PASS' },
-];
+function buildChecklist(
+  candidate: TradeCardData,
+  wlRow: WatchlistRow | undefined,
+  regime: Status,
+): Gate[] {
+  const gates: Gate[] = [];
 
-const ANALOGS = [
-  { date: '2026-02-14', outcome: '+18% in 9d'  },
-  { date: '2025-11-07', outcome: '+11% in 14d' },
-  { date: '2025-08-22', outcome: '−6% stopped' },
-];
+  // Regime
+  const regimeStatus =
+    regime === 'PASS' ? 'PASS' : regime === 'CAUTION' ? 'CAUTION' : 'REJECT';
+  gates.push({ label: 'Regime PASS', status: regimeStatus });
+
+  // IV rank acceptable (≤50 PASS, 51–70 CAUTION, >70 REJECT)
+  const ivRank = candidate.contractDetails?.ivRank;
+  if (ivRank !== undefined) {
+    gates.push({
+      label: 'IV rank acceptable',
+      status: ivRank <= 50 ? 'PASS' : ivRank <= 70 ? 'CAUTION' : 'REJECT',
+    });
+  }
+
+  // Earnings > 7d away
+  const days = wlRow?.nextEventDays;
+  if (days !== undefined) {
+    gates.push({
+      label: 'Earnings > 7d away',
+      status: days > 7 ? 'PASS' : days >= 3 ? 'CAUTION' : 'REJECT',
+    });
+  }
+
+  // Score ≥ 70 (both stock and contract)
+  const minScore = Math.min(candidate.stockScore, candidate.contractScore);
+  gates.push({
+    label: 'Score ≥ 70',
+    status: minScore >= 70 ? 'PASS' : minScore >= 50 ? 'CAUTION' : 'REJECT',
+  });
+
+  // R:R ≥ 2.0
+  gates.push({
+    label: 'R:R ≥ 2.0',
+    status: candidate.rrRatio >= 2.0 ? 'PASS' : candidate.rrRatio >= 1.5 ? 'CAUTION' : 'REJECT',
+  });
+
+  // Spread score ≥ 70 (higher = tighter spread)
+  const spreadScore = candidate.contractBreakdown.spread;
+  gates.push({
+    label: 'Spread < 5% of price',
+    status: spreadScore >= 70 ? 'PASS' : spreadScore >= 40 ? 'CAUTION' : 'REJECT',
+  });
+
+  return gates;
+}
 
 export default function TradeCardContextRail() {
+  const selectedSymbol = useScanStore((s) => s.selectedSymbol);
+  const regime         = useScanStore((s) => s.regime);
+  const candidates     = useScanStore((s) => s.scanResult?.candidates ?? []);
+
+  const candidate = candidates.find((c) => c.symbol === selectedSymbol) ?? candidates[0];
+
+  // Build a minimal WatchlistRow from candidate for buildChecklist
+  const wlRow: WatchlistRow | undefined = candidate
+    ? {
+        symbol: candidate.symbol,
+        company: candidate.company,
+        price: candidate.price,
+        direction: candidate.direction,
+        horizon: 'Swing',
+        score: candidate.stockScore,
+        rankDelta: 0,
+        scoreDelta: 0,
+        status: candidate.status,
+        breakdown: candidate.stockBreakdown,
+        nextEventDays: candidate.nextEventDays,
+        nextEventLabel: candidate.nextEventLabel,
+      }
+    : undefined;
+
+  const gates = candidate ? buildChecklist(candidate, wlRow, regime) : [];
+
   return (
     <>
-      <RailSection title={`Pre-trade checklist · ${SCOPE_SYMBOL}`}>
-        <Text size={11} tone="dim">
-          Gates for this single candidate. Portfolio-level checks live below.
-        </Text>
-        <div className={styles.checklistStack}>
-          {CHECKLIST.map((c) => (
-            <div key={c.label} className={styles.checklistRow}>
-              <StatusDot tone={c.status} size="sm" />
-              <Text size={12} tone={c.status === 'CAUTION' ? 'caution' : 'secondary'}>
-                {c.label}
-              </Text>
+      <RailSection title={selectedSymbol ? `Pre-trade checklist · ${selectedSymbol}` : 'Pre-trade checklist'}>
+        {!candidate ? (
+          <Text size={12} tone="dim">Run a scan to populate the checklist.</Text>
+        ) : (
+          <>
+            <Text size={11} tone="dim">
+              Gates for this candidate. Portfolio-level checks live below.
+            </Text>
+            <div className={styles.checklistStack}>
+              {gates.map((g) => (
+                <div key={g.label} className={styles.checklistRow}>
+                  <StatusDot tone={g.status} size="sm" />
+                  <Text size={12} tone={g.status === 'CAUTION' ? 'caution' : 'secondary'}>
+                    {g.label}
+                  </Text>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
       </RailSection>
 
-      <RailSection title={`Historical analogs · ${SCOPE_SYMBOL}`}>
-        <div className={styles.analogStack}>
-          {ANALOGS.map((a) => (
-            <div key={a.date} className={styles.analogRow}>
-              <Data size={11} tone="secondary">{a.date}</Data>
-              <Text size={12}>{a.outcome}</Text>
-            </div>
-          ))}
-        </div>
+      <RailSection title="Historical analogs">
+        <Text size={12} tone="dim">Not yet available.</Text>
       </RailSection>
 
       <RailQuickLook />

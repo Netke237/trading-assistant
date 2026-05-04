@@ -16,7 +16,8 @@ import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { statusForScore } from '@/lib/status';
 import { api } from '@/lib/api';
-import { contractLabel, type OptionContract } from '@/mocks/contracts';
+import { useScanStore } from '@/lib/scanStore';
+import { contractLabel, type OptionContract } from '@/types/domain';
 import styles from '../screener.module.css';
 import tbl from './contracts.module.css';
 
@@ -34,13 +35,17 @@ export default function Step6Page() {
   const [pick, setPick]           = useState<string>('');
   const [sortKey, setSortKey]     = useState<SortKey>('score');
   const [sortDir, setSortDir]     = useState<SortDir>('desc');
+  const [offline, setOffline]     = useState(false);
+
+  const selectedSymbol = useScanStore((s) => s.selectedSymbol);
 
   useEffect(() => {
-    api.getContracts().then((data) => {
+    if (!selectedSymbol) return;
+    api.getContracts(selectedSymbol).then((data) => {
       setContracts(data);
       if (data[0]) setPick(data[0].id);
-    }).catch(() => {});
-  }, []);
+    }).catch(() => setOffline(true));
+  }, [selectedSymbol]);
 
   const sorted = useMemo<OptionContract[]>(() => {
     const rows = [...contracts];
@@ -68,14 +73,24 @@ export default function Step6Page() {
     <div className={styles.main}>
       <div className={styles.stepHeader}>
         <Text size={11} tone="dim" weight={500}>STEP 6 OF 7</Text>
-        <Title as="h1" size={24}>Contracts — AAPL</Title>
+        <Title as="h1" size={24}>Contracts{selectedSymbol ? ` — ${selectedSymbol}` : ''}</Title>
         <Text size={13} tone="secondary">
           Scored by DTE fit, delta, IV attractiveness, liquidity and spread. Click a column to sort,
           star a contract to track it in the Watchlist.
         </Text>
       </div>
 
-      <div className={tbl.headerRow} style={{ gridTemplateColumns: COLUMNS }}>
+      {offline && (
+        <Text size={13} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
+      )}
+
+      {!selectedSymbol && (
+        <Text size={13} tone="dim">Select a candidate in Step 4 to view contracts.</Text>
+      )}
+
+      {selectedSymbol && (
+        <>
+          <div className={tbl.headerRow} style={{ gridTemplateColumns: COLUMNS }}>
         <span aria-hidden />
         <SortBtn label="CONTRACT" k="contract" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
         <SortBtn label="DTE"      k="dte"      sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
@@ -122,6 +137,8 @@ export default function Step6Page() {
           </TableRow>
         );
       })}
+        </>
+      )}
     </div>
   );
 }

@@ -4,8 +4,8 @@
  * RunScanButton — floating Run Scan FAB.
  * Spec §4: "Run Scan" surfaces scan state in TopBar pill.
  *
- * Mock flow (v1, no backend):
- *   IDLE/COMPLETED/FAILED → click → SCANNING (1.5s) → COMPLETED with fresh time.
+ * Real flow:
+ *   IDLE/COMPLETED/FAILED → click → SCANNING → COMPLETED with fresh time.
  *
  * Reads + writes useScanStore. The TopBar scan-state pill is already wired to
  * the same store, so the pill animation and context string update together.
@@ -13,6 +13,8 @@
 
 import { useCallback } from 'react';
 import { useScanStore } from '@/lib/scanStore';
+import { useUniverseStore } from '@/lib/universeStore';
+import { api } from '@/lib/api';
 import styles from './index.module.css';
 
 function nowLocalISO(): string {
@@ -24,19 +26,44 @@ function nowLocalISO(): string {
   );
 }
 
+function parseSymbols(raw: string): string[] {
+  return Array.from(
+    new Set(
+      raw
+        .split(/[\s,;\n]+/)
+        .map((s) => s.trim().toUpperCase())
+        .filter((s) => /^[A-Z][A-Z0-9.\-]{0,5}$/.test(s)),
+    ),
+  );
+}
+
 export function RunScanButton() {
   const scanState    = useScanStore((s) => s.scanState);
   const setScanState = useScanStore((s) => s.setScanState);
+  const setScanResult = useScanStore((s) => s.setScanResult);
+  const context      = useScanStore((s) => s.context);
+  const pick         = useUniverseStore((s) => s.pick);
+  const customRaw    = useUniverseStore((s) => s.customRaw);
 
   const scanning = scanState === 'SCANNING';
 
   const onClick = useCallback(() => {
     if (scanning) return;
+
+    const universe = pick === 'Custom' ? parseSymbols(customRaw) : [pick];
+    const direction = context?.direction ?? 'Bullish';
+    const horizon   = context?.horizon   ?? 'Swing (5–15d)';
+
     setScanState('SCANNING');
-    setTimeout(() => {
-      setScanState('COMPLETED', nowLocalISO());
-    }, 1500);
-  }, [scanning, setScanState]);
+    api.postScan(universe, direction, horizon)
+      .then((result) => {
+        setScanResult(result);
+        setScanState('COMPLETED', nowLocalISO());
+      })
+      .catch(() => {
+        setScanState('FAILED');
+      });
+  }, [scanning, setScanState, setScanResult, context, pick, customRaw]);
 
   return (
     <button

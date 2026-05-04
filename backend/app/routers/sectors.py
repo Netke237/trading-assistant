@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from app.schemas import SectorTile
-from app.fixtures.sectors import MOCK_SECTORS
 from app.data.market import fetch_quotes
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -34,7 +33,7 @@ def _status(pct: float) -> str:
 async def get_sectors() -> list[SectorTile]:
     quotes = fetch_quotes(SECTOR_ETFS)
     if not quotes:
-        return MOCK_SECTORS
+        return []
     tiles = []
     for etf in SECTOR_ETFS:
         q = quotes.get(etf)
@@ -49,4 +48,4 @@ async def get_sectors() -> list[SectorTile]:
             changePct=round(pct, 2),
             status=_status(pct),
         ))
-    return tiles if tiles else MOCK_SECTORS
+    return tiles

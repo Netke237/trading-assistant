@@ -4,7 +4,6 @@ import json
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.fixtures.alerts import MOCK_ALERTS
 from app.services.alert_service import alert_service
 
 router = APIRouter(tags=["alerts-ws"])
@@ -18,7 +17,7 @@ async def ws_alerts(websocket: WebSocket) -> None:
     On connect:
       1. Accept the connection.
       2. Register the client with alert_service.
-      3. Send the current fixture alerts as a JSON array immediately.
+      3. Send an empty JSON array immediately.
       4. Keep the connection open, waiting for the client to disconnect.
 
     On disconnect (or any error): unregister the client silently.
@@ -27,7 +26,7 @@ async def ws_alerts(websocket: WebSocket) -> None:
     alert_service.connect(websocket)
 
     try:
-        await websocket.send_text(json.dumps(MOCK_ALERTS))
+        await websocket.send_text(json.dumps([]))
 
         while True:
             await websocket.receive_text()

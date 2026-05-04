@@ -1,6 +1,5 @@
 from fastapi import APIRouter
-from app.schemas import MarketRegime
-from app.fixtures.regime import MOCK_REGIME
+from app.schemas import MarketRegime, RegimeMetric
 from app.data.market import fetch_price
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -22,15 +21,21 @@ async def get_regime() -> MarketRegime:
         vix = None
 
     if vix is None:
-        return MOCK_REGIME
+        return MarketRegime(
+            overall='CAUTION',
+            headline='VIX data unavailable',
+            metrics=[],
+        )
 
-    updated_metrics = [
-        {**m.model_dump(), 'value': f'{vix:.1f}', 'status': _vix_status(vix)}
-        if m.label == 'VIX' else m
-        for m in MOCK_REGIME.metrics
-    ]
+    status = _vix_status(vix)
     return MarketRegime(
-        overall=MOCK_REGIME.overall,
-        headline=MOCK_REGIME.headline,
-        metrics=updated_metrics,
+        overall=status,
+        headline=f'VIX {vix:.1f} — {status} environment',
+        metrics=[
+            RegimeMetric(
+                label='VIX',
+                value=f'{vix:.1f}',
+                status=status,
+            ),
+        ],
     )

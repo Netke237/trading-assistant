@@ -21,7 +21,8 @@ import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { api } from '@/lib/api';
 import { exportToXlsx } from '@/lib/export';
-import type { WatchlistRow } from '@/types/domain';
+import { useScanStore } from '@/lib/scanStore';
+import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import styles from './page.module.css';
 
@@ -94,6 +95,23 @@ interface SortHeaderProps {
   onSort: (key: SortKey) => void;
 }
 
+function cardToRow(c: TradeCardData): WatchlistRow {
+  return {
+    symbol: c.symbol,
+    company: c.company,
+    price: c.price,
+    direction: c.direction,
+    horizon: 'Swing',
+    score: c.stockScore,
+    rankDelta: 0,
+    scoreDelta: 0,
+    status: c.status,
+    breakdown: c.stockBreakdown,
+    nextEventDays: c.nextEventDays,
+    nextEventLabel: c.nextEventLabel,
+  };
+}
+
 function SortHeader({ label, sortKey, currentKey, dir, onSort }: SortHeaderProps) {
   const active = currentKey === sortKey;
   return (
@@ -109,11 +127,22 @@ function SortHeader({ label, sortKey, currentKey, dir, onSort }: SortHeaderProps
 export default function Step4Page() {
   const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
   const [candles, setCandles]     = useState<Candle[]>([]);
-  const [selectedSym, setSelectedSym] = useState<string>('AAPL');
+  const [selectedSym, setSelectedSym] = useState<string>('');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  useEffect(() => { api.getWatchlist().then(setWatchlist).catch(() => {}); }, []);
+  const candidates = useScanStore((s) => s.scanResult?.candidates);
+  const setSelectedSymbol = useScanStore((s) => s.setSelectedSymbol);
+
+  useEffect(() => {
+    const list = candidates?.map(cardToRow) ?? [];
+    setWatchlist(list);
+    if (list.length > 0) {
+      const sym = list[0].symbol;
+      setSelectedSym(sym);
+      setSelectedSymbol(sym);
+    }
+  }, [candidates, setSelectedSymbol]);
 
   const sorted = useMemo(
     () => sortRows(watchlist, sortKey, sortDir),
@@ -143,7 +172,7 @@ export default function Step4Page() {
           <Text size={11} tone="dim" weight={500}>STEP 4 OF 7</Text>
           <Title as="h1" size={24}>Stock Ranking</Title>
         </div>
-        <Text size={13} tone="dim">Loading candidates…</Text>
+        <Text size={13} tone="dim">Run a scan to see ranked candidates.</Text>
       </div>
     );
   }
@@ -191,7 +220,10 @@ export default function Step4Page() {
                 status={row.status}
                 columns={COLUMNS}
                 selected={row.symbol === selectedSym}
-                onClick={() => setSelectedSym(row.symbol)}
+                onClick={() => {
+                  setSelectedSym(row.symbol);
+                  setSelectedSymbol(row.symbol);
+                }}
               >
                 <WatchStar symbol={row.symbol} size="sm" />
                 <div className={styles.symCell}>

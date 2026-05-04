@@ -6,7 +6,7 @@
  * in/out with Framer Motion.
  *
  * Renders the real CandlestickChart (Lightweight Charts) when `open`, hydrating
- * data from /mocks/candles.ts.
+ * data from api.getCandles(symbol).
  */
 
 import { useEffect, useState } from 'react';

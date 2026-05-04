@@ -7,14 +7,14 @@
  * Gate = worst of (IV status, event proximity status).
  */
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { EventFlag } from '@/components/atoms/EventFlag';
 import { WatchStar } from '@/components/atoms/WatchStar';
-import { api } from '@/lib/api';
-import type { WatchlistRow } from '@/types/domain';
+import { useScanStore } from '@/lib/scanStore';
+import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import { eventProximity } from '@/lib/date';
 import { worstStatus, type Status } from '@/lib/status';
 import styles from '../screener.module.css';
@@ -22,29 +22,36 @@ import pageStyles from './page.module.css';
 
 const COLUMNS = '32px 72px 1fr 120px 70px 110px 80px';
 
-/** Deterministic IV rank (0–100) from symbol hash. */
-function ivRankFor(symbol: string): number {
-  let h = 0;
-  for (let i = 0; i < symbol.length; i++) h = (h * 31 + symbol.charCodeAt(i)) >>> 0;
-  return 20 + (h % 70);
-}
-
-/** Deterministic IV percentile — correlated with rank, not identical. */
-function ivPctlFor(symbol: string): number {
-  let h = 0;
-  for (let i = 0; i < symbol.length; i++) h = (h * 17 + symbol.charCodeAt(i)) >>> 0;
-  return Math.max(5, Math.min(95, ivRankFor(symbol) + ((h % 21) - 10)));
-}
-
 function ivStatus(rank: number): Status {
   if (rank >= 60) return 'PASS';
   if (rank >= 35) return 'CAUTION';
   return 'REJECT';
 }
 
+function cardToRow(c: TradeCardData): WatchlistRow {
+  return {
+    symbol: c.symbol,
+    company: c.company,
+    price: c.price,
+    direction: c.direction,
+    horizon: 'Swing',
+    score: c.stockScore,
+    rankDelta: 0,
+    scoreDelta: 0,
+    status: c.status,
+    breakdown: c.stockBreakdown,
+    nextEventDays: c.nextEventDays,
+    nextEventLabel: c.nextEventLabel,
+  };
+}
+
 export default function Step5Page() {
-  const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
-  useEffect(() => { api.getWatchlist().then(setWatchlist).catch(() => {}); }, []);
+  const candidates = useScanStore((s) => s.scanResult?.candidates ?? []);
+  const watchlist = useMemo(() => candidates.map(cardToRow), [candidates]);
+  const candidateMap = useMemo(
+    () => Object.fromEntries(candidates.map((c) => [c.symbol, c])),
+    [candidates],
+  );
 
   return (
     <div className={styles.main}>
@@ -69,9 +76,11 @@ export default function Step5Page() {
         </div>
 
         {watchlist.map((r) => {
-          const rank = ivRankFor(r.symbol);
-          const pctl = ivPctlFor(r.symbol);
-          const ivSt = ivStatus(rank);
+          const c = candidateMap[r.symbol];
+          const rank = c?.contractDetails?.ivRank;
+          const pctl = c?.contractDetails?.ivPercentile;
+          const hasIv = rank !== undefined;
+          const ivSt = hasIv ? ivStatus(rank) : 'NO_DATA';
           const prox = r.nextEventDays !== undefined ? eventProximity(r.nextEventDays) : 'distant';
           const proxStatus: Status =
             prox === 'imminent' ? 'REJECT'
@@ -87,16 +96,18 @@ export default function Step5Page() {
 
               {/* IV rank + inline mini bar */}
               <div className={pageStyles.ivRankCell}>
-                <Data size={13} weight={500}>{rank}</Data>
-                <div className={pageStyles.ivTrack}>
-                  <div
-                    className={`${pageStyles.ivFill} ${pageStyles[`ivFill_${ivSt}`]}`}
-                    style={{ width: `${(rank / 100) * 120}px` }}
-                  />
-                </div>
+                <Data size={13} weight={500}>{hasIv ? rank : '—'}</Data>
+                {hasIv && (
+                  <div className={pageStyles.ivTrack}>
+                    <div
+                      className={`${pageStyles.ivFill} ${pageStyles[`ivFill_${ivSt}`]}`}
+                      style={{ width: `${(rank / 100) * 120}px` }}
+                    />
+                  </div>
+                )}
               </div>
 
-              <Data size={13} weight={500}>{pctl}</Data>
+              <Data size={13} weight={500}>{pctl !== undefined ? pctl : '—'}</Data>
 
               {r.nextEventDays !== undefined
                 ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel} />

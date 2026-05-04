@@ -17,8 +17,7 @@ import type { UpcomingEvent } from '@/types/domain';
 import type { Status } from '@/lib/status';
 import styles from './page.module.css';
 
-// Session anchor — matches the rest of the app (2026-04-18 is "today" in mocks).
-const TODAY = new Date('2026-04-18T00:00:00Z');
+const TODAY = new Date();
 
 const WEEK_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
