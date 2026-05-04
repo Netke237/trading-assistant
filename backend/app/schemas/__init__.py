@@ -205,6 +205,8 @@ class TradeCardData(BaseModel):
     contractDetails: Optional[ContractDetails] = None
     entry: TradeEntry
     exit: TradeExit
+    nextEventDays: Optional[int] = None
+    nextEventLabel: Optional[str] = None
     rrRatio: float
     rrModel: RrModel
     finalStatus: Status

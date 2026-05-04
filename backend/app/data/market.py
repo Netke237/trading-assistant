@@ -274,3 +274,65 @@ def fetch_dividend_date(symbol: str) -> Optional[date]:
         return None
     except Exception:
         return None
+
+
+def fetch_company_name(symbol: str) -> Optional[str]:
+    """
+    Returns the company name for `symbol`, or None if unavailable.
+    Uses Tradier's beta fundamentals company endpoint.
+    """
+    try:
+        resp = httpx.get(
+            f"{TRADIER_BASE_URL}/beta/markets/fundamentals/company",
+            headers=_headers(),
+            params={"symbols": symbol},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not data or not isinstance(data, list):
+            return None
+        for entry in data:
+            for result in entry.get("results", []):
+                name = result.get("tables", {}).get("company_profile", {}).get("company_name")
+                if name:
+                    return name
+        return None
+    except Exception:
+        return None
+
+
+def fetch_news(symbols: list[str], limit: int = 20) -> list[dict]:
+    """
+    Returns recent news articles for the given symbols from Tradier.
+    Each item: {id, symbol, headline, source, timestamp, sentiment}
+    sentiment is always 'neutral' — Tradier does not provide sentiment scores.
+    Returns [] on any error.
+    """
+    try:
+        resp = httpx.get(
+            f"{TRADIER_BASE_URL}/v1/markets/news",
+            headers=_headers(),
+            params={"symbols": ",".join(symbols), "limit": limit},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        articles = data.get("news", {}).get("article", [])
+        if isinstance(articles, dict):
+            articles = [articles]
+        result = []
+        for i, a in enumerate(articles):
+            art_symbols = a.get("symbols", "")
+            symbol = art_symbols.split(",")[0].strip() if art_symbols else symbols[0]
+            result.append({
+                "id":        str(a.get("id", i)),
+                "symbol":    symbol,
+                "headline":  a.get("title", ""),
+                "source":    a.get("source", ""),
+                "timestamp": a.get("datetime", ""),
+                "sentiment": "neutral",
+            })
+        return result
+    except Exception:
+        return []

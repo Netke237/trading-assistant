@@ -11,7 +11,7 @@ from app.schemas import (
 from typing import Literal
 from app.data.market import (
     fetch_candles, fetch_price, fetch_option_chain,
-    fetch_earnings_date, fetch_dividend_date,
+    fetch_earnings_date, fetch_dividend_date, fetch_company_name,
 )
 from app.scoring.stock_scorer import score_stock, StockScoreCard
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
@@ -61,6 +61,7 @@ async def run_scan(req: ScanRequest) -> ScanResult:
             # Step 1 — Fetch market data
             candles = fetch_candles(symbol)
             price = fetch_price(symbol)
+            company = fetch_company_name(symbol) or symbol
             if not price or not candles:
                 rejected.append(RejectedCandidate(symbol=symbol, reason="no market data"))
                 log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no market data"})
@@ -148,9 +149,19 @@ async def run_scan(req: ScanRequest) -> ScanResult:
             )
 
             # Step 9 — Build TradeCardData
+            from datetime import date as _date
+            next_event_days = None
+            next_event_label = None
+            if earnings_date:
+                next_event_days = max(0, (earnings_date - _date.today()).days)
+                next_event_label = "Earnings"
+            elif dividend_date:
+                next_event_days = max(0, (dividend_date - _date.today()).days)
+                next_event_label = "Dividend"
+
             trade_card = TradeCardData(
                 symbol=symbol,
-                company=symbol,
+                company=company,
                 price=price,
                 direction=req.direction,
                 status=card.status,
@@ -163,6 +174,8 @@ async def run_scan(req: ScanRequest) -> ScanResult:
                     event=_rule_score(card, "event"),
                     volatility=_rule_score(card, "vol"),
                 ),
+                nextEventDays=next_event_days,
+                nextEventLabel=next_event_label,
                 contract=f"{symbol}|{int(strike)}|{contract.get('expiry','TBD')}|{'C' if req.direction=='Bullish' else 'P'}",
                 contractScore=contract_card.score,
                 contractConfidence=contract_card.status,

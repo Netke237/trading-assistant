@@ -1,8 +1,5 @@
 /*
  * Domain types — shared across pages and components.
- *
- * v1 is mocks-only (see /mocks/). These types are the contract the future
- * FastAPI backend needs to satisfy.
  */
 
 import type { Status } from '@/lib/status';
@@ -111,7 +108,78 @@ export interface TradeCardData {
   };
   entry:  { limit: number; maxFill: number; orderType: OrderType };
   exit:   { invalidation: number; premiumStop: number; timeStopDays: number; target: number };
+  nextEventDays?:  number;
+  nextEventLabel?: string;
   rrRatio:  number;
   rrModel:  'Heston repriced' | 'Delta approximation';
   finalStatus: Status;
+}
+
+// --- Option contracts ---
+
+export type OptionRight = 'C' | 'P';
+
+export interface OptionContract {
+  id:           string;
+  symbol:       string;
+  strike:       number;
+  expiry:       string;
+  right:        OptionRight;
+  dte:          number;
+  dteTotal:     number;
+  price:        number;
+  delta:        number;
+  theta:        number;
+  ivRank:       number;
+  ivPercentile: number;
+  spread:       number;
+  volume:       number;
+  score:        number;
+}
+
+export function contractId(symbol: string, strike: number, expiry: string, right: OptionRight): string {
+  return `${symbol.toUpperCase()}|${strike}|${expiry}|${right}`;
+}
+
+/** Short UI label, e.g. "AAPL 190C 05/15". */
+export function contractLabel(c: Pick<OptionContract, 'symbol' | 'strike' | 'right' | 'expiry'>): string {
+  const [, mm, dd] = c.expiry.split('-');
+  return `${c.symbol} ${c.strike}${c.right} ${mm}/${dd}`;
+}
+
+// --- Market regime ---
+
+export interface RegimeMetric {
+  label:  string;
+  value:  string;
+  status: Status;
+  trend?: 'up' | 'flat' | 'down';
+}
+
+export interface MarketRegime {
+  overall:  Status;
+  headline: string;
+  metrics:  RegimeMetric[];
+}
+
+// --- Sector heatmap ---
+
+export interface SectorTile {
+  key:       string;
+  name:      string;
+  changePct: number;
+  status:    Status;
+}
+
+// --- News ---
+
+export type NewsSentiment = 'bull' | 'bear' | 'neutral';
+
+export interface NewsItem {
+  id:        string;
+  symbol:    string;
+  headline:  string;
+  source:    string;
+  timestamp: string;
+  sentiment: NewsSentiment;
 }
