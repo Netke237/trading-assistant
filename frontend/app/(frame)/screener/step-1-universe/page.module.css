@@ -109,6 +109,40 @@
   align-items: center;
 }
 
+.uploadRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.fileInput {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.uploadBtn {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 var(--space-3);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-family: var(--font-dm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+
+.uploadBtn:hover {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
 /* ---------- Filters ---------- */
 
 .filters {

@@ -11,7 +11,7 @@
  * value is and can tell at a glance if they've drifted.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -63,7 +63,7 @@ export default function SettingsPage() {
       {/* Sticky footer */}
       <footer className={styles.footer}>
         <button type="button" className={styles.btn} onClick={resetToDefaults}>Reset</button>
-        <button type="button" className={`${styles.btn} ${styles.btnPrimary}`}>Save changes</button>
+        <SaveButton />
       </footer>
     </div>
   );
@@ -105,11 +105,51 @@ function Row({
   );
 }
 
+/* ---------- Save button ---------- */
+
+function SaveButton() {
+  const [saved, setSaved] = useState(false);
+  const { customW, customParams, broker } = useSettingsStore();
+
+  function handleSave() {
+    // Already persisted via Zustand — just flash confirmation.
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }
+
+  return (
+    <button
+      type="button"
+      className={`${styles.btn} ${styles.btnPrimary}`}
+      onClick={handleSave}
+      disabled={saved}
+    >
+      {saved ? 'Saved' : 'Save changes'}
+    </button>
+  );
+}
+
 /* ---------- Broker ---------- */
 
 function BrokerForm() {
-  const [broker,  setBroker]  = useState('Interactive Brokers');
-  const [account, setAccount] = useState('');
+  const { broker, setBroker } = useSettingsStore();
+  const [localBroker, setLocalBroker] = useState(broker.broker);
+  const [localAccount, setLocalAccount] = useState(broker.account);
+  const [localToken, setLocalToken] = useState(broker.apiToken);
+  const [localPaper, setLocalPaper] = useState(broker.paperTrading);
+
+  // Sync local state when store updates (e.g. after reset)
+  useEffect(() => {
+    setLocalBroker(broker.broker);
+    setLocalAccount(broker.account);
+    setLocalToken(broker.apiToken);
+    setLocalPaper(broker.paperTrading);
+  }, [broker]);
+
+  function updateBroker(patch: Partial<typeof broker>) {
+    setBroker({ ...broker, ...patch });
+  }
+
   return (
     <>
       <SectionIntro
@@ -117,7 +157,14 @@ function BrokerForm() {
         blurb="Where your trades execute. Paper mode is strongly recommended until you've run the app through a full cycle."
       />
       <Row label="Broker" hint="Interactive Brokers, Tradier, TastyTrade…" defaultValue="Interactive Brokers">
-        <select className={styles.input} value={broker} onChange={(e) => setBroker(e.target.value)}>
+        <select
+          className={styles.input}
+          value={localBroker}
+          onChange={(e) => {
+            setLocalBroker(e.target.value);
+            updateBroker({ broker: e.target.value });
+          }}
+        >
           <option>Interactive Brokers</option>
           <option>Tradier</option>
           <option>TastyTrade</option>
@@ -127,15 +174,33 @@ function BrokerForm() {
         <input
           className={styles.input}
           placeholder="U1234567"
-          value={account}
-          onChange={(e) => setAccount(e.target.value)}
+          value={localAccount}
+          onChange={(e) => {
+            setLocalAccount(e.target.value);
+            updateBroker({ account: e.target.value });
+          }}
         />
       </Row>
       <Row label="API token" hint="Stored locally. Never transmitted to our servers." defaultValue="—">
-        <input className={styles.input} type="password" placeholder="••••••••••••" />
+        <input
+          className={styles.input}
+          type="password"
+          placeholder="••••••••••••"
+          value={localToken}
+          onChange={(e) => {
+            setLocalToken(e.target.value);
+            updateBroker({ apiToken: e.target.value });
+          }}
+        />
       </Row>
       <Row label="Paper trading" hint="Simulated fills — no real orders" defaultValue="On">
-        <Toggle defaultOn />
+        <Toggle
+          defaultOn={localPaper}
+          onChange={(on) => {
+            setLocalPaper(on);
+            updateBroker({ paperTrading: on });
+          }}
+        />
       </Row>
     </>
   );
@@ -488,14 +553,18 @@ function AlertsForm() {
   );
 }
 
-function Toggle({ defaultOn }: { defaultOn?: boolean }) {
+function Toggle({ defaultOn, onChange }: { defaultOn?: boolean; onChange?: (on: boolean) => void }) {
   const [on, setOn] = useState(defaultOn ?? false);
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
-      onClick={() => setOn((v) => !v)}
+      onClick={() => {
+        const next = !on;
+        setOn(next);
+        onChange?.(next);
+      }}
       className={`${styles.toggle} ${on ? styles.toggleOn : ''}`}
     >
       <span className={styles.toggleDot} />

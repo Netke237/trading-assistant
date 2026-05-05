@@ -138,57 +138,66 @@ export default function WatchlistPage() {
 
       {tab === 'stocks' ? (
         <>
-          <div className={styles.tableWrap}>
-            <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
-              <span aria-hidden />
-              <SortBtn label="SYMBOL"     active={sortKey === 'symbol'} dir={sortDir} onClick={() => toggleSort('symbol')} />
-              <Text size={11} tone="dim">NAME</Text>
-              <SortBtn label="PRICE"      active={sortKey === 'price'}  dir={sortDir} onClick={() => toggleSort('price')}  align="right" />
-              <Text size={11} tone="dim">DIR</Text>
-              <Text size={11} tone="dim">HORIZON</Text>
-              <SortBtn label="SCORE"      active={sortKey === 'score'}  dir={sortDir} onClick={() => toggleSort('score')}  align="right" />
-              <SortBtn label="RANK Δ"     active={sortKey === 'rank'}   dir={sortDir} onClick={() => toggleSort('rank')} />
-              <SortBtn label="SCORE Δ"    active={sortKey === 'scoreDelta'} dir={sortDir} onClick={() => toggleSort('scoreDelta')} />
-              <Text size={11} tone="dim">NEXT EVENT</Text>
+          {watchlist.length === 0 ? (
+            <div className={styles.empty}>
+              <Text size={14} tone="secondary">No stocks in watchlist yet.</Text>
+              <Text size={12} tone="dim">
+                Star a stock on the Screener → Step 4 to track it here.
+              </Text>
             </div>
+          ) : (
+            <div className={styles.tableWrap}>
+              <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
+                <span aria-hidden />
+                <SortBtn label="SYMBOL"     active={sortKey === 'symbol'} dir={sortDir} onClick={() => toggleSort('symbol')} />
+                <Text size={11} tone="dim">NAME</Text>
+                <SortBtn label="PRICE"      active={sortKey === 'price'}  dir={sortDir} onClick={() => toggleSort('price')}  align="right" />
+                <Text size={11} tone="dim">DIR</Text>
+                <Text size={11} tone="dim">HORIZON</Text>
+                <SortBtn label="SCORE"      active={sortKey === 'score'}  dir={sortDir} onClick={() => toggleSort('score')}  align="right" />
+                <SortBtn label="RANK Δ"     active={sortKey === 'rank'}   dir={sortDir} onClick={() => toggleSort('rank')} />
+                <SortBtn label="SCORE Δ"    active={sortKey === 'scoreDelta'} dir={sortDir} onClick={() => toggleSort('scoreDelta')} />
+                <Text size={11} tone="dim">NEXT EVENT</Text>
+              </div>
 
-            <div className={styles.tableBody}>
-              {sorted.map((row) => (
-                <TableRow
-                  key={row.symbol}
-                  status={row.status}
-                  columns={COLUMNS}
-                  selected={selected === row.symbol}
-                  onClick={() => onSelect(row.symbol)}
-                >
-                  <WatchStar symbol={row.symbol} size="sm" />
-                  <Data size={13} weight={500}>{row.symbol}</Data>
-                  <Text size={12} tone="secondary">{row.company}</Text>
-                  <Data size={12} weight={500} className={styles.right}>${row.price.toFixed(2)}</Data>
-                  <span className={row.direction === 'Bullish' ? styles.dirBull : styles.dirBear}>
-                    {row.direction === 'Bullish' ? 'Bull' : 'Bear'}
-                  </span>
-                  <Text size={11} tone="secondary">{row.horizon}</Text>
-                  <div className={styles.scoreCell}>
-                    {/*
-                     * ScoreBar (label + track + value, 3-col grid) is designed for the
-                     * ContextRail or detail panels.  Embedding it in the 90px score column
-                     * would require hiding label & value text and shrinking the track to
-                     * ~50px — the result is too cramped to add meaningful visual signal.
-                     * The StatusBadge + numeric score already communicate the score quality.
-                     */}
-                    <Data size={13} weight={500}>{row.score}</Data>
-                    <StatusBadge status={row.status} />
-                  </div>
-                  <RankDelta value={row.rankDelta} context="rank" />
-                  <RankDelta value={row.scoreDelta ?? 0} context="score pt" />
-                  {row.nextEventDays !== undefined
-                    ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel} />
-                    : <Text size={11} tone="dim">—</Text>}
-                </TableRow>
-              ))}
+              <div className={styles.tableBody}>
+                {sorted.map((row) => (
+                  <TableRow
+                    key={row.symbol}
+                    status={row.status}
+                    columns={COLUMNS}
+                    selected={selected === row.symbol}
+                    onClick={() => onSelect(row.symbol)}
+                  >
+                    <WatchStar symbol={row.symbol} size="sm" />
+                    <Data size={13} weight={500}>{row.symbol}</Data>
+                    <Text size={12} tone="secondary">{row.company}</Text>
+                    <Data size={12} weight={500} className={styles.right}>${row.price.toFixed(2)}</Data>
+                    <span className={row.direction === 'Bullish' ? styles.dirBull : styles.dirBear}>
+                      {row.direction === 'Bullish' ? 'Bull' : 'Bear'}
+                    </span>
+                    <Text size={11} tone="secondary">{row.horizon}</Text>
+                    <div className={styles.scoreCell}>
+                      {/*
+                       * ScoreBar (label + track + value, 3-col grid) is designed for the
+                       * ContextRail or detail panels.  Embedding it in the 90px score column
+                       * would require hiding label & value text and shrinking the track to
+                       * ~50px — the result is too cramped to add meaningful visual signal.
+                       * The StatusBadge + numeric score already communicate the score quality.
+                       */}
+                      <Data size={13} weight={500}>{row.score}</Data>
+                      <StatusBadge status={row.status} />
+                    </div>
+                    <RankDelta value={row.rankDelta} context="rank" />
+                    <RankDelta value={row.scoreDelta ?? 0} context="score pt" />
+                    {row.nextEventDays !== undefined
+                      ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel} />
+                      : <Text size={11} tone="dim">—</Text>}
+                  </TableRow>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <InlineChartPanel
             open={selected !== null}

@@ -3,8 +3,7 @@
  *
  * Separate from watchlistStore on purpose: starring a stock and starring a
  * specific option contract are different intents. This store holds just the
- * canonical contract id; the catalog (MOCK_CONTRACT_INDEX for now, a backend
- * later) resolves the id back into a row.
+ * canonical contract id; the backend resolves the id back into a row.
  */
 
 import { create } from 'zustand';

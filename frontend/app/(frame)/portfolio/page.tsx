@@ -57,109 +57,118 @@ export default function PortfolioPage() {
         <Text size={13} tone="secondary">{positions.length} open positions</Text>
       </div>
 
-      <div className={styles.tableWrap}>
-        <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
-          <Text size={11} tone="dim">SYMBOL</Text>
-          <Text size={11} tone="dim">CONTRACT</Text>
-          <Text size={11} tone="dim">DIR</Text>
-          <Text size={11} tone="dim">DTE</Text>
-          <Text size={11} tone="dim" className={styles.right}>ENTRY → NOW</Text>
-          <Text size={11} tone="dim" className={styles.right}>P&amp;L</Text>
-          <Text size={11} tone="dim" className={styles.right}>IV RK</Text>
-          <Text size={11} tone="dim" className={styles.right}>Δ</Text>
-          <Text size={11} tone="dim" className={styles.right}>Θ/DAY</Text>
-          <Text size={11} tone="dim">STATUS</Text>
-          <span aria-hidden />
+      {positions.length === 0 ? (
+        <div className={styles.empty}>
+          <Text size={14} tone="secondary">No open positions.</Text>
+          <Text size={12} tone="dim">
+            Send a trade from the Screener → Step 7 or add manually.
+          </Text>
         </div>
+      ) : (
+        <div className={styles.tableWrap}>
+          <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
+            <Text size={11} tone="dim">SYMBOL</Text>
+            <Text size={11} tone="dim">CONTRACT</Text>
+            <Text size={11} tone="dim">DIR</Text>
+            <Text size={11} tone="dim">DTE</Text>
+            <Text size={11} tone="dim" className={styles.right}>ENTRY → NOW</Text>
+            <Text size={11} tone="dim" className={styles.right}>P&L</Text>
+            <Text size={11} tone="dim" className={styles.right}>IV RK</Text>
+            <Text size={11} tone="dim" className={styles.right}>Δ</Text>
+            <Text size={11} tone="dim" className={styles.right}>Θ/DAY</Text>
+            <Text size={11} tone="dim">STATUS</Text>
+            <span aria-hidden />
+          </div>
 
-        <div className={styles.tableBody}>
-          {positions.map((p) => (
-            <div key={p.contract} className={styles.rowWrap}>
-              <TableRow status={p.status} columns={COLUMNS}>
-                <Data size={13} weight={500}>{p.symbol}</Data>
-                <span className={styles.contractCell}>
-                  <Text size={12} tone="secondary">{p.contract}</Text>
-                  {p.source === 'manual' && <span className={styles.srcManual}>MANUAL</span>}
-                </span>
-                <span className={p.direction === 'Bullish' ? styles.dirBull : styles.dirBear}>
-                  {p.direction === 'Bullish' ? 'Bull' : 'Bear'}
-                </span>
-                <DTEProgressBar daysRemaining={p.dteRemaining} totalDays={p.dteTotal} />
-                <div className={styles.priceCell}>
-                  <Data size={12}>${p.entryPrice.toFixed(2)}</Data>
-                  <Text size={11} tone="dim">→</Text>
-                  <Data size={12} weight={500}>${p.currentPrice.toFixed(2)}</Data>
-                </div>
-                <div className={styles.pnlCell}>
-                  <Data size={13} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
-                    {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
+          <div className={styles.tableBody}>
+            {positions.map((p) => (
+              <div key={p.contract} className={styles.rowWrap}>
+                <TableRow status={p.status} columns={COLUMNS}>
+                  <Data size={13} weight={500}>{p.symbol}</Data>
+                  <span className={styles.contractCell}>
+                    <Text size={12} tone="secondary">{p.contract}</Text>
+                    {p.source === 'manual' && <span className={styles.srcManual}>MANUAL</span>}
+                  </span>
+                  <span className={p.direction === 'Bullish' ? styles.dirBull : styles.dirBear}>
+                    {p.direction === 'Bullish' ? 'Bull' : 'Bear'}
+                  </span>
+                  <DTEProgressBar daysRemaining={p.dteRemaining} totalDays={p.dteTotal} />
+                  <div className={styles.priceCell}>
+                    <Data size={12}>${p.entryPrice.toFixed(2)}</Data>
+                    <Text size={11} tone="dim">→</Text>
+                    <Data size={12} weight={500}>${p.currentPrice.toFixed(2)}</Data>
+                  </div>
+                  <div className={styles.pnlCell}>
+                    <Data size={13} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                      {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
+                    </Data>
+                    <Data size={11} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                      {p.pnlPct > 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
+                    </Data>
+                  </div>
+                  <Data size={12} className={styles.right} tone={ivRankTone(p.ivRank)}>
+                    {p.ivRank !== undefined ? p.ivRank : '—'}
                   </Data>
-                  <Data size={11} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
-                    {p.pnlPct > 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
+                  <Data size={12} className={styles.right}>
+                    {p.delta !== undefined ? p.delta.toFixed(2) : '—'}
                   </Data>
-                </div>
-                <Data size={12} className={styles.right} tone={ivRankTone(p.ivRank)}>
-                  {p.ivRank !== undefined ? p.ivRank : '—'}
-                </Data>
-                <Data size={12} className={styles.right}>
-                  {p.delta !== undefined ? p.delta.toFixed(2) : '—'}
-                </Data>
-                <Data size={12} className={styles.right} tone="reject">
-                  {p.theta !== undefined ? p.theta.toFixed(2) : '—'}
-                </Data>
-                <StatusBadge status={p.status} />
-                <button
-                  type="button"
-                  className={styles.editBtn}
-                  onClick={() => setEditing((cur) => (cur === p.contract ? null : p.contract))}
-                  aria-label={`Edit ${p.contract}`}
-                  aria-expanded={editing === p.contract}
-                  title="Edit position"
-                >
-                  <PencilIcon />
-                </button>
-              </TableRow>
+                  <Data size={12} className={styles.right} tone="reject">
+                    {p.theta !== undefined ? p.theta.toFixed(2) : '—'}
+                  </Data>
+                  <StatusBadge status={p.status} />
+                  <button
+                    type="button"
+                    className={styles.editBtn}
+                    onClick={() => setEditing((cur) => (cur === p.contract ? null : p.contract))}
+                    aria-label={`Edit ${p.contract}`}
+                    aria-expanded={editing === p.contract}
+                    title="Edit position"
+                  >
+                    <PencilIcon />
+                  </button>
+                </TableRow>
 
-              {editing === p.contract && (
-                <EditDrawer
-                  position={p}
-                  onClose={() => setEditing(null)}
-                  onChange={(patch) => updatePosition(p.contract, patch)}
-                  onRemove={() => closePosition(p.contract)}
-                />
-              )}
+                {editing === p.contract && (
+                  <EditDrawer
+                    position={p}
+                    onClose={() => setEditing(null)}
+                    onChange={(patch) => updatePosition(p.contract, patch)}
+                    onRemove={() => closePosition(p.contract)}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Sticky totals footer */}
+          <div className={styles.footer}>
+            <div className={styles.footerGroup}>
+              <Text size={11} tone="secondary">Deployed</Text>
+              <Data size={14} weight={500}>${Math.round(deployed).toLocaleString()}</Data>
             </div>
-          ))}
-        </div>
-
-        {/* Sticky totals footer */}
-        <div className={styles.footer}>
-          <div className={styles.footerGroup}>
-            <Text size={11} tone="secondary">Deployed</Text>
-            <Data size={14} weight={500}>${Math.round(deployed).toLocaleString()}</Data>
-          </div>
-          <div className={styles.footerGroup}>
-            <Text size={11} tone="secondary">Open P&amp;L</Text>
-            <Data size={14} weight={500} tone={openPnL > 0 ? 'pass' : openPnL < 0 ? 'reject' : undefined}>
-              {openPnL > 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
-            </Data>
-          </div>
-          <div className={styles.footerGroup}>
-            <Text size={11} tone="secondary">Return</Text>
-            <Data size={14} weight={500} tone={openPnLPct > 0 ? 'pass' : openPnLPct < 0 ? 'reject' : undefined}>
-              {openPnLPct > 0 ? '+' : ''}{openPnLPct.toFixed(2)}%
-            </Data>
-          </div>
-          <div className={styles.footerGroup}>
-            <Text size={11} tone="secondary">W / L</Text>
-            <Data size={14} weight={500}>
-              <span className={styles.win}>{winners}</span>
-              {' / '}
-              <span className={styles.loss}>{losers}</span>
-            </Data>
+            <div className={styles.footerGroup}>
+              <Text size={11} tone="secondary">Open P&L</Text>
+              <Data size={14} weight={500} tone={openPnL > 0 ? 'pass' : openPnL < 0 ? 'reject' : undefined}>
+                {openPnL > 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
+              </Data>
+            </div>
+            <div className={styles.footerGroup}>
+              <Text size={11} tone="secondary">Return</Text>
+              <Data size={14} weight={500} tone={openPnLPct > 0 ? 'pass' : openPnLPct < 0 ? 'reject' : undefined}>
+                {openPnLPct > 0 ? '+' : ''}{openPnLPct.toFixed(2)}%
+              </Data>
+            </div>
+            <div className={styles.footerGroup}>
+              <Text size={11} tone="secondary">W / L</Text>
+              <Data size={14} weight={500}>
+                <span className={styles.win}>{winners}</span>
+                {' / '}
+                <span className={styles.loss}>{losers}</span>
+              </Data>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

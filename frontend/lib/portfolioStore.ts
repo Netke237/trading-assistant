@@ -1,10 +1,8 @@
 /*
  * Portfolio store — Zustand.
  *
- * Ephemeral for now (mock-only, resets on reload). Seeded from MOCK_PORTFOLIO
- * so the Portfolio page keeps its populated demo state. Step 7's "Send to
- * broker" flow calls `addPosition` to push new orders in — tagged as either
- * `broker` or `manual` via `source`.
+ * Holds open positions. Step 7's "Send to broker" flow calls `addPosition`
+ * to push new orders in — tagged as either `broker` or `manual` via `source`.
  */
 
 import { create } from 'zustand';

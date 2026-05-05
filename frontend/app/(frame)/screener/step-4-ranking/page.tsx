@@ -26,7 +26,7 @@ import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import styles from './page.module.css';
 
-const COLUMNS = '28px 1fr 46px 54px 64px 68px';
+const COLUMNS = '28px 1fr 56px 54px 50px 64px 68px 80px';
 
 // Mirrors the Settings → Score weights defaults. Will read from store later.
 const DEFAULT_WEIGHTS = {
@@ -208,9 +208,11 @@ export default function Step4Page() {
           <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
             <span aria-hidden />
             <SortHeader label="SYMBOL"   sortKey="symbol"        currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+            <Text size={11} tone="dim">HORIZON</Text>
             <SortHeader label="Δ RNK"    sortKey="rankDelta"     currentKey={sortKey} dir={sortDir} onSort={handleSort} />
             <SortHeader label="Δ SCR"    sortKey="scoreDelta"    currentKey={sortKey} dir={sortDir} onSort={handleSort} />
             <SortHeader label="SCORE"    sortKey="score"         currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+            <Text size={11} tone="dim">CONF</Text>
             <SortHeader label="NEXT"     sortKey="nextEventDays" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
           </div>
           <div className={styles.tableBody}>
@@ -230,9 +232,11 @@ export default function Step4Page() {
                   <Data size={12} weight={500}>{row.symbol}</Data>
                   <Text size={11} tone="secondary">{row.company}</Text>
                 </div>
+                <Text size={11} tone="secondary">{row.horizon}</Text>
                 <RankDelta value={row.rankDelta}          context="rank"     />
                 <RankDelta value={row.scoreDelta ?? 0}    context="score pt" />
                 <Data size={13} weight={500}>{row.score}</Data>
+                <StatusBadge status={row.status} />
                 {row.nextEventDays !== undefined
                   ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel} />
                   : <Text size={11} tone="dim">—</Text>}

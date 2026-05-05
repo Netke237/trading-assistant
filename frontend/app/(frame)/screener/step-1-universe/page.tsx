@@ -271,6 +271,39 @@ export default function Step1Page() {
           disabled={!isCustom}
           aria-label="Custom ticker list"
         />
+        {isCustom && (
+          <div className={formStyles.uploadRow}>
+            <input
+              type="file"
+              accept=".csv"
+              id="csv-upload"
+              className={formStyles.fileInput}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                  const text = String(ev.target?.result ?? '');
+                  const lines = text
+                    .split(/\r?\n/)
+                    .map((s) => s.trim().toUpperCase())
+                    .filter((s) => /^[A-Z][A-Z0-9.\-]{0,5}$/.test(s));
+                  const unique = Array.from(new Set(lines));
+                  if (unique.length > 0) {
+                    setCustomRaw(unique.join(' '));
+                  }
+                };
+                reader.readAsText(file);
+                // Reset so the same file can be selected again
+                e.target.value = '';
+              }}
+            />
+            <label htmlFor="csv-upload" className={formStyles.uploadBtn}>
+              Upload CSV
+            </label>
+            <Text size={11} tone="dim">One symbol per line</Text>
+          </div>
+        )}
         {symbols.length > 0 && (
           <div className={formStyles.chips} aria-label="Parsed tickers">
             {symbols.map((s) => (

@@ -1,9 +1,8 @@
 /*
  * Watchlist store — Zustand with localStorage persistence.
  *
- * Single source of truth for which symbols the user is watching. On first run
- * we seed with MOCK_WATCHLIST symbols so the UI shows a populated list, but
- * after that the user is free to add or remove any symbol — base or not.
+ * Single source of truth for which symbols the user is watching.
+ * The user is free to add or remove any symbol — base or not.
  */
 
 import { create } from 'zustand';
@@ -11,10 +10,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 export const WATCHLIST_STORAGE_KEY = 'bamendjou:watchlist';
 
-const SEED_SYMBOLS = ['AAPL', 'NVDA', 'MSFT', 'META', 'GOOGL', 'AMZN', 'AMD', 'TSLA', 'NFLX', 'INTC'];
+const SEED_SYMBOLS: string[] = [];
 
 interface WatchlistState {
-  /** All watched symbols, uppercased. Seeded on first run. */
+  /** All watched symbols, uppercased. Empty by default. */
   added: string[];
   addSymbol:    (sym: string) => void;
   removeSymbol: (sym: string) => void;
@@ -51,8 +50,7 @@ export const useWatchlistStore = create<WatchlistState>()(
           const prevAdded = Array.isArray(prev.added)
             ? prev.added.map((s) => String(s).toUpperCase())
             : [];
-          const merged = Array.from(new Set([...SEED_SYMBOLS, ...prevAdded]));
-          return { ...prev, added: merged } as WatchlistState;
+          return { ...prev, added: prevAdded } as WatchlistState;
         }
         return prev as WatchlistState;
       },

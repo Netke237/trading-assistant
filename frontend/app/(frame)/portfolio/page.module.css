@@ -228,3 +228,17 @@
   background: var(--reject);
   color: var(--accent-text);
 }
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-lg);
+  min-height: 200px;
+  text-align: center;
+}

@@ -38,6 +38,10 @@ export interface WatchlistRow {
   breakdown:    ScoreBreakdown;
   nextEventDays?: number;      // days until earnings / fed / etc
   nextEventLabel?: string;     // "Earnings", "FOMC"
+  /** Which rules flipped vs previous scan (e.g. "ADX", "MA slope"). */
+  ruleChanges?: string[];
+  /** Human-readable reasons for REJECT / CAUTION status. */
+  rejectReasons?: string[];
 }
 
 export interface PortfolioPosition {

@@ -36,11 +36,27 @@ const DEFAULT_PARAMS: CustomParams = {
   Volatility: { ivRankLookback: 252, hvLookback: 20 },
 };
 
+const DEFAULT_BROKER: BrokerConfig = {
+  broker:       'Interactive Brokers',
+  account:      '',
+  apiToken:     '',
+  paperTrading: true,
+};
+
+export interface BrokerConfig {
+  broker:       string;
+  account:      string;
+  apiToken:     string;
+  paperTrading: boolean;
+}
+
 interface SettingsState {
   customW:      CustomWeights;
   customParams: CustomParams;
+  broker:       BrokerConfig;
   setCustomW:        (w: CustomWeights) => void;
   setCustomParams:   (p: CustomParams) => void;
+  setBroker:         (b: BrokerConfig) => void;
   resetToDefaults:   () => void;
 }
 
@@ -49,23 +65,27 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       customW:      { ...DEFAULT_WEIGHTS },
       customParams: structuredClone(DEFAULT_PARAMS),
+      broker:       { ...DEFAULT_BROKER },
       setCustomW: (w) => set({ customW: w }),
       setCustomParams: (p) => set({ customParams: p }),
+      setBroker: (b) => set({ broker: b }),
       resetToDefaults: () => set({
         customW:      { ...DEFAULT_WEIGHTS },
         customParams: structuredClone(DEFAULT_PARAMS),
+        broker:       { ...DEFAULT_BROKER },
       }),
     }),
     {
       name: SETTINGS_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      version: 1,
+      version: 2,
       migrate: (persistedState, version) => {
         const prev = (persistedState as Partial<SettingsState> | null) ?? {};
-        if (version < 1) {
+        if (version < 2) {
           return {
             customW:      prev.customW      ?? { ...DEFAULT_WEIGHTS },
             customParams: prev.customParams ?? structuredClone(DEFAULT_PARAMS),
+            broker:       prev.broker       ?? { ...DEFAULT_BROKER },
           } as SettingsState;
         }
         return prev as SettingsState;
