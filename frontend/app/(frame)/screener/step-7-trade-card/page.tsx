@@ -53,7 +53,7 @@ function positionFromOrder(order: DraftOrder): PortfolioPosition {
     pnlDollar:     0,
     pnlPct:        0,
     stop:          c.exit.invalidation,
-    target:        c.exit.target,
+    targets:       c.exit.targets,
     status:        c.finalStatus,
     ivRank:        cd?.ivRank,
     delta:         cd?.delta,

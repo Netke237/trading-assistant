@@ -23,7 +23,8 @@ import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
-import type { TradeCardData } from '@/types/domain';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import type { TradeCardData, TargetLevel } from '@/types/domain';
 import styles from './TradeCard.module.css';
 
 interface TradeCardProps {
@@ -120,8 +121,17 @@ export function TradeCard({ data, onSendToBroker, sendLabel, sendDisabled }: Tra
             <KV label="Invalidation"  value={`$${data.exit.invalidation.toFixed(2)}`} mono />
             <KV label="Premium stop"  value={`$${data.exit.premiumStop.toFixed(2)}`} mono />
             <KV label="Time stop"     value={`${data.exit.timeStopDays}d`} mono />
-            <KV label="Target"        value={`$${data.exit.target.toFixed(2)}`} mono tone="pass" />
           </dl>
+        </section>
+
+        {/* 5b. Sell-to-close plan */}
+        <section className={`${styles.planCard} ${styles.targetsCard}`}>
+          <Text size={14} weight={600}>Sell-to-Close Plan</Text>
+          <div className={styles.targetsTable}>
+            {data.exit.targets.map((t) => (
+              <TargetRow key={t.id} target={t} totalContracts={data.contractDetails?.dte ?? 1} />
+            ))}
+          </div>
         </section>
 
         {/* 6. R:R */}
@@ -167,6 +177,38 @@ export function TradeCard({ data, onSendToBroker, sendLabel, sendDisabled }: Tra
         symbol={data.symbol}
         onClose={() => setChartOpen(false)}
       />
+    </div>
+  );
+}
+
+function TargetRow({ target, totalContracts }: { target: TargetLevel; totalContracts: number }) {
+  const isScaleOut = target.contractsToSell < totalContracts;
+  const rowTone = target.status === 'HIT' ? 'pass' : target.status === 'MISSED' ? 'reject' : undefined;
+  return (
+    <div className={`${styles.targetRow} ${styles[`target_${target.status}`]}`}>
+      <div className={styles.targetMain}>
+        <div className={styles.targetId}>
+          <Text size={12} weight={600} tone={rowTone}>{target.id.toUpperCase()}</Text>
+          <StatusBadge status={target.status === 'PENDING' ? 'PENDING' : target.status === 'HIT' ? 'PASS' : 'REJECT'} />
+        </div>
+        <div className={styles.targetValues}>
+          <KV label="Stock price" value={`$${target.stockPrice.toFixed(2)}`} mono tone={rowTone} />
+          {target.estimatedOptionPrice !== undefined && (
+            <KV label="Est. option" value={`$${target.estimatedOptionPrice.toFixed(2)}`} mono tone={rowTone} />
+          )}
+          <KV label="Contracts" value={`${target.contractsToSell}`} mono />
+        </div>
+        {isScaleOut && (
+          <Text size={11} tone="caution">
+            Scale out: sell {target.contractsToSell} of {totalContracts}
+          </Text>
+        )}
+      </div>
+      {target.pricingMethod && (
+        <span className={styles.pricingBadge}>
+          <Text size={10} tone="dim">{target.pricingMethod}</Text>
+        </span>
+      )}
     </div>
   );
 }
