@@ -14,6 +14,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
+import { Pagination } from '@/components/molecules/Pagination';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
@@ -25,6 +26,8 @@ import { useScanStore } from '@/lib/scanStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import styles from './page.module.css';
+
+const PAGE_SIZE = 10;
 
 const COLUMNS = '28px 1fr 56px 54px 50px 64px 68px 80px';
 
@@ -130,6 +133,7 @@ export default function Step4Page() {
   const [selectedSym, setSelectedSym] = useState<string>('');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const candidates = useScanStore((s) => s.scanResult?.candidates);
   const setSelectedSymbol = useScanStore((s) => s.setSelectedSymbol);
@@ -137,6 +141,7 @@ export default function Step4Page() {
   useEffect(() => {
     const list = candidates?.map(cardToRow) ?? [];
     setWatchlist(list);
+    setCurrentPage(1);
     if (list.length > 0) {
       const sym = list[0].symbol;
       setSelectedSym(sym);
@@ -148,6 +153,11 @@ export default function Step4Page() {
     () => sortRows(watchlist, sortKey, sortDir),
     [watchlist, sortKey, sortDir],
   );
+
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return sorted.slice(start, start + PAGE_SIZE);
+  }, [sorted, currentPage]);
 
   const selected = sorted.find((r) => r.symbol === selectedSym) ?? sorted[0];
 
@@ -163,6 +173,7 @@ export default function Step4Page() {
       setSortKey(key);
       setSortDir(DEFAULT_SORT[key]);
     }
+    setCurrentPage(1);
   }
 
   if (!selected) {
@@ -216,7 +227,7 @@ export default function Step4Page() {
             <SortHeader label="NEXT"     sortKey="nextEventDays" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
           </div>
           <div className={styles.tableBody}>
-            {sorted.map((row) => (
+            {paginated.map((row) => (
               <TableRow
                 key={row.symbol}
                 status={row.status}
@@ -243,6 +254,12 @@ export default function Step4Page() {
               </TableRow>
             ))}
           </div>
+          <Pagination
+            totalItems={sorted.length}
+            pageSize={PAGE_SIZE}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+          />
         </section>
 
         {/* RIGHT — selected symbol detail */}

@@ -1,0 +1,55 @@
+/*
+ * Pagination — page numbers + prev/next with ellipsis for large ranges.
+ */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-family: var(--font-dm), system-ui, sans-serif;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-surface-2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.active {
+  background: var(--bg-surface-2);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  font-size: 12px;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
