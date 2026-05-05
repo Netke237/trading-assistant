@@ -44,6 +44,15 @@ export interface WatchlistRow {
   rejectReasons?: string[];
 }
 
+export interface TargetLevel {
+  id: string;                    // 'tp1', 'tp2', etc.
+  stockPrice: number;            // underlying price at this target
+  estimatedOptionPrice?: number; // model-based or approximation
+  pricingMethod?: 'heston' | 'delta-approx' | 'manual';
+  contractsToSell: number;       // how many contracts to close here
+  status: 'PENDING' | 'HIT' | 'MISSED';
+}
+
 export interface PortfolioPosition {
   symbol:        string;
   contract:      string;       // "AAPL 220C 05/16"
@@ -57,7 +66,7 @@ export interface PortfolioPosition {
   pnlDollar:     number;
   pnlPct:        number;
   stop:          number;
-  target:        number;
+  targets:       TargetLevel[];
   status:        Status;
   // Options-specific fields surfaced in the portfolio table.
   ivRank?:       number;       // 0–100, current IV vs 52-week range
@@ -114,7 +123,7 @@ export interface TradeCardData {
     dte:    number;
   };
   entry:  { limit: number; maxFill: number; orderType: OrderType };
-  exit:   { invalidation: number; premiumStop: number; timeStopDays: number; target: number };
+  exit:   { invalidation: number; premiumStop: number; timeStopDays: number; targets: TargetLevel[] };
   nextEventDays?:  number;
   nextEventLabel?: string;
   rrRatio:  number;

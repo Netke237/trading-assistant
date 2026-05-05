@@ -34,6 +34,67 @@
   grid-column: 1 / -1;
 }
 
+.targetsCard {
+  grid-column: 1 / -1;
+}
+
+.targetsTable {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.targetRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.target_PENDING {
+  border-color: var(--border-subtle);
+}
+
+.target_HIT {
+  border-color: var(--pass-border);
+  background: color-mix(in srgb, var(--pass) 8%, var(--bg-surface));
+}
+
+.target_MISSED {
+  border-color: var(--reject-border);
+  background: color-mix(in srgb, var(--reject) 8%, var(--bg-surface));
+}
+
+.targetMain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+.targetId {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.targetValues {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-2);
+}
+
+.pricingBadge {
+  padding: 2px var(--space-2);
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
 .detailsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
