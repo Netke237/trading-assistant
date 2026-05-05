@@ -17,7 +17,7 @@
  * Drift log G8 — inline chart slides in below the card.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
@@ -28,6 +28,8 @@ import styles from './TradeCard.module.css';
 
 interface TradeCardProps {
   data: TradeCardData;
+  /** Unique recommendation ID displayed in the UI. */
+  recId?: string;
   /** Override the Send-to-broker button handler. */
   onSendToBroker?: () => void;
   /** Custom label — used by Step 7 to show basket count. */
@@ -36,8 +38,13 @@ interface TradeCardProps {
   sendDisabled?: boolean;
 }
 
-export function TradeCard({ data, onSendToBroker, sendLabel, sendDisabled }: TradeCardProps) {
+function generateRecId(): string {
+  return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+export function TradeCard({ data, recId: propRecId, onSendToBroker, sendLabel, sendDisabled }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
+  const displayRecId = useMemo(() => propRecId ?? generateRecId(), [propRecId]);
 
   const stockBars = [
     { label: 'Trend',      value: data.stockBreakdown.trend      },
@@ -160,6 +167,16 @@ export function TradeCard({ data, onSendToBroker, sendLabel, sendDisabled }: Tra
         <button type="button" className={styles.btn}>
           <Text size={13} weight={500}>Export JSON</Text>
         </button>
+      </div>
+
+      <div
+        style={{
+          borderTop: '1px solid var(--border-subtle)',
+          paddingTop: 'var(--space-2)',
+          marginTop: 'var(--space-2)',
+        }}
+      >
+        <Text size={11} tone="dim">{displayRecId}</Text>
       </div>
 
       <InlineChartPanel
