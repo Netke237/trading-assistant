@@ -16,6 +16,7 @@ import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useScanStore } from '@/lib/scanStore';
+import { logAudit } from '@/lib/audit';
 import type { PortfolioPosition, TradeCardData } from '@/types/domain';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
@@ -33,6 +34,10 @@ function todayISO(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function generateRecId(): string {
+  return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
 }
 
 function positionFromOrder(order: DraftOrder): PortfolioPosition {
@@ -62,6 +67,7 @@ function positionFromOrder(order: DraftOrder): PortfolioPosition {
     contracts:     order.contracts,
     source:        order.autoSend ? 'broker' : 'manual',
     orderedAt:     nowISOLocal(),
+    recId:         generateRecId(),
   };
 }
 
@@ -76,6 +82,17 @@ export default function Step7Page() {
   const [basket, setBasket]       = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [toast, setToast]         = useState<ToastState | null>(null);
+  const [recIdMap, setRecIdMap]   = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setRecIdMap((prev) => {
+      const next: Record<string, string> = {};
+      for (const c of cards) {
+        next[c.symbol] = prev[c.symbol] || generateRecId();
+      }
+      return next;
+    });
+  }, [cards]);
 
   const scanResult        = useScanStore((s) => s.scanResult);
   const setSelectedSymbol = useScanStore((s) => s.setSelectedSymbol);
@@ -122,7 +139,17 @@ export default function Step7Page() {
     let auto = 0, manual = 0;
     for (const o of orders) {
       addPosition(positionFromOrder(o));
-      if (o.autoSend) auto++; else manual++;
+      if (o.autoSend) {
+        auto++;
+      } else {
+        manual++;
+        const recId = recIdMap[o.card.symbol] ?? generateRecId();
+        logAudit('APPROVE', recId, {
+          symbol: o.card.symbol,
+          contract: o.card.contract,
+          contracts: o.contracts,
+        });
+      }
     }
     setDialogOpen(false);
     setBasket([]);
@@ -162,6 +189,7 @@ export default function Step7Page() {
       {card && (
         <TradeCard
           data={card}
+          recId={recIdMap[card.symbol]}
           onSendToBroker={() => !basketEmpty && setDialogOpen(true)}
           sendLabel={sendLabel}
           sendDisabled={basketEmpty}
