@@ -66,6 +66,18 @@
   border-color: var(--reject-border);
 }
 
+.pillPartial {
+  background: var(--caution-bg);
+  color: var(--caution);
+  border-color: var(--caution-border);
+}
+
+.pillCancelled {
+  background: var(--neutral-bg);
+  color: var(--neutral);
+  border-color: var(--neutral);
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.65; }

@@ -9,17 +9,21 @@ import type { ScanState } from '@/lib/scanStore';
 import styles from './ScanIndicator.module.css';
 
 const SCAN_DOT: Record<ScanState, StatusDotTone> = {
-  IDLE:      'PENDING',
-  SCANNING:  'ACCENT',
-  COMPLETED: 'PASS',
-  FAILED:    'REJECT',
+  IDLE:       'PENDING',
+  SCANNING:   'ACCENT',
+  COMPLETED:  'PASS',
+  FAILED:     'REJECT',
+  PARTIAL:    'CAUTION',
+  CANCELLED:  'PENDING',
 };
 
 const SCAN_LABEL: Record<ScanState, string> = {
-  IDLE:      'IDLE',
-  SCANNING:  'SCANNING',
-  COMPLETED: 'COMPLETED',
-  FAILED:    'FAILED',
+  IDLE:       'IDLE',
+  SCANNING:   'SCANNING',
+  COMPLETED:  'COMPLETED',
+  FAILED:     'FAILED',
+  PARTIAL:    'PARTIAL',
+  CANCELLED:  'CANCELLED',
 };
 
 function hhmmFrom(iso: string): string {
@@ -52,7 +56,7 @@ export function ScanIndicator() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const timestamp = scanState === 'COMPLETED' && scanAt
+  const timestamp = (scanState === 'COMPLETED' || scanState === 'PARTIAL' || scanState === 'CANCELLED') && scanAt
     ? mounted ? labelWithDate(scanAt) : hhmmFrom(scanAt)
     : null;
 

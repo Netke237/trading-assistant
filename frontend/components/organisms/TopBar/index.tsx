@@ -17,10 +17,12 @@ import type { ScanState } from '@/lib/scanStore';
 import styles from './TopBar.module.css';
 
 const PILL_CLASS: Record<ScanState, string> = {
-  IDLE:      styles.pillIdle,
-  SCANNING:  styles.pillScanning,
-  COMPLETED: styles.pillCompleted,
-  FAILED:    styles.pillFailed,
+  IDLE:       styles.pillIdle,
+  SCANNING:   styles.pillScanning,
+  COMPLETED:  styles.pillCompleted,
+  FAILED:     styles.pillFailed,
+  PARTIAL:    styles.pillPartial,
+  CANCELLED:  styles.pillCancelled,
 };
 
 /** Deterministic HH:mm slice from the stored local-ISO string. Safe during SSR. */
@@ -49,9 +51,9 @@ function labelWithDate(iso: string): string {
 }
 
 function pillLabel(state: ScanState, iso: string | null, mounted: boolean): string {
-  if (state === 'COMPLETED' && iso) {
+  if ((state === 'COMPLETED' || state === 'PARTIAL' || state === 'CANCELLED') && iso) {
     // Before mount we render just HH:mm to avoid SSR/client timezone mismatch.
-    return `COMPLETED ${mounted ? labelWithDate(iso) : hhmmFrom(iso)}`;
+    return `${state} ${mounted ? labelWithDate(iso) : hhmmFrom(iso)}`;
   }
   return state;
 }
