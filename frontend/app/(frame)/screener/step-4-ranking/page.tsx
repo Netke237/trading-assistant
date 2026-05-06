@@ -261,7 +261,7 @@ export default function Step4Page() {
             </div>
           </div>
           <div className={styles.chartBox}>
-            <CandlestickChart data={candles} height="auto" />
+            <CandlestickChart data={candles} height="auto" defaultIndicators={['volume', 'rsi']} />
           </div>
 
           {/* Compact total-score card */}

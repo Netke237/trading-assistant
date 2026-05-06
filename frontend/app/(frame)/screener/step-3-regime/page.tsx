@@ -114,7 +114,7 @@ export default function Step3Page() {
             </div>
           </header>
           <div className={pageStyles.indexChart}>
-            <CandlestickChart data={spxCandles} height="auto" />
+            <CandlestickChart data={spxCandles} height="auto" showToggles={false} defaultIndicators={[]} />
           </div>
         </div>
         <div className={pageStyles.indexCard}>
@@ -128,7 +128,7 @@ export default function Step3Page() {
             </div>
           </header>
           <div className={pageStyles.indexChart}>
-            <CandlestickChart data={ndxCandles} height="auto" />
+            <CandlestickChart data={ndxCandles} height="auto" showToggles={false} defaultIndicators={[]} />
           </div>
         </div>
       </div>
