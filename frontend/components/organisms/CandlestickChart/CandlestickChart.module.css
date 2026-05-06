@@ -1,5 +1,14 @@
-.chart[data-autofill='true'] {
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.wrapperAuto {
   height: 100%;
+}
+
+.chart[data-autofill='true'] {
   flex: 1;
   min-height: 0;
 }
@@ -11,4 +20,35 @@
 
 .chart > div {
   width: 100% !important;
+}
+
+.toggleBar {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-1) 0;
+  flex-shrink: 0;
+}
+
+.toggleBtn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono), JetBrains Mono, monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.toggleBtn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.toggleBtnActive {
+  background: var(--bg-surface-2);
+  border-color: var(--accent);
+  color: var(--accent-text);
 }
