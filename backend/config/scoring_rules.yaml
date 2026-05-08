@@ -164,3 +164,9 @@ horizons:
       iv_rank_compressed_caution: 5
       iv_rank_pass_max: 44
       iv_rank_caution_max: 65
+
+# Entry quality thresholds (FR-45 — no magic numbers in code)
+entry_quality:
+  spread_tolerance_pct: 0.10
+  max_slippage_pct: 0.03
+  min_premium: 0.10
