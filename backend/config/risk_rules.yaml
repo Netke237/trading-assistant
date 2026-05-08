@@ -11,3 +11,11 @@ portfolio:
 sizing:
   default_contracts: 1
   max_contracts_per_trade: 5
+
+# Reward-risk calculation defaults (FR-45)
+reward_risk:
+  bullish_target_pct: 0.08      # +8% stock move for T1 target
+  bearish_target_pct: 0.08      # 8% move down for bearish T1
+  bullish_invalidation_pct: 0.03   # -3% stock = invalidation
+  bearish_invalidation_pct: 0.03   # +3% stock = bearish invalidation
+  premium_stop_pct: 0.60        # stop out if option loses 60% of premium
