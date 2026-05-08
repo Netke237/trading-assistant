@@ -71,6 +71,7 @@ const mockTradeCard: TradeCardData = {
     invalidation: 179.64,
     premiumStop: 1.5,
     timeStopDays: 10,
+    target: 200.02,
     targets: [{ id: 'tp1', stockPrice: 200.02, contractsToSell: 1, status: 'PENDING' }],
   },
   rrRatio: 2.5,
