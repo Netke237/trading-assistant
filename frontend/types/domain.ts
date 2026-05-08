@@ -199,3 +199,35 @@ export interface NewsItem {
   timestamp: string;
   sentiment: NewsSentiment;
 }
+
+// --- Alerting & monitoring ---
+
+export interface AlertConfig {
+  dedupWindowMinutes: number;      // default 15
+  enabledTypes: AlertType[];
+  soundEnabled: boolean;
+}
+
+export type AlertType =
+  | 'TP_HIT'
+  | 'STOP_REACHED'
+  | 'PREMIUM_STOP'
+  | 'TIME_STOP_APPROACHING'
+  | 'EARNINGS_APPROACHING'
+  | 'EXPIRATION_APPROACHING'
+  | 'REGIME_CHANGE'
+  | 'SCAN_COMPLETE';
+
+export interface AlertRule {
+  type: AlertType;
+  label: string;
+  threshold?: number;  // e.g. DTE threshold for time-stop
+}
+
+export interface ToastItem {
+  id: string;
+  kind: AlertKind;
+  symbol: string;
+  reason: string;
+  dismissed: boolean;
+}
