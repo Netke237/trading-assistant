@@ -113,11 +113,20 @@ async def run_scan(req: ScanRequest) -> ScanResult:
     scan_id = new_rec_id()
     log_event("scan_started", scan_id, {"universe": req.universe, "direction": req.direction})
 
+    # Expand preset universe strings to individual ticker lists
+    from app.data.universe_presets import expand_universe, PresetUnavailableError
+    from fastapi import HTTPException
+
+    try:
+        symbols = expand_universe(req.universe)
+    except PresetUnavailableError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     candidates: list[TradeCardData] = []
     rejected: list[RejectedCandidate] = []
     has_exception = False
 
-    for symbol in req.universe:
+    for symbol in symbols:
         try:
             # Step 1 — Fetch market data
             candles = fetch_candles(symbol)
