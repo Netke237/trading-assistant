@@ -200,11 +200,9 @@ function EditDrawer({
           value={position.stop}
           onChange={(n) => onChange({ stop: n })}
         />
-        <EditField
-          label="Target"
-          hint="First take-profit level."
-          value={position.target}
-          onChange={(n) => onChange({ target: n })}
+        <TargetEditor
+          targets={position.targets}
+          onChange={(targets) => onChange({ targets })}
         />
         <EditField
           label="Contracts"
@@ -232,6 +230,62 @@ function EditDrawer({
         <button type="button" className={styles.editRemove} onClick={onRemove}>
           Close position
         </button>
+      </div>
+    </div>
+  );
+}
+
+function TargetEditor({
+  targets,
+  onChange,
+}: {
+  targets: import('@/types/domain').TargetLevel[];
+  onChange: (targets: import('@/types/domain').TargetLevel[]) => void;
+}) {
+  return (
+    <div className={styles.targetEditor}>
+      <Text size={11} tone="secondary">Targets</Text>
+      <div className={styles.targetList}>
+        {targets.map((t) => (
+          <div key={t.id} className={styles.targetItem}>
+            <div className={styles.targetHeader}>
+              <Text size={12} weight={600}>{t.id.toUpperCase()}</Text>
+              <span className={styles.targetStatus}>{t.status}</span>
+            </div>
+            <div className={styles.targetGrid}>
+              <div>
+                <Text size={10} tone="dim">Stock</Text>
+                <Data size={12} weight={500}>${t.stockPrice.toFixed(2)}</Data>
+              </div>
+              {t.estimatedOptionPrice !== undefined && (
+                <div>
+                  <Text size={10} tone="dim">Est. option</Text>
+                  <Data size={12} weight={500}>${t.estimatedOptionPrice.toFixed(2)}</Data>
+                </div>
+              )}
+              <div>
+                <Text size={10} tone="dim">Sell</Text>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  className={styles.targetInput}
+                  value={t.contractsToSell}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (!Number.isFinite(n) || n < 1) return;
+                    onChange(
+                      targets.map((x) => (x.id === t.id ? { ...x, contractsToSell: n } : x)),
+                    );
+                  }}
+                />
+              </div>
+            </div>
+            {t.pricingMethod && (
+              <Text size={10} tone="dim">Method: {t.pricingMethod}</Text>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

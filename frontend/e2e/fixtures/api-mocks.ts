@@ -222,7 +222,15 @@ export async function setupApiMocks(page: Page): Promise<void> {
               dte: 45,
             },
             entry: { limit: 2.1, maxFill: 2.2, orderType: 'Limit' },
-            exit: { invalidation: 180, premiumStop: 1.0, timeStopDays: 30, target: 195 },
+            exit: {
+              invalidation: 180,
+              premiumStop: 1.0,
+              timeStopDays: 30,
+              targets: [
+                { id: 'tp1', stockPrice: 194.25, estimatedOptionPrice: 3.5, pricingMethod: 'delta-approx', contractsToSell: 1, status: 'PENDING' },
+                { id: 'tp2', stockPrice: 195, estimatedOptionPrice: 4.2, pricingMethod: 'delta-approx', contractsToSell: 1, status: 'PENDING' },
+              ],
+            },
             rrRatio: 2.5,
             rrModel: 'Delta approximation',
             finalStatus: 'PASS',

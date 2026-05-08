@@ -242,3 +242,67 @@
   min-height: 200px;
   text-align: center;
 }
+
+/* ---------- Target editor ---------- */
+
+.targetEditor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.targetList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.targetItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.targetHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.targetStatus {
+  font-family: var(--font-dm);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-2);
+  color: var(--text-dim);
+}
+
+.targetGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: var(--space-2);
+}
+
+.targetInput {
+  height: 28px;
+  width: 64px;
+  padding: 0 var(--space-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-dm);
+  font-size: 12px;
+}
+
+.targetInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
