@@ -128,7 +128,8 @@ describe('TradeCard', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Risk / Reward')).toBeInTheDocument();
     expect(screen.getByText('2.5×')).toBeInTheDocument();
-    expect(screen.getByText('Heston repriced')).toBeInTheDocument();
+    // rrModel appears in both the R:R section and Final Recommendation section
+    expect(screen.getAllByText('Heston repriced').length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders final status', () => {

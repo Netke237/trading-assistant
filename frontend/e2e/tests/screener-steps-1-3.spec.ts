@@ -16,9 +16,8 @@ test.describe('Screener Steps 1-3 @smoke', () => {
 
   test('Step 1 - universe selection sends correct payload to scan API', async ({ page }) => {
     const screener = new ScreenerPage(page);
-    await screener.goto(1);
 
-    // Listen for scan API calls
+    // Listen for scan API calls before any navigation
     let scanPayload: unknown = null;
     page.on('request', (req) => {
       if (req.method() === 'POST' && req.url().includes('/api/scan')) {
@@ -26,8 +25,12 @@ test.describe('Screener Steps 1-3 @smoke', () => {
       }
     });
 
-    // Select SP 500 and click Run Scan
+    // Select SP 500 on Step 1 (persisted in Zustand)
+    await screener.goto(1);
     await screener.selectUniverse('S\\&P 500');
+
+    // RunScanButton is mounted on Step 3 — navigate there to trigger the scan
+    await screener.goto(3);
     await screener.clickRunScan();
 
     // Wait for scan to complete
