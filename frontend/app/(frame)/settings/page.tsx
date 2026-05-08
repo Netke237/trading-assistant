@@ -18,9 +18,11 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useAlertStore, DEFAULT_CONFIG } from '@/lib/alertStore';
 import type { AlertType } from '@/types/domain';
 import type { WeightKey, CustomWeights, CustomParams } from '@/lib/settingsStore';
+import { useRiskStore } from '@/lib/riskStore';
+import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
-type Section = 'broker' | 'theme' | 'weights' | 'alerts' | 'scan';
+type Section = 'broker' | 'theme' | 'weights' | 'alerts' | 'scan' | 'risk';
 
 const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'broker',  label: 'Broker',     desc: 'Credentials + paper trade toggle' },
@@ -28,6 +30,7 @@ const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'weights', label: 'Score weights', desc: 'Trend, pullback, trigger, event, volatility' },
   { key: 'alerts',  label: 'Alerts',     desc: 'Stop-loss and event notifications' },
   { key: 'scan',    label: 'Scan',       desc: 'Continuous scan + cadence' },
+  { key: 'risk',    label: 'Risk',       desc: 'Exposure limits and portfolio value' },
 ];
 
 export default function SettingsPage() {
@@ -61,6 +64,7 @@ export default function SettingsPage() {
           {active === 'weights' && <WeightsForm />}
           {active === 'alerts'  && <AlertsForm  />}
           {active === 'scan'    && <ScanForm    />}
+          {active === 'risk'    && <RiskForm    />}
         </div>
       </div>
 
@@ -648,5 +652,105 @@ function Toggle({ defaultOn, onChange }: { defaultOn?: boolean; onChange?: (on: 
     >
       <span className={styles.toggleDot} />
     </button>
+  );
+}
+
+/* ---------- Risk ---------- */
+
+function RiskForm() {
+  const { limits, setLimits } = useRiskStore();
+  const [localLimits, setLocalLimits] = useState<RiskLimits>(limits);
+
+  useEffect(() => {
+    setLocalLimits(limits);
+  }, [limits]);
+
+  function updateLimit<K extends keyof RiskLimits>(key: K, value: RiskLimits[K]) {
+    const next = { ...localLimits, [key]: value };
+    setLocalLimits(next);
+    setLimits(next);
+  }
+
+  return (
+    <>
+      <SectionIntro
+        title="Risk limits"
+        blurb="Hard stops that prevent accidental over-concentration. Exposure is calculated as notional (contracts × 100 × mid) divided by portfolio value."
+      />
+      <Row
+        label="Portfolio value"
+        hint="Total account value used as the exposure denominator."
+        defaultValue="$50,000"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={1000}
+          step={1000}
+          value={localLimits.portfolioValue}
+          onChange={(e) => updateLimit('portfolioValue', Math.max(1000, Number(e.target.value)))}
+        />
+      </Row>
+      <Row
+        label="Max single trade exposure"
+        hint="Notional of one trade as % of portfolio."
+        defaultValue="5%"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={1}
+          max={100}
+          step={1}
+          value={Math.round(localLimits.maxSingleTradeExposurePct * 100)}
+          onChange={(e) => updateLimit('maxSingleTradeExposurePct', Math.max(1, Math.min(100, Number(e.target.value))) / 100)}
+        />
+      </Row>
+      <Row
+        label="Max total exposure"
+        hint="All open positions combined."
+        defaultValue="25%"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={1}
+          max={100}
+          step={1}
+          value={Math.round(localLimits.maxTotalExposurePct * 100)}
+          onChange={(e) => updateLimit('maxTotalExposurePct', Math.max(1, Math.min(100, Number(e.target.value))) / 100)}
+        />
+      </Row>
+      <Row
+        label="Max concurrent positions"
+        hint="Open trades at the same time."
+        defaultValue="10"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={1}
+          max={50}
+          step={1}
+          value={localLimits.maxConcurrentPositions}
+          onChange={(e) => updateLimit('maxConcurrentPositions', Math.max(1, Math.min(50, Number(e.target.value))))}
+        />
+      </Row>
+      <Row
+        label="Max daily recommendations"
+        hint="New trade ideas accepted per day."
+        defaultValue="5"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={1}
+          max={50}
+          step={1}
+          value={localLimits.maxDailyRecommendations}
+          onChange={(e) => updateLimit('maxDailyRecommendations', Math.max(1, Math.min(50, Number(e.target.value))))}
+        />
+      </Row>
+    </>
   );
 }
