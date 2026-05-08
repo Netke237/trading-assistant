@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 
+import yaml
 from fastapi import APIRouter
 
 from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
+    ScanDelta, ContinuousScanConfig, ScanState,
 )
 from typing import Literal
 from app.data.market import (
@@ -19,8 +22,33 @@ from app.scoring.entry_quality import assess_entry
 from app.scoring.reward_risk import estimate_rr
 from app.models.heston import calibrate_heston
 from app.services.audit import new_rec_id, log_event
+from app.services.scan_scheduler import ScanScheduler
 
 router = APIRouter(prefix='/api', tags=['scan'])
+
+# ── Scheduler instance ───────────────────────────────────────────────────────
+
+_DEFAULT_CADENCE = 60
+
+
+def _load_default_cadence() -> int:
+    path = os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'settings.yaml')
+    path = os.path.normpath(path)
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f) or {}
+        return int(data.get('scan', {}).get('cadence_minutes', _DEFAULT_CADENCE))
+    return _DEFAULT_CADENCE
+
+
+_scheduler = ScanScheduler(cadence_minutes=_load_default_cadence())
+_last_request: ScanRequest | None = None
+_last_result: ScanResult | None = None
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+_ORDER = {"REJECT": 0, "CAUTION": 1, "PASS": 2}
 
 
 _ORDER = {"REJECT": 0, "CAUTION": 1, "PASS": 2}
@@ -37,6 +65,26 @@ def _final_status(s1: str, s2: str, s3: str) -> str:
     return min([s1, s2, s3], key=lambda s: _ORDER.get(s, 1))
 
 
+def _compute_deltas(current: ScanResult, previous: ScanResult | None) -> list[ScanDelta]:
+    """Compare current candidates with previous run and compute rank/score deltas."""
+    if previous is None or not previous.candidates:
+        return []
+
+    prev_by_symbol = {c.symbol: (idx, c.stockScore) for idx, c in enumerate(previous.candidates)}
+    deltas: list[ScanDelta] = []
+
+    for new_rank, cand in enumerate(current.candidates):
+        if cand.symbol in prev_by_symbol:
+            old_rank, old_score = prev_by_symbol[cand.symbol]
+            deltas.append(ScanDelta(
+                symbol=cand.symbol,
+                rank_delta=old_rank - new_rank,
+                score_delta=cand.stockScore - old_score,
+            ))
+
+    return deltas
+
+
 def _augment(c: dict) -> dict:
     mid = float(c.get("price", 0))
     spread = float(c.get("spread", 0))
@@ -50,11 +98,14 @@ def _augment(c: dict) -> dict:
 
 @router.post('/scan', response_model=ScanResult)
 async def run_scan(req: ScanRequest) -> ScanResult:
+    global _last_request, _last_result
+    _last_request = req
     scan_id = new_rec_id()
     log_event("scan_started", scan_id, {"universe": req.universe, "direction": req.direction})
 
     candidates: list[TradeCardData] = []
     rejected: list[RejectedCandidate] = []
+    has_exception = False
 
     for symbol in req.universe:
         try:
@@ -216,12 +267,61 @@ async def run_scan(req: ScanRequest) -> ScanResult:
             log_event("trade_card_created", scan_id, {"symbol": symbol, "score": card.score})
 
         except Exception as e:
+            has_exception = True
             rejected.append(RejectedCandidate(symbol=symbol, reason=str(e)))
             log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": str(e)})
 
-    return ScanResult(
+    # Determine state: PARTIAL if some exceptions occurred but we still got candidates
+    state: ScanState = 'COMPLETED'
+    if has_exception and candidates:
+        state = 'PARTIAL'
+    elif has_exception and not candidates:
+        state = 'FAILED'
+
+    deltas = _compute_deltas(
+        ScanResult(scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(), candidates=candidates, rejected=rejected),
+        _last_result,
+    )
+
+    result = ScanResult(
         scan_id=scan_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
         candidates=candidates,
         rejected=rejected,
+        state=state,
+        previous_run_id=_last_result.scan_id if _last_result else None,
+        deltas=deltas,
     )
+    _last_result = result
+    return result
+
+
+# ── Continuous scan endpoints ────────────────────────────────────────────────
+
+async def _scheduled_scan() -> ScanResult:
+    """Wrapper used by the scheduler. Re-uses the last request configuration."""
+    if _last_request is None:
+        raise RuntimeError("No previous scan request to repeat")
+    return await run_scan(_last_request)
+
+
+@router.post('/scan/continuous', response_model=ContinuousScanConfig)
+async def start_continuous_scan(config: ContinuousScanConfig) -> ContinuousScanConfig:
+    """Start (or restart) the continuous scan scheduler."""
+    _scheduler.set_cadence(config.cadence_minutes)
+    _scheduler.bind(_scheduled_scan)
+    await _scheduler.start()
+    return config
+
+
+@router.delete('/scan/continuous')
+async def stop_continuous_scan() -> dict:
+    """Stop the continuous scan scheduler."""
+    await _scheduler.stop()
+    return {"status": "stopped"}
+
+
+@router.get('/scan/continuous/status')
+async def continuous_scan_status() -> dict:
+    """Get current scheduler status."""
+    return _scheduler.get_status()

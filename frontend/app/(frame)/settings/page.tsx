@@ -18,13 +18,14 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import type { WeightKey, CustomWeights, CustomParams } from '@/lib/settingsStore';
 import styles from './page.module.css';
 
-type Section = 'broker' | 'theme' | 'weights' | 'alerts';
+type Section = 'broker' | 'theme' | 'weights' | 'alerts' | 'scan';
 
 const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'broker',  label: 'Broker',     desc: 'Credentials + paper trade toggle' },
   { key: 'theme',   label: 'Appearance', desc: 'Theme + density' },
   { key: 'weights', label: 'Score weights', desc: 'Trend, pullback, trigger, event, volatility' },
   { key: 'alerts',  label: 'Alerts',     desc: 'Stop-loss and event notifications' },
+  { key: 'scan',    label: 'Scan',       desc: 'Continuous scan + cadence' },
 ];
 
 export default function SettingsPage() {
@@ -57,6 +58,7 @@ export default function SettingsPage() {
           {active === 'theme'   && <ThemeForm   />}
           {active === 'weights' && <WeightsForm />}
           {active === 'alerts'  && <AlertsForm  />}
+          {active === 'scan'    && <ScanForm    />}
         </div>
       </div>
 
@@ -548,6 +550,46 @@ function AlertsForm() {
         defaultValue="Off"
       >
         <Toggle />
+      </Row>
+    </>
+  );
+}
+
+/* ---------- Scan ---------- */
+
+function ScanForm() {
+  const [continuous, setContinuous] = useState(false);
+  const [cadence, setCadence] = useState(60);
+
+  return (
+    <>
+      <SectionIntro
+        title="Scan behaviour"
+        blurb="Continuous scan automatically re-runs the screener on a schedule."
+      />
+      <Row label="Continuous scan" hint="Auto-run the screener in the background" defaultValue="Off">
+        <Toggle
+          defaultOn={continuous}
+          onChange={(on) => setContinuous(on)}
+        />
+      </Row>
+      <Row label="Cadence (minutes)" hint="How often to re-run — 5 min to 24 h" defaultValue="60">
+        <input
+          type="number"
+          className={styles.input}
+          min={5}
+          max={1440}
+          value={cadence}
+          disabled={!continuous}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            if (val >= 5 && val <= 1440) {
+              setCadence(val);
+            } else {
+              setCadence(val < 5 ? 5 : 1440);
+            }
+          }}
+        />
       </Row>
     </>
   );

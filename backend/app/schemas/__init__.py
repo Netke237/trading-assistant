@@ -2,11 +2,19 @@ from __future__ import annotations
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.scan import (
+    ContinuousScanConfig,
+    ContinuousScanStatus,
+    ScanDelta,
+    ScanHistoryEntry,
+)
+
 # ── Shared literals ──────────────────────────────────────────────────────────
 
 Status = Literal['PASS', 'CAUTION', 'REJECT', 'PENDING', 'NO_DATA']
 Direction = Literal['Bullish', 'Bearish']
 Horizon = Literal['Swing', 'Position']
+ScanState = Literal['IDLE', 'SCANNING', 'COMPLETED', 'FAILED', 'PARTIAL', 'CANCELLED']
 AlertKind = Literal['Info', 'Action', 'Critical']
 OrderType = Literal['Limit', 'Market', 'Stop']
 OptionRight = Literal['C', 'P']
@@ -232,3 +240,6 @@ class ScanResult(BaseModel):
     timestamp: str
     candidates: list[TradeCardData]
     rejected: list[RejectedCandidate]
+    state: ScanState = 'COMPLETED'
+    previous_run_id: Optional[str] = None
+    deltas: list[ScanDelta] = []
