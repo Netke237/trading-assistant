@@ -23,6 +23,7 @@ import { scanPortfolio } from '@/lib/alertEngine';
 import { api } from '@/lib/api';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ToastContainer } from '@/components/organisms/ToastContainer';
+import { RiskPanel } from '@/components/molecules/RiskPanel';
 import type { WatchlistRow, PortfolioPosition, AlertItem, MarketRegime, NewsItem } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -201,6 +202,10 @@ export default function DashboardPage() {
               />
             ))}
           </div>
+        </SectionCard>
+
+        <SectionCard title="Risk">
+          <RiskPanel />
         </SectionCard>
       </div>
 
