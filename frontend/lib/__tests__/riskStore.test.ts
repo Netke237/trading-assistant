@@ -48,7 +48,7 @@ function makeCard(overrides: Partial<TradeCardData> = {}): TradeCardData {
     contractBreakdown: { dteFit: 75, delta: 75, ivAttractiveness: 75, liquidity: 75, spread: 75 },
     contractDetails: { strike: 260, expiry: '2026-05-16', right: 'C', mid: 2.5, delta: 0.5, theta: -0.1, ivRank: 50, dte: 24 },
     entry: { limit: 2.5, maxFill: 2.63, orderType: 'Limit' },
-    exit: { invalidation: 240, premiumStop: 1.5, timeStopDays: 10, targets: [{ id: 'tp1', stockPrice: 270, contractsToSell: 1, status: 'PENDING' }] },
+    exit: { invalidation: 240, premiumStop: 1.5, timeStopDays: 10, target: 270, targets: [{ id: 'tp1', stockPrice: 270, contractsToSell: 1, status: 'PENDING' }] },
     rrRatio: 2.5,
     rrModel: 'Heston repriced',
     finalStatus: 'PASS',
@@ -98,7 +98,7 @@ describe('riskStore', () => {
 
   it('checkTrade rejects missing invalidation', () => {
     const { result } = renderHook(() => useRiskStore());
-    const card = makeCard({ exit: { invalidation: 0, premiumStop: 1.5, timeStopDays: 10, targets: [] } });
+    const card = makeCard({ exit: { invalidation: 0, premiumStop: 1.5, timeStopDays: 10, target: 0, targets: [] } });
     const check = result.current.checkTrade(card, 1);
     expect(check.approved).toBe(false);
     expect(check.reasons).toContain('missing_invalidation');

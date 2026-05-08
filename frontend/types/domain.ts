@@ -45,12 +45,14 @@ export interface WatchlistRow {
 }
 
 export interface TargetLevel {
-  id: string;                    // 'tp1', 'tp2', etc.
-  stockPrice: number;            // underlying price at this target
+  id?: string;                   // optional — backend doesn't send it
+  stockPrice: number;            // KEEP — alertEngine.ts reads this (= targetPrice)
+  targetPrice?: number;          // new backend field name; optional for backward compat
   estimatedOptionPrice?: number; // model-based or approximation
-  pricingMethod?: 'heston' | 'delta-approx' | 'manual';
-  contractsToSell: number;       // how many contracts to close here
-  status: 'PENDING' | 'HIT' | 'MISSED';
+  pricingMethod?: 'Heston repriced' | 'Delta approximation' | 'Unavailable' | 'heston' | 'delta-approx' | 'manual';
+  contractsToSell?: number;      // how many contracts to close here
+  status?: string;               // 'PENDING' | 'HIT' | 'MISSED' or undefined
+  rrContribution?: number;       // estimated reward / risk contribution
 }
 
 export interface PortfolioPosition {
@@ -123,7 +125,7 @@ export interface TradeCardData {
     dte:    number;
   };
   entry:  { limit: number; maxFill: number; orderType: OrderType };
-  exit:   { invalidation: number; premiumStop: number; timeStopDays: number; targets: TargetLevel[] };
+  exit:   { invalidation: number; premiumStop: number; timeStopDays: number; target: number; targets: TargetLevel[] };
   nextEventDays?:  number;
   nextEventLabel?: string;
   rrRatio:  number;

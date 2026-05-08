@@ -29,7 +29,7 @@ from app.data.market import (
 from app.scoring.stock_scorer import score_stock, StockScoreCard
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.entry_quality import assess_entry
-from app.scoring.reward_risk import estimate_rr
+from app.scoring.reward_risk import estimate_rr, estimate_targets
 from app.models.heston import calibrate_heston
 from app.services.audit import new_rec_id, log_event
 from app.services.scan_scheduler import ScanScheduler
@@ -211,6 +211,16 @@ async def run_scan(req: ScanRequest) -> ScanResult:
                 heston_params=heston_params,
             )
 
+            targets = estimate_targets(
+                stock_price=price,
+                base_target_price=target_price,
+                strike=strike,
+                expiry_years=expiry_years,
+                current_premium=premium,
+                is_call=(req.direction == "Bullish"),
+                heston_params=heston_params,
+            )
+
             # Step 9 — Build TradeCardData
             from datetime import date as _date
             next_event_days = None
@@ -269,6 +279,7 @@ async def run_scan(req: ScanRequest) -> ScanResult:
                     premiumStop=round(premium * _rr["premium_stop_pct"], 2),
                     timeStopDays=max(3, int(contract.get("dte", 30) * 0.4)),
                     target=round(target_price, 2),
+                    targets=targets,
                 ),
                 rrRatio=rr.rr_ratio,
                 rrModel=rr.model_used,

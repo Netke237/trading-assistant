@@ -133,6 +133,36 @@
   grid-column: 1 / -1;
 }
 
+/* Final Recommendation scorecard — matches visual weight of Stock/Contract scorecards */
+.scoreCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  grid-column: 1 / -1;
+}
+
+.scoreCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.scoreCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.scoreRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .final_PASS    { border-color: var(--pass-border);    background: var(--pass-bg);    }
 .final_CAUTION { border-color: var(--caution-border); background: var(--caution-bg); }
 .final_REJECT  { border-color: var(--reject-border);  background: var(--reject-bg);  }
