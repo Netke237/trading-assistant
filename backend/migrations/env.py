@@ -8,15 +8,24 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import get_settings
 from app.models.base import Base
+from app.database import Base as DatabaseBase
+
+# Load all ORM models so both metadata registries are populated before autogenerate.
+from app.models.admin import Admin  # noqa: F401
+from app.models.child import Child  # noqa: F401
+from app.models.quest import Quest  # noqa: F401
+from app.models.time_log import TimeLog  # noqa: F401
+from app.models.override_log import OverrideLog  # noqa: F401
+from app.models.audit_event import AuditEventModel  # noqa: F401
+from app.models.portfolio import PortfolioPositionModel  # noqa: F401
+from app.models.watchlist import WatchlistSymbolModel  # noqa: F401
 
 settings = get_settings()
-
 config = context.config
-
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = Base.metadata
+target_metadata = [Base.metadata, DatabaseBase.metadata]
 
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 

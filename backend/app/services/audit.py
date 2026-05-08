@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 # Audit log path — relative to wherever uvicorn is started (project root or backend/).
 # Writing to backend/ when started from backend/:
@@ -56,3 +60,54 @@ def log_event(
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception:
         pass  # audit failures are non-fatal
+
+
+# ── DB-backed audit helpers ───────────────────────────────────────────────────
+# These write to the AuditEvent table AND call log_event() for JSONL
+# dual-system traceability.  rec_id must use new_rec_id() format.
+
+async def log_approval(rec_id: str, trade_card_data: dict, db: "AsyncSession") -> None:
+    """Write approval event to AuditEvent table and JSONL audit.log."""
+    from app.models.audit_event import AuditEventModel  # deferred to avoid circular import
+
+    event = AuditEventModel(
+        event_type="approval",
+        rec_id=rec_id,
+        recommendation_id=rec_id,
+        payload=trade_card_data,
+    )
+    db.add(event)
+    await db.commit()
+    # Dual-system traceability: also write to JSONL
+    log_event("approval", rec_id, trade_card_data)
+
+
+async def log_rejection(rec_id: str, reason: str, db: "AsyncSession") -> None:
+    """Write rejection event to AuditEvent table and JSONL audit.log."""
+    from app.models.audit_event import AuditEventModel
+
+    payload = {"reason": reason}
+    event = AuditEventModel(
+        event_type="rejection",
+        rec_id=rec_id,
+        recommendation_id=rec_id,
+        payload=payload,
+    )
+    db.add(event)
+    await db.commit()
+    log_event("rejection", rec_id, payload)
+
+
+async def log_override(rec_id: str, override_data: dict, db: "AsyncSession") -> None:
+    """Write override event to AuditEvent table and JSONL audit.log."""
+    from app.models.audit_event import AuditEventModel
+
+    event = AuditEventModel(
+        event_type="override",
+        rec_id=rec_id,
+        recommendation_id=rec_id,
+        payload=override_data,
+    )
+    db.add(event)
+    await db.commit()
+    log_event("override", rec_id, override_data)
