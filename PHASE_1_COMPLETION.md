@@ -1,10 +1,12 @@
-# Trading Assistant — Phase 2 Continuation Prompt
+# Trading Assistant — Phase Completion Tracker
 
 ## Where we are
 
-This is the **Bamendjou Options Screener and Recommendation Assistant** (repo: `F:\Git\GitHub\Trading assistant`). We just completed **Phase 1** of a production-readiness push against PRD-02 (`PRD-02 Master Phased PRD — Options Screener and Recommendation Assistant.md`).
+This is the **Bamendjou Options Screener and Recommendation Assistant** (repo: `F:\Git\GitHub\Trading assistant`). We have completed **Phase 1 and Phase 2** of a production-readiness push against PRD-02 (`PRD-02 Master Phased PRD — Options Screener and Recommendation Assistant.md`).
 
-### Phase 1 completed (all merged to `main`)
+---
+
+## Phase 1 completed (all merged to `main`)
 
 | Workstream | Branch | PRD Requirement | Status |
 |---|---|---|---|
@@ -14,81 +16,45 @@ This is the **Bamendjou Options Screener and Recommendation Assistant** (repo: `
 | Testing + Pagination | `feature/testing-pagination` | FR-44, FR-12 | 48 frontend unit tests (stores + components), 24 backend tests (data-leakage + reproducibility + portfolio rules), Pagination molecule in Step 4 |
 | Chart Indicators | `feature/chart-indicators` | FR-35 | RSI, MACD, Volume indicator panes on `CandlestickChart`, toggle bar, pure client-side calculations |
 
+## Phase 2 completed (all merged to `main`)
+
+| Workstream | Branch | PRD Requirement | Status |
+|---|---|---|---|
+| Risk Management | `feature-risk-management` | FR-42 | Risk limits store (`lib/riskStore.ts`), exposure/concurrency/duplicate checks, invalidation hard gate, capital-at-risk estimate on TradeCard, RiskPanel on dashboard, Risk settings tab, override-allowed risk gate in SendToBrokerDialog |
+| Alerting & Monitoring | `feature-alerting-monitoring` | FR-37, FR-43 | Alert engine (`lib/alertEngine.ts`) for TP/stop/time/earnings/expiration alerts, deduplicating toast store (`lib/alertStore.ts`), Toast + ToastContainer organisms, AlertBadge on TopBar, 30s portfolio scan interval on dashboard, real alert toggles + dedup window in settings, backend `alert_generator.py` wired to `/api/alerts` |
+
+---
+
 ### Current verification status
 
 - **Frontend typecheck**: Clean (0 errors)
-- **Frontend tests**: 48 passed, 7 suites, 0 failures
-- **Backend tests**: 90 passed (11 pre-existing failures in `test_routes.py` due to empty fixture data — not caused by Phase 1)
+- **Frontend tests**: 89 passed, 11 suites, 0 failures
+- **Backend tests**: 89 passed (11 pre-existing failures in `test_routes.py` due to empty fixture data — not caused by any phase)
 
 ### Architecture context
 
 - **Frontend**: Next.js 15, TypeScript strict, CSS Modules, Zustand v5, lightweight-charts v5, no Tailwind
 - **Backend**: FastAPI, SQLAlchemy async, pytest, Heston + Black-Scholes models
-- **Key types** (`types/domain.ts`): `PortfolioPosition` now has `recId: string` and `targets: TargetLevel[]`; `ScanState` includes `'PARTIAL' | 'CANCELLED'`
+- **Key types** (`types/domain.ts`):
+  - `PortfolioPosition` now has `recId: string` and `targets: TargetLevel[]`
+  - `ScanState` includes `'PARTIAL' | 'CANCELLED'`
+  - `RiskLimits`, `RiskCheckResult`, `PortfolioRiskMetrics` (FR-42)
+  - `AlertConfig`, `AlertType`, `AlertRule`, `ToastItem` (FR-37/FR-43)
 - **Worktrees directory**: `.worktrees/` (gitignored) — contains isolated branches for completed workstreams
 
 ---
 
-## What remains: Phase 2
+## What remains
 
-Phase 2 has 2 workstreams that depend on Phase 1 outputs. These are **not yet started**.
+All PRD-02 workstreams through Phase 2 are complete. Remaining items from `LLM_CONTEXT.md` that are not PRD-mandated:
 
-### F. Risk Management (FR-42)
-
-**Dependencies**: State Persistence (A) + Trade Card Enhancements (B)
-
-**What to build**:
-- Enforce max exposure per trade and max total portfolio exposure
-- Enforce max concurrent approved trade count and max daily trade recommendation count
-- Every trade card must include explicit invalidation level and capital-at-risk estimate
-- Correlation and event-risk checks before adding recommendation to portfolio
-- Risk rules operate independently of scoring confidence and may veto a recommendation
-- Portfolio-level risk state visible in dashboard
-
-**Key acceptance criteria**:
-- Portfolio manager rejects/flags recommendations exceeding configured exposure limits
-- Approved trades show invalidation level, estimated risk, position sizing rationale
-- Correlated-symbol risk visible in recommendation summary, may reduce position size
-- System prevents approval without defined invalidation stop
-
-### G. Alerting & Monitoring (FR-37, FR-43)
-
-**Dependencies**: State Persistence (A) + Trade Card Enhancements (B)
-
-**What to build**:
-- Rate limiting + deduplication windows for alerts
-- Exit-aware alerts: TP hit, stop reached, premium stop, time stop approaching
-- Event-risk alerts for earnings/expirations
-- Alert delivery: in-app toast + badge (sound optional)
-- Structured logs for recommendations, approvals, alerts, portfolio state
-- Dashboard shows watchlist status, approved positions, unrealized P&L, risk status, recent alerts
-
-**Key acceptance criteria**:
-- Alerts limited to one per event type per configured window
-- Each recommendation traceable end-to-end from scan rule to final approval/rejection
-- Event-risk alerts for earnings, expirations, user-configured review dates
+- **Backend integration**: Replace remaining `MOCK_*` imports with `fetch()` / SWR / React Query calls
+- **Real candle data**: Hook up to a market-data provider (currently seeded RNG)
+- **Broker integration**: `SendToBrokerDialog` shows UI but does not call any broker API
+- **Auth / user accounts**: No login, no session management
+- **Bearish contract recommendation**: Not in MVP per PRD boundaries
 
 ---
-
-## How to continue
-
-1. **Read the PRD**: `F:\Git\GitHub\Trading assistant\PRD-02 Master Phased PRD — Options Screener and Recommendation Assistant.md`
-2. **Read LLM_CONTEXT.md**: `F:\Git\GitHub\Trading assistant\frontend\LLM_CONTEXT.md` (master conventions)
-3. **Create worktrees** for Phase 2:
-   - `.worktrees/feature-risk-management`
-   - `.worktrees/feature-alerting-monitoring`
-4. **Implement workstreams F and G** in parallel (they are independent of each other)
-5. **Merge to main** after verification
-6. **Update this file** with Phase 2 results
-
-## Critical rules
-
-- Use the `using-git-worktrees` skill to create isolated workspaces
-- Use the `worktree-context-doc` skill to generate scoped LLM context documents for each subagent
-- Run `npm run typecheck` after every frontend edit — must be clean
-- Run `pytest` after every backend edit — must pass (except pre-existing `test_routes.py` failures)
-- Do not modify files outside the owned files list for each workstream
-- Commit after each file is complete
 
 ## Pre-existing test failures to ignore
 
@@ -96,4 +62,4 @@ Phase 2 has 2 workstreams that depend on Phase 1 outputs. These are **not yet st
 
 ---
 
-*Generated after Phase 1 completion. Next: Phase 2 (Risk Management + Alerting).*
+*Phase 1 and Phase 2 complete. Next: Backend integration / Phase 3 TBD.*
