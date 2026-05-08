@@ -2,6 +2,7 @@ import { renderHook, act } from '@testing-library/react';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import type { PortfolioPosition } from '@/types/domain';
 
+let _recIdCounter = 0;
 const makePosition = (overrides: Partial<PortfolioPosition> = {}): PortfolioPosition => ({
   symbol: 'AAPL',
   contract: 'AAPL 190C 05/16',
@@ -15,9 +16,10 @@ const makePosition = (overrides: Partial<PortfolioPosition> = {}): PortfolioPosi
   pnlDollar: 870,
   pnlPct: 20.96,
   stop: 180.0,
-  target: 198.0,
+  targets: [{ id: 'tp1', stockPrice: 198.0, contractsToSell: 2, status: 'PENDING' }],
   status: 'PASS',
   contracts: 2,
+  recId: `REC-TEST-${++_recIdCounter}`,
   ...overrides,
 });
 
