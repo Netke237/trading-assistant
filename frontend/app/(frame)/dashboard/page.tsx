@@ -20,6 +20,7 @@ import { EventFlag } from '@/components/atoms/EventFlag';
 import { useScanStore } from '@/lib/scanStore';
 import { api } from '@/lib/api';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
+import { RiskPanel } from '@/components/molecules/RiskPanel';
 import type { WatchlistRow, PortfolioPosition, AlertItem, MarketRegime, NewsItem } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -173,6 +174,10 @@ export default function DashboardPage() {
               />
             ))}
           </div>
+        </SectionCard>
+
+        <SectionCard title="Risk">
+          <RiskPanel />
         </SectionCard>
       </div>
 
