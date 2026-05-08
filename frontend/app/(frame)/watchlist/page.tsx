@@ -19,6 +19,7 @@ import { ContractStar } from '@/components/atoms/ContractStar';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { statusForScore } from '@/lib/status';
 import { api } from '@/lib/api';
+import { useWatchlistStore } from '@/lib/watchlistStore';
 import { contractLabel, type OptionContract } from '@/types/domain';
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
 import type { WatchlistRow } from '@/types/domain';
@@ -43,10 +44,13 @@ export default function WatchlistPage() {
   const [contracts, setContracts]   = useState<OptionContract[]>([]);
   const [offline, setOffline]       = useState(false);
 
+  const syncWatchlist = useWatchlistStore((s) => s.syncFromBackend);
+
   useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
     api.getContracts().then(setContracts).catch(() => setOffline(true));
-  }, []);
+    syncWatchlist();
+  }, [syncWatchlist]);
 
   const sorted = useMemo<WatchlistRow[]>(() => {
     const rows = [...watchlist];

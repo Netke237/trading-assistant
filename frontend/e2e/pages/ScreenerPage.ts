@@ -37,6 +37,14 @@ export class ScreenerPage {
     return this.page.locator('[role="button"], button').filter({ hasText: /SP 500|NASDAQ|DOW/i });
   }
 
+  get runScanButton(): Locator {
+    return this.page.getByRole('button', { name: /run scan/i });
+  }
+
+  async clickRunScan(): Promise<void> {
+    await this.runScanButton.click();
+  }
+
   async selectUniverse(name: string): Promise<void> {
     await this.page.getByRole('button', { name: new RegExp(name, 'i') }).click();
   }

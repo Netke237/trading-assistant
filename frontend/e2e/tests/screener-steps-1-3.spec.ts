@@ -14,6 +14,31 @@ test.describe('Screener Steps 1-3 @smoke', () => {
     await expect(selectedTile).toBeVisible();
   });
 
+  test('Step 1 - universe selection sends correct payload to scan API', async ({ page }) => {
+    const screener = new ScreenerPage(page);
+    await screener.goto(1);
+
+    // Listen for scan API calls
+    let scanPayload: unknown = null;
+    page.on('request', (req) => {
+      if (req.method() === 'POST' && req.url().includes('/api/scan')) {
+        scanPayload = req.postDataJSON();
+      }
+    });
+
+    // Select SP 500 and click Run Scan
+    await screener.selectUniverse('S\\&P 500');
+    await screener.clickRunScan();
+
+    // Wait for scan to complete
+    await page.waitForTimeout(2000);
+    expect(scanPayload).not.toBeNull();
+    const payload = scanPayload as Record<string, unknown>;
+    expect(payload.universe).toEqual(['SP500']);
+    expect(payload.direction).toBeDefined();
+    expect(payload.horizon).toBeDefined();
+  });
+
   test('Step 1 - next button navigates to Step 2', async ({ page }) => {
     const screener = new ScreenerPage(page);
     await screener.goto(1);

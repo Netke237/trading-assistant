@@ -44,6 +44,11 @@ export function RunScanButton() {
   const context      = useScanStore((s) => s.context);
   const pick         = useUniverseStore((s) => s.pick);
   const customRaw    = useUniverseStore((s) => s.customRaw);
+  const minPriceRaw  = useUniverseStore((s) => s.minPriceRaw);
+  const maxPriceRaw  = useUniverseStore((s) => s.maxPriceRaw);
+  const minCapRaw    = useUniverseStore((s) => s.minCapRaw);
+  const maxCapRaw    = useUniverseStore((s) => s.maxCapRaw);
+  const capUnit      = useUniverseStore((s) => s.capUnit);
 
   const scanning = scanState === 'SCANNING';
 
@@ -54,8 +59,20 @@ export function RunScanButton() {
     const direction = context?.direction ?? 'Bullish';
     const horizon   = context?.horizon   ?? 'Swing (5–15d)';
 
+    const filters: Record<string, number> = {};
+    const minPrice = Number(minPriceRaw);
+    const maxPrice = Number(maxPriceRaw);
+    const minCap = Number(minCapRaw);
+    const maxCap = Number(maxCapRaw);
+    const capMultiplier = capUnit === 'B' ? 1e9 : 1;
+
+    if (Number.isFinite(minPrice) && minPriceRaw !== '') filters.min_price = minPrice;
+    if (Number.isFinite(maxPrice) && maxPriceRaw !== '') filters.max_price = maxPrice;
+    if (Number.isFinite(minCap) && minCapRaw !== '') filters.min_cap_usd = minCap * capMultiplier;
+    if (Number.isFinite(maxCap) && maxCapRaw !== '') filters.max_cap_usd = maxCap * capMultiplier;
+
     setScanState('SCANNING');
-    api.postScan(universe, direction, horizon)
+    api.postScan(universe, direction, horizon, filters)
       .then((result) => {
         setScanResult(result);
         setScanState('COMPLETED', nowLocalISO());
@@ -63,7 +80,7 @@ export function RunScanButton() {
       .catch(() => {
         setScanState('FAILED');
       });
-  }, [scanning, setScanState, setScanResult, context, pick, customRaw]);
+  }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit]);
 
   return (
     <button

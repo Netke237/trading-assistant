@@ -12,6 +12,7 @@ import { TopBar } from '@/components/organisms/TopBar';
 import { NavRail } from '@/components/organisms/NavRail';
 import { ContextRail } from '@/components/organisms/ContextRail';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
+import { InitStores } from '@/components/molecules/InitStores';
 import styles from '@/components/organisms/Frame.module.css';
 
 export default function FrameLayout({
@@ -23,6 +24,7 @@ export default function FrameLayout({
 }) {
   return (
     <div className={styles.frame}>
+      <InitStores />
       <a href="#workspace" className={styles.skipLink}>Skip to content</a>
       <TopBar />
       <NavRail />

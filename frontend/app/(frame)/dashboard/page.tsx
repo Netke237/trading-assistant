@@ -19,12 +19,13 @@ import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
 import { useScanStore } from '@/lib/scanStore';
 import { useAlertStore } from '@/lib/alertStore';
+import { usePortfolioStore } from '@/lib/portfolioStore';
 import { scanPortfolio } from '@/lib/alertEngine';
 import { api } from '@/lib/api';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ToastContainer } from '@/components/organisms/ToastContainer';
 import { RiskPanel } from '@/components/molecules/RiskPanel';
-import type { WatchlistRow, PortfolioPosition, AlertItem, MarketRegime, NewsItem } from '@/types/domain';
+import type { WatchlistRow, AlertItem, MarketRegime, NewsItem } from '@/types/domain';
 import styles from './page.module.css';
 
 const WL_COLUMNS = '60px 1fr 60px 64px 64px';
@@ -42,11 +43,12 @@ export default function DashboardPage() {
   const { context, scanAt } = useScanStore();
 
   const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
-  const [portfolio, setPortfolio] = useState<PortfolioPosition[]>([]);
   const [alerts, setAlerts]       = useState<AlertItem[]>([]);
   const [regime, setRegime]       = useState<MarketRegime | null>(null);
   const [news, setNews]           = useState<NewsItem[]>([]);
   const [offline, setOffline]     = useState(false);
+
+  const portfolio = usePortfolioStore((s) => s.positions);
 
   const toasts = useAlertStore((s) => s.toasts.filter((t) => !t.dismissed));
   const allAlerts: AlertItem[] = [
@@ -57,12 +59,13 @@ export default function DashboardPage() {
       symbol: t.symbol,
       reason: t.reason,
       timestamp: toastTimestamp(t.id),
+      recId: t.recId,
+      alertType: t.alertType,
     })),
   ];
 
   useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
-    api.getPortfolio().then(setPortfolio).catch(() => setOffline(true));
     api.getAlerts().then(setAlerts).catch(() => setOffline(true));
     api.getRegime().then(setRegime).catch(() => setOffline(true));
   }, []);

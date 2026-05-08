@@ -18,6 +18,7 @@ interface WatchlistState {
   addSymbol:    (sym: string) => void;
   removeSymbol: (sym: string) => void;
   isWatched:    (sym: string) => boolean;
+  syncFromBackend: () => Promise<void>;
 }
 
 export const useWatchlistStore = create<WatchlistState>()(
@@ -38,6 +39,16 @@ export const useWatchlistStore = create<WatchlistState>()(
       isWatched: (sym) => {
         const s = sym.trim().toUpperCase();
         return get().added.includes(s);
+      },
+      syncFromBackend: async () => {
+        try {
+          const res = await fetch('/api/watchlist');
+          if (!res.ok) return;
+          const symbols: string[] = await res.json();
+          set({ added: symbols.map((s) => s.toUpperCase()) });
+        } catch {
+          // network unavailable — keep localStorage state
+        }
       },
     }),
     {

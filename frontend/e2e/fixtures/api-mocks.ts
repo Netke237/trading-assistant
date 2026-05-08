@@ -74,8 +74,50 @@ export async function setupApiMocks(page: Page): Promise<void> {
     });
   });
 
-  // Empty arrays for list endpoints
-  const emptyEndpoints = ['/api/watchlist', '/api/portfolio', '/api/alerts', '/api/events', '/api/tradecards'];
+  // Portfolio — return empty list for GET, success for POST
+  await page.route('**/api/portfolio', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'created' }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    });
+  });
+
+  // Watchlist — return empty list for GET, success for POST/DELETE
+  await page.route('**/api/watchlist**', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'added' }),
+      });
+      return;
+    }
+    if (route.request().method() === 'DELETE') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'removed' }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    });
+  });
+
+  // Empty arrays for remaining list endpoints
+  const emptyEndpoints = ['/api/alerts', '/api/events', '/api/tradecards'];
   for (const endpoint of emptyEndpoints) {
     await page.route(`**${endpoint}`, async (route) => {
       await route.fulfill({
