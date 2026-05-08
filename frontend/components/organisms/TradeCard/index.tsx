@@ -23,6 +23,7 @@ import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk } from '@/lib/risk';
 import type { TradeCardData, TargetLevel } from '@/types/domain';
 import styles from './TradeCard.module.css';
@@ -158,7 +159,7 @@ export function TradeCard({ data, recId: propRecId, onSendToBroker, sendLabel, s
         <section className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
           <div className={styles.scoreCardHeader}>
             <Text size={14} weight={600}>Final Recommendation</Text>
-            <StatusBadge status={data.finalStatus} />
+            <LabeledStatusBadge label="Final Status" status={data.finalStatus} />
           </div>
           <div className={styles.scoreCardBody}>
             <div className={styles.scoreRow}>

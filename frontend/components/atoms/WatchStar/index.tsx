@@ -41,8 +41,17 @@ export function WatchStar({ symbol, size = 'md', className }: WatchStarProps) {
       ].filter(Boolean).join(' ')}
       onClick={(e) => {
         e.stopPropagation();
-        if (watched) removeSymbol(symbol);
-        else         addSymbol(symbol);
+        if (watched) {
+          removeSymbol(symbol);
+          fetch(`/api/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' }).catch(() => {});
+        } else {
+          addSymbol(symbol);
+          fetch('/api/watchlist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol }),
+          }).catch(() => {});
+        }
       }}
       aria-label={watched ? `Remove ${symbol} from watchlist` : `Add ${symbol} to watchlist`}
       aria-pressed={watched}

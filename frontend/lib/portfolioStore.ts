@@ -7,7 +7,46 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PortfolioPosition } from '@/types/domain';
+import type { PortfolioPosition, TargetLevel, Direction } from '@/types/domain';
+
+type BackendPosition = {
+  id: string;
+  recId: string;
+  symbol: string;
+  contract: string;
+  direction: string;
+  entryPrice: number;
+  qty: number;
+  entryDate: string;
+  stop: number | null;
+  targets: TargetLevel[];
+  dteTotal: number | null;
+  createdAt: string;
+};
+
+function fromBackend(p: BackendPosition): PortfolioPosition {
+  const parts = p.contract.split('|');
+  const expiry = parts[2] ?? '';
+
+  return {
+    symbol: p.symbol,
+    contract: p.contract,
+    direction: p.direction as Direction,
+    entryPrice: p.entryPrice,
+    contracts: p.qty,
+    entryDate: p.entryDate,
+    expiry,
+    stop: p.stop ?? 0,
+    targets: p.targets ?? [],
+    dteTotal: p.dteTotal ?? 0,
+    dteRemaining: 0,
+    status: 'PENDING',
+    recId: p.recId,
+    currentPrice: 0,
+    pnlDollar: 0,
+    pnlPct: 0,
+  };
+}
 
 interface PortfolioStoreState {
   positions: PortfolioPosition[];
@@ -15,6 +54,7 @@ interface PortfolioStoreState {
   addPosition:    (p: PortfolioPosition) => void;
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   closePosition:  (contract: string) => void;
+  syncFromBackend: () => Promise<void>;
 }
 
 function generateRecId(): string {
@@ -105,6 +145,16 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         })),
       closePosition: (contract) =>
         set((s) => ({ positions: s.positions.filter((r) => r.contract !== contract) })),
+      syncFromBackend: async () => {
+        try {
+          const res = await fetch('/api/portfolio');
+          if (!res.ok) return;
+          const positions: BackendPosition[] = await res.json();
+          set({ positions: positions.map(fromBackend) });
+        } catch {
+          // network unavailable — keep localStorage state
+        }
+      },
     }),
     {
       name: 'bamendjou-portfolio-v1',

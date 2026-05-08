@@ -13,7 +13,6 @@ import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { usePortfolioStore } from '@/lib/portfolioStore';
-import { api } from '@/lib/api';
 import type { PortfolioPosition } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -28,16 +27,14 @@ const COLUMNS = '72px 1.6fr 72px 1fr 110px 104px 60px 56px 60px 90px 40px';
 
 export default function PortfolioPage() {
   const positions      = usePortfolioStore((s) => s.positions);
-  const hydrate        = usePortfolioStore((s) => s.hydrate);
+  const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
   const updatePosition = usePortfolioStore((s) => s.updatePosition);
   const closeInStore   = usePortfolioStore((s) => s.closePosition);
   const [editing, setEditing] = useState<string | null>(null);
 
   useEffect(() => {
-    if (positions.length === 0) {
-      api.getPortfolio().then(hydrate).catch(() => {});
-    }
-  }, [positions.length, hydrate]);
+    syncFromBackend();
+  }, [syncFromBackend]);
 
   const deployed = positions.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
   const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);

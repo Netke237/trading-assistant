@@ -138,18 +138,37 @@ export default function Step7Page() {
   const handleSubmit = (orders: DraftOrder[], _riskOverridden: boolean) => {
     let auto = 0, manual = 0;
     for (const o of orders) {
-      addPosition(positionFromOrder(o));
-      if (o.autoSend) {
-        auto++;
-      } else {
-        manual++;
-        const recId = recIdMap[o.card.symbol] ?? generateRecId();
-        logAudit('APPROVE', recId, {
-          symbol: o.card.symbol,
-          contract: o.card.contract,
-          contracts: o.contracts,
+      const pos = positionFromOrder(o);
+      const recId = recIdMap[o.card.symbol] ?? generateRecId();
+      addPosition(pos);
+
+      if (o.autoSend) auto++;
+      else manual++;
+
+      const body = JSON.stringify({
+        recId,
+        symbol: pos.symbol,
+        contract: pos.contract,
+        direction: pos.direction,
+        entryPrice: pos.entryPrice,
+        qty: pos.contracts ?? 1,
+        entryDate: pos.entryDate,
+        stop: pos.stop,
+        targets: pos.targets,
+        dteTotal: pos.dteTotal,
+      });
+
+      fetch('/api/portfolio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+        .then(() => {
+          logAudit('APPROVE', recId, {
+            symbol: o.card.symbol,
+            contract: o.card.contract,
+            contracts: o.contracts,
+          });
+        })
+        .catch(() => {
+          // network error — position is still in local store
         });
-      }
     }
     setDialogOpen(false);
     setBasket([]);
