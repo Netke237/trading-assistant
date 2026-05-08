@@ -4,7 +4,17 @@ import os
 from datetime import datetime, timezone
 
 import yaml
+from functools import lru_cache as _lru_cache
+from pathlib import Path as _Path
 from fastapi import APIRouter
+
+_RR_CONFIG_PATH = _Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
+
+@_lru_cache(maxsize=1)
+def _rr_cfg() -> dict:
+    import yaml as _yaml
+    with open(_RR_CONFIG_PATH) as f:
+        return _yaml.safe_load(f)["reward_risk"]
 
 from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
@@ -182,8 +192,10 @@ async def run_scan(req: ScanRequest) -> ScanResult:
             entry = assess_entry(bid=bid, ask=ask, mid=mid)
 
             # Step 8 — Estimate reward-risk
-            target_price = price * (1.08 if req.direction == "Bullish" else 0.92)
-            invalidation_price = price * (0.97 if req.direction == "Bullish" else 1.03)
+            _rr = _rr_cfg()
+            _bull = req.direction == "Bullish"
+            target_price = price * (1 + _rr["bullish_target_pct"]) if _bull else price * (1 - _rr["bearish_target_pct"])
+            invalidation_price = price * (1 - _rr["bullish_invalidation_pct"]) if _bull else price * (1 + _rr["bearish_invalidation_pct"])
             strike = float(contract.get("strike", price))
             expiry_years = contract.get("dte", 30) / 365.0
             premium = float(contract.get("price", 0.10))
@@ -254,7 +266,7 @@ async def run_scan(req: ScanRequest) -> ScanResult:
                 ),
                 exit=TradeExit(
                     invalidation=round(invalidation_price, 2),
-                    premiumStop=round(premium * 0.6, 2),
+                    premiumStop=round(premium * _rr["premium_stop_pct"], 2),
                     timeStopDays=max(3, int(contract.get("dte", 30) * 0.4)),
                     target=round(target_price, 2),
                 ),
