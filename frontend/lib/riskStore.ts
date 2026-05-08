@@ -50,7 +50,7 @@ export const useRiskStore = create<RiskState>()(
       symbols: [],
       setLimits: (l) => set({ limits: l }),
       checkTrade: (card, proposedContracts) => {
-        const { limits, metrics, symbols } = get();
+        const { limits, metrics, symbols, dailyRecommendations } = get();
         const reasons: string[] = [];
         const mid = card.contractDetails?.mid ?? 0;
         const notional = mid * proposedContracts * 100;
@@ -75,7 +75,7 @@ export const useRiskStore = create<RiskState>()(
         if (totalExposurePct > limits.maxTotalExposurePct) {
           reasons.push('total_exposure_limit_reached');
         }
-        if (metrics.dailyRecommendations >= limits.maxDailyRecommendations) {
+        if (dailyRecommendations >= limits.maxDailyRecommendations) {
           reasons.push('max_daily_recommendations_reached');
         }
 
