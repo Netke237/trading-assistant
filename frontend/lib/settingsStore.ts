@@ -66,7 +66,7 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       customW:      { ...DEFAULT_WEIGHTS },
-      customParams: structuredClone(DEFAULT_PARAMS),
+      customParams: JSON.parse(JSON.stringify(DEFAULT_PARAMS)) as CustomParams,
       broker:       { ...DEFAULT_BROKER },
       alertDeduplicationHours: 24,
       setCustomW: (w) => set({ customW: w }),
@@ -75,7 +75,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAlertDeduplicationHours: (h) => set({ alertDeduplicationHours: h }),
       resetToDefaults: () => set({
         customW:      { ...DEFAULT_WEIGHTS },
-        customParams: structuredClone(DEFAULT_PARAMS),
+        customParams: JSON.parse(JSON.stringify(DEFAULT_PARAMS)) as CustomParams,
         broker:       { ...DEFAULT_BROKER },
         alertDeduplicationHours: 24,
       }),
