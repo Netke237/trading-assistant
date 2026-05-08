@@ -135,7 +135,7 @@ export default function Step7Page() {
     setBasket((b) => (b.includes(active) ? b.filter((s) => s !== active) : [...b, active]));
   const removePin = (sym: string) => setBasket((b) => b.filter((s) => s !== sym));
 
-  const handleSubmit = (orders: DraftOrder[]) => {
+  const handleSubmit = (orders: DraftOrder[], _riskOverridden: boolean) => {
     let auto = 0, manual = 0;
     for (const o of orders) {
       addPosition(positionFromOrder(o));
