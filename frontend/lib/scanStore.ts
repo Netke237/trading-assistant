@@ -29,12 +29,14 @@ interface ScanStoreState {
   /** Previous scan result for delta calculation (rankDelta / scoreDelta). */
   previousRun:     ScanResult | null;
   selectedSymbol:  string | null;
+  conflictedSymbols: string[];
   setScanState:    (s: ScanState, at?: string) => void;
   setContext:      (c: ScanContext | null) => void;
   setRegime:       (r: Status) => void;
   setScanResult:   (r: ScanResult | null) => void;
   setPreviousRun:  (r: ScanResult | null) => void;
   setSelectedSymbol: (s: string) => void;
+  setConflictedSymbols: (symbols: string[]) => void;
 }
 
 export const useScanStore = create<ScanStoreState>((set) => ({
@@ -45,10 +47,12 @@ export const useScanStore = create<ScanStoreState>((set) => ({
   scanResult:      null,
   previousRun:     null,
   selectedSymbol:  null,
+  conflictedSymbols: [],
   setScanState:    (s, at) => set({ scanState: s, scanAt: at ?? null }),
   setContext:      (c) => set({ context: c }),
   setRegime:       (r) => set({ regime: r }),
   setScanResult:   (r) => set({ scanResult: r }),
   setPreviousRun:  (r) => set({ previousRun: r }),
   setSelectedSymbol: (s) => set({ selectedSymbol: s }),
+  setConflictedSymbols: (symbols) => set({ conflictedSymbols: symbols }),
 }));

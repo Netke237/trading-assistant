@@ -54,31 +54,42 @@ interface SettingsState {
   customW:      CustomWeights;
   customParams: CustomParams;
   broker:       BrokerConfig;
-  setCustomW:        (w: CustomWeights) => void;
-  setCustomParams:   (p: CustomParams) => void;
-  setBroker:         (b: BrokerConfig) => void;
-  resetToDefaults:   () => void;
+  alertDeduplicationHours: number;
+  setCustomW:                (w: CustomWeights) => void;
+  setCustomParams:           (p: CustomParams) => void;
+  setBroker:                 (b: BrokerConfig) => void;
+  setAlertDeduplicationHours: (h: number) => void;
+  resetToDefaults:           () => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       customW:      { ...DEFAULT_WEIGHTS },
-      customParams: structuredClone(DEFAULT_PARAMS),
+      customParams: JSON.parse(JSON.stringify(DEFAULT_PARAMS)) as CustomParams,
       broker:       { ...DEFAULT_BROKER },
+      alertDeduplicationHours: 24,
       setCustomW: (w) => set({ customW: w }),
       setCustomParams: (p) => set({ customParams: p }),
       setBroker: (b) => set({ broker: b }),
+      setAlertDeduplicationHours: (h) => set({ alertDeduplicationHours: h }),
       resetToDefaults: () => set({
         customW:      { ...DEFAULT_WEIGHTS },
-        customParams: structuredClone(DEFAULT_PARAMS),
+        customParams: JSON.parse(JSON.stringify(DEFAULT_PARAMS)) as CustomParams,
         broker:       { ...DEFAULT_BROKER },
+        alertDeduplicationHours: 24,
       }),
     }),
     {
       name: SETTINGS_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 3,
+      partialize: (state) => ({
+        customW: state.customW,
+        customParams: state.customParams,
+        broker: state.broker,
+        alertDeduplicationHours: state.alertDeduplicationHours,
+      }),
       migrate: (persistedState, version) => {
         const prev = (persistedState as Partial<SettingsState> | null) ?? {};
         if (version < 2) {
@@ -86,6 +97,13 @@ export const useSettingsStore = create<SettingsState>()(
             customW:      prev.customW      ?? { ...DEFAULT_WEIGHTS },
             customParams: prev.customParams ?? structuredClone(DEFAULT_PARAMS),
             broker:       prev.broker       ?? { ...DEFAULT_BROKER },
+            alertDeduplicationHours: prev.alertDeduplicationHours ?? 24,
+          } as SettingsState;
+        }
+        if (version < 3) {
+          return {
+            ...prev,
+            alertDeduplicationHours: prev.alertDeduplicationHours ?? 24,
           } as SettingsState;
         }
         return prev as SettingsState;

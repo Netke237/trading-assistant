@@ -525,9 +525,11 @@ function WeightsForm() {
 const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   TP_HIT: 'Target reached',
   STOP_REACHED: 'Stop-loss breach',
-  PREMIUM_STOP: 'Premium stop (–50%)',
+  PREMIUM_STOP: 'Premium stop (–40%)',
   TIME_STOP_APPROACHING: 'Time stop approaching',
+  TIME_STOP: 'Time stop (≤3 DTE)',
   EARNINGS_APPROACHING: 'Earnings within 3 days',
+  EVENT_RISK: 'Event risk (≤3 days)',
   EXPIRATION_APPROACHING: 'Expiration within 3 days',
   REGIME_CHANGE: 'Regime flip',
   SCAN_COMPLETE: 'Scan complete',
