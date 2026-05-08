@@ -199,3 +199,31 @@ export interface NewsItem {
   timestamp: string;
   sentiment: NewsSentiment;
 }
+
+// --- Risk management ---
+
+export interface RiskLimits {
+  maxSingleTradeExposurePct: number;  // e.g. 0.05 = 5%
+  maxTotalExposurePct: number;        // e.g. 0.25 = 25%
+  maxConcurrentPositions: number;     // e.g. 10
+  maxDailyRecommendations: number;    // e.g. 5
+  portfolioValue: number;             // user's total portfolio value in $
+}
+
+export interface RiskCheckResult {
+  approved: boolean;
+  reasons: string[];
+  adjustedContracts?: number;
+  singleExposurePct: number;
+  totalExposurePct: number;
+  capitalAtRisk: number;
+}
+
+export interface PortfolioRiskMetrics {
+  totalExposurePct: number;
+  concurrentPositions: number;
+  dailyRecommendations: number;
+  largestConcentrationPct: number;
+  largestConcentrationSymbol: string;
+  status: Status;  // PASS if all within limits, CAUTION if near, REJECT if breached
+}
