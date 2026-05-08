@@ -75,6 +75,9 @@ export const useRiskStore = create<RiskState>()(
         if (totalExposurePct > limits.maxTotalExposurePct) {
           reasons.push('total_exposure_limit_reached');
         }
+        if (metrics.dailyRecommendations >= limits.maxDailyRecommendations) {
+          reasons.push('max_daily_recommendations_reached');
+        }
 
         return {
           approved: reasons.length === 0,
