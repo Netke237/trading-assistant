@@ -87,7 +87,11 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
               incoming.contract
             );
             const next = [...s.positions];
-            next[idxByKey] = { ...next[idxByKey]!, ...incoming };
+            const existing = next[idxByKey]!;
+            next[idxByKey] = {
+              ...existing,
+              contracts: (existing.contracts ?? 0) + (incoming.contracts ?? 0),
+            };
             return { positions: next };
           }
 
