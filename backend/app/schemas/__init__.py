@@ -13,7 +13,7 @@ from app.schemas.scan import (
 
 Status = Literal['PASS', 'CAUTION', 'REJECT', 'PENDING', 'NO_DATA']
 Direction = Literal['Bullish', 'Bearish']
-Horizon = Literal['Swing', 'Position']
+Horizon = Literal['Intraday', 'Swing', 'Position']
 ScanState = Literal['IDLE', 'SCANNING', 'COMPLETED', 'FAILED', 'PARTIAL', 'CANCELLED']
 AlertKind = Literal['Info', 'Action', 'Critical']
 OrderType = Literal['Limit', 'Market', 'Stop']
