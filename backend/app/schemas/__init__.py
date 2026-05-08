@@ -1,4 +1,5 @@
 from __future__ import annotations
+from enum import Enum
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -167,6 +168,25 @@ class UpcomingEvent(BaseModel):
     status: Status
 
 
+# ── Pricing method enum ──────────────────────────────────────────────────────
+
+class PricingMethod(str, Enum):
+    HESTON = "Heston repriced"
+    DELTA_APPROX = "Delta approximation"
+    UNAVAILABLE = "Unavailable"
+
+
+# ── Target levels ─────────────────────────────────────────────────────────────
+
+class TargetLevel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    target_price: float          # underlying stock price at this target
+    stock_price: float           # alias of target_price (keep for backward compat)
+    estimated_option_price: float
+    pricing_method: PricingMethod
+    rr_contribution: float       # estimated reward at this target / risk
+
+
 # ── Trade cards ──────────────────────────────────────────────────────────────
 
 class ContractDetails(BaseModel):
@@ -194,7 +214,8 @@ class TradeExit(BaseModel):
     invalidation: float
     premiumStop: float
     timeStopDays: int
-    target: float
+    target: float                    # KEEP — first target stock price (backward compat)
+    targets: list[TargetLevel] = []  # NEW — 3 graduated target levels
 
 
 class TradeCardData(BaseModel):

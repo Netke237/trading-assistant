@@ -21,7 +21,6 @@ import { useMemo, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
-import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { capitalAtRisk } from '@/lib/risk';
@@ -140,8 +139,8 @@ export function TradeCard({ data, recId: propRecId, onSendToBroker, sendLabel, s
         <section className={`${styles.planCard} ${styles.targetsCard}`}>
           <Text size={14} weight={600}>Sell-to-Close Plan</Text>
           <div className={styles.targetsTable}>
-            {data.exit.targets.map((t) => (
-              <TargetRow key={t.id} target={t} totalContracts={data.contractDetails?.dte ?? 1} />
+            {data.exit.targets.map((t, i) => (
+              <TargetRow key={t.id ?? i} index={i} target={t} totalContracts={data.contractDetails?.dte ?? 1} />
             ))}
           </div>
         </section>
@@ -155,9 +154,29 @@ export function TradeCard({ data, recId: propRecId, onSendToBroker, sendLabel, s
           </div>
         </section>
 
-        {/* 7. Final status */}
-        <section className={`${styles.finalCard} ${styles[`final_${data.finalStatus}`]}`}>
-          <LabeledStatusBadge label="Final Status" status={data.finalStatus} />
+        {/* 7. Final Recommendation Scorecard */}
+        <section className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
+          <div className={styles.scoreCardHeader}>
+            <Text size={14} weight={600}>Final Recommendation</Text>
+            <StatusBadge status={data.finalStatus} />
+          </div>
+          <div className={styles.scoreCardBody}>
+            <div className={styles.scoreRow}>
+              <Text size={12} tone="secondary">Stock confidence</Text>
+              <StatusBadge status={data.stockConfidence} />
+            </div>
+            <div className={styles.scoreRow}>
+              <Text size={12} tone="secondary">Contract confidence</Text>
+              <StatusBadge status={data.contractConfidence} />
+            </div>
+            <div className={styles.scoreRow}>
+              <Text size={12} tone="secondary">R:R ratio</Text>
+              <Data size={14} tone="primary">{data.rrRatio.toFixed(2)}x</Data>
+            </div>
+            <div className={styles.scoreRow}>
+              <Text size={11} tone="dim">{data.rrModel}</Text>
+            </div>
+          </div>
         </section>
       </div>
 
@@ -203,24 +222,34 @@ export function TradeCard({ data, recId: propRecId, onSendToBroker, sendLabel, s
   );
 }
 
-function TargetRow({ target, totalContracts }: { target: TargetLevel; totalContracts: number }) {
-  const isScaleOut = target.contractsToSell < totalContracts;
-  const rowTone = target.status === 'HIT' ? 'pass' : target.status === 'MISSED' ? 'reject' : undefined;
+function TargetRow({ target, index, totalContracts }: { target: TargetLevel; index: number; totalContracts: number }) {
+  const statusVal = target.status;
+  const rowTone = statusVal === 'HIT' ? 'pass' : statusVal === 'MISSED' ? 'reject' : undefined;
+  const statusClass = statusVal ? styles[`target_${statusVal}`] : styles.target_PENDING;
+  const badgeStatus = statusVal === 'HIT' ? 'PASS' : statusVal === 'MISSED' ? 'REJECT' : 'PENDING';
+  const isScaleOut = target.contractsToSell !== undefined && target.contractsToSell < totalContracts;
+  const label = target.id ? target.id.toUpperCase() : `T${index + 1}`;
+
   return (
-    <div className={`${styles.targetRow} ${styles[`target_${target.status}`]}`}>
+    <div className={`${styles.targetRow} ${statusClass}`}>
       <div className={styles.targetMain}>
         <div className={styles.targetId}>
-          <Text size={12} weight={600} tone={rowTone}>{target.id.toUpperCase()}</Text>
-          <StatusBadge status={target.status === 'PENDING' ? 'PENDING' : target.status === 'HIT' ? 'PASS' : 'REJECT'} />
+          <Text size={12} weight={600} tone={rowTone}>{label}</Text>
+          {statusVal && <StatusBadge status={badgeStatus as 'PENDING' | 'PASS' | 'REJECT'} />}
         </div>
         <div className={styles.targetValues}>
-          <KV label="Stock price" value={`$${target.stockPrice.toFixed(2)}`} mono tone={rowTone} />
+          <KV label="Stock price" value={`$${(target.targetPrice ?? target.stockPrice).toFixed(2)}`} mono tone={rowTone} />
           {target.estimatedOptionPrice !== undefined && (
             <KV label="Est. option" value={`$${target.estimatedOptionPrice.toFixed(2)}`} mono tone={rowTone} />
           )}
-          <KV label="Contracts" value={`${target.contractsToSell}`} mono />
+          {target.rrContribution !== undefined && (
+            <KV label="R:R" value={`${target.rrContribution.toFixed(1)}x`} mono />
+          )}
+          {target.contractsToSell !== undefined && (
+            <KV label="Contracts" value={`${target.contractsToSell}`} mono />
+          )}
         </div>
-        {isScaleOut && (
+        {isScaleOut && target.contractsToSell !== undefined && (
           <Text size={11} tone="caution">
             Scale out: sell {target.contractsToSell} of {totalContracts}
           </Text>

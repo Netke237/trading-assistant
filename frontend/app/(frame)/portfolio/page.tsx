@@ -249,7 +249,7 @@ function TargetEditor({
         {targets.map((t) => (
           <div key={t.id} className={styles.targetItem}>
             <div className={styles.targetHeader}>
-              <Text size={12} weight={600}>{t.id.toUpperCase()}</Text>
+              <Text size={12} weight={600}>{t.id?.toUpperCase()}</Text>
               <span className={styles.targetStatus}>{t.status}</span>
             </div>
             <div className={styles.targetGrid}>

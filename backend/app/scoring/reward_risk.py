@@ -56,3 +56,69 @@ def estimate_rr(
         model_used=model_used,
         estimated_exit_premium=round(exit_premium, 2),
     )
+
+
+def estimate_targets(
+    stock_price: float,
+    base_target_price: float,   # T1 = the existing single target
+    strike: float,
+    expiry_years: float,
+    current_premium: float,
+    is_call: bool,
+    r: float = 0.05,
+    heston_params: HestonParams | None = None,
+    sigma_fallback: float = 0.25,
+) -> list:
+    """
+    Build 3 target levels: T1=base, T2=base*1.5 move, T3=base*2.0 move.
+    For Bullish calls: T2 = stock_price + 1.5 * (T1 - stock_price)
+    For Bearish puts:  T2 = stock_price - 1.5 * (stock_price - T1)
+    Each level repriced via Heston if available, else delta approximation.
+    """
+    from app.schemas import TargetLevel as TargetLevelSchema, PricingMethod
+
+    move = abs(base_target_price - stock_price)
+    direction_sign = 1 if base_target_price > stock_price else -1
+
+    targets_prices = [
+        stock_price + direction_sign * move,          # T1
+        stock_price + direction_sign * move * 1.5,    # T2
+        stock_price + direction_sign * move * 2.0,    # T3
+    ]
+
+    results = []
+    for t_price in targets_prices:
+        dte_at_target = max(expiry_years * 0.5, 7 / 365)
+        opt_price = None
+        method: PricingMethod
+
+        if heston_params is not None:
+            try:
+                opt_price = heston_price(t_price, strike, dte_at_target, r, heston_params, is_call)
+                method = PricingMethod.HESTON
+            except Exception:
+                opt_price = None
+                method = PricingMethod.UNAVAILABLE
+        else:
+            opt_price = None
+            method = PricingMethod.DELTA_APPROX
+
+        if opt_price is None or opt_price <= 0:
+            delta = 0.5 if (is_call and t_price > strike) or (not is_call and t_price < strike) else 0.3
+            price_move = abs(t_price - stock_price)
+            opt_price = max(0.01, current_premium + delta * price_move)
+            method = PricingMethod.DELTA_APPROX
+
+        risk = current_premium
+        reward = opt_price - current_premium
+        rr = round(reward / risk, 2) if risk > 0 and reward > 0 else 0.0
+
+        results.append(TargetLevelSchema(
+            target_price=round(t_price, 2),
+            stock_price=round(t_price, 2),
+            estimated_option_price=round(opt_price, 2),
+            pricing_method=method,
+            rr_contribution=rr,
+        ))
+
+    return results
