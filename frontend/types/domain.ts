@@ -125,7 +125,6 @@ export interface TradeCardData {
     dte:    number;
   };
   entry:  { limit: number; maxFill: number; orderType: OrderType };
-<<<<<<< HEAD
   exit:   { invalidation: number; premiumStop: number; timeStopDays: number; target: number; targets: TargetLevel[] };
   nextEventDays?:  number;
   nextEventLabel?: string;
