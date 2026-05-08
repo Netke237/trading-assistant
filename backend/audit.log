@@ -54,3 +54,4 @@
 {"ts": "2026-05-04T15:51:29.605292+00:00", "event": "candidate_rejected", "rec_id": "REC-20260504-51F90FD8", "symbol": "AAPL", "reason": "stock REJECT (score 31)"}
 {"ts": "2026-05-04T15:51:32.389571+00:00", "event": "candidate_rejected", "rec_id": "REC-20260504-51F90FD8", "symbol": "MSFT", "reason": "stock REJECT (score 31)"}
 {"ts": "2026-05-04T15:51:34.972331+00:00", "event": "candidate_rejected", "rec_id": "REC-20260504-51F90FD8", "symbol": "NVDA", "reason": "stock REJECT (score 31)"}
+{"ts": "2026-05-08T10:13:54.810084+00:00", "event": "approval", "rec_id": "REC-20260508-AUDITROW", "symbol": "AAPL", "contract": "AAPL|190|2026-06-20|C"}

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.scan import (
     ContinuousScanConfig,
@@ -243,3 +243,67 @@ class ScanResult(BaseModel):
     state: ScanState = 'COMPLETED'
     previous_run_id: Optional[str] = None
     deltas: list[ScanDelta] = []
+
+
+# ── Portfolio persistence ─────────────────────────────────────────────────────
+
+class PortfolioPositionCreate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    recId: str = Field(alias="rec_id", default=None)
+    symbol: str
+    contract: str       # SYMBOL|STRIKE|EXPIRY|C/P
+    direction: str
+    entryPrice: float = Field(alias="entry_price", default=None)
+    qty: int = Field(default=1)
+    entryDate: str = Field(alias="entry_date", default=None)
+    stop: Optional[float] = None
+    targets: list[dict] = []
+    dteTotal: Optional[int] = Field(alias="dte_total", default=None)
+
+    def __init__(self, **data):
+        # Support both camelCase and snake_case field names
+        mapped = {}
+        aliases = {
+            "rec_id": "recId",
+            "entry_price": "entryPrice",
+            "entry_date": "entryDate",
+            "dte_total": "dteTotal",
+        }
+        for k, v in data.items():
+            mapped[aliases.get(k, k)] = v
+        super().__init__(**mapped)
+
+
+class PortfolioPositionSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, from_attributes=True)
+
+    id: str
+    recId: str
+    symbol: str
+    contract: str
+    direction: str
+    entryPrice: float
+    qty: int
+    entryDate: str
+    stop: Optional[float] = None
+    targets: list[dict] = []
+    dteTotal: Optional[int] = None
+    createdAt: str
+
+    @classmethod
+    def from_orm_model(cls, obj) -> "PortfolioPositionSchema":
+        return cls(
+            id=str(obj.id),
+            recId=obj.rec_id,
+            symbol=obj.symbol,
+            contract=obj.contract,
+            direction=obj.direction,
+            entryPrice=obj.entry_price,
+            qty=obj.qty,
+            entryDate=obj.entry_date,
+            stop=obj.stop,
+            targets=obj.targets or [],
+            dteTotal=obj.dte_total,
+            createdAt=obj.created_at.isoformat() if obj.created_at else "",
+        )
