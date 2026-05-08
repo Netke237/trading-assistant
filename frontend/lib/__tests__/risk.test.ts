@@ -1,0 +1,188 @@
+import {
+  capitalAtRisk,
+  exposurePct,
+  checkInvalidation,
+  totalNotional,
+  computePortfolioRiskMetrics,
+  checkTradeRisk,
+} from '@/lib/risk';
+import type { PortfolioPosition, RiskLimits, TradeCardData } from '@/types/domain';
+
+const DEFAULT_LIMITS: RiskLimits = {
+  maxSingleTradeExposurePct: 0.05,
+  maxTotalExposurePct: 0.25,
+  maxConcurrentPositions: 10,
+  maxDailyRecommendations: 5,
+  portfolioValue: 50000,
+};
+
+function makePosition(overrides: Partial<PortfolioPosition> = {}): PortfolioPosition {
+  return {
+    symbol: 'AAPL',
+    contract: 'AAPL 190C 05/16',
+    direction: 'Bullish',
+    entryDate: '2026-04-08',
+    expiry: '2026-05-16',
+    dteRemaining: 28,
+    dteTotal: 38,
+    entryPrice: 4.15,
+    currentPrice: 5.02,
+    pnlDollar: 870,
+    pnlPct: 20.96,
+    stop: 180.0,
+    targets: [{ id: 'tp1', stockPrice: 198.0, contractsToSell: 2, status: 'PENDING' }],
+    status: 'PASS',
+    contracts: 2,
+    recId: 'REC-TEST-001',
+    ...overrides,
+  };
+}
+
+function makeCard(overrides: Partial<TradeCardData> = {}): TradeCardData {
+  return {
+    symbol: 'TSLA',
+    company: 'Tesla Inc.',
+    price: 250,
+    direction: 'Bullish',
+    status: 'PASS',
+    stockScore: 80,
+    stockConfidence: 'PASS',
+    stockBreakdown: { trend: 80, pullback: 80, trigger: 80, event: 80, volatility: 80 },
+    contract: 'TSLA 260C 05/16',
+    contractScore: 75,
+    contractConfidence: 'PASS',
+    contractBreakdown: { dteFit: 75, delta: 75, ivAttractiveness: 75, liquidity: 75, spread: 75 },
+    contractDetails: { strike: 260, expiry: '2026-05-16', right: 'C', mid: 2.5, delta: 0.5, theta: -0.1, ivRank: 50, dte: 24 },
+    entry: { limit: 2.5, maxFill: 2.63, orderType: 'Limit' },
+    exit: { invalidation: 240, premiumStop: 1.5, timeStopDays: 10, targets: [{ id: 'tp1', stockPrice: 270, contractsToSell: 1, status: 'PENDING' }] },
+    rrRatio: 2.5,
+    rrModel: 'Heston repriced',
+    finalStatus: 'PASS',
+    ...overrides,
+  };
+}
+
+describe('risk helpers', () => {
+  describe('capitalAtRisk', () => {
+    it('computes mid * contracts * 100', () => {
+      expect(capitalAtRisk(2.5, 2)).toBe(500);
+      expect(capitalAtRisk(5, 1)).toBe(500);
+    });
+  });
+
+  describe('exposurePct', () => {
+    it('returns notional / portfolioValue', () => {
+      expect(exposurePct(5000, 50000)).toBe(0.1);
+    });
+
+    it('returns 0 when portfolioValue is 0 or negative', () => {
+      expect(exposurePct(5000, 0)).toBe(0);
+      expect(exposurePct(5000, -100)).toBe(0);
+    });
+  });
+
+  describe('checkInvalidation', () => {
+    it('returns true for positive numbers', () => {
+      expect(checkInvalidation(180)).toBe(true);
+    });
+
+    it('returns false for 0 or undefined', () => {
+      expect(checkInvalidation(0)).toBe(false);
+      expect(checkInvalidation(undefined)).toBe(false);
+    });
+  });
+
+  describe('totalNotional', () => {
+    it('sums currentPrice * 100 * contracts', () => {
+      const positions = [
+        makePosition({ currentPrice: 5, contracts: 2 }),
+        makePosition({ currentPrice: 10, contracts: 1 }),
+      ];
+      expect(totalNotional(positions)).toBe(5 * 100 * 2 + 10 * 100 * 1);
+    });
+  });
+
+  describe('computePortfolioRiskMetrics', () => {
+    it('returns PASS when all within limits', () => {
+      const positions = [makePosition({ currentPrice: 5, contracts: 1 })];
+      const metrics = computePortfolioRiskMetrics(positions, DEFAULT_LIMITS, 0);
+      expect(metrics.status).toBe('PASS');
+      expect(metrics.totalExposurePct).toBe(500 / 50000);
+      expect(metrics.concurrentPositions).toBe(1);
+    });
+
+    it('returns REJECT when total exposure exceeds limit', () => {
+      const positions = [makePosition({ currentPrice: 200, contracts: 10 })];
+      const metrics = computePortfolioRiskMetrics(positions, DEFAULT_LIMITS, 0);
+      expect(metrics.status).toBe('REJECT');
+    });
+
+    it('returns CAUTION when total exposure is near limit', () => {
+      const positions = [makePosition({ currentPrice: 11, contracts: 10 })];
+      const metrics = computePortfolioRiskMetrics(positions, DEFAULT_LIMITS, 0);
+      expect(metrics.totalExposurePct).toBe(11000 / 50000); // 0.22 > 80% of 0.25 limit
+      expect(metrics.status).toBe('CAUTION');
+    });
+
+    it('tracks largest concentration', () => {
+      const positions = [
+        makePosition({ symbol: 'AAPL', currentPrice: 10, contracts: 5 }),
+        makePosition({ symbol: 'MSFT', currentPrice: 5, contracts: 2 }),
+      ];
+      const metrics = computePortfolioRiskMetrics(positions, DEFAULT_LIMITS, 0);
+      expect(metrics.largestConcentrationSymbol).toBe('AAPL');
+      expect(metrics.largestConcentrationPct).toBe(5000 / 50000);
+    });
+  });
+
+  describe('checkTradeRisk', () => {
+    it('approves a clean trade within limits', () => {
+      const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, [], 0);
+      expect(result.approved).toBe(true);
+      expect(result.reasons).toEqual([]);
+      expect(result.capitalAtRisk).toBe(250);
+      expect(result.singleExposurePct).toBe(250 / 50000);
+    });
+
+    it('rejects when single trade exposure is too high', () => {
+      const card = makeCard({ contractDetails: { strike: 260, expiry: '2026-05-16', right: 'C', mid: 10, delta: 0.5, theta: -0.1, ivRank: 50, dte: 24 } });
+      const result = checkTradeRisk(card, 10, DEFAULT_LIMITS, [], 0);
+      expect(result.approved).toBe(false);
+      expect(result.reasons).toContain('single_trade_exposure_too_high');
+    });
+
+    it('rejects when total exposure limit would be reached', () => {
+      const positions = [makePosition({ currentPrice: 20, contracts: 50 })]; // 100k notional
+      const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, positions, 0);
+      expect(result.approved).toBe(false);
+      expect(result.reasons).toContain('total_exposure_limit_reached');
+    });
+
+    it('rejects when max concurrent positions reached', () => {
+      const positions = Array.from({ length: 10 }, (_, i) => makePosition({ symbol: `SYM${i}`, recId: `REC-${i}` }));
+      const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, positions, 0);
+      expect(result.approved).toBe(false);
+      expect(result.reasons).toContain('max_concurrent_positions_reached');
+    });
+
+    it('rejects when symbol already exists in portfolio', () => {
+      const positions = [makePosition({ symbol: 'TSLA' })];
+      const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, positions, 0);
+      expect(result.approved).toBe(false);
+      expect(result.reasons).toContain('duplicate_symbol');
+    });
+
+    it('rejects when invalidation is missing', () => {
+      const card = makeCard({ exit: { invalidation: 0, premiumStop: 1.5, timeStopDays: 10, targets: [] } });
+      const result = checkTradeRisk(card, 1, DEFAULT_LIMITS, [], 0);
+      expect(result.approved).toBe(false);
+      expect(result.reasons).toContain('missing_invalidation');
+    });
+
+    it('rejects when daily recommendations reached', () => {
+      const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, [], 5);
+      expect(result.approved).toBe(false);
+      expect(result.reasons).toContain('max_daily_recommendations_reached');
+    });
+  });
+});

@@ -10,7 +10,10 @@
 
 import { useMemo, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
-import type { TradeCardData } from '@/types/domain';
+import { useRiskStore } from '@/lib/riskStore';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { checkTradeRisk } from '@/lib/risk';
+import type { TradeCardData, RiskCheckResult } from '@/types/domain';
 import styles from './SendToBrokerDialog.module.css';
 
 export interface DraftOrder {
@@ -22,7 +25,7 @@ export interface DraftOrder {
 interface Props {
   cards:    TradeCardData[];
   onClose:  () => void;
-  onSubmit: (orders: DraftOrder[]) => void;
+  onSubmit: (orders: DraftOrder[], riskOverridden: boolean) => void;
 }
 
 interface RowState {
@@ -34,6 +37,11 @@ export function SendToBrokerDialog({ cards, onClose, onSubmit }: Props) {
   const [rows, setRows] = useState<Record<string, RowState>>(() =>
     Object.fromEntries(cards.map((c) => [c.symbol, { contracts: 1, autoSend: true }])),
   );
+  const [overrideReady, setOverrideReady] = useState(false);
+
+  const limits = useRiskStore((s) => s.limits);
+  const dailyRecommendations = useRiskStore((s) => s.dailyRecommendations);
+  const positions = usePortfolioStore((s) => s.positions);
 
   const { autoCount, manualCount, estTotal } = useMemo(() => {
     let a = 0, m = 0, t = 0;
@@ -46,15 +54,46 @@ export function SendToBrokerDialog({ cards, onClose, onSubmit }: Props) {
     return { autoCount: a, manualCount: m, estTotal: t };
   }, [cards, rows]);
 
-  const patch = (sym: string, p: Partial<RowState>) =>
+  const riskChecks = useMemo(() => {
+    const checks: Record<string, RiskCheckResult> = {};
+    for (const c of cards) {
+      const r = rows[c.symbol] ?? { contracts: 1, autoSend: true };
+      checks[c.symbol] = checkTradeRisk(c, Math.max(1, Math.round(r.contracts)), limits, positions, dailyRecommendations);
+    }
+    return checks;
+  }, [cards, rows, limits, positions, dailyRecommendations]);
+
+  const hasMissingInvalidation = useMemo(
+    () => Object.values(riskChecks).some((rc) => rc.reasons.includes('missing_invalidation')),
+    [riskChecks],
+  );
+
+  const hasWarnings = useMemo(
+    () => Object.values(riskChecks).some((rc) => !rc.approved && !rc.reasons.includes('missing_invalidation')),
+    [riskChecks],
+  );
+
+  const allClean = useMemo(
+    () => Object.values(riskChecks).every((rc) => rc.approved),
+    [riskChecks],
+  );
+
+  const patch = (sym: string, p: Partial<RowState>) => {
+    setOverrideReady(false);
     setRows((r) => ({ ...r, [sym]: { ...(r[sym] ?? { contracts: 1, autoSend: true }), ...p } }));
+  };
 
   const submit = () => {
+    if (hasMissingInvalidation) return;
+    if (hasWarnings && !overrideReady) {
+      setOverrideReady(true);
+      return;
+    }
     const orders: DraftOrder[] = cards.map((c) => {
       const r = rows[c.symbol] ?? { contracts: 1, autoSend: true };
       return { card: c, contracts: Math.max(1, Math.round(r.contracts)), autoSend: r.autoSend };
     });
-    onSubmit(orders);
+    onSubmit(orders, overrideReady);
   };
 
   return (
@@ -129,6 +168,16 @@ export function SendToBrokerDialog({ cards, onClose, onSubmit }: Props) {
           })}
         </div>
 
+        <div style={{ padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--border-subtle)' }}>
+          <RiskSummary
+            hasMissingInvalidation={hasMissingInvalidation}
+            hasWarnings={hasWarnings}
+            allClean={allClean}
+            overrideReady={overrideReady}
+            riskChecks={riskChecks}
+          />
+        </div>
+
         <footer className={styles.footer}>
           <Text size={12} tone="secondary">
             {autoCount} auto · {manualCount} manual · Est total ${Math.round(estTotal).toLocaleString()}
@@ -139,13 +188,76 @@ export function SendToBrokerDialog({ cards, onClose, onSubmit }: Props) {
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={submit}
-              disabled={cards.length === 0}
+              disabled={cards.length === 0 || hasMissingInvalidation}
+              title={hasMissingInvalidation ? 'Invalidation stop required' : undefined}
             >
-              Submit {cards.length} order{cards.length === 1 ? '' : 's'}
+              {overrideReady && hasWarnings
+                ? 'Override & Submit'
+                : `Submit ${cards.length} order${cards.length === 1 ? '' : 's'}`}
             </button>
           </div>
         </footer>
       </div>
+    </div>
+  );
+}
+
+function RiskSummary({
+  hasMissingInvalidation,
+  hasWarnings,
+  allClean,
+  overrideReady,
+  riskChecks,
+}: {
+  hasMissingInvalidation: boolean;
+  hasWarnings: boolean;
+  allClean: boolean;
+  overrideReady: boolean;
+  riskChecks: Record<string, RiskCheckResult>;
+}) {
+  if (hasMissingInvalidation) {
+    return (
+      <Text size={12} tone="reject">
+        Invalidation stop required — define an invalidation level before submitting.
+      </Text>
+    );
+  }
+
+  if (allClean) {
+    return (
+      <Text size={12} tone="pass">
+        Within risk limits.
+      </Text>
+    );
+  }
+
+  const reasons = new Set<string>();
+  for (const rc of Object.values(riskChecks)) {
+    for (const r of rc.reasons) {
+      reasons.add(r);
+    }
+  }
+
+  const reasonLabels: Record<string, string> = {
+    single_trade_exposure_too_high: 'Single trade exposure too high',
+    total_exposure_limit_reached: 'Total exposure limit reached',
+    max_concurrent_positions_reached: 'Max concurrent positions reached',
+    duplicate_symbol: 'Duplicate symbol in portfolio',
+    max_daily_recommendations_reached: 'Max daily recommendations reached',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {Array.from(reasons).map((r) => (
+        <Text key={r} size={12} tone="caution">
+          {reasonLabels[r] ?? r}
+        </Text>
+      ))}
+      {!overrideReady && (
+        <Text size={12} tone="secondary">
+          Click Submit again to override.
+        </Text>
+      )}
     </div>
   );
 }
