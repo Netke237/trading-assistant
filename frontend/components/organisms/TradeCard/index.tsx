@@ -24,6 +24,7 @@ import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { capitalAtRisk } from '@/lib/risk';
 import type { TradeCardData, TargetLevel } from '@/types/domain';
 import styles from './TradeCard.module.css';
 
@@ -37,15 +38,18 @@ interface TradeCardProps {
   sendLabel?:    string;
   /** Disable the send button (e.g. empty basket). */
   sendDisabled?: boolean;
+  /** Number of contracts for CaR estimate. Default 1. */
+  contracts?: number;
 }
 
 function generateRecId(): string {
   return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
 }
 
-export function TradeCard({ data, recId: propRecId, onSendToBroker, sendLabel, sendDisabled }: TradeCardProps) {
+export function TradeCard({ data, recId: propRecId, onSendToBroker, sendLabel, sendDisabled, contracts = 1 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
   const displayRecId = useMemo(() => propRecId ?? generateRecId(), [propRecId]);
+  const car = useMemo(() => capitalAtRisk(data.contractDetails?.mid ?? 0, contracts), [data.contractDetails?.mid, contracts]);
 
   const stockBars = [
     { label: 'Trend',      value: data.stockBreakdown.trend      },
@@ -107,6 +111,7 @@ export function TradeCard({ data, recId: propRecId, onSendToBroker, sendLabel, s
               <DetailCell label="Θ / day" value={`$${data.contractDetails.theta.toFixed(2)}`} mono />
               <DetailCell label="IV rank" value={`${data.contractDetails.ivRank}`} mono />
               <DetailCell label="DTE"     value={`${data.contractDetails.dte}d`} mono />
+              <DetailCell label="CaR"     value={`$${car.toFixed(0)}`} mono />
             </div>
           </section>
         )}
