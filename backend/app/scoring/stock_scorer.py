@@ -86,7 +86,7 @@ def _slope(series: list[float], lookback: int = 5) -> float:
 # Rule 1: Trend
 # ---------------------------------------------------------------------------
 
-def _rule_trend(closes: list[float], cfg: dict) -> RuleResult:
+def _rule_trend(closes: list[float], cfg: dict, direction: Direction = "Bullish") -> RuleResult:
     fast_p = cfg["trend"]["fast_ema"]
     slow_p = cfg["trend"]["slow_ema"]
     slow_required = cfg["trend"]["slow_slope_required"]
@@ -103,6 +103,36 @@ def _rule_trend(closes: list[float], cfg: dict) -> RuleResult:
     slow_slope = _slope(slow_ema)
     fast_slope = _slope(fast_ema)
 
+    if direction == "Bearish":
+        # Bearish: fast_ema must be BELOW slow_ema; slow must be declining for PASS
+        above = fast_val < slow_val   # inverted: fast below slow
+        slow_falling = slow_slope < 0
+        fast_falling = fast_slope < 0
+
+        if not above:
+            return RuleResult("trend", "REJECT", 10,
+                              {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2),
+                               "reason": "fast_above_slow_bearish"})
+
+        if slow_required and not slow_falling:
+            return RuleResult("trend", "REJECT", 20,
+                              {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2),
+                               "reason": "slow_ma_rising_bearish"})
+
+        if fast_required and not fast_falling:
+            return RuleResult("trend", "REJECT", 20,
+                              {"reason": "fast_ma_rising_required_bearish"})
+
+        if not fast_falling:
+            # Fast flat but not required — CAUTION
+            return RuleResult("trend", "CAUTION", 60,
+                              {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2),
+                               "reason": "fast_ma_flat_bearish"})
+
+        return RuleResult("trend", "PASS", 90,
+                          {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2)})
+
+    # --- Bullish (original logic) ---
     above = fast_val > slow_val
     slow_rising = slow_slope > 0
     fast_rising = fast_slope > 0
@@ -146,10 +176,9 @@ def _atr(bars: list[dict], period: int) -> float:
     return sum(trs) / len(trs)
 
 
-def _rule_pullback(bars: list[dict], cfg: dict) -> RuleResult:
+def _rule_pullback(bars: list[dict], cfg: dict, direction: Direction = "Bullish") -> RuleResult:
     pc = cfg["pullback"]
     closes = [b["close"] for b in bars]
-    highs = [b["high"] for b in bars]
 
     lookback = pc["swing_high_lookback_bars"]
     min_ago = pc["swing_high_min_bars_ago"]
@@ -166,6 +195,46 @@ def _rule_pullback(bars: list[dict], cfg: dict) -> RuleResult:
     if swing_range <= 0:
         return RuleResult("pullback", "CAUTION", 50, {"reason": "flat_range"})
 
+    if direction == "Bearish":
+        # Bearish pullback: price bounced above swing_low toward resistance then rejected.
+        # Retracement measured as how far price has risen from swing_low relative to the range.
+        # Same fib thresholds apply but from the low side:
+        #   shallow bounce (< fib_shallow_min) = no pullback yet, CAUTION
+        #   golden zone = best entry signal, PASS
+        retracement = (current_price - swing_low) / swing_range
+
+        fib_result = None
+        if retracement < pc["fib_shallow_min"]:
+            fib_result = ("CAUTION", 45, "no_bounce_yet")
+        elif retracement <= pc["fib_shallow_max"]:
+            fib_result = ("CAUTION", 55, "shallow_bounce")
+        elif retracement <= pc["fib_standard_max"]:
+            fib_result = ("CAUTION", 65, "standard_bounce")
+        elif retracement <= pc["fib_golden_max"]:
+            fib_result = ("PASS", 88, "golden_zone")
+        else:
+            # Bounced too far — fall back to ATR before rejecting
+            atr = _atr(bars, pc["atr_period"])
+            if atr > 0:
+                atr_mult = (current_price - swing_low) / atr
+                if atr_mult < pc["atr_pass_min"]:
+                    return RuleResult("pullback", "REJECT", 15,
+                                      {"reason": "too_shallow_atr_bearish", "atr_mult": round(atr_mult, 2)})
+                elif atr_mult <= pc["atr_pass_max"]:
+                    return RuleResult("pullback", "PASS", 80,
+                                      {"method": "atr_fallback", "atr_mult": round(atr_mult, 2)})
+                elif atr_mult <= pc["atr_caution_max"]:
+                    return RuleResult("pullback", "CAUTION", 55,
+                                      {"method": "atr_fallback", "atr_mult": round(atr_mult, 2)})
+            return RuleResult("pullback", "REJECT", 10,
+                              {"reason": "bounce_too_deep", "retracement_pct": round(retracement * 100, 1)})
+
+        status, score, reason = fib_result
+        return RuleResult("pullback", status, score,
+                          {"retracement_pct": round(retracement * 100, 1), "reason": reason,
+                           "swing_low": round(swing_low, 2), "current": round(current_price, 2)})
+
+    # --- Bullish (original logic) ---
     retracement = (swing_high - current_price) / swing_range
 
     fib_result = None
@@ -250,8 +319,8 @@ def _stoch(bars: list[dict], k: int = 14, d: int = 3) -> tuple[list[float], list
     return k_vals, d_vals
 
 
-def _detect_candle(bars: list[dict]) -> tuple[bool, str]:
-    """Check last bar for reversal candle. Returns (found, pattern_name)."""
+def _detect_candle(bars: list[dict], direction: Direction = "Bullish") -> tuple[bool, str]:
+    """Check last bar(s) for a reversal candle matching direction. Returns (found, pattern_name)."""
     if not bars:
         return False, ""
     b = bars[-1]
@@ -264,6 +333,36 @@ def _detect_candle(bars: list[dict]) -> tuple[bool, str]:
     lower_wick = body_bot - b["low"]
     upper_wick = b["high"] - body_top
 
+    if direction == "Bearish":
+        # Shooting star: small body at bottom of range, large upper wick, close near low
+        if (body >= 0.05 * rng and upper_wick >= 2 * body and
+                lower_wick <= 0.10 * rng and (b["high"] - b["close"]) / rng >= 0.65):
+            return True, "shooting_star"
+
+        # Bearish Engulfing (needs prior bar)
+        if len(bars) >= 2:
+            prev = bars[-2]
+            if (prev["close"] > prev["open"] and b["close"] < b["open"] and
+                    b["open"] >= prev["close"] and b["close"] <= prev["open"] and
+                    body >= 0.40 * rng):
+                return True, "bearish_engulfing"
+
+        # Evening Star (needs 3 bars)
+        if len(bars) >= 3:
+            b1, b2, b3 = bars[-3], bars[-2], bars[-1]
+            b1_body = abs(b1["close"] - b1["open"])
+            b2_body = abs(b2["close"] - b2["open"])
+            b3_body = abs(b3["close"] - b3["open"])
+            if (b1["close"] > b1["open"] and               # b1 bullish
+                    b2_body < b1_body * 0.4 and             # b2 small body (doji/spinning top)
+                    b3["close"] < b3["open"] and             # b3 bearish
+                    b3_body >= b1_body * 0.5 and             # b3 substantial body
+                    b3["close"] < (b1["open"] + b1["close"]) / 2):  # b3 closes into b1's body
+                return True, "evening_star"
+
+        return False, ""
+
+    # --- Bullish patterns (original logic) ---
     # Hammer
     if (body >= 0.05 * rng and lower_wick >= 2 * body and
             upper_wick <= 0.10 * rng and (b["close"] - b["low"]) / rng >= 0.65):
@@ -294,12 +393,12 @@ def _detect_candle(bars: list[dict]) -> tuple[bool, str]:
     return False, ""
 
 
-def _rule_trigger(bars: list[dict], cfg: dict, volumes: list[float]) -> tuple[RuleResult, bool]:
+def _rule_trigger(bars: list[dict], cfg: dict, volumes: list[float], direction: Direction = "Bullish") -> tuple[RuleResult, bool]:
     """Returns (RuleResult, volume_bonus)."""
     tc = cfg["trigger"]
     closes = [b["close"] for b in bars]
 
-    candle_found, candle_name = _detect_candle(bars)
+    candle_found, candle_name = _detect_candle(bars, direction)
 
     # MACD
     hist = _macd_histogram(closes, tc["macd_fast"], tc["macd_slow"], tc["macd_signal"])
@@ -467,9 +566,9 @@ def score_stock(
     closes = [b["close"] for b in bars]
     volumes = [b["volume"] for b in bars]
 
-    trend_result = _rule_trend(closes, cfg)
-    pullback_result = _rule_pullback(bars, cfg)
-    trigger_result, vol_bonus = _rule_trigger(bars, cfg, volumes)
+    trend_result = _rule_trend(closes, cfg, direction)
+    pullback_result = _rule_pullback(bars, cfg, direction)
+    trigger_result, vol_bonus = _rule_trigger(bars, cfg, volumes, direction)
     event_result = _rule_event(earnings_date, dividend_date, cfg)
     vol_result = _rule_vol(iv_rank, cfg)
 
