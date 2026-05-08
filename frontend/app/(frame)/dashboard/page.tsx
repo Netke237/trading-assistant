@@ -18,8 +18,11 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
 import { useScanStore } from '@/lib/scanStore';
+import { useAlertStore } from '@/lib/alertStore';
+import { scanPortfolio } from '@/lib/alertEngine';
 import { api } from '@/lib/api';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
+import { ToastContainer } from '@/components/organisms/ToastContainer';
 import type { WatchlistRow, PortfolioPosition, AlertItem, MarketRegime, NewsItem } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -44,6 +47,18 @@ export default function DashboardPage() {
   const [news, setNews]           = useState<NewsItem[]>([]);
   const [offline, setOffline]     = useState(false);
 
+  const toasts = useAlertStore((s) => s.toasts.filter((t) => !t.dismissed));
+  const allAlerts: AlertItem[] = [
+    ...alerts,
+    ...toasts.map((t) => ({
+      id: t.id,
+      kind: t.kind,
+      symbol: t.symbol,
+      reason: t.reason,
+      timestamp: toastTimestamp(t.id),
+    })),
+  ];
+
   useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
     api.getPortfolio().then(setPortfolio).catch(() => setOffline(true));
@@ -55,6 +70,19 @@ export default function DashboardPage() {
     if (watchlist.length === 0) return;
     api.getNews(watchlist.map((r) => r.symbol)).then(setNews).catch(() => {});
   }, [watchlist]);
+
+  useEffect(() => {
+    const tick = () => {
+      const reasons = scanPortfolio(portfolio);
+      const addToast = useAlertStore.getState().addToast;
+      for (const r of reasons) {
+        addToast(r);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, [portfolio]);
 
   const top5 = watchlist.slice(0, 5);
 
@@ -161,9 +189,9 @@ export default function DashboardPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Alerts" count={alerts.length}>
+        <SectionCard title="Alerts" count={allAlerts.length}>
           <div className={styles.alertList}>
-            {alerts.slice(0, 5).map((a) => (
+            {allAlerts.slice(0, 5).map((a) => (
               <AlertRow
                 key={a.id}
                 kind={a.kind}
@@ -225,6 +253,7 @@ export default function DashboardPage() {
       </div>
 
       <RunScanButton />
+      <ToastContainer />
     </div>
   );
 }
@@ -251,4 +280,10 @@ function toneFor(status: string): 'pass' | 'caution' | 'reject' | undefined {
   if (status === 'CAUTION') return 'caution';
   if (status === 'REJECT')  return 'reject';
   return undefined;
+}
+
+function toastTimestamp(id: string): string {
+  const ts = parseInt(id.slice(0, 8), 36);
+  const d = new Date(ts);
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }

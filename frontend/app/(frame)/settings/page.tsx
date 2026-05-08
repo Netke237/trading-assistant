@@ -15,6 +15,8 @@ import { useState, useEffect } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore } from '@/lib/settingsStore';
+import { useAlertStore, DEFAULT_CONFIG } from '@/lib/alertStore';
+import type { AlertType } from '@/types/domain';
 import type { WeightKey, CustomWeights, CustomParams } from '@/lib/settingsStore';
 import styles from './page.module.css';
 
@@ -516,7 +518,27 @@ function WeightsForm() {
 
 /* ---------- Alerts ---------- */
 
+const ALERT_TYPE_LABELS: Record<AlertType, string> = {
+  TP_HIT: 'Target reached',
+  STOP_REACHED: 'Stop-loss breach',
+  PREMIUM_STOP: 'Premium stop (–50%)',
+  TIME_STOP_APPROACHING: 'Time stop approaching',
+  EARNINGS_APPROACHING: 'Earnings within 3 days',
+  EXPIRATION_APPROACHING: 'Expiration within 3 days',
+  REGIME_CHANGE: 'Regime flip',
+  SCAN_COMPLETE: 'Scan complete',
+};
+
 function AlertsForm() {
+  const { config, setConfig } = useAlertStore();
+
+  function toggleType(type: AlertType, on: boolean) {
+    const next = on
+      ? [...config.enabledTypes, type]
+      : config.enabledTypes.filter((t) => t !== type);
+    setConfig({ ...config, enabledTypes: next });
+  }
+
   return (
     <>
       <SectionIntro
@@ -524,33 +546,48 @@ function AlertsForm() {
         blurb="In-app alerts only. Email / push integrations arrive in Phase 7."
       />
       <Row
-        label="Stop-loss breach"
-        hint="Fires when an open position closes past your stop."
-        defaultValue="On"
+        label="Deduplication window"
+        hint="Minutes before the same alert can fire again."
+        defaultValue="15"
       >
-        <Toggle defaultOn />
+        <input
+          type="number"
+          className={styles.input}
+          min={1}
+          max={120}
+          value={config.dedupWindowMinutes}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            if (val >= 1 && val <= 120) {
+              setConfig({ ...config, dedupWindowMinutes: val });
+            }
+          }}
+        />
       </Row>
       <Row
-        label="Target reached"
-        hint="Fires at the first take-profit level."
-        defaultValue="On"
-      >
-        <Toggle defaultOn />
-      </Row>
-      <Row
-        label="Earnings within 3 days"
-        hint="Warns before a held name reports."
-        defaultValue="On"
-      >
-        <Toggle defaultOn />
-      </Row>
-      <Row
-        label="Regime flip"
-        hint="Dashboard banner always updates; this is an extra toast."
+        label="Sound"
+        hint="Play a short tone when a new toast appears."
         defaultValue="Off"
       >
-        <Toggle />
+        <Toggle
+          defaultOn={config.soundEnabled}
+          onChange={(on) => setConfig({ ...config, soundEnabled: on })}
+        />
       </Row>
+      {(Object.keys(ALERT_TYPE_LABELS) as AlertType[]).map((type) => (
+        <Row
+          key={type}
+          label={ALERT_TYPE_LABELS[type]}
+          defaultValue={
+            DEFAULT_CONFIG.enabledTypes.includes(type) ? 'On' : 'Off'
+          }
+        >
+          <Toggle
+            defaultOn={config.enabledTypes.includes(type)}
+            onChange={(on) => toggleType(type, on)}
+          />
+        </Row>
+      ))}
     </>
   );
 }
