@@ -9,7 +9,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-export const WATCHED_CONTRACTS_STORAGE_KEY = 'bamendjou:watched-contracts';
+export const WATCHED_CONTRACTS_STORAGE_KEY = 'bamendjou-watched-contracts-v1';
 
 interface WatchedContractsState {
   /** Canonical contract ids, e.g. "AAPL|190|2026-05-15|C". */
@@ -43,6 +43,7 @@ export const useWatchedContractsStore = create<WatchedContractsState>()(
     {
       name: WATCHED_CONTRACTS_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ ids: state.ids }),
       version: 1,
     }
   )

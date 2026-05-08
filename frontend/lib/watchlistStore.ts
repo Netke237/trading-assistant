@@ -8,7 +8,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-export const WATCHLIST_STORAGE_KEY = 'bamendjou:watchlist';
+export const WATCHLIST_STORAGE_KEY = 'bamendjou-watchlist-v1';
 
 const SEED_SYMBOLS: string[] = [];
 
@@ -43,6 +43,7 @@ export const useWatchlistStore = create<WatchlistState>()(
     {
       name: WATCHLIST_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ added: state.added }),
       version: 1,
       migrate: (persistedState, version) => {
         const prev = (persistedState as Partial<WatchlistState> | null) ?? {};

@@ -69,6 +69,8 @@ export interface PortfolioPosition {
   source?:       'broker' | 'manual';
   /** ISO timestamp of when the order was created (from Step 7). */
   orderedAt?:    string;
+  /** Unique recommendation / position ID. */
+  recId:         string;
 }
 
 export interface AlertItem {
