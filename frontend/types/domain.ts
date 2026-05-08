@@ -90,6 +90,8 @@ export interface AlertItem {
   symbol:    string;
   reason:    string;
   timestamp: string;           // "09:42" or ISO
+  recId:     string;
+  alertType: AlertType;
 }
 
 export interface UpcomingEvent {
@@ -217,6 +219,8 @@ export type AlertType =
   | 'TIME_STOP_APPROACHING'
   | 'EARNINGS_APPROACHING'
   | 'EXPIRATION_APPROACHING'
+  | 'TIME_STOP'
+  | 'EVENT_RISK'
   | 'REGIME_CHANGE'
   | 'SCAN_COMPLETE';
 
@@ -232,6 +236,8 @@ export interface ToastItem {
   symbol: string;
   reason: string;
   dismissed: boolean;
+  recId: string;
+  alertType: AlertType;
 }
 
 // --- Risk management ---

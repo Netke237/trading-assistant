@@ -156,6 +156,8 @@ class AlertItem(BaseModel):
     symbol: str
     reason: str
     timestamp: str
+    recId: str = ""
+    alertType: str = "SCAN_COMPLETE"
 
 
 # ── Events ───────────────────────────────────────────────────────────────────

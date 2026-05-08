@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ToastItem, AlertConfig } from '@/types/domain';
+import type { ToastItem, AlertConfig, AlertType } from '@/types/domain';
+import { useSettingsStore } from '@/lib/settingsStore';
 
 interface AlertStoreState {
   toasts: ToastItem[];
   unreadCount: number;
   config: AlertConfig;
+  firedAlerts: Record<string, number>;
   addToast: (item: Omit<ToastItem, 'id' | 'dismissed'>) => void;
   dismissToast: (id: string) => void;
   clearAll: () => void;
@@ -15,14 +17,15 @@ interface AlertStoreState {
 export const DEFAULT_CONFIG: AlertConfig = {
   dedupWindowMinutes: 15,
   enabledTypes: [
-    'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP_APPROACHING',
-    'EARNINGS_APPROACHING', 'EXPIRATION_APPROACHING',
+    'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP',
+    'EVENT_RISK', 'REGIME_CHANGE', 'SCAN_COMPLETE',
+    'TIME_STOP_APPROACHING', 'EARNINGS_APPROACHING', 'EXPIRATION_APPROACHING',
   ],
   soundEnabled: false,
 };
 
-function makeDedupKey(item: Omit<ToastItem, 'id' | 'dismissed'>): string {
-  return `${item.kind}:${item.symbol}:${item.reason}`;
+function makeDedupKey(recId: string, alertType: AlertType | string): string {
+  return `${recId}-${alertType}`;
 }
 
 export const useAlertStore = create<AlertStoreState>()(
@@ -31,34 +34,44 @@ export const useAlertStore = create<AlertStoreState>()(
       toasts: [],
       unreadCount: 0,
       config: DEFAULT_CONFIG,
+      firedAlerts: {},
+
       addToast: (item) => {
-        const { toasts, config } = get();
-        const key = makeDedupKey(item);
-        const windowMs = config.dedupWindowMinutes * 60_000;
+        const { toasts, config, firedAlerts } = get();
+        const dedupHours = useSettingsStore.getState().alertDeduplicationHours;
         const now = Date.now();
+        const windowMs = dedupHours * 3_600_000;
 
-        const duplicate = toasts.find((t) => {
-          if (t.dismissed) return false;
-          return makeDedupKey(t) === key && now - parseInt(t.id, 36) < windowMs;
-        });
+        const evicted: Record<string, number> = {};
+        for (const [key, ts] of Object.entries(firedAlerts)) {
+          if (now - ts <= windowMs) {
+            evicted[key] = ts;
+          }
+        }
 
-        if (duplicate) return;
+        const compositeKey = makeDedupKey(item.recId, item.alertType);
+        if (compositeKey in evicted) return;
 
+        evicted[compositeKey] = now;
         const id = now.toString(36) + Math.random().toString(36).slice(2, 6);
         const toast: ToastItem = { ...item, id, dismissed: false };
         set({
           toasts: [...toasts, toast],
           unreadCount: get().unreadCount + 1,
+          firedAlerts: evicted,
         });
       },
+
       dismissToast: (id) => {
         set((s) => ({
           toasts: s.toasts.map((t) => (t.id === id ? { ...t, dismissed: true } : t)),
         }));
       },
+
       clearAll: () => {
         set({ unreadCount: 0 });
       },
+
       setConfig: (c) => {
         set({ config: c });
       },
