@@ -6,7 +6,13 @@ from datetime import datetime, timezone
 import yaml
 from functools import lru_cache as _lru_cache
 from pathlib import Path as _Path
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.database import AsyncSessionLocal, get_db
+from app.models.scan_session import ScanSession
+import json as _json
 
 _RR_CONFIG_PATH = _Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
@@ -111,8 +117,48 @@ def _augment(c: dict) -> dict:
     }
 
 
+async def _upsert_session(
+    db: AsyncSession,
+    req: ScanRequest | None,
+    result: ScanResult | None,
+    status: str,
+) -> None:
+    """Persist scan state to the DB as a single row with id='current'."""
+    await db.merge(
+        ScanSession(
+            id="current",
+            status=status,
+            last_result_json=result.model_dump_json() if result else None,
+            last_request_json=req.model_dump_json() if req else None,
+        )
+    )
+    await db.commit()
+
+
+async def restore_from_db() -> str | None:
+    """Restore _last_request and _last_result from DB on startup.
+
+    Returns the stored status string so the caller can auto-resume the scheduler.
+    """
+    global _last_request, _last_result
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(select(ScanSession).where(ScanSession.id == "current"))
+        except Exception:
+            # Table may not exist (e.g., test_app.py with no DB)
+            return None
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        if row.last_result_json:
+            _last_result = ScanResult.model_validate_json(row.last_result_json)
+        if row.last_request_json:
+            _last_request = ScanRequest.model_validate_json(row.last_request_json)
+        return row.status
+
+
 @router.post('/scan', response_model=ScanResult)
-async def run_scan(req: ScanRequest) -> ScanResult:
+async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> ScanResult:
     global _last_request, _last_result
     _last_request = req
     scan_id = new_rec_id()
@@ -338,6 +384,7 @@ async def run_scan(req: ScanRequest) -> ScanResult:
         original_count=original_count,
     )
     _last_result = result
+    await _upsert_session(db, req=_last_request, result=result, status="complete")
     return result
 
 
@@ -347,22 +394,27 @@ async def _scheduled_scan() -> ScanResult:
     """Wrapper used by the scheduler. Re-uses the last request configuration."""
     if _last_request is None:
         raise RuntimeError("No previous scan request to repeat")
-    return await run_scan(_last_request)
+    async with AsyncSessionLocal() as db:
+        return await run_scan(_last_request, db)
 
 
 @router.post('/scan/continuous', response_model=ContinuousScanConfig)
-async def start_continuous_scan(config: ContinuousScanConfig) -> ContinuousScanConfig:
+async def start_continuous_scan(
+    config: ContinuousScanConfig, db: AsyncSession = Depends(get_db)
+) -> ContinuousScanConfig:
     """Start (or restart) the continuous scan scheduler."""
     _scheduler.set_cadence(config.cadence_minutes)
     _scheduler.bind(_scheduled_scan)
     await _scheduler.start()
+    await _upsert_session(db, req=_last_request, result=_last_result, status="running")
     return config
 
 
 @router.delete('/scan/continuous')
-async def stop_continuous_scan() -> dict:
+async def stop_continuous_scan(db: AsyncSession = Depends(get_db)) -> dict:
     """Stop the continuous scan scheduler."""
     await _scheduler.stop()
+    await _upsert_session(db, req=_last_request, result=_last_result, status="stopped")
     return {"status": "stopped"}
 
 

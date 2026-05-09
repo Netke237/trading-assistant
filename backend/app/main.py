@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,6 +20,20 @@ from app.routers.scan       import router as scan_router
 from app.routers.news       import router as news_router
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── Startup ──────────────────────────────────────────────────────────
+    from app.routers.scan import restore_from_db, _scheduler, _scheduled_scan
+    status = await restore_from_db()
+    if status == "running":
+        _scheduler.bind(_scheduled_scan)
+        await _scheduler.start()
+    yield
+    # ── Shutdown ─────────────────────────────────────────────────────────
+    if _scheduler._running:
+        await _scheduler.stop()
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
 
@@ -26,6 +42,7 @@ def create_app() -> FastAPI:
         version="0.1.0",
         description="Backend API for the Trading Assistant options screener.",
         debug=settings.DEBUG,
+        lifespan=lifespan,
     )
 
     app.add_middleware(
