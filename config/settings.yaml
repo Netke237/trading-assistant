@@ -8,6 +8,7 @@ scan:
   cadence_minutes: 30
   max_symbols: 150
   min_valid_stocks: 5
+  shortlist_max_candidates: 10
 
 risk:
   max_exposure_per_trade_pct: 10

@@ -2,9 +2,8 @@
  * Settings store — Zustand with localStorage persistence.
  *
  * Persists the Custom tab's score weights (customW) and indicator
- * parameters (customParams) across page refreshes. All other settings
- * tabs (Broker, Appearance, Alerts) use local component state and are
- * NOT persisted here.
+ * parameters (customParams) across page refreshes. Also persists broker
+ * config, alertDeduplicationHours, and IV thresholds.
  *
  * Default values mirror the Swing preset so Custom starts populated.
  */
@@ -51,45 +50,82 @@ export interface BrokerConfig {
 }
 
 interface SettingsState {
-  customW:      CustomWeights;
-  customParams: CustomParams;
-  broker:       BrokerConfig;
-  setCustomW:        (w: CustomWeights) => void;
-  setCustomParams:   (p: CustomParams) => void;
-  setBroker:         (b: BrokerConfig) => void;
-  resetToDefaults:   () => void;
+  customW:                 CustomWeights;
+  customParams:            CustomParams;
+  broker:                  BrokerConfig;
+  alertDeduplicationHours: number;
+  ivPassThreshold:         number;
+  ivCautionThreshold:      number;
+  setCustomW:                   (w: CustomWeights) => void;
+  setCustomParams:              (p: CustomParams) => void;
+  setBroker:                    (b: BrokerConfig) => void;
+  setAlertDeduplicationHours:   (h: number) => void;
+  setIvPassThreshold:           (n: number) => void;
+  setIvCautionThreshold:        (n: number) => void;
+  resetToDefaults:              () => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      customW:      { ...DEFAULT_WEIGHTS },
-      customParams: structuredClone(DEFAULT_PARAMS),
-      broker:       { ...DEFAULT_BROKER },
-      setCustomW: (w) => set({ customW: w }),
-      setCustomParams: (p) => set({ customParams: p }),
-      setBroker: (b) => set({ broker: b }),
+      customW:                 { ...DEFAULT_WEIGHTS },
+      customParams:            JSON.parse(JSON.stringify(DEFAULT_PARAMS)) as CustomParams,
+      broker:                  { ...DEFAULT_BROKER },
+      alertDeduplicationHours: 1,
+      ivPassThreshold:         60,
+      ivCautionThreshold:      35,
+      setCustomW:                   (w) => set({ customW: w }),
+      setCustomParams:              (p) => set({ customParams: p }),
+      setBroker:                    (b) => set({ broker: b }),
+      setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
+      setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
+      setIvCautionThreshold:        (n) => set({ ivCautionThreshold: n }),
       resetToDefaults: () => set({
-        customW:      { ...DEFAULT_WEIGHTS },
-        customParams: structuredClone(DEFAULT_PARAMS),
-        broker:       { ...DEFAULT_BROKER },
+        customW:                 { ...DEFAULT_WEIGHTS },
+        customParams:            JSON.parse(JSON.stringify(DEFAULT_PARAMS)) as CustomParams,
+        broker:                  { ...DEFAULT_BROKER },
+        alertDeduplicationHours: 1,
+        ivPassThreshold:         60,
+        ivCautionThreshold:      35,
       }),
     }),
     {
       name: SETTINGS_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 4,
       migrate: (persistedState, version) => {
         const prev = (persistedState as Partial<SettingsState> | null) ?? {};
         if (version < 2) {
           return {
+            ...prev,
             customW:      prev.customW      ?? { ...DEFAULT_WEIGHTS },
-            customParams: prev.customParams ?? structuredClone(DEFAULT_PARAMS),
+            customParams: prev.customParams ?? JSON.parse(JSON.stringify(DEFAULT_PARAMS)) as CustomParams,
             broker:       prev.broker       ?? { ...DEFAULT_BROKER },
+          } as SettingsState;
+        }
+        if (version < 3) {
+          return {
+            ...prev,
+            alertDeduplicationHours: 1,
+          } as SettingsState;
+        }
+        if (version < 4) {
+          return {
+            ...prev,
+            ivPassThreshold:    60,
+            ivCautionThreshold: 35,
           } as SettingsState;
         }
         return prev as SettingsState;
       },
+      partialize: (state) => ({
+        customW:                 state.customW,
+        customParams:            state.customParams,
+        broker:                  state.broker,
+        alertDeduplicationHours: state.alertDeduplicationHours,
+        ivPassThreshold:         state.ivPassThreshold,
+        ivCautionThreshold:      state.ivCautionThreshold,
+      }),
     }
   )
 );

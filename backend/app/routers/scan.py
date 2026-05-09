@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import pathlib
+import uuid
+import yaml
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
@@ -18,10 +23,16 @@ from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.entry_quality import assess_entry
 from app.scoring.reward_risk import estimate_rr
 from app.models.heston import calibrate_heston
+from app.models.scan_session import ScanSession
 from app.services.audit import new_rec_id, log_event
+from app.database import get_db
 
 router = APIRouter(prefix='/api', tags=['scan'])
 
+# Load settings once at module level (patchable in tests via app.routers.scan._settings)
+_settings: dict = yaml.safe_load(
+    (pathlib.Path(__file__).parent.parent.parent.parent / "config" / "settings.yaml").read_text()
+)
 
 _ORDER = {"REJECT": 0, "CAUTION": 1, "PASS": 2}
 
@@ -48,10 +59,29 @@ def _augment(c: dict) -> dict:
     }
 
 
+@router.get('/scan/status')
+async def scan_status(db: AsyncSession = Depends(get_db)) -> dict:
+    """Return the most recent scan session status from the DB."""
+    q = select(ScanSession).order_by(ScanSession.updated_at.desc()).limit(1)
+    row = (await db.execute(q)).scalars().first()
+    if row is None:
+        return {"status": "idle", "scan_id": None}
+    return {"status": row.status, "scan_id": row.id}
+
+
 @router.post('/scan', response_model=ScanResult)
-async def run_scan(req: ScanRequest) -> ScanResult:
+async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> ScanResult:
     scan_id = new_rec_id()
     log_event("scan_started", scan_id, {"universe": req.universe, "direction": req.direction})
+
+    # Persist "running" status
+    session_row = ScanSession(
+        id=str(uuid.uuid4()),
+        status="running",
+    )
+    db.add(session_row)
+    await db.commit()
+    await db.refresh(session_row)
 
     candidates: list[TradeCardData] = []
     rejected: list[RejectedCandidate] = []
@@ -219,9 +249,24 @@ async def run_scan(req: ScanRequest) -> ScanResult:
             rejected.append(RejectedCandidate(symbol=symbol, reason=str(e)))
             log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": str(e)})
 
-    return ScanResult(
+    # ── Shortlist cap ─────────────────────────────────────────────────────────
+    max_candidates: int = _settings.get("scan", {}).get("shortlist_max_candidates", 10)
+    original_count: int = len(candidates)
+    shortlist_truncated: bool = original_count > max_candidates
+    candidates = candidates[:max_candidates]
+
+    result = ScanResult(
         scan_id=scan_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
         candidates=candidates,
         rejected=rejected,
+        shortlist_truncated=shortlist_truncated,
+        original_count=original_count,
     )
+
+    # Persist "complete" status + serialized result
+    session_row.status = "complete"
+    session_row.last_result_json = result.model_dump_json()
+    await db.commit()
+
+    return result

@@ -232,3 +232,5 @@ class ScanResult(BaseModel):
     timestamp: str
     candidates: list[TradeCardData]
     rejected: list[RejectedCandidate]
+    shortlist_truncated: bool = False
+    original_count: int = 0

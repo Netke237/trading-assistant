@@ -515,6 +515,15 @@ function WeightsForm() {
 /* ---------- Alerts ---------- */
 
 function AlertsForm() {
+  const { ivPassThreshold, ivCautionThreshold, setIvPassThreshold, setIvCautionThreshold } =
+    useSettingsStore();
+  const [localIvPass,    setLocalIvPass]    = useState(ivPassThreshold);
+  const [localIvCaution, setLocalIvCaution] = useState(ivCautionThreshold);
+
+  // Sync local state when store updates (e.g. after reset)
+  useEffect(() => { setLocalIvPass(ivPassThreshold); },    [ivPassThreshold]);
+  useEffect(() => { setLocalIvCaution(ivCautionThreshold); }, [ivCautionThreshold]);
+
   return (
     <>
       <SectionIntro
@@ -548,6 +557,44 @@ function AlertsForm() {
         defaultValue="Off"
       >
         <Toggle />
+      </Row>
+      <Row
+        label="IV Pass Threshold"
+        hint="IV rank at or above this value scores PASS in Step 5."
+        defaultValue="60"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          value={localIvPass}
+          min={0}
+          max={100}
+          step={1}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            setLocalIvPass(n);
+            setIvPassThreshold(n);
+          }}
+        />
+      </Row>
+      <Row
+        label="IV Caution Threshold"
+        hint="IV rank at or above this value scores CAUTION in Step 5; below scores REJECT."
+        defaultValue="35"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          value={localIvCaution}
+          min={0}
+          max={100}
+          step={1}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            setLocalIvCaution(n);
+            setIvCautionThreshold(n);
+          }}
+        />
       </Row>
     </>
   );
