@@ -89,6 +89,60 @@ describe('scanStore', () => {
     expect(result.current.scanResult).toEqual(mockResult);
   });
 
+  it('shifts old scan result into previousRun when setting new result', () => {
+    const { result } = renderHook(() => useScanStore());
+    const firstResult = {
+      scan_id: 'REC-20260504-A1B2C3D4',
+      timestamp: '2026-05-04T09:30:00',
+      candidates: [{ symbol: 'AAPL', stockScore: 80 } as any],
+    };
+    const secondResult = {
+      scan_id: 'REC-20260505-E5F6G7H8',
+      timestamp: '2026-05-05T10:00:00',
+      candidates: [{ symbol: 'AAPL', stockScore: 85 } as any],
+    };
+
+    act(() => {
+      result.current.setScanResult(firstResult);
+    });
+    expect(result.current.scanResult).toEqual(firstResult);
+    expect(result.current.previousRun).toBeNull();
+
+    act(() => {
+      result.current.setScanResult(secondResult);
+    });
+    expect(result.current.scanResult).toEqual(secondResult);
+    expect(result.current.previousRun).toEqual(firstResult);
+  });
+
+  it('preserves previousRun when clearing scan result', () => {
+    const { result } = renderHook(() => useScanStore());
+    const firstResult = {
+      scan_id: 'REC-1',
+      timestamp: '2026-05-04T09:30:00',
+      candidates: [],
+    };
+    const secondResult = {
+      scan_id: 'REC-2',
+      timestamp: '2026-05-05T10:00:00',
+      candidates: [],
+    };
+
+    act(() => {
+      result.current.setScanResult(firstResult);
+    });
+    act(() => {
+      result.current.setScanResult(secondResult);
+    });
+    expect(result.current.previousRun).toEqual(firstResult);
+
+    act(() => {
+      result.current.setScanResult(null);
+    });
+    expect(result.current.scanResult).toBeNull();
+    expect(result.current.previousRun).toEqual(firstResult);
+  });
+
   it('sets selected symbol', () => {
     const { result } = renderHook(() => useScanStore());
 

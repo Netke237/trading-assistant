@@ -51,7 +51,10 @@ export const useScanStore = create<ScanStoreState>((set) => ({
   setScanState:    (s, at) => set({ scanState: s, scanAt: at ?? null }),
   setContext:      (c) => set({ context: c }),
   setRegime:       (r) => set({ regime: r }),
-  setScanResult:   (r) => set({ scanResult: r }),
+  setScanResult:   (r) => set((state) => ({
+    scanResult: r,
+    previousRun: r !== null ? state.scanResult : state.previousRun,
+  })),
   setPreviousRun:  (r) => set({ previousRun: r }),
   setSelectedSymbol: (s) => set({ selectedSymbol: s }),
   setConflictedSymbols: (symbols) => set({ conflictedSymbols: symbols }),
