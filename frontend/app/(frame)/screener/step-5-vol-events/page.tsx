@@ -41,7 +41,8 @@ function cardToRow(c: TradeCardData): WatchlistRow {
 }
 
 export default function Step5Page() {
-  const candidates = useScanStore((s) => s.scanResult?.candidates ?? []);
+  const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
+  const candidates           = scanResultCandidates ?? [];
   const ivPassThreshold    = useSettingsStore((s) => s.ivPassThreshold);
   const ivCautionThreshold = useSettingsStore((s) => s.ivCautionThreshold);
   const watchlist = useMemo(() => candidates.map(cardToRow), [candidates]);
@@ -62,7 +63,8 @@ export default function Step5Page() {
         <Text size={11} tone="dim" weight={500}>STEP 5 OF 7</Text>
         <Title as="h1" size={24}>Volatility + Events</Title>
         <Text size={13} tone="secondary">
-          IV rank sweet-spot: 35–100 preferred. Earnings within 7 days → CAUTION; within 3 days → REJECT.
+          IV rank ≥ {ivPassThreshold} → PASS; ≥ {ivCautionThreshold} → CAUTION; below → REJECT.
+          Earnings within 7 days → CAUTION; within 3 days → REJECT.
           Gate = worst of IV and event proximity.
         </Text>
       </div>

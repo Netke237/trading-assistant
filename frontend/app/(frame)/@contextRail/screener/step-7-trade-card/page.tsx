@@ -74,9 +74,10 @@ function buildChecklist(
 }
 
 export default function TradeCardContextRail() {
-  const selectedSymbol = useScanStore((s) => s.selectedSymbol);
-  const regime         = useScanStore((s) => s.regime);
-  const candidates     = useScanStore((s) => s.scanResult?.candidates ?? []);
+  const selectedSymbol      = useScanStore((s) => s.selectedSymbol);
+  const regime              = useScanStore((s) => s.regime);
+  const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
+  const candidates          = scanResultCandidates ?? [];
 
   const candidate = candidates.find((c) => c.symbol === selectedSymbol) ?? candidates[0];
 
