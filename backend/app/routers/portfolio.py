@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.portfolio import PortfolioPositionModel
 from app.schemas import PortfolioPositionCreate, PortfolioPositionSchema
+from app.services.portfolio_risk import check_position_risk, PortfolioPosition as RiskPosition
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -29,6 +30,36 @@ async def add_position(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Position with contract '{body.contract}' already exists.",
+        )
+
+    # Fetch existing portfolio for risk check
+    result = await db.execute(select(PortfolioPositionModel))
+    db_positions = result.scalars().all()
+    portfolio = [
+        RiskPosition(
+            symbol=p.symbol,
+            contract_id=p.contract,
+            contracts=p.qty,
+            entry_premium=p.entry_price,
+            current_price=p.entry_price,
+            capital_at_risk=p.entry_price * p.qty * 100,
+        )
+        for p in db_positions
+    ]
+
+    risk = check_position_risk(
+        symbol=body.symbol,
+        contract_id=body.contract,
+        proposed_contracts=body.qty,
+        entry_premium=body.entryPrice,
+        current_price=body.entryPrice,
+        portfolio=portfolio,
+        portfolio_value=body.portfolioValue,
+    )
+    if not risk.approved:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=" ".join(risk.reasons),
         )
 
     position = PortfolioPositionModel(
