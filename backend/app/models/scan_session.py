@@ -16,8 +16,9 @@ class ScanSession(ScanSessionBase):
     id               = Column(String, primary_key=True)   # UUID string
     status           = Column(String, nullable=False, default="idle")
     # "idle" | "running" | "complete"
-    last_result_json = Column(Text, nullable=True)         # JSON-serialized ScanResult
-    created_at       = Column(
+    last_result_json  = Column(Text, nullable=True)         # JSON-serialized ScanResult
+    last_request_json = Column(Text, nullable=True)         # JSON-serialized ScanRequest
+    created_at        = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
