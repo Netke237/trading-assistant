@@ -144,66 +144,7 @@ def calibrate_heston(
 ) -> CalibrationResult:
     """
     Calibrate Heston parameters to an observed option chain.
-
-    Args:
-        option_chain: list of dicts with keys:
-                      strike (float), expiry_years (float), mid_price (float), is_call (bool)
-        S:            current underlying price
-        r:            risk-free rate
-
-    Returns:
-        CalibrationResult with best-fit HestonParams and RMSE.
-        Falls back to HestonParams with BS-implied v0 if chain is thin.
+    Delegates to cached implementation with 2-second timeout + BS fallback.
     """
-    # Filter to usable contracts (price > 0, T > 0)
-    chain = [c for c in option_chain
-             if c.get("mid_price", 0) > 0 and c.get("expiry_years", 0) > 0]
-
-    if len(chain) < 3:
-        # Too thin - return BS-implied variance as v0, neutral Heston params
-        ivs = [bs_iv(c["mid_price"], S, c["strike"], c["expiry_years"], r, c.get("is_call", True))
-               for c in chain if c.get("mid_price", 0) > 0]
-        ivs = [iv for iv in ivs if iv is not None]
-        v0_seed = (sum(ivs) / len(ivs)) ** 2 if ivs else 0.04
-        fallback = HestonParams(v0=v0_seed, kappa=2.0, theta=v0_seed, sigma_v=0.3, rho=-0.7)
-        return CalibrationResult(params=fallback, rmse=float("inf"), method="bs_fallback")
-
-    # Grid search
-    best_rmse = float("inf")
-    best_params = None
-
-    v0_grid = [0.01, 0.04, 0.09]
-    kappa_grid = [0.5, 1.5, 3.0]
-    theta_grid = [0.02, 0.04, 0.08]
-    sigma_v_grid = [0.2, 0.4, 0.6]
-    rho_grid = [-0.8, -0.5, -0.2]
-
-    for v0 in v0_grid:
-        for kappa in kappa_grid:
-            for theta in theta_grid:
-                for sigma_v in sigma_v_grid:
-                    for rho in rho_grid:
-                        params = HestonParams(v0=v0, kappa=kappa, theta=theta,
-                                             sigma_v=sigma_v, rho=rho)
-                        sse = 0.0
-                        valid = 0
-                        for c in chain:
-                            try:
-                                model_p = heston_price(S, c["strike"], c["expiry_years"],
-                                                       r, params, c.get("is_call", True))
-                                sse += (model_p - c["mid_price"]) ** 2
-                                valid += 1
-                            except Exception:
-                                continue
-                        if valid == 0:
-                            continue
-                        rmse = math.sqrt(sse / valid)
-                        if rmse < best_rmse:
-                            best_rmse = rmse
-                            best_params = params
-
-    if best_params is None:
-        fallback = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
-        return CalibrationResult(params=fallback, rmse=float("inf"), method="bs_fallback")
-
-    return CalibrationResult(params=best_params, rmse=round(best_rmse, 6), method="heston_grid")
+    from app.models.heston_cache import calibrate_cached
+    return calibrate_cached(option_chain, S, r)
