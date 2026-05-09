@@ -285,7 +285,7 @@ class PortfolioPositionCreate(BaseModel):
     stop: Optional[float] = None
     targets: list[dict] = []
     dteTotal: Optional[int] = Field(alias="dte_total", default=None)
-    portfolioValue: float = Field(alias="portfolio_value", default=0.0)
+    portfolioValue: float = Field(alias="portfolio_value", default=50000.0)
 
     def __init__(self, **data):
         # Support both camelCase and snake_case field names
