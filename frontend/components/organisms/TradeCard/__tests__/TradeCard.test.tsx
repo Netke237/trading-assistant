@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import type { TradeCardData } from '@/types/domain';
 
@@ -13,7 +13,7 @@ jest.mock('@/components/molecules/SymbolHeader', () => ({
   SymbolHeader: ({ ticker, company }: { ticker: string; company: string }) => (
     <div data-testid="symbol-header">{ticker} — {company}</div>
   ),
-}));
+}))
 
 jest.mock('@/components/molecules/ScoreCardPanel', () => ({
   ScoreCardPanel: ({ title }: { title: string }) => (
@@ -72,7 +72,9 @@ const mockTradeCard: TradeCardData = {
     premiumStop: 1.5,
     timeStopDays: 10,
     target: 200.02,
-    targets: [{ id: 'tp1', stockPrice: 200.02, contractsToSell: 1, status: 'PENDING' }],
+    targets: [
+      { id: 'tp1', stockPrice: 200.02, targetPrice: 200.02, estimatedOptionPrice: 5.0, contractsToSell: 1, status: 'PENDING', rrContribution: 1.0 },
+    ],
   },
   rrRatio: 2.5,
   rrModel: 'Heston repriced',
@@ -101,35 +103,36 @@ describe('TradeCard', () => {
     expect(screen.getByText('$-0.09')).toBeInTheDocument();
     expect(screen.getByText('45')).toBeInTheDocument();
     expect(screen.getByText('24d')).toBeInTheDocument();
-    // mid value $2.50 appears in both contract details and entry plan
     const mids = screen.getAllByText('$2.50');
     expect(mids.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders entry plan details', () => {
+  it('renders entry plan section', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Entry Plan')).toBeInTheDocument();
-    // "Limit" appears as label and value
-    const limits = screen.getAllByText('Limit');
-    expect(limits.length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('$2.63')).toBeInTheDocument();
+    expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument();
+    expect(screen.getByLabelText('Edit Max fill')).toBeInTheDocument();
+    expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
   });
 
-  it('renders exit plan details', () => {
+  it('renders exit plan section', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Exit Plan')).toBeInTheDocument();
-    expect(screen.getByText('$179.64')).toBeInTheDocument();
-    expect(screen.getByText('$1.50')).toBeInTheDocument();
-    expect(screen.getByText('10d')).toBeInTheDocument();
-    expect(screen.getByText('$200.02')).toBeInTheDocument();
+    expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
+    expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
+    expect(screen.getByLabelText('Edit Time stop')).toBeInTheDocument();
+  });
+
+  it('renders sell-to-close plan with editable target', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    expect(screen.getByText('Sell-to-Close Plan')).toBeInTheDocument();
+    expect(screen.getByLabelText('Edit target stock price for TP1')).toBeInTheDocument();
   });
 
   it('renders risk/reward ratio', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Risk / Reward')).toBeInTheDocument();
     expect(screen.getByText('2.5×')).toBeInTheDocument();
-    // rrModel appears in both the R:R section and Final Recommendation section
-    expect(screen.getAllByText('Heston repriced').length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders final status', () => {
@@ -167,5 +170,172 @@ describe('TradeCard', () => {
 
     expect(screen.getByTestId('inline-chart')).toHaveAttribute('data-open', 'true');
     expect(screen.getByRole('button', { name: /hide chart/i })).toBeInTheDocument();
+  });
+
+  describe('editable fields', () => {
+    it('renders editable fields with aria-label affordance', () => {
+      render(<TradeCard data={mockTradeCard} />);
+      expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument();
+      expect(screen.getByLabelText('Edit Max fill')).toBeInTheDocument();
+      expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
+      expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
+      expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
+      expect(screen.getByLabelText('Edit Time stop')).toBeInTheDocument();
+    });
+
+    it('opens inline input when clicking editable limit field', async () => {
+      render(<TradeCard data={mockTradeCard} />);
+      const limitTrigger = screen.getByLabelText('Edit Limit');
+      await act(async () => {
+        fireEvent.click(limitTrigger);
+      });
+      expect(screen.getByDisplayValue('2.5')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('2.5')).toHaveAttribute('type', 'number');
+    });
+
+    it('saves edited value on blur', async () => {
+      render(<TradeCard data={mockTradeCard} />);
+      const limitTrigger = screen.getByLabelText('Edit Limit');
+      await act(async () => {
+        fireEvent.click(limitTrigger);
+      });
+      const input = screen.getByDisplayValue('2.5');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '3.50' } });
+        fireEvent.blur(input);
+      });
+      expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('$3.50');
+    });
+
+    it('saves edited value on Enter key', async () => {
+      render(<TradeCard data={mockTradeCard} />);
+      const limitTrigger = screen.getByLabelText('Edit Limit');
+      await act(async () => {
+        fireEvent.click(limitTrigger);
+      });
+      const input = screen.getByDisplayValue('2.5');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '4.00' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+      });
+      expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('$4.00');
+    });
+
+    it('cancels edit on Escape key', async () => {
+      render(<TradeCard data={mockTradeCard} />);
+      const limitTrigger = screen.getByLabelText('Edit Limit');
+      await act(async () => {
+        fireEvent.click(limitTrigger);
+      });
+      const input = screen.getByDisplayValue('2.5');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '99.99' } });
+        fireEvent.keyDown(input, { key: 'Escape' });
+      });
+      expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('$2.50');
+    });
+
+    it('updates R:R section to show edited model when entry limit changes', async () => {
+      render(<TradeCard data={mockTradeCard} />);
+      expect(screen.getAllByText('Heston repriced').length).toBeGreaterThanOrEqual(1);
+      const limitTrigger = screen.getByLabelText('Edit Limit');
+      await act(async () => {
+        fireEvent.click(limitTrigger);
+      });
+      const input = screen.getByDisplayValue('2.5');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '5.0' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+      });
+      expect(screen.getAllByText(/Edit \(delta approx\)/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('shows edited badge in target row when stock price is changed', async () => {
+      render(<TradeCard data={mockTradeCard} />);
+      const targetTrigger = screen.getByLabelText('Edit target stock price for TP1');
+      await act(async () => {
+        fireEvent.click(targetTrigger);
+      });
+      const input = screen.getByDisplayValue('200.02');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '210.00' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+      });
+      expect(screen.getByText('edited')).toBeInTheDocument();
+    });
+
+    it('updates contracts display', async () => {
+      render(<TradeCard data={mockTradeCard} />);
+      const contractsTrigger = screen.getByLabelText('Edit Contracts');
+      await act(async () => {
+        fireEvent.click(contractsTrigger);
+      });
+      const input = screen.getByDisplayValue('1');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '5' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+      });
+      expect(screen.getByLabelText('Edit Contracts')).toHaveTextContent('5');
+    });
+
+    it('clamps entry limit to minimum 0.01 on save', async () => {
+      render(<TradeCard data={mockTradeCard} />);
+      const limitTrigger = screen.getByLabelText('Edit Limit');
+      await act(async () => {
+        fireEvent.click(limitTrigger);
+      });
+      const input = screen.getByDisplayValue('2.5');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '0.001' } });
+        fireEvent.blur(input);
+      });
+      expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('$0.01');
+    });
+
+    it('clamps contracts to minimum 1 on save', async () => {
+      render(<TradeCard data={mockTradeCard} />);
+      const contractsTrigger = screen.getByLabelText('Edit Contracts');
+      await act(async () => {
+        fireEvent.click(contractsTrigger);
+      });
+      const input = screen.getByDisplayValue('1');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '0' } });
+        fireEvent.blur(input);
+      });
+      expect(screen.getByLabelText('Edit Contracts')).toHaveTextContent('1');
+    });
+
+    it('fires onEditsChange callback when overlay changes', async () => {
+      const onEditsChange = jest.fn();
+      render(<TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />);
+      const limitTrigger = screen.getByLabelText('Edit Limit');
+      await act(async () => {
+        fireEvent.click(limitTrigger);
+      });
+      const input = screen.getByDisplayValue('2.5');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '3.0' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+      });
+      expect(onEditsChange).toHaveBeenCalledWith(
+        expect.objectContaining({ entryLimit: 3.0 }),
+      );
+    });
+
+    it('shows edited indicator in R:R sections when values differ from original', async () => {
+      render(<TradeCard data={mockTradeCard} />);
+      const limitTrigger = screen.getByLabelText('Edit Limit');
+      await act(async () => {
+        fireEvent.click(limitTrigger);
+      });
+      const input = screen.getByDisplayValue('2.5');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '3.50' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+      });
+      const editedLabels = screen.getAllByText(/edited/);
+      expect(editedLabels.length).toBeGreaterThanOrEqual(1);
+    });
   });
 });
