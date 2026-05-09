@@ -110,6 +110,9 @@ export interface TradeCardData {
   contractScore: number;
   contractConfidence: Status;
   contractBreakdown: ContractScoreBreakdown;
+  /** Alternative contracts (FR-28) — zero to N alternatives to the best contract. */
+  alternatives?: AlternativeContract[];
+  alternativesCount?: number;
   /** Resolved contract fields for the TradeCard contract-detail block. */
   contractDetails?: {
     strike: number;
@@ -161,6 +164,26 @@ export function contractId(symbol: string, strike: number, expiry: string, right
 export function contractLabel(c: Pick<OptionContract, 'symbol' | 'strike' | 'right' | 'expiry'>): string {
   const [, mm, dd] = c.expiry.split('-');
   return `${c.symbol} ${c.strike}${c.right} ${mm}/${dd}`;
+}
+
+// --- Alternative contracts (FR-28) ---
+
+export interface AlternativeContract {
+  symbol:       string;
+  strike:       number;
+  expiry:       string;
+  right:        OptionRight;
+  dte:          number;
+  mid:          number;
+  delta:        number;
+  theta:        number;
+  ivRank:       number;
+  score:        number;
+  contractConfidence: Status;
+  contractBreakdown:  ContractScoreBreakdown;
+  rrRatio:      number;
+  rrModel:      'Heston repriced' | 'Delta approximation';
+  reason:       string;
 }
 
 // --- Market regime ---

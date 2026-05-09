@@ -40,6 +40,25 @@ export const MOCK_TRADECARDS: (TradeCardData & { recId: string })[] = [
     rrRatio: 2.4,
     rrModel: 'Heston repriced',
     finalStatus: 'PASS',
+    alternatives: [
+      {
+        symbol: 'AAPL', strike: 185, expiry: '2026-05-23', right: 'C', dte: 31,
+        mid: 4.80, delta: 0.63, theta: -0.06, ivRank: 40,
+        score: 72, contractConfidence: 'CAUTION',
+        contractBreakdown: { dteFit: 78, delta: 75, ivAttractiveness: 60, liquidity: 80, spread: 65 },
+        rrRatio: 2.0, rrModel: 'Heston repriced',
+        reason: 'Lower strike, higher delta — better leverage if premium acceptable',
+      },
+      {
+        symbol: 'AAPL', strike: 195, expiry: '2026-05-30', right: 'C', dte: 38,
+        mid: 2.90, delta: 0.49, theta: -0.05, ivRank: 38,
+        score: 68, contractConfidence: 'CAUTION',
+        contractBreakdown: { dteFit: 85, delta: 60, ivAttractiveness: 55, liquidity: 82, spread: 62 },
+        rrRatio: 2.6, rrModel: 'Delta approximation',
+        reason: 'Longer DTE, lower IV rank — more time for thesis to play out',
+      },
+    ],
+    alternativesCount: 2,
     recId: 'REC-1715000000100-AA11',
   },
   {
@@ -81,6 +100,25 @@ export const MOCK_TRADECARDS: (TradeCardData & { recId: string })[] = [
     rrRatio: 2.1,
     rrModel: 'Heston repriced',
     finalStatus: 'PASS',
+    alternatives: [
+      {
+        symbol: 'NVDA', strike: 930, expiry: '2026-05-16', right: 'C', dte: 24,
+        mid: 16.20, delta: 0.70, theta: -0.28, ivRank: 68,
+        score: 75, contractConfidence: 'PASS',
+        contractBreakdown: { dteFit: 82, delta: 80, ivAttractiveness: 65, liquidity: 88, spread: 72 },
+        rrRatio: 1.9, rrModel: 'Heston repriced',
+        reason: 'ITM proximity, highest delta — best directional exposure',
+      },
+      {
+        symbol: 'NVDA', strike: 950, expiry: '2026-05-23', right: 'C', dte: 31,
+        mid: 9.50, delta: 0.55, theta: -0.22, ivRank: 72,
+        score: 72, contractConfidence: 'CAUTION',
+        contractBreakdown: { dteFit: 80, delta: 72, ivAttractiveness: 68, liquidity: 85, spread: 68 },
+        rrRatio: 2.3, rrModel: 'Delta approximation',
+        reason: 'Longer DTE, higher IV rank — better premium selling opportunity',
+      },
+    ],
+    alternativesCount: 2,
     recId: 'REC-1715000000101-BB22',
   },
 ];
