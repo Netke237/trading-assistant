@@ -14,6 +14,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { EventFlag } from '@/components/atoms/EventFlag';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { useScanStore } from '@/lib/scanStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import { eventProximity } from '@/lib/date';
 import { worstStatus, type Status } from '@/lib/status';
@@ -21,12 +22,6 @@ import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
 
 const COLUMNS = '32px 72px 1fr 120px 70px 110px 80px';
-
-function ivStatus(rank: number): Status {
-  if (rank >= 60) return 'PASS';
-  if (rank >= 35) return 'CAUTION';
-  return 'REJECT';
-}
 
 function cardToRow(c: TradeCardData): WatchlistRow {
   return {
@@ -47,11 +42,19 @@ function cardToRow(c: TradeCardData): WatchlistRow {
 
 export default function Step5Page() {
   const candidates = useScanStore((s) => s.scanResult?.candidates ?? []);
+  const ivPassThreshold    = useSettingsStore((s) => s.ivPassThreshold);
+  const ivCautionThreshold = useSettingsStore((s) => s.ivCautionThreshold);
   const watchlist = useMemo(() => candidates.map(cardToRow), [candidates]);
   const candidateMap = useMemo(
     () => Object.fromEntries(candidates.map((c) => [c.symbol, c])),
     [candidates],
   );
+
+  function ivStatus(rank: number): Status {
+    if (rank >= ivPassThreshold)    return 'PASS';
+    if (rank >= ivCautionThreshold) return 'CAUTION';
+    return 'REJECT';
+  }
 
   return (
     <div className={styles.main}>

@@ -266,6 +266,8 @@ class ScanResult(BaseModel):
     state: ScanState = 'COMPLETED'
     previous_run_id: Optional[str] = None
     deltas: list[ScanDelta] = []
+    shortlist_truncated: bool = False
+    original_count: int = 0
 
 
 # ── Portfolio persistence ─────────────────────────────────────────────────────

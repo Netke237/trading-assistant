@@ -36,6 +36,11 @@ from app.services.scan_scheduler import ScanScheduler
 
 router = APIRouter(prefix='/api', tags=['scan'])
 
+# Load settings once at module level (patchable in tests via app.routers.scan._settings)
+_settings: dict = yaml.safe_load(
+    (_Path(__file__).parent.parent.parent.parent / "config" / "settings.yaml").read_text()
+)
+
 # ── Scheduler instance ───────────────────────────────────────────────────────
 
 _DEFAULT_CADENCE = 60
@@ -303,6 +308,12 @@ async def run_scan(req: ScanRequest) -> ScanResult:
             rejected.append(RejectedCandidate(symbol=symbol, reason=str(e)))
             log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": str(e)})
 
+    # ── Shortlist cap ─────────────────────────────────────────────────────────
+    max_candidates: int = _settings.get("scan", {}).get("shortlist_max_candidates", 10)
+    original_count: int = len(candidates)
+    shortlist_truncated: bool = original_count > max_candidates
+    candidates = candidates[:max_candidates]
+
     # Determine state: PARTIAL if some exceptions occurred but we still got candidates
     state: ScanState = 'COMPLETED'
     if has_exception and candidates:
@@ -323,6 +334,8 @@ async def run_scan(req: ScanRequest) -> ScanResult:
         state=state,
         previous_run_id=_last_result.scan_id if _last_result else None,
         deltas=deltas,
+        shortlist_truncated=shortlist_truncated,
+        original_count=original_count,
     )
     _last_result = result
     return result

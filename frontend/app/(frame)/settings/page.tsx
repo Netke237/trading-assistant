@@ -537,6 +537,7 @@ const ALERT_TYPE_LABELS: Record<AlertType, string> = {
 
 function AlertsForm() {
   const { config, setConfig } = useAlertStore();
+  const { ivPassThreshold, ivCautionThreshold, setIvPassThreshold, setIvCautionThreshold } = useSettingsStore();
 
   function toggleType(type: AlertType, on: boolean) {
     const next = on
@@ -578,6 +579,40 @@ function AlertsForm() {
         <Toggle
           defaultOn={config.soundEnabled}
           onChange={(on) => setConfig({ ...config, soundEnabled: on })}
+        />
+      </Row>
+      <Row
+        label="IV Pass Threshold"
+        hint="IV rank above this is considered PASS."
+        defaultValue="60"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={1}
+          max={100}
+          value={ivPassThreshold}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            if (val >= 1 && val <= 100) setIvPassThreshold(val);
+          }}
+        />
+      </Row>
+      <Row
+        label="IV Caution Threshold"
+        hint="IV rank above this (but below Pass) is CAUTION."
+        defaultValue="35"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={1}
+          max={100}
+          value={ivCautionThreshold}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            if (val >= 1 && val <= 100) setIvCautionThreshold(val);
+          }}
         />
       </Row>
       {(Object.keys(ALERT_TYPE_LABELS) as AlertType[]).map((type) => (
