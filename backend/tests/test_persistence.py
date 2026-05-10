@@ -78,6 +78,7 @@ _POSITION_PAYLOAD = {
     "stop": 2.25,
     "targets": [{"id": "tp1", "stockPrice": 200.0, "contractsToSell": 1, "status": "PENDING"}],
     "dteTotal": 43,
+    "portfolioValue": 50_000.0,
 }
 
 
@@ -233,3 +234,18 @@ async def test_rec_id_dual_system_match(db_session, tmp_path, monkeypatch):
     parsed = json.loads(lines[-1])
     assert parsed["rec_id"] == rec_id, f"JSONL rec_id mismatch: {parsed}"
     assert parsed["event"] == "approval"
+
+
+# -- Test 8: Risk gate rejects with 422 when portfolio too small ---------------
+
+@pytest.mark.asyncio
+async def test_portfolio_risk_gate_rejects_422(client):
+    """POST with portfolioValue below min_portfolio_value -> 422."""
+    payload = dict(_POSITION_PAYLOAD)
+    payload["recId"] = "REC-20260508-RISK01"
+    payload["portfolioValue"] = 1000.0  # below 5000 min
+    resp = await client.post("/api/portfolio", json=payload)
+    assert resp.status_code == 422, resp.text
+    data = resp.json()
+    assert "detail" in data
+    assert "portfolio_too_small" in data["detail"]
