@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
+import { AlternativeContractRow } from '@/components/molecules/AlternativeContractRow';
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
@@ -127,6 +128,7 @@ export function TradeCard({
   onEditsChange,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
+  const [altOpen, setAltOpen] = useState(false);
   const [overlay, setOverlay] = useState<EditOverlay>(() => ({
     ...defaultOverlay(data),
     contracts: initialContracts,
@@ -231,6 +233,27 @@ export function TradeCard({
               <DetailCell label="CaR" value={`$${car.toFixed(0)}`} mono />
             </div>
           </section>
+        )}
+
+        {data.alternatives && data.alternatives.length > 0 && (
+          <div className={styles.altSection}>
+            <button
+              type="button"
+              className={styles.altToggle}
+              onClick={() => setAltOpen((v) => !v)}
+              aria-expanded={altOpen}
+            >
+              <Text size={11} tone="dim">ALTERNATIVES ({data.alternatives.length})</Text>
+              <Text size={11} tone="dim">{altOpen ? '▲' : '▼'}</Text>
+            </button>
+            {altOpen && (
+              <div className={styles.altList}>
+                {data.alternatives.map((alt, i) => (
+                  <AlternativeContractRow key={alt.strike + alt.expiry} alt={alt} rank={i + 1} />
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {/* 4. Entry plan */}

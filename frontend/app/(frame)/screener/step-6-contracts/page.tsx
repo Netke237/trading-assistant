@@ -39,6 +39,12 @@ export default function Step6Page() {
 
   const selectedSymbol = useScanStore((s) => s.selectedSymbol);
 
+  const candidates = useScanStore((s) => s.scanResult?.candidates ?? []);
+  const activeCandidateAlts = useMemo(
+    () => candidates.find((c) => c.symbol === selectedSymbol)?.alternativesCount ?? 0,
+    [candidates, selectedSymbol]
+  );
+
   useEffect(() => {
     if (!selectedSymbol) return;
     api.getContracts(selectedSymbol).then((data) => {
@@ -74,6 +80,11 @@ export default function Step6Page() {
       <div className={styles.stepHeader}>
         <Text size={11} tone="dim" weight={500}>STEP 6 OF 7</Text>
         <Title as="h1" size={24}>Contracts{selectedSymbol ? ` — ${selectedSymbol}` : ''}</Title>
+        {activeCandidateAlts > 0 && (
+          <span className={tbl.altBadge}>
+            <Text size={11} tone="secondary">{activeCandidateAlts} alt{activeCandidateAlts > 1 ? 's' : ''}</Text>
+          </span>
+        )}
         <Text size={13} tone="secondary">
           Scored by DTE fit, delta, IV attractiveness, liquidity and spread. Click a column to sort,
           star a contract to track it in the Watchlist.

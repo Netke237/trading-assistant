@@ -49,3 +49,12 @@
 .pickDot[data-selected='true'] {
   background: var(--accent);
 }
+
+.altBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
