@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { WatchlistRow } from '@/types/domain';
+import type { WatchlistRow, TradeCardData } from '@/types/domain';
 
 export function exportToXlsx(rows: WatchlistRow[], filename: string): void {
   const data = rows.map((r, i) => ({
@@ -24,5 +24,26 @@ export function exportToXlsx(rows: WatchlistRow[], filename: string): void {
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Rankings');
+  XLSX.writeFile(wb, filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`);
+}
+
+export function exportValidationToXlsx(candidates: TradeCardData[], filename: string): void {
+  const data = candidates.map((c, i) => ({
+    Rank:     i + 1,
+    Symbol:   c.symbol,
+    Company:  c.company,
+    Direction: c.direction,
+    Score:    c.stockScore,
+    Status:   c.finalStatus,
+    Trend:    c.stockBreakdown.trend,
+    Pullback: c.stockBreakdown.pullback,
+    Trigger:  c.stockBreakdown.trigger,
+    Event:    c.stockBreakdown.event,
+    Vol:      c.stockBreakdown.volatility,
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Validation');
   XLSX.writeFile(wb, filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`);
 }
