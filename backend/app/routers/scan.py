@@ -44,7 +44,7 @@ router = APIRouter(prefix='/api', tags=['scan'])
 
 # Load settings once at module level (patchable in tests via app.routers.scan._settings)
 _settings: dict = yaml.safe_load(
-    (_Path(__file__).parent.parent.parent.parent / "config" / "settings.yaml").read_text()
+    (_Path(__file__).parent.parent.parent / "config" / "settings.yaml").read_text()
 )
 
 # ── Scheduler instance ───────────────────────────────────────────────────────
