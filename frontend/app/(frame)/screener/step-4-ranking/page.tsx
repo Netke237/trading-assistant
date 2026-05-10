@@ -23,6 +23,7 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { api } from '@/lib/api';
 import { exportToXlsx } from '@/lib/export';
 import { useScanStore } from '@/lib/scanStore';
+import { cardToRow } from './cardToRow';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import styles from './page.module.css';
@@ -98,23 +99,6 @@ interface SortHeaderProps {
   onSort: (key: SortKey) => void;
 }
 
-function cardToRow(c: TradeCardData): WatchlistRow {
-  return {
-    symbol: c.symbol,
-    company: c.company,
-    price: c.price,
-    direction: c.direction,
-    horizon: 'Swing',
-    score: c.stockScore,
-    rankDelta: 0,
-    scoreDelta: 0,
-    status: c.status,
-    breakdown: c.stockBreakdown,
-    nextEventDays: c.nextEventDays,
-    nextEventLabel: c.nextEventLabel,
-  };
-}
-
 function SortHeader({ label, sortKey, currentKey, dir, onSort }: SortHeaderProps) {
   const active = currentKey === sortKey;
   return (
@@ -136,10 +120,12 @@ export default function Step4Page() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const candidates = useScanStore((s) => s.scanResult?.candidates);
+  const previousRun = useScanStore((s) => s.previousRun);
+  const context = useScanStore((s) => s.context);
   const setSelectedSymbol = useScanStore((s) => s.setSelectedSymbol);
 
   useEffect(() => {
-    const list = candidates?.map(cardToRow) ?? [];
+    const list = candidates?.map((c, idx) => cardToRow(c, idx + 1, previousRun, context?.horizon)) ?? [];
     setWatchlist(list);
     setCurrentPage(1);
     if (list.length > 0) {
@@ -147,7 +133,7 @@ export default function Step4Page() {
       setSelectedSym(sym);
       setSelectedSymbol(sym);
     }
-  }, [candidates, setSelectedSymbol]);
+  }, [candidates, previousRun, context, setSelectedSymbol]);
 
   const sorted = useMemo(
     () => sortRows(watchlist, sortKey, sortDir),

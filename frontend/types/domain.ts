@@ -5,7 +5,7 @@
 import type { Status } from '@/lib/status';
 
 export type Direction = 'Bullish' | 'Bearish';
-export type Horizon = 'Swing' | 'Position';
+export type Horizon = 'Intraday' | 'Swing' | 'Position' | 'Custom';
 export type AlertKind = 'Info' | 'Action' | 'Critical';
 export type OrderType = 'Limit' | 'Market' | 'Stop';
 
@@ -38,10 +38,6 @@ export interface WatchlistRow {
   breakdown:    ScoreBreakdown;
   nextEventDays?: number;      // days until earnings / fed / etc
   nextEventLabel?: string;     // "Earnings", "FOMC"
-  /** Which rules flipped vs previous scan (e.g. "ADX", "MA slope"). */
-  ruleChanges?: string[];
-  /** Human-readable reasons for REJECT / CAUTION status. */
-  rejectReasons?: string[];
 }
 
 export interface TargetLevel {
