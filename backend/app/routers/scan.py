@@ -44,7 +44,7 @@ router = APIRouter(prefix='/api', tags=['scan'])
 
 # Load settings once at module level (patchable in tests via app.routers.scan._settings)
 _settings: dict = yaml.safe_load(
-    (_Path(__file__).parent.parent.parent.parent / "config" / "settings.yaml").read_text()
+    (_Path(__file__).parent.parent.parent / "config" / "settings.yaml").read_text()
 )
 
 # ── Scheduler instance ───────────────────────────────────────────────────────
@@ -53,8 +53,8 @@ _DEFAULT_CADENCE = 60
 
 
 def _load_default_cadence() -> int:
-    path = os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'settings.yaml')
-    path = os.path.normpath(path)
+    # 3 levels up from app/routers/scan.py → backend/ → backend/config/settings.yaml
+    path = str((_Path(__file__).parent.parent.parent / "config" / "settings.yaml").resolve())
     if os.path.exists(path):
         with open(path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f) or {}

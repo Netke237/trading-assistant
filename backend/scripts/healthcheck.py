@@ -15,7 +15,7 @@ def main():
         with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
             if response.status == 200:
                 data = response.read().decode("utf-8")
-                if '"status": "ok"' in data:
+                if '"status":"ok"' in data or '"status": "ok"' in data:
                     print("Health check passed")
                     sys.exit(0)
             print(f"Health check failed: unexpected status {response.status}")
