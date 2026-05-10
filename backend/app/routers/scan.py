@@ -26,6 +26,7 @@ from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
     ScanDelta, ContinuousScanConfig, ScanState,
+    AlternativeContract,
 )
 from typing import Literal
 from app.data.market import (
@@ -115,6 +116,32 @@ def _augment(c: dict) -> dict:
         "ask": round(mid + spread / 2, 2),
         "open_interest": c.get("volume", 0),
     }
+
+
+def _alt_reason(alt: dict, primary: dict, *, is_call: bool) -> str:
+    alt_strike = float(alt.get("strike", 0))
+    pri_strike = float(primary.get("strike", 0))
+    alt_dte    = int(alt.get("dte", 0))
+    pri_dte    = int(primary.get("dte", 0))
+
+    parts: list[str] = []
+    if alt_dte > pri_dte + 7:
+        parts.append("longer DTE — more time for thesis to develop")
+    elif alt_dte < pri_dte - 7:
+        parts.append("shorter DTE — lower theta cost")
+
+    if is_call:
+        if alt_strike < pri_strike - 1:
+            parts.append("lower strike — higher delta, more directional exposure")
+        elif alt_strike > pri_strike + 1:
+            parts.append("higher strike — lower cost, higher leverage if stock moves strongly")
+    else:
+        if alt_strike > pri_strike + 1:
+            parts.append("higher strike — higher delta for downside move")
+        elif alt_strike < pri_strike - 1:
+            parts.append("lower strike — lower cost, higher leverage on further decline")
+
+    return "; ".join(parts) if parts else "similar profile — alternative liquidity/spread characteristics"
 
 
 async def _upsert_session(
@@ -228,8 +255,11 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "all contracts rejected"})
                 continue
 
-            best_score, contract = max(valid_scores, key=lambda x: x[0].score)
+            # Sort descending by score; primary = index 0, alternatives = indices 1–2
+            valid_scores.sort(key=lambda x: x[0].score, reverse=True)
+            best_score, contract = valid_scores[0]
             contract_card: ContractScoreCard = best_score
+            runner_ups = valid_scores[1:3]
 
             # Step 6 — Calibrate Heston (best-effort)
             heston_chain = [
@@ -345,6 +375,47 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 rrModel=rr.model_used,
                 finalStatus=_final_status(card.status, contract_card.status, entry.quality_status),
             )
+
+            alts: list[AlternativeContract] = []
+            for alt_card, alt_c in runner_ups:
+                alt_strike = float(alt_c.get("strike", price))
+                alt_expiry_years = alt_c.get("dte", 30) / 365.0
+                alt_premium = float(alt_c.get("price", 0.10))
+                alt_rr = estimate_rr(
+                    stock_price=price,
+                    target_price=target_price,
+                    invalidation_price=invalidation_price,
+                    strike=alt_strike,
+                    expiry_years=alt_expiry_years,
+                    current_premium=alt_premium,
+                    is_call=(req.direction == "Bullish"),
+                    heston_params=heston_params,
+                )
+                alts.append(AlternativeContract(
+                    symbol=symbol,
+                    strike=int(alt_strike),
+                    expiry=alt_c.get("expiry", "TBD"),
+                    right="C" if req.direction == "Bullish" else "P",
+                    dte=int(alt_c.get("dte", 30)),
+                    mid=round(float(alt_c.get("price", 0)), 2),
+                    delta=round(float(alt_c.get("delta", 0.45)), 3),
+                    theta=round(float(alt_c.get("theta", -0.05)), 3),
+                    ivRank=int(alt_c.get("ivRank", 50)),
+                    score=alt_card.score,
+                    contractConfidence=alt_card.status,
+                    contractBreakdown=ContractScoreBreakdown(
+                        dteFit=alt_card.breakdown.dte_score,
+                        delta=alt_card.breakdown.delta_score,
+                        ivAttractiveness=alt_card.breakdown.iv_rank_score,
+                        liquidity=alt_card.breakdown.liquidity_score,
+                        spread=alt_card.breakdown.spread_score,
+                    ),
+                    rrRatio=alt_rr.rr_ratio,
+                    rrModel=alt_rr.model_used,
+                    reason=_alt_reason(alt_c, contract, is_call=(req.direction == "Bullish")),
+                ))
+            trade_card.alternatives = alts
+            trade_card.alternativesCount = len(alts)
 
             candidates.append(trade_card)
             log_event("trade_card_created", scan_id, {"symbol": symbol, "score": card.score})

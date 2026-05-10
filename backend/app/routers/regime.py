@@ -1,8 +1,20 @@
 from fastapi import APIRouter
 from app.schemas import MarketRegime, RegimeMetric
-from app.data.market import fetch_price
+from app.data.market import fetch_price, fetch_candles
 
 router = APIRouter(prefix='/api', tags=['trading'])
+
+_PRIORITY = {"REJECT": 0, "CAUTION": 1, "PENDING": 2, "NO_DATA": 2, "PASS": 3}
+
+
+def _ema(closes: list[float], period: int) -> float | None:
+    if len(closes) < period:
+        return None
+    k = 2 / (period + 1)
+    ema = sum(closes[:period]) / period
+    for price in closes[period:]:
+        ema = price * k + ema * (1 - k)
+    return ema
 
 
 def _vix_status(vix: float) -> str:
@@ -13,29 +25,74 @@ def _vix_status(vix: float) -> str:
     return 'REJECT'
 
 
+def _spx_ndx_metric(symbol: str, label: str) -> RegimeMetric | None:
+    try:
+        candles = fetch_candles(symbol, bars=200)
+    except Exception:
+        return RegimeMetric(label=label, value='—', status='PENDING', trend=None)
+
+    if not candles:
+        return RegimeMetric(label=label, value='—', status='PENDING', trend=None)
+
+    closes = [c["close"] for c in candles]
+    ema_200 = _ema(closes, 200)
+    if ema_200 is None or len(closes) == 0:
+        return RegimeMetric(label=label, value='—', status='PENDING', trend=None)
+
+    price = closes[-1]
+    if price > ema_200:
+        return RegimeMetric(label=label, value='Above', status='PASS', trend='up')
+    if price >= 0.97 * ema_200:
+        return RegimeMetric(label=label, value='Near', status='CAUTION', trend='flat')
+    return RegimeMetric(label=label, value='Below', status='REJECT', trend='down')
+
+
 @router.get('/regime', response_model=MarketRegime)
 async def get_regime() -> MarketRegime:
+    spx = _spx_ndx_metric('SPX', 'SPX trend (200 EMA)')
+    ndx = _spx_ndx_metric('NDX', 'NDX trend (200 EMA)')
+
     try:
         vix = fetch_price('VIX')
     except Exception:
         vix = None
 
-    if vix is None:
+    if vix is not None:
+        vix_status = _vix_status(vix)
+        vix_metric = RegimeMetric(
+            label='VIX',
+            value=f'{vix:.1f}',
+            status=vix_status,
+            trend='down' if vix_status == 'PASS' else ('up' if vix_status == 'REJECT' else 'flat'),
+        )
+    else:
+        vix_metric = RegimeMetric(label='VIX', value='—', status='PENDING', trend=None)
+
+    metrics: list[RegimeMetric] = [m for m in (spx, ndx, vix_metric) if m is not None]
+    statuses = [m.status for m in metrics]
+
+    if not statuses:
         return MarketRegime(
             overall='CAUTION',
-            headline='VIX data unavailable',
+            headline='Market data unavailable',
             metrics=[],
         )
 
-    status = _vix_status(vix)
+    overall = min(statuses, key=lambda s: _PRIORITY.get(s, 2))
+
+    parts: list[str] = []
+    for m in metrics:
+        if m.status == 'PENDING':
+            parts.append(f'{m.label} unavailable')
+        elif m.label == 'VIX':
+            parts.append(f'VIX {m.value} — {m.status}')
+        else:
+            parts.append(f'{m.label} {m.value} 200 EMA · {m.status}')
+
+    headline = ' · '.join(parts)
+
     return MarketRegime(
-        overall=status,
-        headline=f'VIX {vix:.1f} — {status} environment',
-        metrics=[
-            RegimeMetric(
-                label='VIX',
-                value=f'{vix:.1f}',
-                status=status,
-            ),
-        ],
+        overall=overall,
+        headline=headline,
+        metrics=metrics,
     )

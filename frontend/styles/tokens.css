@@ -68,6 +68,7 @@
   /* Shadows (dark-mode values from spec) */
   --shadow-card:     0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-elevated: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-overlay:  0 4px 16px rgba(0, 0, 0, 0.35);
 
   /* Frame sizes (spec Section 4) */
   --frame-topbar-h:     48px;
@@ -113,4 +114,5 @@
   /* Light-mode shadows: softer than dark */
   --shadow-card:     0 1px 3px rgba(19, 23, 34, 0.08);
   --shadow-elevated: 0 4px 16px rgba(19, 23, 34, 0.12);
+  --shadow-overlay:  0 4px 16px rgba(0, 0, 0, 0.12);
 }
