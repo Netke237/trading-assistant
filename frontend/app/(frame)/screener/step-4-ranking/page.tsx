@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
@@ -194,6 +195,9 @@ export default function Step4Page() {
           <header className={styles.panelHeader}>
             <Text size={13} weight={600}>Candidates</Text>
             <Text size={11} tone="secondary">{watchlist.length} ranked</Text>
+            <Link href="/validation" className={styles.exportBtn}>
+              Validation
+            </Link>
             <button
               className={styles.exportBtn}
               onClick={() => exportToXlsx(sorted, 'bamendjou-rankings')}
