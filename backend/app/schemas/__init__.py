@@ -220,6 +220,25 @@ class TradeExit(BaseModel):
     targets: list[TargetLevel] = []  # NEW — 3 graduated target levels
 
 
+class AlternativeContract(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    symbol:             str
+    strike:             int
+    expiry:             str
+    right:              OptionRight
+    dte:                int
+    mid:                float
+    delta:              float
+    theta:              float
+    ivRank:             int
+    score:              int
+    contractConfidence: Status
+    contractBreakdown:  ContractScoreBreakdown
+    rrRatio:            float
+    rrModel:            RrModel
+    reason:             str
+
+
 class TradeCardData(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     symbol: str
@@ -242,6 +261,8 @@ class TradeCardData(BaseModel):
     rrRatio: float
     rrModel: RrModel
     finalStatus: Status
+    alternatives:      list[AlternativeContract] = []
+    alternativesCount: int = 0
 
 
 # ── Scan ─────────────────────────────────────────────────────────────────────
