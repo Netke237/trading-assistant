@@ -14,6 +14,7 @@
 import { useCallback } from 'react';
 import { useScanStore } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
+import { usePortfolioStore } from '@/lib/portfolioStore';
 import { api } from '@/lib/api';
 import styles from './index.module.css';
 
@@ -49,6 +50,7 @@ export function RunScanButton() {
   const minCapRaw    = useUniverseStore((s) => s.minCapRaw);
   const maxCapRaw    = useUniverseStore((s) => s.maxCapRaw);
   const capUnit      = useUniverseStore((s) => s.capUnit);
+  const positions    = usePortfolioStore((s) => s.positions);
 
   const scanning = scanState === 'SCANNING';
 
@@ -75,6 +77,11 @@ export function RunScanButton() {
     api.postScan(universe, direction, horizon, filters)
       .then((result) => {
         setScanResult(result);
+        const portfolioSymbols = new Set(positions.map((p) => p.symbol));
+        const conflicted = result.candidates
+          .map((c) => c.symbol)
+          .filter((s) => portfolioSymbols.has(s));
+        useScanStore.getState().setConflictedSymbols(conflicted);
         setScanState('COMPLETED', nowLocalISO());
       })
       .catch(() => {
