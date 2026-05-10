@@ -214,3 +214,76 @@
   background: var(--accent);
   border-color: var(--accent);
 }
+
+.editValue {
+  cursor: pointer;
+  border-bottom: 1px dotted var(--border-strong);
+  transition: border-color 0.15s ease;
+}
+
+.editValue:hover {
+  border-bottom-color: var(--accent);
+}
+
+.editInput {
+  height: 28px;
+  width: 100%;
+  padding: 0 var(--space-2);
+  background: var(--bg-base);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.editInput:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.editInput::-webkit-outer-spin-button,
+.editInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.editInput {
+  -moz-appearance: textfield;
+}
+
+.editTargetInput {
+  height: 26px;
+  width: 90px;
+  padding: 0 var(--space-1);
+  background: var(--bg-base);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.editTargetInput:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.editTargetInput::-webkit-outer-spin-button,
+.editTargetInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.editTargetInput {
+  -moz-appearance: textfield;
+}
+
+.editBadge {
+  padding: 2px var(--space-2);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface-2));
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
