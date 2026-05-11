@@ -84,6 +84,7 @@ export function TopBar() {
   const scanState = useScanStore((s) => s.scanState);
   const scanAt    = useScanStore((s) => s.scanAt);
   const context   = useScanStore((s) => s.context);
+  const scanError = useScanStore((s) => s.scanError);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -98,6 +99,11 @@ export function TopBar() {
         {context && (
           <Text size={12} tone="secondary">
             Last scan: {context.universe} · {context.direction} · {context.horizon}
+          </Text>
+        )}
+        {scanError && scanState === 'FAILED' && (
+          <Text size={12} tone="reject">
+            {scanError}
           </Text>
         )}
       </div>

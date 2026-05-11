@@ -15,7 +15,7 @@ import { useCallback } from 'react';
 import { useScanStore } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import styles from './index.module.css';
 
 function nowLocalISO(): string {
@@ -59,7 +59,8 @@ export function RunScanButton() {
 
     const universe = pick === 'Custom' ? parseSymbols(customRaw) : [pick];
     const direction = context?.direction ?? 'Bullish';
-    const horizon   = context?.horizon   ?? 'Swing (5–15d)';
+    const rawHorizon = context?.horizon ?? 'Swing (5-15d)';
+    const horizon   = rawHorizon.split(' ')[0];
 
     const filters: Record<string, number> = {};
     const minPrice = Number(minPriceRaw);
@@ -73,6 +74,7 @@ export function RunScanButton() {
     if (Number.isFinite(minCap) && minCapRaw !== '') filters.min_cap_usd = minCap * capMultiplier;
     if (Number.isFinite(maxCap) && maxCapRaw !== '') filters.max_cap_usd = maxCap * capMultiplier;
 
+    useScanStore.getState().setScanError(null);
     setScanState('SCANNING');
     api.postScan(universe, direction, horizon, filters)
       .then((result) => {
@@ -84,10 +86,30 @@ export function RunScanButton() {
         useScanStore.getState().setConflictedSymbols(conflicted);
         setScanState('COMPLETED', nowLocalISO());
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        let message: string;
+
+        if (err instanceof ApiError) {
+          if (err.status === 500) {
+            message = 'Server error — check backend logs';
+          } else if (err.status === 429) {
+            message = 'Rate limited — wait 60s and retry';
+          } else if (err.status === 422) {
+            message = 'Validation error — check scan parameters';
+          } else {
+            message = `Backend error (${err.status})`;
+          }
+        } else if (err instanceof TypeError && err.message.includes('fetch')) {
+          message = 'Backend not running — start the FastAPI server';
+        } else {
+          message = (err as Error)?.message ?? 'Unknown error';
+        }
+
+        console.error('[RunScan] Scan failed:', err);
+        useScanStore.getState().setScanError(message);
         setScanState('FAILED');
       });
-  }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit]);
+  }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit, positions]);
 
   return (
     <button

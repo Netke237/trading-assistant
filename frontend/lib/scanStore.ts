@@ -30,6 +30,7 @@ interface ScanStoreState {
   previousRun:     ScanResult | null;
   selectedSymbol:  string | null;
   conflictedSymbols: string[];
+  scanError:       string | null;
   setScanState:    (s: ScanState, at?: string) => void;
   setContext:      (c: ScanContext | null) => void;
   setRegime:       (r: Status) => void;
@@ -37,6 +38,7 @@ interface ScanStoreState {
   setPreviousRun:  (r: ScanResult | null) => void;
   setSelectedSymbol: (s: string) => void;
   setConflictedSymbols: (symbols: string[]) => void;
+  setScanError:    (msg: string | null) => void;
 }
 
 export const useScanStore = create<ScanStoreState>((set) => ({
@@ -48,6 +50,7 @@ export const useScanStore = create<ScanStoreState>((set) => ({
   previousRun:     null,
   selectedSymbol:  null,
   conflictedSymbols: [],
+  scanError:       null,
   setScanState:    (s, at) => set({ scanState: s, scanAt: at ?? null }),
   setContext:      (c) => set({ context: c }),
   setRegime:       (r) => set({ regime: r }),
@@ -58,4 +61,5 @@ export const useScanStore = create<ScanStoreState>((set) => ({
   setPreviousRun:  (r) => set({ previousRun: r }),
   setSelectedSymbol: (s) => set({ selectedSymbol: s }),
   setConflictedSymbols: (symbols) => set({ conflictedSymbols: symbols }),
+  setScanError:    (msg) => set({ scanError: msg }),
 }));
