@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from app.schemas import MarketRegime, RegimeMetric
-from app.data.market import fetch_price, fetch_candles
+from app.data.market import fetch_candles, fetch_quotes
+import httpx
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -25,9 +26,9 @@ def _vix_status(vix: float) -> str:
     return 'REJECT'
 
 
-def _spx_ndx_metric(symbol: str, label: str) -> RegimeMetric | None:
+async def _spx_ndx_metric(client: httpx.AsyncClient, symbol: str, label: str) -> RegimeMetric | None:
     try:
-        candles = fetch_candles(symbol, bars=200)
+        candles = await fetch_candles(client, symbol, bars=200)
     except Exception:
         return RegimeMetric(label=label, value='—', status='PENDING', trend=None)
 
@@ -49,13 +50,15 @@ def _spx_ndx_metric(symbol: str, label: str) -> RegimeMetric | None:
 
 @router.get('/regime', response_model=MarketRegime)
 async def get_regime() -> MarketRegime:
-    spx = _spx_ndx_metric('SPX', 'SPX trend (200 EMA)')
-    ndx = _spx_ndx_metric('NDX', 'NDX trend (200 EMA)')
+    async with httpx.AsyncClient(http2=True) as client:
+        spx = await _spx_ndx_metric(client, 'SPX', 'SPX trend (200 EMA)')
+        ndx = await _spx_ndx_metric(client, 'NDX', 'NDX trend (200 EMA)')
 
-    try:
-        vix = fetch_price('VIX')
-    except Exception:
-        vix = None
+        try:
+            quotes = await fetch_quotes(client, ['VIX'])
+            vix = quotes.get('VIX', {}).get('last', None)
+        except Exception:
+            vix = None
 
     if vix is not None:
         vix_status = _vix_status(vix)

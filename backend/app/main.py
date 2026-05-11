@@ -23,6 +23,11 @@ from app.routers.news       import router as news_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ──────────────────────────────────────────────────────────
+    from app.database import create_all
+    try:
+        await create_all()
+    except Exception:
+        pass  # tables may already exist
     from app.routers.scan import restore_from_db, _scheduler, _scheduled_scan
     status = await restore_from_db()
     if status == "running":

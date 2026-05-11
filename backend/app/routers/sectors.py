@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from app.schemas import SectorTile
 from app.data.market import fetch_quotes
+import httpx
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -31,7 +32,8 @@ def _status(pct: float) -> str:
 
 @router.get('/sectors', response_model=list[SectorTile])
 async def get_sectors() -> list[SectorTile]:
-    quotes = fetch_quotes(SECTOR_ETFS)
+    async with httpx.AsyncClient(http2=True) as client:
+        quotes = await fetch_quotes(client, SECTOR_ETFS)
     if not quotes:
         return []
     tiles = []
