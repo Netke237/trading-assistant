@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+import time as _time
 from datetime import datetime, timezone
 
+import httpx
+import asyncio
 import yaml
 from functools import lru_cache as _lru_cache
 from pathlib import Path as _Path
@@ -30,8 +33,9 @@ from app.schemas import (
 )
 from typing import Literal
 from app.data.market import (
-    fetch_candles, fetch_price, fetch_option_chain,
-    fetch_earnings_date, fetch_dividend_date, fetch_company_name,
+    fetch_candles, fetch_option_chain, fetch_events,
+    fetch_company_name, fetch_batch_quotes, fetch_batch_candles,
+    prefilter_candidates,
 )
 from app.scoring.stock_scorer import score_stock, StockScoreCard
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
@@ -146,17 +150,27 @@ def _alt_reason(alt: dict, primary: dict, *, is_call: bool) -> str:
 
 async def _upsert_session(
     db: AsyncSession,
-    req: ScanRequest | None,
-    result: ScanResult | None,
-    status: str,
+    scan_id: str,
+    req: ScanRequest | None = None,
+    result: ScanResult | None = None,
+    status: str = "complete",
+    progress_scanned: int = 0,
+    progress_total: int = 0,
+    candidates_found: int = 0,
+    error_message: str | None = None,
 ) -> None:
-    """Persist scan state to the DB as a single row with id='current'."""
+    """Persist scan state to the DB as a UUID-keyed row."""
     await db.merge(
         ScanSession(
-            id="current",
+            id=scan_id,
             status=status,
+            progress_scanned=progress_scanned,
+            progress_total=progress_total,
+            candidates_found=candidates_found,
+            error_message=error_message,
             last_result_json=result.model_dump_json() if result else None,
             last_request_json=req.model_dump_json() if req else None,
+            completed_at=(datetime.now(timezone.utc) if status in ("COMPLETED", "FAILED") else None),
         )
     )
     await db.commit()
@@ -170,9 +184,10 @@ async def restore_from_db() -> str | None:
     global _last_request, _last_result
     async with AsyncSessionLocal() as db:
         try:
-            result = await db.execute(select(ScanSession).where(ScanSession.id == "current"))
+            result = await db.execute(
+                select(ScanSession).order_by(ScanSession.created_at.desc()).limit(1)
+            )
         except Exception:
-            # Table may not exist (e.g., test_app.py with no DB)
             return None
         row = result.scalar_one_or_none()
         if row is None:
@@ -184,14 +199,17 @@ async def restore_from_db() -> str | None:
         return row.status
 
 
+# TODO: Phase 3 — Background task + polling if Phase 1+2 lands above ~3 minutes.
+# Split run_scan into trigger + background task, add GET /api/scan/{id}/status.
+
 @router.post('/scan', response_model=ScanResult)
 async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> ScanResult:
     global _last_request, _last_result
     _last_request = req
     scan_id = new_rec_id()
     log_event("scan_started", scan_id, {"universe": req.universe, "direction": req.direction})
+    t0 = _time.monotonic()
 
-    # Expand preset universe strings to individual ticker lists
     from app.data.universe_presets import expand_universe, PresetUnavailableError
     from fastapi import HTTPException
 
@@ -200,230 +218,243 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
     except PresetUnavailableError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    option_type: Literal["C", "P"] = "C" if req.direction == "Bullish" else "P"
+    semaphore = asyncio.Semaphore(4)
     candidates: list[TradeCardData] = []
     rejected: list[RejectedCandidate] = []
     has_exception = False
 
-    for symbol in symbols:
-        try:
-            # Step 1 — Fetch market data
-            candles = fetch_candles(symbol)
-            price = fetch_price(symbol)
-            company = fetch_company_name(symbol) or symbol
-            if not price or not candles:
-                rejected.append(RejectedCandidate(symbol=symbol, reason="no market data"))
-                log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no market data"})
-                continue
+    async with httpx.AsyncClient(http2=True) as client:
 
-            # Step 2 — Fetch option chain (before scoring so we can derive iv_rank)
-            option_type: Literal["C", "P"] = "C" if req.direction == "Bullish" else "P"
-            chain = fetch_option_chain(symbol, option_type=option_type)
+        # Phase A — Batch-fetch all quotes (~10 API calls for 500 symbols)
+        all_quotes = await fetch_batch_quotes(client, symbols, semaphore)
 
-            # Derive IV rank proxy from ATM contract (current IV as approximation)
-            atm = sorted(chain, key=lambda c: abs(float(c.get("strike", 0)) - price)) if chain else []
-            iv_rank: float | None = float(atm[0]["ivRank"]) if atm else None
+        # Phase B — Pre-filter to top candidates using quote data only
+        filters_in = {
+            k: v for k, v in req.model_dump().items()
+            if k in ("min_price", "max_price", "min_cap_usd", "max_cap_usd") and v is not None
+        }
+        prefiltered = prefilter_candidates(all_quotes, filters_in, max_candidates=75)
 
-            # Step 3 — Fetch event dates (best-effort; None if Tradier fundamentals unavailable)
-            earnings_date = fetch_earnings_date(symbol)
-            dividend_date = fetch_dividend_date(symbol)
+        # Phase C — Batch-fetch candles for pre-filtered symbols only
+        all_candles = await fetch_batch_candles(client, prefiltered, semaphore)
 
-            # Step 4 — Score the stock with full context
-            card: StockScoreCard = score_stock(
-                symbol, req.direction, req.horizon, candles,
-                earnings_date=earnings_date,
-                dividend_date=dividend_date,
-                iv_rank=iv_rank,
-            )
-            if card.status == "REJECT":
-                rejected.append(RejectedCandidate(symbol=symbol, reason=f"stock REJECT (score {card.score})"))
-                log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": f"stock REJECT (score {card.score})"})
-                continue
+        # Phase D — Per-candidate scoring (only ~75 symbols instead of 500)
+        for symbol in prefiltered:
+            try:
+                q = all_quotes.get(symbol, {})
+                price = q.get("last", 0)
+                candles = all_candles.get(symbol, [])
 
-            # Step 5 — Validate contracts (chain already fetched above)
-            if not chain:
-                rejected.append(RejectedCandidate(symbol=symbol, reason="no option chain"))
-                log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
-                continue
+                if not price or not candles:
+                    rejected.append(RejectedCandidate(symbol=symbol, reason="no market data"))
+                    log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no market data"})
+                    continue
 
-            augmented = [_augment(c) for c in chain]
-            scored = [(validate_contract(c, card.score), c) for c in augmented]
+                chain = await fetch_option_chain(client, symbol, option_type=option_type)
+                atm = sorted(chain, key=lambda c: abs(float(c.get("strike", 0)) - price)) if chain else []
+                iv_rank: float | None = float(atm[0]["ivRank"]) if atm else None
 
-            # Check if all contracts are rejected
-            valid_scores = [(s, c) for s, c in scored if s.status != "REJECT"]
-            if not valid_scores:
-                rejected.append(RejectedCandidate(symbol=symbol, reason="all contracts rejected"))
-                log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "all contracts rejected"})
-                continue
+                events = await fetch_events(client, symbol)
+                earnings_date = events.get("earnings_date")
+                dividend_date = events.get("dividend_date")
 
-            # Sort descending by score; primary = index 0, alternatives = indices 1–2
-            valid_scores.sort(key=lambda x: x[0].score, reverse=True)
-            best_score, contract = valid_scores[0]
-            contract_card: ContractScoreCard = best_score
-            runner_ups = valid_scores[1:3]
+                company = (await fetch_company_name(client, symbol)) or symbol
 
-            # Step 6 — Calibrate Heston (best-effort)
-            heston_chain = [
-                {
-                    "strike": float(c.get("strike", 0)),
-                    "expiry_years": c.get("dte", 30) / 365.0,
-                    "mid_price": float(c.get("price", 0)),
-                    "is_call": c.get("right", "C") == "C",
-                }
-                for c in chain
-                if float(c.get("price", 0)) > 0
-            ]
-            heston_result = calibrate_heston(heston_chain, price, r=0.05)
-            heston_params = heston_result.params
+                # Score the stock with full context
+                card: StockScoreCard = score_stock(
+                    symbol, req.direction, req.horizon, candles,
+                    earnings_date=earnings_date,
+                    dividend_date=dividend_date,
+                    iv_rank=iv_rank,
+                )
+                if card.status == "REJECT":
+                    rejected.append(RejectedCandidate(symbol=symbol, reason=f"stock REJECT (score {card.score})"))
+                    log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": f"stock REJECT (score {card.score})"})
+                    continue
 
-            # Step 7 — Assess entry quality
-            bid = float(contract.get("bid", 0))
-            ask = float(contract.get("ask", 0))
-            mid = float(contract.get("price", 0))
-            entry = assess_entry(bid=bid, ask=ask, mid=mid)
+                if not chain:
+                    rejected.append(RejectedCandidate(symbol=symbol, reason="no option chain"))
+                    log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
+                    continue
 
-            # Step 8 — Estimate reward-risk
-            _rr = _rr_cfg()
-            _bull = req.direction == "Bullish"
-            target_price = price * (1 + _rr["bullish_target_pct"]) if _bull else price * (1 - _rr["bearish_target_pct"])
-            invalidation_price = price * (1 - _rr["bullish_invalidation_pct"]) if _bull else price * (1 + _rr["bearish_invalidation_pct"])
-            strike = float(contract.get("strike", price))
-            expiry_years = contract.get("dte", 30) / 365.0
-            premium = float(contract.get("price", 0.10))
+                augmented = [_augment(c) for c in chain]
+                scored = [(validate_contract(c, card.score), c) for c in augmented]
 
-            rr = estimate_rr(
-                stock_price=price,
-                target_price=target_price,
-                invalidation_price=invalidation_price,
-                strike=strike,
-                expiry_years=expiry_years,
-                current_premium=premium,
-                is_call=(req.direction == "Bullish"),
-                heston_params=heston_params,
-            )
+                valid_scores = [(s, c) for s, c in scored if s.status != "REJECT"]
+                if not valid_scores:
+                    rejected.append(RejectedCandidate(symbol=symbol, reason="all contracts rejected"))
+                    log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "all contracts rejected"})
+                    continue
 
-            targets = estimate_targets(
-                stock_price=price,
-                base_target_price=target_price,
-                strike=strike,
-                expiry_years=expiry_years,
-                current_premium=premium,
-                is_call=(req.direction == "Bullish"),
-                heston_params=heston_params,
-            )
+                valid_scores.sort(key=lambda x: x[0].score, reverse=True)
+                best_score, contract = valid_scores[0]
+                contract_card: ContractScoreCard = best_score
+                runner_ups = valid_scores[1:3]
 
-            # Step 9 — Build TradeCardData
-            from datetime import date as _date
-            next_event_days = None
-            next_event_label = None
-            if earnings_date:
-                next_event_days = max(0, (earnings_date - _date.today()).days)
-                next_event_label = "Earnings"
-            elif dividend_date:
-                next_event_days = max(0, (dividend_date - _date.today()).days)
-                next_event_label = "Dividend"
+                # Calibrate Heston (best-effort)
+                heston_chain = [
+                    {
+                        "strike": float(c.get("strike", 0)),
+                        "expiry_years": c.get("dte", 30) / 365.0,
+                        "mid_price": float(c.get("price", 0)),
+                        "is_call": c.get("right", "C") == "C",
+                    }
+                    for c in chain
+                    if float(c.get("price", 0)) > 0
+                ]
+                heston_result = calibrate_heston(heston_chain, price, r=0.05)
+                heston_params = heston_result.params
 
-            trade_card = TradeCardData(
-                symbol=symbol,
-                company=company,
-                price=price,
-                direction=req.direction,
-                status=card.status,
-                stockScore=card.score,
-                stockConfidence=card.status,
-                stockBreakdown=ScoreBreakdown(
-                    trend=_rule_score(card, "trend"),
-                    pullback=_rule_score(card, "pullback"),
-                    trigger=_rule_score(card, "trigger"),
-                    event=_rule_score(card, "event"),
-                    volatility=_rule_score(card, "vol"),
-                ),
-                nextEventDays=next_event_days,
-                nextEventLabel=next_event_label,
-                contract=f"{symbol}|{int(strike)}|{contract.get('expiry','TBD')}|{'C' if req.direction=='Bullish' else 'P'}",
-                contractScore=contract_card.score,
-                contractConfidence=contract_card.status,
-                contractBreakdown=ContractScoreBreakdown(
-                    dteFit=contract_card.breakdown.dte_score,
-                    delta=contract_card.breakdown.delta_score,
-                    ivAttractiveness=contract_card.breakdown.iv_rank_score,
-                    liquidity=contract_card.breakdown.liquidity_score,
-                    spread=contract_card.breakdown.spread_score,
-                ),
-                contractDetails=ContractDetails(
-                    strike=int(strike),
-                    expiry=contract.get("expiry", "TBD"),
-                    right="C" if req.direction == "Bullish" else "P",
-                    mid=round(premium, 2),
-                    delta=float(contract.get("delta", 0.45)),
-                    theta=float(contract.get("theta", -0.05)),
-                    ivRank=int(contract.get("ivRank", 50)),
-                    dte=int(contract.get("dte", 30)),
-                ),
-                entry=TradeEntry(
-                    limit=round(entry.limit_price, 2),
-                    maxFill=round(entry.max_fill, 2),
-                    orderType=entry.order_type,
-                ),
-                exit=TradeExit(
-                    invalidation=round(invalidation_price, 2),
-                    premiumStop=round(premium * _rr["premium_stop_pct"], 2),
-                    timeStopDays=max(3, int(contract.get("dte", 30) * 0.4)),
-                    target=round(target_price, 2),
-                    targets=targets,
-                ),
-                rrRatio=rr.rr_ratio,
-                rrModel=rr.model_used,
-                finalStatus=_final_status(card.status, contract_card.status, entry.quality_status),
-            )
+                # Assess entry quality
+                bid = float(contract.get("bid", 0))
+                ask = float(contract.get("ask", 0))
+                mid = float(contract.get("price", 0))
+                entry = assess_entry(bid=bid, ask=ask, mid=mid)
 
-            alts: list[AlternativeContract] = []
-            for alt_card, alt_c in runner_ups:
-                alt_strike = float(alt_c.get("strike", price))
-                alt_expiry_years = alt_c.get("dte", 30) / 365.0
-                alt_premium = float(alt_c.get("price", 0.10))
-                alt_rr = estimate_rr(
+                # Estimate reward-risk
+                _rr = _rr_cfg()
+                _bull = req.direction == "Bullish"
+                target_price = price * (1 + _rr["bullish_target_pct"]) if _bull else price * (1 - _rr["bearish_target_pct"])
+                invalidation_price = price * (1 - _rr["bullish_invalidation_pct"]) if _bull else price * (1 + _rr["bearish_invalidation_pct"])
+                strike = float(contract.get("strike", price))
+                expiry_years = contract.get("dte", 30) / 365.0
+                premium = float(contract.get("price", 0.10))
+
+                rr = estimate_rr(
                     stock_price=price,
                     target_price=target_price,
                     invalidation_price=invalidation_price,
-                    strike=alt_strike,
-                    expiry_years=alt_expiry_years,
-                    current_premium=alt_premium,
+                    strike=strike,
+                    expiry_years=expiry_years,
+                    current_premium=premium,
                     is_call=(req.direction == "Bullish"),
                     heston_params=heston_params,
                 )
-                alts.append(AlternativeContract(
+
+                targets = estimate_targets(
+                    stock_price=price,
+                    base_target_price=target_price,
+                    strike=strike,
+                    expiry_years=expiry_years,
+                    current_premium=premium,
+                    is_call=(req.direction == "Bullish"),
+                    heston_params=heston_params,
+                )
+
+                # Build TradeCardData
+                from datetime import date as _date
+                next_event_days = None
+                next_event_label = None
+                if earnings_date:
+                    next_event_days = max(0, (earnings_date - _date.today()).days)
+                    next_event_label = "Earnings"
+                elif dividend_date:
+                    next_event_days = max(0, (dividend_date - _date.today()).days)
+                    next_event_label = "Dividend"
+
+                trade_card = TradeCardData(
                     symbol=symbol,
-                    strike=int(alt_strike),
-                    expiry=alt_c.get("expiry", "TBD"),
-                    right="C" if req.direction == "Bullish" else "P",
-                    dte=int(alt_c.get("dte", 30)),
-                    mid=round(float(alt_c.get("price", 0)), 2),
-                    delta=round(float(alt_c.get("delta", 0.45)), 3),
-                    theta=round(float(alt_c.get("theta", -0.05)), 3),
-                    ivRank=int(alt_c.get("ivRank", 50)),
-                    score=alt_card.score,
-                    contractConfidence=alt_card.status,
-                    contractBreakdown=ContractScoreBreakdown(
-                        dteFit=alt_card.breakdown.dte_score,
-                        delta=alt_card.breakdown.delta_score,
-                        ivAttractiveness=alt_card.breakdown.iv_rank_score,
-                        liquidity=alt_card.breakdown.liquidity_score,
-                        spread=alt_card.breakdown.spread_score,
+                    company=company,
+                    price=price,
+                    direction=req.direction,
+                    status=card.status,
+                    stockScore=card.score,
+                    stockConfidence=card.status,
+                    stockBreakdown=ScoreBreakdown(
+                        trend=_rule_score(card, "trend"),
+                        pullback=_rule_score(card, "pullback"),
+                        trigger=_rule_score(card, "trigger"),
+                        event=_rule_score(card, "event"),
+                        volatility=_rule_score(card, "vol"),
                     ),
-                    rrRatio=alt_rr.rr_ratio,
-                    rrModel=alt_rr.model_used,
-                    reason=_alt_reason(alt_c, contract, is_call=(req.direction == "Bullish")),
-                ))
-            trade_card.alternatives = alts
-            trade_card.alternativesCount = len(alts)
+                    nextEventDays=next_event_days,
+                    nextEventLabel=next_event_label,
+                    contract=f"{symbol}|{int(strike)}|{contract.get('expiry','TBD')}|{'C' if req.direction=='Bullish' else 'P'}",
+                    contractScore=contract_card.score,
+                    contractConfidence=contract_card.status,
+                    contractBreakdown=ContractScoreBreakdown(
+                        dteFit=contract_card.breakdown.dte_score,
+                        delta=contract_card.breakdown.delta_score,
+                        ivAttractiveness=contract_card.breakdown.iv_rank_score,
+                        liquidity=contract_card.breakdown.liquidity_score,
+                        spread=contract_card.breakdown.spread_score,
+                    ),
+                    contractDetails=ContractDetails(
+                        strike=int(strike),
+                        expiry=contract.get("expiry", "TBD"),
+                        right="C" if req.direction == "Bullish" else "P",
+                        mid=round(premium, 2),
+                        delta=float(contract.get("delta", 0.45)),
+                        theta=float(contract.get("theta", -0.05)),
+                        ivRank=int(contract.get("ivRank", 50)),
+                        dte=int(contract.get("dte", 30)),
+                    ),
+                    entry=TradeEntry(
+                        limit=round(entry.limit_price, 2),
+                        maxFill=round(entry.max_fill, 2),
+                        orderType=entry.order_type,
+                    ),
+                    exit=TradeExit(
+                        invalidation=round(invalidation_price, 2),
+                        premiumStop=round(premium * _rr["premium_stop_pct"], 2),
+                        timeStopDays=max(3, int(contract.get("dte", 30) * 0.4)),
+                        target=round(target_price, 2),
+                        targets=targets,
+                    ),
+                    rrRatio=rr.rr_ratio,
+                    rrModel=rr.model_used,
+                    finalStatus=_final_status(card.status, contract_card.status, entry.quality_status),
+                )
 
-            candidates.append(trade_card)
-            log_event("trade_card_created", scan_id, {"symbol": symbol, "score": card.score})
+                alts: list[AlternativeContract] = []
+                for alt_card, alt_c in runner_ups:
+                    alt_strike = float(alt_c.get("strike", price))
+                    alt_expiry_years = alt_c.get("dte", 30) / 365.0
+                    alt_premium = float(alt_c.get("price", 0.10))
+                    alt_rr = estimate_rr(
+                        stock_price=price,
+                        target_price=target_price,
+                        invalidation_price=invalidation_price,
+                        strike=alt_strike,
+                        expiry_years=alt_expiry_years,
+                        current_premium=alt_premium,
+                        is_call=(req.direction == "Bullish"),
+                        heston_params=heston_params,
+                    )
+                    alts.append(AlternativeContract(
+                        symbol=symbol,
+                        strike=int(alt_strike),
+                        expiry=alt_c.get("expiry", "TBD"),
+                        right="C" if req.direction == "Bullish" else "P",
+                        dte=int(alt_c.get("dte", 30)),
+                        mid=round(float(alt_c.get("price", 0)), 2),
+                        delta=round(float(alt_c.get("delta", 0.45)), 3),
+                        theta=round(float(alt_c.get("theta", -0.05)), 3),
+                        ivRank=int(alt_c.get("ivRank", 50)),
+                        score=alt_card.score,
+                        contractConfidence=alt_card.status,
+                        contractBreakdown=ContractScoreBreakdown(
+                            dteFit=alt_card.breakdown.dte_score,
+                            delta=alt_card.breakdown.delta_score,
+                            ivAttractiveness=alt_card.breakdown.iv_rank_score,
+                            liquidity=alt_card.breakdown.liquidity_score,
+                            spread=alt_card.breakdown.spread_score,
+                        ),
+                        rrRatio=alt_rr.rr_ratio,
+                        rrModel=alt_rr.model_used,
+                        reason=_alt_reason(alt_c, contract, is_call=(req.direction == "Bullish")),
+                    ))
+                trade_card.alternatives = alts
+                trade_card.alternativesCount = len(alts)
 
-        except Exception as e:
-            has_exception = True
-            rejected.append(RejectedCandidate(symbol=symbol, reason=str(e)))
-            log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": str(e)})
+                candidates.append(trade_card)
+                log_event("trade_card_created", scan_id, {"symbol": symbol, "score": card.score})
+
+            except Exception as e:
+                has_exception = True
+                rejected.append(RejectedCandidate(symbol=symbol, reason=str(e)))
+                log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": str(e)})
 
     # ── Shortlist cap ─────────────────────────────────────────────────────────
     max_candidates: int = _settings.get("scan", {}).get("shortlist_max_candidates", 10)
@@ -431,7 +462,6 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
     shortlist_truncated: bool = original_count > max_candidates
     candidates = candidates[:max_candidates]
 
-    # Determine state: PARTIAL if some exceptions occurred but we still got candidates
     state: ScanState = 'COMPLETED'
     if has_exception and candidates:
         state = 'PARTIAL'
@@ -442,6 +472,10 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         ScanResult(scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(), candidates=candidates, rejected=rejected),
         _last_result,
     )
+
+    elapsed = _time.monotonic() - t0
+    print(f"[scan] Scan completed in {elapsed:.1f}s — {len(candidates)} candidates / "
+          f"{len(prefiltered)} pre-filtered / {len(symbols)} universe")
 
     result = ScanResult(
         scan_id=scan_id,
@@ -455,7 +489,16 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         original_count=original_count,
     )
     _last_result = result
-    await _upsert_session(db, req=_last_request, result=result, status="complete")
+    await _upsert_session(
+        db,
+        scan_id=scan_id,
+        req=_last_request,
+        result=result,
+        status="complete",
+        progress_scanned=len(prefiltered),
+        progress_total=len(prefiltered),
+        candidates_found=len(candidates),
+    )
     return result
 
 
@@ -477,7 +520,7 @@ async def start_continuous_scan(
     _scheduler.set_cadence(config.cadence_minutes)
     _scheduler.bind(_scheduled_scan)
     await _scheduler.start()
-    await _upsert_session(db, req=_last_request, result=_last_result, status="running")
+    await _upsert_session(db, scan_id="scheduler", req=_last_request, result=_last_result, status="running")
     return config
 
 
@@ -485,7 +528,7 @@ async def start_continuous_scan(
 async def stop_continuous_scan(db: AsyncSession = Depends(get_db)) -> dict:
     """Stop the continuous scan scheduler."""
     await _scheduler.stop()
-    await _upsert_session(db, req=_last_request, result=_last_result, status="stopped")
+    await _upsert_session(db, scan_id="scheduler", req=_last_request, result=_last_result, status="stopped")
     return {"status": "stopped"}
 
 

@@ -1,29 +1,21 @@
 from __future__ import annotations
+import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Text, DateTime
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import Column, String, Text, DateTime, Integer
+from app.database import Base
 
 
-class ScanSessionBase(DeclarativeBase):
-    """Standalone base for ScanSession — avoids conflict with the shared Base
-    that injects a PostgreSQL UUID primary key and timestamp columns."""
-    pass
-
-
-class ScanSession(ScanSessionBase):
+class ScanSession(Base):
     __tablename__ = "scan_sessions"
 
-    id               = Column(String, primary_key=True)   # UUID string
-    status           = Column(String, nullable=False, default="idle")
-    # "idle" | "running" | "complete"
-    last_result_json  = Column(Text, nullable=True)         # JSON-serialized ScanResult
-    last_request_json = Column(Text, nullable=True)         # JSON-serialized ScanRequest
-    created_at        = Column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-    )
-    updated_at       = Column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
+    id                = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    status            = Column(String, nullable=False, default="QUEUED")
+    progress_scanned  = Column(Integer, default=0)
+    progress_total    = Column(Integer, default=0)
+    candidates_found  = Column(Integer, default=0)
+    error_message     = Column(String, nullable=True)
+    last_result_json  = Column(Text, nullable=True)
+    last_request_json = Column(Text, nullable=True)
+    created_at        = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at        = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    completed_at      = Column(DateTime(timezone=True), nullable=True)

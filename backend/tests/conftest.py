@@ -25,8 +25,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.database import get_db
-from app.models.scan_session import ScanSessionBase
+from app.database import get_db, Base
+from app.models import scan_session  # noqa: F401  registers ScanSession on Base.metadata
 
 # ── Test DB ───────────────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ _TestSession = async_sessionmaker(
 
 async def _create_tables() -> None:
     async with _test_engine.begin() as conn:
-        await conn.run_sync(ScanSessionBase.metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all)
 
 
 async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:

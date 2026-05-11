@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import date, timedelta
+from typing import Iterable as _Iterable
 from typing import Literal, Optional
 
 import httpx
@@ -17,16 +19,13 @@ def _headers() -> dict:
     }
 
 
-def fetch_candles(symbol: str, bars: int = 120) -> list[dict]:
-    """
-    Returns up to `bars` daily OHLCV bars for `symbol`, newest last.
-    Each dict: {time: str (YYYY-MM-DD), open, high, low, close: float, volume: int}
-    Returns [] on any error.
-    """
+# -- Per-symbol async fetchers (all take httpx.AsyncClient) --------------------
+
+async def fetch_candles(client: httpx.AsyncClient, symbol: str, bars: int = 120) -> list[dict]:
     try:
         end = date.today()
-        start = end - timedelta(days=200)  # ~200 calendar days covers 120+ trading days
-        resp = httpx.get(
+        start = end - timedelta(days=200)
+        resp = await client.get(
             f"{TRADIER_BASE_URL}/v1/markets/history",
             headers=_headers(),
             params={
@@ -35,7 +34,7 @@ def fetch_candles(symbol: str, bars: int = 120) -> list[dict]:
                 "start": start.isoformat(),
                 "end": end.isoformat(),
             },
-            timeout=10,
+            timeout=10.0,
         )
         resp.raise_for_status()
         history = resp.json().get("history")
@@ -59,45 +58,18 @@ def fetch_candles(symbol: str, bars: int = 120) -> list[dict]:
         return []
 
 
-def fetch_price(symbol: str) -> Optional[float]:
-    """
-    Returns the latest price for `symbol`, or None on failure.
-    """
-    try:
-        resp = httpx.get(
-            f"{TRADIER_BASE_URL}/v1/markets/quotes",
-            headers=_headers(),
-            params={"symbols": symbol},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        quote = resp.json().get("quotes", {}).get("quote", {})
-        if isinstance(quote, list):
-            quote = quote[0]
-        last = quote.get("last") or quote.get("close")
-        return round(float(last), 2) if last else None
-    except Exception:
-        return None
-
-
-def fetch_option_chain(
+async def fetch_option_chain(
+    client: httpx.AsyncClient,
     symbol: str,
     expiry: Optional[str] = None,
     option_type: Literal["C", "P"] = "C",
 ) -> list[dict]:
-    """
-    Returns option contracts for `symbol`.
-    option_type: "C" for calls (Bullish), "P" for puts (Bearish).
-    Returns real greeks (delta, theta) from Tradier.
-    Returns [] on any error.
-    """
     try:
-        # Step 1: get available expirations
-        exp_resp = httpx.get(
+        exp_resp = await client.get(
             f"{TRADIER_BASE_URL}/v1/markets/options/expirations",
             headers=_headers(),
             params={"symbol": symbol, "includeAllRoots": "true"},
-            timeout=10,
+            timeout=10.0,
         )
         exp_resp.raise_for_status()
         expirations = exp_resp.json().get("expirations")
@@ -111,8 +83,7 @@ def fetch_option_chain(
 
         target_exp = expiry if expiry in dates else dates[0]
 
-        # Step 2: fetch chain with greeks
-        chain_resp = httpx.get(
+        chain_resp = await client.get(
             f"{TRADIER_BASE_URL}/v1/markets/options/chains",
             headers=_headers(),
             params={
@@ -120,7 +91,7 @@ def fetch_option_chain(
                 "expiration": target_exp,
                 "greeks": "true",
             },
-            timeout=10,
+            timeout=10.0,
         )
         chain_resp.raise_for_status()
         options_data = chain_resp.json().get("options")
@@ -142,7 +113,6 @@ def fetch_option_chain(
         for c in contracts:
             if c.get("option_type") != tradier_type:
                 continue
-
             bid = float(c.get("bid") or 0)
             ask = float(c.get("ask") or 0)
             if ask <= 0:
@@ -153,11 +123,9 @@ def fetch_option_chain(
             oi = int(c.get("open_interest") or 0)
             strike = float(c.get("strike") or 0)
             iv = float(c.get("implied_volatility") or 0)
-
             greeks = c.get("greeks") or {}
             delta = float(greeks.get("delta") or 0)
             theta = float(greeks.get("theta") or 0)
-
             result.append({
                 "id": f"{symbol}|{int(strike)}|{target_exp}|{option_type}",
                 "symbol": symbol,
@@ -169,7 +137,6 @@ def fetch_option_chain(
                 "price": mid,
                 "delta": round(delta, 4),
                 "theta": round(theta, 4),
-                # ivRank: current IV as proxy — true 52-week IV rank needs historical options data
                 "ivRank": int(round(iv * 100)),
                 "ivPercentile": 0,
                 "spread": spread,
@@ -182,18 +149,13 @@ def fetch_option_chain(
         return []
 
 
-def fetch_quotes(symbols: list[str]) -> dict[str, dict]:
-    """
-    Batch-fetch latest quotes for a list of symbols.
-    Returns dict keyed by symbol: {"last": float, "prevclose": float}
-    Returns {} on any error.
-    """
+async def fetch_quotes(client: httpx.AsyncClient, symbols: list[str]) -> dict[str, dict]:
     try:
-        resp = httpx.get(
+        resp = await client.get(
             f"{TRADIER_BASE_URL}/v1/markets/quotes",
             headers=_headers(),
             params={"symbols": ",".join(symbols)},
-            timeout=10,
+            timeout=10.0,
         )
         resp.raise_for_status()
         quote_data = resp.json().get("quotes", {}).get("quote", [])
@@ -205,88 +167,62 @@ def fetch_quotes(symbols: list[str]) -> dict[str, dict]:
             last = q.get("last") or q.get("close") or 0
             prev = q.get("prevclose") or last
             if sym and last:
-                result[sym] = {"last": float(last), "prevclose": float(prev)}
+                result[sym] = {
+                    "last": float(last),
+                    "prevclose": float(prev),
+                    "average_volume": int(q.get("average_volume") or 0),
+                    "week_52_high": float(q.get("week_52_high") or 0),
+                    "week_52_low": float(q.get("week_52_low") or 0),
+                }
         return result
     except Exception:
         return {}
 
 
-def fetch_earnings_date(symbol: str) -> Optional[date]:
-    """
-    Returns the next earnings report date for `symbol`, or None if unavailable.
-    Uses Tradier's beta fundamentals calendar endpoint — may return None if
-    the account lacks fundamentals access.
-    """
+async def fetch_events(client: httpx.AsyncClient, symbol: str) -> dict[str, Optional[date]]:
+    result: dict[str, Optional[date]] = {"earnings_date": None, "dividend_date": None}
     try:
-        resp = httpx.get(
+        resp = await client.get(
             f"{TRADIER_BASE_URL}/beta/markets/fundamentals/calendars",
             headers=_headers(),
             params={"symbols": symbol},
-            timeout=10,
+            timeout=10.0,
         )
         resp.raise_for_status()
         data = resp.json()
         if not data or not isinstance(data, list):
-            return None
+            return result
         today = date.today()
         for entry in data:
-            for result in entry.get("results", []):
-                report_date_str = result.get("tables", {}).get("earnings", {}).get("report_date")
-                if report_date_str:
+            for r in entry.get("results", []):
+                earnings_str = r.get("tables", {}).get("earnings", {}).get("report_date")
+                if earnings_str:
                     try:
-                        d = date.fromisoformat(report_date_str)
-                        if d >= today:
-                            return d
+                        d = date.fromisoformat(earnings_str)
+                        if d >= today and result["earnings_date"] is None:
+                            result["earnings_date"] = d
                     except ValueError:
                         pass
-        return None
-    except Exception:
-        return None
-
-
-def fetch_dividend_date(symbol: str) -> Optional[date]:
-    """
-    Returns the next ex-dividend date for `symbol`, or None if unavailable.
-    Uses Tradier's beta fundamentals calendar endpoint.
-    """
-    try:
-        resp = httpx.get(
-            f"{TRADIER_BASE_URL}/beta/markets/fundamentals/calendars",
-            headers=_headers(),
-            params={"symbols": symbol},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if not data or not isinstance(data, list):
-            return None
-        today = date.today()
-        for entry in data:
-            for result in entry.get("results", []):
-                ex_date_str = result.get("tables", {}).get("dividend", {}).get("ex_dividend_date")
-                if ex_date_str:
+                div_str = r.get("tables", {}).get("dividend", {}).get("ex_dividend_date")
+                if div_str:
                     try:
-                        d = date.fromisoformat(ex_date_str)
-                        if d >= today:
-                            return d
+                        d = date.fromisoformat(div_str)
+                        if d >= today and result["dividend_date"] is None:
+                            result["dividend_date"] = d
                     except ValueError:
                         pass
-        return None
+        return result
     except Exception:
-        return None
+        return result
 
 
-def fetch_company_name(symbol: str) -> Optional[str]:
-    """
-    Returns the company name for `symbol`, or None if unavailable.
-    Uses Tradier's beta fundamentals company endpoint.
-    """
+async def fetch_company_name(client: httpx.AsyncClient, symbol: str) -> Optional[str]:
     try:
-        resp = httpx.get(
+        resp = await client.get(
             f"{TRADIER_BASE_URL}/beta/markets/fundamentals/company",
             headers=_headers(),
             params={"symbols": symbol},
-            timeout=10,
+            timeout=10.0,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -302,19 +238,13 @@ def fetch_company_name(symbol: str) -> Optional[str]:
         return None
 
 
-def fetch_news(symbols: list[str], limit: int = 20) -> list[dict]:
-    """
-    Returns recent news articles for the given symbols from Tradier.
-    Each item: {id, symbol, headline, source, timestamp, sentiment}
-    sentiment is always 'neutral' — Tradier does not provide sentiment scores.
-    Returns [] on any error.
-    """
+async def fetch_news(client: httpx.AsyncClient, symbols: list[str], limit: int = 20) -> list[dict]:
     try:
-        resp = httpx.get(
+        resp = await client.get(
             f"{TRADIER_BASE_URL}/v1/markets/news",
             headers=_headers(),
             params={"symbols": ",".join(symbols), "limit": limit},
-            timeout=10,
+            timeout=10.0,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -336,3 +266,123 @@ def fetch_news(symbols: list[str], limit: int = 20) -> list[dict]:
         return result
     except Exception:
         return []
+
+
+# -- Backward-compatible wrappers (thin around fetch_events) -------------------
+
+async def fetch_earnings_date(client: httpx.AsyncClient, symbol: str) -> Optional[date]:
+    events = await fetch_events(client, symbol)
+    return events["earnings_date"]
+
+
+async def fetch_dividend_date(client: httpx.AsyncClient, symbol: str) -> Optional[date]:
+    events = await fetch_events(client, symbol)
+    return events["dividend_date"]
+
+
+# -- Batch helpers -------------------------------------------------------------
+
+def _chunked(lst: list, n: int) -> _Iterable:
+    for i in range(0, len(lst), n):
+        yield lst[i : i + n]
+
+
+async def fetch_batch_quotes(
+    client: httpx.AsyncClient,
+    symbols: list[str],
+    semaphore: asyncio.Semaphore,
+) -> dict[str, dict]:
+    batches = list(_chunked(symbols, 50))
+    async def _safe(batch):
+        async with semaphore:
+            try:
+                return await fetch_quotes(client, batch)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    retry_after = int(e.response.headers.get("Retry-After", 10))
+                    await asyncio.sleep(retry_after)
+                    return await fetch_quotes(client, batch)
+                raise
+    results = await asyncio.gather(*[_safe(b) for b in batches], return_exceptions=True)
+    merged: dict[str, dict] = {}
+    for r in results:
+        if isinstance(r, dict):
+            merged.update(r)
+    return merged
+
+
+async def fetch_batch_candles(
+    client: httpx.AsyncClient,
+    symbols: list[str],
+    semaphore: asyncio.Semaphore,
+    bars: int = 120,
+) -> dict[str, list[dict]]:
+    async def _safe(sym):
+        async with semaphore:
+            try:
+                return sym, await fetch_candles(client, sym, bars)
+            except Exception:
+                return sym, []
+    results = await asyncio.gather(*[_safe(s) for s in symbols], return_exceptions=True)
+    out: dict[str, list[dict]] = {}
+    for item in results:
+        if isinstance(item, tuple):
+            sym, candles = item
+            out[sym] = candles
+    return out
+
+
+# -- Pre-filter (quote data only -- no candles, no option chains) --------------
+
+def _prefilter_score(q: dict) -> float:
+    last = float(q.get("last", 0))
+    high = float(q.get("week_52_high", 0))
+    low = float(q.get("week_52_low", 0))
+    if not all([last, high, low]) or high <= low:
+        return 0.0
+
+    range_pct = (last - low) / (high - low)
+
+    if range_pct < 0.3:
+        drift = 0.5 - (0.3 - range_pct)
+    elif range_pct > 0.7:
+        drift = 0.5 - (range_pct - 0.7)
+    else:
+        drift = 0.5 + (0.5 - abs(range_pct - 0.5))
+
+    vol_score = min(1.0, float(q.get("average_volume", 0)) / 10_000_000)
+
+    return (drift * 0.6) + (vol_score * 0.4)
+
+
+def prefilter_candidates(
+    quotes: dict[str, dict],
+    filters: dict | None = None,
+    max_candidates: int = 75,
+) -> list[str]:
+    scored: list[tuple[str, float]] = []
+    for sym, q in quotes.items():
+        last = q.get("last", 0)
+        vol = q.get("average_volume", 0)
+        high = q.get("week_52_high", 0)
+
+        if not last or not high:
+            continue
+        if vol < 500_000:
+            continue
+
+        if filters:
+            min_price = filters.get("min_price")
+            max_price = filters.get("max_price")
+            if min_price is not None and last < min_price:
+                continue
+            if max_price is not None and last > max_price:
+                continue
+
+        score = _prefilter_score(q)
+        if score <= 0:
+            continue
+        scored.append((sym, score))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [sym for sym, _ in scored[:max_candidates]]
