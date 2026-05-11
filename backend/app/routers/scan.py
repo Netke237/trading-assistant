@@ -236,6 +236,14 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         }
         prefiltered = prefilter_candidates(all_quotes, filters_in, max_candidates=75)
 
+        # Track symbols filtered out by pre-filter (no quotes, low volume, price out of range)
+        prefiltered_set = set(prefiltered)
+        for sym in symbols:
+            if sym not in prefiltered_set:
+                reason = "no quotes" if sym not in all_quotes else "failed pre-filter (low volume, price range, or 52w position)"
+                rejected.append(RejectedCandidate(symbol=sym, reason=reason))
+                log_event("candidate_rejected", scan_id, {"symbol": sym, "reason": reason})
+
         # Phase C — Batch-fetch candles for pre-filtered symbols only
         all_candles = await fetch_batch_candles(client, prefiltered, semaphore)
 

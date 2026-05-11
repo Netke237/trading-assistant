@@ -1,12 +1,12 @@
 """Route tests for POST /api/scan.
 
-market.py uses yfinance for live data. All tests that exercise the pipeline
-mock fetch_price, fetch_candles, and fetch_option_chain so they run
-network-free and deterministically.
+market.py uses async Tradier calls. All tests that exercise the pipeline
+mock fetch_batch_quotes, fetch_batch_candles, fetch_option_chain, fetch_events,
+and fetch_company_name so they run network-free and deterministically.
 """
 
 import re
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 # ── Shape & contract ──────────────────────────────────────────────────────────
 
@@ -68,9 +68,11 @@ def test_scan_missing_body_returns_422(client):
 # ── No market data → symbol rejected ─────────────────────────────────────────
 
 def test_scan_no_market_data_rejects_symbol(client):
-    """When fetch_price returns None the symbol must appear in rejected, not candidates."""
-    with patch("app.routers.scan.fetch_price",        return_value=None), \
-         patch("app.routers.scan.fetch_candles",       return_value=[]), \
+    """When candles are empty the symbol appears in rejected (pre-filter passes via quote, fails on blank candles)."""
+    mock_quotes = {"AAPL": {"last": 185.0, "prevclose": 184.0, "average_volume": 5_000_000,
+                              "week_52_high": 200.0, "week_52_low": 150.0}}
+    with patch("app.routers.scan.fetch_batch_quotes",   return_value=mock_quotes), \
+         patch("app.routers.scan.fetch_batch_candles",  return_value={"AAPL": []}), \
          patch("app.routers.scan.fetch_option_chain",  return_value=[]):
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
@@ -98,12 +100,27 @@ _MOCK_CHAIN = [
     }
 ]
 
+_MOCK_QUOTE = {
+    "last": 185.0,
+    "average_volume": 5_000_000,
+    "week_52_high": 200.0,
+    "week_52_low": 150.0,
+}
+
+_MOCK_EVENTS = {"earnings_date": None, "dividend_date": None}
+
 
 def test_scan_with_mock_data_processes_symbol(client):
     """With valid mock data the symbol appears in candidates or rejected — never missing."""
-    with patch("app.routers.scan.fetch_price",        return_value=185.0), \
-         patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES), \
-         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_CHAIN):
+    mock_quotes = {
+        "AAPL": {"last": 185.0, "prevclose": 184.0, "average_volume": 60_000_000,
+                  "week_52_high": 200.0, "week_52_low": 150.0},
+    }
+    with patch("app.routers.scan.fetch_batch_quotes",   return_value=mock_quotes), \
+         patch("app.routers.scan.fetch_batch_candles",  return_value={"AAPL": _MOCK_CANDLES}), \
+         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_CHAIN), \
+         patch("app.routers.scan.fetch_events",         return_value={"earnings_date": None, "dividend_date": None}), \
+         patch("app.routers.scan.fetch_company_name",  return_value="Apple Inc."):
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
         })
@@ -118,9 +135,15 @@ def test_scan_with_mock_data_processes_symbol(client):
 
 def test_scan_with_mock_data_candidate_shape(client):
     """If AAPL is scored as a candidate its TradeCardData shape must be valid."""
-    with patch("app.routers.scan.fetch_price",        return_value=185.0), \
-         patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES), \
-         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_CHAIN):
+    mock_quotes = {
+        "AAPL": {"last": 185.0, "prevclose": 184.0, "average_volume": 60_000_000,
+                  "week_52_high": 200.0, "week_52_low": 150.0},
+    }
+    with patch("app.routers.scan.fetch_batch_quotes",   return_value=mock_quotes), \
+         patch("app.routers.scan.fetch_batch_candles",  return_value={"AAPL": _MOCK_CANDLES}), \
+         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_CHAIN), \
+         patch("app.routers.scan.fetch_events",         return_value={"earnings_date": None, "dividend_date": None}), \
+         patch("app.routers.scan.fetch_company_name",  return_value="Apple Inc."):
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
         })
@@ -136,9 +159,13 @@ def test_scan_with_mock_data_candidate_shape(client):
 def test_scan_multiple_symbols_all_accounted_for(client):
     """Every symbol in universe must appear in candidates OR rejected — none silently dropped."""
     universe = ["AAPL", "MSFT", "NVDA"]
-    with patch("app.routers.scan.fetch_price",        return_value=185.0), \
-         patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES), \
-         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_CHAIN):
+    quotes = {s: _MOCK_QUOTE for s in universe}
+    candles = {s: _MOCK_CANDLES for s in universe}
+    with patch("app.routers.scan.fetch_batch_quotes",   new_callable=AsyncMock, return_value=quotes), \
+         patch("app.routers.scan.fetch_batch_candles",  new_callable=AsyncMock, return_value=candles), \
+         patch("app.routers.scan.fetch_option_chain",   new_callable=AsyncMock, return_value=_MOCK_CHAIN), \
+         patch("app.routers.scan.fetch_events",         new_callable=AsyncMock, return_value=_MOCK_EVENTS), \
+         patch("app.routers.scan.fetch_company_name",   new_callable=AsyncMock, return_value="Corp"):
         r = client.post("/api/scan", json={
             "universe": universe, "direction": "Bullish", "horizon": "Swing", "overrides": {},
         })
