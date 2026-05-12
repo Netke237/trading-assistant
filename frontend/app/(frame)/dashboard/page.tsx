@@ -50,10 +50,10 @@ export default function DashboardPage() {
 
   const portfolio = usePortfolioStore((s) => s.positions);
 
-  const toasts = useAlertStore((s) => s.toasts.filter((t) => !t.dismissed));
+  const visibleToasts = useAlertStore((s) => s.visibleToasts);
   const allAlerts: AlertItem[] = [
     ...alerts,
-    ...toasts.map((t) => ({
+    ...visibleToasts.map((t) => ({
       id: t.id,
       kind: t.kind,
       symbol: t.symbol,

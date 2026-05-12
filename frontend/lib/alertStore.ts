@@ -5,6 +5,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 
 interface AlertStoreState {
   toasts: ToastItem[];
+  visibleToasts: ToastItem[];
   unreadCount: number;
   config: AlertConfig;
   firedAlerts: Record<string, number>;
@@ -32,6 +33,7 @@ export const useAlertStore = create<AlertStoreState>()(
   persist(
     (set, get) => ({
       toasts: [],
+      visibleToasts: [],
       unreadCount: 0,
       config: DEFAULT_CONFIG,
       firedAlerts: {},
@@ -55,17 +57,23 @@ export const useAlertStore = create<AlertStoreState>()(
         evicted[compositeKey] = now;
         const id = now.toString(36) + Math.random().toString(36).slice(2, 6);
         const toast: ToastItem = { ...item, id, dismissed: false };
+        const updatedToasts = [...toasts, toast];
         set({
-          toasts: [...toasts, toast],
+          toasts: updatedToasts,
+          visibleToasts: updatedToasts.filter((t) => !t.dismissed),
           unreadCount: get().unreadCount + 1,
           firedAlerts: evicted,
         });
       },
 
       dismissToast: (id) => {
-        set((s) => ({
-          toasts: s.toasts.map((t) => (t.id === id ? { ...t, dismissed: true } : t)),
-        }));
+        set((s) => {
+          const updatedToasts = s.toasts.map((t) => (t.id === id ? { ...t, dismissed: true } : t));
+          return {
+            toasts: updatedToasts,
+            visibleToasts: updatedToasts.filter((t) => !t.dismissed),
+          };
+        });
       },
 
       clearAll: () => {
