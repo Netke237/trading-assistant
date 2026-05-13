@@ -115,7 +115,6 @@ def _augment(c: dict) -> dict:
         **c,
         "bid": round(max(0.01, mid - spread / 2), 2),
         "ask": round(mid + spread / 2, 2),
-        "open_interest": c.get("volume", 0),
     }
 
 

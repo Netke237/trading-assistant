@@ -59,7 +59,14 @@ export function RunScanButton() {
     const universe = pick === 'Custom' ? parseSymbols(customRaw) : [pick];
     const direction   = context?.direction ?? 'Bullish';
     const horizonRaw  = context?.horizon   ?? 'Swing (5–15d)';
-    const horizon     = horizonRaw.split(' ')[0];  // "Swing (5–15d)" → "Swing"
+    const horizonKey  = horizonRaw.split(' ')[0];  // "Swing (5–15d)" → "Swing"
+    // "Custom" is not a valid API horizon — map to nearest preset by max-day value
+    let horizon: string = horizonKey;
+    if (horizonKey === 'Custom') {
+      const maxMatch = horizonRaw.match(/–(\d+)d/);
+      const maxDays  = maxMatch ? Number(maxMatch[1]) : 15;
+      horizon = maxDays <= 4 ? 'Intraday' : maxDays <= 20 ? 'Swing' : 'Position';
+    }
 
     const filters: Record<string, number> = {};
     const minPrice = Number(minPriceRaw);
