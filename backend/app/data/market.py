@@ -107,7 +107,7 @@ def fetch_option_chain(
             target_exp = expiry
         else:
             target_exp = next(
-                (d for d in dates if (date.fromisoformat(d) - _today).days >= 14),
+                (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
                 None,
             )
             if target_exp is None:
@@ -405,7 +405,7 @@ async def fetch_option_chain_async(
             target_exp = expiry
         else:
             target_exp = next(
-                (d for d in dates if (date.fromisoformat(d) - _today).days >= 14),
+                (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
                 None,
             )
             if target_exp is None:
