@@ -49,6 +49,7 @@ export default function Step3Page() {
   const [offline, setOffline]     = useState(false);
   const [news, setNews]           = useState<NewsItem[]>([]);
   const [newsLoading, setNewsLoading] = useState(false);
+  const [newsError, setNewsError] = useState(false);
 
   useEffect(() => {
     api.getRegime().then((r) => { setRegimeData(r); setRegime(r.overall); }).catch(() => setOffline(true));
@@ -59,7 +60,7 @@ export default function Step3Page() {
     const symbols = useScanStore.getState().scanResult?.candidates.map((c) => c.symbol) ?? [];
     if (symbols.length > 0) {
       setNewsLoading(true);
-      api.getNews(symbols).then(setNews).catch(() => {}).finally(() => setNewsLoading(false));
+      api.getNews(symbols).then(setNews).catch(() => setNewsError(true)).finally(() => setNewsLoading(false));
     }
   }, [setRegime]);
 
@@ -188,7 +189,9 @@ export default function Step3Page() {
 
       <section className={pageStyles.newsSection}>
         <Text size={11} tone="dim" weight={500}>MARKET NEWS</Text>
-        <NewsCard items={news} loading={newsLoading} />
+        {newsError && !newsLoading
+          ? <Text size={12} tone="reject">News unavailable — backend offline?</Text>
+          : <NewsCard items={news} loading={newsLoading} />}
       </section>
 
       <RunScanButton />

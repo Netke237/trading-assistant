@@ -160,8 +160,8 @@ export default function Step2Page() {
             <Text size={11} tone="dim" weight={500}>SCAN FILTER LOG</Text>
             <span className={formStyles.badge}>{rejectedLog.length}</span>
           </div>
-          {rejectedLog.slice(0, 10).map((entry, i) => (
-            <div key={i} className={formStyles.logRow}>
+          {rejectedLog.slice(0, 10).map((entry) => (
+            <div key={`${entry.symbol}-${entry.reason}`} className={formStyles.logRow}>
               <Data size={12} weight={500}>{entry.symbol}</Data>
               <Text size={12} tone="secondary">&mdash; {entry.reason}</Text>
             </div>

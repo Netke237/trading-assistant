@@ -17,6 +17,7 @@ export interface ScanResult {
   scan_id: string;
   timestamp: string;
   candidates: TradeCardData[];
+  rejected?: { symbol: string; reason: string }[];
 }
 
 interface ScanStoreState {

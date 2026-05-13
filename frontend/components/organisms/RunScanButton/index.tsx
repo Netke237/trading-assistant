@@ -81,6 +81,7 @@ export function RunScanButton() {
     if (Number.isFinite(maxCap) && maxCapRaw !== '') filters.max_cap_usd = maxCap * capMultiplier;
 
     setScanState('SCANNING');
+    useScanStore.getState().setRejectedLog([]);
     api.postScan(universe, direction, horizon, filters)
       .then((result) => {
         setScanResult(result);
@@ -94,6 +95,7 @@ export function RunScanButton() {
       })
       .catch(() => {
         console.error('[RunScanButton] scan failed, is backend running on port 8000?');
+        useScanStore.getState().setRejectedLog([]);
         setScanState('FAILED');
         useAlertStore.getState().addToast({
           kind: 'Critical',

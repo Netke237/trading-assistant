@@ -70,14 +70,17 @@ export default function Step1Page() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState(false);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
+    setRefreshError(false);
     try {
       const regime = await api.getRegime();
       useScanStore.getState().setRegime(regime.overall);
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch {
+      setRefreshError(true);
     } finally {
       setRefreshing(false);
     }
@@ -284,8 +287,11 @@ export default function Step1Page() {
           >
             {refreshing ? 'Refreshing\u2026' : 'Refresh regime'}
           </button>
-          {lastRefreshed && (
+          {lastRefreshed && !refreshError && (
             <Text size={11} tone="dim">Updated {lastRefreshed}</Text>
+          )}
+          {refreshError && (
+            <Text size={11} tone="reject">Refresh failed</Text>
           )}
         </div>
       </div>
