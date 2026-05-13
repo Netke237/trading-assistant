@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { Title, Text } from '@/components/primitives';
+import { Title, Text, Data } from '@/components/primitives';
 import type { Direction } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
 import styles from '../screener.module.css';
@@ -47,8 +47,9 @@ function parseCustomDays(h: string | undefined): [number, number] {
 }
 
 export default function Step2Page() {
-  const context    = useScanStore((s) => s.context);
-  const setContext = useScanStore((s) => s.setContext);
+  const context     = useScanStore((s) => s.context);
+  const setContext  = useScanStore((s) => s.setContext);
+  const rejectedLog = useScanStore((s) => s.rejectedLog);
 
   const [dir,     setDir]     = useState<Direction>(() => context?.direction ?? 'Bullish');
   const [hz,      setHz]      = useState<HorizonKey>(() => parseHorizonKey(context?.horizon));
@@ -152,6 +153,25 @@ export default function Step2Page() {
           </div>
         </div>
       </div>
+
+      {rejectedLog.length > 0 && (
+        <div className={formStyles.logSection}>
+          <div className={formStyles.logHeader}>
+            <Text size={11} tone="dim" weight={500}>SCAN FILTER LOG</Text>
+            <span className={formStyles.badge}>{rejectedLog.length}</span>
+          </div>
+          {rejectedLog.slice(0, 10).map((entry, i) => (
+            <div key={i} className={formStyles.logRow}>
+              <Data size={12} weight={500}>{entry.symbol}</Data>
+              <Text size={12} tone="secondary">&mdash; {entry.reason}</Text>
+            </div>
+          ))}
+          {rejectedLog.length > 10 && (
+            <Text size={12} tone="dim">&hellip; and {rejectedLog.length - 10} more screened out</Text>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
