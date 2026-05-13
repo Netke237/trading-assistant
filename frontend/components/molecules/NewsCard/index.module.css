@@ -1,0 +1,31 @@
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.sentimentBar {
+  width: 3px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  align-self: stretch;
+}
+
+.row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.skeleton {
+  height: 48px;
+  background: color-mix(in srgb, var(--fg-primary) 6%, var(--bg-surface));
+  border-radius: 4px;
+  margin-bottom: var(--space-2);
+}
