@@ -84,6 +84,7 @@ export function RunScanButton() {
     api.postScan(universe, direction, horizon, filters)
       .then((result) => {
         setScanResult(result);
+        useScanStore.getState().setRejectedLog(result.rejected ?? []);
         const portfolioSymbols = new Set(usePortfolioStore.getState().positions.map((p) => p.symbol));
         const conflicted = result.candidates
           .map((c) => c.symbol)
