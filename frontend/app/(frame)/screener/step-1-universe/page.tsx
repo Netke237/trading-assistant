@@ -20,7 +20,6 @@ type Universe =
   | 'SP500'
   | 'NDX100'
   | 'DOW30'
-  | 'RUSSELL2000'
   | 'SPY'
   | 'Watchlist'
   | 'Custom';
@@ -92,7 +91,6 @@ export default function Step1Page() {
     { key: 'SP500',       label: 'S&P 500',      count: 503,  desc: 'Large-cap US equities. Recommended for most users.' },
     { key: 'NDX100',      label: 'Nasdaq-100',   count: 100,  desc: 'Tech-heavy large caps. Higher vol, higher signal.' },
     { key: 'DOW30',       label: 'Dow 30',       count: 30,   desc: 'Blue-chip US industrials. Narrow but liquid.' },
-    { key: 'RUSSELL2000', label: 'Russell 2000', count: 2000, desc: 'US small caps. Broader breadth, thinner liquidity.' },
     { key: 'SPY',         label: 'SPY ETF',      count: 1,    desc: 'S&P 500 ETF — single contract, fast scan for testing.' },
     { key: 'Watchlist',   label: 'My Watchlist', count: watchlistCount, desc: 'Only symbols on your personal watchlist.' },
     { key: 'Custom',      label: 'Custom list',  count: symbols.length || '—',  desc: 'Paste or type your own tickers (stocks / ETFs).' },
@@ -132,7 +130,9 @@ export default function Step1Page() {
             <div className={formStyles.cardHeader}>
               <Text size={14} weight={600}>{o.label}</Text>
               <Data size={11} tone="secondary">
-                {typeof o.count === 'number' ? `${o.count} symbols` : o.count}
+                {typeof o.count === 'number'
+                  ? `${o.count} ${o.count === 1 ? 'symbol' : 'symbols'}`
+                  : o.count}
               </Data>
             </div>
             <Text size={12} tone="secondary">{o.desc}</Text>
@@ -163,6 +163,7 @@ export default function Step1Page() {
                   onChange={(e) => setMinPriceRaw(e.target.value)}
                   className={formStyles.numInput}
                   aria-label="Minimum stock price in dollars"
+                  aria-describedby={priceInvalid ? 'filter-warning' : undefined}
                 />
               </div>
               <span className={formStyles.pairDash}>–</span>
@@ -177,6 +178,7 @@ export default function Step1Page() {
                   onChange={(e) => setMaxPriceRaw(e.target.value)}
                   className={formStyles.numInput}
                   aria-label="Maximum stock price in dollars"
+                  aria-describedby={priceInvalid ? 'filter-warning' : undefined}
                 />
               </div>
             </div>
@@ -224,6 +226,7 @@ export default function Step1Page() {
                   onChange={(e) => setMinCapRaw(e.target.value)}
                   className={formStyles.numInput}
                   aria-label={`Minimum market cap in ${capUnit === 'B' ? 'billions' : 'millions'}`}
+                  aria-describedby={capInvalid ? 'filter-warning' : undefined}
                 />
                 <span className={formStyles.moneySuffix}>{capUnit}</span>
               </div>
@@ -239,6 +242,7 @@ export default function Step1Page() {
                   onChange={(e) => setMaxCapRaw(e.target.value)}
                   className={formStyles.numInput}
                   aria-label={`Maximum market cap in ${capUnit === 'B' ? 'billions' : 'millions'}`}
+                  aria-describedby={capInvalid ? 'filter-warning' : undefined}
                 />
                 <span className={formStyles.moneySuffix}>{capUnit}</span>
               </div>
@@ -252,18 +256,30 @@ export default function Step1Page() {
         </div>
 
         {(priceInvalid || capInvalid) && (
-          <Text size={12} tone="reject">Fix filter range before proceeding — minimum is above maximum.</Text>
+          <div
+            id="filter-warning"
+            className={formStyles.filterWarning}
+            role="alert"
+          >
+            <Text size={12} tone="reject">
+              {priceInvalid && capInvalid
+                ? 'Fix filter ranges before proceeding — both minimums are above their maximums.'
+                : 'Fix filter range before proceeding — minimum is above maximum.'}
+            </Text>
+          </div>
         )}
 
         <div className={formStyles.filtersFooter}>
           {hasFilters ? (
             <>
-              <Text size={11} tone="secondary">
-                Filters:&nbsp;
-                {priceSummary && <>price {priceSummary}</>}
-                {priceSummary && capSummary && <> · </>}
-                {capSummary && <>cap {capSummary}</>}
-              </Text>
+              {!(priceInvalid || capInvalid) && (
+                <Text size={11} tone="secondary">
+                  Filters:&nbsp;
+                  {priceSummary && <>price {priceSummary}</>}
+                  {priceSummary && capSummary && <> · </>}
+                  {capSummary && <>cap {capSummary}</>}
+                </Text>
+              )}
               <button
                 type="button"
                 className={formStyles.clearBtn}

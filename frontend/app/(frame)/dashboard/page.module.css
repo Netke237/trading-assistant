@@ -192,3 +192,9 @@
 .contractRight {
   text-align: right;
 }
+
+/* Market news — full-width row below bento2 */
+.marketNews {
+  display: grid;
+  grid-template-columns: 1fr;
+}

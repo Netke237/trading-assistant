@@ -14,6 +14,7 @@
 import { useCallback } from 'react';
 import { useScanStore } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useAlertStore } from '@/lib/alertStore';
 import { api } from '@/lib/api';
@@ -56,7 +57,24 @@ export function RunScanButton() {
   const onClick = useCallback(() => {
     if (scanning) return;
 
-    const universe = pick === 'Custom' ? parseSymbols(customRaw) : [pick];
+    const universe =
+      pick === 'Custom'
+        ? parseSymbols(customRaw)
+        : pick === 'Watchlist'
+        ? useWatchlistStore.getState().added
+        : [pick];
+
+    if (universe.length === 0) {
+      useAlertStore.getState().addToast({
+        kind: 'Critical',
+        symbol: 'SYSTEM',
+        reason: 'Watchlist is empty — add symbols before scanning.',
+        recId: 'WATCHLIST-EMPTY',
+        alertType: 'SCAN_FAILED',
+      });
+      return;
+    }
+
     const direction   = context?.direction ?? 'Bullish';
     const horizonRaw  = context?.horizon   ?? 'Swing (5–15d)';
     const horizonKey  = horizonRaw.split(' ')[0];  // "Swing (5–15d)" → "Swing"

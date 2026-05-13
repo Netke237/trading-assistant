@@ -14,6 +14,7 @@ import { Title, Text, Data } from '@/components/primitives';
 import { SectionCard } from '@/components/molecules/SectionCard';
 import { TableRow } from '@/components/molecules/TableRow';
 import { AlertRow } from '@/components/molecules/AlertRow';
+import { NewsCard } from '@/components/molecules/NewsCard';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
@@ -48,6 +49,10 @@ export default function DashboardPage() {
   const [news, setNews]           = useState<NewsItem[]>([]);
   const [offline, setOffline]     = useState(false);
 
+  const [marketNews, setMarketNews]           = useState<NewsItem[]>([]);
+  const [marketNewsLoading, setMarketNewsLoading] = useState(true);
+  const [marketNewsError, setMarketNewsError] = useState(false);
+
   const portfolio = usePortfolioStore((s) => s.positions);
 
   const visibleToasts = useAlertStore((s) => s.visibleToasts);
@@ -68,6 +73,11 @@ export default function DashboardPage() {
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
     api.getAlerts().then(setAlerts).catch(() => setOffline(true));
     api.getRegime().then(setRegime).catch(() => setOffline(true));
+
+    api.getNews(['SPY', 'QQQ', 'VIX', 'DIA'])
+      .then(setMarketNews)
+      .catch(() => setMarketNewsError(true))
+      .finally(() => setMarketNewsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -257,6 +267,14 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+        </SectionCard>
+      </div>
+
+      <div className={styles.marketNews}>
+        <SectionCard title="Market News" count={marketNews.length}>
+          {marketNewsError && !marketNewsLoading
+            ? <Text size={12} tone="reject">Market news unavailable — backend offline?</Text>
+            : <NewsCard items={marketNews} loading={marketNewsLoading} />}
         </SectionCard>
       </div>
 

@@ -322,3 +322,10 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.filterWarning {
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--reject) 10%, var(--bg-surface));
+  border: 1px solid var(--reject-border);
+  border-radius: var(--radius-sm);
+}
