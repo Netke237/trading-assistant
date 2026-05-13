@@ -21,8 +21,7 @@ type Universe =
   | 'NDX100'
   | 'DOW30'
   | 'RUSSELL2000'
-  | 'STOXX600'
-  | 'DAX40'
+  | 'SPY'
   | 'Watchlist'
   | 'Custom';
 
@@ -84,18 +83,18 @@ export default function Step1Page() {
     }
   }, []);
 
+  const symbols  = useMemo(() => parseSymbols(customRaw), [customRaw]);
+
   const OPTIONS: { key: Universe; label: string; count: number | string; desc: string }[] = [
     { key: 'SP500',       label: 'S&P 500',      count: 503,  desc: 'Large-cap US equities. Recommended for most users.' },
     { key: 'NDX100',      label: 'Nasdaq-100',   count: 100,  desc: 'Tech-heavy large caps. Higher vol, higher signal.' },
     { key: 'DOW30',       label: 'Dow 30',       count: 30,   desc: 'Blue-chip US industrials. Narrow but liquid.' },
     { key: 'RUSSELL2000', label: 'Russell 2000', count: 2000, desc: 'US small caps. Broader breadth, thinner liquidity.' },
-    { key: 'STOXX600',    label: 'STOXX 600',    count: 600,  desc: 'European large/mid caps.' },
-    { key: 'DAX40',       label: 'DAX 40',       count: 40,   desc: 'German blue chips. Liquid European single-stock options.' },
+    { key: 'SPY',         label: 'SPY ETF',      count: 1,    desc: 'S&P 500 ETF — single contract, fast scan for testing.' },
     { key: 'Watchlist',   label: 'My Watchlist', count: watchlistCount, desc: 'Only symbols on your personal watchlist.' },
-    { key: 'Custom',      label: 'Custom list',  count: '—',  desc: 'Paste or type your own tickers (stocks / ETFs).' },
+    { key: 'Custom',      label: 'Custom list',  count: symbols.length || '—',  desc: 'Paste or type your own tickers (stocks / ETFs).' },
   ];
 
-  const symbols  = useMemo(() => parseSymbols(customRaw), [customRaw]);
   const isCustom = pick === 'Custom';
 
   const minPrice = parseNumOrNull(minPriceRaw);
@@ -248,6 +247,10 @@ export default function Step1Page() {
             </Text>
           </div>
         </div>
+
+        {(priceInvalid || capInvalid) && (
+          <Text size={12} tone="reject">Fix filter range before proceeding — minimum is above maximum.</Text>
+        )}
 
         <div className={formStyles.filtersFooter}>
           {hasFilters ? (

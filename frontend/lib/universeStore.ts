@@ -12,8 +12,7 @@ export type Universe =
   | 'NDX100'
   | 'DOW30'
   | 'RUSSELL2000'
-  | 'STOXX600'
-  | 'DAX40'
+  | 'SPY'
   | 'Watchlist'
   | 'Custom';
 
