@@ -72,8 +72,8 @@ export const useSettingsStore = create<SettingsState>()(
       customParams:            JSON.parse(JSON.stringify(DEFAULT_PARAMS)) as CustomParams,
       broker:                  { ...DEFAULT_BROKER },
       alertDeduplicationHours: 24,
-      ivPassThreshold:         60,
-      ivCautionThreshold:      35,
+      ivPassThreshold:         40,
+      ivCautionThreshold:      60,
       setCustomW:                   (w) => set({ customW: w }),
       setCustomParams:              (p) => set({ customParams: p }),
       setBroker:                    (b) => set({ broker: b }),
@@ -85,14 +85,14 @@ export const useSettingsStore = create<SettingsState>()(
         customParams:            JSON.parse(JSON.stringify(DEFAULT_PARAMS)) as CustomParams,
         broker:                  { ...DEFAULT_BROKER },
         alertDeduplicationHours: 24,
-        ivPassThreshold:         60,
-        ivCautionThreshold:      35,
+        ivPassThreshold:         40,
+        ivCautionThreshold:      60,
       }),
     }),
     {
       name: SETTINGS_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      version: 4,
+      version: 5,
       partialize: (state) => ({
         customW:                 state.customW,
         customParams:            state.customParams,
@@ -126,6 +126,13 @@ export const useSettingsStore = create<SettingsState>()(
             ...prev,
             ivPassThreshold:    60,
             ivCautionThreshold: 35,
+          } as SettingsState;
+        }
+        if (version < 5) {
+          return {
+            ...prev,
+            ivPassThreshold:    40,
+            ivCautionThreshold: 60,
           } as SettingsState;
         }
         return prev as SettingsState;

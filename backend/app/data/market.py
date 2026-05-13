@@ -177,7 +177,8 @@ def fetch_option_chain(
                 "open_interest": oi,
                 "score": 0,
             })
-        return result
+        seen: set[str] = set()
+        return [c for c in result if not (c["id"] in seen or seen.add(c["id"]))]  # type: ignore[func-returns-value]
     except Exception:
         return []
 
@@ -473,7 +474,8 @@ async def fetch_option_chain_async(
                 "open_interest": oi,
                 "score": 0,
             })
-        return result
+        seen: set[str] = set()
+        return [c for c in result if not (c["id"] in seen or seen.add(c["id"]))]  # type: ignore[func-returns-value]
     except Exception:
         return []
 

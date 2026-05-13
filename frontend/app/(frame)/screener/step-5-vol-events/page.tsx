@@ -52,8 +52,8 @@ export default function Step5Page() {
   );
 
   function ivStatus(rank: number): Status {
-    if (rank >= ivPassThreshold)    return 'PASS';
-    if (rank >= ivCautionThreshold) return 'CAUTION';
+    if (rank <= ivPassThreshold)    return 'PASS';
+    if (rank <= ivCautionThreshold) return 'CAUTION';
     return 'REJECT';
   }
 
@@ -63,7 +63,7 @@ export default function Step5Page() {
         <Text size={11} tone="dim" weight={500}>STEP 5 OF 7</Text>
         <Title as="h1" size={24}>Volatility + Events</Title>
         <Text size={13} tone="secondary">
-          IV rank ≥ {ivPassThreshold} → PASS; ≥ {ivCautionThreshold} → CAUTION; below → REJECT.
+          IV rank ≤ {ivPassThreshold} → PASS; ≤ {ivCautionThreshold} → CAUTION; above → REJECT.
           Earnings within 7 days → CAUTION; within 3 days → REJECT.
           Gate = worst of IV and event proximity.
         </Text>
