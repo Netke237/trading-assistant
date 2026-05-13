@@ -164,13 +164,16 @@ export default function Step4Page() {
   }
 
   if (!selected) {
+    const hasRun = candidates !== undefined;
     return (
       <div className={styles.main}>
         <div className={styles.stepHeader}>
           <Text size={11} tone="dim" weight={500}>STEP 4 OF 7</Text>
           <Title as="h1" size={24}>Stock Ranking</Title>
         </div>
-        <Text size={13} tone="dim">Run a scan to see ranked candidates.</Text>
+        <Text size={13} tone="dim">
+          {hasRun ? 'No candidates matched the current scan criteria.' : 'Run a scan to see ranked candidates.'}
+        </Text>
       </div>
     );
   }

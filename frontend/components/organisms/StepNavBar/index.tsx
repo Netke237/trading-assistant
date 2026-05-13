@@ -86,7 +86,7 @@ export function StepNavBar() {
         </div>
       )}
 
-      <nav className={styles.bar} aria-label="Screener step navigation">
+      <nav className={styles.bar} aria-label="Screener step navigation" data-regime={regime}>
         <button
           type="button"
           className={styles.btn}

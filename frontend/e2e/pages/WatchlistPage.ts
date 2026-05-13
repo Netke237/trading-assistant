@@ -12,11 +12,11 @@ export class WatchlistPage {
   }
 
   get contractsTab(): Locator {
-    return this.page.getByRole('tab', { name: /contracts/i }).or(this.page.getByText(/contracts/i).first());
+    return this.page.getByRole('tab', { name: /contracts/i });
   }
 
   get emptyStateText(): Locator {
-    return this.page.getByText(/no starred|empty|nothing here/i).first();
+    return this.page.getByText(/no stocks|no starred|empty|nothing here/i).first();
   }
 
   async switchToContractsTab(): Promise<void> {

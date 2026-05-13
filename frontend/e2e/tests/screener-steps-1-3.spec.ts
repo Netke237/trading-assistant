@@ -123,9 +123,9 @@ test.describe('Screener Step 3 REJECT dialog @smoke', () => {
     await expect(screener.regimeBanner).toBeVisible();
     await expect(page.getByRole('banner').getByText('REJECT')).toBeVisible();
 
-    // Wait a bit for Zustand store to settle after reload
-    await page.waitForTimeout(1000);
-    
+    // Wait for StepNavBar to reflect the REJECT regime from Zustand store
+    await expect(page.locator('nav[aria-label="Screener step navigation"]')).toHaveAttribute('data-regime', 'REJECT');
+
     await screener.clickNext();
     await expect(screener.rejectDialog).toBeVisible();
     await expect(page.getByText(/regime flagged as reject/i)).toBeVisible();

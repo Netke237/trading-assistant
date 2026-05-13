@@ -533,6 +533,7 @@ const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   EXPIRATION_APPROACHING: 'Expiration within 3 days',
   REGIME_CHANGE: 'Regime flip',
   SCAN_COMPLETE: 'Scan complete',
+  SCAN_FAILED: 'Scan failed',
 };
 
 function AlertsForm() {

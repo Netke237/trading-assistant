@@ -448,7 +448,12 @@ def _rule_trigger(bars: list[dict], cfg: dict, volumes: list[float], direction: 
     }
 
     if not candle_found:
-        return RuleResult("trigger", "REJECT", 5, detail), vol_bonus
+        if momentum_count >= required:
+            return RuleResult("trigger", "CAUTION", 35, detail), vol_bonus
+        elif momentum_count == 1:
+            return RuleResult("trigger", "CAUTION", 20, detail), vol_bonus
+        else:
+            return RuleResult("trigger", "REJECT", 10, detail), vol_bonus
 
     base_score = 70 if momentum_count >= required else (45 if momentum_count == 1 else 20)
     if vol_bonus:

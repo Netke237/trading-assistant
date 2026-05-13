@@ -19,7 +19,7 @@ export const DEFAULT_CONFIG: AlertConfig = {
   dedupWindowMinutes: 15,
   enabledTypes: [
     'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP',
-    'EVENT_RISK', 'REGIME_CHANGE', 'SCAN_COMPLETE',
+    'EVENT_RISK', 'REGIME_CHANGE', 'SCAN_COMPLETE', 'SCAN_FAILED',
     'TIME_STOP_APPROACHING', 'EARNINGS_APPROACHING', 'EXPIRATION_APPROACHING',
   ],
   soundEnabled: false,

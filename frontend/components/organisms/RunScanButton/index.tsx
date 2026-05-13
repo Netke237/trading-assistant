@@ -15,6 +15,7 @@ import { useCallback } from 'react';
 import { useScanStore } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useAlertStore } from '@/lib/alertStore';
 import { api } from '@/lib/api';
 import styles from './index.module.css';
 
@@ -50,16 +51,15 @@ export function RunScanButton() {
   const minCapRaw    = useUniverseStore((s) => s.minCapRaw);
   const maxCapRaw    = useUniverseStore((s) => s.maxCapRaw);
   const capUnit      = useUniverseStore((s) => s.capUnit);
-  const positions    = usePortfolioStore((s) => s.positions);
-
   const scanning = scanState === 'SCANNING';
 
   const onClick = useCallback(() => {
     if (scanning) return;
 
     const universe = pick === 'Custom' ? parseSymbols(customRaw) : [pick];
-    const direction = context?.direction ?? 'Bullish';
-    const horizon   = context?.horizon   ?? 'Swing (5–15d)';
+    const direction   = context?.direction ?? 'Bullish';
+    const horizonRaw  = context?.horizon   ?? 'Swing (5–15d)';
+    const horizon     = horizonRaw.split(' ')[0];  // "Swing (5–15d)" → "Swing"
 
     const filters: Record<string, number> = {};
     const minPrice = Number(minPriceRaw);
@@ -77,7 +77,7 @@ export function RunScanButton() {
     api.postScan(universe, direction, horizon, filters)
       .then((result) => {
         setScanResult(result);
-        const portfolioSymbols = new Set(positions.map((p) => p.symbol));
+        const portfolioSymbols = new Set(usePortfolioStore.getState().positions.map((p) => p.symbol));
         const conflicted = result.candidates
           .map((c) => c.symbol)
           .filter((s) => portfolioSymbols.has(s));
@@ -85,7 +85,15 @@ export function RunScanButton() {
         setScanState('COMPLETED', nowLocalISO());
       })
       .catch(() => {
+        console.error('[RunScanButton] scan failed, is backend running on port 8000?');
         setScanState('FAILED');
+        useAlertStore.getState().addToast({
+          kind: 'Critical',
+          symbol: 'SYSTEM',
+          reason: 'Scan failed — backend unreachable',
+          recId: 'SCAN-FAILED',
+          alertType: 'SCAN_FAILED',
+        });
       });
   }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit]);
 

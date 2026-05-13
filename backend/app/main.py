@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()  # Load root .env into os.environ before market.py reads TRADIER_API_TOKEN
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI

@@ -1,6 +1,7 @@
 """Test AlternativeContract attachment to TradeCardData in scan results."""
 
-from unittest.mock import patch
+from contextlib import ExitStack
+from unittest.mock import patch, AsyncMock
 
 _MOCK_CANDLES = [
     {"time": f"2026-0{i//10+1}-{i%28+1:02d}", "open": 184.0, "high": 190.0,
@@ -27,10 +28,19 @@ _MOCK_MULTI_CHAIN = [
 ]
 
 
+def _enter_scan_patches(*, price=185.0, candles=_MOCK_CANDLES, chain=_MOCK_MULTI_CHAIN,
+                        company="Test Company", fund=None):
+    stack = ExitStack()
+    stack.enter_context(patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=price)))
+    stack.enter_context(patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=candles)))
+    stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=chain)))
+    stack.enter_context(patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value=company)))
+    stack.enter_context(patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=fund)))
+    return stack
+
+
 def test_scan_produces_alternatives_with_multi_contract_chain(client):
-    with patch("app.routers.scan.fetch_price",        return_value=185.0), \
-         patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES), \
-         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_MULTI_CHAIN):
+    with _enter_scan_patches():
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
         })
@@ -65,9 +75,7 @@ def test_scan_single_contract_produces_no_alternatives(client):
             "right": "C", "volume": 500,
         }
     ]
-    with patch("app.routers.scan.fetch_price",        return_value=185.0), \
-         patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES), \
-         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_SINGLE):
+    with _enter_scan_patches(chain=_MOCK_SINGLE):
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
         })
@@ -79,9 +87,7 @@ def test_scan_single_contract_produces_no_alternatives(client):
 
 
 def test_scan_bullish_alternatives_have_right_C(client):
-    with patch("app.routers.scan.fetch_price",        return_value=185.0), \
-         patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES), \
-         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_MULTI_CHAIN):
+    with _enter_scan_patches():
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
         })
@@ -110,9 +116,7 @@ def test_scan_bearish_alternatives_have_right_P(client):
             "right": "P", "volume": 300,
         },
     ]
-    with patch("app.routers.scan.fetch_price",        return_value=185.0), \
-         patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES), \
-         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_PUT_CHAIN):
+    with _enter_scan_patches(chain=_MOCK_PUT_CHAIN):
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bearish", "horizon": "Swing", "overrides": {},
         })

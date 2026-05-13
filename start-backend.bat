@@ -2,15 +2,14 @@
 title Bamendjou — Backend
 cd /d "%~dp0backend"
 
-if exist "%~dp0.env" (
-    for /f "usebackq tokens=1,* delims==" %%A in ("%~dp0.env") do (
-        if not "%%A"=="" if not "%%A:~0,1%"=="#" set "%%A=%%B"
-    )
+:: Check if port 8000 is already occupied
+for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /L "127.0.0.1:8000" ^| findstr /L "LISTENING"') do (
+    echo ERROR: Port 8000 is already in use by PID %%P.
+    echo        Run: taskkill /F /PID %%P /T   to free it, then retry.
+    pause
+    exit /b 1
 )
 
-echo Starting FastAPI backend on http://localhost:8000
-echo Press Ctrl+C to stop.
-echo.
 call .venv\Scripts\activate.bat
-uvicorn app.main:app --reload --port 8000
+call uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 pause

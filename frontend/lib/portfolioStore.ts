@@ -147,7 +147,8 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         set((s) => ({ positions: s.positions.filter((r) => r.contract !== contract) })),
       syncFromBackend: async () => {
         try {
-          const res = await fetch('/api/portfolio');
+          const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+          const res = await fetch(`${BASE_URL}/api/portfolio`);
           if (!res.ok) return;
           const positions: BackendPosition[] = await res.json();
           set({ positions: positions.map(fromBackend) });

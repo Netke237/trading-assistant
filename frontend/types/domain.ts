@@ -241,7 +241,8 @@ export type AlertType =
   | 'TIME_STOP'
   | 'EVENT_RISK'
   | 'REGIME_CHANGE'
-  | 'SCAN_COMPLETE';
+  | 'SCAN_COMPLETE'
+  | 'SCAN_FAILED';
 
 export interface AlertRule {
   type: AlertType;
