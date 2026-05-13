@@ -7,10 +7,12 @@
  * market-cap filters that apply to any selected universe.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
+import { api } from '@/lib/api';
+import { useScanStore } from '@/lib/scanStore';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
 
@@ -66,6 +68,21 @@ export default function Step1Page() {
   } = useUniverseStore();
 
   const watchlistCount = useWatchlistStore((s) => s.added.length);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const regime = await api.getRegime();
+      useScanStore.getState().setRegime(regime.overall);
+      setLastRefreshed(new Date().toLocaleTimeString());
+    } catch {
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   const OPTIONS: { key: Universe; label: string; count: number | string; desc: string }[] = [
     { key: 'SP500',       label: 'S&P 500',      count: 503,  desc: 'Large-cap US equities. Recommended for most users.' },
@@ -251,6 +268,21 @@ export default function Step1Page() {
             </>
           ) : (
             <Text size={11} tone="dim">No filters — all symbols included.</Text>
+          )}
+        </div>
+
+        <div className={formStyles.refreshRow}>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className={formStyles.refreshBtn}
+            aria-label="Refresh regime data"
+          >
+            {refreshing ? 'Refreshing\u2026' : 'Refresh regime'}
+          </button>
+          {lastRefreshed && (
+            <Text size={11} tone="dim">Updated {lastRefreshed}</Text>
           )}
         </div>
       </div>
