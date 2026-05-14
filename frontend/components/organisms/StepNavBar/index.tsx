@@ -38,7 +38,7 @@ export function StepNavBar() {
   }, [next, router]);
 
   const handleNext = useCallback(() => {
-    if (current === 3 && regime === 'REJECT') {
+    if (current === 1 && regime === 'REJECT') {
       setShowConfirm(true);
     } else {
       goNext();
@@ -68,7 +68,7 @@ export function StepNavBar() {
             </p>
             <Text size={13} tone="secondary">
               Market conditions are unfavourable for new directional positions.
-              Step 4 will still rank your candidates — but consider waiting for a better regime before trading.
+              Step 4 (Stock Ranking) will still rank your candidates — but consider waiting for a better regime before trading.
             </Text>
             <div className={styles.dialogActions}>
               <button type="button" className={styles.btn} onClick={() => setShowConfirm(false)}>

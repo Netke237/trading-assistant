@@ -12,14 +12,14 @@ test.describe('WS-D: Execution Parameters Panel (CR-02)', () => {
 
   test('panel is collapsed by default on Step 2', async ({ page }) => {
     await stubApis(page);
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await expect(page.getByText('Execution Parameters')).toBeVisible();
     await expect(page.getByText('IV Rank pass threshold')).not.toBeVisible();
   });
 
   test('panel expands to show parameter rows', async ({ page }) => {
     await stubApis(page);
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await page.getByText('Execution Parameters').click();
     await expect(page.getByText('IV Rank pass threshold')).toBeVisible();
     await expect(page.getByText('RSI floor')).toBeVisible();
@@ -28,7 +28,7 @@ test.describe('WS-D: Execution Parameters Panel (CR-02)', () => {
 
   test('default values shown for Swing horizon', async ({ page }) => {
     await stubApis(page);
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await page.getByRole('button', { name: /Swing/ }).click();
     await page.getByText('Execution Parameters').click();
     await expect(page.getByText('34')).toBeVisible();
@@ -42,7 +42,7 @@ test.describe('WS-D: Execution Parameters Panel (CR-02)', () => {
       try { capturedBody = route.request().postDataJSON() as Record<string, unknown>; } catch { /* ignore */ }
       await route.fulfill({ json: { scan_id: 't', timestamp: '', candidates: [], rejected: [] } });
     });
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await page.getByText('Execution Parameters').click();
     const rsiInput = page.getByLabel(/RSI floor/i);
     await rsiInput.fill('50');
@@ -61,7 +61,7 @@ test.describe('WS-D: Execution Parameters Panel (CR-02)', () => {
       try { lastBody = route.request().postDataJSON() as Record<string, unknown>; } catch { /* ignore */ }
       await route.fulfill({ json: { scan_id: 't', timestamp: '', candidates: [], rejected: [] } });
     });
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await page.getByText('Execution Parameters').click();
     await page.getByLabel(/RSI floor/i).fill('55');
     await page.getByRole('button', { name: /Reset to defaults/i }).click();
@@ -72,7 +72,7 @@ test.describe('WS-D: Execution Parameters Panel (CR-02)', () => {
 
   test('switching horizon resets panel to new horizon defaults', async ({ page }) => {
     await stubApis(page);
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await page.getByRole('button', { name: /Swing/ }).click();
     await page.getByText('Execution Parameters').click();
     const eventRejectRow = page.locator('[data-param-key="event_reject_days"]');
