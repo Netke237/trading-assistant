@@ -4,6 +4,7 @@
  * Screener Step 2 — Direction + Horizon. Phase 5 / Round 1.
  * Directional bias + holding-horizon preset picker, plus a Custom option
  * for explicit (min..max) day ranges.
+ * Round 4: collapsible Execution Parameters panel with per-horizon overrides.
  */
 
 import { useEffect, useState } from 'react';
@@ -25,6 +26,46 @@ const HORIZON_PRESETS: { key: HorizonKey; label: string; hint: string }[] = [
   { key: 'Position', label: 'Position', hint: '15–45 days' },
   { key: 'Custom',   label: 'Custom',   hint: 'Set range' },
 ];
+
+interface ParamDef {
+  key: string;
+  label: string;
+  type: 'number' | 'boolean';
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+}
+
+const PARAM_DEFS: ParamDef[] = [
+  { key: 'iv_rank_pass_max',        label: 'IV Rank pass threshold', type: 'number',  min: 0,   max: 100,  step: 1   },
+  { key: 'rsi_floor',               label: 'RSI floor',              type: 'number',  min: 0,   max: 100,  step: 1   },
+  { key: 'macd_fast',               label: 'MACD fast',              type: 'number',  min: 2,   max: 50,   step: 1   },
+  { key: 'macd_slow',               label: 'MACD slow',              type: 'number',  min: 2,   max: 100,  step: 1   },
+  { key: 'macd_signal',             label: 'MACD signal',            type: 'number',  min: 2,   max: 50,   step: 1   },
+  { key: 'ema_required',            label: 'EMA condition active',   type: 'boolean'                                   },
+  { key: 'max_delta',               label: 'Max delta',              type: 'number',  min: 0,   max: 1,    step: 0.01 },
+  { key: 'atr_caution_max',         label: 'ATR caution max',        type: 'number',  min: 0,   max: 10,   step: 0.1  },
+  { key: 'swing_high_lookback_bars',label: 'Swing high lookback',    type: 'number',  min: 2,   max: 200,  step: 1   },
+  { key: 'max_bid_ask_spread_pct',  label: 'Bid-ask spread ceiling', type: 'number',  min: 0,   max: 1,    step: 0.01 },
+  { key: 'event_reject_days',       label: 'Event reject days',      type: 'number',  min: 0,   max: 90,   step: 1   },
+  { key: 'event_caution_days',      label: 'Event caution days',     type: 'number',  min: 0,   max: 120,  step: 1   },
+];
+
+type ParamDefaults = Record<string, number | boolean | null>;
+
+const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
+  Intraday: { iv_rank_pass_max: null, rsi_floor: 44, macd_fast: 5, macd_slow: 13, macd_signal: 3, ema_required: false, max_delta: 0.85, atr_caution_max: 2.5, swing_high_lookback_bars: 20, max_bid_ask_spread_pct: 0.20, event_reject_days: 1, event_caution_days: 3 },
+  Swing:    { iv_rank_pass_max: 34,  rsi_floor: 44, macd_fast: 8, macd_slow: 21, macd_signal: 5, ema_required: true,  max_delta: 0.85, atr_caution_max: 2.5, swing_high_lookback_bars: 40, max_bid_ask_spread_pct: 0.20, event_reject_days: 7, event_caution_days: 21 },
+  Position: { iv_rank_pass_max: 44,  rsi_floor: 48, macd_fast: 12, macd_slow: 26, macd_signal: 9, ema_required: true,  max_delta: 0.85, atr_caution_max: 2.5, swing_high_lookback_bars: 15, max_bid_ask_spread_pct: 0.20, event_reject_days: 30, event_caution_days: 60 },
+  Custom:   { iv_rank_pass_max: 34,  rsi_floor: 44, macd_fast: 8, macd_slow: 21, macd_signal: 5, ema_required: true,  max_delta: 0.85, atr_caution_max: 2.5, swing_high_lookback_bars: 40, max_bid_ask_spread_pct: 0.20, event_reject_days: 7, event_caution_days: 21 },
+};
+
+function formatDefault(def: number | boolean | null): string {
+  if (def === null) return 'N/A (not scored for Intraday)';
+  if (typeof def === 'boolean') return def ? 'On' : 'Off';
+  return String(def);
+}
 
 function horizonLabel(hz: HorizonKey, minDays: number, maxDays: number): string {
   if (hz === 'Intraday') return 'Intraday (0–2d)';
@@ -68,16 +109,18 @@ function dteRecommendation(horizon: string | undefined): string {
 }
 
 export default function Step2Page() {
-  const context     = useScanStore((s) => s.context);
-  const setContext  = useScanStore((s) => s.setContext);
-  const rejectedLog = useScanStore((s) => s.rejectedLog);
-  const scanResult  = useScanStore((s) => s.scanResult);
-  const regime      = useScanStore((s) => s.regime);
+  const context       = useScanStore((s) => s.context);
+  const setContext    = useScanStore((s) => s.setContext);
+  const rejectedLog   = useScanStore((s) => s.rejectedLog);
+  const scanResult    = useScanStore((s) => s.scanResult);
+  const regime        = useScanStore((s) => s.regime);
+  const scanOverrides = useScanStore((s) => s.scanOverrides);
 
   const [dir,     setDir]     = useState<Direction>(() => context?.direction ?? 'Bullish');
   const [hz,      setHz]      = useState<HorizonKey>(() => parseHorizonKey(context?.horizon));
   const [minDays, setMinDays] = useState<number>(() => parseCustomDays(context?.horizon)[0]);
   const [maxDays, setMaxDays] = useState<number>(() => parseCustomDays(context?.horizon)[1]);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     api.getRegime().then((r) => {
@@ -100,6 +143,7 @@ export default function Step2Page() {
   const handleHzChange = (h: HorizonKey) => {
     setHz(h);
     syncToStore(dir, h, minDays, maxDays);
+    useScanStore.getState().setScanOverrides({});
   };
   const handleMinChange = (v: number) => {
     setMinDays(v);
@@ -200,6 +244,120 @@ export default function Step2Page() {
             />
           </div>
         </div>
+      </div>
+
+      <div className={formStyles.paramsPanel}>
+        <button
+          type="button"
+          className={formStyles.paramsHeader}
+          onClick={() => setIsExpanded((v) => !v)}
+          aria-expanded={isExpanded}
+        >
+          <Text size={12} weight={500}>Execution Parameters</Text>
+          <span className={formStyles.paramsChevron} aria-hidden>
+            {isExpanded ? '\u25BE Collapse' : '\u25B8 Expand'}
+          </span>
+        </button>
+
+        {isExpanded && (
+          <div className={formStyles.paramsBody}>
+            {PARAM_DEFS.map((def) => {
+              const defaults = PARAM_DEFAULTS_PER_HORIZON[hz];
+              const defaultVal = defaults[def.key];
+              const isNa = defaultVal === null;
+              const currentOverride = scanOverrides[def.key] as number | boolean | undefined;
+
+              if (isNa) {
+                return (
+                  <div key={def.key} className={formStyles.paramsRow} data-param-key={def.key}>
+                    <Text size={12} tone="dim">{def.label}</Text>
+                    <div className={formStyles.paramsValue}>
+                      <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
+                    </div>
+                    <div className={formStyles.paramsInput}>
+                      <Text size={11} tone="dim">&mdash;</Text>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (def.type === 'boolean') {
+                const isOn = currentOverride !== undefined
+                  ? currentOverride as boolean
+                  : defaultVal as boolean;
+                return (
+                  <div key={def.key} className={formStyles.paramsRow} data-param-key={def.key}>
+                    <Text size={12}>{def.label}</Text>
+                    <div className={formStyles.paramsValue}>
+                      <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
+                    </div>
+                    <div className={formStyles.paramsInput}>
+                      <button
+                        type="button"
+                        className={`${formStyles.toggleBtn} ${isOn ? formStyles.toggleOn : ''}`}
+                        onClick={() => {
+                          const next = { ...scanOverrides, [def.key]: !isOn };
+                          useScanStore.getState().setScanOverrides(next);
+                        }}
+                        aria-label={def.label}
+                      >
+                        {isOn ? 'On' : 'Off'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              const inputValue = currentOverride !== undefined
+                ? String(currentOverride)
+                : String(defaultVal);
+
+              return (
+                <div key={def.key} className={formStyles.paramsRow} data-param-key={def.key}>
+                  <Text size={12}>{def.label}</Text>
+                  <div className={formStyles.paramsValue}>
+                    <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
+                  </div>
+                  <div className={formStyles.paramsInput}>
+                    <input
+                      type="number"
+                      className={formStyles.numInput}
+                      value={inputValue}
+                      min={def.min}
+                      max={def.max}
+                      step={def.step}
+                      aria-label={def.label}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === '' || raw === String(defaultVal)) {
+                          const next = { ...scanOverrides };
+                          delete next[def.key];
+                          useScanStore.getState().setScanOverrides(next);
+                        } else {
+                          const num = Number(raw);
+                          if (!Number.isNaN(num)) {
+                            useScanStore.getState().setScanOverrides({ ...scanOverrides, [def.key]: num });
+                          }
+                        }
+                      }}
+                    />
+                    {def.unit && <Text size={11} tone="dim">{def.unit}</Text>}
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className={formStyles.paramsFooter}>
+              <button
+                type="button"
+                className={formStyles.paramsReset}
+                onClick={() => useScanStore.getState().setScanOverrides({})}
+              >
+                Reset to defaults
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className={formStyles.logSection}>

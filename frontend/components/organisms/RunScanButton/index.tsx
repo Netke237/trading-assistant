@@ -107,9 +107,11 @@ export function RunScanButton() {
     if (Number.isFinite(minCap) && minCapRaw !== '') filters.min_cap_usd = minCap * capMultiplier;
     if (Number.isFinite(maxCap) && maxCapRaw !== '') filters.max_cap_usd = maxCap * capMultiplier;
 
+    const scanOverrides = useScanStore.getState().scanOverrides;
+
     setScanState('SCANNING');
     useScanStore.getState().setRejectedLog([]);
-    api.postScan(universe, direction, horizon, filters)
+    api.postScan(universe, direction, horizon, filters, scanOverrides)
       .then((result) => {
         setScanResult(result);
         useScanStore.getState().setRejectedLog(result.rejected ?? []);
