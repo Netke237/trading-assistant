@@ -11,7 +11,7 @@
  * the same store, so the pill animation and context string update together.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useScanStore } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
@@ -54,6 +54,9 @@ export function RunScanButton() {
   const capUnit      = useUniverseStore((s) => s.capUnit);
   const scanning = scanState === 'SCANNING';
 
+  const [showRegimeConfirm, setShowRegimeConfirm] = useState(false);
+  const regimeConfirmedRef = useRef(false);
+
   const onClick = useCallback(() => {
     if (scanning) return;
 
@@ -84,6 +87,12 @@ export function RunScanButton() {
       const maxMatch = horizonRaw.match(/–(\d+)d/);
       const maxDays  = maxMatch ? Number(maxMatch[1]) : 15;
       horizon = maxDays <= 4 ? 'Intraday' : maxDays <= 20 ? 'Swing' : 'Position';
+    }
+
+    const currentRegime = useScanStore.getState().regime;
+    if (currentRegime === 'REJECT' && direction === 'Bullish' && !regimeConfirmedRef.current) {
+      setShowRegimeConfirm(true);
+      return;
     }
 
     const filters: Record<string, number> = {};
@@ -126,19 +135,48 @@ export function RunScanButton() {
   }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit]);
 
   return (
-    <button
-      type="button"
-      className={styles.fab}
-      onClick={onClick}
-      disabled={scanning}
-      aria-label={scanning ? 'Scan in progress' : 'Run scan'}
-      aria-live="polite"
-    >
-      <span className={`${styles.icon} ${scanning ? styles.spin : ''}`} aria-hidden>
-        {scanning ? <SpinnerIcon /> : <PlayIcon />}
-      </span>
-      <span>{scanning ? 'Scanning…' : 'Run Scan'}</span>
-    </button>
+    <>
+      {showRegimeConfirm && (
+        <div className={styles.regimeOverlay} role="dialog" aria-modal aria-labelledby="regime-run-title">
+          <div className={styles.regimeDialog}>
+            <p id="regime-run-title" className={styles.regimeDialogTitle}>Market regime is REJECT</p>
+            <p className={styles.regimeDialogBody}>
+              Running a Bullish scan in a REJECT regime carries elevated risk.
+              Proceed anyway?
+            </p>
+            <div className={styles.regimeDialogActions}>
+              <button type="button" className={styles.regimeCancelBtn}
+                onClick={() => setShowRegimeConfirm(false)}>
+                Cancel
+              </button>
+              <button type="button" className={styles.regimeProceedBtn}
+                onClick={() => {
+                  setShowRegimeConfirm(false);
+                  regimeConfirmedRef.current = true;
+                  onClick();
+                  regimeConfirmedRef.current = false;
+                }}>
+                Proceed anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        className={styles.fab}
+        onClick={onClick}
+        disabled={scanning}
+        aria-label={scanning ? 'Scan in progress' : 'Run scan'}
+        aria-live="polite"
+      >
+        <span className={`${styles.icon} ${scanning ? styles.spin : ''}`} aria-hidden>
+          {scanning ? <SpinnerIcon /> : <PlayIcon />}
+        </span>
+        <span>{scanning ? 'Scanning…' : 'Run Scan'}</span>
+      </button>
+    </>
   );
 }
 
