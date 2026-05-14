@@ -46,7 +46,10 @@ export class ScreenerPage {
   }
 
   async selectUniverse(name: string): Promise<void> {
-    await this.page.getByRole('button', { name: new RegExp(name, 'i') }).click();
+    // Anchor to start of accessible name to avoid matching card descriptions
+    // (e.g. SPY desc contains "S&P 500 ETF", which would otherwise match an "S&P 500" query)
+    const cleanName = name.replace(/\\/g, '');
+    await this.page.getByRole('button', { name: new RegExp(`^${cleanName}`, 'i') }).click();
   }
 
   // Step 2
