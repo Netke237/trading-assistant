@@ -25,19 +25,19 @@ test.describe('WS-C: Scan Log + Regime Gate (CR-03 + CR-07)', () => {
 
   test('scan log shows placeholder before first scan', async ({ page }) => {
     await stubApis(page);
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await expect(page.getByText('No scan run yet.')).toBeVisible();
   });
 
   test('scan log shows rejection breakdown after scan', async ({ page }) => {
     await stubApis(page);
     await page.route('**/api/scan', (r) => r.fulfill({ json: MOCK_SCAN }));
-    await page.goto('/screener/step-1-universe');
+    await page.goto('/screener/step-2-universe');
     await page.getByRole('button', { name: /SPY ETF/ }).click();
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await page.getByRole('button', { name: 'Run Scan' }).click();
     await expect(page.getByText('SCANNING')).not.toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: 'Next: Market Regime' }).click();
+    await page.getByRole('button', { name: 'Next: Stock Ranking' }).click();
     await page.getByRole('button', { name: 'Back: Direction + Horizon' }).click();
     await expect(page.getByText(/stock score/i).first()).toBeVisible();
     await expect(page.getByText(/contract spread/i).first()).toBeVisible();
@@ -46,12 +46,12 @@ test.describe('WS-C: Scan Log + Regime Gate (CR-03 + CR-07)', () => {
   test('scan log shows stage summary with stock and contract counts', async ({ page }) => {
     await stubApis(page);
     await page.route('**/api/scan', (r) => r.fulfill({ json: MOCK_SCAN }));
-    await page.goto('/screener/step-1-universe');
+    await page.goto('/screener/step-2-universe');
     await page.getByRole('button', { name: /SPY ETF/ }).click();
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await page.getByRole('button', { name: 'Run Scan' }).click();
     await expect(page.getByText('SCANNING')).not.toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: 'Next: Market Regime' }).click();
+    await page.getByRole('button', { name: 'Next: Stock Ranking' }).click();
     await page.getByRole('button', { name: 'Back: Direction + Horizon' }).click();
     // Stage summary must distinguish stock vs contract rejections
     await expect(page.getByText(/stock.*rejected|contract.*rejected/i).first()).toBeVisible();
@@ -60,13 +60,13 @@ test.describe('WS-C: Scan Log + Regime Gate (CR-03 + CR-07)', () => {
   test('DTE recommendation is shown for Swing horizon', async ({ page }) => {
     await stubApis(page);
     await page.route('**/api/scan', (r) => r.fulfill({ json: MOCK_SCAN }));
-    await page.goto('/screener/step-1-universe');
+    await page.goto('/screener/step-2-universe');
     await page.getByRole('button', { name: /SPY ETF/ }).click();
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await page.getByRole('button', { name: /Swing/ }).click();
     await page.getByRole('button', { name: 'Run Scan' }).click();
     await expect(page.getByText('SCANNING')).not.toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: 'Next: Market Regime' }).click();
+    await page.getByRole('button', { name: 'Next: Stock Ranking' }).click();
     await page.getByRole('button', { name: 'Back: Direction + Horizon' }).click();
     await expect(page.getByText(/DTE.*21.*45|target DTE/i).first()).toBeVisible();
   });
@@ -77,9 +77,9 @@ test.describe('WS-C: Scan Log + Regime Gate (CR-03 + CR-07)', () => {
       await new Promise((res) => setTimeout(res, 800));
       await route.fulfill({ json: MOCK_SCAN });
     });
-    await page.goto('/screener/step-1-universe');
+    await page.goto('/screener/step-2-universe');
     await page.getByRole('button', { name: /SPY ETF/ }).click();
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await page.getByRole('button', { name: 'Run Scan' }).click();
     await expect(page.getByText('SCANNING').first()).not.toBeVisible({ timeout: 10000 });
     await expect(page.getByText(/stock score/i).first()).toBeVisible();
@@ -92,7 +92,7 @@ test.describe('WS-C: Scan Log + Regime Gate (CR-03 + CR-07)', () => {
 
   test('CR-07: no regime badge when regime is PASS', async ({ page }) => {
     await stubApis(page); // regime: PASS
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await expect(page.getByText(/REGIME REJECT/i)).not.toBeVisible();
   });
 
@@ -102,9 +102,9 @@ test.describe('WS-C: Scan Log + Regime Gate (CR-03 + CR-07)', () => {
     await page.route('**/api/alerts',   (r) => r.fulfill({ json: [] }));
     await page.route('**/api/news*',    (r) => r.fulfill({ json: [] }));
     await page.route('**/api/portfolio',(r) => r.fulfill({ json: [] }));
-    await page.goto('/screener/step-1-universe');
+    await page.goto('/screener/step-2-universe');
     // Trigger regime load (step 1 refreshes regime)
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-3-direction');
     await expect(page.getByText(/REGIME REJECT/i)).toBeVisible();
   });
 
@@ -114,8 +114,8 @@ test.describe('WS-C: Scan Log + Regime Gate (CR-03 + CR-07)', () => {
     await page.route('**/api/alerts',   (r) => r.fulfill({ json: [] }));
     await page.route('**/api/news*',    (r) => r.fulfill({ json: [] }));
     await page.route('**/api/portfolio',(r) => r.fulfill({ json: [] }));
-    await page.goto('/screener/step-1-universe');
-    await page.goto('/screener/step-2-direction');
+    await page.goto('/screener/step-2-universe');
+    await page.goto('/screener/step-3-direction');
     await page.getByRole('button', { name: /Bullish/ }).click();
     // Stub scan so it doesn't actually fire
     await page.route('**/api/scan', (r) => r.fulfill({ json: { scan_id: 'x', timestamp: '', candidates: [], rejected: [] } }));
