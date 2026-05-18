@@ -170,6 +170,18 @@ class UpcomingEvent(BaseModel):
     status: Status
 
 
+# ── News ─────────────────────────────────────────────────────────────────────
+
+class NewsItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    id:        str
+    symbol:    str
+    headline:  str
+    source:    str
+    timestamp: str
+    sentiment: Literal['bull', 'bear', 'neutral'] = 'neutral'
+
+
 # ── Pricing method enum ──────────────────────────────────────────────────────
 
 class PricingMethod(str, Enum):
