@@ -1,7 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.schemas.scan import (
     ContinuousScanConfig,
@@ -182,11 +182,23 @@ class PricingMethod(str, Enum):
 
 class TargetLevel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    targetPrice: float           # underlying stock price at this target
-    stockPrice: float            # alias of targetPrice (keep for backward compat)
-    estimatedOptionPrice: float
-    pricingMethod: PricingMethod
-    rrContribution: float        # estimated reward at this target / risk
+    # AliasChoices lets Pydantic accept both the new camelCase keys (current API)
+    # and the old snake_case keys still present in existing DB scan-session JSON.
+    targetPrice: float = Field(
+        validation_alias=AliasChoices('targetPrice', 'target_price'),
+    )
+    stockPrice: float = Field(
+        validation_alias=AliasChoices('stockPrice', 'stock_price', 'targetPrice', 'target_price'),
+    )
+    estimatedOptionPrice: float = Field(
+        validation_alias=AliasChoices('estimatedOptionPrice', 'estimated_option_price'),
+    )
+    pricingMethod: PricingMethod = Field(
+        validation_alias=AliasChoices('pricingMethod', 'pricing_method'),
+    )
+    rrContribution: float = Field(
+        validation_alias=AliasChoices('rrContribution', 'rr_contribution'),
+    )
 
 
 # ── Trade cards ──────────────────────────────────────────────────────────────
