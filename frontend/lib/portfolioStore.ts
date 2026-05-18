@@ -22,6 +22,14 @@ type BackendPosition = {
   targets: TargetLevel[];
   dteTotal: number | null;
   createdAt: string;
+  // Live fields enriched by GET /portfolio via Tradier
+  currentPrice?: number;
+  pnlDollar?: number;
+  pnlPct?: number;
+  dteRemaining?: number;
+  delta?: number | null;
+  theta?: number | null;
+  ivRank?: number | null;
 };
 
 function fromBackend(p: BackendPosition): PortfolioPosition {
@@ -29,22 +37,25 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
   const expiry = parts[2] ?? '';
 
   return {
-    symbol: p.symbol,
-    contract: p.contract,
-    direction: p.direction as Direction,
-    entryPrice: p.entryPrice,
-    contracts: p.qty,
-    entryDate: p.entryDate,
+    symbol:       p.symbol,
+    contract:     p.contract,
+    direction:    p.direction as Direction,
+    entryPrice:   p.entryPrice,
+    contracts:    p.qty,
+    entryDate:    p.entryDate,
     expiry,
-    stop: p.stop ?? 0,
-    targets: p.targets ?? [],
-    dteTotal: p.dteTotal ?? 0,
-    dteRemaining: 0,
-    status: 'PENDING',
-    recId: p.recId,
-    currentPrice: 0,
-    pnlDollar: 0,
-    pnlPct: 0,
+    stop:         p.stop ?? 0,
+    targets:      p.targets ?? [],
+    dteTotal:     p.dteTotal ?? 0,
+    dteRemaining: p.dteRemaining ?? 0,
+    status:       'PENDING',
+    recId:        p.recId,
+    currentPrice: p.currentPrice ?? 0,
+    pnlDollar:    p.pnlDollar ?? 0,
+    pnlPct:       p.pnlPct ?? 0,
+    delta:        p.delta ?? undefined,
+    theta:        p.theta ?? undefined,
+    ivRank:       p.ivRank ?? undefined,
   };
 }
 

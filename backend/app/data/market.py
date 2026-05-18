@@ -480,6 +480,31 @@ async def fetch_option_chain_async(
         return []
 
 
+async def fetch_contract_quote_async(
+    client: httpx.AsyncClient,
+    contract_id: str,
+) -> dict | None:
+    """Fetch live mid price + greeks for a single contract.
+
+    contract_id format: SYMBOL|STRIKE|EXPIRY|C/P  (e.g. AAPL|185|2025-05-16|C)
+    Returns a chain-entry dict with: price, delta, theta, ivRank, dte — or None.
+    """
+    try:
+        parts = contract_id.split("|")
+        if len(parts) != 4:
+            return None
+        symbol, strike_str, expiry, right = parts
+        if right not in ("C", "P"):
+            return None
+        target_strike = int(float(strike_str))
+        chain = await fetch_option_chain_async(
+            client, symbol, expiry=expiry, option_type=right  # type: ignore[arg-type]
+        )
+        return next((c for c in chain if c["strike"] == target_strike), None)
+    except Exception:
+        return None
+
+
 async def fetch_company_name_async(
     client: httpx.AsyncClient, symbol: str
 ) -> Optional[str]:

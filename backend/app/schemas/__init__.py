@@ -339,6 +339,14 @@ class PortfolioPositionSchema(BaseModel):
     targets: list[dict] = []
     dteTotal: Optional[int] = None
     createdAt: str
+    # Live fields — populated by GET /portfolio via Tradier option quote
+    currentPrice: float = 0.0
+    pnlDollar: float = 0.0
+    pnlPct: float = 0.0
+    dteRemaining: int = 0
+    delta: Optional[float] = None
+    theta: Optional[float] = None
+    ivRank: Optional[int] = None
 
     @classmethod
     def from_orm_model(cls, obj) -> "PortfolioPositionSchema":
