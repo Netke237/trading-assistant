@@ -73,7 +73,7 @@ export default function Step3Page() {
   return (
     <div className={styles.main}>
       <div className={styles.stepHeader}>
-        <Text size={11} tone="dim" weight={500}>STEP 3 OF 7</Text>
+        <Text size={11} tone="dim" weight={500}>STEP 1 OF 7</Text>
         <Title as="h1" size={24}>Market Regime</Title>
         <Text size={13} tone="secondary">
           Macro snapshot — advisory. REJECT prompts confirmation before proceeding.

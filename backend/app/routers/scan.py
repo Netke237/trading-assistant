@@ -187,8 +187,9 @@ async def _process_symbol(
         iv_rank=iv_rank,
     )
     if card.status == "REJECT":
+        bd = {r.name: r.score for r in card.rules}
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": f"stock REJECT (score {card.score})"})
-        return RejectedCandidate(symbol=symbol, reason=f"stock REJECT (score {card.score})")
+        return RejectedCandidate(symbol=symbol, reason=f"stock REJECT (score {card.score})", breakdown=bd)
 
     if not chain:
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})

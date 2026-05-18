@@ -40,8 +40,15 @@ function cardToRow(c: TradeCardData): WatchlistRow {
   };
 }
 
+const EVENT_WINDOWS: Record<string, { caution: number; reject: number }> = {
+  Intraday: { caution: 3,  reject: 1  },
+  Swing:    { caution: 21, reject: 7  },
+  Position: { caution: 60, reject: 30 },
+};
+
 export default function Step5Page() {
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
+  const context              = useScanStore((s) => s.context);
   const candidates           = scanResultCandidates ?? [];
   const ivPassThreshold    = useSettingsStore((s) => s.ivPassThreshold);
   const ivCautionThreshold = useSettingsStore((s) => s.ivCautionThreshold);
@@ -50,6 +57,11 @@ export default function Step5Page() {
     () => Object.fromEntries(candidates.map((c) => [c.symbol, c])),
     [candidates],
   );
+
+  const horizonKey = context?.horizon?.startsWith('Intraday') ? 'Intraday'
+    : context?.horizon?.startsWith('Position') ? 'Position'
+    : 'Swing';
+  const { caution: evCaution, reject: evReject } = EVENT_WINDOWS[horizonKey];
 
   function ivStatus(rank: number): Status {
     if (rank <= ivPassThreshold)    return 'PASS';
@@ -64,7 +76,7 @@ export default function Step5Page() {
         <Title as="h1" size={24}>Volatility + Events</Title>
         <Text size={13} tone="secondary">
           IV rank ≤ {ivPassThreshold} → PASS; ≤ {ivCautionThreshold} → CAUTION; above → REJECT.
-          Earnings within 7 days → CAUTION; within 3 days → REJECT.
+          Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
           Gate = worst of IV and event proximity.
         </Text>
       </div>

@@ -33,16 +33,13 @@ const PAGE_SIZE = 10;
 
 const COLUMNS = '28px 1fr 56px 54px 50px 64px 68px 80px';
 
-// Mirrors the Settings → Score weights defaults. Will read from store later.
-const DEFAULT_WEIGHTS = {
-  trend:      25,
-  pullback:   20,
-  trigger:    20,
-  event:      15,
-  volatility: 20,
-} as const;
+const HORIZON_WEIGHTS: Record<string, { trend: number; pullback: number; trigger: number; event: number; volatility: number }> = {
+  Intraday: { trend: 35, pullback: 20, trigger: 30, event: 5,  volatility: 10 },
+  Swing:    { trend: 30, pullback: 20, trigger: 25, event: 15, volatility: 10 },
+  Position: { trend: 30, pullback: 20, trigger: 20, event: 20, volatility: 10 },
+};
 
-type ComponentKey = keyof typeof DEFAULT_WEIGHTS;
+type ComponentKey = 'trend' | 'pullback' | 'trigger' | 'event' | 'volatility';
 
 const COMPONENTS: { key: ComponentKey; label: string; desc: string }[] = [
   { key: 'trend',      label: 'Trend',      desc: 'Medium-term direction — price vs 200 EMA, slope of 50 EMA, higher highs.' },
@@ -178,9 +175,14 @@ export default function Step4Page() {
     );
   }
 
+  const horizonKey = context?.horizon?.startsWith('Intraday') ? 'Intraday'
+    : context?.horizon?.startsWith('Position') ? 'Position'
+    : 'Swing';
+  const WEIGHTS = HORIZON_WEIGHTS[horizonKey];
+
   const contributions = COMPONENTS.map((c) => {
     const raw    = selected.breakdown[c.key];
-    const weight = DEFAULT_WEIGHTS[c.key];
+    const weight = WEIGHTS[c.key] ?? 0;
     const points = (raw * weight) / 100;
     return { ...c, raw, weight, points, signal: signalFor(raw) };
   });

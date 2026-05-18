@@ -113,7 +113,7 @@ export default function Step1Page() {
   return (
     <div className={styles.main}>
       <div className={styles.stepHeader}>
-        <Text size={11} tone="dim" weight={500}>STEP 1 OF 7</Text>
+        <Text size={11} tone="dim" weight={500}>STEP 2 OF 7</Text>
         <Title as="h1" size={24}>Universe</Title>
         <Text size={13} tone="secondary">Pick the stock universe to scan.</Text>
       </div>
@@ -360,6 +360,12 @@ export default function Step1Page() {
             </label>
             <Text size={11} tone="dim">One symbol per line</Text>
           </div>
+        )}
+        {isCustom && symbols.length === 0 && customRaw.trim().length > 0 && (
+          <Text size={11} tone="reject">No valid symbols recognised — use A–Z ticker format.</Text>
+        )}
+        {isCustom && symbols.length === 0 && customRaw.trim().length === 0 && (
+          <Text size={11} tone="reject">Enter at least one valid symbol.</Text>
         )}
         {symbols.length > 0 && (
           <div className={formStyles.chips} aria-label="Parsed tickers">

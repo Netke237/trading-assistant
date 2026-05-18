@@ -109,31 +109,109 @@
   border-radius: var(--radius-sm);
 }
 
-.logBlock {
-  margin-top: var(--space-4);
+.rejectList {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.breakdownTable {
+.rejectGroup {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.rejectGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface-2);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.rejectGroupHeader:hover {
+  background: color-mix(in srgb, var(--bg-surface-2) 80%, var(--border-subtle));
+}
+
+.chevron {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  transition: transform 120ms;
+  display: inline-block;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.rejectGroupBody {
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.symbolList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+
+.breakdownBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.breakdownHeader {
+  display: grid;
+  grid-template-columns: 72px 56px 36px 1fr 40px;
+  gap: var(--space-2);
+  padding: 0 0 var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-1);
 }
 
 .breakdownRow {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 72px 56px 36px 1fr 40px;
   align-items: center;
-  padding: var(--space-1) 0;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  padding: 2px 0;
 }
 
-.summaryRow {
+.miniTrack {
+  height: 3px;
+  background: var(--bg-base);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.miniFill {
+  height: 100%;
+  background: var(--border-strong);
+  border-radius: 2px;
+  max-width: 100%;
+}
+
+.otherRejects {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.otherRejectRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .paramsPanel {

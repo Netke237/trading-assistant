@@ -52,7 +52,8 @@ export function RunScanButton() {
   const minCapRaw    = useUniverseStore((s) => s.minCapRaw);
   const maxCapRaw    = useUniverseStore((s) => s.maxCapRaw);
   const capUnit      = useUniverseStore((s) => s.capUnit);
-  const scanning = scanState === 'SCANNING';
+  const scanning    = scanState === 'SCANNING';
+  const customEmpty = pick === 'Custom' && parseSymbols(customRaw).length === 0;
 
   const [showRegimeConfirm, setShowRegimeConfirm] = useState(false);
   const regimeConfirmedRef = useRef(false);
@@ -169,7 +170,8 @@ export function RunScanButton() {
         type="button"
         className={styles.fab}
         onClick={onClick}
-        disabled={scanning}
+        disabled={scanning || customEmpty}
+        title={customEmpty ? 'Enter at least one valid symbol' : undefined}
         aria-label={scanning ? 'Scan in progress' : 'Run scan'}
         aria-live="polite"
       >

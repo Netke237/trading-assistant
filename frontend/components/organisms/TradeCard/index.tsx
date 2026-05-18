@@ -450,10 +450,10 @@ function EditableTargetRow({
   totalContracts: number;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(editedStockPrice));
+  const [draft, setDraft] = useState(String(editedStockPrice ?? 0));
 
   const startEdit = useCallback(() => {
-    setDraft(String(editedStockPrice));
+    setDraft(String(editedStockPrice ?? 0));
     setEditing(true);
   }, [editedStockPrice]);
 
@@ -529,7 +529,7 @@ function EditableTargetRow({
                 aria-label={`Edit target stock price for ${label}`}
               >
                 <Data size={13} weight={500} tone={rowTone}>
-                  ${editedStockPrice.toFixed(2)}
+                  ${(editedStockPrice ?? 0).toFixed(2)}
                 </Data>
               </span>
             )}

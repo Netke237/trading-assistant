@@ -11,10 +11,124 @@ import { useEffect, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import type { Direction } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
+import type { RejectedEntry } from '@/lib/scanStore';
 import { api } from '@/lib/api';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
+
+// ── Scan-log constants ────────────────────────────────────────────────────────
+
+const HORIZON_WEIGHTS: Record<string, Record<string, number>> = {
+  Intraday: { trend: 35, pullback: 20, trigger: 30, event: 5,  vol: 10 },
+  Swing:    { trend: 30, pullback: 20, trigger: 25, event: 15, vol: 10 },
+  Position: { trend: 30, pullback: 20, trigger: 20, event: 20, vol: 10 },
+};
+
+const COMPONENT_LABELS: Record<string, string> = {
+  trend:    'Trend',
+  pullback: 'Pullback',
+  trigger:  'Trigger',
+  event:    'Event',
+  vol:      'Vol',
+};
+
+const COMPONENT_ORDER = ['trend', 'pullback', 'trigger', 'event', 'vol'];
+
+// ── Breakdown row component ───────────────────────────────────────────────────
+
+function BreakdownRow({ compKey, rawScore, weight }: { compKey: string; rawScore: number; weight: number }) {
+  const label = COMPONENT_LABELS[compKey] ?? compKey;
+  const weightedPts = Math.round((rawScore / 100) * weight);
+  const tone: 'pass' | 'caution' | 'reject' =
+    weightedPts >= weight * 0.6 ? 'pass' : weightedPts >= weight * 0.3 ? 'caution' : 'reject';
+  return (
+    <div className={formStyles.breakdownRow}>
+      <Text size={11} tone="secondary" weight={400}>{label}</Text>
+      <Data size={11} weight={500}>{rawScore}/100</Data>
+      <Text size={11} tone="dim">{weight}%</Text>
+      <div className={formStyles.miniTrack}>
+        <div className={formStyles.miniFill} style={{ width: `${rawScore}%` }} />
+      </div>
+      <Data size={11} weight={500} tone={tone}>{weightedPts}pt</Data>
+    </div>
+  );
+}
+
+// ── StockRejectGroup ──────────────────────────────────────────────────────────
+
+function StockRejectGroup({ reason, entries, horizonKey }: { reason: string; entries: RejectedEntry[]; horizonKey: string }) {
+  const [open, setOpen] = useState(false);
+  const weights = HORIZON_WEIGHTS[horizonKey] ?? HORIZON_WEIGHTS['Swing'];
+  const sampleBreakdown = entries.find((e) => e.breakdown)?.breakdown;
+
+  return (
+    <div className={formStyles.rejectGroup}>
+      <button type="button" className={formStyles.rejectGroupHeader} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <Text size={12} tone="reject" weight={500}>{reason}</Text>
+        <Text size={11} tone="dim">{entries.length} symbol{entries.length !== 1 ? 's' : ''}</Text>
+        <span className={`${formStyles.chevron} ${open ? formStyles.chevronOpen : ''}`} aria-hidden>▾</span>
+      </button>
+      {open && (
+        <div className={formStyles.rejectGroupBody}>
+          <div className={formStyles.symbolList}>
+            {entries.map((e) => <Text key={e.symbol} size={11} tone="secondary">{e.symbol}</Text>)}
+          </div>
+          {sampleBreakdown && (
+            <div className={formStyles.breakdownBlock}>
+              <div className={formStyles.breakdownHeader}>
+                <Text size={10} tone="dim">COMPONENT</Text>
+                <Text size={10} tone="dim">RAW</Text>
+                <Text size={10} tone="dim">WT%</Text>
+                <span />
+                <Text size={10} tone="dim">PTS</Text>
+              </div>
+              {COMPONENT_ORDER.map((k) =>
+                sampleBreakdown[k] !== undefined ? (
+                  <BreakdownRow key={k} compKey={k} rawScore={sampleBreakdown[k]} weight={weights[k] ?? 0} />
+                ) : null
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ScanLog section ───────────────────────────────────────────────────────────
+
+function ScanLogSection({ entries, horizonKey }: { entries: RejectedEntry[]; horizonKey: string }) {
+  if (entries.length === 0) return null;
+  const stockRejects = entries.filter((e) => e.reason.startsWith('stock REJECT'));
+  const otherRejects = entries.filter((e) => !e.reason.startsWith('stock REJECT'));
+  const byReason = new Map<string, RejectedEntry[]>();
+  for (const e of stockRejects) {
+    const list = byReason.get(e.reason) ?? [];
+    list.push(e);
+    byReason.set(e.reason, list);
+  }
+  return (
+    <div className={formStyles.rejectList}>
+      {Array.from(byReason.entries())
+        .sort((a, b) => b[1].length - a[1].length)
+        .map(([reason, list]) => (
+          <StockRejectGroup key={reason} reason={reason} entries={list} horizonKey={horizonKey} />
+        ))}
+      {otherRejects.length > 0 && (
+        <div className={formStyles.otherRejects}>
+          <Text size={11} tone="dim" weight={500}>OTHER</Text>
+          {otherRejects.map((e) => (
+            <div key={e.symbol} className={formStyles.otherRejectRow}>
+              <Text size={11} weight={500}>{e.symbol}</Text>
+              <Text size={11} tone="dim">{e.reason}</Text>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const DIRECTIONS: Direction[] = ['Bullish', 'Bearish'];
 
@@ -89,11 +203,6 @@ function parseCustomDays(h: string | undefined): [number, number] {
   return m ? [Number(m[1]), Number(m[2])] : [5, 15];
 }
 
-function inferStage(reason: string): 'stock' | 'contract' | 'filter' {
-  if (reason.includes('contract') || reason.includes('delta') || reason.includes('DTE') || reason.includes('spread')) return 'contract';
-  if (reason.includes('price') || reason.includes('cap')) return 'filter';
-  return 'stock';
-}
 
 function dteRecommendation(horizon: string | undefined): string {
   if (!horizon) return '';
@@ -112,7 +221,6 @@ export default function Step2Page() {
   const context       = useScanStore((s) => s.context);
   const setContext    = useScanStore((s) => s.setContext);
   const rejectedLog   = useScanStore((s) => s.rejectedLog);
-  const scanResult    = useScanStore((s) => s.scanResult);
   const regime        = useScanStore((s) => s.regime);
   const scanOverrides = useScanStore((s) => s.scanOverrides);
 
@@ -157,24 +265,14 @@ export default function Step2Page() {
 
   const custom = hz === 'Custom';
 
-  const byReason = rejectedLog.reduce<Record<string, number>>((acc, e) => {
-    acc[e.reason] = (acc[e.reason] ?? 0) + 1;
-    return acc;
-  }, {});
-
-  const stageCounts = rejectedLog.reduce<{ stock: number; contract: number; filter: number }>(
-    (acc, e) => {
-      const stage = inferStage(e.reason);
-      acc[stage]++;
-      return acc;
-    },
-    { stock: 0, contract: 0, filter: 0 },
-  );
+  const horizonKey = context?.horizon?.startsWith('Intraday') ? 'Intraday'
+    : context?.horizon?.startsWith('Position') ? 'Position'
+    : 'Swing';
 
   return (
     <div className={styles.main}>
       <div className={styles.stepHeader}>
-        <Text size={11} tone="dim" weight={500}>STEP 2 OF 7</Text>
+        <Text size={11} tone="dim" weight={500}>STEP 3 OF 7</Text>
         <Title as="h1" size={24}>Direction + Horizon</Title>
         <Text size={13} tone="secondary">Choose your directional bias and holding horizon.</Text>
         {regime === 'REJECT' && (
@@ -363,48 +461,11 @@ export default function Step2Page() {
       <div className={formStyles.logSection}>
         <div className={formStyles.logHeader}>
           <Text size={11} tone="dim" weight={500}>SCAN LOG</Text>
-          {scanResult !== null && rejectedLog.length > 0 && (
+          {rejectedLog.length > 0 && (
             <span className={formStyles.badge}>{rejectedLog.length}</span>
           )}
         </div>
-
-        {scanResult === null && (
-          <Text size={13} tone="secondary">No scan run yet.</Text>
-        )}
-
-        {scanResult !== null && rejectedLog.length === 0 && (
-          <Text size={13} tone="secondary">All symbols passed all filters.</Text>
-        )}
-
-        {scanResult !== null && rejectedLog.length > 0 && (
-          <>
-            <div className={formStyles.logBlock}>
-              <Text size={11} tone="dim" weight={500}>REJECTION BREAKDOWN</Text>
-              <div className={formStyles.breakdownTable}>
-                {Object.entries(byReason).map(([reason, count]) => (
-                  <div key={reason} className={formStyles.breakdownRow}>
-                    <Text size={12} tone="secondary">{reason}</Text>
-                    <Data size={12} weight={500}>{count}</Data>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className={formStyles.logBlock}>
-              <Text size={11} tone="dim" weight={500}>STAGE SUMMARY</Text>
-              <div className={formStyles.summaryRow}>
-                <Text size={12} tone="secondary">Stock scoring: <Data size={12} weight={500}>{stageCounts.stock}</Data> rejected</Text>
-                <Text size={12} tone="secondary">Contract scoring: <Data size={12} weight={500}>{stageCounts.contract}</Data> rejected</Text>
-                <Text size={12} tone="secondary">Pre-filter: <Data size={12} weight={500}>{stageCounts.filter}</Data> rejected</Text>
-              </div>
-            </div>
-
-            <div className={formStyles.logBlock}>
-              <Text size={11} tone="dim" weight={500}>DTE RECOMMENDATION</Text>
-              <Text size={12} tone="secondary">{dteRecommendation(context?.horizon)}</Text>
-            </div>
-          </>
-        )}
+        <ScanLogSection entries={rejectedLog} horizonKey={horizonKey} />
       </div>
 
       <RunScanButton />
