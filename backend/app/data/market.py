@@ -304,22 +304,26 @@ def _fetch_news_yf(symbols: list[str], limit: int = 20) -> list[dict]:
         except Exception:
             items = []
         for i, item in enumerate(items):
-            uid = item.get("uuid", f"{sym}_{i}")
+            # yfinance >=0.2.52 wraps everything under a "content" key
+            content = item.get("content") or item
+            uid = item.get("id") or content.get("id") or f"{sym}_{i}"
             if uid in seen:
                 continue
             seen.add(uid)
-            ts = item.get("providerPublishTime", 0)
-            timestamp = (
-                datetime.fromtimestamp(ts, tz=tz.utc).isoformat()
-                if ts else ""
-            )
-            related = item.get("relatedTickers") or []
+            pub = content.get("pubDate") or ""
+            timestamp = pub if pub else ""
+            provider = content.get("provider") or {}
+            source = provider.get("displayName") or content.get("publisher", "")
+            related = content.get("relatedTickers") or item.get("relatedTickers") or []
             article_sym = next((r for r in related if r in sym_set), sym)
+            headline = content.get("title") or item.get("title", "")
+            if not headline:
+                continue
             articles.append({
                 "id":        uid,
                 "symbol":    article_sym,
-                "headline":  item.get("title", ""),
-                "source":    item.get("publisher", ""),
+                "headline":  headline,
+                "source":    source,
                 "timestamp": timestamp,
                 "sentiment": "neutral",
             })
