@@ -1,4 +1,4 @@
-import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
+import type { WatchlistRow, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, OptionContract, NewsItem } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import type { ScanResult } from '@/lib/scanStore';
@@ -23,7 +23,6 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 export const api = {
   getWatchlist:  () => get<WatchlistRow[]>('/api/watchlist'),
-  getPortfolio:  () => get<PortfolioPosition[]>('/api/portfolio'),
   getAlerts:     () => get<AlertItem[]>('/api/alerts'),
   getRegime:     () => get<MarketRegime>('/api/regime'),
   getSectors:    () => get<SectorTile[]>('/api/sectors'),
