@@ -280,10 +280,15 @@ class TradeCardData(BaseModel):
 # ── Scan ─────────────────────────────────────────────────────────────────────
 
 class ScanRequest(BaseModel):
-    universe: list[str]
-    direction: Direction
-    horizon: Horizon
-    overrides: dict = {}
+    universe:    list[str]
+    direction:   Direction
+    horizon:     Horizon
+    overrides:   dict = {}
+    # Price / cap filters from Step 1 universe page
+    min_price:   Optional[float] = None
+    max_price:   Optional[float] = None
+    min_cap_usd: Optional[float] = None
+    max_cap_usd: Optional[float] = None
 
 
 class RejectedCandidate(BaseModel):

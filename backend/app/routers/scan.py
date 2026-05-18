@@ -34,6 +34,7 @@ from typing import Literal
 from app.data.market import (
     fetch_candles_async, fetch_price_async, fetch_option_chain_async,
     fetch_company_name_async, fetch_fundamentals_calendar,
+    fetch_market_cap_async,
     _extract_earnings_date, _extract_dividend_date,
     TRADIER_BASE_URL, TRADIER_TOKEN,
 )
@@ -154,6 +155,11 @@ async def _process_symbol(
     client: httpx.AsyncClient,
     sem: asyncio.Semaphore,
     scan_id: str,
+    *,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    min_cap_usd: float | None = None,
+    max_cap_usd: float | None = None,
 ) -> TradeCardData | RejectedCandidate:
     """Process one symbol: fetch data, score stock, validate contracts, build trade card."""
     async with sem:
@@ -166,6 +172,25 @@ async def _process_symbol(
         if not price or not candles:
             log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no market data"})
             return RejectedCandidate(symbol=symbol, reason="no market data")
+
+        # ── Price filter ───────────────────────────────────────────────────────
+        if min_price is not None and price < min_price:
+            return RejectedCandidate(symbol=symbol, reason=f"price filter (${price:.2f} < ${min_price:.2f} min)")
+        if max_price is not None and price > max_price:
+            return RejectedCandidate(symbol=symbol, reason=f"price filter (${price:.2f} > ${max_price:.2f} max)")
+
+        # ── Market-cap filter ──────────────────────────────────────────────────
+        if min_cap_usd is not None or max_cap_usd is not None:
+            market_cap = await fetch_market_cap_async(symbol)
+            if market_cap is not None:
+                if min_cap_usd is not None and market_cap < min_cap_usd:
+                    cap_b = market_cap / 1e9
+                    min_b = min_cap_usd / 1e9
+                    return RejectedCandidate(symbol=symbol, reason=f"cap filter (${cap_b:.1f}B < ${min_b:.1f}B min)")
+                if max_cap_usd is not None and market_cap > max_cap_usd:
+                    cap_b = market_cap / 1e9
+                    max_b = max_cap_usd / 1e9
+                    return RejectedCandidate(symbol=symbol, reason=f"cap filter (${cap_b:.1f}B > ${max_b:.1f}B max)")
 
         option_type: Literal["C", "P"] = "C" if direction == "Bullish" else "P"
         chain = await fetch_option_chain_async(client, symbol, option_type=option_type)
@@ -439,7 +464,13 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         timeout=httpx.Timeout(10.0),
     ) as client:
         tasks = [
-            _process_symbol(symbol, req.direction, req.horizon, client, semaphore, scan_id)
+            _process_symbol(
+                symbol, req.direction, req.horizon, client, semaphore, scan_id,
+                min_price=req.min_price,
+                max_price=req.max_price,
+                min_cap_usd=req.min_cap_usd,
+                max_cap_usd=req.max_cap_usd,
+            )
             for symbol in symbols
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)

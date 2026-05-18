@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import date, timedelta
 from typing import Literal, Optional
@@ -478,6 +479,31 @@ async def fetch_option_chain_async(
         return [c for c in result if not (c["id"] in seen or seen.add(c["id"]))]  # type: ignore[func-returns-value]
     except Exception:
         return []
+
+
+_market_cap_cache: dict[str, float | None] = {}
+
+
+async def fetch_market_cap_async(symbol: str) -> float | None:
+    """Return market cap in USD for *symbol*, or None if unavailable.
+
+    Uses yfinance (which already appears in the project as a dividend fallback).
+    Results are cached for the lifetime of the process so repeated scans don't
+    re-fetch the same data.
+    """
+    if symbol in _market_cap_cache:
+        return _market_cap_cache[symbol]
+    result: float | None = None
+    try:
+        import yfinance as yf  # local import — optional dependency
+        info = await asyncio.to_thread(lambda: yf.Ticker(symbol).info)
+        cap = info.get("marketCap")
+        if cap:
+            result = float(cap)
+    except Exception:
+        pass
+    _market_cap_cache[symbol] = result
+    return result
 
 
 async def fetch_contract_quote_async(
