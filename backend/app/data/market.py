@@ -302,37 +302,119 @@ def fetch_company_name(symbol: str) -> Optional[str]:
         return None
 
 
-def fetch_news(symbols: list[str], limit: int = 20) -> list[dict]:
-    """
-    Returns recent news articles for the given symbols from Tradier.
-    Each item: {id, symbol, headline, source, timestamp, sentiment}
-    sentiment is always 'neutral' — Tradier does not provide sentiment scores.
-    Returns [] on any error.
-    """
-    try:
-        resp = httpx.get(
-            f"{TRADIER_BASE_URL}/v1/markets/news",
-            headers=_headers(),
-            params={"symbols": ",".join(symbols), "limit": limit},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        articles = data.get("news", {}).get("article", [])
-        if isinstance(articles, dict):
-            articles = [articles]
-        result = []
-        for i, a in enumerate(articles):
-            art_symbols = a.get("symbols", "")
-            symbol = art_symbols.split(",")[0].strip() if art_symbols else symbols[0]
-            result.append({
-                "id":        str(a.get("id", i)),
-                "symbol":    symbol,
-                "headline":  a.get("title", ""),
-                "source":    a.get("source", ""),
-                "timestamp": a.get("datetime", ""),
+def _fetch_news_yf(symbols: list[str], limit: int = 20) -> list[dict]:
+    """Fetch news for *symbols* using yfinance (free, no API key needed)."""
+    import yfinance as yf
+    from datetime import datetime, timezone as tz
+
+    seen: set[str] = set()
+    articles: list[dict] = []
+    sym_set = set(symbols)
+
+    for sym in symbols:
+        try:
+            items = yf.Ticker(sym).news or []
+        except Exception:
+            items = []
+        for i, item in enumerate(items):
+            uid = item.get("uuid", f"{sym}_{i}")
+            if uid in seen:
+                continue
+            seen.add(uid)
+            ts = item.get("providerPublishTime", 0)
+            timestamp = (
+                datetime.fromtimestamp(ts, tz=tz.utc).isoformat()
+                if ts else ""
+            )
+            related = item.get("relatedTickers") or []
+            article_sym = next((r for r in related if r in sym_set), sym)
+            articles.append({
+                "id":        uid,
+                "symbol":    article_sym,
+                "headline":  item.get("title", ""),
+                "source":    item.get("publisher", ""),
+                "timestamp": timestamp,
                 "sentiment": "neutral",
             })
-        return result
-    except Exception:
-        return []
+
+    articles.sort(key=lambda x: x["timestamp"], reverse=True)
+    return articles[:limit]
+
+
+def fetch_news(symbols: list[str], limit: int = 20) -> list[dict]:
+    """
+    Returns recent news headlines for the given symbols.
+    Tries Tradier first (when TRADIER_API_TOKEN is set), then falls back to yfinance.
+    Each item: {id, symbol, headline, source, timestamp, sentiment}
+    """
+    if TRADIER_TOKEN:
+        try:
+            resp = httpx.get(
+                f"{TRADIER_BASE_URL}/v1/markets/news",
+                headers=_headers(),
+                params={"symbols": ",".join(symbols), "limit": limit},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            articles = data.get("news", {}).get("article", [])
+            if isinstance(articles, dict):
+                articles = [articles]
+            result = []
+            for i, a in enumerate(articles):
+                art_symbols = a.get("symbols", "")
+                symbol = art_symbols.split(",")[0].strip() if art_symbols else symbols[0]
+                result.append({
+                    "id":        str(a.get("id", i)),
+                    "symbol":    symbol,
+                    "headline":  a.get("title", ""),
+                    "source":    a.get("source", ""),
+                    "timestamp": a.get("datetime", ""),
+                    "sentiment": "neutral",
+                })
+            if result:
+                return result
+        except Exception:
+            pass
+    return _fetch_news_yf(symbols, limit)
+
+
+def fetch_earnings_events(symbols: list[str], days_ahead: int = 60) -> list[dict]:
+    """
+    Returns upcoming earnings dates for *symbols* within *days_ahead* days.
+    Each item: {date: 'YYYY-MM-DD', symbol: str, label: 'Earnings', status: 'PENDING'}
+    Uses yfinance — free, no API key needed.
+    """
+    import yfinance as yf
+    from datetime import date as date_type, datetime
+
+    events: list[dict] = []
+    today = date_type.today()
+
+    for sym in symbols:
+        try:
+            cal = yf.Ticker(sym).calendar
+            if not cal:
+                continue
+            dates = cal.get("Earnings Date")
+            if not dates:
+                continue
+            raw = list(dates)[0] if hasattr(dates, "__iter__") else dates
+            if hasattr(raw, "date"):
+                d = raw.date()
+            else:
+                d = datetime.fromisoformat(str(raw)).date()
+            delta = (d - today).days
+            if delta < -1 or delta > days_ahead:
+                continue
+            events.append({
+                "date":   d.isoformat(),
+                "symbol": sym,
+                "label":  "Earnings",
+                "status": "PENDING",
+            })
+        except Exception:
+            continue
+
+    events.sort(key=lambda x: x["date"])
+    return events

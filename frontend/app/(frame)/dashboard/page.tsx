@@ -218,8 +218,10 @@ export default function DashboardPage() {
           <div className={styles.newsList}>
             {offline ? (
               <Text size={12} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
+            ) : watchlist.length === 0 ? (
+              <Text size={12} tone="dim">Add stocks to your watchlist to see news here.</Text>
             ) : news.length === 0 ? (
-              <Text size={12} tone="dim">No news for your watchlist right now.</Text>
+              <Text size={12} tone="dim">No recent news for your watchlist.</Text>
             ) : news.slice(0, 6).map((n) => (
               <article key={n.id} className={styles.newsItem}>
                 <span className={`${styles.newsDot} ${styles[`newsDot_${n.sentiment}`]}`} aria-hidden />
