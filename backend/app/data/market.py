@@ -304,8 +304,11 @@ def fetch_company_name(symbol: str) -> Optional[str]:
 
 def _fetch_news_yf(symbols: list[str], limit: int = 20) -> list[dict]:
     """Fetch news for *symbols* using yfinance (free, no API key needed)."""
-    import yfinance as yf
-    from datetime import datetime, timezone as tz
+    try:
+        import yfinance as yf
+        from datetime import datetime, timezone as tz
+    except Exception:
+        return []
 
     seen: set[str] = set()
     articles: list[dict] = []
@@ -385,8 +388,11 @@ def fetch_earnings_events(symbols: list[str], days_ahead: int = 60) -> list[dict
     Each item: {date: 'YYYY-MM-DD', symbol: str, label: 'Earnings', status: 'PENDING'}
     Uses yfinance — free, no API key needed.
     """
-    import yfinance as yf
-    from datetime import date as date_type, datetime
+    try:
+        import yfinance as yf
+        from datetime import date as date_type, datetime
+    except Exception:
+        return []
 
     events: list[dict] = []
     today = date_type.today()
