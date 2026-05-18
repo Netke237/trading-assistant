@@ -114,11 +114,11 @@ def estimate_targets(
         rr = round(reward / risk, 2) if risk > 0 and reward > 0 else 0.0
 
         results.append(TargetLevelSchema(
-            target_price=round(t_price, 2),
-            stock_price=round(t_price, 2),
-            estimated_option_price=round(opt_price, 2),
-            pricing_method=method,
-            rr_contribution=rr,
+            targetPrice=round(t_price, 2),
+            stockPrice=round(t_price, 2),
+            estimatedOptionPrice=round(opt_price, 2),
+            pricingMethod=method,
+            rrContribution=rr,
         ))
 
     return results

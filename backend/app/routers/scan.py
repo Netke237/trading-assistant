@@ -261,12 +261,13 @@ async def _process_symbol(
     from datetime import date as _date
     next_event_days = None
     next_event_label = None
-    if earnings_date:
-        next_event_days = max(0, (earnings_date - _date.today()).days)
-        next_event_label = "Earnings"
-    elif dividend_date:
-        next_event_days = max(0, (dividend_date - _date.today()).days)
-        next_event_label = "Dividend"
+    for ev_date, ev_label in [(earnings_date, "Earnings"), (dividend_date, "Dividend")]:
+        if ev_date is None:
+            continue
+        days = max(0, (ev_date - _date.today()).days)
+        if next_event_days is None or days < next_event_days:
+            next_event_days = days
+            next_event_label = ev_label
 
     trade_card = TradeCardData(
         symbol=symbol,

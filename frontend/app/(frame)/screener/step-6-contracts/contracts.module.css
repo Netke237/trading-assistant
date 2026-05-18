@@ -58,3 +58,44 @@
   border: 1px solid var(--border-subtle);
   background: var(--bg-surface);
 }
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  user-select: none;
+  width: 100%;
+  text-align: left;
+}
+
+.groupHeader:hover {
+  background: var(--bg-surface-2);
+}
+
+.groupBody {
+  /* rows handle their own padding */
+}
+
+.chevron {
+  margin-left: auto;
+  display: inline-block;
+  transition: transform 120ms;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}

@@ -182,11 +182,11 @@ class PricingMethod(str, Enum):
 
 class TargetLevel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    target_price: float          # underlying stock price at this target
-    stock_price: float           # alias of target_price (keep for backward compat)
-    estimated_option_price: float
-    pricing_method: PricingMethod
-    rr_contribution: float       # estimated reward at this target / risk
+    targetPrice: float           # underlying stock price at this target
+    stockPrice: float            # alias of targetPrice (keep for backward compat)
+    estimatedOptionPrice: float
+    pricingMethod: PricingMethod
+    rrContribution: float        # estimated reward at this target / risk
 
 
 # ── Trade cards ──────────────────────────────────────────────────────────────
@@ -277,6 +277,7 @@ class ScanRequest(BaseModel):
 class RejectedCandidate(BaseModel):
     symbol: str
     reason: str
+    breakdown: dict[str, int] | None = None
 
 
 class ScanResult(BaseModel):
