@@ -80,6 +80,7 @@ describe('scanStore', () => {
     const mockResult = {
       scan_id: 'REC-20260505-A1B2C3D4',
       timestamp: '2026-05-05T10:00:00Z',
+      rejected: [],
       candidates: [],
     };
 
@@ -94,11 +95,13 @@ describe('scanStore', () => {
     const firstResult = {
       scan_id: 'REC-20260504-A1B2C3D4',
       timestamp: '2026-05-04T09:30:00',
+      rejected: [],
       candidates: [{ symbol: 'AAPL', stockScore: 80 } as any],
     };
     const secondResult = {
       scan_id: 'REC-20260505-E5F6G7H8',
       timestamp: '2026-05-05T10:00:00',
+      rejected: [],
       candidates: [{ symbol: 'AAPL', stockScore: 85 } as any],
     };
 
@@ -120,11 +123,13 @@ describe('scanStore', () => {
     const firstResult = {
       scan_id: 'REC-1',
       timestamp: '2026-05-04T09:30:00',
+      rejected: [],
       candidates: [],
     };
     const secondResult = {
       scan_id: 'REC-2',
       timestamp: '2026-05-05T10:00:00',
+      rejected: [],
       candidates: [],
     };
 
@@ -156,7 +161,7 @@ describe('scanStore', () => {
     const { result } = renderHook(() => useScanStore());
 
     act(() => {
-      result.current.setScanResult({ scan_id: '1', timestamp: 't', candidates: [] });
+      result.current.setScanResult({ scan_id: '1', timestamp: 't', rejected: [], candidates: [] });
     });
     expect(result.current.scanResult).not.toBeNull();
 

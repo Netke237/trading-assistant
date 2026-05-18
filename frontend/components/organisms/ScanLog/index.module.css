@@ -103,3 +103,7 @@
   gap: var(--space-3);
   padding: var(--space-1) 0;
 }
+
+.categoryLabel {
+  flex: 1;
+}

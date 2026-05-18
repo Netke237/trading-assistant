@@ -240,7 +240,7 @@ function ContractRejectionSection({ rejected }: { rejected: RejectedEntry[] }) {
             .filter((c) => catCounts[c] > 0)
             .map((cat) => (
               <div key={cat} className={styles.categoryRow}>
-                <Text size={11} tone="secondary" style={{ flex: 1 }}>{CATEGORY_LABELS[cat]}</Text>
+                <span className={styles.categoryLabel}><Text size={11} tone="secondary">{CATEGORY_LABELS[cat]}</Text></span>
                 <Data size={11} tone="dim">{catCounts[cat]}</Data>
               </div>
             ))}

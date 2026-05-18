@@ -4,6 +4,7 @@ import type { ScanResult } from '@/lib/scanStore';
 const mockPreviousRun: ScanResult = {
   scan_id: 'REC-20260504-A1B2C3D4',
   timestamp: '2026-05-04T09:30:00',
+  rejected: [],
   candidates: [
     {
       symbol: 'AAPL', company: 'Apple Inc.', price: 185.20, direction: 'Bullish', status: 'PASS',
@@ -44,6 +45,7 @@ const mockPreviousRun: ScanResult = {
 const mockCurrentRun: ScanResult = {
   scan_id: 'REC-20260504-10111213',
   timestamp: '2026-05-04T10:30:00',
+  rejected: [],
   candidates: [
     {
       symbol: 'MSFT', company: 'Microsoft Corp.', price: 412.00, direction: 'Bullish', status: 'PASS',
