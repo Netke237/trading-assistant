@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Query
 from app.data.market import fetch_news
 from app.schemas import NewsItem
@@ -16,4 +18,4 @@ async def get_news(symbols: str = Query(default='')) -> list[NewsItem]:
     sym_list = [s.strip().upper() for s in symbols.split(',') if s.strip()]
     if not sym_list:
         return []
-    return fetch_news(sym_list)
+    return await asyncio.to_thread(fetch_news, sym_list)
