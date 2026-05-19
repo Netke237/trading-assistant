@@ -36,8 +36,8 @@ export interface WatchlistRow {
   scoreDelta?:  number;        // score pts vs previous scan
   status:       Status;
   breakdown:    ScoreBreakdown;
-  nextEventDays?: number;      // days until earnings / fed / etc
-  nextEventLabel?: string;     // "Earnings", "FOMC"
+  nextEventDays?: number | null;   // days until earnings / dividend / etc; null = no event known
+  nextEventLabel?: string | null;
 }
 
 export interface TargetLevel {
@@ -127,8 +127,8 @@ export interface TradeCardData {
   };
   entry:  { limit: number; maxFill: number; orderType: OrderType };
   exit:   { invalidation: number; premiumStop: number; timeStopDays: number; target: number; targets: TargetLevel[] };
-  nextEventDays?:  number;
-  nextEventLabel?: string;
+  nextEventDays?:  number | null;
+  nextEventLabel?: string | null;
   rrRatio:  number;
   rrModel:  'Heston repriced' | 'Delta approximation';
   finalStatus: Status;
@@ -241,7 +241,8 @@ export type AlertType =
   | 'TIME_STOP'
   | 'EVENT_RISK'
   | 'REGIME_CHANGE'
-  | 'SCAN_COMPLETE';
+  | 'SCAN_COMPLETE'
+  | 'SCAN_FAILED';
 
 export interface AlertRule {
   type: AlertType;

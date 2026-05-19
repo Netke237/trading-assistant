@@ -1,6 +1,7 @@
 """Tests for shortlist cap enforcement in POST /api/scan."""
 
-from unittest.mock import patch
+from contextlib import ExitStack
+from unittest.mock import patch, AsyncMock
 from app.scoring.stock_scorer import StockScoreCard, RuleResult
 from app.scoring.contract_validator import ContractScoreCard, ContractScoreBreakdown
 
@@ -47,33 +48,40 @@ def _pass_card(symbol, *_, **__) -> StockScoreCard:
 
 
 def _pass_contract(contract, *_, **__) -> ContractScoreCard:
+    sym = contract.get("symbol", "SYM")
+    strike = float(contract.get("strike", 190.0))
+    expiry = contract.get("expiry", "2026-06-20")
+    right = contract.get("right", "C")
     return ContractScoreCard(
-        contract_id=f"SYM|190|2026-06-20|C",
-        symbol="SYM",
-        strike=190.0,
-        expiry="2026-06-20",
-        is_call=True,
+        contract_id=f"{sym}|{int(strike)}|{expiry}|{right}",
+        symbol=sym,
+        strike=strike,
+        expiry=expiry,
+        is_call=right == "C",
         score=75,
         status="PASS",
         breakdown=_PASS_CONTRACT_BREAKDOWN,
     )
 
 
+def _enter_shortlist_patches(truncate):
+    stack = ExitStack()
+    stack.enter_context(patch("app.routers.scan.fetch_price_async",            AsyncMock(return_value=185.0)))
+    stack.enter_context(patch("app.routers.scan.fetch_candles_async",           AsyncMock(return_value=_MOCK_CANDLES)))
+    stack.enter_context(patch("app.routers.scan.fetch_option_chain_async",      AsyncMock(return_value=_MOCK_CHAIN)))
+    stack.enter_context(patch("app.routers.scan.fetch_company_name_async",      AsyncMock(return_value=None)))
+    stack.enter_context(patch("app.routers.scan.fetch_fundamentals_calendar",   AsyncMock(return_value=None)))
+    stack.enter_context(patch("app.routers.scan.score_stock",                 side_effect=_pass_card))
+    stack.enter_context(patch("app.routers.scan.validate_contract",           side_effect=_pass_contract))
+    stack.enter_context(patch("app.routers.scan._settings", {"scan": {"shortlist_max_candidates": truncate}}))
+    return stack
+
+
 def test_shortlist_cap_enforced(client):
     """20 symbols all scoring PASS, cap=5 -> <=5 candidates, truncated=True, original_count=20."""
     symbols = [f"SYM{i:02d}" for i in range(20)]
 
-    with (
-        patch("app.routers.scan.fetch_price",         return_value=185.0),
-        patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES),
-        patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_CHAIN),
-        patch("app.routers.scan.fetch_company_name",  return_value=None),
-        patch("app.routers.scan.fetch_earnings_date", return_value=None),
-        patch("app.routers.scan.fetch_dividend_date", return_value=None),
-        patch("app.routers.scan.score_stock",          side_effect=_pass_card),
-        patch("app.routers.scan.validate_contract",    side_effect=_pass_contract),
-        patch("app.routers.scan._settings", {"scan": {"shortlist_max_candidates": 5}}),
-    ):
+    with _enter_shortlist_patches(truncate=5):
         r = client.post("/api/scan", json={
             "universe": symbols,
             "direction": "Bullish",
@@ -89,17 +97,7 @@ def test_shortlist_cap_enforced(client):
 
 def test_shortlist_not_truncated_when_below_cap(client):
     """2 symbols, cap=10 -> shortlist_truncated=False."""
-    with (
-        patch("app.routers.scan.fetch_price",         return_value=185.0),
-        patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES),
-        patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_CHAIN),
-        patch("app.routers.scan.fetch_company_name",  return_value=None),
-        patch("app.routers.scan.fetch_earnings_date", return_value=None),
-        patch("app.routers.scan.fetch_dividend_date", return_value=None),
-        patch("app.routers.scan.score_stock",          side_effect=_pass_card),
-        patch("app.routers.scan.validate_contract",    side_effect=_pass_contract),
-        patch("app.routers.scan._settings", {"scan": {"shortlist_max_candidates": 10}}),
-    ):
+    with _enter_shortlist_patches(truncate=10):
         r = client.post("/api/scan", json={
             "universe": ["AAPL", "MSFT"],
             "direction": "Bullish",

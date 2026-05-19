@@ -1,14 +1,6 @@
 'use client';
 
-/*
- * Screener Step 6 — Contracts. Phase 5.
- * Scored option contracts for the currently-selected symbol, enriched with
- * PRICE, IV RANK, IV PCTL, Θ/DAY and VOLUME. Clickable column headers sort
- * the table. Each row has a star that writes to useWatchedContractsStore,
- * and the selection radio at the right marks the contract feeding Step 7.
- */
-
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
@@ -30,42 +22,48 @@ type SortKey =
 
 type SortDir = 'asc' | 'desc';
 
-export default function Step6Page() {
-  const [contracts, setContracts] = useState<OptionContract[]>([]);
-  const [pick, setPick]           = useState<string>('');
-  const [sortKey, setSortKey]     = useState<SortKey>('score');
-  const [sortDir, setSortDir]     = useState<SortDir>('desc');
-  const [offline, setOffline]     = useState(false);
+function sortContracts(
+  contracts: OptionContract[],
+  key: SortKey,
+  dir: SortDir,
+): OptionContract[] {
+  const rows = [...contracts];
+  const mul = dir === 'asc' ? 1 : -1;
+  rows.sort((a, b) => {
+    switch (key) {
+      case 'contract':
+        return contractLabel(a).localeCompare(contractLabel(b)) * mul;
+      default:
+        return ((a[key] as number) - (b[key] as number)) * mul;
+    }
+  });
+  return rows;
+}
 
-  const selectedSymbol = useScanStore((s) => s.selectedSymbol);
+export default function Step6Page() {
+  const [contractsBySymbol, setContractsBySymbol] = useState<Record<string, OptionContract[]>>({});
+  const [expanded, setExpanded] = useState<string>('');
+  const [pick, setPick]         = useState<string>('');
+  const [sortKey, setSortKey]   = useState<SortKey>('score');
+  const [sortDir, setSortDir]   = useState<SortDir>('desc');
+  const [offline, setOffline]   = useState(false);
 
   const candidates = useScanStore((s) => s.scanResult?.candidates ?? []);
-  const activeCandidateAlts = useMemo(
-    () => candidates.find((c) => c.symbol === selectedSymbol)?.alternativesCount ?? 0,
-    [candidates, selectedSymbol]
-  );
 
   useEffect(() => {
-    if (!selectedSymbol) return;
-    api.getContracts(selectedSymbol).then((data) => {
-      setContracts(data);
-      if (data[0]) setPick(data[0].id);
-    }).catch(() => setOffline(true));
-  }, [selectedSymbol]);
-
-  const sorted = useMemo<OptionContract[]>(() => {
-    const rows = [...contracts];
-    const mul = sortDir === 'asc' ? 1 : -1;
-    rows.sort((a, b) => {
-      switch (sortKey) {
-        case 'contract':
-          return contractLabel(a).localeCompare(contractLabel(b)) * mul;
-        default:
-          return ((a[sortKey] as number) - (b[sortKey] as number)) * mul;
-      }
-    });
-    return rows;
-  }, [contracts, sortKey, sortDir]);
+    if (candidates.length === 0) return;
+    setOffline(false);
+    Promise.all(candidates.map((c) => api.getContracts(c.symbol)))
+      .then((results) => {
+        const bySymbol: Record<string, OptionContract[]> = {};
+        candidates.forEach((c, i) => { bySymbol[c.symbol] = results[i] ?? []; });
+        setContractsBySymbol(bySymbol);
+        const first = results[0]?.[0];
+        if (first) setPick(first.id);
+        if (candidates[0]) setExpanded(candidates[0].symbol);
+      })
+      .catch(() => setOffline(true));
+  }, [candidates]);
 
   const toggleSort = (k: SortKey) => {
     if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -79,15 +77,10 @@ export default function Step6Page() {
     <div className={styles.main}>
       <div className={styles.stepHeader}>
         <Text size={11} tone="dim" weight={500}>STEP 6 OF 7</Text>
-        <Title as="h1" size={24}>Contracts{selectedSymbol ? ` — ${selectedSymbol}` : ''}</Title>
-        {activeCandidateAlts > 0 && (
-          <span className={tbl.altBadge}>
-            <Text size={11} tone="secondary">{activeCandidateAlts} alt{activeCandidateAlts > 1 ? 's' : ''}</Text>
-          </span>
-        )}
+        <Title as="h1" size={24}>Contracts</Title>
         <Text size={13} tone="secondary">
-          Scored by DTE fit, delta, IV attractiveness, liquidity and spread. Click a column to sort,
-          star a contract to track it in the Watchlist.
+          Scored by DTE fit, delta, IV attractiveness, liquidity and spread. Click a stock to
+          expand its chain. Click a column header to sort. Star a contract to track it.
         </Text>
       </div>
 
@@ -95,59 +88,134 @@ export default function Step6Page() {
         <Text size={13} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
       )}
 
-      {!selectedSymbol && (
-        <Text size={13} tone="dim">Select a candidate in Step 4 to view contracts.</Text>
+      {candidates.length === 0 && (
+        <Text size={13} tone="secondary">Run a scan to see contracts.</Text>
       )}
 
-      {selectedSymbol && (
+      {candidates.length > 0 && (
         <>
           <div className={tbl.headerRow} style={{ gridTemplateColumns: COLUMNS }}>
-        <span aria-hidden />
-        <SortBtn label="CONTRACT" k="contract" sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-        <SortBtn label="DTE"      k="dte"      sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
-        <SortBtn label="DELTA"    k="delta"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-        <SortBtn label="PRICE"    k="price"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-        <SortBtn label="IV RANK"  k="ivRank"   sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-        <SortBtn label="IV PCTL"  k="ivPercentile" sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-        <SortBtn label="Θ/DAY"    k="theta"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-        <SortBtn label="SPREAD"   k="spread"   sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-        <SortBtn label="VOL"      k="volume"   sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-        <SortBtn label="SCORE"    k="score"    sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-        <Text size={11} tone="dim">PICK</Text>
-      </div>
+            <span aria-hidden />
+            <SortBtn label="CONTRACT" k="contract"     sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+            <SortBtn label="DTE"      k="dte"          sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
+            <SortBtn label="DELTA"    k="delta"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+            <SortBtn label="PRICE"    k="price"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+            <SortBtn label="IV RANK"  k="ivRank"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+            <SortBtn label="IV PCTL"  k="ivPercentile" sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+            <SortBtn label="Θ/DAY"    k="theta"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+            <SortBtn label="SPREAD"   k="spread"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+            <SortBtn label="VOL"      k="volume"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+            <SortBtn label="SCORE"    k="score"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+            <Text size={11} tone="dim">PICK</Text>
+          </div>
 
-      {sorted.map((c) => {
-        const status = statusForScore(c.score);
-        return (
-          <TableRow
-            key={c.id}
-            status={status}
-            columns={COLUMNS}
-            selected={c.id === pick}
-            onClick={() => setPick(c.id)}
-          >
-            <ContractStar contractId={c.id} size="sm" />
-            <Data size={13} weight={500}>{contractLabel(c)}</Data>
-            <DTEProgressBar daysRemaining={c.dte} totalDays={c.dteTotal} />
-            <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
-            <Data size={12} className={tbl.right}>${c.price.toFixed(2)}</Data>
-            <Data size={12} className={tbl.right}>{c.ivRank}</Data>
-            <Data size={12} className={tbl.right}>{c.ivPercentile}</Data>
-            <Data size={12} className={tbl.right}>{c.theta.toFixed(2)}</Data>
-            <Data size={12} className={tbl.right}>${c.spread.toFixed(2)}</Data>
-            <Data size={12} className={tbl.right}>{c.volume.toLocaleString()}</Data>
-            <div className={tbl.scoreCell}>
-              <Data size={13} weight={500}>{c.score}</Data>
-              <StatusBadge status={status} />
-            </div>
-            <span
-              aria-label={c.id === pick ? 'Selected' : 'Select'}
-              className={tbl.pickDot}
-              data-selected={c.id === pick ? 'true' : 'false'}
-            />
-          </TableRow>
-        );
-      })}
+          {candidates.map((candidate) => {
+            const contracts = contractsBySymbol[candidate.symbol] ?? [];
+            const isOpen = expanded === candidate.symbol;
+            const sorted = sortContracts(contracts, sortKey, sortDir);
+            const recommended = sorted[0];
+            const chain = sorted.slice(1);
+            return (
+              <div key={candidate.symbol} className={tbl.group}>
+                <button
+                  type="button"
+                  className={tbl.groupHeader}
+                  onClick={() => setExpanded(isOpen ? '' : candidate.symbol)}
+                  aria-expanded={isOpen}
+                >
+                  <Text size={13} weight={500}>{candidate.symbol}</Text>
+                  <Text size={11} tone="secondary">{contracts.length} contracts</Text>
+                  <span className={`${tbl.chevron} ${isOpen ? tbl.chevronOpen : ''}`} aria-hidden>&#x203A;</span>
+                </button>
+
+                {isOpen && (
+                  <div className={tbl.groupBody}>
+                    {recommended && (
+                      <>
+                        <div className={tbl.sectionLabel}>
+                          <Text size={10} tone="dim" weight={500}>A — RECOMMENDED</Text>
+                        </div>
+                        {(() => {
+                          const c = recommended;
+                          const status = statusForScore(c.score);
+                          return (
+                            <TableRow
+                              key={c.id}
+                              status={status}
+                              columns={COLUMNS}
+                              selected={c.id === pick}
+                              onClick={() => setPick(c.id)}
+                              className={tbl.recommendedRow}
+                            >
+                              <ContractStar contractId={c.id} size="sm" />
+                              <Data size={13} weight={500}>{contractLabel(c)}</Data>
+                              <DTEProgressBar daysRemaining={c.dte} totalDays={c.dteTotal} />
+                              <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
+                              <Data size={12} className={tbl.right}>${c.price.toFixed(2)}</Data>
+                              <Data size={12} className={tbl.right}>{c.ivRank}</Data>
+                              <Data size={12} className={tbl.right}>{c.ivPercentile}</Data>
+                              <Data size={12} className={tbl.right}>{c.theta.toFixed(2)}</Data>
+                              <Data size={12} className={tbl.right}>${c.spread.toFixed(2)}</Data>
+                              <Data size={12} className={tbl.right}>{c.volume.toLocaleString()}</Data>
+                              <div className={tbl.scoreCell}>
+                                <Data size={13} weight={500}>{c.score}</Data>
+                                <StatusBadge status={status} />
+                              </div>
+                              <span
+                                aria-label={c.id === pick ? 'Selected' : 'Select'}
+                                className={tbl.pickDot}
+                                data-selected={c.id === pick ? 'true' : 'false'}
+                              />
+                            </TableRow>
+                          );
+                        })()}
+                      </>
+                    )}
+
+                    {chain.length > 0 && (
+                      <>
+                        <div className={tbl.sectionLabel}>
+                          <Text size={10} tone="dim" weight={500}>B — FULL CHAIN</Text>
+                        </div>
+                        {chain.map((c) => {
+                          const status = statusForScore(c.score);
+                          return (
+                            <TableRow
+                              key={c.id}
+                              status={status}
+                              columns={COLUMNS}
+                              selected={c.id === pick}
+                              onClick={() => setPick(c.id)}
+                            >
+                              <ContractStar contractId={c.id} size="sm" />
+                              <Data size={13} weight={500}>{contractLabel(c)}</Data>
+                              <DTEProgressBar daysRemaining={c.dte} totalDays={c.dteTotal} />
+                              <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
+                              <Data size={12} className={tbl.right}>${c.price.toFixed(2)}</Data>
+                              <Data size={12} className={tbl.right}>{c.ivRank}</Data>
+                              <Data size={12} className={tbl.right}>{c.ivPercentile}</Data>
+                              <Data size={12} className={tbl.right}>{c.theta.toFixed(2)}</Data>
+                              <Data size={12} className={tbl.right}>${c.spread.toFixed(2)}</Data>
+                              <Data size={12} className={tbl.right}>{c.volume.toLocaleString()}</Data>
+                              <div className={tbl.scoreCell}>
+                                <Data size={13} weight={500}>{c.score}</Data>
+                                <StatusBadge status={status} />
+                              </div>
+                              <span
+                                aria-label={c.id === pick ? 'Selected' : 'Select'}
+                                className={tbl.pickDot}
+                                data-selected={c.id === pick ? 'true' : 'false'}
+                              />
+                            </TableRow>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </>
       )}
     </div>

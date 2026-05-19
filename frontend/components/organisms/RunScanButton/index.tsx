@@ -11,10 +11,12 @@
  * the same store, so the pill animation and context string update together.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useScanStore } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useAlertStore } from '@/lib/alertStore';
 import { api } from '@/lib/api';
 import styles from './index.module.css';
 
@@ -50,16 +52,49 @@ export function RunScanButton() {
   const minCapRaw    = useUniverseStore((s) => s.minCapRaw);
   const maxCapRaw    = useUniverseStore((s) => s.maxCapRaw);
   const capUnit      = useUniverseStore((s) => s.capUnit);
-  const positions    = usePortfolioStore((s) => s.positions);
+  const scanning    = scanState === 'SCANNING';
+  const customEmpty = pick === 'Custom' && parseSymbols(customRaw).length === 0;
 
-  const scanning = scanState === 'SCANNING';
+  const [showRegimeConfirm, setShowRegimeConfirm] = useState(false);
+  const regimeConfirmedRef = useRef(false);
 
   const onClick = useCallback(() => {
     if (scanning) return;
 
-    const universe = pick === 'Custom' ? parseSymbols(customRaw) : [pick];
-    const direction = context?.direction ?? 'Bullish';
-    const horizon   = context?.horizon   ?? 'Swing (5–15d)';
+    const universe =
+      pick === 'Custom'
+        ? parseSymbols(customRaw)
+        : pick === 'Watchlist'
+        ? useWatchlistStore.getState().added
+        : [pick];
+
+    if (universe.length === 0) {
+      useAlertStore.getState().addToast({
+        kind: 'Critical',
+        symbol: 'SYSTEM',
+        reason: 'Watchlist is empty — add symbols before scanning.',
+        recId: 'WATCHLIST-EMPTY',
+        alertType: 'SCAN_FAILED',
+      });
+      return;
+    }
+
+    const direction   = context?.direction ?? 'Bullish';
+    const horizonRaw  = context?.horizon   ?? 'Swing (5–15d)';
+    const horizonKey  = horizonRaw.split(' ')[0];  // "Swing (5–15d)" → "Swing"
+    // "Custom" is not a valid API horizon — map to nearest preset by max-day value
+    let horizon: string = horizonKey;
+    if (horizonKey === 'Custom') {
+      const maxMatch = horizonRaw.match(/–(\d+)d/);
+      const maxDays  = maxMatch ? Number(maxMatch[1]) : 15;
+      horizon = maxDays <= 4 ? 'Intraday' : maxDays <= 20 ? 'Swing' : 'Position';
+    }
+
+    const currentRegime = useScanStore.getState().regime;
+    if (currentRegime === 'REJECT' && direction === 'Bullish' && !regimeConfirmedRef.current) {
+      setShowRegimeConfirm(true);
+      return;
+    }
 
     const filters: Record<string, number> = {};
     const minPrice = Number(minPriceRaw);
@@ -73,11 +108,15 @@ export function RunScanButton() {
     if (Number.isFinite(minCap) && minCapRaw !== '') filters.min_cap_usd = minCap * capMultiplier;
     if (Number.isFinite(maxCap) && maxCapRaw !== '') filters.max_cap_usd = maxCap * capMultiplier;
 
+    const scanOverrides = useScanStore.getState().scanOverrides;
+
     setScanState('SCANNING');
-    api.postScan(universe, direction, horizon, filters)
+    useScanStore.getState().setRejectedLog([]);
+    api.postScan(universe, direction, horizon, filters, scanOverrides)
       .then((result) => {
         setScanResult(result);
-        const portfolioSymbols = new Set(positions.map((p) => p.symbol));
+        useScanStore.getState().setRejectedLog(result.rejected ?? []);
+        const portfolioSymbols = new Set(usePortfolioStore.getState().positions.map((p) => p.symbol));
         const conflicted = result.candidates
           .map((c) => c.symbol)
           .filter((s) => portfolioSymbols.has(s));
@@ -85,24 +124,63 @@ export function RunScanButton() {
         setScanState('COMPLETED', nowLocalISO());
       })
       .catch(() => {
+        console.error('[RunScanButton] scan failed, is backend running on port 8000?');
+        useScanStore.getState().setRejectedLog([]);
         setScanState('FAILED');
+        useAlertStore.getState().addToast({
+          kind: 'Critical',
+          symbol: 'SYSTEM',
+          reason: 'Scan failed — backend unreachable',
+          recId: 'SCAN-FAILED',
+          alertType: 'SCAN_FAILED',
+        });
       });
   }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit]);
 
   return (
-    <button
-      type="button"
-      className={styles.fab}
-      onClick={onClick}
-      disabled={scanning}
-      aria-label={scanning ? 'Scan in progress' : 'Run scan'}
-      aria-live="polite"
-    >
-      <span className={`${styles.icon} ${scanning ? styles.spin : ''}`} aria-hidden>
-        {scanning ? <SpinnerIcon /> : <PlayIcon />}
-      </span>
-      <span>{scanning ? 'Scanning…' : 'Run Scan'}</span>
-    </button>
+    <>
+      {showRegimeConfirm && (
+        <div className={styles.regimeOverlay} role="dialog" aria-modal aria-labelledby="regime-run-title">
+          <div className={styles.regimeDialog}>
+            <p id="regime-run-title" className={styles.regimeDialogTitle}>Market regime is REJECT</p>
+            <p className={styles.regimeDialogBody}>
+              Running a Bullish scan in a REJECT regime carries elevated risk.
+              Proceed anyway?
+            </p>
+            <div className={styles.regimeDialogActions}>
+              <button type="button" className={styles.regimeCancelBtn}
+                onClick={() => setShowRegimeConfirm(false)}>
+                Cancel
+              </button>
+              <button type="button" className={styles.regimeProceedBtn}
+                onClick={() => {
+                  setShowRegimeConfirm(false);
+                  regimeConfirmedRef.current = true;
+                  onClick();
+                  regimeConfirmedRef.current = false;
+                }}>
+                Proceed anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        className={styles.fab}
+        onClick={onClick}
+        disabled={scanning || customEmpty}
+        title={customEmpty ? 'Enter at least one valid symbol' : undefined}
+        aria-label={scanning ? 'Scan in progress' : 'Run scan'}
+        aria-live="polite"
+      >
+        <span className={`${styles.icon} ${scanning ? styles.spin : ''}`} aria-hidden>
+          {scanning ? <SpinnerIcon /> : <PlayIcon />}
+        </span>
+        <span>{scanning ? 'Scanning…' : 'Run Scan'}</span>
+      </button>
+    </>
   );
 }
 

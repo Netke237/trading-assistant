@@ -12,6 +12,7 @@
  */
 
 import { useWatchlistStore } from '@/lib/watchlistStore';
+import { api } from '@/lib/api';
 import styles from './WatchStar.module.css';
 
 interface WatchStarProps {
@@ -43,14 +44,10 @@ export function WatchStar({ symbol, size = 'md', className }: WatchStarProps) {
         e.stopPropagation();
         if (watched) {
           removeSymbol(symbol);
-          fetch(`/api/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' }).catch(() => {});
+          api.removeWatchlist(symbol).catch(() => {});
         } else {
           addSymbol(symbol);
-          fetch('/api/watchlist', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ symbol }),
-          }).catch(() => {});
+          api.addWatchlist(symbol).catch(() => {});
         }
       }}
       aria-label={watched ? `Remove ${symbol} from watchlist` : `Add ${symbol} to watchlist`}

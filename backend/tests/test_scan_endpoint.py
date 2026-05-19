@@ -1,12 +1,12 @@
 """Route tests for POST /api/scan.
 
-market.py uses yfinance for live data. All tests that exercise the pipeline
-mock fetch_price, fetch_candles, and fetch_option_chain so they run
-network-free and deterministically.
+market.py uses Tradier for live data. All tests that exercise the pipeline
+mock async fetch functions so they run network-free and deterministically.
 """
 
 import re
-from unittest.mock import patch
+from contextlib import ExitStack
+from unittest.mock import patch, AsyncMock
 
 # ── Shape & contract ──────────────────────────────────────────────────────────
 
@@ -67,11 +67,20 @@ def test_scan_missing_body_returns_422(client):
 
 # ── No market data → symbol rejected ─────────────────────────────────────────
 
+def _enter_mock_patches(*, price=None, candles=None, chain=None,
+                        company=None, fund=None):
+    stack = ExitStack()
+    stack.enter_context(patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=price)))
+    stack.enter_context(patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=candles or [])))
+    stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=chain or [])))
+    stack.enter_context(patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value=company)))
+    stack.enter_context(patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=fund)))
+    return stack
+
+
 def test_scan_no_market_data_rejects_symbol(client):
     """When fetch_price returns None the symbol must appear in rejected, not candidates."""
-    with patch("app.routers.scan.fetch_price",        return_value=None), \
-         patch("app.routers.scan.fetch_candles",       return_value=[]), \
-         patch("app.routers.scan.fetch_option_chain",  return_value=[]):
+    with _enter_mock_patches(price=None, candles=[]):
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
         })
@@ -100,10 +109,9 @@ _MOCK_CHAIN = [
 
 
 def test_scan_with_mock_data_processes_symbol(client):
-    """With valid mock data the symbol appears in candidates or rejected — never missing."""
-    with patch("app.routers.scan.fetch_price",        return_value=185.0), \
-         patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES), \
-         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_CHAIN):
+    """With valid mock data the symbol appears in candidates or rejected � never missing."""
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_MOCK_CHAIN,
+                             company="Apple Inc."):
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
         })
@@ -118,9 +126,8 @@ def test_scan_with_mock_data_processes_symbol(client):
 
 def test_scan_with_mock_data_candidate_shape(client):
     """If AAPL is scored as a candidate its TradeCardData shape must be valid."""
-    with patch("app.routers.scan.fetch_price",        return_value=185.0), \
-         patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES), \
-         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_CHAIN):
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_MOCK_CHAIN,
+                             company="Apple Inc."):
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
         })
@@ -134,11 +141,10 @@ def test_scan_with_mock_data_candidate_shape(client):
 
 
 def test_scan_multiple_symbols_all_accounted_for(client):
-    """Every symbol in universe must appear in candidates OR rejected — none silently dropped."""
+    """Every symbol in universe must appear in candidates OR rejected � none silently dropped."""
     universe = ["AAPL", "MSFT", "NVDA"]
-    with patch("app.routers.scan.fetch_price",        return_value=185.0), \
-         patch("app.routers.scan.fetch_candles",       return_value=_MOCK_CANDLES), \
-         patch("app.routers.scan.fetch_option_chain",  return_value=_MOCK_CHAIN):
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_MOCK_CHAIN,
+                             company="Test Corp"):
         r = client.post("/api/scan", json={
             "universe": universe, "direction": "Bullish", "horizon": "Swing", "overrides": {},
         })

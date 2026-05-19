@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Bamendjou — Options Screener
 
 Next.js 15 options screener for Kenneth. All work lives in `frontend/`.
@@ -108,6 +112,24 @@ Contract canonical ID format: `SYMBOL|STRIKE|EXPIRY|C/P` (e.g. `AAPL|185|2025-05
 
 ---
 
+## Backend (`backend/`)
+
+Not yet connected to the frontend — all data still served from `mocks/`.
+
+| Layer | Choice |
+|---|---|
+| Framework | FastAPI + Uvicorn |
+| Validation | Pydantic v2 |
+| ORM / migrations | SQLAlchemy v2 + Alembic |
+| Database | PostgreSQL via AsyncPG; aiosqlite fallback |
+| Tests | pytest + pytest-asyncio |
+
+Key paths: `backend/app/main.py` (entry), `backend/app/routers/` (endpoints), `backend/app/services/` (business logic), `backend/app/scoring/` (scoring algorithms), `backend/config/*.yaml` (contract_rules, risk_rules, scoring_rules, settings).
+
+Test fixtures live in `backend/tests/fixtures/` (OHLCV JSON files per symbol).
+
+---
+
 ## Screener workflow (7 steps)
 
 | Step | Slug | Status |
@@ -153,6 +175,35 @@ type Status = 'PASS' | 'CAUTION' | 'REJECT' | 'PENDING' | 'NO_DATA'
 `WatchStar` (stocks) and `ContractStar` (contracts) write to their respective Zustand stores.
 Watchlist page has Stocks / Contracts tabs.
 
+### Theme system
+- Store: `lib/theme.ts` — `'dark' | 'light'`, persisted to `localStorage` as `'bamendjou:theme'`
+- Applied via `<html data-theme="...">` attribute, set by `ThemeProvider/index.tsx`
+- `app/layout.tsx` contains an inline no-flash script that reads localStorage before React hydrates — do not remove it
+
+### @contextRail parallel route
+- `app/(frame)/@contextRail/` is a Next.js parallel route slot; its segments mirror the main route tree
+- Each segment has a `default.tsx` (shown when no page matches) and optionally a `page.tsx`
+- The frame layout receives `{ children, contextRail }` and renders the rail in the right column
+
+### AlternativeContract (FR-28)
+- `TradeCardData.alternatives?: AlternativeContract[]` — runner-up contracts attached to each trade card
+- Each entry carries all standard contract fields plus `reason: string` (plain-text trade-off explanation)
+- Step 6 badge shows the count; Step 7 renders them in a collapsible section via `AlternativeContractRow`
+
+### Domain type helpers
+```ts
+// lib/status.ts
+statusForScore(score: number): Status      // 0–100 → PASS / CAUTION / REJECT
+worstStatus(...statuses: Status[]): Status
+
+// types/domain.ts
+contractId(symbol, strike, expiry, right): string  // "AAPL|185|2025-05-16|C"
+contractLabel(c): string                           // "AAPL 185C 05/16"
+```
+
+### Zustand persistence
+Some stores use `persist()` with versioned `migrate()` callbacks. When adding a new persisted field, bump the `version` number and add a migration branch — do not rely on Zustand's default merge for breaking shape changes. Storage key prefix: `'bamendjou:'`.
+
 ---
 
 ## Dev workflow
@@ -161,6 +212,14 @@ Watchlist page has Stocks / Contracts tabs.
 cd frontend
 npm run dev          # localhost:3001 (3000 often occupied)
 npm run typecheck    # must be clean — run before every commit
+npm run test         # Jest (all frontend tests)
+npm run test -- --testPathPattern=StatusBadge  # single test file
+```
+
+Backend tests (from repo root):
+```bash
+cd backend && pytest                              # all tests
+pytest tests/test_alternatives.py                # single module
 ```
 
 Min-width gate: 1200px (`MinWidthGate.tsx`) — shows a "rotate / resize" message below that.
@@ -169,6 +228,5 @@ Min-width gate: 1200px (`MinWidthGate.tsx`) — shows a "rotate / resize" messag
 
 ## What's next
 
-- Step 5 (Vol + Events) — review and polish
 - Backend integration — FastAPI; replace mocks with `fetch()`
 - Persist Settings (weights + custom params) to localStorage or backend

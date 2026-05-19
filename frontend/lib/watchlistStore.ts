@@ -42,7 +42,8 @@ export const useWatchlistStore = create<WatchlistState>()(
       },
       syncFromBackend: async () => {
         try {
-          const res = await fetch('/api/watchlist');
+          const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+          const res = await fetch(`${BASE_URL}/api/watchlist`);
           if (!res.ok) return;
           const symbols: string[] = await res.json();
           set({ added: symbols.map((s) => s.toUpperCase()) });

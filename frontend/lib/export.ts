@@ -16,7 +16,7 @@ export function exportToXlsx(rows: WatchlistRow[], filename: string): void {
     Trigger:      r.breakdown.trigger,
     Event:        r.breakdown.event,
     Vol:          r.breakdown.volatility,
-    'Next Event': r.nextEventDays !== undefined
+    'Next Event': r.nextEventDays != null
       ? `${r.nextEventDays}d${r.nextEventLabel ? ` (${r.nextEventLabel})` : ''}`
       : '—',
   }));

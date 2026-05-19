@@ -19,8 +19,9 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { useScanStore } from '@/lib/scanStore';
+import { NewsCard } from '@/components/molecules/NewsCard';
 import { api } from '@/lib/api';
-import type { MarketRegime, SectorTile } from '@/types/domain';
+import type { MarketRegime, SectorTile, NewsItem } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
@@ -46,12 +47,21 @@ export default function Step3Page() {
   const [spxCandles, setSpxCandles] = useState<Candle[]>([]);
   const [ndxCandles, setNdxCandles] = useState<Candle[]>([]);
   const [offline, setOffline]     = useState(false);
+  const [news, setNews]           = useState<NewsItem[]>([]);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [newsError, setNewsError] = useState(false);
 
   useEffect(() => {
     api.getRegime().then((r) => { setRegimeData(r); setRegime(r.overall); }).catch(() => setOffline(true));
     api.getSectors().then(setSectors).catch(() => setOffline(true));
     api.getCandles('SPY').then(setSpxCandles).catch(() => setOffline(true));
     api.getCandles('QQQ').then(setNdxCandles).catch(() => setOffline(true));
+
+    const symbols = useScanStore.getState().scanResult?.candidates.map((c) => c.symbol) ?? [];
+    if (symbols.length > 0) {
+      setNewsLoading(true);
+      api.getNews(symbols).then(setNews).catch(() => setNewsError(true)).finally(() => setNewsLoading(false));
+    }
   }, [setRegime]);
 
   const spx = lastClose(spxCandles);
@@ -63,7 +73,7 @@ export default function Step3Page() {
   return (
     <div className={styles.main}>
       <div className={styles.stepHeader}>
-        <Text size={11} tone="dim" weight={500}>STEP 3 OF 7</Text>
+        <Text size={11} tone="dim" weight={500}>STEP 1 OF 7</Text>
         <Title as="h1" size={24}>Market Regime</Title>
         <Text size={13} tone="secondary">
           Macro snapshot — advisory. REJECT prompts confirmation before proceeding.
@@ -176,6 +186,13 @@ export default function Step3Page() {
           </div>
         ))}
       </div>
+
+      <section className={pageStyles.newsSection}>
+        <Text size={11} tone="dim" weight={500}>MARKET NEWS</Text>
+        {newsError && !newsLoading
+          ? <Text size={12} tone="reject">News unavailable — backend offline?</Text>
+          : <NewsCard items={news} loading={newsLoading} />}
+      </section>
 
       <RunScanButton />
     </div>

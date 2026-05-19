@@ -2,8 +2,8 @@
 # Generated from SCORING_RULES.md — 2026-04-30
 
 score_thresholds:
-  pass: 70
-  caution: 50
+  pass: 55
+  caution: 35
 
 horizons:
   swing:

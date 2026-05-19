@@ -40,8 +40,15 @@ function cardToRow(c: TradeCardData): WatchlistRow {
   };
 }
 
+const EVENT_WINDOWS: Record<string, { caution: number; reject: number }> = {
+  Intraday: { caution: 3,  reject: 1  },
+  Swing:    { caution: 21, reject: 7  },
+  Position: { caution: 60, reject: 30 },
+};
+
 export default function Step5Page() {
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
+  const context              = useScanStore((s) => s.context);
   const candidates           = scanResultCandidates ?? [];
   const ivPassThreshold    = useSettingsStore((s) => s.ivPassThreshold);
   const ivCautionThreshold = useSettingsStore((s) => s.ivCautionThreshold);
@@ -51,9 +58,14 @@ export default function Step5Page() {
     [candidates],
   );
 
+  const horizonKey = context?.horizon?.startsWith('Intraday') ? 'Intraday'
+    : context?.horizon?.startsWith('Position') ? 'Position'
+    : 'Swing';
+  const { caution: evCaution, reject: evReject } = EVENT_WINDOWS[horizonKey];
+
   function ivStatus(rank: number): Status {
-    if (rank >= ivPassThreshold)    return 'PASS';
-    if (rank >= ivCautionThreshold) return 'CAUTION';
+    if (rank <= ivPassThreshold)    return 'PASS';
+    if (rank <= ivCautionThreshold) return 'CAUTION';
     return 'REJECT';
   }
 
@@ -63,8 +75,8 @@ export default function Step5Page() {
         <Text size={11} tone="dim" weight={500}>STEP 5 OF 7</Text>
         <Title as="h1" size={24}>Volatility + Events</Title>
         <Text size={13} tone="secondary">
-          IV rank ≥ {ivPassThreshold} → PASS; ≥ {ivCautionThreshold} → CAUTION; below → REJECT.
-          Earnings within 7 days → CAUTION; within 3 days → REJECT.
+          IV rank ≤ {ivPassThreshold} → PASS; ≤ {ivCautionThreshold} → CAUTION; above → REJECT.
+          Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
           Gate = worst of IV and event proximity.
         </Text>
       </div>
@@ -84,9 +96,9 @@ export default function Step5Page() {
           const c = candidateMap[r.symbol];
           const rank = c?.contractDetails?.ivRank;
           const pctl = c?.contractDetails?.ivPercentile;
-          const hasIv = rank !== undefined;
+          const hasIv = rank != null && rank > 0;
           const ivSt = hasIv ? ivStatus(rank) : 'NO_DATA';
-          const prox = r.nextEventDays !== undefined ? eventProximity(r.nextEventDays) : 'distant';
+          const prox = r.nextEventDays != null ? eventProximity(r.nextEventDays) : 'distant';
           const proxStatus: Status =
             prox === 'imminent' ? 'REJECT'
             : prox === 'near'   ? 'CAUTION'
@@ -114,8 +126,8 @@ export default function Step5Page() {
 
               <Data size={13} weight={500}>{pctl !== undefined ? pctl : '—'}</Data>
 
-              {r.nextEventDays !== undefined
-                ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel} />
+              {r.nextEventDays != null
+                ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />
                 : <Text size={11} tone="dim">—</Text>}
 
               <StatusBadge status={gate} />

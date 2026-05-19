@@ -7,5 +7,5 @@
 import { redirect } from 'next/navigation';
 
 export default function ScreenerIndex() {
-  redirect('/screener/step-1-universe');
+  redirect('/screener/step-1-regime');
 }

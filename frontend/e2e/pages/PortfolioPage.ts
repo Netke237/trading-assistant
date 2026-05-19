@@ -8,7 +8,7 @@ export class PortfolioPage {
   }
 
   get emptyStateText(): Locator {
-    return this.page.getByText(/no positions|empty|nothing here/i).first();
+    return this.page.getByText(/no open positions|no positions|empty|nothing here/i).first();
   }
 
   get positionsTable(): Locator {

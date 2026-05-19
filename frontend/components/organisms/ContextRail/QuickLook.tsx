@@ -13,17 +13,19 @@ import { RailSection } from '@/components/organisms/ContextRail';
 import { Text, Data } from '@/components/primitives';
 import { QuickLookRow } from '@/components/molecules/QuickLookRow';
 import { api } from '@/lib/api';
-import type { WatchlistRow, PortfolioPosition } from '@/types/domain';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import type { WatchlistRow } from '@/types/domain';
 import styles from './QuickLook.module.css';
 
 export function RailQuickLook() {
   const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
-  const [portfolio, setPortfolio] = useState<PortfolioPosition[]>([]);
+  const portfolio       = usePortfolioStore((s) => s.positions);
+  const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
 
   useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => {});
-    api.getPortfolio().then(setPortfolio).catch(() => {});
-  }, []);
+    syncFromBackend();
+  }, [syncFromBackend]);
 
   const top = [...watchlist].sort((a, b) => b.score - a.score).slice(0, 5);
 

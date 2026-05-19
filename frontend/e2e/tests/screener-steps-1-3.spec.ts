@@ -2,11 +2,11 @@ import { test, expect } from '../fixtures';
 import { ScreenerPage } from '../pages/ScreenerPage';
 
 test.describe('Screener Steps 1-3 @smoke', () => {
-  test('Step 1 - universe page loads with selectable tiles', async ({ page }) => {
+  test('Step 2 - universe page loads with selectable tiles', async ({ page }) => {
     const screener = new ScreenerPage(page);
-    await screener.goto(1);
+    await screener.goto(2);
 
-    await expect(page).toHaveURL(/step-1-universe/);
+    await expect(page).toHaveURL(/step-2-universe/);
     await expect(screener.universeTiles.first()).toBeVisible();
 
     await screener.selectUniverse('S\\&P 500');
@@ -14,7 +14,7 @@ test.describe('Screener Steps 1-3 @smoke', () => {
     await expect(selectedTile).toBeVisible();
   });
 
-  test('Step 1 - universe selection sends correct payload to scan API', async ({ page }) => {
+  test('Step 2 - universe selection sends correct payload to scan API', async ({ page }) => {
     const screener = new ScreenerPage(page);
 
     // Listen for scan API calls before any navigation
@@ -25,11 +25,11 @@ test.describe('Screener Steps 1-3 @smoke', () => {
       }
     });
 
-    // Select SP 500 on Step 1 (persisted in Zustand)
-    await screener.goto(1);
+    // Select SP 500 on Step 2 (Universe — persisted in Zustand)
+    await screener.goto(2);
     await screener.selectUniverse('S\\&P 500');
 
-    // RunScanButton is mounted on Step 3 — navigate there to trigger the scan
+    // RunScanButton is mounted on Step 3 (Direction) — navigate there to trigger the scan
     await screener.goto(3);
     await screener.clickRunScan();
 
@@ -42,16 +42,16 @@ test.describe('Screener Steps 1-3 @smoke', () => {
     expect(payload.horizon).toBeDefined();
   });
 
-  test('Step 1 - next button navigates to Step 2', async ({ page }) => {
-    const screener = new ScreenerPage(page);
-    await screener.goto(1);
-    await screener.clickNext();
-    await expect(page).toHaveURL(/step-2-direction/);
-  });
-
-  test('Step 2 - direction toggle works', async ({ page }) => {
+  test('Step 2 - next button navigates to Step 3', async ({ page }) => {
     const screener = new ScreenerPage(page);
     await screener.goto(2);
+    await screener.clickNext();
+    await expect(page).toHaveURL(/step-3-direction/);
+  });
+
+  test('Step 3 - direction toggle works', async ({ page }) => {
+    const screener = new ScreenerPage(page);
+    await screener.goto(3);
 
     await expect(screener.bullishButton).toBeVisible();
     await expect(screener.bearishButton).toBeVisible();
@@ -67,14 +67,14 @@ test.describe('Screener Steps 1-3 @smoke', () => {
     const screener = new ScreenerPage(page);
     await screener.goto(2);
     await screener.clickNext();
-    await expect(page).toHaveURL(/step-3-regime/);
+    await expect(page).toHaveURL(/step-3-direction/);
   });
 
-  test('Step 3 - regime banner and charts render', async ({ page }) => {
+  test('Step 1 - regime banner and charts render', async ({ page }) => {
     const screener = new ScreenerPage(page);
-    await screener.goto(3);
+    await screener.goto(1);
 
-    await expect(page).toHaveURL(/step-3-regime/);
+    await expect(page).toHaveURL(/step-1-regime/);
     await expect(screener.regimeBanner).toBeVisible();
 
     // Charts should render (canvas elements with size > 0)
@@ -85,16 +85,16 @@ test.describe('Screener Steps 1-3 @smoke', () => {
     await expect(screener.ndxChart).toBeVisible();
   });
 
-  test('Step 3 - metric grid and sector heatmap visible', async ({ page }) => {
+  test('Step 1 - metric grid and sector heatmap visible', async ({ page }) => {
     const screener = new ScreenerPage(page);
-    await screener.goto(3);
+    await screener.goto(1);
 
     await expect(screener.metricGrid).toBeVisible();
     await expect(screener.sectorHeatmap).toBeVisible();
   });
 });
 
-test.describe('Screener Step 3 REJECT dialog @smoke', () => {
+test.describe('Screener Step 1 REJECT dialog @smoke', () => {
   test('shows confirmation dialog when regime is REJECT', async ({ page }) => {
     // Override the regime route to return REJECT
     await page.route('**/api/regime', async (route) => {
@@ -114,8 +114,8 @@ test.describe('Screener Step 3 REJECT dialog @smoke', () => {
     });
 
     const screener = new ScreenerPage(page);
-    await screener.goto(3);
-    
+    await screener.goto(1);
+
     // Reload to ensure fresh store with overridden REJECT regime
     await page.reload();
     await page.waitForLoadState('networkidle');
@@ -123,14 +123,14 @@ test.describe('Screener Step 3 REJECT dialog @smoke', () => {
     await expect(screener.regimeBanner).toBeVisible();
     await expect(page.getByRole('banner').getByText('REJECT')).toBeVisible();
 
-    // Wait a bit for Zustand store to settle after reload
-    await page.waitForTimeout(1000);
-    
+    // Wait for StepNavBar to reflect the REJECT regime from Zustand store
+    await expect(page.locator('nav[aria-label="Screener step navigation"]')).toHaveAttribute('data-regime', 'REJECT');
+
     await screener.clickNext();
     await expect(screener.rejectDialog).toBeVisible();
     await expect(page.getByText(/regime flagged as reject/i)).toBeVisible();
 
     await screener.proceedAnywayButton.click();
-    await expect(page).toHaveURL(/step-4-ranking/);
+    await expect(page).toHaveURL(/step-2-universe/);
   });
 });

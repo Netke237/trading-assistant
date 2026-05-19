@@ -14,6 +14,7 @@ import { Title, Text, Data } from '@/components/primitives';
 import { SectionCard } from '@/components/molecules/SectionCard';
 import { TableRow } from '@/components/molecules/TableRow';
 import { AlertRow } from '@/components/molecules/AlertRow';
+import { NewsCard } from '@/components/molecules/NewsCard';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
@@ -48,12 +49,16 @@ export default function DashboardPage() {
   const [news, setNews]           = useState<NewsItem[]>([]);
   const [offline, setOffline]     = useState(false);
 
+  const [marketNews, setMarketNews]           = useState<NewsItem[]>([]);
+  const [marketNewsLoading, setMarketNewsLoading] = useState(true);
+  const [marketNewsError, setMarketNewsError] = useState(false);
+
   const portfolio = usePortfolioStore((s) => s.positions);
 
-  const toasts = useAlertStore((s) => s.toasts.filter((t) => !t.dismissed));
+  const visibleToasts = useAlertStore((s) => s.visibleToasts);
   const allAlerts: AlertItem[] = [
     ...alerts,
-    ...toasts.map((t) => ({
+    ...visibleToasts.map((t) => ({
       id: t.id,
       kind: t.kind,
       symbol: t.symbol,
@@ -68,6 +73,13 @@ export default function DashboardPage() {
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
     api.getAlerts().then(setAlerts).catch(() => setOffline(true));
     api.getRegime().then(setRegime).catch(() => setOffline(true));
+
+    // Expanded set disabled — 9 symbols × 1 HTTP call each adds 5-10s latency; re-enable when news endpoint is batched.
+    // api.getNews(['SPY','QQQ','VIX','DIA','AAPL','MSFT','TSLA','AMZN','NVDA'])
+    api.getNews(['SPY', 'QQQ', 'VIX', 'DIA'])
+      .then(setMarketNews)
+      .catch(() => setMarketNewsError(true))
+      .finally(() => setMarketNewsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -153,8 +165,8 @@ export default function DashboardPage() {
               <Text size={12} tone="secondary">{row.company}</Text>
               <Data size={12} weight={500}>{row.score}</Data>
               <RankDelta value={row.rankDelta} />
-              {row.nextEventDays !== undefined
-                ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel} />
+              {row.nextEventDays != null
+                ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel ?? undefined} />
                 : <Text size={11} tone="dim">—</Text>}
             </TableRow>
           ))}
@@ -218,8 +230,10 @@ export default function DashboardPage() {
           <div className={styles.newsList}>
             {offline ? (
               <Text size={12} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
+            ) : watchlist.length === 0 ? (
+              <Text size={12} tone="dim">Add stocks to your watchlist to see news here.</Text>
             ) : news.length === 0 ? (
-              <Text size={12} tone="dim">No news for your watchlist right now.</Text>
+              <Text size={12} tone="dim">No recent news for your watchlist.</Text>
             ) : news.slice(0, 6).map((n) => (
               <article key={n.id} className={styles.newsItem}>
                 <span className={`${styles.newsDot} ${styles[`newsDot_${n.sentiment}`]}`} aria-hidden />
@@ -257,6 +271,14 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+        </SectionCard>
+      </div>
+
+      <div className={styles.marketNews}>
+        <SectionCard title="Market News" count={marketNews.length}>
+          {marketNewsError && !marketNewsLoading
+            ? <Text size={12} tone="reject">Market news unavailable — backend offline?</Text>
+            : <NewsCard items={marketNews} loading={marketNewsLoading} limit={8} />}
         </SectionCard>
       </div>
 

@@ -5,9 +5,9 @@ export class ScreenerPage {
 
   async goto(step: number): Promise<void> {
     const stepNames: Record<number, string> = {
-      1: 'step-1-universe',
-      2: 'step-2-direction',
-      3: 'step-3-regime',
+      1: 'step-1-regime',
+      2: 'step-2-universe',
+      3: 'step-3-direction',
       4: 'step-4-ranking',
       5: 'step-5-vol-events',
       6: 'step-6-contracts',
@@ -46,7 +46,10 @@ export class ScreenerPage {
   }
 
   async selectUniverse(name: string): Promise<void> {
-    await this.page.getByRole('button', { name: new RegExp(name, 'i') }).click();
+    // Anchor to start of accessible name to avoid matching card descriptions
+    // (e.g. SPY desc contains "S&P 500 ETF", which would otherwise match an "S&P 500" query)
+    const cleanName = name.replace(/\\/g, '');
+    await this.page.getByRole('button', { name: new RegExp(`^${cleanName}`, 'i') }).click();
   }
 
   // Step 2

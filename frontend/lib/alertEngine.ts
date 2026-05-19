@@ -77,7 +77,7 @@ export function scanPortfolio(positions: AlertPosition[]): AlertReason[] {
     }
 
     // EVENT_RISK
-    if (p.nextEventDays !== undefined && p.nextEventDays <= 3) {
+    if (p.nextEventDays != null && p.nextEventDays <= 3) {
       out.push({
         recId: p.recId,
         kind: 'Action',

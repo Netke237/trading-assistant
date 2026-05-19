@@ -1,7 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.schemas.scan import (
     ContinuousScanConfig,
@@ -170,6 +170,18 @@ class UpcomingEvent(BaseModel):
     status: Status
 
 
+# ── News ─────────────────────────────────────────────────────────────────────
+
+class NewsItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    id:        str
+    symbol:    str
+    headline:  str
+    source:    str
+    timestamp: str
+    sentiment: Literal['bull', 'bear', 'neutral'] = 'neutral'
+
+
 # ── Pricing method enum ──────────────────────────────────────────────────────
 
 class PricingMethod(str, Enum):
@@ -182,11 +194,23 @@ class PricingMethod(str, Enum):
 
 class TargetLevel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    target_price: float          # underlying stock price at this target
-    stock_price: float           # alias of target_price (keep for backward compat)
-    estimated_option_price: float
-    pricing_method: PricingMethod
-    rr_contribution: float       # estimated reward at this target / risk
+    # AliasChoices lets Pydantic accept both the new camelCase keys (current API)
+    # and the old snake_case keys still present in existing DB scan-session JSON.
+    targetPrice: float = Field(
+        validation_alias=AliasChoices('targetPrice', 'target_price'),
+    )
+    stockPrice: float = Field(
+        validation_alias=AliasChoices('stockPrice', 'stock_price', 'targetPrice', 'target_price'),
+    )
+    estimatedOptionPrice: float = Field(
+        validation_alias=AliasChoices('estimatedOptionPrice', 'estimated_option_price'),
+    )
+    pricingMethod: PricingMethod = Field(
+        validation_alias=AliasChoices('pricingMethod', 'pricing_method'),
+    )
+    rrContribution: float = Field(
+        validation_alias=AliasChoices('rrContribution', 'rr_contribution'),
+    )
 
 
 # ── Trade cards ──────────────────────────────────────────────────────────────
@@ -268,15 +292,21 @@ class TradeCardData(BaseModel):
 # ── Scan ─────────────────────────────────────────────────────────────────────
 
 class ScanRequest(BaseModel):
-    universe: list[str]
-    direction: Direction
-    horizon: Horizon
-    overrides: dict = {}
+    universe:    list[str]
+    direction:   Direction
+    horizon:     Horizon
+    overrides:   dict = {}
+    # Price / cap filters from Step 1 universe page
+    min_price:   Optional[float] = None
+    max_price:   Optional[float] = None
+    min_cap_usd: Optional[float] = None
+    max_cap_usd: Optional[float] = None
 
 
 class RejectedCandidate(BaseModel):
     symbol: str
     reason: str
+    breakdown: dict[str, int] | None = None
 
 
 class ScanResult(BaseModel):
@@ -338,6 +368,14 @@ class PortfolioPositionSchema(BaseModel):
     targets: list[dict] = []
     dteTotal: Optional[int] = None
     createdAt: str
+    # Live fields — populated by GET /portfolio via Tradier option quote
+    currentPrice: float = 0.0
+    pnlDollar: float = 0.0
+    pnlPct: float = 0.0
+    dteRemaining: int = 0
+    delta: Optional[float] = None
+    theta: Optional[float] = None
+    ivRank: Optional[int] = None
 
     @classmethod
     def from_orm_model(cls, obj) -> "PortfolioPositionSchema":

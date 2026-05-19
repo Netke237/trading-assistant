@@ -54,16 +54,17 @@ export function CandlestickChart({
   const theme = useThemeStore((s) => s.theme);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const [chartVersion, setChartVersion] = useState(0);
   const [activeIndicators, setActiveIndicators] = useState<IndicatorType[]>(defaultIndicators);
 
   const autoFill = height === 'auto';
 
+  // Chart lifecycle — recreate only when layout/theme changes, never on data.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    // Pull theme-aware tokens.
     const bg = token('--bg-surface') || '#1E2335';
     const gridSoft = token('--border-subtle') || '#2A2E42';
     const textDim = token('--text-secondary') || '#787B86';
@@ -90,7 +91,6 @@ export function CandlestickChart({
       crosshair: { mode: 1 },
     });
     chartRef.current = chart;
-    setChartVersion((v) => v + 1);
 
     const candle = chart.addSeries(CandlestickSeries, {
       upColor: passColor,
@@ -100,21 +100,9 @@ export function CandlestickChart({
       wickUpColor: passColor,
       wickDownColor: rejColor,
     }) as ISeriesApi<'Candlestick'>;
+    candleSeriesRef.current = candle;
+    setChartVersion((v) => v + 1);
 
-    candle.setData(
-      data.map((c) => ({
-        time: c.time as Time,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-      })),
-    );
-
-    chart.timeScale().fitContent();
-
-    // Track size changes — window resize covers width; ResizeObserver
-    // covers container height changes when autoFill is on (flex growing).
     const applySize = () => {
       chart.applyOptions({
         width: el.clientWidth,
@@ -130,9 +118,26 @@ export function CandlestickChart({
       window.removeEventListener('resize', applySize);
       chart.remove();
       chartRef.current = null;
+      candleSeriesRef.current = null;
     };
-    // Re-init on theme flip so chart colors rematch tokens.
-  }, [data, height, theme, autoFill]);
+  }, [height, theme, autoFill]);
+
+  // Data update — never recreates the chart, just replaces series data.
+  // chartVersion dep ensures this re-runs after a theme-triggered chart rebuild.
+  useEffect(() => {
+    const candle = candleSeriesRef.current;
+    if (!candle) return;
+    candle.setData(
+      data.map((c) => ({
+        time: c.time as Time,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+      })),
+    );
+    chartRef.current?.timeScale().fitContent();
+  }, [data, chartVersion]);
 
   const indicatorData = useMemo(
     () => ({

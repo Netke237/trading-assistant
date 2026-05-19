@@ -1,0 +1,323 @@
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.segmented {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.seg {
+  flex: 1 1 0;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+
+.seg:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-surface-2);
+}
+
+.segActive {
+  border-color: var(--accent);
+  background: var(--bg-surface-2);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.customRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0 0;
+}
+
+.customInputs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.numInput {
+  width: 72px;
+  height: 34px;
+  padding: 0 var(--space-2);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono, var(--font-dm));
+  font-size: 13px;
+  text-align: center;
+}
+
+.numInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.numInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.regimeBadge {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--reject) 10%, var(--bg-surface));
+  border: 1px solid var(--reject-border);
+  border-radius: var(--radius-md);
+  width: fit-content;
+}
+
+.logSection {
+  margin-top: var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-4);
+}
+
+.logHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.logRow {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.badge {
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.rejectList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rejectGroup {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.rejectGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface-2);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.rejectGroupHeader:hover {
+  background: color-mix(in srgb, var(--bg-surface-2) 80%, var(--border-subtle));
+}
+
+.chevron {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  transition: transform 120ms;
+  display: inline-block;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.rejectGroupBody {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.symbolList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+
+.breakdownBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.breakdownHeader {
+  display: grid;
+  grid-template-columns: 72px 56px 36px 1fr 40px;
+  gap: var(--space-2);
+  padding: 0 0 var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-1);
+}
+
+.breakdownRow {
+  display: grid;
+  grid-template-columns: 72px 56px 36px 1fr 40px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px 0;
+}
+
+.miniTrack {
+  height: 3px;
+  background: var(--bg-base);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.miniFill {
+  height: 100%;
+  background: var(--border-strong);
+  border-radius: 2px;
+  max-width: 100%;
+}
+
+.otherRejects {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.otherRejectRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.paramsPanel {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.paramsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.paramsHeader:hover {
+  background: var(--bg-surface-2);
+}
+
+.paramsChevron {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.paramsBody {
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.paramsRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 30px;
+}
+
+.paramsRow > :first-child {
+  min-width: 160px;
+  flex-shrink: 0;
+}
+
+.paramsValue {
+  min-width: 60px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.paramsInput {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+}
+
+.toggleBtn {
+  height: 28px;
+  padding: 0 var(--space-3);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms, color 120ms;
+}
+
+.toggleBtn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.toggleOn {
+  border-color: var(--pass-border);
+  color: var(--pass);
+  background: var(--pass-bg);
+}
+
+.paramsFooter {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-2);
+}
+
+.paramsReset {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.paramsReset:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+}
