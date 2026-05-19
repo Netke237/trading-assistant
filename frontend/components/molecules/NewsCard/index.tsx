@@ -1,10 +1,11 @@
-import { Text, Data } from '@/components/primitives';
+import { Text } from '@/components/primitives';
 import type { NewsItem } from '@/types/domain';
 import styles from './index.module.css';
 
 interface NewsCardProps {
   items: NewsItem[];
   loading?: boolean;
+  limit?: number;
 }
 
 function relativeTime(iso: string): string {
@@ -21,13 +22,7 @@ function relativeTime(iso: string): string {
   return `${diffDay}d ago`;
 }
 
-function sentimentColor(sentiment: NewsItem['sentiment']): string {
-  if (sentiment === 'bull') return 'var(--pass)';
-  if (sentiment === 'bear') return 'var(--reject)';
-  return 'var(--border-subtle)';
-}
-
-export function NewsCard({ items, loading }: NewsCardProps) {
+export function NewsCard({ items, loading, limit }: NewsCardProps) {
   if (loading) {
     return (
       <div>
@@ -42,21 +37,14 @@ export function NewsCard({ items, loading }: NewsCardProps) {
     return <Text size={12} tone="dim">No news for current candidates.</Text>;
   }
 
+  const visible = limit ? items.slice(0, limit) : items;
+
   return (
     <div>
-      {items.map((item) => (
+      {visible.map((item) => (
         <div key={item.id} className={styles.item}>
-          <div className={styles.row}>
-            <div
-              className={styles.sentimentBar}
-              style={{ backgroundColor: sentimentColor(item.sentiment) }}
-            />
-            <div>
-              <Data size={11}>{item.symbol}</Data>
-              <Text size={12} tone="primary">{item.headline}</Text>
-              <Text size={11} tone="dim">{item.source} · {relativeTime(item.timestamp)}</Text>
-            </div>
-          </div>
+          <Text size={12} tone="primary">{item.headline}</Text>
+          <Text size={11} tone="dim">{item.source} · {relativeTime(item.timestamp)}</Text>
         </div>
       ))}
     </div>

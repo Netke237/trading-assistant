@@ -243,8 +243,8 @@ export default function Step4Page() {
                 <RankDelta value={row.scoreDelta ?? 0}    context="score pt" />
                 <Data size={13} weight={500}>{row.score}</Data>
                 <StatusBadge status={row.status} />
-                {row.nextEventDays !== undefined
-                  ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel} />
+                {row.nextEventDays != null
+                  ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel ?? undefined} />
                   : <Text size={11} tone="dim">—</Text>}
               </TableRow>
             ))}

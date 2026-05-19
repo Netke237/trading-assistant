@@ -96,9 +96,9 @@ export default function Step5Page() {
           const c = candidateMap[r.symbol];
           const rank = c?.contractDetails?.ivRank;
           const pctl = c?.contractDetails?.ivPercentile;
-          const hasIv = rank !== undefined;
+          const hasIv = rank != null && rank > 0;
           const ivSt = hasIv ? ivStatus(rank) : 'NO_DATA';
-          const prox = r.nextEventDays !== undefined ? eventProximity(r.nextEventDays) : 'distant';
+          const prox = r.nextEventDays != null ? eventProximity(r.nextEventDays) : 'distant';
           const proxStatus: Status =
             prox === 'imminent' ? 'REJECT'
             : prox === 'near'   ? 'CAUTION'
@@ -126,8 +126,8 @@ export default function Step5Page() {
 
               <Data size={13} weight={500}>{pctl !== undefined ? pctl : '—'}</Data>
 
-              {r.nextEventDays !== undefined
-                ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel} />
+              {r.nextEventDays != null
+                ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />
                 : <Text size={11} tone="dim">—</Text>}
 
               <StatusBadge status={gate} />

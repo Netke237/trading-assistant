@@ -414,6 +414,78 @@ def fetch_earnings_events(symbols: list[str], days_ahead: int = 60) -> list[dict
     return events
 
 
+def _compute_iv_bs(
+    mid: float,
+    S: float,
+    K: float,
+    dte: int,
+    is_call: bool,
+    r: float = 0.05,
+) -> Optional[float]:
+    """Implied volatility via Black-Scholes inversion (scipy brentq). Returns decimal or None."""
+    try:
+        from scipy.optimize import brentq
+        from scipy.stats import norm as _norm
+        import math as _math
+    except ImportError:
+        return None
+    T = dte / 365.0
+    if T <= 0 or mid <= 0 or S <= 0 or K <= 0:
+        return None
+    intrinsic = max(0.0, S - K) if is_call else max(0.0, K - S)
+    if mid <= intrinsic * 1.001:
+        return None
+
+    def _bs(sigma: float) -> float:
+        d1 = (_math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * _math.sqrt(T))
+        d2 = d1 - sigma * _math.sqrt(T)
+        if is_call:
+            return S * _norm.cdf(d1) - K * _math.exp(-r * T) * _norm.cdf(d2) - mid
+        return K * _math.exp(-r * T) * _norm.cdf(-d2) - S * _norm.cdf(-d1) - mid
+
+    try:
+        sigma = brentq(_bs, 1e-6, 20.0, xtol=1e-6, full_output=False)
+        return round(float(sigma), 4)
+    except (ValueError, RuntimeError):
+        return None
+
+
+def _earnings_date_yf(symbol: str) -> Optional[date]:
+    """Next earnings date via yfinance (fallback when Tradier fundamentals unavailable)."""
+    try:
+        import yfinance as yf
+        from datetime import datetime as _dt
+        cal = yf.Ticker(symbol).calendar
+        if not cal:
+            return None
+        dates = cal.get("Earnings Date")
+        if not dates:
+            return None
+        raw = list(dates)[0] if hasattr(dates, "__iter__") else dates
+        # yfinance 1.x returns datetime.date; older versions return datetime.datetime
+        d: date = raw if isinstance(raw, date) and not isinstance(raw, _dt) else raw.date()
+        return d if d >= date.today() else None
+    except Exception:
+        return None
+
+
+def _dividend_date_yf(symbol: str) -> Optional[date]:
+    """Next ex-dividend date via yfinance (fallback when Tradier fundamentals unavailable)."""
+    try:
+        import yfinance as yf
+        from datetime import datetime as _dt
+        cal = yf.Ticker(symbol).calendar
+        if not cal:
+            return None
+        raw = cal.get("Ex-Dividend Date") or cal.get("Dividend Date")
+        if raw is None:
+            return None
+        d: date = raw if isinstance(raw, date) and not isinstance(raw, _dt) else raw.date()
+        return d if d >= date.today() else None
+    except Exception:
+        return None
+
+
 # ── Async functions for the scan hot-path ─────────────────────────────────────
 
 

@@ -74,6 +74,8 @@ export default function DashboardPage() {
     api.getAlerts().then(setAlerts).catch(() => setOffline(true));
     api.getRegime().then(setRegime).catch(() => setOffline(true));
 
+    // Expanded set disabled — 9 symbols × 1 HTTP call each adds 5-10s latency; re-enable when news endpoint is batched.
+    // api.getNews(['SPY','QQQ','VIX','DIA','AAPL','MSFT','TSLA','AMZN','NVDA'])
     api.getNews(['SPY', 'QQQ', 'VIX', 'DIA'])
       .then(setMarketNews)
       .catch(() => setMarketNewsError(true))
@@ -163,8 +165,8 @@ export default function DashboardPage() {
               <Text size={12} tone="secondary">{row.company}</Text>
               <Data size={12} weight={500}>{row.score}</Data>
               <RankDelta value={row.rankDelta} />
-              {row.nextEventDays !== undefined
-                ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel} />
+              {row.nextEventDays != null
+                ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel ?? undefined} />
                 : <Text size={11} tone="dim">—</Text>}
             </TableRow>
           ))}
@@ -276,7 +278,7 @@ export default function DashboardPage() {
         <SectionCard title="Market News" count={marketNews.length}>
           {marketNewsError && !marketNewsLoading
             ? <Text size={12} tone="reject">Market news unavailable — backend offline?</Text>
-            : <NewsCard items={marketNews} loading={marketNewsLoading} />}
+            : <NewsCard items={marketNews} loading={marketNewsLoading} limit={8} />}
         </SectionCard>
       </div>
 

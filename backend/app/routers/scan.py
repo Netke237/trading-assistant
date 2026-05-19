@@ -36,6 +36,7 @@ from app.data.market import (
     fetch_company_name_async, fetch_fundamentals_calendar,
     fetch_market_cap_async,
     _extract_earnings_date, _extract_dividend_date,
+    _earnings_date_yf, _dividend_date_yf, _compute_iv_bs,
     TRADIER_BASE_URL, TRADIER_TOKEN,
 )
 from app.scoring.stock_scorer import score_stock, StockScoreCard
@@ -200,10 +201,29 @@ async def _process_symbol(
         earnings_date = _extract_earnings_date(fund_data)
         dividend_date = _extract_dividend_date(fund_data)
 
+    # yfinance fallbacks when Tradier fundamentals unavailable (requires paid tier)
+    if earnings_date is None:
+        earnings_date = await asyncio.to_thread(_earnings_date_yf, symbol)
+    if dividend_date is None:
+        dividend_date = await asyncio.to_thread(_dividend_date_yf, symbol)
+
     # ── Scoring (CPU-bound, outside semaphore) ─────────────────────────────────
 
     atm = sorted(chain, key=lambda c: abs(float(c.get("strike", 0)) - price)) if chain else []
     iv_rank: float | None = float(atm[0]["ivRank"]) if atm else None
+
+    # Tradier returns implied_volatility=0 when no data — compute via Black-Scholes inversion
+    if (iv_rank is None or iv_rank == 0) and atm:
+        c0 = atm[0]
+        iv_bs = _compute_iv_bs(
+            mid=float(c0.get("price", 0)),
+            S=price,
+            K=float(c0.get("strike", price)),
+            dte=int(c0.get("dte", 30)),
+            is_call=(option_type == "C"),
+        )
+        if iv_bs is not None:
+            iv_rank = round(iv_bs * 100, 1)
 
     card: StockScoreCard = score_stock(
         symbol, direction, horizon, candles,

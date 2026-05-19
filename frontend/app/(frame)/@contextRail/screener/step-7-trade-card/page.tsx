@@ -43,7 +43,7 @@ function buildChecklist(
 
   // Earnings > 7d away
   const days = wlRow?.nextEventDays;
-  if (days !== undefined) {
+  if (days != null) {
     gates.push({
       label: 'Earnings > 7d away',
       status: days > 7 ? 'PASS' : days >= 3 ? 'CAUTION' : 'REJECT',

@@ -194,8 +194,8 @@ export default function WatchlistPage() {
                     </div>
                     <RankDelta value={row.rankDelta} context="rank" />
                     <RankDelta value={row.scoreDelta ?? 0} context="score pt" />
-                    {row.nextEventDays !== undefined
-                      ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel} />
+                    {row.nextEventDays != null
+                      ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel ?? undefined} />
                       : <Text size={11} tone="dim">—</Text>}
                   </TableRow>
                 ))}
