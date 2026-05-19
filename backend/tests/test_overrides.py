@@ -136,3 +136,26 @@ def test_contract_override_does_not_mutate_cached_config():
     card_b = validate_contract(contract, 70, overrides={"min_dte": 5})   # pass  (20 >= 5)
     assert "dte_too_short" in card_a.reject_reasons
     assert "dte_too_short" not in card_b.reject_reasons
+
+
+# ── WI-12: off-hours null-data guard ─────────────────────────────────────────
+
+def test_zero_volume_with_adequate_oi_is_not_rejected():
+    """volume=0 is Tradier's off-hours sentinel; if OI >= min_open_interest, pass through."""
+    contract = _make_contract(volume=0, oi=1000)  # OI well above 200 default
+    card = validate_contract(contract, 70)
+    assert "volume_too_low" not in card.reject_reasons
+
+
+def test_zero_volume_with_zero_oi_is_rejected():
+    """volume=0 AND oi=0 is genuinely illiquid — must still reject."""
+    contract = _make_contract(volume=0, oi=0)
+    card = validate_contract(contract, 70)
+    assert "open_interest_too_low" in card.reject_reasons
+
+
+def test_low_nonzero_volume_is_rejected():
+    """volume=10 (real but below threshold) must still trigger volume_too_low."""
+    contract = _make_contract(volume=10, oi=1000)
+    card = validate_contract(contract, 70)
+    assert "volume_too_low" in card.reject_reasons

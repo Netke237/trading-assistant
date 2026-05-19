@@ -65,7 +65,9 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     except (ValueError, TypeError):
         dte = 0
 
-    if volume < hr["min_volume"]:
+    # volume == 0 is Tradier's off-hours sentinel (resets daily before market open).
+    # When OI is adequate, skip the volume gate — OI is the real liquidity proxy.
+    if volume < hr["min_volume"] and not (volume == 0 and oi >= hr["min_open_interest"]):
         reasons.append("volume_too_low")
     if oi < hr["min_open_interest"]:
         reasons.append("open_interest_too_low")
