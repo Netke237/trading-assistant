@@ -161,6 +161,7 @@ async def _process_symbol(
     max_price: float | None = None,
     min_cap_usd: float | None = None,
     max_cap_usd: float | None = None,
+    overrides: dict | None = None,
 ) -> TradeCardData | RejectedCandidate:
     """Process one symbol: fetch data, score stock, validate contracts, build trade card."""
     async with sem:
@@ -230,6 +231,7 @@ async def _process_symbol(
         earnings_date=earnings_date,
         dividend_date=dividend_date,
         iv_rank=iv_rank,
+        overrides=overrides,
     )
     if card.status == "REJECT":
         bd = {r.name: r.score for r in card.rules}
@@ -241,12 +243,23 @@ async def _process_symbol(
         return RejectedCandidate(symbol=symbol, reason="no option chain")
 
     augmented = [_augment(c) for c in chain]
-    scored = [(validate_contract(c, card.score), c) for c in augmented]
+    scored = [(validate_contract(c, card.score, overrides=overrides), c) for c in augmented]
 
     valid_scores = [(s, c) for s, c in scored if s.status != "REJECT"]
     if not valid_scores:
-        log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "all contracts rejected"})
-        return RejectedCandidate(symbol=symbol, reason="all contracts rejected")
+        reason_counts: dict[str, int] = {}
+        for s, _ in scored:
+            for r in s.reject_reasons:
+                reason_counts[r] = reason_counts.get(r, 0) + 1
+        if reason_counts:
+            detail = ", ".join(
+                f"{r}({n})" for r, n in sorted(reason_counts.items(), key=lambda x: -x[1])
+            )
+            reject_reason = f"contracts rejected: {detail}"
+        else:
+            reject_reason = "all contracts rejected"
+        log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": reject_reason})
+        return RejectedCandidate(symbol=symbol, reason=reject_reason)
 
     valid_scores.sort(key=lambda x: x[0].score, reverse=True)
     best_score, contract = valid_scores[0]
@@ -490,6 +503,7 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 max_price=req.max_price,
                 min_cap_usd=req.min_cap_usd,
                 max_cap_usd=req.max_cap_usd,
+                overrides=dict(req.overrides) if req.overrides else None,
             )
             for symbol in symbols
         ]

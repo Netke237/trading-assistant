@@ -1,4 +1,5 @@
 from __future__ import annotations
+import copy
 import math
 import os
 import yaml
@@ -69,6 +70,13 @@ def _ema(values: list[float], period: int) -> list[float]:
     return result
 
 
+def _sma(values: list[float], period: int) -> list[float]:
+    """Simple moving average series. Returns list of length len(values) - period + 1."""
+    if len(values) < period:
+        return []
+    return [sum(values[i:i + period]) / period for i in range(len(values) - period + 1)]
+
+
 def _slope(series: list[float], lookback: int = 5) -> float:
     """Linear regression slope over last `lookback` values. Positive = rising."""
     if len(series) < lookback:
@@ -86,14 +94,16 @@ def _slope(series: list[float], lookback: int = 5) -> float:
 # Rule 1: Trend
 # ---------------------------------------------------------------------------
 
-def _rule_trend(closes: list[float], cfg: dict, direction: Direction = "Bullish") -> RuleResult:
+def _rule_trend(closes: list[float], cfg: dict, direction: Direction = "Bullish", *, ma_func=None) -> RuleResult:
+    if ma_func is None:
+        ma_func = _ema
     fast_p = cfg["trend"]["fast_ema"]
     slow_p = cfg["trend"]["slow_ema"]
     slow_required = cfg["trend"]["slow_slope_required"]
     fast_required = cfg["trend"]["fast_slope_required"]
 
-    fast_ema = _ema(closes, fast_p)
-    slow_ema = _ema(closes, slow_p)
+    fast_ema = ma_func(closes, fast_p)
+    slow_ema = ma_func(closes, slow_p)
 
     if not fast_ema or not slow_ema:
         return RuleResult("trend", "REJECT", 0, {"reason": "insufficient_data"})
@@ -550,6 +560,7 @@ def score_stock(
     earnings_date: date | None = None,
     dividend_date: date | None = None,
     iv_rank: float | None = None,
+    overrides: dict | None = None,
 ) -> StockScoreCard:
     """
     Score a stock for the given direction and horizon.
@@ -562,16 +573,45 @@ def score_stock(
         earnings_date:  Next earnings date (None if unknown)
         dividend_date:  Next ex-dividend date (None if unknown)
         iv_rank:        Current IV rank 0–100 (None if unavailable)
+        overrides:      Optional dict of parameter overrides (see plan WI-2)
 
     Returns:
         StockScoreCard with weighted score, status, and per-rule breakdown.
     """
-    cfg = _horizon_cfg(horizon)
+    cfg = copy.deepcopy(_horizon_cfg(horizon))
+    ov = overrides or {}
+
+    if ov:
+        w = cfg["weights"]
+        for key, val in ov.items():
+            if key == "weight_trend":        w["trend"]     = float(val)
+            elif key == "weight_pullback":   w["pullback"]  = float(val)
+            elif key == "weight_trigger":    w["trigger"]   = float(val)
+            elif key == "weight_event":      w["event"]     = float(val)
+            elif key == "weight_vol":        w["vol"]       = float(val)
+            elif key == "fast_ema":          cfg["trend"]["fast_ema"]                  = int(val)
+            elif key == "slow_ema":          cfg["trend"]["slow_ema"]                  = int(val)
+            elif key == "rsi_period":        cfg["trigger"]["rsi_period"]              = int(val)
+            elif key == "rsi_floor":         cfg["trigger"]["rsi_floor"]               = float(val)
+            elif key == "macd_fast":         cfg["trigger"]["macd_fast"]               = int(val)
+            elif key == "macd_slow":         cfg["trigger"]["macd_slow"]               = int(val)
+            elif key == "macd_signal":       cfg["trigger"]["macd_signal"]             = int(val)
+            elif key == "swing_high_lookback_bars": cfg["pullback"]["swing_high_lookback_bars"] = int(val)
+            elif key == "atr_caution_max":   cfg["pullback"]["atr_caution_max"]        = float(val)
+            elif key == "event_reject_days": cfg["event"]["reject_days"]               = int(val)
+            elif key == "event_caution_days": cfg["event"]["caution_days"]             = int(val)
+            elif key == "iv_rank_pass_max":  cfg["vol"]["iv_rank_pass_max"]            = float(val)
+            elif key == "volume_lookback_bars": cfg["trigger"]["volume_lookback_bars"] = int(val)
+            elif key == "volume_multiplier": cfg["trigger"]["volume_multiplier"]       = float(val)
+
+    ma_type = str(ov.get("ma_type", "EMA")).upper()
+    ma_func = _sma if ma_type == "SMA" else _ema
+
     thresholds = _thresholds()
     closes = [b["close"] for b in bars]
     volumes = [b["volume"] for b in bars]
 
-    trend_result = _rule_trend(closes, cfg, direction)
+    trend_result = _rule_trend(closes, cfg, direction, ma_func=ma_func)
     pullback_result = _rule_pullback(bars, cfg, direction)
     trigger_result, vol_bonus = _rule_trigger(bars, cfg, volumes, direction)
     event_result = _rule_event(earnings_date, dividend_date, cfg)

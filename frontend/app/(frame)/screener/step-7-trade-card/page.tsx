@@ -21,6 +21,8 @@ import type { PortfolioPosition, TradeCardData } from '@/types/domain';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+
 function nowISOLocal(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -158,7 +160,7 @@ export default function Step7Page() {
         dteTotal: pos.dteTotal,
       });
 
-      fetch('/api/portfolio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+      fetch(`${BASE_URL}/api/portfolio`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
         .then(() => {
           logAudit('APPROVE', recId, {
             symbol: o.card.symbol,
