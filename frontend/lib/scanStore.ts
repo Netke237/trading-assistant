@@ -39,7 +39,7 @@ interface ScanStoreState {
   selectedSymbol:  string | null;
   conflictedSymbols: string[];
   rejectedLog: { symbol: string; reason: string }[];
-  scanOverrides: Record<string, number | boolean>;
+  scanOverrides: Record<string, number | boolean | string>;
   setScanState:    (s: ScanState, at?: string) => void;
   setContext:      (c: ScanContext | null) => void;
   setRegime:       (r: Status) => void;
@@ -48,7 +48,7 @@ interface ScanStoreState {
   setSelectedSymbol: (s: string) => void;
   setConflictedSymbols: (symbols: string[]) => void;
   setRejectedLog:  (entries: { symbol: string; reason: string }[]) => void;
-  setScanOverrides: (o: Record<string, number | boolean>) => void;
+  setScanOverrides: (o: Record<string, number | boolean | string>) => void;
 }
 
 export const useScanStore = create<ScanStoreState>()(

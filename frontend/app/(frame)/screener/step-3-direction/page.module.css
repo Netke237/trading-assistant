@@ -321,3 +321,124 @@
   color: var(--text-primary);
   background: var(--bg-surface-2);
 }
+
+/* ── Section (STOCKS / OPTIONS) ─────────────────────────────────────────────── */
+
+.sectionBlock {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: var(--space-2);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface-2);
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sectionHeader:hover {
+  background: color-mix(in srgb, var(--bg-surface-2) 70%, var(--border-subtle));
+}
+
+.sectionBody {
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* ── Sub-group ───────────────────────────────────────────────────────────────── */
+
+.subGroup {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: var(--space-1);
+}
+
+.subGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-base);
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-secondary);
+}
+
+.subGroupHeader:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.subGroupBody {
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background: var(--bg-surface);
+}
+
+/* ── Override badge ──────────────────────────────────────────────────────────── */
+
+.overrideBadge {
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-surface));
+  color: var(--accent);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+/* ── Redundant / deprecated note ─────────────────────────────────────────────── */
+
+.redundantNote {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* ── SMA/EMA segmented toggle (small inline) ─────────────────────────────────── */
+
+.segmentedTiny {
+  display: flex;
+  gap: 2px;
+}
+
+.segTiny {
+  height: 26px;
+  padding: 0 var(--space-2);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 100ms, background 100ms, color 100ms;
+}
+
+.segTiny:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.segTinyActive {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}

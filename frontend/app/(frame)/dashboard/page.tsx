@@ -70,6 +70,10 @@ export default function DashboardPage() {
   ];
 
   useEffect(() => {
+    usePortfolioStore.getState().syncFromBackend?.().catch(() => {});
+  }, []);
+
+  useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
     api.getAlerts().then(setAlerts).catch(() => setOffline(true));
     api.getRegime().then(setRegime).catch(() => setOffline(true));

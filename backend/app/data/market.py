@@ -414,6 +414,32 @@ def fetch_earnings_events(symbols: list[str], days_ahead: int = 60) -> list[dict
     return events
 
 
+def fetch_dividend_events(symbols: list[str], days_ahead: int = 60) -> list[dict]:
+    """
+    Returns upcoming ex-dividend dates for *symbols* within *days_ahead* days.
+    Each item: {date: 'YYYY-MM-DD', symbol: str, label: 'Dividend', status: 'PENDING'}
+    Uses yfinance — free, no API key needed.
+    """
+    from datetime import date as date_type, timedelta
+    today = date_type.today()
+    cutoff = today + timedelta(days=days_ahead)
+    events: list[dict] = []
+    for sym in symbols:
+        try:
+            div_date = _dividend_date_yf(sym)
+            if div_date is not None and today <= div_date <= cutoff:
+                events.append({
+                    "date":   div_date.isoformat(),
+                    "symbol": sym,
+                    "label":  "Dividend",
+                    "status": "PENDING",
+                })
+        except Exception:
+            continue
+    events.sort(key=lambda x: x["date"])
+    return events
+
+
 def _compute_iv_bs(
     mid: float,
     S: float,

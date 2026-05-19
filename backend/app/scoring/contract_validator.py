@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import yaml
 from dataclasses import dataclass, field
 from datetime import date
@@ -64,7 +65,9 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     except (ValueError, TypeError):
         dte = 0
 
-    if volume < hr["min_volume"]:
+    # volume == 0 is Tradier's off-hours sentinel (resets daily before market open).
+    # When OI is adequate, skip the volume gate — OI is the real liquidity proxy.
+    if volume < hr["min_volume"] and not (volume == 0 and oi >= hr["min_open_interest"]):
         reasons.append("volume_too_low")
     if oi < hr["min_open_interest"]:
         reasons.append("open_interest_too_low")
@@ -181,6 +184,7 @@ def _contract_id(contract: dict) -> str:
 def validate_contract(
     contract: dict,
     stock_score: int,
+    overrides: dict | None = None,
 ) -> ContractScoreCard:
     """
     Validate and score an option contract.
@@ -189,12 +193,24 @@ def validate_contract(
         contract:    Option contract dict (see Section 3 for shape)
         stock_score: Aggregate stock score from StockScoreCard (0–100).
                      Contracts are only recommended when stock_score >= 50.
+        overrides:   Optional dict of hard-reject parameter overrides.
 
     Returns:
         ContractScoreCard with score, status, hard-reject reasons, soft flags,
         and score breakdown.
     """
-    cfg = _load_config()
+    cfg = copy.deepcopy(_load_config())
+    ov = overrides or {}
+    if ov:
+        hr = cfg["hard_reject"]
+        for key, val in ov.items():
+            if key == "max_bid_ask_spread_pct": hr["max_bid_ask_spread_pct"] = float(val)
+            elif key == "max_delta":            hr["max_delta"]              = float(val)
+            elif key == "min_delta":            hr["min_delta"]              = float(val)
+            elif key == "min_volume":           hr["min_volume"]             = int(val)
+            elif key == "min_open_interest":    hr["min_open_interest"]      = int(val)
+            elif key == "min_dte":              hr["min_dte"]                = int(val)
+            elif key == "max_dte":              hr["max_dte"]                = int(val)
     contract_id = _contract_id(contract)
 
     reject_reasons = _hard_reject_reasons(contract, cfg)

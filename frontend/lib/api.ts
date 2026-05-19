@@ -39,9 +39,15 @@ export const api = {
   getNews:         (symbols: string[]) => get<NewsItem[]>(`/api/news?symbols=${symbols.join(',')}`),
   addWatchlist:    (symbol: string) => post<{ symbol: string }>('/api/watchlist', { symbol }),
   removeWatchlist: (symbol: string) => del(`/api/watchlist/${encodeURIComponent(symbol)}`),
-  postScan: (universe: string[], direction: string, horizon: string, filters?: { min_price?: number; max_price?: number; min_cap_usd?: number; max_cap_usd?: number }) =>
+  postScan: (
+    universe: string[],
+    direction: string,
+    horizon: string,
+    filters?: { min_price?: number; max_price?: number; min_cap_usd?: number; max_cap_usd?: number },
+    overrides?: Record<string, number | boolean | string>,
+  ) =>
     post<{ scan_id: string; timestamp: string; candidates: TradeCardData[]; rejected: { symbol: string; reason: string }[] }>(
       '/api/scan',
-      { universe, direction, horizon, overrides: {}, ...filters },
+      { universe, direction, horizon, overrides: overrides ?? {}, ...filters },
     ),
 };
