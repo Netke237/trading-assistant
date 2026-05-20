@@ -1,0 +1,256 @@
+.page {
+  padding: 24px 32px;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.headerActions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.link {
+  color: var(--accent);
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+
+/* ── Alert list ── */
+
+.alertList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.alertRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  transition: opacity 200ms;
+}
+
+.alertRowAck {
+  opacity: 0.45;
+}
+
+.alertMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alertKind {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.alertKind[data-kind="Critical"] {
+  background: color-mix(in srgb, var(--reject) 18%, var(--bg-surface));
+  color: var(--reject);
+}
+
+.alertKind[data-kind="Action"] {
+  background: color-mix(in srgb, var(--caution) 18%, var(--bg-surface));
+  color: var(--caution);
+}
+
+.alertFooter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ackBadge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-surface-2);
+  color: var(--text-dim);
+}
+
+.btnAck {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.btnAck:hover {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+
+.btnDelete {
+  margin-left: auto;
+  font-size: 14px;
+  line-height: 1;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.btnDelete:hover {
+  color: var(--reject);
+  background: color-mix(in srgb, var(--reject) 10%, transparent);
+}
+
+/* ── Upcoming Events ── */
+
+.eventList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.eventRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-surface);
+}
+
+/* ── Settings ── */
+
+.settingsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.settingsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.settingsLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settingsControl {
+  flex-shrink: 0;
+}
+
+.defaultTag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg-surface-2);
+  color: var(--text-dim);
+  width: fit-content;
+}
+
+.input {
+  width: 72px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: right;
+}
+
+.toggle {
+  width: 38px;
+  height: 20px;
+  border-radius: 10px;
+  border: none;
+  background: var(--bg-surface-2);
+  cursor: pointer;
+  position: relative;
+  transition: background 150ms;
+}
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 150ms, background 150ms;
+}
+
+.toggleOn {
+  background: var(--accent);
+}
+
+.toggleOn::after {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 8px 0;
+}
+
+/* ── Shared ── */
+
+.empty {
+  padding: 20px 0;
+}
+
+.btnSecondary {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.btnSecondary:hover {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}

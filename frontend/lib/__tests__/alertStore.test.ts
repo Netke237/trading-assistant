@@ -1,15 +1,13 @@
 import { useAlertStore, DEFAULT_CONFIG } from '@/lib/alertStore';
-import { useSettingsStore } from '@/lib/settingsStore';
 
 describe('alertStore', () => {
   beforeEach(() => {
     useAlertStore.setState({
       toasts: [],
-      unreadCount: 0,
       config: DEFAULT_CONFIG,
       firedAlerts: {},
+      suppressedAlerts: {},
     });
-    useSettingsStore.setState({ alertDeduplicationHours: 24 });
   });
 
   it('adds a toast', () => {
@@ -50,12 +48,12 @@ describe('alertStore', () => {
     expect(useAlertStore.getState().toasts[0].dismissed).toBe(true);
   });
 
-  it('clears unread count', () => {
+  it('clears all toasts', () => {
     const store = useAlertStore.getState();
     store.addToast({ kind: 'Action', symbol: 'AAPL', reason: 'Target reached', recId: 'REC-1', alertType: 'TP_HIT' });
-    expect(useAlertStore.getState().unreadCount).toBe(1);
+    expect(useAlertStore.getState().toasts).toHaveLength(1);
     store.clearAll();
-    expect(useAlertStore.getState().unreadCount).toBe(0);
+    expect(useAlertStore.getState().toasts).toHaveLength(0);
   });
 
   it('updates config', () => {
@@ -75,8 +73,6 @@ describe('alertStore', () => {
     useAlertStore.setState({
       firedAlerts: { [key]: now - 25 * 3600_000 },
     });
-
-    useSettingsStore.setState({ alertDeduplicationHours: 24 });
 
     store.addToast({ kind: 'Action', symbol: 'MSFT', reason: 'Target reached', recId: 'REC-2', alertType: 'TP_HIT' });
 

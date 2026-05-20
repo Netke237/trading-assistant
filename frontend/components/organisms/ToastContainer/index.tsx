@@ -6,7 +6,7 @@ import { Toast } from '@/components/molecules/Toast';
 import styles from './ToastContainer.module.css';
 
 export function ToastContainer() {
-  const visibleToasts = useAlertStore((s) => s.visibleToasts);
+  const visibleToasts = useAlertStore((s) => s.toasts.filter((t) => !t.dismissed));
   const recentToasts = useMemo(() => visibleToasts.slice(-3), [visibleToasts]);
   const dismissToast = useAlertStore((s) => s.dismissToast);
 

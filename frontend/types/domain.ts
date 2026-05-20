@@ -229,6 +229,7 @@ export interface AlertConfig {
   dedupWindowMinutes: number;      // default 15
   enabledTypes: AlertType[];
   soundEnabled: boolean;
+  keepAlertsDays: number;          // default 10 — auto-purge after N days
 }
 
 export type AlertType =
@@ -256,6 +257,8 @@ export interface ToastItem {
   symbol: string;
   reason: string;
   dismissed: boolean;
+  acknowledged: boolean;   // permanently suppress re-fire; dims row in history
+  firedAt: string;         // ISO timestamp when the alert fired
   recId: string;
   alertType: AlertType;
 }

@@ -37,7 +37,30 @@
   color: var(--accent);
 }
 
+.iconWrap {
+  position: relative;
+  width: 20px;
+  height: 20px;
+}
+
 .icon {
   width: 20px;
   height: 20px;
+}
+
+.badge {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--reject);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
 }

@@ -15,24 +15,22 @@ import { useState, useEffect } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore } from '@/lib/settingsStore';
-import { useAlertStore, DEFAULT_CONFIG } from '@/lib/alertStore';
-import type { AlertType } from '@/types/domain';
 import { useRiskStore } from '@/lib/riskStore';
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
-type Section = 'broker' | 'theme' | 'alerts' | 'scan' | 'risk';
+type Section = 'broker' | 'theme' | 'scan' | 'risk';
 
 const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'broker',  label: 'Broker',     desc: 'Credentials + paper trade toggle' },
   { key: 'theme',   label: 'Appearance', desc: 'Theme + density' },
-  { key: 'alerts',  label: 'Alerts',     desc: 'Stop-loss and event notifications' },
   { key: 'scan',    label: 'Scan',       desc: 'Continuous scan + cadence' },
   { key: 'risk',    label: 'Risk',       desc: 'Exposure limits and portfolio value' },
 ];
 
 export default function SettingsPage() {
   const [active, setActive] = useState<Section>('broker');
+  // Alert settings moved to /alerts page
   const { resetToDefaults } = useSettingsStore();
 
   return (
@@ -59,7 +57,6 @@ export default function SettingsPage() {
         <div className={styles.panel}>
           {active === 'broker'  && <BrokerForm  />}
           {active === 'theme'   && <ThemeForm   />}
-          {active === 'alerts'  && <AlertsForm  />}
           {active === 'scan'    && <ScanForm    />}
           {active === 'risk'    && <RiskForm    />}
         </div>
@@ -233,120 +230,6 @@ function ThemeForm() {
           <option>Compact</option>
         </select>
       </Row>
-    </>
-  );
-}
-
-/* ---------- Alerts ---------- */
-
-const ALERT_TYPE_LABELS: Record<AlertType, string> = {
-  TP_HIT: 'Target reached',
-  STOP_REACHED: 'Stop-loss breach',
-  PREMIUM_STOP: 'Premium stop (–40%)',
-  TIME_STOP_APPROACHING: 'Time stop approaching',
-  TIME_STOP: 'Time stop (≤3 DTE)',
-  EARNINGS_APPROACHING: 'Earnings within 3 days',
-  EVENT_RISK: 'Event risk (≤3 days)',
-  EXPIRATION_APPROACHING: 'Expiration within 3 days',
-  REGIME_CHANGE: 'Regime flip',
-  SCAN_COMPLETE: 'Scan complete',
-  SCAN_FAILED: 'Scan failed',
-};
-
-function AlertsForm() {
-  const { config, setConfig } = useAlertStore();
-  const { ivPassThreshold, ivCautionThreshold, setIvPassThreshold, setIvCautionThreshold } = useSettingsStore();
-
-  function toggleType(type: AlertType, on: boolean) {
-    const next = on
-      ? [...config.enabledTypes, type]
-      : config.enabledTypes.filter((t) => t !== type);
-    setConfig({ ...config, enabledTypes: next });
-  }
-
-  return (
-    <>
-      <SectionIntro
-        title="Notifications"
-        blurb="In-app alerts only. Email / push integrations arrive in Phase 7."
-      />
-      <Row
-        label="Deduplication window"
-        hint="Minutes before the same alert can fire again."
-        defaultValue="15"
-      >
-        <input
-          type="number"
-          className={styles.input}
-          min={1}
-          max={120}
-          value={config.dedupWindowMinutes}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            if (val >= 1 && val <= 120) {
-              setConfig({ ...config, dedupWindowMinutes: val });
-            }
-          }}
-        />
-      </Row>
-      <Row
-        label="Sound"
-        hint="Play a short tone when a new toast appears."
-        defaultValue="Off"
-      >
-        <Toggle
-          defaultOn={config.soundEnabled}
-          onChange={(on) => setConfig({ ...config, soundEnabled: on })}
-        />
-      </Row>
-      <Row
-        label="IV Pass Threshold"
-        hint="IV rank above this is considered PASS."
-        defaultValue="34"
-      >
-        <input
-          type="number"
-          className={styles.input}
-          min={1}
-          max={100}
-          value={ivPassThreshold}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            if (val >= 1 && val <= 100) setIvPassThreshold(val);
-          }}
-        />
-      </Row>
-      <Row
-        label="IV Caution Threshold"
-        hint="IV rank above this (but below Pass) is CAUTION."
-        defaultValue="55"
-      >
-        <input
-          type="number"
-          className={styles.input}
-          min={1}
-          max={100}
-          value={ivCautionThreshold}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            if (val >= 1 && val <= 100) setIvCautionThreshold(val);
-          }}
-        />
-      </Row>
-      {(Object.keys(ALERT_TYPE_LABELS) as AlertType[]).map((type) => (
-        <Row
-          key={type}
-          label={ALERT_TYPE_LABELS[type]}
-          defaultValue={
-            DEFAULT_CONFIG.enabledTypes.includes(type) ? 'On' : 'Off'
-          }
-        >
-          <Toggle
-            defaultOn={config.enabledTypes.includes(type)}
-            onChange={(on) => toggleType(type, on)}
-          />
-        </Row>
-      ))}
     </>
   );
 }

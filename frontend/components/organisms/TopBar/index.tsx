@@ -1,25 +1,13 @@
 'use client';
 
-/*
- * TopBar — spec §4. Persistent across every page.
- * Left:        BAMENDJOU wordmark + product tagline
- * Center-left: last-scan context
- * Center-right: scan state pill (IDLE / SCANNING / COMPLETED hh:mm / FAILED)
- * Right:       regime dot + "Regime: PASS" + ModeToggle
- */
-
 import { useEffect, useState } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { RegimeIndicator } from '@/components/molecules/RegimeIndicator';
 import { TopBarActions } from '@/components/molecules/TopBarActions';
-import { AlertBadge } from '@/components/atoms/AlertBadge';
-import { BellPanel } from '@/components/organisms/BellPanel';
 import { useScanStore } from '@/lib/scanStore';
-import { useAlertStore } from '@/lib/alertStore';
-import type { ScanState } from '@/lib/scanStore';
 import styles from './TopBar.module.css';
 
-const PILL_CLASS: Record<ScanState, string> = {
+const PILL_CLASS: Record<import('@/lib/scanStore').ScanState, string> = {
   IDLE:       styles.pillIdle,
   SCANNING:   styles.pillScanning,
   COMPLETED:  styles.pillCompleted,
@@ -28,7 +16,6 @@ const PILL_CLASS: Record<ScanState, string> = {
   CANCELLED:  styles.pillCancelled,
 };
 
-/** Deterministic HH:mm slice from the stored local-ISO string. Safe during SSR. */
 function hhmmFrom(iso: string): string {
   return iso.slice(11, 16);
 }
@@ -37,7 +24,6 @@ function startOfDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
-/** Client-only label with date prefix when the scan isn't today. */
 function labelWithDate(iso: string): string {
   const hhmm = hhmmFrom(iso);
   const scan = new Date(iso);
@@ -53,36 +39,11 @@ function labelWithDate(iso: string): string {
     : `${mon} ${day} ${scan.getFullYear()} ${hhmm}`;
 }
 
-function pillLabel(state: ScanState, iso: string | null, mounted: boolean): string {
+function pillLabel(state: import('@/lib/scanStore').ScanState, iso: string | null, mounted: boolean): string {
   if ((state === 'COMPLETED' || state === 'PARTIAL' || state === 'CANCELLED') && iso) {
-    // Before mount we render just HH:mm to avoid SSR/client timezone mismatch.
     return `${state} ${mounted ? labelWithDate(iso) : hhmmFrom(iso)}`;
   }
   return state;
-}
-
-function BellButton() {
-  const unreadCount = useAlertStore((s) => s.unreadCount);
-  const [bellOpen, setBellOpen] = useState(false);
-  return (
-    <div style={{ position: 'relative' }}>
-      <button
-        type="button"
-        className={styles.bell}
-        onClick={() => setBellOpen((o) => !o)}
-        aria-label="Notifications"
-        aria-expanded={bellOpen}
-        title="Notifications"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-        </svg>
-        <AlertBadge count={unreadCount} />
-      </button>
-      <BellPanel open={bellOpen} onClose={() => setBellOpen(false)} />
-    </div>
-  );
 }
 
 export function TopBar() {
@@ -112,8 +73,6 @@ export function TopBar() {
       </span>
 
       <RegimeIndicator />
-
-      <BellButton />
 
       <TopBarActions />
     </header>

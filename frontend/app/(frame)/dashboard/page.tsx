@@ -26,7 +26,7 @@ import { api } from '@/lib/api';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ToastContainer } from '@/components/organisms/ToastContainer';
 import { RiskPanel } from '@/components/molecules/RiskPanel';
-import type { WatchlistRow, AlertItem, MarketRegime, NewsItem } from '@/types/domain';
+import type { WatchlistRow, MarketRegime, NewsItem } from '@/types/domain';
 import styles from './page.module.css';
 
 const WL_COLUMNS = '60px 1fr 60px 64px 64px';
@@ -44,7 +44,6 @@ export default function DashboardPage() {
   const { context, scanAt } = useScanStore();
 
   const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
-  const [alerts, setAlerts]       = useState<AlertItem[]>([]);
   const [regime, setRegime]       = useState<MarketRegime | null>(null);
   const [news, setNews]           = useState<NewsItem[]>([]);
   const [offline, setOffline]     = useState(false);
@@ -55,19 +54,10 @@ export default function DashboardPage() {
 
   const portfolio = usePortfolioStore((s) => s.positions);
 
-  const visibleToasts = useAlertStore((s) => s.visibleToasts);
-  const allAlerts: AlertItem[] = [
-    ...alerts,
-    ...visibleToasts.map((t) => ({
-      id: t.id,
-      kind: t.kind,
-      symbol: t.symbol,
-      reason: t.reason,
-      timestamp: toastTimestamp(t.id),
-      recId: t.recId,
-      alertType: t.alertType,
-    })),
-  ];
+  const toasts = useAlertStore((s) => s.toasts);
+  const top5Alerts = [...toasts]
+    .sort((a, b) => new Date(b.firedAt).getTime() - new Date(a.firedAt).getTime())
+    .slice(0, 5);
 
   useEffect(() => {
     usePortfolioStore.getState().syncFromBackend?.().catch(() => {});
@@ -75,7 +65,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
-    api.getAlerts().then(setAlerts).catch(() => setOffline(true));
     api.getRegime().then(setRegime).catch(() => setOffline(true));
 
     // Expanded set disabled — 9 symbols × 1 HTTP call each adds 5-10s latency; re-enable when news endpoint is batched.
@@ -209,15 +198,21 @@ export default function DashboardPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Alerts" count={allAlerts.length}>
+        <SectionCard
+          title="Alerts"
+          count={toasts.length}
+          action={{ label: 'View all →', onClick: () => router.push('/alerts') }}
+        >
           <div className={styles.alertList}>
-            {allAlerts.slice(0, 5).map((a) => (
+            {top5Alerts.length === 0 ? (
+              <Text size={12} tone="dim">No alerts yet.</Text>
+            ) : top5Alerts.map((a) => (
               <AlertRow
                 key={a.id}
                 kind={a.kind}
                 symbol={a.symbol}
                 reason={a.reason}
-                timestamp={a.timestamp}
+                timestamp={timeAgo(a.firedAt)}
               />
             ))}
           </div>
@@ -316,8 +311,12 @@ function toneFor(status: string): 'pass' | 'caution' | 'reject' | undefined {
   return undefined;
 }
 
-function toastTimestamp(id: string): string {
-  const ts = parseInt(id.slice(0, 8), 36);
-  const d = new Date(ts);
-  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }

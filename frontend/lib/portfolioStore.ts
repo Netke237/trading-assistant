@@ -162,7 +162,9 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           const res = await fetch(`${BASE_URL}/api/portfolio`);
           if (!res.ok) return;
           const positions: BackendPosition[] = await res.json();
-          set({ positions: positions.map(fromBackend) });
+          if (positions.length > 0) {
+            set({ positions: positions.map(fromBackend) });
+          }
         } catch {
           // network unavailable — keep localStorage state
         }

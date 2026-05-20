@@ -1,18 +1,13 @@
 'use client';
 
-/*
- * NavItems — 6 nav links (Dashboard · Screener · Watchlist · Portfolio · Calendar · Settings).
- * Active state derived from pathname. Drift log Screen 0 #2, Screen 5 #5, Screen 6 #5.
- */
-
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Text } from '@/components/primitives';
+import { useAlertStore } from '@/lib/alertStore';
 import styles from './NavItems.module.css';
 
 interface NavItemDef {
   label: string;
-  /** base path prefix — matches itself and any nested route. */
   match: string;
   href: string;
   Icon: React.ComponentType;
@@ -24,16 +19,19 @@ const ITEMS: NavItemDef[] = [
   { label: 'Watchlist', match: '/watchlist', href: '/watchlist', Icon: WatchlistIcon },
   { label: 'Portfolio', match: '/portfolio', href: '/portfolio', Icon: PortfolioIcon },
   { label: 'Calendar',  match: '/calendar',  href: '/calendar',  Icon: CalendarIcon  },
+  { label: 'Alerts',    match: '/alerts',    href: '/alerts',    Icon: AlertsIcon    },
   { label: 'Settings',  match: '/settings',  href: '/settings',  Icon: SettingsIcon  },
 ];
 
 export function NavItems() {
   const pathname = usePathname() ?? '';
+  const unacknowledgedCount = useAlertStore((s) => s.unacknowledgedCount());
 
   return (
     <nav className={styles.list} aria-label="Primary">
       {ITEMS.map((it) => {
         const active = pathname.startsWith(it.match);
+        const showBadge = it.label === 'Alerts' && unacknowledgedCount > 0;
         return (
           <Link
             key={it.label}
@@ -41,7 +39,14 @@ export function NavItems() {
             className={[styles.item, active ? styles.itemActive : null].filter(Boolean).join(' ')}
             aria-current={active ? 'page' : undefined}
           >
-            <span className={styles.icon}><it.Icon /></span>
+            <span className={styles.iconWrap}>
+              <span className={styles.icon}><it.Icon /></span>
+              {showBadge && (
+                <span className={styles.badge}>
+                  {unacknowledgedCount > 99 ? '99+' : unacknowledgedCount}
+                </span>
+              )}
+            </span>
             <Text size={10} tone={active ? 'accent' : 'secondary'}>
               {it.label}
             </Text>
@@ -52,7 +57,7 @@ export function NavItems() {
   );
 }
 
-/* ─────────── Icons (single-color, stroke via currentColor) ─────────── */
+/* ─────────── Icons ─────────── */
 
 function svgProps() {
   return {
@@ -106,6 +111,14 @@ function CalendarIcon() {
     <svg {...svgProps()}>
       <rect x="3" y="4" width="18" height="18" rx="2" />
       <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  );
+}
+function AlertsIcon() {
+  return (
+    <svg {...svgProps()}>
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </svg>
   );
 }
