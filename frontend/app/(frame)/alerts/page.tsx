@@ -117,6 +117,8 @@ export default function AlertsPage() {
   const sorted = [...toasts].sort(
     (a, b) => new Date(b.firedAt).getTime() - new Date(a.firedAt).getTime(),
   );
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const recent = sorted.filter((t) => new Date(t.firedAt).getTime() >= cutoff);
   const unacknowledgedCount = toasts.filter((t) => !t.acknowledged).length;
 
   const toggleType = useCallback((type: AlertType, on: boolean) => {
@@ -152,139 +154,148 @@ export default function AlertsPage() {
         </div>
       </div>
 
-      {/* ── Alert history ── */}
-      <section className={styles.section}>
-        <Text size={11} tone="secondary" weight={600}>Alert History</Text>
-        {sorted.length === 0 ? (
-          <div className={styles.empty}>
-            <Text size={13} tone="secondary">No alerts yet.</Text>
-          </div>
-        ) : (
-          <div className={styles.alertList}>
-            {sorted.map((t) => <AlertRow key={t.id} toast={t} />)}
-          </div>
-        )}
-      </section>
+      <div className={styles.layout}>
+        {/* ── Left: Alert Settings ── */}
+        <aside className={styles.colLeft}>
+          <section className={styles.section}>
+            <Text size={11} tone="secondary" weight={600}>Alert Settings</Text>
+            <Text size={12} tone="secondary">In-app alerts only. Email / push arrive in Phase 8.</Text>
 
-      {/* ── Upcoming Events ── */}
-      <section className={styles.section}>
-        <div className={styles.sectionHead}>
-          <Text size={11} tone="secondary" weight={600}>Upcoming Events</Text>
-          <Text size={11} tone="dim">Portfolio + watchlist · ≤ 30d · beyond 30d shown in{' '}
-            <Link href="/calendar" className={styles.link}>Calendar</Link>
-          </Text>
-        </div>
-        {upcomingEvents.length === 0 ? (
-          <div className={styles.empty}>
-            <Text size={13} tone="secondary">
-              {candidates.length === 0
-                ? 'Run a scan to see upcoming events.'
-                : 'No events within 30 days for your portfolio + watchlist.'}
-            </Text>
-          </div>
-        ) : (
-          <div className={styles.eventList}>
-            {upcomingEvents.map((c) => (
-              <div key={c.symbol} className={styles.eventRow}>
-                <Data size={12} weight={500}>{c.symbol}</Data>
-                <Text size={12}>{c.nextEventLabel ?? 'Earnings'}</Text>
-                <Data
-                  size={12}
-                  tone={
-                    (c.nextEventDays ?? 999) <= 3 ? 'reject'
-                    : (c.nextEventDays ?? 999) <= 14 ? 'caution'
-                    : undefined
-                  }
+            <div className={styles.settingsGrid}>
+              <SettingsRow label="Keep alerts for (days)" hint="Alerts older than this are auto-purged." defaultValue="10">
+                <input
+                  type="number"
+                  className={styles.input}
+                  min={1}
+                  max={365}
+                  value={config.keepAlertsDays}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 1 && val <= 365) {
+                      setConfig({ ...config, keepAlertsDays: val });
+                      clearOldAlerts();
+                    }
+                  }}
+                />
+              </SettingsRow>
+              <SettingsRow label="Deduplication window (min)" hint="Minutes before the same alert can fire again." defaultValue="15">
+                <input
+                  type="number"
+                  className={styles.input}
+                  min={1}
+                  max={120}
+                  value={config.dedupWindowMinutes}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 1 && val <= 120) setConfig({ ...config, dedupWindowMinutes: val });
+                  }}
+                />
+              </SettingsRow>
+              <SettingsRow label="Sound" hint="Play a short tone when a new alert fires." defaultValue="Off">
+                <Toggle on={config.soundEnabled} onChange={(on) => setConfig({ ...config, soundEnabled: on })} />
+              </SettingsRow>
+              <SettingsRow label="IV Pass Threshold" hint="IV rank above this is considered PASS." defaultValue="34">
+                <input
+                  type="number"
+                  className={styles.input}
+                  min={1}
+                  max={100}
+                  value={ivPassThreshold}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 1 && val <= 100) setIvPassThreshold(val);
+                  }}
+                />
+              </SettingsRow>
+              <SettingsRow label="IV Caution Threshold" hint="IV rank above this (but below Pass) is CAUTION." defaultValue="55">
+                <input
+                  type="number"
+                  className={styles.input}
+                  min={1}
+                  max={100}
+                  value={ivCautionThreshold}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 1 && val <= 100) setIvCautionThreshold(val);
+                  }}
+                />
+              </SettingsRow>
+
+              <div className={styles.divider} />
+              <Text size={12} tone="secondary">Alert types</Text>
+              {(Object.keys(ALERT_TYPE_LABELS) as AlertType[]).map((type) => (
+                <SettingsRow
+                  key={type}
+                  label={ALERT_TYPE_LABELS[type]}
+                  defaultValue={DEFAULT_CONFIG.enabledTypes.includes(type) ? 'On' : 'Off'}
                 >
-                  {c.nextEventDays}d
-                </Data>
+                  <Toggle
+                    on={config.enabledTypes.includes(type)}
+                    onChange={(on) => toggleType(type, on)}
+                  />
+                </SettingsRow>
+              ))}
+            </div>
+          </section>
+        </aside>
+
+        {/* ── Middle: Alert History (30d) ── */}
+        <main className={styles.colMiddle}>
+          <section className={styles.section}>
+            <Text size={11} tone="secondary" weight={600}>Alert History (30d)</Text>
+            <Text size={11} tone="dim">Showing alerts from the last 30 days.</Text>
+            {recent.length === 0 ? (
+              <div className={styles.empty}>
+                <Text size={13} tone="secondary">No alerts in the last 30 days.</Text>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+            ) : (
+              <div className={styles.alertList}>
+                {recent.map((t) => <AlertRow key={t.id} toast={t} />)}
+              </div>
+            )}
+          </section>
+        </main>
 
-      {/* ── Alert Settings ── */}
-      <section className={styles.section}>
-        <Text size={11} tone="secondary" weight={600}>Alert Settings</Text>
-        <Text size={12} tone="secondary">In-app alerts only. Email / push arrive in Phase 8.</Text>
-
-        <div className={styles.settingsGrid}>
-          <SettingsRow label="Keep alerts for (days)" hint="Alerts older than this are auto-purged." defaultValue="10">
-            <input
-              type="number"
-              className={styles.input}
-              min={1}
-              max={365}
-              value={config.keepAlertsDays}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                if (val >= 1 && val <= 365) {
-                  setConfig({ ...config, keepAlertsDays: val });
-                  clearOldAlerts();
-                }
-              }}
-            />
-          </SettingsRow>
-          <SettingsRow label="Deduplication window (min)" hint="Minutes before the same alert can fire again." defaultValue="15">
-            <input
-              type="number"
-              className={styles.input}
-              min={1}
-              max={120}
-              value={config.dedupWindowMinutes}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                if (val >= 1 && val <= 120) setConfig({ ...config, dedupWindowMinutes: val });
-              }}
-            />
-          </SettingsRow>
-          <SettingsRow label="Sound" hint="Play a short tone when a new alert fires." defaultValue="Off">
-            <Toggle on={config.soundEnabled} onChange={(on) => setConfig({ ...config, soundEnabled: on })} />
-          </SettingsRow>
-          <SettingsRow label="IV Pass Threshold" hint="IV rank above this is considered PASS." defaultValue="34">
-            <input
-              type="number"
-              className={styles.input}
-              min={1}
-              max={100}
-              value={ivPassThreshold}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                if (val >= 1 && val <= 100) setIvPassThreshold(val);
-              }}
-            />
-          </SettingsRow>
-          <SettingsRow label="IV Caution Threshold" hint="IV rank above this (but below Pass) is CAUTION." defaultValue="55">
-            <input
-              type="number"
-              className={styles.input}
-              min={1}
-              max={100}
-              value={ivCautionThreshold}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                if (val >= 1 && val <= 100) setIvCautionThreshold(val);
-              }}
-            />
-          </SettingsRow>
-
-          <div className={styles.divider} />
-          <Text size={12} tone="secondary">Alert types</Text>
-          {(Object.keys(ALERT_TYPE_LABELS) as AlertType[]).map((type) => (
-            <SettingsRow
-              key={type}
-              label={ALERT_TYPE_LABELS[type]}
-              defaultValue={DEFAULT_CONFIG.enabledTypes.includes(type) ? 'On' : 'Off'}
-            >
-              <Toggle
-                on={config.enabledTypes.includes(type)}
-                onChange={(on) => toggleType(type, on)}
-              />
-            </SettingsRow>
-          ))}
-        </div>
-      </section>
+        {/* ── Right: Upcoming Events ── */}
+        <aside className={styles.colRight}>
+          <section className={styles.section}>
+            <div className={styles.sectionHead}>
+              <Text size={11} tone="secondary" weight={600}>Upcoming Events</Text>
+              <Text size={11} tone="dim">Portfolio + watchlist · ≤ 30d · beyond 30d shown in{' '}
+                <Link href="/calendar" className={styles.link}>Calendar</Link>
+              </Text>
+            </div>
+            {upcomingEvents.length === 0 ? (
+              <div className={styles.empty}>
+                <Text size={13} tone="secondary">
+                  {candidates.length === 0
+                    ? 'Run a scan to see upcoming events.'
+                    : 'No events within 30 days for your portfolio + watchlist.'}
+                </Text>
+              </div>
+            ) : (
+              <div className={styles.eventList}>
+                {upcomingEvents.map((c) => (
+                  <div key={c.symbol} className={styles.eventRow}>
+                    <Data size={12} weight={500}>{c.symbol}</Data>
+                    <Text size={12}>{c.nextEventLabel ?? 'Earnings'}</Text>
+                    <Data
+                      size={12}
+                      tone={
+                        (c.nextEventDays ?? 999) <= 3 ? 'reject'
+                        : (c.nextEventDays ?? 999) <= 14 ? 'caution'
+                        : undefined
+                      }
+                    >
+                      {c.nextEventDays}d
+                    </Data>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }
