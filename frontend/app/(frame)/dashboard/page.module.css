@@ -58,11 +58,18 @@
   min-width: 96px;
 }
 
-/* ---------- bento row ---------- */
+/* ---------- bento rows ---------- */
 
-.bento {
+.bentoTop {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1fr;
+  grid-template-columns: 1.3fr 1fr;
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.bentoMid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-4);
   align-items: stretch;
 }

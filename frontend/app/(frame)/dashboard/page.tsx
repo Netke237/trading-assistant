@@ -133,8 +133,8 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Bento row: Watchlist preview | Portfolio | Alerts */}
-      <div className={styles.bento}>
+      {/* Row 1: Watchlist + Portfolio */}
+      <div className={styles.bentoTop}>
         <SectionCard
           title="Watchlist (Top 5)"
           count={watchlist.length}
@@ -197,6 +197,13 @@ export default function DashboardPage() {
             ))}
           </div>
         </SectionCard>
+      </div>
+
+      {/* Row 2: Risk + Alerts */}
+      <div className={styles.bentoMid}>
+        <SectionCard title="Risk">
+          <RiskPanel />
+        </SectionCard>
 
         <SectionCard
           title="Alerts"
@@ -216,10 +223,6 @@ export default function DashboardPage() {
               />
             ))}
           </div>
-        </SectionCard>
-
-        <SectionCard title="Risk">
-          <RiskPanel />
         </SectionCard>
       </div>
 
