@@ -216,7 +216,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     earnings_buffer_days: 1, fomc_buffer_days: 1, div_buffer_days: 1,
     iv_rank_pass_max: null, iv_rank_lookback: 30, hv_lookback: 10,
     max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
-    min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 14, max_dte: 90,
+    min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 1, max_dte: 7,
   },
   Swing: {
     weight_trend: 30, weight_pullback: 20, weight_trigger: 25, weight_event: 15, weight_vol: 10,
@@ -228,7 +228,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     earnings_buffer_days: 7, fomc_buffer_days: 3, div_buffer_days: 3,
     iv_rank_pass_max: 34, iv_rank_lookback: 252, hv_lookback: 20,
     max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
-    min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 14, max_dte: 90,
+    min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 14, max_dte: 45,
   },
   Position: {
     weight_trend: 30, weight_pullback: 20, weight_trigger: 20, weight_event: 20, weight_vol: 10,
@@ -240,7 +240,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     earnings_buffer_days: 14, fomc_buffer_days: 5, div_buffer_days: 5,
     iv_rank_pass_max: 44, iv_rank_lookback: 252, hv_lookback: 60,
     max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
-    min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 14, max_dte: 90,
+    min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 30, max_dte: 90,
   },
   Custom: {
     weight_trend: 30, weight_pullback: 20, weight_trigger: 25, weight_event: 15, weight_vol: 10,
@@ -578,7 +578,12 @@ export default function Step2Page() {
   const handleHzChange = (h: HorizonKey) => {
     setHz(h);
     syncToStore(dir, h, minDays, maxDays);
-    useScanStore.getState().setScanOverrides({});
+    const hd = PARAM_DEFAULTS_PER_HORIZON[h];
+    useScanStore.getState().setScanOverrides({
+      ma_type: hd.ma_type  as string,
+      fast_ema: hd.fast_ema as number,
+      slow_ema: hd.slow_ema as number,
+    });
   };
   const handleMinChange = (v: number) => {
     setMinDays(v);

@@ -21,7 +21,7 @@ def _headers() -> dict:
 # ── Original synchronous functions (kept for backwards compat) ────────────────
 
 
-def fetch_candles(symbol: str, bars: int = 120) -> list[dict]:
+def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
     """
     Returns up to `bars` daily OHLCV bars for `symbol`, newest last.
     Each dict: {time: str (YYYY-MM-DD), open, high, low, close: float, volume: int}
@@ -29,7 +29,7 @@ def fetch_candles(symbol: str, bars: int = 120) -> list[dict]:
     """
     try:
         end = date.today()
-        start = end - timedelta(days=300)
+        start = end - timedelta(days=365)
         resp = httpx.get(
             f"{TRADIER_BASE_URL}/v1/markets/history",
             headers=_headers(),
@@ -516,12 +516,12 @@ def _dividend_date_yf(symbol: str) -> Optional[date]:
 
 
 async def fetch_candles_async(
-    client: httpx.AsyncClient, symbol: str, bars: int = 120
+    client: httpx.AsyncClient, symbol: str, bars: int = 252
 ) -> list[dict]:
     """Async variant — uses the provided AsyncClient for connection reuse."""
     try:
         end = date.today()
-        start = end - timedelta(days=300)
+        start = end - timedelta(days=365)
         resp = await client.get(
             f"{TRADIER_BASE_URL}/v1/markets/history",
             headers=_headers(),

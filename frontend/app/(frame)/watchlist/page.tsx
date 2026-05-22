@@ -90,13 +90,11 @@ export default function WatchlistPage() {
     [watchedSymbols],
   );
 
-  const displayRows = useMemo<WatchlistRow[]>(
-    () =>
-      offline
-        ? offlineRows
-        : sorted.filter((r) => watchedSet.has(r.symbol.toUpperCase())),
-    [offline, offlineRows, sorted, watchedSet],
-  );
+  const displayRows = useMemo<WatchlistRow[]>(() => {
+    if (offline) return offlineRows;
+    const filtered = sorted.filter((r) => watchedSet.has(r.symbol.toUpperCase()));
+    return filtered.length > 0 ? filtered : offlineRows;
+  }, [offline, offlineRows, sorted, watchedSet]);
 
   const watchedIds = useWatchedContractsStore((s) => s.ids);
   const watchedContracts = useMemo<OptionContract[]>(
