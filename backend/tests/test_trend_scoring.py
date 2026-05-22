@@ -69,6 +69,7 @@ def test_additive_downtrend_bullish_scores_low():
         overrides={"trend_method": "additive"},
     )
     trend = card.rules[0]
+    assert trend.name == "trend"
     assert trend.detail["method"] == "additive"
     assert trend.score <= 40, f"Expected score <= 40, got {trend.score}"
 
@@ -126,6 +127,7 @@ def test_additive_custom_weight_split_stays_in_range():
         },
     )
     trend = card.rules[0]
+    assert trend.name == "trend"
     assert 0 <= trend.score <= 100, f"Score out of range: {trend.score}"
 
 
@@ -142,6 +144,7 @@ def test_crossover_fast_above_slow_rising_gives_pass():
         overrides={"trend_method": "crossover"},
     )
     trend = card.rules[0]
+    assert trend.name == "trend"
     assert trend.detail["method"] == "crossover"
     assert trend.status == "PASS", f"Expected PASS, got {trend.status}"
     assert trend.score == 90, f"Expected score 90, got {trend.score}"
@@ -155,14 +158,15 @@ def test_crossover_fast_below_slow_gives_reject():
         overrides={"trend_method": "crossover"},
     )
     trend = card.rules[0]
+    assert trend.name == "trend"
     assert trend.detail["method"] == "crossover"
     assert trend.status == "REJECT", f"Expected REJECT, got {trend.status}"
     assert trend.score == 10, f"Expected score 10, got {trend.score}"
 
 
 def test_crossover_produces_discrete_scores():
-    """Crossover scores should be one of the discrete values: 0, 10, 20, 60, or 90."""
-    allowed = {0, 10, 20, 60, 90}
+    """Crossover scores should be one of the discrete values: 10, 20, 60, or 90."""
+    allowed = {10, 20, 60, 90}
     for trend_dir in ("up", "down", "flat"):
         bars = _make_bars(n=260, trend=trend_dir)
         for direction in ("Bullish", "Bearish"):
@@ -171,6 +175,7 @@ def test_crossover_produces_discrete_scores():
                 overrides={"trend_method": "crossover"},
             )
             trend = card.rules[0]
+            assert trend.name == "trend"
             assert trend.score in allowed, (
                 f"Crossover produced non-discrete score {trend.score} "
                 f"(trend={trend_dir}, direction={direction})"
@@ -197,6 +202,7 @@ def test_rs_outperforms_benchmark_gives_pass():
         benchmark_candles=bench_bars,
     )
     trend = card.rules[0]
+    assert trend.name == "trend"
     assert trend.detail["method"] == "relative_strength"
     assert trend.status == "PASS", f"Expected PASS, got {trend.status} (rs={trend.detail.get('rs')})"
     assert trend.score == 90, f"Expected score 90, got {trend.score}"
@@ -217,9 +223,11 @@ def test_rs_matches_benchmark_gives_caution():
         benchmark_candles=bench_bars,
     )
     trend = card.rules[0]
+    assert trend.name == "trend"
     assert trend.detail["method"] == "relative_strength"
     # RS = 0.0, which is between rs_caution_threshold (-1.0) and rs_pass_threshold (2.0)
     assert trend.status == "CAUTION", f"Expected CAUTION, got {trend.status} (rs={trend.detail.get('rs')})"
+    assert trend.score == 60
 
 
 def test_rs_no_benchmark_data_gives_caution_fallback():
@@ -231,6 +239,7 @@ def test_rs_no_benchmark_data_gives_caution_fallback():
         benchmark_candles=None,
     )
     trend = card.rules[0]
+    assert trend.name == "trend"
     assert trend.detail["method"] == "relative_strength"
     assert trend.detail.get("reason") == "no_benchmark_data", (
         f"Expected reason 'no_benchmark_data', got {trend.detail.get('reason')}"
@@ -255,6 +264,7 @@ def test_rs_bearish_direction_inverts():
         benchmark_candles=bench_bars,
     )
     trend = card.rules[0]
+    assert trend.name == "trend"
     assert trend.detail["method"] == "relative_strength"
     assert trend.status == "PASS", f"Expected PASS for bearish underperformer, got {trend.status}"
     assert trend.score == 90, f"Expected score 90, got {trend.score}"
@@ -297,3 +307,15 @@ def test_additive_scores_distribute_across_range():
     assert up_score > down_score, (
         f"Uptrend score ({up_score}) should exceed downtrend score ({down_score})"
     )
+
+
+def test_additive_insufficient_bars_returns_reject():
+    bars = _make_bars(n=10)  # fewer than ma_period=20 for Swing
+    card = score_stock(
+        "TEST", "Bullish", "Swing", bars,
+        overrides={"trend_method": "additive"},
+    )
+    trend = card.rules[0]
+    assert trend.name == "trend"
+    assert trend.score == 0
+    assert trend.detail.get("reason") == "insufficient_data"
