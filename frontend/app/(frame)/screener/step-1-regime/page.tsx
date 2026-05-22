@@ -51,6 +51,7 @@ function hmmStatus(state: HmmState): 'PASS' | 'CAUTION' | 'REJECT' {
 
 export default function Step3Page() {
   const setRegime = useScanStore((s) => s.setRegime);
+  const setCombinedRegime = useScanStore((s) => s.setCombinedRegime);
   const markov = useSettingsStore((s) => s.markov);
   const [regime, setRegimeData]   = useState<MarketRegime | null>(null);
   const [sectors, setSectors]     = useState<SectorTile[]>([]);
@@ -77,9 +78,15 @@ export default function Step3Page() {
   const spx = lastClose(spxCandles);
   const ndx = lastClose(ndxCandles);
 
-  const hmmResult = computeHmmState(spxCandles, markov);
-  const hmmSt = hmmStatus(hmmResult.state);
-  const combinedStatus = regime ? worstStatus(regime.overall, hmmSt) : 'PENDING';
+  const hmmResult    = computeHmmState(spxCandles, markov);
+  const hmmNdxResult = computeHmmState(ndxCandles, markov);
+  const hmmSt        = hmmStatus(hmmResult.state);
+  const hmmNdxSt     = hmmStatus(hmmNdxResult.state);
+  const combinedStatus = regime ? worstStatus(regime.overall, hmmSt, hmmNdxSt) : 'PENDING';
+
+  useEffect(() => {
+    setCombinedRegime(combinedStatus);
+  }, [combinedStatus, setCombinedRegime]);
 
   const sectorsUp   = sectors.filter((s) => s.changePct >   0.05).length;
   const sectorsDown = sectors.filter((s) => s.changePct <  -0.05).length;
@@ -179,7 +186,7 @@ export default function Step3Page() {
       {/* HMM Regime */}
       <div className={pageStyles.sectionHeader}>
         <Text size={13} weight={600}>HMM Regime</Text>
-        <Text size={12} tone="secondary">Hidden Markov Model state (SPX candles)</Text>
+        <Text size={12} tone="secondary">Hidden Markov Model state computed from SPX &amp; NDX candles</Text>
       </div>
       <div className={pageStyles.grid}>
         <div className={pageStyles.metricCard}>
@@ -187,7 +194,34 @@ export default function Step3Page() {
           <div className={pageStyles.metricValueRow}>
             <Data size={18} weight={500} tone={toneFor(hmmSt)}>{hmmResult.state}</Data>
           </div>
+          <Text size={11} tone="secondary">
+            {hmmResult.state === 'Bull'   && 'Smoothed return positive — momentum supports longs.'}
+            {hmmResult.state === 'Bear'   && 'Smoothed return negative — momentum favours caution.'}
+            {hmmResult.state === 'Choppy' && 'Return near zero — unclear directional bias.'}
+          </Text>
           <StatusBadge status={hmmSt} />
+        </div>
+        <div className={pageStyles.metricCard}>
+          <Text size={12} tone="secondary">HMM State (NDX)</Text>
+          <div className={pageStyles.metricValueRow}>
+            <Data size={18} weight={500} tone={toneFor(hmmNdxSt)}>{hmmNdxResult.state}</Data>
+          </div>
+          <Text size={11} tone="secondary">
+            {hmmNdxResult.state === 'Bull'   && 'Smoothed return positive — momentum supports longs.'}
+            {hmmNdxResult.state === 'Bear'   && 'Smoothed return negative — momentum favours caution.'}
+            {hmmNdxResult.state === 'Choppy' && 'Return near zero — unclear directional bias.'}
+          </Text>
+          <StatusBadge status={hmmNdxSt} />
+        </div>
+        <div className={pageStyles.metricCard}>
+          <Text size={12} tone="secondary">Overall Market Regime</Text>
+          <div className={pageStyles.metricValueRow}>
+            <Data size={18} weight={500} tone={toneFor(combinedStatus)}>{combinedStatus}</Data>
+          </div>
+          <Text size={11} tone="secondary">
+            Worst of EMA/VIX regime + SPX HMM + NDX HMM
+          </Text>
+          <StatusBadge status={combinedStatus} />
         </div>
       </div>
 

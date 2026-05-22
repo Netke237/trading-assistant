@@ -33,6 +33,7 @@ interface ScanStoreState {
   scanAt:          string | null;
   context:         ScanContext | null;
   regime:          Status;
+  combinedRegime:  Status;
   scanResult:      ScanResult | null;
   /** Previous scan result for delta calculation (rankDelta / scoreDelta). */
   previousRun:     ScanResult | null;
@@ -43,6 +44,7 @@ interface ScanStoreState {
   setScanState:    (s: ScanState, at?: string) => void;
   setContext:      (c: ScanContext | null) => void;
   setRegime:       (r: Status) => void;
+  setCombinedRegime: (r: Status) => void;
   setScanResult:   (r: ScanResult | null) => void;
   setPreviousRun:  (r: ScanResult | null) => void;
   setSelectedSymbol: (s: string) => void;
@@ -58,6 +60,7 @@ export const useScanStore = create<ScanStoreState>()(
       scanAt:          null,
       context:         null,
       regime:          'PENDING',
+      combinedRegime:  'PENDING',
       scanResult:      null,
       previousRun:     null,
       selectedSymbol:  null,
@@ -67,6 +70,7 @@ export const useScanStore = create<ScanStoreState>()(
       setScanState:    (s, at) => set({ scanState: s, scanAt: at ?? null }),
       setContext:      (c) => set({ context: c }),
       setRegime:       (r) => set({ regime: r }),
+      setCombinedRegime: (r) => set({ combinedRegime: r }),
       setScanResult:   (r) => set((state) => ({
         scanResult: r,
         previousRun: r !== null ? state.scanResult : state.previousRun,
