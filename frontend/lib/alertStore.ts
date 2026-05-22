@@ -22,7 +22,7 @@ interface AlertStoreState {
 
 export const DEFAULT_CONFIG: AlertConfig = {
   dedupWindowMinutes: 15,
-  keepAlertsDays: 10,
+  keepAlertsDays: 30,
   enabledTypes: [
     'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP',
     'EVENT_RISK', 'REGIME_CHANGE', 'SCAN_COMPLETE', 'SCAN_FAILED',
