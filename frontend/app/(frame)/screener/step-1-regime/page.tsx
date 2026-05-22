@@ -21,7 +21,10 @@ import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { useScanStore } from '@/lib/scanStore';
 import { NewsCard } from '@/components/molecules/NewsCard';
 import { api } from '@/lib/api';
-import type { MarketRegime, SectorTile, NewsItem } from '@/types/domain';
+import { useSettingsStore } from '@/lib/settingsStore';
+import { computeHmmState } from '@/lib/hmmMock';
+import { worstStatus } from '@/lib/status';
+import type { MarketRegime, SectorTile, NewsItem, HmmState } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
@@ -40,8 +43,15 @@ function lastClose(candles: Candle[]): { close: number; changePct: number } {
   return { close: last.close, changePct: ((last.close - prev.close) / prev.close) * 100 };
 }
 
+function hmmStatus(state: HmmState): 'PASS' | 'CAUTION' | 'REJECT' {
+  if (state === 'Bull') return 'PASS';
+  if (state === 'Bear') return 'REJECT';
+  return 'CAUTION';
+}
+
 export default function Step3Page() {
   const setRegime = useScanStore((s) => s.setRegime);
+  const markov = useSettingsStore((s) => s.markov);
   const [regime, setRegimeData]   = useState<MarketRegime | null>(null);
   const [sectors, setSectors]     = useState<SectorTile[]>([]);
   const [spxCandles, setSpxCandles] = useState<Candle[]>([]);
@@ -67,6 +77,10 @@ export default function Step3Page() {
   const spx = lastClose(spxCandles);
   const ndx = lastClose(ndxCandles);
 
+  const hmmResult = computeHmmState(spxCandles, markov);
+  const hmmSt = hmmStatus(hmmResult.state);
+  const combinedStatus = regime ? worstStatus(regime.overall, hmmSt) : 'PENDING';
+
   const sectorsUp   = sectors.filter((s) => s.changePct >   0.05).length;
   const sectorsDown = sectors.filter((s) => s.changePct <  -0.05).length;
 
@@ -85,9 +99,9 @@ export default function Step3Page() {
       )}
 
       {/* 1. Overall banner */}
-      <section className={`${pageStyles.banner} ${pageStyles[`banner_${regime?.overall ?? 'PENDING'}`]}`}>
+      <section className={`${pageStyles.banner} ${pageStyles[`banner_${combinedStatus}`]}`}>
         <div className={pageStyles.bannerLeft}>
-          <StatusBadge status={regime?.overall ?? 'PENDING'} label={`REGIME ${regime?.overall ?? '…'}`} />
+          <StatusBadge status={combinedStatus} label={`REGIME ${combinedStatus}`} />
           <Text size={14} weight={500}>{regime?.headline ?? ''}</Text>
         </div>
       </section>
@@ -145,8 +159,8 @@ export default function Step3Page() {
 
       {/* 4. Metric grid */}
       <div className={pageStyles.sectionHeader}>
-        <Text size={13} weight={600}>Regime inputs</Text>
-        <Text size={12} tone="secondary">Each gate contributes to the overall call</Text>
+        <Text size={13} weight={600}>EMA / VIX</Text>
+        <Text size={12} tone="secondary">SPX &amp; NDX vs 200-day EMA, plus VIX level</Text>
       </div>
       <div className={pageStyles.grid}>
         {(regime?.metrics ?? []).map((m) => (
@@ -160,6 +174,21 @@ export default function Step3Page() {
             <StatusBadge status={m.status} />
           </div>
         ))}
+      </div>
+
+      {/* HMM Regime */}
+      <div className={pageStyles.sectionHeader}>
+        <Text size={13} weight={600}>HMM Regime</Text>
+        <Text size={12} tone="secondary">Hidden Markov Model state (SPX candles)</Text>
+      </div>
+      <div className={pageStyles.grid}>
+        <div className={pageStyles.metricCard}>
+          <Text size={12} tone="secondary">HMM State (SPX)</Text>
+          <div className={pageStyles.metricValueRow}>
+            <Data size={18} weight={500} tone={toneFor(hmmSt)}>{hmmResult.state}</Data>
+          </div>
+          <StatusBadge status={hmmSt} />
+        </div>
       </div>
 
       {/* 5. Sector heatmap */}
