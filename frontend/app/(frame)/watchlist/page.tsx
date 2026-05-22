@@ -49,12 +49,16 @@ export default function WatchlistPage() {
 
   useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
+  }, []);
 
+  useEffect(() => {
     const symbols = [...new Set(watchedIds.map((id) => id.split('|')[0]).filter(Boolean))];
-    if (symbols.length === 0) return;
+    if (symbols.length === 0) { setContracts([]); return; }
+    let cancelled = false;
     Promise.all(symbols.map((s) => api.getContracts(s)))
-      .then((results) => setContracts(results.flat()))
-      .catch(() => setOffline(true));
+      .then((results) => { if (!cancelled) setContracts(results.flat()); })
+      .catch(() => { if (!cancelled) setOffline(true); });
+    return () => { cancelled = true; };
   }, [watchedIds]);
 
   const sorted = useMemo<WatchlistRow[]>(() => {
