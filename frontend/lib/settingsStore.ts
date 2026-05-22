@@ -10,6 +10,23 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 export const SETTINGS_STORAGE_KEY = 'bamendjou-settings';
 
+export type MarkovPreset = 'default' | 'conservative' | 'aggressive';
+
+export interface MarkovConfig {
+  preset:    MarkovPreset;
+  lookback:  number;   // bars (number of candles)
+  threshold: number;   // avg return threshold (e.g. 0.003 = 0.3%)
+  smoothing: number;   // EMA weight 0.0–1.0
+}
+
+export const MARKOV_PRESETS: Record<MarkovPreset, Omit<MarkovConfig, 'preset'>> = {
+  default:      { lookback: 60,  threshold: 0.003, smoothing: 0.7 },
+  conservative: { lookback: 120, threshold: 0.005, smoothing: 0.8 },
+  aggressive:   { lookback: 20,  threshold: 0.001, smoothing: 0.5 },
+};
+
+export const DEFAULT_MARKOV: MarkovConfig = { preset: 'default', ...MARKOV_PRESETS.default };
+
 const DEFAULT_BROKER: BrokerConfig = {
   broker:       'Interactive Brokers',
   account:      '',
@@ -29,10 +46,12 @@ interface SettingsState {
   alertDeduplicationHours: number;
   ivPassThreshold:         number;
   ivCautionThreshold:      number;
+  markov:                  MarkovConfig;
   setBroker:                    (b: BrokerConfig) => void;
   setAlertDeduplicationHours:   (h: number) => void;
   setIvPassThreshold:           (n: number) => void;
   setIvCautionThreshold:        (n: number) => void;
+  setMarkov:                    (cfg: MarkovConfig) => void;
   resetToDefaults:              () => void;
 }
 
@@ -43,36 +62,35 @@ export const useSettingsStore = create<SettingsState>()(
       alertDeduplicationHours: 24,
       ivPassThreshold:         34,
       ivCautionThreshold:      55,
+      markov:                  { ...DEFAULT_MARKOV },
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
       setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
       setIvCautionThreshold:        (n) => set({ ivCautionThreshold: n }),
+      setMarkov:                    (cfg) => set({ markov: cfg }),
       resetToDefaults: () => set({
         broker:                  { ...DEFAULT_BROKER },
         alertDeduplicationHours: 24,
         ivPassThreshold:         34,
         ivCautionThreshold:      55,
+        markov:                  { ...DEFAULT_MARKOV },
       }),
     }),
     {
       name: SETTINGS_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      version: 6,
+      version: 7,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
         ivPassThreshold:         state.ivPassThreshold,
         ivCautionThreshold:      state.ivCautionThreshold,
+        markov:                  state.markov,
       }),
       migrate: (persistedState, version) => {
         const prev = (persistedState ?? {}) as Partial<SettingsState>;
-        if (version < 6) {
-          return {
-            broker:                  prev.broker ?? { ...DEFAULT_BROKER },
-            alertDeduplicationHours: prev.alertDeduplicationHours ?? 24,
-            ivPassThreshold:         34,
-            ivCautionThreshold:      55,
-          } as unknown as SettingsState;
+        if (version < 7) {
+          return { ...prev, markov: DEFAULT_MARKOV } as unknown as SettingsState;
         }
         return prev as unknown as SettingsState;
       },

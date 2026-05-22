@@ -195,10 +195,13 @@ export interface RegimeMetric {
   trend?: 'up' | 'flat' | 'down';
 }
 
+export type HmmState = 'Bull' | 'Bear' | 'Choppy';
+
 export interface MarketRegime {
   overall:  Status;
   headline: string;
   metrics:  RegimeMetric[];
+  hmm?: { state: HmmState; confidence: number };
 }
 
 // --- Sector heatmap ---
