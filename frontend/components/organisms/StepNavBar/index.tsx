@@ -22,7 +22,7 @@ export function StepNavBar() {
   const router   = useRouter();
   const pathname = usePathname();
   const current  = currentStepFromPath(pathname);
-  const regime   = useScanStore((s) => s.regime);
+  const regime   = useScanStore((s) => s.combinedRegime);
 
   const [showConfirm, setShowConfirm] = useState(false);
 
