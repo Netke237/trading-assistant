@@ -6,8 +6,11 @@ import { Toast } from '@/components/molecules/Toast';
 import styles from './ToastContainer.module.css';
 
 export function ToastContainer() {
-  const visibleToasts = useAlertStore((s) => s.toasts.filter((t) => !t.dismissed));
-  const recentToasts = useMemo(() => visibleToasts.slice(-3), [visibleToasts]);
+  const toasts = useAlertStore((s) => s.toasts);
+  const recentToasts = useMemo(
+    () => toasts.filter((t) => !t.dismissed).slice(-3),
+    [toasts],
+  );
   const dismissToast = useAlertStore((s) => s.dismissToast);
 
   if (recentToasts.length === 0) return null;

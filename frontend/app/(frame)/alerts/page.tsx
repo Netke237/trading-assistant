@@ -105,11 +105,11 @@ export default function AlertsPage() {
   const { toasts, config, setConfig, clearAll, clearOldAlerts, acknowledgeAlert } = useAlertStore();
   const { ivPassThreshold, ivCautionThreshold, setIvPassThreshold, setIvCautionThreshold } = useSettingsStore();
 
-  const candidates = useScanStore((s) => s.scanResult?.candidates ?? []);
-  const portfolioSymbols = usePortfolioStore((s) => s.positions.map((p) => p.symbol));
+  const candidates = useScanStore((s) => s.scanResult?.candidates) ?? [];
+  const portfolioPositions = usePortfolioStore((s) => s.positions);
   const watchlistSymbols = useWatchlistStore((s) => s.added);
 
-  const mySymbols = new Set([...portfolioSymbols, ...watchlistSymbols]);
+  const mySymbols = new Set([...portfolioPositions.map((p) => p.symbol), ...watchlistSymbols]);
   const upcomingEvents = candidates
     .filter((c) => mySymbols.has(c.symbol) && c.nextEventDays != null && (c.nextEventDays ?? 999) <= 30)
     .sort((a, b) => (a.nextEventDays ?? 999) - (b.nextEventDays ?? 999));

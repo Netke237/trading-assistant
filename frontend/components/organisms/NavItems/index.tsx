@@ -25,7 +25,7 @@ const ITEMS: NavItemDef[] = [
 
 export function NavItems() {
   const pathname = usePathname() ?? '';
-  const unacknowledgedCount = useAlertStore((s) => s.unacknowledgedCount());
+  const unacknowledgedCount = useAlertStore((s) => s.toasts.filter((t) => !t.acknowledged).length);
 
   return (
     <nav className={styles.list} aria-label="Primary">
