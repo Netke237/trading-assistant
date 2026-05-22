@@ -199,12 +199,8 @@ export default function DashboardPage() {
         </SectionCard>
       </div>
 
-      {/* Row 2: Risk + Alerts */}
+      {/* Row 2: Alerts + Risk */}
       <div className={styles.bentoMid}>
-        <SectionCard title="Risk">
-          <RiskPanel />
-        </SectionCard>
-
         <SectionCard
           title="Alerts"
           count={toasts.length}
@@ -223,6 +219,10 @@ export default function DashboardPage() {
               />
             ))}
           </div>
+        </SectionCard>
+
+        <SectionCard title="Risk">
+          <RiskPanel />
         </SectionCard>
       </div>
 

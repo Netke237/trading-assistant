@@ -30,6 +30,7 @@ function shortDate(iso: string): string {
 
 export default function DashboardContextRail() {
   const { scanState, context, scanAt } = useScanStore();
+  const combinedRegime = useScanStore((s) => s.combinedRegime);
   const positions = usePortfolioStore((s) => s.positions);
   const [alerts, setAlerts]   = useState<AlertItem[]>([]);
   const [events, setEvents]   = useState<UpcomingEvent[]>([]);
@@ -57,6 +58,18 @@ export default function DashboardContextRail() {
             <Text size={12} tone="secondary">{formatTime(scanAt)}</Text>
           </div>
           <Text size={12} tone="secondary">{contextStr}</Text>
+        </div>
+      </RailSection>
+
+      <RailSection title="Market Regime">
+        <div className={styles.regimeRow}>
+          <StatusDot tone={toneFor(combinedRegime)} size="sm" />
+          <Text size={12} tone="secondary">
+            {combinedRegime === 'PASS'    && 'Clear — EMA/VIX + HMM aligned.'}
+            {combinedRegime === 'CAUTION' && 'Caution — mixed signals.'}
+            {combinedRegime === 'REJECT'  && 'Reject — adverse regime.'}
+            {combinedRegime === 'PENDING' && 'Run Step 1 to assess regime.'}
+          </Text>
         </div>
       </RailSection>
 
@@ -114,4 +127,11 @@ function alertKindToStatus(kind: string): 'PASS' | 'CAUTION' | 'REJECT' {
   if (kind === 'Critical') return 'REJECT';
   if (kind === 'Action')   return 'CAUTION';
   return 'PASS';
+}
+
+function toneFor(status: string): 'PASS' | 'CAUTION' | 'REJECT' | 'PENDING' {
+  if (status === 'CAUTION') return 'CAUTION';
+  if (status === 'REJECT')  return 'REJECT';
+  if (status === 'PASS')    return 'PASS';
+  return 'PENDING';
 }

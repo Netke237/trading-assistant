@@ -23,12 +23,18 @@
 }
 
 .eventStack {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  row-gap: 8px;
 }
 
 .eventRow {
+  display: grid;
+  grid-template-columns: 8px 52px 44px 1fr;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.regimeRow {
   display: flex;
   align-items: center;
   gap: var(--space-2);

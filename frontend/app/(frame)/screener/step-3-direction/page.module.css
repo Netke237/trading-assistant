@@ -95,6 +95,29 @@
   margin-bottom: var(--space-3);
 }
 
+.logStats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.logStat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.badgePass {
+  background: color-mix(in srgb, var(--pass) 20%, var(--bg-surface));
+  color: var(--pass);
+}
+
+.badgeReject {
+  background: color-mix(in srgb, var(--reject) 20%, var(--bg-surface));
+  color: var(--reject);
+}
+
 .logRow {
   display: flex;
   gap: var(--space-2);
