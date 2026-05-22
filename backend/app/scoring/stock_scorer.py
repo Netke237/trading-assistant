@@ -90,85 +90,266 @@ def _slope(series: list[float], lookback: int = 5) -> float:
     return num / den if den else 0.0
 
 
+def _adx(bars: list[dict] | None, period: int = 14) -> float:
+    """Average Directional Index using Wilder smoothing. Returns 0.0 if insufficient data."""
+    if bars is None or len(bars) < period + 1:
+        return 0.0
+
+    tr_list: list[float] = []
+    plus_dm: list[float] = []
+    minus_dm: list[float] = []
+
+    for i in range(1, len(bars)):
+        h, l = bars[i]["high"], bars[i]["low"]
+        pc = bars[i - 1]["close"]
+        ph, pl = bars[i - 1]["high"], bars[i - 1]["low"]
+        tr_list.append(max(h - l, abs(h - pc), abs(l - pc)))
+        up_move = h - ph
+        down_move = pl - l
+        plus_dm.append(up_move if up_move > down_move and up_move > 0 else 0.0)
+        minus_dm.append(down_move if down_move > up_move and down_move > 0 else 0.0)
+
+    def _wilder(data: list[float], p: int) -> list[float]:
+        if len(data) < p:
+            return []
+        result = [sum(data[:p])]
+        for v in data[p:]:
+            result.append(result[-1] - result[-1] / p + v)
+        return result
+
+    atr_s = _wilder(tr_list, period)
+    pdm_s = _wilder(plus_dm, period)
+    mdm_s = _wilder(minus_dm, period)
+    n = min(len(atr_s), len(pdm_s), len(mdm_s))
+    if n == 0:
+        return 0.0
+
+    dx_vals: list[float] = []
+    for i in range(n):
+        atr_v = atr_s[i]
+        if atr_v == 0:
+            continue
+        di_plus = 100.0 * pdm_s[i] / atr_v
+        di_minus = 100.0 * mdm_s[i] / atr_v
+        di_sum = di_plus + di_minus
+        dx_vals.append(100.0 * abs(di_plus - di_minus) / di_sum if di_sum > 0 else 0.0)
+
+    adx_s = _wilder(dx_vals, period)
+    return adx_s[-1] if adx_s else 0.0
+
+
+def _roc(closes: list[float], period: int) -> float:
+    """Percent rate-of-change over last `period` bars. Returns 0.0 if insufficient data."""
+    if len(closes) <= period:
+        return 0.0
+    base = closes[-(period + 1)]
+    return (closes[-1] - base) / base * 100.0 if base != 0 else 0.0
+
+
 # ---------------------------------------------------------------------------
-# Rule 1: Trend
+# Rule 1: Trend — dispatcher + three methods
 # ---------------------------------------------------------------------------
 
-def _rule_trend(closes: list[float], cfg: dict, direction: Direction = "Bullish", *, ma_func=None) -> RuleResult:
+def _trend_crossover(
+    closes: list[float],
+    cfg: dict,
+    direction: Direction,
+    *,
+    ma_func=None,
+) -> RuleResult:
     if ma_func is None:
         ma_func = _ema
-    fast_p = cfg["trend"]["fast_ema"]
-    slow_p = cfg["trend"]["slow_ema"]
-    slow_required = cfg["trend"]["slow_slope_required"]
-    fast_required = cfg["trend"]["fast_slope_required"]
+    cc = cfg["trend"]["crossover"]
+    fast_p = cc["fast_ema"]
+    slow_p = cc["slow_ema"]
+    slow_required = cc["slow_slope_required"]
+    fast_required = cc["fast_slope_required"]
 
-    fast_ema = ma_func(closes, fast_p)
-    slow_ema = ma_func(closes, slow_p)
+    fast_ma = ma_func(closes, fast_p)
+    slow_ma = ma_func(closes, slow_p)
 
-    if not fast_ema or not slow_ema:
-        return RuleResult("trend", "REJECT", 0, {"reason": "insufficient_data"})
+    if not fast_ma or not slow_ma:
+        return RuleResult("trend", "REJECT", 0, {"reason": "insufficient_data", "method": "crossover"})
 
-    fast_val = fast_ema[-1]
-    slow_val = slow_ema[-1]
-    slow_slope = _slope(slow_ema)
-    fast_slope = _slope(fast_ema)
+    fast_val = fast_ma[-1]
+    slow_val = slow_ma[-1]
+    slow_slope = _slope(slow_ma)
+    fast_slope = _slope(fast_ma)
 
     if direction == "Bearish":
-        # Bearish: fast_ema must be BELOW slow_ema; slow must be declining for PASS
-        above = fast_val < slow_val   # inverted: fast below slow
-        slow_falling = slow_slope < 0
-        fast_falling = fast_slope < 0
-
+        above = fast_val < slow_val
+        slow_ok = slow_slope < 0
+        fast_ok = fast_slope < 0
         if not above:
             return RuleResult("trend", "REJECT", 10,
-                              {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2),
-                               "reason": "fast_above_slow_bearish"})
-
-        if slow_required and not slow_falling:
+                              {"fast_ma": round(fast_val, 2), "slow_ma": round(slow_val, 2),
+                               "reason": "fast_above_slow_bearish", "method": "crossover"})
+        if slow_required and not slow_ok:
             return RuleResult("trend", "REJECT", 20,
-                              {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2),
-                               "reason": "slow_ma_rising_bearish"})
-
-        if fast_required and not fast_falling:
+                              {"fast_ma": round(fast_val, 2), "slow_ma": round(slow_val, 2),
+                               "reason": "slow_ma_rising_bearish", "method": "crossover"})
+        if fast_required and not fast_ok:
             return RuleResult("trend", "REJECT", 20,
-                              {"reason": "fast_ma_rising_required_bearish"})
-
-        if not fast_falling:
-            # Fast flat but not required — CAUTION
+                              {"reason": "fast_ma_rising_required_bearish", "method": "crossover"})
+        if not fast_ok:
             return RuleResult("trend", "CAUTION", 60,
-                              {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2),
-                               "reason": "fast_ma_flat_bearish"})
-
+                              {"fast_ma": round(fast_val, 2), "slow_ma": round(slow_val, 2),
+                               "reason": "fast_ma_flat_bearish", "method": "crossover"})
         return RuleResult("trend", "PASS", 90,
-                          {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2)})
+                          {"fast_ma": round(fast_val, 2), "slow_ma": round(slow_val, 2), "method": "crossover"})
 
-    # --- Bullish (original logic) ---
+    # Bullish
     above = fast_val > slow_val
-    slow_rising = slow_slope > 0
-    fast_rising = fast_slope > 0
-
+    slow_ok = slow_slope > 0
+    fast_ok = fast_slope > 0
     if not above:
         return RuleResult("trend", "REJECT", 10,
-                          {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2),
-                           "reason": "fast_below_slow"})
-
-    if slow_required and not slow_rising:
+                          {"fast_ma": round(fast_val, 2), "slow_ma": round(slow_val, 2),
+                           "reason": "fast_below_slow", "method": "crossover"})
+    if slow_required and not slow_ok:
         return RuleResult("trend", "REJECT", 20,
-                          {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2),
-                           "reason": "slow_ma_declining"})
-
-    if fast_required and not fast_rising:
+                          {"fast_ma": round(fast_val, 2), "slow_ma": round(slow_val, 2),
+                           "reason": "slow_ma_declining", "method": "crossover"})
+    if fast_required and not fast_ok:
         return RuleResult("trend", "REJECT", 20,
-                          {"reason": "fast_ma_declining_required_on_horizon"})
-
-    if not fast_rising:
-        # Fast flat but not required — CAUTION
+                          {"reason": "fast_ma_declining_required", "method": "crossover"})
+    if not fast_ok:
         return RuleResult("trend", "CAUTION", 60,
-                          {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2),
-                           "reason": "fast_ma_flat"})
-
+                          {"fast_ma": round(fast_val, 2), "slow_ma": round(slow_val, 2),
+                           "reason": "fast_ma_flat", "method": "crossover"})
     return RuleResult("trend", "PASS", 90,
-                      {"fast_ema": round(fast_val, 2), "slow_ema": round(slow_val, 2)})
+                      {"fast_ma": round(fast_val, 2), "slow_ma": round(slow_val, 2), "method": "crossover"})
+
+
+def _trend_additive(
+    closes: list[float],
+    cfg: dict,
+    direction: Direction,
+    *,
+    bars: list[dict] | None = None,
+) -> RuleResult:
+    ac = cfg["trend"]["additive"]
+    ma_type = str(ac.get("ma_type", "SMA")).upper()
+    ma_func = _sma if ma_type == "SMA" else _ema
+    period = int(ac["ma_period"])
+    slope_lookback = int(ac["slope_lookback"])
+    price_max = int(ac["price_max"])
+    slope_max = int(ac["slope_max"])
+    adx_max = int(ac["adx_max"])
+    total_max = price_max + slope_max + adx_max
+
+    ma_series = ma_func(closes, period)
+    if not ma_series:
+        return RuleResult("trend", "REJECT", 0, {"reason": "insufficient_data", "method": "additive"})
+
+    current_close = closes[-1]
+    current_ma = ma_series[-1]
+
+    if direction == "Bullish":
+        price_pts = price_max if current_close > current_ma else 0
+    else:
+        price_pts = price_max if current_close < current_ma else 0
+
+    slope = _slope(ma_series, slope_lookback)
+    if direction == "Bullish":
+        slope_pts = slope_max if slope > 0 else 0
+    else:
+        slope_pts = slope_max if slope < 0 else 0
+
+    adx_period = int(ac["adx_period"])
+    adx_pass = float(ac["adx_pass"])
+    adx_caution_thresh = float(ac["adx_caution"])
+    adx_val = _adx(bars, adx_period) if bars is not None else 0.0
+
+    if adx_val >= adx_pass:
+        adx_pts = adx_max
+    elif adx_val >= adx_caution_thresh:
+        adx_pts = adx_max // 2
+    else:
+        adx_pts = 0
+
+    raw = price_pts + slope_pts + adx_pts
+    score = round(raw * 100 / total_max) if total_max > 0 else 0
+    score = max(0, min(100, score))
+
+    detail = {
+        "method": "additive",
+        "price_pts": price_pts,
+        "slope_pts": slope_pts,
+        "adx_pts": adx_pts,
+        "adx_val": round(adx_val, 1),
+        "price_max": price_max,
+        "slope_max": slope_max,
+        "adx_max": adx_max,
+        "current_close": round(current_close, 2),
+        "current_ma": round(current_ma, 2),
+    }
+
+    if score >= 70:
+        status: Status = "PASS"
+    elif score >= 40:
+        status = "CAUTION"
+    else:
+        status = "REJECT"
+    return RuleResult("trend", status, score, detail)
+
+
+def _trend_relative_strength(
+    closes: list[float],
+    cfg: dict,
+    direction: Direction,
+    *,
+    benchmark_closes: list[float] | None = None,
+) -> RuleResult:
+    rc = cfg["trend"]["relative_strength"]
+    period = int(rc["rs_period"])
+    pass_t = float(rc["rs_pass_threshold"])
+    caution_t = float(rc["rs_caution_threshold"])
+    benchmark = str(rc.get("benchmark", "NDX"))
+
+    if benchmark_closes is None or len(benchmark_closes) <= period:
+        return RuleResult(
+            "trend", "CAUTION", 50,
+            {"reason": "no_benchmark_data", "method": "relative_strength", "benchmark": benchmark},
+        )
+
+    stock_roc = _roc(closes, period)
+    bench_roc = _roc(benchmark_closes, period)
+    rs = stock_roc - bench_roc
+    if direction == "Bearish":
+        rs = -rs
+
+    detail = {
+        "method": "relative_strength",
+        "stock_roc": round(stock_roc, 2),
+        "bench_roc": round(bench_roc, 2),
+        "rs": round(rs, 2),
+        "benchmark": benchmark,
+        "period": period,
+    }
+
+    if rs > pass_t:
+        return RuleResult("trend", "PASS", 90, detail)
+    if rs >= caution_t:
+        return RuleResult("trend", "CAUTION", 60, detail)
+    return RuleResult("trend", "REJECT", 10, detail)
+
+
+def _rule_trend(
+    closes: list[float],
+    cfg: dict,
+    direction: Direction = "Bullish",
+    *,
+    ma_func=None,
+    bars: list[dict] | None = None,
+    benchmark_closes: list[float] | None = None,
+) -> RuleResult:
+    method = cfg["trend"].get("method", "additive")
+    if method == "additive":
+        return _trend_additive(closes, cfg, direction, bars=bars)
+    if method == "relative_strength":
+        return _trend_relative_strength(closes, cfg, direction, benchmark_closes=benchmark_closes)
+    return _trend_crossover(closes, cfg, direction, ma_func=ma_func)
 
 
 # ---------------------------------------------------------------------------
@@ -561,19 +742,21 @@ def score_stock(
     dividend_date: date | None = None,
     iv_rank: float | None = None,
     overrides: dict | None = None,
+    benchmark_candles: list[dict] | None = None,
 ) -> StockScoreCard:
     """
     Score a stock for the given direction and horizon.
 
     Args:
-        symbol:         Ticker symbol (e.g. "AAPL")
-        direction:      "Bullish" or "Bearish"
-        horizon:        "Intraday", "Swing", or "Position"
-        bars:           List of OHLCV dicts from fetch_candles()
-        earnings_date:  Next earnings date (None if unknown)
-        dividend_date:  Next ex-dividend date (None if unknown)
-        iv_rank:        Current IV rank 0–100 (None if unavailable)
-        overrides:      Optional dict of parameter overrides (see plan WI-2)
+        symbol:            Ticker symbol (e.g. "AAPL")
+        direction:         "Bullish" or "Bearish"
+        horizon:           "Intraday", "Swing", or "Position"
+        bars:              List of OHLCV dicts from fetch_candles()
+        earnings_date:     Next earnings date (None if unknown)
+        dividend_date:     Next ex-dividend date (None if unknown)
+        iv_rank:           Current IV rank 0–100 (None if unavailable)
+        overrides:         Optional dict of parameter overrides
+        benchmark_candles: Optional OHLCV dicts for RS benchmark (e.g. NDX)
 
     Returns:
         StockScoreCard with weighted score, status, and per-rule breakdown.
@@ -583,54 +766,77 @@ def score_stock(
 
     if ov:
         w = cfg["weights"]
+        cc = cfg["trend"]["crossover"]
+        ac = cfg["trend"]["additive"]
+        rc = cfg["trend"]["relative_strength"]
         for key, val in ov.items():
-            if key == "weight_trend":        w["trend"]     = float(val)
-            elif key == "weight_pullback":   w["pullback"]  = float(val)
-            elif key == "weight_trigger":    w["trigger"]   = float(val)
-            elif key == "weight_event":      w["event"]     = float(val)
-            elif key == "weight_vol":        w["vol"]       = float(val)
-            elif key == "fast_ema":          cfg["trend"]["fast_ema"]                  = int(val)
-            elif key == "slow_ema":          cfg["trend"]["slow_ema"]                  = int(val)
-            elif key == "rsi_period":        cfg["trigger"]["rsi_period"]              = int(val)
-            elif key == "rsi_floor":         cfg["trigger"]["rsi_floor"]               = float(val)
-            elif key == "macd_fast":         cfg["trigger"]["macd_fast"]               = int(val)
-            elif key == "macd_slow":         cfg["trigger"]["macd_slow"]               = int(val)
-            elif key == "macd_signal":       cfg["trigger"]["macd_signal"]             = int(val)
+            if   key == "weight_trend":            w["trend"]      = float(val)
+            elif key == "weight_pullback":          w["pullback"]   = float(val)
+            elif key == "weight_trigger":           w["trigger"]    = float(val)
+            elif key == "weight_event":             w["event"]      = float(val)
+            elif key == "weight_vol":               w["vol"]        = float(val)
+            # crossover params
+            elif key == "fast_ema":                cc["fast_ema"]   = int(val)
+            elif key == "slow_ema":                cc["slow_ema"]   = int(val)
+            # method selector
+            elif key == "trend_method":            cfg["trend"]["method"] = str(val)
+            # additive params
+            elif key == "additive_ma_period":      ac["ma_period"]       = int(val)
+            elif key == "additive_ma_type":        ac["ma_type"]         = str(val)
+            elif key == "additive_slope_lookback": ac["slope_lookback"]  = int(val)
+            elif key == "additive_adx_period":     ac["adx_period"]      = int(val)
+            elif key == "additive_adx_pass":       ac["adx_pass"]        = float(val)
+            elif key == "additive_adx_caution":    ac["adx_caution"]     = float(val)
+            elif key == "additive_price_max":      ac["price_max"]       = int(val)
+            elif key == "additive_slope_max":      ac["slope_max"]       = int(val)
+            elif key == "additive_adx_max":        ac["adx_max"]         = int(val)
+            # relative_strength params
+            elif key == "rs_period":               rc["rs_period"]            = int(val)
+            elif key == "rs_pass_threshold":       rc["rs_pass_threshold"]    = float(val)
+            elif key == "rs_caution_threshold":    rc["rs_caution_threshold"] = float(val)
+            elif key == "rs_benchmark":            rc["benchmark"]            = str(val)
+            # other scoring params
+            elif key == "rsi_period":              cfg["trigger"]["rsi_period"]              = int(val)
+            elif key == "rsi_floor":               cfg["trigger"]["rsi_floor"]               = float(val)
+            elif key == "macd_fast":               cfg["trigger"]["macd_fast"]               = int(val)
+            elif key == "macd_slow":               cfg["trigger"]["macd_slow"]               = int(val)
+            elif key == "macd_signal":             cfg["trigger"]["macd_signal"]             = int(val)
             elif key == "swing_high_lookback_bars": cfg["pullback"]["swing_high_lookback_bars"] = int(val)
-            elif key == "atr_caution_max":   cfg["pullback"]["atr_caution_max"]        = float(val)
-            elif key == "event_reject_days": cfg["event"]["reject_days"]               = int(val)
-            elif key == "event_caution_days": cfg["event"]["caution_days"]             = int(val)
-            elif key == "iv_rank_pass_max":  cfg["vol"]["iv_rank_pass_max"]            = float(val)
-            elif key == "volume_lookback_bars": cfg["trigger"]["volume_lookback_bars"] = int(val)
-            elif key == "volume_multiplier": cfg["trigger"]["volume_multiplier"]       = float(val)
+            elif key == "atr_caution_max":         cfg["pullback"]["atr_caution_max"]        = float(val)
+            elif key == "event_reject_days":       cfg["event"]["reject_days"]               = int(val)
+            elif key == "event_caution_days":      cfg["event"]["caution_days"]              = int(val)
+            elif key == "iv_rank_pass_max":        cfg["vol"]["iv_rank_pass_max"]            = float(val)
+            elif key == "volume_lookback_bars":    cfg["trigger"]["volume_lookback_bars"]    = int(val)
+            elif key == "volume_multiplier":       cfg["trigger"]["volume_multiplier"]       = float(val)
 
-    ma_type = str(ov.get("ma_type", "EMA")).upper()
+    ma_type = str(ov.get("ma_type", cfg["trend"]["crossover"].get("ma_type", "EMA"))).upper()
     ma_func = _sma if ma_type == "SMA" else _ema
 
     thresholds = _thresholds()
     closes = [b["close"] for b in bars]
     volumes = [b["volume"] for b in bars]
+    benchmark_closes = [b["close"] for b in benchmark_candles] if benchmark_candles else None
 
-    trend_result = _rule_trend(closes, cfg, direction, ma_func=ma_func)
-    pullback_result = _rule_pullback(bars, cfg, direction)
+    trend_result            = _rule_trend(closes, cfg, direction, ma_func=ma_func, bars=bars, benchmark_closes=benchmark_closes)
+    pullback_result         = _rule_pullback(bars, cfg, direction)
     trigger_result, vol_bonus = _rule_trigger(bars, cfg, volumes, direction)
-    event_result = _rule_event(earnings_date, dividend_date, cfg)
-    vol_result = _rule_vol(iv_rank, cfg)
+    event_result            = _rule_event(earnings_date, dividend_date, cfg)
+    vol_result              = _rule_vol(iv_rank, cfg)
 
     rules = [trend_result, pullback_result, trigger_result, event_result, vol_result]
 
     weights = cfg["weights"]
     name_to_weight = {
-        "trend": weights["trend"],
+        "trend":    weights["trend"],
         "pullback": weights["pullback"],
-        "trigger": weights["trigger"],
-        "event": weights["event"],
-        "vol": weights["vol"],
+        "trigger":  weights["trigger"],
+        "event":    weights["event"],
+        "vol":      weights["vol"],
     }
 
     weighted_score = sum(r.score * name_to_weight[r.name] for r in rules)
-    final_score = round(weighted_score)
-    final_status = _status_from_score(final_score, thresholds)
+    final_score    = round(weighted_score)
+    final_status   = _status_from_score(final_score, thresholds)
 
     return StockScoreCard(
         symbol=symbol,
