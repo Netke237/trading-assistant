@@ -129,9 +129,9 @@ function alertKindToStatus(kind: string): 'PASS' | 'CAUTION' | 'REJECT' {
   return 'PASS';
 }
 
-function toneFor(status: string): 'pass' | 'caution' | 'reject' | undefined {
-  if (status === 'PASS')    return 'pass';
-  if (status === 'CAUTION') return 'caution';
-  if (status === 'REJECT')  return 'reject';
-  return undefined;
+function toneFor(status: string): 'PASS' | 'CAUTION' | 'REJECT' | 'PENDING' {
+  if (status === 'CAUTION') return 'CAUTION';
+  if (status === 'REJECT')  return 'REJECT';
+  if (status === 'PASS')    return 'PASS';
+  return 'PENDING';
 }
