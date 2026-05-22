@@ -44,13 +44,12 @@ export default function WatchlistPage() {
   const [contracts, setContracts]   = useState<OptionContract[]>([]);
   const [offline, setOffline]       = useState(false);
 
-  const syncWatchlist = useWatchlistStore((s) => s.syncFromBackend);
+  const watchedSymbols = useWatchlistStore((s) => s.added);
 
   useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
     api.getContracts().then(setContracts).catch(() => setOffline(true));
-    syncWatchlist();
-  }, [syncWatchlist]);
+  }, []);
 
   const sorted = useMemo<WatchlistRow[]>(() => {
     const rows = [...watchlist];
@@ -67,6 +66,37 @@ export default function WatchlistPage() {
     });
     return rows;
   }, [watchlist, sortKey, sortDir]);
+
+  const watchedSet = useMemo(
+    () => new Set(watchedSymbols.map((s) => s.toUpperCase())),
+    [watchedSymbols],
+  );
+
+  const offlineRows = useMemo<WatchlistRow[]>(
+    () =>
+      watchedSymbols.map((sym) => ({
+        symbol:         sym,
+        company:        sym,
+        price:          0,
+        direction:      'Bullish' as const,
+        horizon:        'Swing' as const,
+        score:          0,
+        rankDelta:      0,
+        status:         'NO_DATA' as const,
+        breakdown:      { trend: 0, pullback: 0, trigger: 0, event: 0, volatility: 0 },
+        nextEventDays:  null,
+        nextEventLabel: null,
+      })),
+    [watchedSymbols],
+  );
+
+  const displayRows = useMemo<WatchlistRow[]>(
+    () =>
+      offline
+        ? offlineRows
+        : sorted.filter((r) => watchedSet.has(r.symbol.toUpperCase())),
+    [offline, offlineRows, sorted, watchedSet],
+  );
 
   const watchedIds = useWatchedContractsStore((s) => s.ids);
   const watchedContracts = useMemo<OptionContract[]>(
@@ -111,7 +141,7 @@ export default function WatchlistPage() {
         <Title as="h1" size={24}>Watchlist</Title>
         <Text size={13} tone="secondary">
           {tab === 'stocks'
-            ? `${watchlist.length} candidates · sorted by ${sortKey} ${sortDir === 'asc' ? '↑' : '↓'}`
+            ? `${displayRows.length} starred · sorted by ${sortKey} ${sortDir === 'asc' ? '↑' : '↓'}`
             : `${sortedContracts.length} starred contract${sortedContracts.length === 1 ? '' : 's'} · sorted by ${contractSortKey} ${contractSortDir === 'asc' ? '↑' : '↓'}`}
         </Text>
         {offline && (
@@ -127,7 +157,7 @@ export default function WatchlistPage() {
           className={`${styles.tab} ${tab === 'stocks' ? styles.tabActive : ''}`}
           onClick={() => setTab('stocks')}
         >
-          Stocks <span className={styles.tabCount}>{watchlist.length}</span>
+          Stocks <span className={styles.tabCount}>{displayRows.length}</span>
         </button>
         <button
           type="button"
@@ -142,7 +172,7 @@ export default function WatchlistPage() {
 
       {tab === 'stocks' ? (
         <>
-          {watchlist.length === 0 ? (
+          {displayRows.length === 0 ? (
             <div className={styles.empty}>
               <Text size={14} tone="secondary">No stocks in watchlist yet.</Text>
               <Text size={12} tone="dim">
@@ -165,7 +195,7 @@ export default function WatchlistPage() {
               </div>
 
               <div className={styles.tableBody}>
-                {sorted.map((row) => (
+                {displayRows.map((row) => (
                   <TableRow
                     key={row.symbol}
                     status={row.status}
