@@ -17,6 +17,7 @@ import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useAlertStore } from '@/lib/alertStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import styles from './index.module.css';
 
@@ -52,6 +53,7 @@ export function RunScanButton() {
   const minCapRaw    = useUniverseStore((s) => s.minCapRaw);
   const maxCapRaw    = useUniverseStore((s) => s.maxCapRaw);
   const capUnit      = useUniverseStore((s) => s.capUnit);
+  const shortlistMaxCandidates = useSettingsStore((s) => s.shortlistMaxCandidates);
   const scanning    = scanState === 'SCANNING';
   const customEmpty = pick === 'Custom' && parseSymbols(customRaw).length === 0;
 
@@ -109,10 +111,11 @@ export function RunScanButton() {
     if (Number.isFinite(maxCap) && maxCapRaw !== '') filters.max_cap_usd = maxCap * capMultiplier;
 
     const scanOverrides = useScanStore.getState().scanOverrides;
+    const effectiveOverrides = { ...scanOverrides, shortlist_max_candidates: shortlistMaxCandidates };
 
     setScanState('SCANNING');
     useScanStore.getState().setRejectedLog([]);
-    api.postScan(universe, direction, horizon, filters, scanOverrides)
+    api.postScan(universe, direction, horizon, filters, effectiveOverrides)
       .then((result) => {
         setScanResult(result);
         useScanStore.getState().setRejectedLog(result.rejected ?? []);

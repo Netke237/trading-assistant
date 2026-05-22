@@ -47,11 +47,13 @@ interface SettingsState {
   ivPassThreshold:         number;
   ivCautionThreshold:      number;
   markov:                  MarkovConfig;
+  shortlistMaxCandidates:      number;
   setBroker:                    (b: BrokerConfig) => void;
   setAlertDeduplicationHours:   (h: number) => void;
   setIvPassThreshold:           (n: number) => void;
   setIvCautionThreshold:        (n: number) => void;
   setMarkov:                    (cfg: MarkovConfig) => void;
+  setShortlistMaxCandidates:   (n: number) => void;
   resetToDefaults:              () => void;
 }
 
@@ -63,34 +65,41 @@ export const useSettingsStore = create<SettingsState>()(
       ivPassThreshold:         34,
       ivCautionThreshold:      55,
       markov:                  { ...DEFAULT_MARKOV },
+      shortlistMaxCandidates: 10,
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
       setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
       setIvCautionThreshold:        (n) => set({ ivCautionThreshold: n }),
       setMarkov:                    (cfg) => set({ markov: cfg }),
+      setShortlistMaxCandidates: (n) => set({ shortlistMaxCandidates: n }),
       resetToDefaults: () => set({
         broker:                  { ...DEFAULT_BROKER },
         alertDeduplicationHours: 24,
         ivPassThreshold:         34,
         ivCautionThreshold:      55,
         markov:                  { ...DEFAULT_MARKOV },
+        shortlistMaxCandidates: 10,
       }),
     }),
     {
       name: SETTINGS_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      version: 7,
+      version: 8,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
         ivPassThreshold:         state.ivPassThreshold,
         ivCautionThreshold:      state.ivCautionThreshold,
         markov:                  state.markov,
+        shortlistMaxCandidates: state.shortlistMaxCandidates,
       }),
       migrate: (persistedState, version) => {
         const prev = (persistedState ?? {}) as Partial<SettingsState>;
         if (version < 7) {
           return { ...prev, markov: DEFAULT_MARKOV } as unknown as SettingsState;
+        }
+        if (version < 8) {
+          return { ...prev, shortlistMaxCandidates: 10 } as unknown as SettingsState;
         }
         return prev as unknown as SettingsState;
       },

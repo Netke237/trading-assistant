@@ -239,6 +239,7 @@ function ThemeForm() {
 /* ---------- Scan ---------- */
 
 function ScanForm() {
+  const { shortlistMaxCandidates, setShortlistMaxCandidates } = useSettingsStore();
   const [continuous, setContinuous] = useState(false);
   const [cadence, setCadence] = useState(60);
 
@@ -269,6 +270,23 @@ function ScanForm() {
             } else {
               setCadence(val < 5 ? 5 : 1440);
             }
+          }}
+        />
+      </Row>
+      <Row
+        label="Shortlist max candidates"
+        hint="Cap on how many stocks pass the score gate per scan (1–50)"
+        defaultValue="10"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={1}
+          max={50}
+          value={shortlistMaxCandidates}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            if (val >= 1 && val <= 50) setShortlistMaxCandidates(val);
           }}
         />
       </Row>

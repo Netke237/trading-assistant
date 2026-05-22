@@ -519,7 +519,12 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             candidates.append(result)
 
     # ── Shortlist cap ─────────────────────────────────────────────────────────
-    max_candidates: int = _settings.get("scan", {}).get("shortlist_max_candidates", 10)
+    max_candidates: int = int(
+        req.overrides.get(
+            "shortlist_max_candidates",
+            _settings.get("scan", {}).get("shortlist_max_candidates", 10),
+        )
+    )
     original_count: int = len(candidates)
     shortlist_truncated: bool = original_count > max_candidates
     candidates = candidates[:max_candidates]
