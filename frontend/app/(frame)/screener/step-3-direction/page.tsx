@@ -540,6 +540,7 @@ export default function Step2Page() {
   const rejectedLog   = useScanStore((s) => s.rejectedLog);
   const regime        = useScanStore((s) => s.regime);
   const scanOverrides = useScanStore((s) => s.scanOverrides);
+  const scanResult    = useScanStore((s) => s.scanResult);
 
   const [dir,     setDir]     = useState<Direction>(() => context?.direction ?? 'Bullish');
   const [hz,      setHz]      = useState<HorizonKey>(() => parseHorizonKey(context?.horizon));
@@ -591,6 +592,13 @@ export default function Step2Page() {
 
   const custom = hz === 'Custom';
   const defaults = PARAM_DEFAULTS_PER_HORIZON[hz];
+
+  const totalPassed   = scanResult?.candidates?.length ?? 0;
+  const totalRejected = rejectedLog.length;
+  const totalScanned  = totalPassed + totalRejected;
+
+  const effectiveMinDte = (scanOverrides.min_dte as number | undefined) ?? (defaults.min_dte as number);
+  const effectiveMaxDte = (scanOverrides.max_dte as number | undefined) ?? (defaults.max_dte as number);
 
   const horizonKey = context?.horizon?.startsWith('Intraday') ? 'Intraday'
     : context?.horizon?.startsWith('Position') ? 'Position'
@@ -771,9 +779,31 @@ export default function Step2Page() {
       <div className={formStyles.logSection}>
         <div className={formStyles.logHeader}>
           <Text size={11} tone="dim" weight={500}>SCAN LOG</Text>
-          {rejectedLog.length > 0 && (
-            <span className={formStyles.badge}>{rejectedLog.length}</span>
-          )}
+          <div className={formStyles.logStats}>
+            {totalScanned > 0 && (
+              <>
+                <span className={formStyles.logStat}>
+                  <Text size={11} tone="dim">Scanned</Text>
+                  <span className={formStyles.badge}>{totalScanned}</span>
+                </span>
+                <span className={formStyles.logStat}>
+                  <Text size={11} tone="pass">Passed</Text>
+                  <span className={`${formStyles.badge} ${formStyles.badgePass}`}>{totalPassed}</span>
+                </span>
+                <span className={formStyles.logStat}>
+                  <Text size={11} tone="reject">Rejected</Text>
+                  <span className={`${formStyles.badge} ${formStyles.badgeReject}`}>{totalRejected}</span>
+                </span>
+                <span className={formStyles.logStat}>
+                  <Text size={11} tone="dim">DTE</Text>
+                  <Text size={11} tone="secondary">{effectiveMinDte}–{effectiveMaxDte}d</Text>
+                </span>
+              </>
+            )}
+            {totalScanned === 0 && rejectedLog.length > 0 && (
+              <span className={formStyles.badge}>{rejectedLog.length}</span>
+            )}
+          </div>
         </div>
         <ScanLogSection entries={rejectedLog} horizonKey={horizonKey} />
       </div>
