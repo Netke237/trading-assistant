@@ -46,6 +46,7 @@ export const useWatchlistStore = create<WatchlistState>()(
           const res = await fetch(`${BASE_URL}/api/watchlist`);
           if (!res.ok) return;
           const symbols: string[] = await res.json();
+          if (symbols.length === 0) return; // don't overwrite localStorage when backend has no data
           set({ added: symbols.map((s) => s.toUpperCase()) });
         } catch {
           // network unavailable — keep localStorage state
