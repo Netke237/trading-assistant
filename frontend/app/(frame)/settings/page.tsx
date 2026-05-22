@@ -14,24 +14,25 @@
 import { useState, useEffect } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
-import { useSettingsStore } from '@/lib/settingsStore';
+import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
-type Section = 'broker' | 'theme' | 'scan' | 'risk';
+type Section = 'broker' | 'theme' | 'scan' | 'risk' | 'regime';
 
 const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'broker',  label: 'Broker',     desc: 'Credentials + paper trade toggle' },
   { key: 'theme',   label: 'Appearance', desc: 'Theme + density' },
   { key: 'scan',    label: 'Scan',       desc: 'Continuous scan + cadence' },
   { key: 'risk',    label: 'Risk',       desc: 'Exposure limits and portfolio value' },
+  { key: 'regime',  label: 'Regime',     desc: 'HMM / Markov model parameters' },
 ];
 
 export default function SettingsPage() {
   const [active, setActive] = useState<Section>('broker');
   // Alert settings moved to /alerts page
-  const { resetToDefaults } = useSettingsStore();
+  const { resetToDefaults, markov, setMarkov } = useSettingsStore();
 
   return (
     <div className={styles.main}>
@@ -59,6 +60,7 @@ export default function SettingsPage() {
           {active === 'theme'   && <ThemeForm   />}
           {active === 'scan'    && <ScanForm    />}
           {active === 'risk'    && <RiskForm    />}
+          {active === 'regime'  && <RegimeForm markov={markov} setMarkov={setMarkov} />}
         </div>
       </div>
 
@@ -387,6 +389,103 @@ function RiskForm() {
           step={1}
           value={localLimits.maxDailyRecommendations}
           onChange={(e) => updateLimit('maxDailyRecommendations', Math.max(1, Math.min(50, Number(e.target.value))))}
+        />
+      </Row>
+    </>
+  );
+}
+
+/* ---------- Regime ---------- */
+
+function RegimeForm({
+  markov,
+  setMarkov,
+}: {
+  markov: MarkovConfig;
+  setMarkov: (cfg: MarkovConfig) => void;
+}) {
+  const PRESET_LABELS: { key: MarkovPreset; label: string }[] = [
+    { key: 'default',      label: 'Default' },
+    { key: 'conservative', label: 'Conservative' },
+    { key: 'aggressive',   label: 'Aggressive' },
+  ];
+
+  return (
+    <>
+      <SectionIntro
+        title="Regime model"
+        blurb="Controls how the Hidden Markov Model interprets market state. Preset changes update all parameters at once; you can then fine-tune individually."
+      />
+      <Row
+        label="Preset"
+        hint="Applies a standard parameter bundle."
+        defaultValue="Default"
+      >
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {PRESET_LABELS.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              className={`${styles.btn} ${markov.preset === key ? styles.btnPrimary : ''}`}
+              onClick={() => setMarkov({ preset: key, ...MARKOV_PRESETS[key] })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </Row>
+      <Row
+        label="Lookback (bars)"
+        hint="Number of daily candles used to compute regime state."
+        defaultValue={String(MARKOV_PRESETS.default.lookback)}
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={5}
+          max={500}
+          step={5}
+          value={markov.lookback}
+          onChange={(e) => {
+            const val = Math.max(5, Math.min(500, Number(e.target.value)));
+            setMarkov({ ...markov, lookback: val });
+          }}
+        />
+      </Row>
+      <Row
+        label="Threshold (%)"
+        hint="Minimum average return for Bull/Bear signal. Lower = more sensitive."
+        defaultValue={String(MARKOV_PRESETS.default.threshold)}
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={0.001}
+          max={0.05}
+          step={0.001}
+          value={markov.threshold}
+          onChange={(e) => {
+            const val = Math.max(0.001, Math.min(0.05, Number(e.target.value)));
+            setMarkov({ ...markov, threshold: val });
+          }}
+        />
+      </Row>
+      <Row
+        label="Smoothing (0–1)"
+        hint="EMA weight applied to recent returns. Higher = slower to change state."
+        defaultValue={String(MARKOV_PRESETS.default.smoothing)}
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={0.1}
+          max={1.0}
+          step={0.05}
+          value={markov.smoothing}
+          onChange={(e) => {
+            const val = Math.max(0.1, Math.min(1.0, Number(e.target.value)));
+            setMarkov({ ...markov, smoothing: val });
+          }}
         />
       </Row>
     </>
