@@ -41,13 +41,6 @@ const HORIZON_WEIGHTS: Record<string, { trend: number; pullback: number; trigger
 
 type ComponentKey = 'trend' | 'pullback' | 'trigger' | 'event' | 'volatility';
 
-const COMPONENTS: { key: ComponentKey; label: string; desc: string }[] = [
-  { key: 'trend',      label: 'Trend',      desc: 'Medium-term direction — price vs 200 EMA, slope of 50 EMA, higher highs.' },
-  { key: 'pullback',   label: 'Pullback',   desc: 'Healthy retracement to a supportive level — not extended, not broken.' },
-  { key: 'trigger',    label: 'Trigger',    desc: 'Short-term entry signal — engulfing, volume expansion, breakout close.' },
-  { key: 'event',      label: 'Event',      desc: 'Calendar gate — earnings / FOMC proximity. High = clear of events.' },
-  { key: 'volatility', label: 'Volatility', desc: 'IV rank sweet-spot — rich enough to earn premium, not blown-out.' },
-];
 
 type Signal = 'pos' | 'neu' | 'neg';
 
@@ -121,6 +114,20 @@ export default function Step4Page() {
   const previousRun = useScanStore((s) => s.previousRun);
   const context = useScanStore((s) => s.context);
   const setSelectedSymbol = useScanStore((s) => s.setSelectedSymbol);
+  const scanOverrides = useScanStore((s) => s.scanOverrides);
+
+  const maType   = (scanOverrides.ma_type  as string | undefined) ?? 'EMA';
+  const fastMa   = (scanOverrides.fast_ema as number | undefined) ?? 50;
+  const slowMa   = (scanOverrides.slow_ema as number | undefined) ?? 200;
+  const trendDesc = `Medium-term direction — price vs ${slowMa} ${maType}, slope of ${fastMa} ${maType}, higher highs.`;
+
+  const COMPONENTS: { key: ComponentKey; label: string; desc: string }[] = [
+    { key: 'trend',      label: 'Trend',      desc: trendDesc },
+    { key: 'pullback',   label: 'Pullback',   desc: 'Healthy retracement to a supportive level — not extended, not broken.' },
+    { key: 'trigger',    label: 'Trigger',    desc: 'Short-term entry signal — engulfing, volume expansion, breakout close.' },
+    { key: 'event',      label: 'Event',      desc: 'Calendar gate — earnings / FOMC proximity. High = clear of events.' },
+    { key: 'volatility', label: 'Volatility', desc: 'IV rank sweet-spot — rich enough to earn premium, not blown-out.' },
+  ];
 
   useEffect(() => {
     const list = candidates?.map((c, idx) => cardToRow(c, idx + 1, previousRun, context?.horizon)) ?? [];
