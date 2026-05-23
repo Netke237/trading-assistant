@@ -157,6 +157,7 @@ interface ParamDef {
   unit?: string;
   redundant?: true;
   deprecated?: true;
+  visibleFor?: string[];   // if set, only show when scanOverrides.trend_method (or default) is in this list
 }
 
 const PARAM_DEFS: ParamDef[] = [
@@ -167,11 +168,26 @@ const PARAM_DEFS: ParamDef[] = [
   { key: 'weight_event',    label: 'Event weight',    type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%' },
   { key: 'weight_vol',      label: 'Vol weight',      type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%' },
   // STOCKS — Trend
-  { key: 'ma_type',  label: 'MA type',        type: 'select',  section: 'stocks', subGroup: 'Trend', options: ['EMA', 'SMA'] },
-  { key: 'fast_ema', label: 'Fast MA period', type: 'number',  section: 'stocks', subGroup: 'Trend', min: 5, max: 200, step: 1 },
-  { key: 'slow_ema', label: 'Slow MA period', type: 'number',  section: 'stocks', subGroup: 'Trend', min: 10, max: 500, step: 1 },
-  { key: 'adx_period',    label: 'ADX period',         type: 'display', section: 'stocks', subGroup: 'Trend' },
-  { key: 'ema_required',  label: 'EMA condition active', type: 'boolean', section: 'stocks', subGroup: 'Trend', deprecated: true },
+  { key: 'trend_method',            label: 'Trend method',          type: 'select',  section: 'stocks', subGroup: 'Trend', options: ['additive', 'crossover', 'relative_strength'] },
+  // crossover
+  { key: 'ma_type',                 label: 'MA type',               type: 'select',  section: 'stocks', subGroup: 'Trend', options: ['EMA', 'SMA'],           visibleFor: ['crossover'] },
+  { key: 'fast_ema',                label: 'Fast MA period',        type: 'number',  section: 'stocks', subGroup: 'Trend', min: 5,   max: 200, step: 1,       visibleFor: ['crossover'] },
+  { key: 'slow_ema',                label: 'Slow MA period',        type: 'number',  section: 'stocks', subGroup: 'Trend', min: 10,  max: 500, step: 1,       visibleFor: ['crossover'] },
+  // additive
+  { key: 'additive_ma_type',        label: 'MA type',               type: 'select',  section: 'stocks', subGroup: 'Trend', options: ['EMA', 'SMA'],           visibleFor: ['additive'] },
+  { key: 'additive_ma_period',      label: 'MA period',             type: 'number',  section: 'stocks', subGroup: 'Trend', min: 5,   max: 200, step: 1,       visibleFor: ['additive'] },
+  { key: 'additive_slope_lookback', label: 'Slope lookback',        type: 'number',  section: 'stocks', subGroup: 'Trend', min: 1,   max: 50,  step: 1, unit: 'bars', visibleFor: ['additive'] },
+  { key: 'additive_adx_period',     label: 'ADX period',            type: 'number',  section: 'stocks', subGroup: 'Trend', min: 5,   max: 30,  step: 1,       visibleFor: ['additive'] },
+  { key: 'additive_adx_pass',       label: 'ADX pass threshold',    type: 'number',  section: 'stocks', subGroup: 'Trend', min: 0,   max: 60,  step: 1,       visibleFor: ['additive'] },
+  { key: 'additive_adx_caution',    label: 'ADX caution threshold', type: 'number',  section: 'stocks', subGroup: 'Trend', min: 0,   max: 50,  step: 1,       visibleFor: ['additive'] },
+  { key: 'additive_price_max',      label: 'Price factor max pts',  type: 'number',  section: 'stocks', subGroup: 'Trend', min: 0,   max: 100, step: 5,       visibleFor: ['additive'] },
+  { key: 'additive_slope_max',      label: 'Slope factor max pts',  type: 'number',  section: 'stocks', subGroup: 'Trend', min: 0,   max: 100, step: 5,       visibleFor: ['additive'] },
+  { key: 'additive_adx_max',        label: 'ADX factor max pts',    type: 'number',  section: 'stocks', subGroup: 'Trend', min: 0,   max: 100, step: 5,       visibleFor: ['additive'] },
+  // relative_strength
+  { key: 'rs_period',               label: 'RS period',             type: 'number',  section: 'stocks', subGroup: 'Trend', min: 1,   max: 252, step: 1, unit: 'days', visibleFor: ['relative_strength'] },
+  { key: 'rs_pass_threshold',       label: 'RS pass threshold',     type: 'number',  section: 'stocks', subGroup: 'Trend', min: -10, max: 20,  step: 0.5, unit: '%', visibleFor: ['relative_strength'] },
+  { key: 'rs_caution_threshold',    label: 'RS caution threshold',  type: 'number',  section: 'stocks', subGroup: 'Trend', min: -10, max: 10,  step: 0.5, unit: '%', visibleFor: ['relative_strength'] },
+  { key: 'rs_benchmark',            label: 'Benchmark index',       type: 'select',  section: 'stocks', subGroup: 'Trend', options: ['NDX', 'SPX'],            visibleFor: ['relative_strength'] },
   // STOCKS — Pullback
   { key: 'rsi_period',               label: 'RSI period',          type: 'display', section: 'stocks', subGroup: 'Pullback' },
   { key: 'swing_high_lookback_bars', label: 'Swing high lookback', type: 'number',  section: 'stocks', subGroup: 'Pullback', min: 2, max: 200, step: 1 },
@@ -217,6 +233,11 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     iv_rank_pass_max: null, iv_rank_lookback: 30, hv_lookback: 10,
     max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
     min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 1, max_dte: 7,
+    trend_method: 'additive',
+    additive_ma_period: 9, additive_ma_type: 'EMA', additive_slope_lookback: 3,
+    additive_adx_period: 7, additive_adx_pass: 20, additive_adx_caution: 15,
+    additive_price_max: 40, additive_slope_max: 30, additive_adx_max: 30,
+    rs_period: 2, rs_pass_threshold: 1.0, rs_caution_threshold: -0.5, rs_benchmark: 'NDX',
   },
   Swing: {
     weight_trend: 30, weight_pullback: 20, weight_trigger: 25, weight_event: 15, weight_vol: 10,
@@ -229,6 +250,11 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     iv_rank_pass_max: 34, iv_rank_lookback: 252, hv_lookback: 20,
     max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
     min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 14, max_dte: 45,
+    trend_method: 'additive',
+    additive_ma_period: 20, additive_ma_type: 'SMA', additive_slope_lookback: 10,
+    additive_adx_period: 14, additive_adx_pass: 25, additive_adx_caution: 20,
+    additive_price_max: 40, additive_slope_max: 30, additive_adx_max: 30,
+    rs_period: 20, rs_pass_threshold: 2.0, rs_caution_threshold: -1.0, rs_benchmark: 'NDX',
   },
   Position: {
     weight_trend: 30, weight_pullback: 20, weight_trigger: 20, weight_event: 20, weight_vol: 10,
@@ -241,6 +267,11 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     iv_rank_pass_max: 44, iv_rank_lookback: 252, hv_lookback: 60,
     max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
     min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 30, max_dte: 90,
+    trend_method: 'additive',
+    additive_ma_period: 50, additive_ma_type: 'SMA', additive_slope_lookback: 20,
+    additive_adx_period: 14, additive_adx_pass: 20, additive_adx_caution: 15,
+    additive_price_max: 40, additive_slope_max: 30, additive_adx_max: 30,
+    rs_period: 50, rs_pass_threshold: 3.0, rs_caution_threshold: -1.5, rs_benchmark: 'SPX',
   },
   Custom: {
     weight_trend: 30, weight_pullback: 20, weight_trigger: 25, weight_event: 15, weight_vol: 10,
@@ -253,6 +284,11 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     iv_rank_pass_max: 34, iv_rank_lookback: 252, hv_lookback: 20,
     max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
     min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 14, max_dte: 90,
+    trend_method: 'additive',
+    additive_ma_period: 20, additive_ma_type: 'SMA', additive_slope_lookback: 10,
+    additive_adx_period: 14, additive_adx_pass: 25, additive_adx_caution: 20,
+    additive_price_max: 40, additive_slope_max: 30, additive_adx_max: 30,
+    rs_period: 20, rs_pass_threshold: 2.0, rs_caution_threshold: -1.0, rs_benchmark: 'NDX',
   },
 };
 
@@ -580,9 +616,23 @@ export default function Step2Page() {
     syncToStore(dir, h, minDays, maxDays);
     const hd = PARAM_DEFAULTS_PER_HORIZON[h];
     useScanStore.getState().setScanOverrides({
-      ma_type: hd.ma_type  as string,
-      fast_ema: hd.fast_ema as number,
-      slow_ema: hd.slow_ema as number,
+      ma_type:                hd.ma_type                as string,
+      fast_ema:               hd.fast_ema               as number,
+      slow_ema:               hd.slow_ema               as number,
+      trend_method:           hd.trend_method           as string,
+      additive_ma_period:     hd.additive_ma_period     as number,
+      additive_ma_type:       hd.additive_ma_type       as string,
+      additive_slope_lookback: hd.additive_slope_lookback as number,
+      additive_adx_period:    hd.additive_adx_period    as number,
+      additive_adx_pass:      hd.additive_adx_pass      as number,
+      additive_adx_caution:   hd.additive_adx_caution   as number,
+      additive_price_max:     hd.additive_price_max     as number,
+      additive_slope_max:     hd.additive_slope_max     as number,
+      additive_adx_max:       hd.additive_adx_max       as number,
+      rs_period:              hd.rs_period              as number,
+      rs_pass_threshold:      hd.rs_pass_threshold      as number,
+      rs_caution_threshold:   hd.rs_caution_threshold   as number,
+      rs_benchmark:           hd.rs_benchmark           as string,
     });
   };
   const handleMinChange = (v: number) => {
@@ -716,15 +766,17 @@ export default function Step2Page() {
               {stockSubGroups.map((sg) => {
                 const sgDefs = stocksDefs.filter((d) => d.subGroup === sg);
                 const sgOpen = subGroupOpen[sg] ?? true;
+                const currentTrendMethod = (scanOverrides.trend_method as string | undefined) ?? (defaults.trend_method as string ?? 'additive');
+                const visibleDefs = sgDefs.filter((d) => !d.visibleFor || d.visibleFor.includes(currentTrendMethod));
                 return (
                   <SubGroupBlock
                     key={sg}
                     label={sg}
                     open={sgOpen}
                     onToggle={() => toggleSubGroup(sg)}
-                    overrideCount={countActiveOverrides(sgDefs, scanOverrides, defaults)}
+                    overrideCount={countActiveOverrides(visibleDefs, scanOverrides, defaults)}
                   >
-                    {sgDefs.map((def) => (
+                    {visibleDefs.map((def) => (
                       <ParamRow
                         key={def.key}
                         def={def}

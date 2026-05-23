@@ -45,11 +45,21 @@ export default function WatchlistPage() {
   const [offline, setOffline]       = useState(false);
 
   const watchedSymbols = useWatchlistStore((s) => s.added);
+  const watchedIds = useWatchedContractsStore((s) => s.ids);
 
   useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
-    api.getContracts().then(setContracts).catch(() => setOffline(true));
   }, []);
+
+  useEffect(() => {
+    const symbols = [...new Set(watchedIds.map((id) => id.split('|')[0]).filter(Boolean))];
+    if (symbols.length === 0) { setContracts([]); return; }
+    let cancelled = false;
+    Promise.all(symbols.map((s) => api.getContracts(s)))
+      .then((results) => { if (!cancelled) setContracts(results.flat()); })
+      .catch(() => { if (!cancelled) setOffline(true); });
+    return () => { cancelled = true; };
+  }, [watchedIds]);
 
   const sorted = useMemo<WatchlistRow[]>(() => {
     const rows = [...watchlist];
@@ -96,7 +106,6 @@ export default function WatchlistPage() {
     return filtered.length > 0 ? filtered : offlineRows;
   }, [offline, offlineRows, sorted, watchedSet]);
 
-  const watchedIds = useWatchedContractsStore((s) => s.ids);
   const watchedContracts = useMemo<OptionContract[]>(
     () => {
       const idx = Object.fromEntries(contracts.map((c) => [c.id, c]));
