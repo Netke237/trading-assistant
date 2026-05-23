@@ -52,10 +52,18 @@ export default function WatchlistPage() {
   }, []);
 
   useEffect(() => {
-    const symbols = [...new Set(watchedIds.map((id) => id.split('|')[0]).filter(Boolean))];
-    if (symbols.length === 0) { setContracts([]); return; }
+    if (watchedIds.length === 0) { setContracts([]); return; }
+    const pairs = [...new Set(
+      watchedIds.map((id) => {
+        const parts = id.split('|');
+        return `${parts[0]}|${parts[3] ?? 'C'}`;
+      })
+    )].map((key) => {
+      const [sym, right] = key.split('|');
+      return { sym, right: (right === 'P' ? 'P' : 'C') as 'C' | 'P' };
+    });
     let cancelled = false;
-    Promise.all(symbols.map((s) => api.getContracts(s)))
+    Promise.all(pairs.map(({ sym, right }) => api.getContracts(sym, right)))
       .then((results) => { if (!cancelled) setContracts(results.flat()); })
       .catch(() => { if (!cancelled) setOffline(true); });
     return () => { cancelled = true; };
@@ -107,10 +115,16 @@ export default function WatchlistPage() {
   }, [offline, offlineRows, sorted, watchedSet]);
 
   const watchedContracts = useMemo<OptionContract[]>(
-    () => {
-      const idx = Object.fromEntries(contracts.map((c) => [c.id, c]));
-      return watchedIds.map((id) => idx[id]).filter((c): c is OptionContract => !!c);
-    },
+    () => watchedIds.map((storedId) => {
+      const [sym, strike, , type] = storedId.split('|');
+      const exact = contracts.find((c) => c.id === storedId);
+      if (exact) return exact;
+      return contracts.find(
+        (c) => c.symbol === sym &&
+               String(c.strike) === strike &&
+               c.id.endsWith(`|${type ?? 'C'}`)
+      ) ?? null;
+    }).filter((c): c is OptionContract => c !== null),
     [contracts, watchedIds],
   );
 

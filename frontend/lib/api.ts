@@ -32,8 +32,8 @@ export const api = {
   getRegime:     () => get<MarketRegime>('/api/regime'),
   getSectors:    () => get<SectorTile[]>('/api/sectors'),
   getEvents:     () => get<UpcomingEvent[]>('/api/events'),
-  getContracts:  (symbol?: string) =>
-    get<OptionContract[]>(`/api/contracts${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ''}`),
+  getContracts:  (symbol: string, right: 'C' | 'P' = 'C') =>
+    get<OptionContract[]>(`/api/contracts?symbol=${encodeURIComponent(symbol)}&right=${right}`),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards'),
   getCandles:    (symbol: string) => get<Candle[]>(`/api/candles/${encodeURIComponent(symbol)}`),
   getNews:         (symbols: string[]) => get<NewsItem[]>(`/api/news?symbols=${symbols.join(',')}`),
