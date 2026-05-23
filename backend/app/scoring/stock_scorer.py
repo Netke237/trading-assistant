@@ -1,8 +1,11 @@
 from __future__ import annotations
 import copy
+import logging
 import math
 import os
 import yaml
+
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from functools import lru_cache
@@ -308,6 +311,10 @@ def _trend_relative_strength(
     benchmark = str(rc.get("benchmark", "NDX"))
 
     if benchmark_closes is None or len(benchmark_closes) <= period:
+        logger.warning(
+            "relative_strength trend method: no benchmark data for %s — falling back to CAUTION 50",
+            benchmark,
+        )
         return RuleResult(
             "trend", "CAUTION", 50,
             {"reason": "no_benchmark_data", "method": "relative_strength", "benchmark": benchmark},

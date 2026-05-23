@@ -32,10 +32,13 @@ def test_rule_trend_only_uses_historical_closes():
     closes = [b["close"] for b in bars]
     cfg = {
         "trend": {
-            "fast_ema": 12,
-            "slow_ema": 26,
-            "slow_slope_required": True,
-            "fast_slope_required": True,
+            "method": "crossover",
+            "crossover": {
+                "fast_ema": 12,
+                "slow_ema": 26,
+                "slow_slope_required": True,
+                "fast_slope_required": True,
+            },
         }
     }
     result = _rule_trend(closes, cfg)
