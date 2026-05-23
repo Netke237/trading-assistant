@@ -120,10 +120,10 @@ def _augment(c: dict, stock_price: float = 0.0) -> dict:
     # Compute BS delta when greeks are missing but IV is available
     if delta == 0 and iv > 0 and stock_price > 0:
         K = float(c.get("strike", stock_price))
-        T = int(c.get("dte", 30)) / 365.0
+        T = int(float(c.get("dte", 30))) / 365.0
         is_call = c.get("right", "C") == "C"
         computed = bs_delta(stock_price, K, T, r=0.05, sigma=iv, is_call=is_call)
-        if computed:
+        if computed != 0.0:
             delta = round(computed, 4)
 
     return {
@@ -241,7 +241,7 @@ async def _process_symbol(
         if iv_bs is not None:
             iv_rank = round(iv_bs * 100, 1)
             for c in chain:
-                if not c.get("ivRank"):
+                if c.get("ivRank") is None or c.get("ivRank") == 0:
                     c["ivRank"] = int(iv_rank)
                     c["implied_volatility"] = round(iv_bs, 4)
 
