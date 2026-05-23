@@ -178,6 +178,16 @@ def fetch_option_chain(
                 "open_interest": oi,
                 "score": 0,
             })
+        zero_iv = sum(1 for c in result if c["ivRank"] == 0)
+        if zero_iv > len(result) * 0.5 and result:
+            yf_iv = _yf_iv_for_chain(symbol, target_exp, option_type == "C")
+            for c in result:
+                if c["ivRank"] == 0:
+                    yf_val = yf_iv.get(float(c["strike"]))
+                    if yf_val:
+                        c["ivRank"] = int(round(yf_val * 100))
+                        c["implied_volatility"] = round(yf_val, 4)
+
         seen: set[str] = set()
         return [c for c in result if not (c["id"] in seen or seen.add(c["id"]))]  # type: ignore[func-returns-value]
     except Exception:
@@ -476,6 +486,17 @@ def _compute_iv_bs(
         return None
 
 
+def _yf_iv_for_chain(symbol: str, expiry: str, is_call: bool) -> dict[float, float]:
+    """Return strike → IV map from yfinance for a given expiry. Empty dict on any failure."""
+    try:
+        import yfinance as yf
+        chain = yf.Ticker(symbol).option_chain(expiry)
+        df = chain.calls if is_call else chain.puts
+        return {float(row["strike"]): float(row["impliedVolatility"]) for _, row in df.iterrows()}
+    except Exception:
+        return {}
+
+
 def _earnings_date_yf(symbol: str) -> Optional[date]:
     """Next earnings date via yfinance (fallback when Tradier fundamentals unavailable)."""
     try:
@@ -671,6 +692,16 @@ async def fetch_option_chain_async(
                 "open_interest": oi,
                 "score": 0,
             })
+        zero_iv = sum(1 for c in result if c["ivRank"] == 0)
+        if zero_iv > len(result) * 0.5 and result:
+            yf_iv = await asyncio.to_thread(_yf_iv_for_chain, symbol, target_exp, option_type == "C")
+            for c in result:
+                if c["ivRank"] == 0:
+                    yf_val = yf_iv.get(float(c["strike"]))
+                    if yf_val:
+                        c["ivRank"] = int(round(yf_val * 100))
+                        c["implied_volatility"] = round(yf_val, 4)
+
         seen: set[str] = set()
         return [c for c in result if not (c["id"] in seen or seen.add(c["id"]))]  # type: ignore[func-returns-value]
     except Exception:
