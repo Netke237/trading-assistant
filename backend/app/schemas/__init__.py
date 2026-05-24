@@ -103,11 +103,41 @@ class RegimeMetric(BaseModel):
     trend: Optional[TrendDir] = None
 
 
+class OmmData(BaseModel):
+    """Observable Markov Model output for Position / Swing horizons."""
+    model_config = ConfigDict(populate_by_name=True)
+    state: Literal['Bull', 'Bear', 'Choppy']
+    p_stay: float                    # P(current state persists next bar)
+    stability: Literal['Stable', 'Fragile']
+    regime_age_days: int             # consecutive bars in current state
+    avg_regime_duration: float       # 1 / (1 − p_stay), in days
+    transition_row: list[float]      # [P(Bull), P(Bear), P(Choppy)] for current state
+    state_order: list[str]           # ['Bull', 'Bear', 'Choppy'] — index key
+
+
+class IntraHmmTransition(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    to: str
+    prob: float
+
+
+class IntraHmmData(BaseModel):
+    """Gaussian HMM output for Intraday horizon (15-min bars)."""
+    model_config = ConfigDict(populate_by_name=True)
+    state: Literal['Trending', 'Choppy', 'Mean-reverting']
+    p_stay: float
+    p_transition: list[IntraHmmTransition]   # non-trivial transitions (prob > 0.05)
+
+
 class MarketRegime(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     overall: Status
     headline: str
     metrics: list[RegimeMetric]
+    omm: Optional[OmmData] = None                  # Position / Swing — None if insufficient data
+    intraday_hmm: Optional[IntraHmmData] = None    # Intraday — None if insufficient data
+    vix_pct_30d: Optional[float] = None            # VIX percentile vs last 30 trading days
+    vix_pct_252d: Optional[float] = None           # VIX percentile vs last 252 trading days
 
 
 # ── Sectors ──────────────────────────────────────────────────────────────────

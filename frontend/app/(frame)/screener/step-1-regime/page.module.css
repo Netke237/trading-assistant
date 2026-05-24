@@ -145,3 +145,94 @@
 .newsSection {
   margin-top: var(--space-6);
 }
+
+/* ---------- Regime quality strip (OMM) ---------- */
+
+.qualityStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.qualityItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.qualityDivider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
+
+/* ---------- OMM transition row ---------- */
+
+.transitionRow {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ---------- Intraday HMM panel ---------- */
+
+.hmmPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.hmmPanelRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.hmmStateLabel {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.progressBarWrap {
+  flex: 1;
+  min-width: 120px;
+  max-width: 200px;
+  height: 6px;
+  background: var(--bg-surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progressBarFill {
+  height: 100%;
+  background: var(--pass);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progressBarFill_fragile {
+  background: var(--caution);
+}
+
+.hmmTransitions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.noData {
+  color: var(--text-dim);
+  font-style: italic;
+}

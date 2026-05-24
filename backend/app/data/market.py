@@ -29,7 +29,9 @@ def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
     """
     try:
         end = date.today()
-        start = end - timedelta(days=365)
+        # 365/252 ≈ 1.45 calendar days per trading day; +20% buffer for holidays/gaps
+        calendar_days = max(400, int(bars * 1.75))
+        start = end - timedelta(days=calendar_days)
         resp = httpx.get(
             f"{TRADIER_BASE_URL}/v1/markets/history",
             headers=_headers(),
@@ -61,6 +63,87 @@ def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
         return rows
     except Exception:
         return []
+
+
+def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 60) -> list[dict]:
+    """yfinance fallback for intraday bars. Max 60 days for 15m resolution."""
+    try:
+        import yfinance as yf
+        capped_days = min(days, 60)
+        df = yf.download(
+            symbol,
+            period=f"{capped_days}d",
+            interval=interval,
+            progress=False,
+            auto_adjust=True,
+        )
+        if df is None or df.empty:
+            return []
+        rows = []
+        for ts, row in df.iterrows():
+            rows.append({
+                "time": str(ts),
+                "open":   round(float(row["Open"]),   4),
+                "high":   round(float(row["High"]),   4),
+                "low":    round(float(row["Low"]),    4),
+                "close":  round(float(row["Close"]),  4),
+                "volume": int(row["Volume"]),
+            })
+        return rows
+    except Exception:
+        return []
+
+
+def fetch_intraday_candles(
+    symbol: str,
+    interval: str = "15min",
+    days: int = 90,
+) -> list[dict]:
+    """
+    Returns intraday OHLCV bars. Tries Tradier first, falls back to yfinance.
+    interval: '1min' | '5min' | '15min' (default 15min)
+    days: lookback in calendar days (default 90 ≈ 500+ bars of 15m data)
+    Returns [] on any error.
+    """
+    if TRADIER_TOKEN:
+        try:
+            end = date.today()
+            start = end - timedelta(days=days)
+            resp = httpx.get(
+                f"{TRADIER_BASE_URL}/v1/markets/timesales",
+                headers=_headers(),
+                params={
+                    "symbol": symbol,
+                    "interval": interval,
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "session_filter": "open",
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            series = resp.json().get("series")
+            if series:
+                data = series.get("data", [])
+                if isinstance(data, dict):
+                    data = [data]
+                rows = []
+                for d in data:
+                    rows.append({
+                        "time":   d.get("time", ""),
+                        "open":   round(float(d.get("open",   0)), 4),
+                        "high":   round(float(d.get("high",   0)), 4),
+                        "low":    round(float(d.get("low",    0)), 4),
+                        "close":  round(float(d.get("close",  0)), 4),
+                        "volume": int(d.get("volume", 0)),
+                    })
+                if rows:
+                    return rows
+        except Exception:
+            pass
+    # yfinance fallback — max 60 calendar days for 15m resolution
+    yf_interval = interval.replace("min", "m")  # "15min" → "15m"
+    return _fetch_intraday_yf(symbol, interval=yf_interval, days=days)
 
 
 def fetch_price(symbol: str) -> Optional[float]:
@@ -542,7 +625,8 @@ async def fetch_candles_async(
     """Async variant — uses the provided AsyncClient for connection reuse."""
     try:
         end = date.today()
-        start = end - timedelta(days=365)
+        calendar_days = max(400, int(bars * 1.75))
+        start = end - timedelta(days=calendar_days)
         resp = await client.get(
             f"{TRADIER_BASE_URL}/v1/markets/history",
             headers=_headers(),
