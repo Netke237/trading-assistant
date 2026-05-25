@@ -141,24 +141,23 @@ async def get_regime(
     except Exception:
         pass
 
-    # ── 4. Gaussian HMM (intraday only — expensive fit, skip for swing/position) ─
+    # ── 4. Gaussian HMM (always computed — regime step is before horizon selection) ─
     intraday_hmm_out: IntraHmmData | None = None
-    if horizon == 'intraday':
-        try:
-            intra_bars = fetch_intraday_candles('SPY', interval='15min', days=120)
-            if intra_bars:
-                result_hmm = compute_intraday_hmm(intra_bars)
-                if result_hmm:
-                    intraday_hmm_out = IntraHmmData(
-                        state=result_hmm.state,
-                        p_stay=result_hmm.p_stay,
-                        p_transition=[
-                            IntraHmmTransition(to=t['to'], prob=t['prob'])
-                            for t in result_hmm.p_transition
-                        ],
-                    )
-        except Exception:
-            pass
+    try:
+        intra_bars = fetch_intraday_candles('SPY', interval='15min', days=120)
+        if intra_bars:
+            result_hmm = compute_intraday_hmm(intra_bars)
+            if result_hmm:
+                intraday_hmm_out = IntraHmmData(
+                    state=result_hmm.state,
+                    p_stay=result_hmm.p_stay,
+                    p_transition=[
+                        IntraHmmTransition(to=t['to'], prob=t['prob'])
+                        for t in result_hmm.p_transition
+                    ],
+                )
+    except Exception:
+        pass
 
     return MarketRegime(
         overall=overall,

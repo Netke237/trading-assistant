@@ -10,10 +10,9 @@
  *   2. Explainer
  *   3. Mini SPX + NDX candlestick charts
  *   4. EMA / VIX metric grid
- *   5. OMM regime quality strip (transition persistence, age, VIX percentile)
- *   6. Intraday HMM session panel (Trending / Choppy / Mean-reverting)
- *   7. Sector heatmap
- *   8. Market news
+ *   5. Horizon regime card (Intraday | Swing | Position) — replaces old sections 5/6
+ *   6. Sector heatmap
+ *   7. Market news
  */
 
 import { useEffect, useState } from 'react';
@@ -43,11 +42,6 @@ function lastClose(candles: Candle[]): { close: number; changePct: number } {
   return { close: last.close, changePct: ((last.close - prev.close) / prev.close) * 100 };
 }
 
-function pctLabel(val: number | null | undefined): string {
-  if (val == null) return '—';
-  return `${Math.round(val)}th pct`;
-}
-
 function ommStateIcon(state: string): string {
   if (state === 'Bull') return '↑';
   if (state === 'Bear') return '↓';
@@ -60,30 +54,27 @@ function hmmStateIcon(state: string): string {
   return '≈';
 }
 
-function toApiHorizon(h: string | null | undefined): string {
-  const s = (h ?? '').toLowerCase();
-  if (s.startsWith('intraday')) return 'intraday';
-  if (s.startsWith('position')) return 'position';
-  return 'swing';
+function pct(p: number): string {
+  return `${Math.round(p * 100)}%`;
 }
 
 export default function Step1RegimePage() {
   const setRegime = useScanStore((s) => s.setRegime);
   const setCombinedRegime = useScanStore((s) => s.setCombinedRegime);
-  const contextHorizon = useScanStore((s) => s.context?.horizon ?? null);
-  const apiHorizon = toApiHorizon(contextHorizon);
 
-  const [regime, setRegimeData]   = useState<MarketRegime | null>(null);
-  const [sectors, setSectors]     = useState<SectorTile[]>([]);
+  const [regime, setRegimeData]     = useState<MarketRegime | null>(null);
+  const [sectors, setSectors]       = useState<SectorTile[]>([]);
   const [spxCandles, setSpxCandles] = useState<Candle[]>([]);
   const [ndxCandles, setNdxCandles] = useState<Candle[]>([]);
-  const [offline, setOffline]     = useState(false);
-  const [news, setNews]           = useState<NewsItem[]>([]);
+  const [offline, setOffline]       = useState(false);
+  const [news, setNews]             = useState<NewsItem[]>([]);
   const [newsLoading, setNewsLoading] = useState(false);
-  const [newsError, setNewsError] = useState(false);
+  const [newsError, setNewsError]   = useState(false);
 
   useEffect(() => {
-    api.getRegime(apiHorizon).then((r) => {
+    // Always fetch with 'intraday' so the HMM is always computed —
+    // the regime step is visited before horizon selection (step 3).
+    api.getRegime('intraday').then((r) => {
       setRegimeData(r);
       setRegime(r.overall);
       setCombinedRegime(r.overall);
@@ -98,19 +89,19 @@ export default function Step1RegimePage() {
       setNewsLoading(true);
       api.getNews(symbols).then(setNews).catch(() => setNewsError(true)).finally(() => setNewsLoading(false));
     }
-  }, [setRegime, setCombinedRegime, apiHorizon]);
+  }, [setRegime, setCombinedRegime]);
 
   const spx = lastClose(spxCandles);
   const ndx = lastClose(ndxCandles);
   const combinedStatus = regime?.overall ?? 'PENDING';
 
-  const sectorsUp   = sectors.filter((s) => s.changePct >   0.05).length;
-  const sectorsDown = sectors.filter((s) => s.changePct <  -0.05).length;
+  const sectorsUp   = sectors.filter((s) => s.changePct >  0.05).length;
+  const sectorsDown = sectors.filter((s) => s.changePct < -0.05).length;
 
-  const omm = regime?.omm ?? null;
-  const intraHmm = regime?.intraday_hmm ?? null;
-  const vix30  = regime?.vix_pct_30d  ?? null;
-  const vix252 = regime?.vix_pct_252d ?? null;
+  const omm      = regime?.omm           ?? null;
+  const intraHmm = regime?.intraday_hmm  ?? null;
+  const vix30    = regime?.vix_pct_30d   ?? null;
+  const vix252   = regime?.vix_pct_252d  ?? null;
 
   return (
     <div className={styles.main}>
@@ -204,149 +195,97 @@ export default function Step1RegimePage() {
         ))}
       </div>
 
-      {/* 5. OMM regime quality strip */}
-      <div className={pageStyles.sectionHeader}>
-        <Text size={13} weight={600}>Regime Persistence (OMM)</Text>
-        <Text size={12} tone="secondary">Rolling 500-day transition matrix — how durable is the current state?</Text>
-      </div>
-      {omm ? (
-        <div className={pageStyles.qualityStrip}>
-          {/* State */}
-          <div className={pageStyles.qualityItem}>
-            <Text size={11} tone="dim">State</Text>
-            <Data size={14} weight={500} tone={toneFor(omm.state === 'Bull' ? 'PASS' : omm.state === 'Bear' ? 'REJECT' : 'CAUTION')}>
-              {ommStateIcon(omm.state)} {omm.state}
-            </Data>
+      {/* 5. Horizon regime card (Intraday | Swing | Position) */}
+      {(omm || intraHmm) && (
+        <>
+          <div className={pageStyles.sectionHeader}>
+            <Text size={13} weight={600}>Regime by Horizon</Text>
+            <Text size={12} tone="secondary">Same macro signal — emphasis varies by timeframe</Text>
           </div>
+          <div className={pageStyles.horizonCard}>
 
-          <div className={pageStyles.qualityDivider} />
-
-          {/* Stability */}
-          <div className={pageStyles.qualityItem}>
-            <Text size={11} tone="dim">Stability</Text>
-            <StatusBadge
-              status={omm.stability === 'Stable' ? 'PASS' : 'CAUTION'}
-              label={omm.stability}
-            />
-          </div>
-
-          <div className={pageStyles.qualityDivider} />
-
-          {/* Age */}
-          <div className={pageStyles.qualityItem}>
-            <Text size={11} tone="dim">Age</Text>
-            <Text size={13} weight={500}>
-              Day {omm.regime_age_days} of ~{Math.round(omm.avg_regime_duration)} avg
-            </Text>
-          </div>
-
-          <div className={pageStyles.qualityDivider} />
-
-          {/* P(stay) */}
-          <div className={pageStyles.qualityItem}>
-            <Text size={11} tone="dim">Continue</Text>
-            <Data size={13} weight={500} tone={omm.p_stay >= 0.75 ? 'pass' : omm.p_stay >= 0.5 ? 'caution' : 'reject'}>
-              {Math.round(omm.p_stay * 100)}%
-            </Data>
-          </div>
-
-          <div className={pageStyles.qualityDivider} />
-
-          {/* Transition risk — show states with risk > 8% */}
-          <div className={pageStyles.qualityItem}>
-            <Text size={11} tone="dim">Transition risk</Text>
-            <div className={pageStyles.transitionRow}>
-              {omm.state_order.map((s, i) => {
-                const prob = omm.transition_row[i] ?? 0;
-                if (s === omm.state || prob < 0.08) return null;
-                return (
-                  <Text key={s} size={12} tone={s === 'Bear' ? 'reject' : 'caution'}>
-                    →{s} {Math.round(prob * 100)}%
-                  </Text>
-                );
-              })}
+            {/* Intraday column — leads with HMM session state */}
+            <div className={pageStyles.horizonCol}>
+              <Text size={11} tone="dim" weight={500}>INTRADAY</Text>
+              {intraHmm ? (
+                <>
+                  <Data size={14} weight={600}>
+                    {hmmStateIcon(intraHmm.state)} {intraHmm.state}
+                  </Data>
+                  <Text size={12} tone="secondary">P(stay): {pct(intraHmm.p_stay)}</Text>
+                  {intraHmm.p_transition
+                    .filter((t) => t.prob > 0.08)
+                    .map((t) => (
+                      <Text key={t.to} size={11} tone={t.prob > 0.2 ? 'caution' : 'dim'}>
+                        →{t.to} {pct(t.prob)}
+                      </Text>
+                    ))}
+                  {vix30 != null && (
+                    <Text size={11} tone="dim">VIX · {Math.round(vix30)}th pct (30d)</Text>
+                  )}
+                </>
+              ) : (
+                <Text size={11} tone="dim">Calculating…</Text>
+              )}
             </div>
-          </div>
 
-          <div className={pageStyles.qualityDivider} />
+            {/* Swing column — leads with OMM daily state + stability */}
+            <div className={pageStyles.horizonCol}>
+              <Text size={11} tone="dim" weight={500}>SWING</Text>
+              {omm ? (
+                <>
+                  <Data size={14} weight={600}>
+                    {ommStateIcon(omm.state)} {omm.state} · {omm.stability}
+                  </Data>
+                  <Text size={12} tone="secondary">P(stay): {pct(omm.p_stay)}</Text>
+                  {omm.state_order.map((s, i) => {
+                    const prob = omm.transition_row[i] ?? 0;
+                    if (s === omm.state || prob < 0.08) return null;
+                    return (
+                      <Text key={s} size={11} tone={s === 'Bear' ? 'reject' : 'caution'}>
+                        →{s} {pct(prob)}
+                      </Text>
+                    );
+                  })}
+                  {vix252 != null && (
+                    <Text size={11} tone="dim">VIX · {Math.round(vix252)}th pct (252d)</Text>
+                  )}
+                </>
+              ) : null}
+            </div>
 
-          {/* VIX percentile */}
-          <div className={pageStyles.qualityItem}>
-            <Text size={11} tone="dim">VIX context</Text>
-            <Text size={12} weight={500}>
-              {pctLabel(vix30)} (30d) · {pctLabel(vix252)} (252d)
-            </Text>
+            {/* Position column — leads with OMM regime age + longer-term VIX */}
+            <div className={pageStyles.horizonCol}>
+              <Text size={11} tone="dim" weight={500}>POSITION</Text>
+              {omm ? (
+                <>
+                  <Data size={14} weight={600}>
+                    {ommStateIcon(omm.state)} {omm.state} · Day {omm.regime_age_days}
+                  </Data>
+                  <Text size={12} tone="secondary">
+                    of ~{Math.round(omm.avg_regime_duration)} avg · {omm.stability}
+                  </Text>
+                  {omm.state_order.map((s, i) => {
+                    const prob = omm.transition_row[i] ?? 0;
+                    if (s === omm.state || prob < 0.08) return null;
+                    return (
+                      <Text key={s} size={11} tone={s === 'Bear' ? 'reject' : 'caution'}>
+                        →{s} {pct(prob)}
+                      </Text>
+                    );
+                  })}
+                  {vix252 != null && (
+                    <Text size={11} tone="dim">VIX · {Math.round(vix252)}th pct (252d)</Text>
+                  )}
+                </>
+              ) : null}
+            </div>
+
           </div>
-        </div>
-      ) : (
-        <div className={pageStyles.qualityStrip}>
-          <Text size={12} tone="dim" className={pageStyles.noData}>
-            Insufficient data for OMM — need 600+ daily bars from Tradier.
-          </Text>
-        </div>
+        </>
       )}
 
-      {/* 6. Intraday HMM session panel */}
-      <div className={pageStyles.sectionHeader}>
-        <Text size={13} weight={600}>Intraday Session Character (HMM)</Text>
-        <Text size={12} tone="secondary">Gaussian HMM on 15-min SPY bars — session state detection</Text>
-      </div>
-      {intraHmm ? (
-        <div className={pageStyles.hmmPanel}>
-          <div className={pageStyles.hmmPanelRow}>
-            {/* Session state */}
-            <div className={pageStyles.hmmStateLabel}>
-              <Data size={18} weight={500}>
-                {hmmStateIcon(intraHmm.state)} {intraHmm.state}
-              </Data>
-            </div>
-
-            {/* P(stay) progress bar */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 140 }}>
-              <Text size={11} tone="dim">P(stay in {intraHmm.state}): {Math.round(intraHmm.p_stay * 100)}%</Text>
-              <div className={pageStyles.progressBarWrap}>
-                <div
-                  className={`${pageStyles.progressBarFill}${intraHmm.p_stay < 0.6 ? ` ${pageStyles.progressBarFill_fragile}` : ''}`}
-                  style={{ width: `${Math.round(intraHmm.p_stay * 100)}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Transition warnings */}
-            {intraHmm.p_transition.length > 0 && (
-              <div className={pageStyles.hmmTransitions}>
-                {intraHmm.p_transition.map((t) => (
-                  <Text key={t.to} size={12} tone={t.prob > 0.2 ? 'caution' : 'secondary'}>
-                    →{t.to} {Math.round(t.prob * 100)}%
-                  </Text>
-                ))}
-              </div>
-            )}
-
-            {/* VIX intraday context */}
-            {vix30 != null && (
-              <div className={pageStyles.qualityItem}>
-                <Text size={11} tone="dim">VIX today</Text>
-                <Text size={12} weight={500}>{pctLabel(vix30)} vs last 30 sessions</Text>
-              </div>
-            )}
-          </div>
-
-          <Text size={11} tone="secondary">
-            {intraHmm.state === 'Trending'       && 'Directional momentum detected — price making consistent progress.'}
-            {intraHmm.state === 'Choppy'         && 'Low-variance, directionless session — range-bound, ideal for premium selling.'}
-            {intraHmm.state === 'Mean-reverting' && 'High-variance whipsaw session — large moves that reverse; avoid breakout plays.'}
-          </Text>
-        </div>
-      ) : (
-        <div className={pageStyles.hmmPanel}>
-          <Text size={12} tone="dim" className={pageStyles.noData}>
-            Insufficient intraday data — need 500+ 15-min bars (≈120 days) from Tradier.
-          </Text>
-        </div>
-      )}
-
-      {/* 7. Sector heatmap */}
+      {/* 6. Sector heatmap */}
       <div className={pageStyles.sectionHeader}>
         <Text size={13} weight={600}>Sector heatmap</Text>
         <Text size={12} tone="secondary">
@@ -371,7 +310,7 @@ export default function Step1RegimePage() {
         ))}
       </div>
 
-      {/* 8. Market news */}
+      {/* 7. Market news */}
       <section className={pageStyles.newsSection}>
         <Text size={11} tone="dim" weight={500}>MARKET NEWS</Text>
         {newsError && !newsLoading
