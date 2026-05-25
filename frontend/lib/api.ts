@@ -29,7 +29,7 @@ export const api = {
   getWatchlist:  () => get<WatchlistRow[]>('/api/watchlist'),
   getPortfolio:  () => get<PortfolioPosition[]>('/api/portfolio'),
   getAlerts:     () => get<AlertItem[]>('/api/alerts'),
-  getRegime:     () => get<MarketRegime>('/api/regime'),
+  getRegime:     (horizon?: string) => get<MarketRegime>(`/api/regime${horizon ? `?horizon=${horizon}` : ''}`),
   getSectors:    () => get<SectorTile[]>('/api/sectors'),
   getEvents:     () => get<UpcomingEvent[]>('/api/events'),
   getContracts:  (symbol: string, right: 'C' | 'P' = 'C') =>

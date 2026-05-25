@@ -1,16 +1,19 @@
 'use client';
 
 /*
- * Screener Step 3 — Market Regime.
+ * Screener Step 1 — Market Regime.
  * Macro snapshot — advisory for the user's trade. REJECT prompts confirmation
  * before proceeding to Step 4.
  *
  * Layout:
  *   1. Overall banner (PASS / CAUTION / REJECT + headline)
- *   2. Explainer (what this page means + how it's computed)
- *   3. Mini SPX + NDX candlestick charts (120 daily bars)
- *   4. Metric grid (SPX/NDX trend, breadth, VIX, yields, credit, put/call…)
- *   5. Sector heatmap (11 GICS sectors, 1-day change)
+ *   2. Explainer
+ *   3. Mini SPX + NDX candlestick charts
+ *   4. EMA / VIX metric grid
+ *   5. OMM regime quality strip (transition persistence, age, VIX percentile)
+ *   6. Intraday HMM session panel (Trending / Choppy / Mean-reverting)
+ *   7. Sector heatmap
+ *   8. Market news
  */
 
 import { useEffect, useState } from 'react';
@@ -21,10 +24,7 @@ import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { useScanStore } from '@/lib/scanStore';
 import { NewsCard } from '@/components/molecules/NewsCard';
 import { api } from '@/lib/api';
-import { useSettingsStore } from '@/lib/settingsStore';
-import { computeHmmState } from '@/lib/hmmMock';
-import { worstStatus } from '@/lib/status';
-import type { MarketRegime, SectorTile, NewsItem, HmmState } from '@/types/domain';
+import type { MarketRegime, SectorTile, NewsItem } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
@@ -43,16 +43,36 @@ function lastClose(candles: Candle[]): { close: number; changePct: number } {
   return { close: last.close, changePct: ((last.close - prev.close) / prev.close) * 100 };
 }
 
-function hmmStatus(state: HmmState): 'PASS' | 'CAUTION' | 'REJECT' {
-  if (state === 'Bull') return 'PASS';
-  if (state === 'Bear') return 'REJECT';
-  return 'CAUTION';
+function pctLabel(val: number | null | undefined): string {
+  if (val == null) return '—';
+  return `${Math.round(val)}th pct`;
 }
 
-export default function Step3Page() {
+function ommStateIcon(state: string): string {
+  if (state === 'Bull') return '↑';
+  if (state === 'Bear') return '↓';
+  return '≈';
+}
+
+function hmmStateIcon(state: string): string {
+  if (state === 'Trending')       return '▲';
+  if (state === 'Mean-reverting') return '↕';
+  return '≈';
+}
+
+function toApiHorizon(h: string | null | undefined): string {
+  const s = (h ?? '').toLowerCase();
+  if (s.startsWith('intraday')) return 'intraday';
+  if (s.startsWith('position')) return 'position';
+  return 'swing';
+}
+
+export default function Step1RegimePage() {
   const setRegime = useScanStore((s) => s.setRegime);
   const setCombinedRegime = useScanStore((s) => s.setCombinedRegime);
-  const markov = useSettingsStore((s) => s.markov);
+  const contextHorizon = useScanStore((s) => s.context?.horizon ?? null);
+  const apiHorizon = toApiHorizon(contextHorizon);
+
   const [regime, setRegimeData]   = useState<MarketRegime | null>(null);
   const [sectors, setSectors]     = useState<SectorTile[]>([]);
   const [spxCandles, setSpxCandles] = useState<Candle[]>([]);
@@ -63,7 +83,12 @@ export default function Step3Page() {
   const [newsError, setNewsError] = useState(false);
 
   useEffect(() => {
-    api.getRegime().then((r) => { setRegimeData(r); setRegime(r.overall); }).catch(() => setOffline(true));
+    api.getRegime(apiHorizon).then((r) => {
+      setRegimeData(r);
+      setRegime(r.overall);
+      setCombinedRegime(r.overall);
+    }).catch(() => setOffline(true));
+
     api.getSectors().then(setSectors).catch(() => setOffline(true));
     api.getCandles('SPY').then(setSpxCandles).catch(() => setOffline(true));
     api.getCandles('QQQ').then(setNdxCandles).catch(() => setOffline(true));
@@ -73,23 +98,19 @@ export default function Step3Page() {
       setNewsLoading(true);
       api.getNews(symbols).then(setNews).catch(() => setNewsError(true)).finally(() => setNewsLoading(false));
     }
-  }, [setRegime]);
+  }, [setRegime, setCombinedRegime, apiHorizon]);
 
   const spx = lastClose(spxCandles);
   const ndx = lastClose(ndxCandles);
-
-  const hmmResult    = computeHmmState(spxCandles, markov);
-  const hmmNdxResult = computeHmmState(ndxCandles, markov);
-  const hmmSt        = hmmStatus(hmmResult.state);
-  const hmmNdxSt     = hmmStatus(hmmNdxResult.state);
-  const combinedStatus = regime ? worstStatus(regime.overall, hmmSt, hmmNdxSt) : 'PENDING';
-
-  useEffect(() => {
-    setCombinedRegime(combinedStatus);
-  }, [combinedStatus, setCombinedRegime]);
+  const combinedStatus = regime?.overall ?? 'PENDING';
 
   const sectorsUp   = sectors.filter((s) => s.changePct >   0.05).length;
   const sectorsDown = sectors.filter((s) => s.changePct <  -0.05).length;
+
+  const omm = regime?.omm ?? null;
+  const intraHmm = regime?.intraday_hmm ?? null;
+  const vix30  = regime?.vix_pct_30d  ?? null;
+  const vix252 = regime?.vix_pct_252d ?? null;
 
   return (
     <div className={styles.main}>
@@ -136,7 +157,7 @@ export default function Step3Page() {
       <div className={pageStyles.indices}>
         <div className={pageStyles.indexCard}>
           <header className={pageStyles.indexHeader}>
-            <Text size={13} weight={600}>S&amp;P 500 (SPX)</Text>
+            <Text size={13} weight={600}>S&amp;P 500 (SPY)</Text>
             <div className={pageStyles.indexPriceGroup}>
               <Data size={14} weight={500}>{spx.close.toFixed(2)}</Data>
               <Data size={11} tone={spx.changePct > 0 ? 'pass' : spx.changePct < 0 ? 'reject' : undefined}>
@@ -150,7 +171,7 @@ export default function Step3Page() {
         </div>
         <div className={pageStyles.indexCard}>
           <header className={pageStyles.indexHeader}>
-            <Text size={13} weight={600}>Nasdaq 100 (NDX)</Text>
+            <Text size={13} weight={600}>Nasdaq 100 (QQQ)</Text>
             <div className={pageStyles.indexPriceGroup}>
               <Data size={14} weight={500}>{ndx.close.toFixed(2)}</Data>
               <Data size={11} tone={ndx.changePct > 0 ? 'pass' : ndx.changePct < 0 ? 'reject' : undefined}>
@@ -164,7 +185,7 @@ export default function Step3Page() {
         </div>
       </div>
 
-      {/* 4. Metric grid */}
+      {/* 4. EMA / VIX metric grid */}
       <div className={pageStyles.sectionHeader}>
         <Text size={13} weight={600}>EMA / VIX</Text>
         <Text size={12} tone="secondary">SPX &amp; NDX vs 200-day EMA, plus VIX level</Text>
@@ -183,49 +204,149 @@ export default function Step3Page() {
         ))}
       </div>
 
-      {/* HMM Regime */}
+      {/* 5. OMM regime quality strip */}
       <div className={pageStyles.sectionHeader}>
-        <Text size={13} weight={600}>HMM Regime</Text>
-        <Text size={12} tone="secondary">Hidden Markov Model state computed from SPX &amp; NDX candles</Text>
+        <Text size={13} weight={600}>Regime Persistence (OMM)</Text>
+        <Text size={12} tone="secondary">Rolling 500-day transition matrix — how durable is the current state?</Text>
       </div>
-      <div className={pageStyles.grid}>
-        <div className={pageStyles.metricCard}>
-          <Text size={12} tone="secondary">HMM State (SPX)</Text>
-          <div className={pageStyles.metricValueRow}>
-            <Data size={18} weight={500} tone={toneFor(hmmSt)}>{hmmResult.state}</Data>
+      {omm ? (
+        <div className={pageStyles.qualityStrip}>
+          {/* State */}
+          <div className={pageStyles.qualityItem}>
+            <Text size={11} tone="dim">State</Text>
+            <Data size={14} weight={500} tone={toneFor(omm.state === 'Bull' ? 'PASS' : omm.state === 'Bear' ? 'REJECT' : 'CAUTION')}>
+              {ommStateIcon(omm.state)} {omm.state}
+            </Data>
           </div>
-          <Text size={11} tone="secondary">
-            {hmmResult.state === 'Bull'   && 'Smoothed return positive — momentum supports longs.'}
-            {hmmResult.state === 'Bear'   && 'Smoothed return negative — momentum favours caution.'}
-            {hmmResult.state === 'Choppy' && 'Return near zero — unclear directional bias.'}
-          </Text>
-          <StatusBadge status={hmmSt} />
-        </div>
-        <div className={pageStyles.metricCard}>
-          <Text size={12} tone="secondary">HMM State (NDX)</Text>
-          <div className={pageStyles.metricValueRow}>
-            <Data size={18} weight={500} tone={toneFor(hmmNdxSt)}>{hmmNdxResult.state}</Data>
-          </div>
-          <Text size={11} tone="secondary">
-            {hmmNdxResult.state === 'Bull'   && 'Smoothed return positive — momentum supports longs.'}
-            {hmmNdxResult.state === 'Bear'   && 'Smoothed return negative — momentum favours caution.'}
-            {hmmNdxResult.state === 'Choppy' && 'Return near zero — unclear directional bias.'}
-          </Text>
-          <StatusBadge status={hmmNdxSt} />
-        </div>
-        <div className={pageStyles.metricCard}>
-          <Text size={12} tone="secondary">Overall Market Regime</Text>
-          <div className={pageStyles.metricValueRow}>
-            <Data size={18} weight={500} tone={toneFor(combinedStatus)}>{combinedStatus}</Data>
-          </div>
-          <Text size={11} tone="secondary">
-            Worst of EMA/VIX regime + SPX HMM + NDX HMM
-          </Text>
-          <StatusBadge status={combinedStatus} />
-        </div>
-      </div>
 
-      {/* 5. Sector heatmap */}
+          <div className={pageStyles.qualityDivider} />
+
+          {/* Stability */}
+          <div className={pageStyles.qualityItem}>
+            <Text size={11} tone="dim">Stability</Text>
+            <StatusBadge
+              status={omm.stability === 'Stable' ? 'PASS' : 'CAUTION'}
+              label={omm.stability}
+            />
+          </div>
+
+          <div className={pageStyles.qualityDivider} />
+
+          {/* Age */}
+          <div className={pageStyles.qualityItem}>
+            <Text size={11} tone="dim">Age</Text>
+            <Text size={13} weight={500}>
+              Day {omm.regime_age_days} of ~{Math.round(omm.avg_regime_duration)} avg
+            </Text>
+          </div>
+
+          <div className={pageStyles.qualityDivider} />
+
+          {/* P(stay) */}
+          <div className={pageStyles.qualityItem}>
+            <Text size={11} tone="dim">Continue</Text>
+            <Data size={13} weight={500} tone={omm.p_stay >= 0.75 ? 'pass' : omm.p_stay >= 0.5 ? 'caution' : 'reject'}>
+              {Math.round(omm.p_stay * 100)}%
+            </Data>
+          </div>
+
+          <div className={pageStyles.qualityDivider} />
+
+          {/* Transition risk — show states with risk > 8% */}
+          <div className={pageStyles.qualityItem}>
+            <Text size={11} tone="dim">Transition risk</Text>
+            <div className={pageStyles.transitionRow}>
+              {omm.state_order.map((s, i) => {
+                const prob = omm.transition_row[i] ?? 0;
+                if (s === omm.state || prob < 0.08) return null;
+                return (
+                  <Text key={s} size={12} tone={s === 'Bear' ? 'reject' : 'caution'}>
+                    →{s} {Math.round(prob * 100)}%
+                  </Text>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className={pageStyles.qualityDivider} />
+
+          {/* VIX percentile */}
+          <div className={pageStyles.qualityItem}>
+            <Text size={11} tone="dim">VIX context</Text>
+            <Text size={12} weight={500}>
+              {pctLabel(vix30)} (30d) · {pctLabel(vix252)} (252d)
+            </Text>
+          </div>
+        </div>
+      ) : (
+        <div className={pageStyles.qualityStrip}>
+          <Text size={12} tone="dim" className={pageStyles.noData}>
+            Insufficient data for OMM — need 600+ daily bars from Tradier.
+          </Text>
+        </div>
+      )}
+
+      {/* 6. Intraday HMM session panel */}
+      <div className={pageStyles.sectionHeader}>
+        <Text size={13} weight={600}>Intraday Session Character (HMM)</Text>
+        <Text size={12} tone="secondary">Gaussian HMM on 15-min SPY bars — session state detection</Text>
+      </div>
+      {intraHmm ? (
+        <div className={pageStyles.hmmPanel}>
+          <div className={pageStyles.hmmPanelRow}>
+            {/* Session state */}
+            <div className={pageStyles.hmmStateLabel}>
+              <Data size={18} weight={500}>
+                {hmmStateIcon(intraHmm.state)} {intraHmm.state}
+              </Data>
+            </div>
+
+            {/* P(stay) progress bar */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 140 }}>
+              <Text size={11} tone="dim">P(stay in {intraHmm.state}): {Math.round(intraHmm.p_stay * 100)}%</Text>
+              <div className={pageStyles.progressBarWrap}>
+                <div
+                  className={`${pageStyles.progressBarFill}${intraHmm.p_stay < 0.6 ? ` ${pageStyles.progressBarFill_fragile}` : ''}`}
+                  style={{ width: `${Math.round(intraHmm.p_stay * 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Transition warnings */}
+            {intraHmm.p_transition.length > 0 && (
+              <div className={pageStyles.hmmTransitions}>
+                {intraHmm.p_transition.map((t) => (
+                  <Text key={t.to} size={12} tone={t.prob > 0.2 ? 'caution' : 'secondary'}>
+                    →{t.to} {Math.round(t.prob * 100)}%
+                  </Text>
+                ))}
+              </div>
+            )}
+
+            {/* VIX intraday context */}
+            {vix30 != null && (
+              <div className={pageStyles.qualityItem}>
+                <Text size={11} tone="dim">VIX today</Text>
+                <Text size={12} weight={500}>{pctLabel(vix30)} vs last 30 sessions</Text>
+              </div>
+            )}
+          </div>
+
+          <Text size={11} tone="secondary">
+            {intraHmm.state === 'Trending'       && 'Directional momentum detected — price making consistent progress.'}
+            {intraHmm.state === 'Choppy'         && 'Low-variance, directionless session — range-bound, ideal for premium selling.'}
+            {intraHmm.state === 'Mean-reverting' && 'High-variance whipsaw session — large moves that reverse; avoid breakout plays.'}
+          </Text>
+        </div>
+      ) : (
+        <div className={pageStyles.hmmPanel}>
+          <Text size={12} tone="dim" className={pageStyles.noData}>
+            Insufficient intraday data — need 500+ 15-min bars (≈120 days) from Tradier.
+          </Text>
+        </div>
+      )}
+
+      {/* 7. Sector heatmap */}
       <div className={pageStyles.sectionHeader}>
         <Text size={13} weight={600}>Sector heatmap</Text>
         <Text size={12} tone="secondary">
@@ -250,6 +371,7 @@ export default function Step3Page() {
         ))}
       </div>
 
+      {/* 8. Market news */}
       <section className={pageStyles.newsSection}>
         <Text size={11} tone="dim" weight={500}>MARKET NEWS</Text>
         {newsError && !newsLoading

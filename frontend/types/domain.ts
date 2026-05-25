@@ -197,10 +197,36 @@ export interface RegimeMetric {
 
 export type HmmState = 'Bull' | 'Bear' | 'Choppy';
 
+export interface OmmData {
+  state:                'Bull' | 'Bear' | 'Choppy';
+  p_stay:               number;   // 0–1
+  stability:            'Stable' | 'Fragile';
+  regime_age_days:      number;
+  avg_regime_duration:  number;   // days
+  transition_row:       number[]; // [P(Bull), P(Bear), P(Choppy)]
+  state_order:          string[]; // ['Bull', 'Bear', 'Choppy']
+}
+
+export interface IntraHmmTransition {
+  to:   string;
+  prob: number;
+}
+
+export interface IntraHmmData {
+  state:        'Trending' | 'Choppy' | 'Mean-reverting';
+  p_stay:       number;
+  p_transition: IntraHmmTransition[];
+}
+
 export interface MarketRegime {
-  overall:  Status;
-  headline: string;
-  metrics:  RegimeMetric[];
+  overall:       Status;
+  headline:      string;
+  metrics:       RegimeMetric[];
+  omm?:          OmmData | null;
+  intraday_hmm?: IntraHmmData | null;
+  vix_pct_30d?:  number | null;
+  vix_pct_252d?: number | null;
+  /** Legacy client-side field — kept for backward compat, not populated by backend. */
   hmm?: { state: HmmState; confidence: number };
 }
 
