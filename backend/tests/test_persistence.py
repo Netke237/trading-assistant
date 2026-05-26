@@ -34,11 +34,13 @@ TestSessionLocal = async_sessionmaker(
 async def setup_db():
     """Create all tables before each test; drop them after."""
     from app.database import Base
+    from app.models.scan_session import ScanSessionBase
     # Import models so their metadata is registered on Base
     from app.models import portfolio, watchlist, audit_event  # noqa: F401
 
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(ScanSessionBase.metadata.create_all)
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -166,11 +168,11 @@ async def test_watchlist_add_list_delete(client):
     add_resp = await client.post("/api/watchlist", json={"symbol": "NVDA"})
     assert add_resp.status_code == 201, add_resp.text
 
-    # List
+    # List — endpoint returns list[WatchlistRow] objects
     list_resp = await client.get("/api/watchlist")
     assert list_resp.status_code == 200
-    symbols = list_resp.json()
-    assert "NVDA" in symbols
+    rows = list_resp.json()
+    assert any(r["symbol"] == "NVDA" for r in rows), f"NVDA not in watchlist: {rows}"
 
     # Delete
     del_resp = await client.delete("/api/watchlist/NVDA")
