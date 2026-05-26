@@ -129,6 +129,9 @@ class IntraHmmData(BaseModel):
     p_transition: list[IntraHmmTransition]   # non-trivial transitions (prob > 0.05)
 
 
+IntradayHmmStatus = Literal['ok', 'insufficient_data', 'unavailable']
+
+
 class MarketRegime(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     overall: Status
@@ -136,6 +139,7 @@ class MarketRegime(BaseModel):
     metrics: list[RegimeMetric]
     omm: Optional[OmmData] = None                  # Position / Swing — None if insufficient data
     intraday_hmm: Optional[IntraHmmData] = None    # Intraday — None if insufficient data
+    intraday_hmm_status: IntradayHmmStatus = 'unavailable'  # ok / insufficient_data / unavailable
     vix_pct_30d: Optional[float] = None            # VIX percentile vs last 30 trading days
     vix_pct_252d: Optional[float] = None           # VIX percentile vs last 252 trading days
 

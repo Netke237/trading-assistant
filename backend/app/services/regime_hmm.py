@@ -11,12 +11,18 @@ States are labelled from emission parameters:
 """
 from __future__ import annotations
 
+import logging
 import warnings
 from dataclasses import dataclass
 
 import numpy as np
 
-MIN_BARS = 500   # minimum 15-min bars to fit a reliable model
+logger = logging.getLogger(__name__)
+
+MIN_BARS = 200   # minimum 15-min bars to fit a reliable model
+# 55d × ~26 bars/day ≈ 1430 bars under normal conditions; 200 is a safe floor
+# for GaussianHMM with 3 components. Warn if between 200 and 500.
+_BARS_LOW_WARN = 500
 
 
 @dataclass
@@ -56,6 +62,13 @@ def compute_intraday_hmm(bars: list[dict]) -> HmmResult | None:
     """
     if len(bars) < MIN_BARS:
         return None
+
+    if len(bars) < _BARS_LOW_WARN:
+        logger.warning(
+            "compute_intraday_hmm: only %d bars available (ideal ≥ %d); "
+            "HMM fit may be less reliable",
+            len(bars), _BARS_LOW_WARN,
+        )
 
     try:
         from hmmlearn.hmm import GaussianHMM

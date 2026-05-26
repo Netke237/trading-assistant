@@ -219,13 +219,14 @@ export interface IntraHmmData {
 }
 
 export interface MarketRegime {
-  overall:       Status;
-  headline:      string;
-  metrics:       RegimeMetric[];
-  omm?:          OmmData | null;
-  intraday_hmm?: IntraHmmData | null;
-  vix_pct_30d?:  number | null;
-  vix_pct_252d?: number | null;
+  overall:              Status;
+  headline:             string;
+  metrics:              RegimeMetric[];
+  omm?:                 OmmData | null;
+  intraday_hmm?:        IntraHmmData | null;
+  intraday_hmm_status?: 'ok' | 'insufficient_data' | 'unavailable';
+  vix_pct_30d?:         number | null;
+  vix_pct_252d?:        number | null;
   /** Legacy client-side field — kept for backward compat, not populated by backend. */
   hmm?: { state: HmmState; confidence: number };
 }

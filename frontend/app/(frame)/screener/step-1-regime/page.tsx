@@ -224,6 +224,10 @@ export default function Step1RegimePage() {
                     <Text size={11} tone="dim">VIX · {Math.round(vix30)}th pct (30d)</Text>
                   )}
                 </>
+              ) : regime?.intraday_hmm_status === 'insufficient_data' ? (
+                <StatusBadge status="NO_DATA" label="Insufficient data" />
+              ) : regime?.intraday_hmm_status === 'unavailable' ? (
+                <StatusBadge status="NO_DATA" label="Data unavailable" />
               ) : (
                 <Text size={11} tone="dim">Calculating…</Text>
               )}
