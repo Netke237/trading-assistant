@@ -9,6 +9,7 @@ import { ContractStar } from '@/components/atoms/ContractStar';
 import { statusForScore } from '@/lib/status';
 import { api } from '@/lib/api';
 import { useScanStore } from '@/lib/scanStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import { contractLabel, type OptionContract } from '@/types/domain';
 import styles from '../screener.module.css';
 import tbl from './contracts.module.css';
@@ -48,12 +49,25 @@ export default function Step6Page() {
   const [sortDir, setSortDir]   = useState<SortDir>('desc');
   const [offline, setOffline]   = useState(false);
 
+  const { maxContractsPerChain, maxContractPrice } = useSettingsStore();
+  const scanResult = useScanStore((s) => s.scanResult);
+  const context    = useScanStore((s) => s.context);
   const candidates = useScanStore((s) => s.scanResult?.candidates ?? []);
+
+  const stockScoreBySymbol = Object.fromEntries(
+    (scanResult?.candidates ?? []).map((c) => [c.symbol, c.stockScore ?? 70]),
+  );
 
   useEffect(() => {
     if (candidates.length === 0) return;
     setOffline(false);
-    Promise.all(candidates.map((c) => api.getContracts(c.symbol)))
+    Promise.all(candidates.map((c) => api.getContracts(c.symbol, 'C', {
+      stock_score: stockScoreBySymbol[c.symbol] ?? 70,
+      direction:   context?.direction ?? 'Bullish',
+      horizon:     context?.horizon ?? 'swing',
+      limit:       maxContractsPerChain,
+      max_price:   maxContractPrice,
+    })))
       .then((results) => {
         const bySymbol: Record<string, OptionContract[]> = {};
         candidates.forEach((c, i) => { bySymbol[c.symbol] = results[i] ?? []; });
@@ -112,9 +126,12 @@ export default function Step6Page() {
           {candidates.map((candidate) => {
             const contracts = contractsBySymbol[candidate.symbol] ?? [];
             const isOpen = expanded === candidate.symbol;
+            // Recommended is always the highest-score contract regardless of active sort column.
+            const byScore      = sortContracts(contracts, 'score', 'desc');
+            const recommended  = byScore[0];
+            // User sort applies to the remaining (chain) contracts.
             const sorted = sortContracts(contracts, sortKey, sortDir);
-            const recommended = sorted[0];
-            const chain = sorted.slice(1);
+            const chain  = sorted.filter((c) => c.id !== recommended?.id);
             return (
               <div key={candidate.symbol} className={tbl.group}>
                 <button
@@ -175,7 +192,7 @@ export default function Step6Page() {
                     {chain.length > 0 && (
                       <>
                         <div className={tbl.sectionLabel}>
-                          <Text size={10} tone="dim" weight={500}>B — FULL CHAIN</Text>
+                          <Text size={10} tone="dim" weight={500}>B — TOP {chain.length}</Text>
                         </div>
                         {chain.map((c) => {
                           const status = statusForScore(c.score);
