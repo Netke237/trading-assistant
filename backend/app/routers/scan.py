@@ -39,7 +39,8 @@ from app.data.market import (
     _earnings_date_yf, _dividend_date_yf, _compute_iv_bs,
     TRADIER_BASE_URL, TRADIER_TOKEN,
 )
-from app.models.black_scholes import bs_delta
+from app.models.black_scholes import bs_delta  # kept for other callers in this module
+from app.data.augment import _augment
 from app.scoring.stock_scorer import score_stock, StockScoreCard
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.entry_quality import assess_entry
@@ -109,30 +110,6 @@ def _compute_deltas(current: ScanResult, previous: ScanResult | None) -> list[Sc
             ))
 
     return deltas
-
-
-def _augment(c: dict, stock_price: float = 0.0) -> dict:
-    mid = float(c.get("price", 0))
-    spread = float(c.get("spread", 0))
-    iv = float(c.get("implied_volatility") or 0)
-    delta = float(c.get("delta") or 0)
-
-    # Compute BS delta when greeks are missing but IV is available
-    if delta == 0 and iv > 0 and stock_price > 0:
-        K = float(c.get("strike", stock_price))
-        T = int(float(c.get("dte", 30))) / 365.0
-        is_call = c.get("right", "C") == "C"
-        computed = bs_delta(stock_price, K, T, r=0.05, sigma=iv, is_call=is_call)
-        if computed != 0.0:
-            delta = round(computed, 4)
-
-    return {
-        **c,
-        "bid": round(max(0.01, mid - spread / 2), 2),
-        "ask": round(mid + spread / 2, 2),
-        "delta": delta,
-        "iv_rank": int(c.get("ivRank", 0)),   # snake_case alias for contract_validator
-    }
 
 
 def _alt_reason(alt: dict, primary: dict, *, is_call: bool) -> str:
