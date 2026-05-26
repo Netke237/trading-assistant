@@ -209,7 +209,7 @@ export default function Step1RegimePage() {
               <Text size={11} tone="dim" weight={500}>INTRADAY</Text>
               {intraHmm ? (
                 <>
-                  <Data size={14} weight={600}>
+                  <Data size={14} weight={500}>
                     {hmmStateIcon(intraHmm.state)} {intraHmm.state}
                   </Data>
                   <Text size={12} tone="secondary">P(stay): {pct(intraHmm.p_stay)}</Text>
@@ -238,7 +238,7 @@ export default function Step1RegimePage() {
               <Text size={11} tone="dim" weight={500}>SWING</Text>
               {omm ? (
                 <>
-                  <Data size={14} weight={600}>
+                  <Data size={14} weight={500}>
                     {ommStateIcon(omm.state)} {omm.state} · {omm.stability}
                   </Data>
                   <Text size={12} tone="secondary">P(stay): {pct(omm.p_stay)}</Text>
@@ -263,7 +263,7 @@ export default function Step1RegimePage() {
               <Text size={11} tone="dim" weight={500}>POSITION</Text>
               {omm ? (
                 <>
-                  <Data size={14} weight={600}>
+                  <Data size={14} weight={500}>
                     {ommStateIcon(omm.state)} {omm.state} · Day {omm.regime_age_days}
                   </Data>
                   <Text size={12} tone="secondary">

@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Status } from './status';
-import type { Direction, TradeCardData } from '@/types/domain';
+import type { Direction, OptionContract, TradeCardData } from '@/types/domain';
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
@@ -41,6 +41,8 @@ interface ScanStoreState {
   conflictedSymbols: string[];
   rejectedLog: { symbol: string; reason: string }[];
   scanOverrides: Record<string, number | boolean | string>;
+  pickedContracts:    Record<string, string>;
+  contractsBySymbol:  Record<string, OptionContract[]>;
   setScanState:    (s: ScanState, at?: string) => void;
   setContext:      (c: ScanContext | null) => void;
   setRegime:       (r: Status) => void;
@@ -51,6 +53,9 @@ interface ScanStoreState {
   setConflictedSymbols: (symbols: string[]) => void;
   setRejectedLog:  (entries: { symbol: string; reason: string }[]) => void;
   setScanOverrides: (o: Record<string, number | boolean | string>) => void;
+  setPickedContract:    (symbol: string, contractId: string) => void;
+  clearPickedContracts: () => void;
+  setContractsBySymbol: (map: Record<string, OptionContract[]>) => void;
 }
 
 export const useScanStore = create<ScanStoreState>()(
@@ -67,6 +72,8 @@ export const useScanStore = create<ScanStoreState>()(
       conflictedSymbols: [],
       rejectedLog: [],
       scanOverrides:   {},
+      pickedContracts:    {},
+      contractsBySymbol:  {},
       setScanState:    (s, at) => set({ scanState: s, scanAt: at ?? null }),
       setContext:      (c) => set({ context: c }),
       setRegime:       (r) => set({ regime: r }),
@@ -80,15 +87,25 @@ export const useScanStore = create<ScanStoreState>()(
       setConflictedSymbols: (symbols) => set({ conflictedSymbols: symbols }),
       setRejectedLog: (entries) => set({ rejectedLog: entries }),
       setScanOverrides: (o) => set({ scanOverrides: o }),
+      setPickedContract:    (symbol, contractId) => set(s => ({ pickedContracts: { ...s.pickedContracts, [symbol]: contractId } })),
+      clearPickedContracts: () => set({ pickedContracts: {} }),
+      setContractsBySymbol: (map) => set({ contractsBySymbol: map }),
     }),
     {
       name: 'bamendjou-scan-store',
       storage: createJSONStorage(() => localStorage),
+      version: 2,
+      migrate: (persistedState, version) => {
+        const prev = (persistedState ?? {}) as any;
+        if (version < 2) return { ...prev, pickedContracts: {} };
+        return prev;
+      },
       partialize: (state) => ({
-        scanResult:  state.scanResult,
-        previousRun: state.previousRun,
-        context:     state.context,
-        scanAt:      state.scanAt,
+        scanResult:      state.scanResult,
+        previousRun:     state.previousRun,
+        context:         state.context,
+        scanAt:          state.scanAt,
+        pickedContracts: state.pickedContracts,
       }),
       merge: (persisted, current) => ({
         ...current,
