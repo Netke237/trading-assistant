@@ -360,6 +360,45 @@ def _rule_trend(
 
 
 # ---------------------------------------------------------------------------
+# Rule 2: Pullback — FVG helper
+# ---------------------------------------------------------------------------
+
+def _detect_fvg(bars: list[dict], direction: str) -> tuple[bool, float, float]:
+    """
+    Scan the last 30 bars for the most recent FVG that the current price falls inside.
+    Returns (hit, gap_low, gap_high). gap_low/gap_high are 0.0 if no hit.
+
+    Bullish FVG (for bullish direction):
+        bar[i-1].low > bar[i+1].high  — unfilled gap above bar[i+1]
+        gap = (bar[i+1].high, bar[i-1].low)
+
+    Bearish FVG (for bearish direction):
+        bar[i-1].high < bar[i+1].low  — unfilled gap below bar[i+1]
+        gap = (bar[i-1].high, bar[i+1].low)
+    """
+    if len(bars) < 3:
+        return False, 0.0, 0.0
+    current_price = bars[-1]["close"]
+    window = bars[-30:] if len(bars) >= 30 else bars
+    # Scan from newest to oldest (skip first and last of window)
+    for i in range(len(window) - 2, 0, -1):
+        prev_bar  = window[i - 1]
+        curr_bar  = window[i]      # noqa: F841 — middle candle (the gap candle)
+        next_bar  = window[i + 1]
+        if direction == "Bullish":
+            gap_low  = next_bar["high"]
+            gap_high = prev_bar["low"]
+            if gap_high > gap_low and gap_low <= current_price <= gap_high:
+                return True, round(gap_low, 2), round(gap_high, 2)
+        else:  # Bearish
+            gap_low  = prev_bar["high"]
+            gap_high = next_bar["low"]
+            if gap_high > gap_low and gap_low <= current_price <= gap_high:
+                return True, round(gap_low, 2), round(gap_high, 2)
+    return False, 0.0, 0.0
+
+
+# ---------------------------------------------------------------------------
 # Rule 2: Pullback
 # ---------------------------------------------------------------------------
 
@@ -428,9 +467,17 @@ def _rule_pullback(bars: list[dict], cfg: dict, direction: Direction = "Bullish"
                               {"reason": "bounce_too_deep", "retracement_pct": round(retracement * 100, 1)})
 
         status, score, reason = fib_result
-        return RuleResult("pullback", status, score,
-                          {"retracement_pct": round(retracement * 100, 1), "reason": reason,
-                           "swing_low": round(swing_low, 2), "current": round(current_price, 2)})
+
+        # FVG soft bonus: +8 pts when pullback has Fibonacci confluence AND price sits in an FVG
+        fvg_hit, fvg_low, fvg_high = _detect_fvg(bars, direction)
+        if fvg_hit and score >= 35:   # only boost CAUTION or better, not REJECT
+            score = min(100, score + 8)
+
+        detail: dict = {"retracement_pct": round(retracement * 100, 1), "reason": reason,
+                        "swing_low": round(swing_low, 2), "current": round(current_price, 2)}
+        detail["fvg_hit"]  = fvg_hit
+        detail["fvg_gap"]  = [fvg_low, fvg_high] if fvg_hit else None
+        return RuleResult("pullback", status, score, detail)
 
     # --- Bullish (original logic) ---
     retracement = (swing_high - current_price) / swing_range
@@ -462,9 +509,17 @@ def _rule_pullback(bars: list[dict], cfg: dict, direction: Direction = "Bullish"
                           {"reason": "too_deep", "retracement_pct": round(retracement * 100, 1)})
 
     status, score, reason = fib_result
-    return RuleResult("pullback", status, score,
-                      {"retracement_pct": round(retracement * 100, 1), "reason": reason,
-                       "swing_high": round(swing_high, 2), "current": round(current_price, 2)})
+
+    # FVG soft bonus: +8 pts when pullback has Fibonacci confluence AND price sits in an FVG
+    fvg_hit, fvg_low, fvg_high = _detect_fvg(bars, direction)
+    if fvg_hit and score >= 35:   # only boost CAUTION or better, not REJECT
+        score = min(100, score + 8)
+
+    detail: dict = {"retracement_pct": round(retracement * 100, 1), "reason": reason,
+                    "swing_high": round(swing_high, 2), "current": round(current_price, 2)}
+    detail["fvg_hit"]  = fvg_hit
+    detail["fvg_gap"]  = [fvg_low, fvg_high] if fvg_hit else None
+    return RuleResult("pullback", status, score, detail)
 
 
 # ---------------------------------------------------------------------------

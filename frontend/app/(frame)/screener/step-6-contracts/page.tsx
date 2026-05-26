@@ -9,6 +9,7 @@ import { ContractStar } from '@/components/atoms/ContractStar';
 import { statusForScore } from '@/lib/status';
 import { api } from '@/lib/api';
 import { useScanStore } from '@/lib/scanStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import { contractLabel, type OptionContract } from '@/types/domain';
 import styles from '../screener.module.css';
 import tbl from './contracts.module.css';
@@ -41,28 +42,50 @@ function sortContracts(
 }
 
 export default function Step6Page() {
-  const [contractsBySymbol, setContractsBySymbol] = useState<Record<string, OptionContract[]>>({});
+  const [localContractsBySymbol, setLocalContractsBySymbol] = useState<Record<string, OptionContract[]>>({});
   const [expanded, setExpanded] = useState<string>('');
   const [pick, setPick]         = useState<string>('');
   const [sortKey, setSortKey]   = useState<SortKey>('score');
   const [sortDir, setSortDir]   = useState<SortDir>('desc');
   const [offline, setOffline]   = useState(false);
 
-  const candidates = useScanStore((s) => s.scanResult?.candidates ?? []);
+  const { maxContractsPerChain, maxContractPrice } = useSettingsStore();
+  const scanResult              = useScanStore((s) => s.scanResult);
+  const context                 = useScanStore((s) => s.context);
+  const candidates              = useScanStore((s) => s.scanResult?.candidates ?? []);
+  const pickedContracts         = useScanStore((s) => s.pickedContracts);
+  const setPickedContract       = useScanStore((s) => s.setPickedContract);
+  const setContractsBySymbol    = useScanStore((s) => s.setContractsBySymbol);
+
+  const stockScoreBySymbol = Object.fromEntries(
+    (scanResult?.candidates ?? []).map((c) => [c.symbol, c.stockScore ?? 70]),
+  );
 
   useEffect(() => {
     if (candidates.length === 0) return;
     setOffline(false);
-    Promise.all(candidates.map((c) => api.getContracts(c.symbol)))
+    Promise.all(candidates.map((c) => api.getContracts(c.symbol, 'C', {
+      stock_score: stockScoreBySymbol[c.symbol] ?? 70,
+      direction:   context?.direction ?? 'Bullish',
+      horizon:     context?.horizon ?? 'swing',
+      limit:       maxContractsPerChain,
+      max_price:   maxContractPrice,
+    })))
       .then((results) => {
         const bySymbol: Record<string, OptionContract[]> = {};
         candidates.forEach((c, i) => { bySymbol[c.symbol] = results[i] ?? []; });
+        setLocalContractsBySymbol(bySymbol);
         setContractsBySymbol(bySymbol);
-        const first = results[0]?.[0];
+        const firstSymbol = candidates[0]?.symbol ?? '';
+        const storedPick = pickedContracts[firstSymbol];
+        const first = storedPick
+          ? bySymbol[firstSymbol]?.find((c) => c.id === storedPick) ?? results[0]?.[0]
+          : results[0]?.[0];
         if (first) setPick(first.id);
         if (candidates[0]) setExpanded(candidates[0].symbol);
       })
       .catch(() => setOffline(true));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidates]);
 
   const toggleSort = (k: SortKey) => {
@@ -110,11 +133,14 @@ export default function Step6Page() {
           </div>
 
           {candidates.map((candidate) => {
-            const contracts = contractsBySymbol[candidate.symbol] ?? [];
+            const contracts = localContractsBySymbol[candidate.symbol] ?? [];
             const isOpen = expanded === candidate.symbol;
+            // Recommended is always the highest-score contract regardless of active sort column.
+            const byScore      = sortContracts(contracts, 'score', 'desc');
+            const recommended  = byScore[0];
+            // User sort applies to the remaining (chain) contracts.
             const sorted = sortContracts(contracts, sortKey, sortDir);
-            const recommended = sorted[0];
-            const chain = sorted.slice(1);
+            const chain  = sorted.filter((c) => c.id !== recommended?.id);
             return (
               <div key={candidate.symbol} className={tbl.group}>
                 <button
@@ -144,7 +170,10 @@ export default function Step6Page() {
                               status={status}
                               columns={COLUMNS}
                               selected={c.id === pick}
-                              onClick={() => setPick(c.id)}
+                              onClick={() => {
+                                setPick(c.id);
+                                setPickedContract(candidate.symbol, c.id);
+                              }}
                               className={tbl.recommendedRow}
                             >
                               <ContractStar contractId={c.id} size="sm" />
@@ -185,7 +214,10 @@ export default function Step6Page() {
                               status={status}
                               columns={COLUMNS}
                               selected={c.id === pick}
-                              onClick={() => setPick(c.id)}
+                              onClick={() => {
+                                setPick(c.id);
+                                setPickedContract(candidate.symbol, c.id);
+                              }}
                             >
                               <ContractStar contractId={c.id} size="sm" />
                               <Data size={13} weight={500}>{contractLabel(c)}</Data>

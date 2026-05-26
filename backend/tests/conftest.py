@@ -155,6 +155,8 @@ def client():
     with (
         patch("app.routers.contracts.fetch_option_chain",
               return_value=_contract_dicts),
+        patch("app.routers.contracts.fetch_price",
+              return_value=190.0),
         patch("app.routers.candles.fetch_candles",
               side_effect=_candles_for_symbol),
     ):

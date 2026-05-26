@@ -29,6 +29,7 @@ from app.schemas import (
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
     ScanDelta, ContinuousScanConfig, ScanState,
     AlternativeContract,
+    TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
 )
 from typing import Literal
 from app.data.market import (
@@ -39,7 +40,8 @@ from app.data.market import (
     _earnings_date_yf, _dividend_date_yf, _compute_iv_bs,
     TRADIER_BASE_URL, TRADIER_TOKEN,
 )
-from app.models.black_scholes import bs_delta
+from app.models.black_scholes import bs_delta  # kept for other callers in this module
+from app.data.augment import _augment
 from app.scoring.stock_scorer import score_stock, StockScoreCard
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.entry_quality import assess_entry
@@ -111,30 +113,6 @@ def _compute_deltas(current: ScanResult, previous: ScanResult | None) -> list[Sc
     return deltas
 
 
-def _augment(c: dict, stock_price: float = 0.0) -> dict:
-    mid = float(c.get("price", 0))
-    spread = float(c.get("spread", 0))
-    iv = float(c.get("implied_volatility") or 0)
-    delta = float(c.get("delta") or 0)
-
-    # Compute BS delta when greeks are missing but IV is available
-    if delta == 0 and iv > 0 and stock_price > 0:
-        K = float(c.get("strike", stock_price))
-        T = int(float(c.get("dte", 30))) / 365.0
-        is_call = c.get("right", "C") == "C"
-        computed = bs_delta(stock_price, K, T, r=0.05, sigma=iv, is_call=is_call)
-        if computed != 0.0:
-            delta = round(computed, 4)
-
-    return {
-        **c,
-        "bid": round(max(0.01, mid - spread / 2), 2),
-        "ask": round(mid + spread / 2, 2),
-        "delta": delta,
-        "iv_rank": int(c.get("ivRank", 0)),   # snake_case alias for contract_validator
-    }
-
-
 def _alt_reason(alt: dict, primary: dict, *, is_call: bool) -> str:
     alt_strike = float(alt.get("strike", 0))
     pri_strike = float(primary.get("strike", 0))
@@ -162,6 +140,17 @@ def _alt_reason(alt: dict, primary: dict, *, is_call: bool) -> str:
 
 
 _SCAN_CONCURRENCY = 10
+
+
+def _safe(model_cls, d: dict | None):
+    """Construct a Pydantic detail model from a dict, ignoring unknown keys."""
+    if not d:
+        return None
+    try:
+        known = {f: d[f] for f in model_cls.model_fields if f in d}
+        return model_cls(**known)
+    except Exception:
+        return None
 
 
 async def _process_symbol(
@@ -347,6 +336,9 @@ async def _process_symbol(
             next_event_days = days
             next_event_label = ev_label
 
+    # Build a name → detail lookup for rich ScoreBreakdown fields
+    rule_detail = {r.name: r.detail for r in card.rules}
+
     trade_card = TradeCardData(
         symbol=symbol,
         company=company,
@@ -361,6 +353,11 @@ async def _process_symbol(
             trigger=_rule_score(card, "trigger"),
             event=_rule_score(card, "event"),
             volatility=_rule_score(card, "vol"),
+            trendDetail=    _safe(TrendDetail,    rule_detail.get("trend")),
+            pullbackDetail= _safe(PullbackDetail, rule_detail.get("pullback")),
+            triggerDetail=  _safe(TriggerDetail,  rule_detail.get("trigger")),
+            eventDetail=    _safe(EventDetail,    rule_detail.get("event")),
+            volDetail=      _safe(VolDetail,      rule_detail.get("vol")),
         ),
         nextEventDays=next_event_days,
         nextEventLabel=next_event_label,

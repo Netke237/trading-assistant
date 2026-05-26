@@ -143,8 +143,9 @@ async def get_regime(
 
     # ── 4. Gaussian HMM (always computed — regime step is before horizon selection) ─
     intraday_hmm_out: IntraHmmData | None = None
+    intraday_hmm_status: str = 'unavailable'
     try:
-        intra_bars = fetch_intraday_candles('SPY', interval='15min', days=120)
+        intra_bars = fetch_intraday_candles('SPY', interval='15min', days=55)
         if intra_bars:
             result_hmm = compute_intraday_hmm(intra_bars)
             if result_hmm:
@@ -156,6 +157,11 @@ async def get_regime(
                         for t in result_hmm.p_transition
                     ],
                 )
+                intraday_hmm_status = 'ok'
+            else:
+                # Fetch returned some bars but HMM returned None (insufficient_data)
+                intraday_hmm_status = 'insufficient_data'
+        # else: intra_bars is empty → status stays 'unavailable'
     except Exception:
         pass
 
@@ -165,6 +171,7 @@ async def get_regime(
         metrics=metrics,
         omm=omm_out,
         intraday_hmm=intraday_hmm_out,
+        intraday_hmm_status=intraday_hmm_status,
         vix_pct_30d=vix_pct_30d,
         vix_pct_252d=vix_pct_252d,
     )

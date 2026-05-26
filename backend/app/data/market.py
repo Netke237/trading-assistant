@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from datetime import date, timedelta
 from typing import Literal, Optional
@@ -9,6 +10,8 @@ import httpx
 
 TRADIER_BASE_URL = os.getenv("TRADIER_BASE_URL", "https://api.tradier.com")
 TRADIER_TOKEN = os.getenv("TRADIER_API_TOKEN", "")
+
+logger = logging.getLogger(__name__)
 
 
 def _headers() -> dict:
@@ -65,11 +68,11 @@ def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
         return []
 
 
-def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 60) -> list[dict]:
-    """yfinance fallback for intraday bars. Max 60 days for 15m resolution."""
+def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 55) -> list[dict]:
+    """yfinance fallback for intraday bars. Max 55 days for 15m resolution (hard cap 60; buffer 5)."""
     try:
         import yfinance as yf
-        capped_days = min(days, 60)
+        capped_days = min(days, 55)
         df = yf.download(
             symbol,
             period=f"{capped_days}d",
@@ -97,18 +100,21 @@ def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 60) -> li
 def fetch_intraday_candles(
     symbol: str,
     interval: str = "15min",
-    days: int = 90,
+    days: int = 55,
 ) -> list[dict]:
     """
     Returns intraday OHLCV bars. Tries Tradier first, falls back to yfinance.
     interval: '1min' | '5min' | '15min' (default 15min)
-    days: lookback in calendar days (default 90 ≈ 500+ bars of 15m data)
-    Returns [] on any error.
+    days: lookback in calendar days (default 55 — yfinance hard cap is 60d for 15m)
+    Returns [] only if all sources fail; returns partial results if any bars were fetched.
     """
+    logger.info("Fetching intraday %s %s days=%s", symbol, interval, days)
+    capped_days = min(days, 55)
+
     if TRADIER_TOKEN:
         try:
             end = date.today()
-            start = end - timedelta(days=days)
+            start = end - timedelta(days=capped_days)
             resp = httpx.get(
                 f"{TRADIER_BASE_URL}/v1/markets/timesales",
                 headers=_headers(),
@@ -117,7 +123,8 @@ def fetch_intraday_candles(
                     "interval": interval,
                     "start": start.isoformat(),
                     "end": end.isoformat(),
-                    "session_filter": "open",
+                    # Use "all" instead of "open" — "open" silently drops bars during off-hours
+                    "session_filter": "all",
                 },
                 timeout=30,
             )
@@ -138,12 +145,19 @@ def fetch_intraday_candles(
                         "volume": int(d.get("volume", 0)),
                     })
                 if rows:
+                    logger.info("Tradier returned %d intraday bars for %s", len(rows), symbol)
                     return rows
-        except Exception:
-            pass
-    # yfinance fallback — max 60 calendar days for 15m resolution
+                logger.warning("Tradier returned 0 intraday bars for %s — falling back to yfinance", symbol)
+            else:
+                logger.warning("Tradier timesales response had no 'series' for %s — falling back to yfinance", symbol)
+        except Exception as exc:
+            logger.warning("Tradier intraday fetch failed for %s: %s — falling back to yfinance", symbol, exc)
+
+    # yfinance fallback — hard cap 55 calendar days for 15m resolution
     yf_interval = interval.replace("min", "m")  # "15min" → "15m"
-    return _fetch_intraday_yf(symbol, interval=yf_interval, days=days)
+    rows = _fetch_intraday_yf(symbol, interval=yf_interval, days=capped_days)
+    logger.info("yfinance returned %d intraday bars for %s", len(rows), symbol)
+    return rows
 
 
 def fetch_price(symbol: str) -> Optional[float]:

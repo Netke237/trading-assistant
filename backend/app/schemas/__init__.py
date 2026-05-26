@@ -24,6 +24,37 @@ RrModel = Literal['Heston repriced', 'Delta approximation']
 
 # ── Score breakdowns ─────────────────────────────────────────────────────────
 
+class TriggerDetail(BaseModel):
+    candle:         str
+    macd_pass:      bool
+    rsi_pass:       bool
+    stoch_pass:     bool
+    momentum_count: int
+    volume_bonus:   bool
+
+class PullbackDetail(BaseModel):
+    retracement_pct: float | None = None
+    reason:          str
+    fvg_hit:         bool = False
+    fvg_gap:         list[float] | None = None
+
+class TrendDetail(BaseModel):
+    method:    str
+    adx_val:   float | None = None
+    price_pts: int   | None = None
+    slope_pts: int   | None = None
+    stock_roc: float | None = None
+    bench_roc: float | None = None
+
+class EventDetail(BaseModel):
+    event:         str
+    days_to_event: int | None = None
+
+class VolDetail(BaseModel):
+    iv_rank: float | None = None
+    reason:  str   | None = None
+
+
 class ScoreBreakdown(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     trend: int
@@ -31,6 +62,12 @@ class ScoreBreakdown(BaseModel):
     trigger: int
     event: int
     volatility: int
+    # Optional rich detail — populated from RuleResult.detail
+    trendDetail:    TrendDetail    | None = None
+    pullbackDetail: PullbackDetail | None = None
+    triggerDetail:  TriggerDetail  | None = None
+    eventDetail:    EventDetail    | None = None
+    volDetail:      VolDetail      | None = None
 
 
 class ContractScoreBreakdown(BaseModel):
@@ -129,6 +166,9 @@ class IntraHmmData(BaseModel):
     p_transition: list[IntraHmmTransition]   # non-trivial transitions (prob > 0.05)
 
 
+IntradayHmmStatus = Literal['ok', 'insufficient_data', 'unavailable']
+
+
 class MarketRegime(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     overall: Status
@@ -136,6 +176,7 @@ class MarketRegime(BaseModel):
     metrics: list[RegimeMetric]
     omm: Optional[OmmData] = None                  # Position / Swing — None if insufficient data
     intraday_hmm: Optional[IntraHmmData] = None    # Intraday — None if insufficient data
+    intraday_hmm_status: IntradayHmmStatus = 'unavailable'  # ok / insufficient_data / unavailable
     vix_pct_30d: Optional[float] = None            # VIX percentile vs last 30 trading days
     vix_pct_252d: Optional[float] = None           # VIX percentile vs last 252 trading days
 

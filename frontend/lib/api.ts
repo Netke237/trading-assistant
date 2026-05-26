@@ -32,8 +32,18 @@ export const api = {
   getRegime:     (horizon?: string) => get<MarketRegime>(`/api/regime${horizon ? `?horizon=${horizon}` : ''}`),
   getSectors:    () => get<SectorTile[]>('/api/sectors'),
   getEvents:     () => get<UpcomingEvent[]>('/api/events'),
-  getContracts:  (symbol: string, right: 'C' | 'P' = 'C') =>
-    get<OptionContract[]>(`/api/contracts?symbol=${encodeURIComponent(symbol)}&right=${right}`),
+  getContracts: (
+    symbol: string,
+    right: 'C' | 'P' = 'C',
+    ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number }
+  ) => get<OptionContract[]>(
+    `/api/contracts?symbol=${encodeURIComponent(symbol)}&right=${right}` +
+    (ctx?.stock_score != null ? `&stock_score=${ctx.stock_score}` : '') +
+    (ctx?.direction ? `&direction=${encodeURIComponent(ctx.direction)}` : '') +
+    (ctx?.horizon ? `&horizon=${encodeURIComponent(ctx.horizon)}` : '') +
+    (ctx?.limit != null ? `&limit=${ctx.limit}` : '') +
+    (ctx?.max_price != null ? `&max_price=${ctx.max_price}` : '')
+  ),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards'),
   getCandles:    (symbol: string) => get<Candle[]>(`/api/candles/${encodeURIComponent(symbol)}`),
   getNews:         (symbols: string[]) => get<NewsItem[]>(`/api/news?symbols=${symbols.join(',')}`),

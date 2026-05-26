@@ -25,6 +25,7 @@ import { api } from '@/lib/api';
 import { exportToXlsx } from '@/lib/export';
 import { useScanStore } from '@/lib/scanStore';
 import { cardToRow } from './cardToRow';
+import { trendDetailText, pullbackDetailText, triggerDetailText, eventDetailText, volDetailText } from '@/components/organisms/TradeCard';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import styles from './page.module.css';
@@ -349,6 +350,18 @@ export default function Step4Page() {
                 </Data>
               </div>
             </div>
+            {(() => {
+              const bd = selected.breakdown;
+              const detailFns: Record<string, () => string | undefined> = {
+                trend:      () => trendDetailText(bd?.trendDetail),
+                pullback:   () => pullbackDetailText(bd?.pullbackDetail),
+                trigger:    () => triggerDetailText(bd?.triggerDetail),
+                event:      () => eventDetailText(bd?.eventDetail),
+                volatility: () => volDetailText(bd?.volDetail),
+              };
+              const text = detailFns[c.key]?.();
+              return text ? <Text size={11} tone="dim">{text}</Text> : null;
+            })()}
           </article>
         ))}
       </div>
