@@ -29,6 +29,7 @@ from app.schemas import (
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
     ScanDelta, ContinuousScanConfig, ScanState,
     AlternativeContract,
+    TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
 )
 from typing import Literal
 from app.data.market import (
@@ -139,6 +140,17 @@ def _alt_reason(alt: dict, primary: dict, *, is_call: bool) -> str:
 
 
 _SCAN_CONCURRENCY = 10
+
+
+def _safe(model_cls, d: dict | None):
+    """Construct a Pydantic detail model from a dict, ignoring unknown keys."""
+    if not d:
+        return None
+    try:
+        known = {f: d[f] for f in model_cls.model_fields if f in d}
+        return model_cls(**known)
+    except Exception:
+        return None
 
 
 async def _process_symbol(
@@ -324,6 +336,9 @@ async def _process_symbol(
             next_event_days = days
             next_event_label = ev_label
 
+    # Build a name → detail lookup for rich ScoreBreakdown fields
+    rule_detail = {r.name: r.detail for r in card.rules}
+
     trade_card = TradeCardData(
         symbol=symbol,
         company=company,
@@ -338,6 +353,11 @@ async def _process_symbol(
             trigger=_rule_score(card, "trigger"),
             event=_rule_score(card, "event"),
             volatility=_rule_score(card, "vol"),
+            trendDetail=    _safe(TrendDetail,    rule_detail.get("trend")),
+            pullbackDetail= _safe(PullbackDetail, rule_detail.get("pullback")),
+            triggerDetail=  _safe(TriggerDetail,  rule_detail.get("trigger")),
+            eventDetail=    _safe(EventDetail,    rule_detail.get("event")),
+            volDetail=      _safe(VolDetail,      rule_detail.get("vol")),
         ),
         nextEventDays=next_event_days,
         nextEventLabel=next_event_label,
