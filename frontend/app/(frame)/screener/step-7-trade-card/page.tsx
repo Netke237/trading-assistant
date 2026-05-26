@@ -17,7 +17,9 @@ import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/Send
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useScanStore } from '@/lib/scanStore';
 import { logAudit } from '@/lib/audit';
-import type { PortfolioPosition, TradeCardData } from '@/types/domain';
+import { statusForScore } from '@/lib/status';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import type { PortfolioPosition, Status, TradeCardData } from '@/types/domain';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 
@@ -96,8 +98,10 @@ export default function Step7Page() {
     });
   }, [cards]);
 
-  const scanResult        = useScanStore((s) => s.scanResult);
-  const setSelectedSymbol = useScanStore((s) => s.setSelectedSymbol);
+  const scanResult          = useScanStore((s) => s.scanResult);
+  const setSelectedSymbol   = useScanStore((s) => s.setSelectedSymbol);
+  const pickedContracts     = useScanStore((s) => s.pickedContracts);
+  const contractsBySymbol   = useScanStore((s) => s.contractsBySymbol);
 
   useEffect(() => {
     if (scanResult?.candidates?.length) {
@@ -122,6 +126,33 @@ export default function Step7Page() {
   const symbols = cards.map((c) => c.symbol);
 
   const card = cardIndex[active] ?? cards[0];
+
+  const pickedId = pickedContracts[card?.symbol ?? ''];
+  const pickedContract = pickedId
+    ? contractsBySymbol[card?.symbol ?? '']?.find((c) => c.id === pickedId)
+    : undefined;
+
+  const effectiveCard = pickedContract && pickedContract.id !== card?.contract
+    ? {
+        ...card,
+        contract: pickedContract.id,
+        contractScore: pickedContract.score,
+        contractConfidence: statusForScore(pickedContract.score) as Status,
+        contractBreakdown: card?.contractBreakdown,
+        contractDetails: {
+          strike:       pickedContract.strike,
+          expiry:       pickedContract.expiry,
+          right:        pickedContract.right,
+          mid:          pickedContract.price,
+          delta:        pickedContract.delta,
+          theta:        pickedContract.theta,
+          ivRank:       pickedContract.ivRank,
+          ivPercentile: pickedContract.ivPercentile,
+          dte:          pickedContract.dte,
+        },
+        _userOverride: true,
+      }
+    : card;
 
   const basketCards = useMemo<TradeCardData[]>(
     () => basket.map((s) => cardIndex[s]).filter((c): c is TradeCardData => !!c),
@@ -207,14 +238,19 @@ export default function Step7Page() {
         <Text size={13} tone="dim">Run a scan to generate trade cards.</Text>
       )}
 
-      {card && (
-        <TradeCard
-          data={card}
-          recId={recIdMap[card.symbol]}
-          onSendToBroker={() => !basketEmpty && setDialogOpen(true)}
-          sendLabel={sendLabel}
-          sendDisabled={basketEmpty}
-        />
+      {effectiveCard && (
+        <>
+          {(effectiveCard as any)._userOverride && (
+            <StatusBadge status="PENDING" label="User-selected" />
+          )}
+          <TradeCard
+            data={effectiveCard}
+            recId={recIdMap[effectiveCard.symbol]}
+            onSendToBroker={() => !basketEmpty && setDialogOpen(true)}
+            sendLabel={sendLabel}
+            sendDisabled={basketEmpty}
+          />
+        </>
       )}
 
       {dialogOpen && (
