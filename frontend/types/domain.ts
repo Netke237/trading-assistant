@@ -9,12 +9,48 @@ export type Horizon = 'Intraday' | 'Swing' | 'Position' | 'Custom';
 export type AlertKind = 'Info' | 'Action' | 'Critical';
 export type OrderType = 'Limit' | 'Market' | 'Stop';
 
+export interface TriggerDetail {
+  candle:         string;
+  macd_pass:      boolean;
+  rsi_pass:       boolean;
+  stoch_pass:     boolean;
+  momentum_count: number;
+  volume_bonus:   boolean;
+}
+export interface PullbackDetail {
+  retracement_pct: number | null;
+  reason:          string;
+  fvg_hit:         boolean;
+  fvg_gap:         [number, number] | null;
+}
+export interface TrendDetail {
+  method:     string;
+  adx_val?:   number;
+  price_pts?: number;
+  slope_pts?: number;
+  stock_roc?: number;
+  bench_roc?: number;
+}
+export interface EventDetail {
+  event:          string;
+  days_to_event?: number;
+}
+export interface VolDetail {
+  iv_rank?: number;
+  reason?:  string;
+}
+
 export interface ScoreBreakdown {
   trend:       number;
   pullback:    number;
   trigger:     number;
   event:       number;
   volatility:  number;
+  trendDetail?:    TrendDetail;
+  pullbackDetail?: PullbackDetail;
+  triggerDetail?:  TriggerDetail;
+  eventDetail?:    EventDetail;
+  volDetail?:      VolDetail;
 }
 
 export interface ContractScoreBreakdown {

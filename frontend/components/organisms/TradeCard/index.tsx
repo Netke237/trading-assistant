@@ -9,7 +9,7 @@ import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk } from '@/lib/risk';
-import type { TradeCardData, TargetLevel } from '@/types/domain';
+import type { TradeCardData, TargetLevel, TriggerDetail, PullbackDetail, TrendDetail, EventDetail, VolDetail } from '@/types/domain';
 import styles from './TradeCard.module.css';
 
 interface EditOverlay {
@@ -104,6 +104,46 @@ function rrContribution(
   return Math.round((reward / risk) * 10) / 10;
 }
 
+function triggerDetailText(d?: TriggerDetail): string | undefined {
+  if (!d) return undefined;
+  const checks = [
+    d.macd_pass  ? 'MACD ✓'  : 'MACD ✗',
+    d.rsi_pass   ? 'RSI ✓'   : 'RSI ✗',
+    d.stoch_pass ? 'Stoch ✓' : 'Stoch ✗',
+  ].join(' · ');
+  const candle = d.candle !== 'none' ? d.candle : '';
+  const vol = d.volume_bonus ? ' + vol' : '';
+  return [candle, `${checks} · ${d.momentum_count}/3 signals${vol}`].filter(Boolean).join(' · ');
+}
+
+function pullbackDetailText(d?: PullbackDetail): string | undefined {
+  if (!d) return undefined;
+  const ret = d.retracement_pct != null ? `Ret ${d.retracement_pct.toFixed(1)}%` : '';
+  const fvg = d.fvg_hit ? '+ FVG' : '';
+  return [ret, fvg, d.reason].filter(Boolean).join(' · ');
+}
+
+function trendDetailText(d?: TrendDetail): string | undefined {
+  if (!d) return undefined;
+  if (d.adx_val != null) return `ADX ${d.adx_val.toFixed(0)} · ${d.method}`;
+  if (d.stock_roc != null) return `RS ${d.stock_roc.toFixed(1)}% vs bench ${d.bench_roc?.toFixed(1)}%`;
+  return d.method;
+}
+
+function eventDetailText(d?: EventDetail): string | undefined {
+  if (!d) return undefined;
+  if (d.event === 'none') return 'No upcoming event';
+  return `${d.event} in ${d.days_to_event}d`;
+}
+
+function volDetailText(d?: VolDetail): string | undefined {
+  if (!d) return undefined;
+  const parts = [];
+  if (d.iv_rank != null) parts.push(`IV Rank ${d.iv_rank.toFixed(0)}`);
+  if (d.reason) parts.push(d.reason);
+  return parts.join(' · ') || undefined;
+}
+
 interface TradeCardProps {
   data: TradeCardData;
   recId?: string;
@@ -171,11 +211,11 @@ export function TradeCard({
   }, [dirty, overlay, data]);
 
   const stockBars = [
-    { label: 'Trend', value: data.stockBreakdown.trend },
-    { label: 'Pullback', value: data.stockBreakdown.pullback },
-    { label: 'Trigger', value: data.stockBreakdown.trigger },
-    { label: 'Event', value: data.stockBreakdown.event },
-    { label: 'Volatility', value: data.stockBreakdown.volatility },
+    { label: 'Trend',     value: data.stockBreakdown.trend,     detailText: trendDetailText(data.stockBreakdown.trendDetail) },
+    { label: 'Pullback',  value: data.stockBreakdown.pullback,  detailText: pullbackDetailText(data.stockBreakdown.pullbackDetail) },
+    { label: 'Trigger',   value: data.stockBreakdown.trigger,   detailText: triggerDetailText(data.stockBreakdown.triggerDetail) },
+    { label: 'Event',     value: data.stockBreakdown.event,     detailText: eventDetailText(data.stockBreakdown.eventDetail) },
+    { label: 'Volatility',value: data.stockBreakdown.volatility,detailText: volDetailText(data.stockBreakdown.volDetail) },
   ];
 
   const contractBars = [
@@ -735,3 +775,4 @@ function DetailCell({ label, value, mono }: { label: string; value: string; mono
 }
 
 export type { EditOverlay };
+export { triggerDetailText, pullbackDetailText, trendDetailText, eventDetailText, volDetailText };

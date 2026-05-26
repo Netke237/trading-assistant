@@ -14,6 +14,7 @@ export interface ScoreBarData {
   value: number;
   max?: number;
   displayValue?: string;
+  detailText?: string;
 }
 
 interface ScoreCardPanelProps {
@@ -42,13 +43,17 @@ export function ScoreCardPanel({
       </div>
       <div className={styles.bars}>
         {bars.map((b) => (
-          <ScoreBar
-            key={b.label}
-            label={b.label}
-            value={b.value}
-            max={b.max}
-            displayValue={b.displayValue}
-          />
+          <div key={b.label}>
+            <ScoreBar
+              label={b.label}
+              value={b.value}
+              max={b.max}
+              displayValue={b.displayValue}
+            />
+            {b.detailText && (
+              <Text size={11} tone="dim" className={styles.barDetail}>{b.detailText}</Text>
+            )}
+          </div>
         ))}
       </div>
       <div className={styles.footer}>
