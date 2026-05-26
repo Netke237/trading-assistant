@@ -48,12 +48,16 @@ interface SettingsState {
   ivCautionThreshold:      number;
   markov:                  MarkovConfig;
   shortlistMaxCandidates:      number;
+  maxContractsPerChain:        number;
+  maxContractPrice:            number;
   setBroker:                    (b: BrokerConfig) => void;
   setAlertDeduplicationHours:   (h: number) => void;
   setIvPassThreshold:           (n: number) => void;
   setIvCautionThreshold:        (n: number) => void;
   setMarkov:                    (cfg: MarkovConfig) => void;
   setShortlistMaxCandidates:   (n: number) => void;
+  setMaxContractsPerChain:     (n: number) => void;
+  setMaxContractPrice:         (n: number) => void;
   resetToDefaults:              () => void;
 }
 
@@ -66,12 +70,16 @@ export const useSettingsStore = create<SettingsState>()(
       ivCautionThreshold:      55,
       markov:                  { ...DEFAULT_MARKOV },
       shortlistMaxCandidates: 10,
+      maxContractsPerChain: 10,
+      maxContractPrice:     50,
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
       setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
       setIvCautionThreshold:        (n) => set({ ivCautionThreshold: n }),
       setMarkov:                    (cfg) => set({ markov: cfg }),
       setShortlistMaxCandidates: (n) => set({ shortlistMaxCandidates: n }),
+      setMaxContractsPerChain: (n) => set({ maxContractsPerChain: n }),
+      setMaxContractPrice:     (n) => set({ maxContractPrice: n }),
       resetToDefaults: () => set({
         broker:                  { ...DEFAULT_BROKER },
         alertDeduplicationHours: 24,
@@ -79,12 +87,14 @@ export const useSettingsStore = create<SettingsState>()(
         ivCautionThreshold:      55,
         markov:                  { ...DEFAULT_MARKOV },
         shortlistMaxCandidates: 10,
+        maxContractsPerChain: 10,
+        maxContractPrice:     50,
       }),
     }),
     {
       name: SETTINGS_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      version: 8,
+      version: 9,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
@@ -92,6 +102,8 @@ export const useSettingsStore = create<SettingsState>()(
         ivCautionThreshold:      state.ivCautionThreshold,
         markov:                  state.markov,
         shortlistMaxCandidates: state.shortlistMaxCandidates,
+        maxContractsPerChain:   state.maxContractsPerChain,
+        maxContractPrice:       state.maxContractPrice,
       }),
       migrate: (persistedState, version) => {
         const prev = (persistedState ?? {}) as Partial<SettingsState>;
@@ -100,6 +112,9 @@ export const useSettingsStore = create<SettingsState>()(
         }
         if (version < 8) {
           return { ...prev, shortlistMaxCandidates: 10 } as unknown as SettingsState;
+        }
+        if (version < 9) {
+          return { ...prev, maxContractsPerChain: 10, maxContractPrice: 50 } as unknown as SettingsState;
         }
         return prev as unknown as SettingsState;
       },

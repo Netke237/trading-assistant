@@ -239,7 +239,11 @@ function ThemeForm() {
 /* ---------- Scan ---------- */
 
 function ScanForm() {
-  const { shortlistMaxCandidates, setShortlistMaxCandidates } = useSettingsStore();
+  const {
+    shortlistMaxCandidates, setShortlistMaxCandidates,
+    maxContractsPerChain, setMaxContractsPerChain,
+    maxContractPrice, setMaxContractPrice,
+  } = useSettingsStore();
   const [continuous, setContinuous] = useState(false);
   const [cadence, setCadence] = useState(60);
 
@@ -287,6 +291,41 @@ function ScanForm() {
           onChange={(e) => {
             const val = Number(e.target.value);
             if (val >= 1 && val <= 50) setShortlistMaxCandidates(val);
+          }}
+        />
+      </Row>
+      <Row
+        label="Max contracts per chain"
+        hint="Show only the top N highest-scoring contracts per symbol in Step 6 (1–100)"
+        defaultValue="10"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={1}
+          max={100}
+          value={maxContractsPerChain}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            if (val >= 1 && val <= 100) setMaxContractsPerChain(val);
+          }}
+        />
+      </Row>
+      <Row
+        label="Max contract price (USD)"
+        hint="Hide contracts whose ask price exceeds this threshold — keeps premium cost manageable"
+        defaultValue="$50"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={0.5}
+          max={500}
+          step={0.5}
+          value={maxContractPrice}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            if (val >= 0.5 && val <= 500) setMaxContractPrice(val);
           }}
         />
       </Row>
