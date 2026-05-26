@@ -26,7 +26,7 @@ const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'theme',   label: 'Appearance', desc: 'Theme + density' },
   { key: 'scan',    label: 'Scan',       desc: 'Continuous scan + cadence' },
   { key: 'risk',    label: 'Risk',       desc: 'Exposure limits and portfolio value' },
-  { key: 'regime',  label: 'Regime',     desc: 'HMM / Markov model parameters' },
+  { key: 'regime',  label: 'Regime',     desc: 'Daily OMM parameters' },
 ];
 
 export default function SettingsPage() {
@@ -470,8 +470,8 @@ function RegimeForm({
   return (
     <>
       <SectionIntro
-        title="Regime model"
-        blurb="Controls how the Hidden Markov Model interprets market state. Preset changes update all parameters at once; you can then fine-tune individually."
+        title="Daily Regime Model (OMM)"
+        blurb="Controls the Observable Markov Model that classifies daily SPX bars as Bull / Bear / Choppy. Preset changes update all parameters at once; you can then fine-tune individually. The intraday session model (15-min Gaussian HMM) uses fixed parameters and is not configurable here."
       />
       <Row
         label="Preset"
@@ -493,54 +493,54 @@ function RegimeForm({
       </Row>
       <Row
         label="Lookback (bars)"
-        hint="Number of daily candles used to compute regime state."
-        defaultValue={String(MARKOV_PRESETS.default.lookback)}
+        hint="Daily trading bars for the rolling return window (5–252). Default: 20 (~1 month)."
+        defaultValue="20"
       >
         <input
           type="number"
           className={styles.input}
           min={5}
-          max={500}
+          max={252}
           step={5}
           value={markov.lookback}
           onChange={(e) => {
-            const val = Math.max(5, Math.min(500, Number(e.target.value)));
+            const val = Math.max(5, Math.min(252, Number(e.target.value)));
             setMarkov({ ...markov, lookback: val });
           }}
         />
       </Row>
       <Row
-        label="Threshold (%)"
-        hint="Minimum average return for Bull/Bear signal. Lower = more sensitive."
-        defaultValue={String(MARKOV_PRESETS.default.threshold)}
+        label="Threshold"
+        hint="Return threshold for Bull/Bear classification (0.001–0.1). Default: 0.02 = 2% — bars above +2% are Bull, below −2% are Bear."
+        defaultValue="0.02"
       >
         <input
           type="number"
           className={styles.input}
           min={0.001}
-          max={0.05}
-          step={0.001}
+          max={0.1}
+          step={0.005}
           value={markov.threshold}
           onChange={(e) => {
-            const val = Math.max(0.001, Math.min(0.05, Number(e.target.value)));
+            const val = Math.max(0.001, Math.min(0.1, Number(e.target.value)));
             setMarkov({ ...markov, threshold: val });
           }}
         />
       </Row>
       <Row
         label="Smoothing (0–1)"
-        hint="EMA weight applied to recent returns. Higher = slower to change state."
-        defaultValue={String(MARKOV_PRESETS.default.smoothing)}
+        hint="EMA weight on the return signal before threshold comparison. 0 = raw returns (default), higher = slower state changes."
+        defaultValue="0"
       >
         <input
           type="number"
           className={styles.input}
-          min={0.1}
-          max={1.0}
+          min={0}
+          max={0.99}
           step={0.05}
           value={markov.smoothing}
           onChange={(e) => {
-            const val = Math.max(0.1, Math.min(1.0, Number(e.target.value)));
+            const val = Math.max(0, Math.min(0.99, Number(e.target.value)));
             setMarkov({ ...markov, smoothing: val });
           }}
         />

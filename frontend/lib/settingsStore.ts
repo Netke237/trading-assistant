@@ -14,15 +14,15 @@ export type MarkovPreset = 'default' | 'conservative' | 'aggressive';
 
 export interface MarkovConfig {
   preset:    MarkovPreset;
-  lookback:  number;   // bars (number of candles)
-  threshold: number;   // avg return threshold (e.g. 0.003 = 0.3%)
-  smoothing: number;   // EMA weight 0.0–1.0
+  lookback:  number;   // daily trading bars for the rolling return window
+  threshold: number;   // Bull/Bear return threshold (e.g. 0.02 = 2%)
+  smoothing: number;   // EMA weight on return signal (0 = no smoothing)
 }
 
 export const MARKOV_PRESETS: Record<MarkovPreset, Omit<MarkovConfig, 'preset'>> = {
-  default:      { lookback: 60,  threshold: 0.003, smoothing: 0.7 },
-  conservative: { lookback: 120, threshold: 0.005, smoothing: 0.8 },
-  aggressive:   { lookback: 20,  threshold: 0.001, smoothing: 0.5 },
+  default:      { lookback: 20,  threshold: 0.02,  smoothing: 0.0 },
+  conservative: { lookback: 60,  threshold: 0.03,  smoothing: 0.5 },
+  aggressive:   { lookback: 10,  threshold: 0.01,  smoothing: 0.0 },
 };
 
 export const DEFAULT_MARKOV: MarkovConfig = { preset: 'default', ...MARKOV_PRESETS.default };
