@@ -25,8 +25,8 @@ def test_t2_price_is_1_5x_move():
         is_call=True,
     )
     t1, t2, t3 = targets
-    assert abs(t2.target_price - 112.0) < 0.1  # 100 + 8*1.5 = 112
-    assert abs(t3.target_price - 116.0) < 0.1  # 100 + 8*2.0 = 116
+    assert abs(t2.targetPrice - 112.0) < 0.1  # 100 + 8*1.5 = 112
+    assert abs(t3.targetPrice - 116.0) < 0.1  # 100 + 8*2.0 = 116
 
 
 def test_pricing_method_not_empty():
@@ -39,8 +39,8 @@ def test_pricing_method_not_empty():
         is_call=True,
     )
     for t in targets:
-        assert t.pricing_method in (PricingMethod.HESTON, PricingMethod.DELTA_APPROX, PricingMethod.UNAVAILABLE)
-        assert t.pricing_method != ""
+        assert t.pricingMethod in (PricingMethod.HESTON, PricingMethod.DELTA_APPROX, PricingMethod.UNAVAILABLE)
+        assert t.pricingMethod != ""
 
 
 def test_rr_contribution_positive():
@@ -53,7 +53,7 @@ def test_rr_contribution_positive():
         is_call=True,
     )
     for t in targets:
-        assert t.rr_contribution >= 0
+        assert t.rrContribution >= 0
 
 
 def test_stock_price_equals_target_price():
@@ -67,4 +67,4 @@ def test_stock_price_equals_target_price():
         is_call=True,
     )
     for t in targets:
-        assert t.stock_price == t.target_price
+        assert t.stockPrice == t.targetPrice

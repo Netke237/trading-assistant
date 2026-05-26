@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+pytest.importorskip("hmmlearn", reason="hmmlearn not available on this Python version — skipping HMM tests")
 from app.services.regime_hmm import compute_intraday_hmm, HmmResult, MIN_BARS
 
 

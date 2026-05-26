@@ -1,6 +1,7 @@
 """Tests for regime_hmm — synthetic 3-regime returns → correct state assignment."""
 import pytest
 import numpy as np
+pytest.importorskip("hmmlearn", reason="hmmlearn not available on this Python version — skipping HMM tests")
 from app.services.regime_hmm import compute_intraday_hmm, _assign_labels, MIN_BARS
 
 
