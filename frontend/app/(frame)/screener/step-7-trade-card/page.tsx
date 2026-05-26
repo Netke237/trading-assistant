@@ -18,8 +18,9 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useScanStore } from '@/lib/scanStore';
 import { logAudit } from '@/lib/audit';
 import { statusForScore } from '@/lib/status';
+import type { Status } from '@/lib/status';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
-import type { PortfolioPosition, Status, TradeCardData } from '@/types/domain';
+import type { PortfolioPosition, TradeCardData } from '@/types/domain';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 
