@@ -63,7 +63,10 @@ def _vix_percentile(history: list[float], current: float) -> float:
 
 @router.get('/regime', response_model=MarketRegime)
 async def get_regime(
-    horizon: str = Query(default='swing', description="'intraday' | 'swing' | 'position'"),
+    horizon:   str   = Query(default='swing',  description="'intraday' | 'swing' | 'position'"),
+    lookback:  int   = Query(default=20,   ge=5,   le=252, description='OMM rolling-return window in bars'),
+    threshold: float = Query(default=0.02, ge=0.001, le=0.1, description='Bull/Bear return threshold'),
+    smoothing: float = Query(default=0.0,  ge=0.0,   le=0.99, description='EMA weight on return signal'),
 ) -> MarketRegime:
     # ── 1. Existing EMA / VIX gate (unchanged) ────────────────────────────────
     spx = _spx_ndx_metric('SPX', 'SPX trend (200 EMA)')
@@ -127,7 +130,7 @@ async def get_regime(
         spx_candles = fetch_candles('SPX', bars=600)
         if spx_candles:
             closes = [c['close'] for c in spx_candles]
-            result = compute_omm(closes)
+            result = compute_omm(closes, lookback=lookback, threshold=threshold, smoothing=smoothing)
             if result:
                 omm_out = OmmData(
                     state=result.state,

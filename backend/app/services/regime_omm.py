@@ -31,17 +31,31 @@ class OmmResult:
     state_order: list[str]
 
 
-def label_daily_states(closes: list[float]) -> list[str]:
-    """Compute Bull/Bear/Choppy label for each bar from rolling 20d return."""
+def label_daily_states(
+    closes: list[float],
+    lookback: int = RETURN_LOOKBACK,
+    threshold: float = BULL_THRESH,
+    smoothing: float = 0.0,
+) -> list[str]:
+    """
+    Compute Bull/Bear/Choppy label for each bar from a rolling return.
+    smoothing: EMA weight on the raw return signal (0 = no smoothing).
+    """
     labels: list[str] = []
+    ema_ret: float = 0.0
     for i in range(len(closes)):
-        if i < RETURN_LOOKBACK:
+        if i < lookback:
             labels.append('Choppy')
             continue
-        ret = (closes[i] - closes[i - RETURN_LOOKBACK]) / closes[i - RETURN_LOOKBACK]
-        if ret > BULL_THRESH:
+        raw = (closes[i] - closes[i - lookback]) / closes[i - lookback]
+        if smoothing > 0:
+            ema_ret = smoothing * ema_ret + (1 - smoothing) * raw
+            ret = ema_ret
+        else:
+            ret = raw
+        if ret > threshold:
             labels.append('Bull')
-        elif ret < BEAR_THRESH:
+        elif ret < -threshold:
             labels.append('Bear')
         else:
             labels.append('Choppy')
@@ -83,16 +97,22 @@ def _regime_age(labels: list[str], current: str) -> int:
     return age
 
 
-def compute_omm(closes: list[float]) -> OmmResult | None:
+def compute_omm(
+    closes: list[float],
+    *,
+    lookback: int = RETURN_LOOKBACK,
+    threshold: float = BULL_THRESH,
+    smoothing: float = 0.0,
+) -> OmmResult | None:
     """
     Build rolling OMM from daily close prices.
     Returns None if the current state has fewer than MIN_OBS observations
     in the training window (matrix not reliable enough to publish).
     """
-    if len(closes) < RETURN_LOOKBACK + 2:
+    if len(closes) < lookback + 2:
         return None
 
-    labels = label_daily_states(closes)
+    labels = label_daily_states(closes, lookback=lookback, threshold=threshold, smoothing=smoothing)
     current = labels[-1]
     current_idx = STATE_IDX[current]
 

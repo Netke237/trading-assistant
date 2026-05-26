@@ -29,7 +29,18 @@ export const api = {
   getWatchlist:  () => get<WatchlistRow[]>('/api/watchlist'),
   getPortfolio:  () => get<PortfolioPosition[]>('/api/portfolio'),
   getAlerts:     () => get<AlertItem[]>('/api/alerts'),
-  getRegime:     (horizon?: string) => get<MarketRegime>(`/api/regime${horizon ? `?horizon=${horizon}` : ''}`),
+  getRegime: (
+    horizon?: string,
+    markov?: { lookback?: number; threshold?: number; smoothing?: number },
+  ) => {
+    const params = new URLSearchParams();
+    if (horizon)                   params.set('horizon',   horizon);
+    if (markov?.lookback  != null) params.set('lookback',  String(markov.lookback));
+    if (markov?.threshold != null) params.set('threshold', String(markov.threshold));
+    if (markov?.smoothing != null) params.set('smoothing', String(markov.smoothing));
+    const qs = params.toString();
+    return get<MarketRegime>(`/api/regime${qs ? `?${qs}` : ''}`);
+  },
   getSectors:    () => get<SectorTile[]>('/api/sectors'),
   getEvents:     () => get<UpcomingEvent[]>('/api/events'),
   getContracts: (

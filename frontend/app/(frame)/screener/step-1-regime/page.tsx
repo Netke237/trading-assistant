@@ -21,6 +21,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { useScanStore } from '@/lib/scanStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import { NewsCard } from '@/components/molecules/NewsCard';
 import { api } from '@/lib/api';
 import type { MarketRegime, SectorTile, NewsItem } from '@/types/domain';
@@ -61,6 +62,7 @@ function pct(p: number): string {
 export default function Step1RegimePage() {
   const setRegime = useScanStore((s) => s.setRegime);
   const setCombinedRegime = useScanStore((s) => s.setCombinedRegime);
+  const markov = useSettingsStore((s) => s.markov);
 
   const [regime, setRegimeData]     = useState<MarketRegime | null>(null);
   const [sectors, setSectors]       = useState<SectorTile[]>([]);
@@ -74,7 +76,7 @@ export default function Step1RegimePage() {
   useEffect(() => {
     // Always fetch with 'intraday' so the HMM is always computed —
     // the regime step is visited before horizon selection (step 3).
-    api.getRegime('intraday').then((r) => {
+    api.getRegime('intraday', { lookback: markov.lookback, threshold: markov.threshold, smoothing: markov.smoothing }).then((r) => {
       setRegimeData(r);
       setRegime(r.overall);
       setCombinedRegime(r.overall);
@@ -89,7 +91,7 @@ export default function Step1RegimePage() {
       setNewsLoading(true);
       api.getNews(symbols).then(setNews).catch(() => setNewsError(true)).finally(() => setNewsLoading(false));
     }
-  }, [setRegime, setCombinedRegime]);
+  }, [setRegime, setCombinedRegime, markov]);
 
   const spx = lastClose(spxCandles);
   const ndx = lastClose(ndxCandles);
