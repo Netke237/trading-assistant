@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useChartStore, type IndicatorConfig, type Interval } from '@/lib/chartStore';
 import { ChartWSClient, type WSMessage } from '@/lib/chartWS';
@@ -123,8 +123,13 @@ export default function ChartWorkspace() {
     });
   }, []);
 
-  const mainSeries = buildMainSeries(candles, activeIndicators);
-  const subIndicators = activeIndicators.filter(i => i.pane === 'sub');
+  const mainSeries = useMemo(() => buildMainSeries(candles, activeIndicators), [candles, activeIndicators]);
+  const subPanes = useMemo(
+    () => activeIndicators
+      .filter(i => i.pane === 'sub')
+      .map(ind => ({ id: ind.id, series: buildSubSeries(candles, ind) })),
+    [candles, activeIndicators],
+  );
 
   return (
     <div className={styles.workspace}>
@@ -134,8 +139,8 @@ export default function ChartWorkspace() {
         <DrawingToolbar active={drawingTool} onChange={setDrawingTool} />
         <div className={styles.charts}>
           <ChartPane series={mainSeries} height={320} onCrosshairMove={handleCrosshair} />
-          {subIndicators.map(ind => (
-            <ChartPane key={ind.id} series={buildSubSeries(candles, ind)} height={100} />
+          {subPanes.map(({ id, series }) => (
+            <ChartPane key={id} series={series} height={100} />
           ))}
         </div>
         <ChartRightPanel crosshairData={crosshair} />
