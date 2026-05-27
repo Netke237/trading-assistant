@@ -108,6 +108,11 @@ export default function ChartWorkspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally run only once on mount
 
+  // Sync alert rules from backend on mount
+  useEffect(() => {
+    useChartAlertStore.getState().syncRules();
+  }, []);
+
   // Connect/reconnect WebSocket when symbol or interval changes
   useEffect(() => {
     wsRef.current?.destroy();
@@ -133,6 +138,14 @@ export default function ChartWorkspace() {
       if (msg.type === 'structure') {
         const key = `${msg.symbol}:${msg.interval}`;
         useStructureStore.getState().setSignals(key, msg.signals);
+      }
+      if (msg.type === 'alert_triggered') {
+        useChartAlertStore.getState().addHistory(msg.entry);
+        useChartAlertStore.getState().pushToast({
+          id: msg.entry.id,
+          message: `${msg.entry.symbol} \u00b7 ${msg.entry.reason}`,
+          timestamp: Date.now(),
+        });
       }
     });
     client.connect();

@@ -19,7 +19,7 @@ import { useRiskStore } from '@/lib/riskStore';
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
-type Section = 'broker' | 'theme' | 'scan' | 'risk' | 'regime';
+type Section = 'broker' | 'theme' | 'scan' | 'risk' | 'regime' | 'notifications';
 
 const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'broker',  label: 'Broker',     desc: 'Credentials + paper trade toggle' },
@@ -27,6 +27,7 @@ const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'scan',    label: 'Scan',       desc: 'Continuous scan + cadence' },
   { key: 'risk',    label: 'Risk',       desc: 'Exposure limits and portfolio value' },
   { key: 'regime',  label: 'Regime',     desc: 'Daily OMM parameters' },
+  { key: 'notifications', label: 'Notifications', desc: 'Gmail + Telegram alert delivery' },
 ];
 
 export default function SettingsPage() {
@@ -61,6 +62,7 @@ export default function SettingsPage() {
           {active === 'scan'    && <ScanForm    />}
           {active === 'risk'    && <RiskForm    />}
           {active === 'regime'  && <RegimeForm markov={markov} setMarkov={setMarkov} />}
+          {active === 'notifications' && <NotificationForm />}
         </div>
       </div>
 
@@ -245,7 +247,17 @@ function ScanForm() {
     maxContractPrice, setMaxContractPrice,
   } = useSettingsStore();
   const [continuous, setContinuous] = useState(false);
-  const [cadence, setCadence] = useState(60);
+
+  // Local text buffers — let the user type freely; validate on blur
+  const [cadenceText,    setCadenceText]    = useState('60');
+  const [candidatesText, setCandidatesText] = useState(String(shortlistMaxCandidates));
+  const [chainsText,     setChainsText]     = useState(String(maxContractsPerChain));
+  const [priceText,      setPriceText]      = useState(String(maxContractPrice));
+
+  // Sync text buffers when the store resets
+  useEffect(() => { setCandidatesText(String(shortlistMaxCandidates)); }, [shortlistMaxCandidates]);
+  useEffect(() => { setChainsText(String(maxContractsPerChain));        }, [maxContractsPerChain]);
+  useEffect(() => { setPriceText(String(maxContractPrice));             }, [maxContractPrice]);
 
   return (
     <>
@@ -261,19 +273,16 @@ function ScanForm() {
       </Row>
       <Row label="Cadence (minutes)" hint="How often to re-run — 5 min to 24 h" defaultValue="60">
         <input
-          type="number"
+          type="text"
+          inputMode="numeric"
           className={styles.input}
-          min={5}
-          max={1440}
-          value={cadence}
           disabled={!continuous}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            if (val >= 5 && val <= 1440) {
-              setCadence(val);
-            } else {
-              setCadence(val < 5 ? 5 : 1440);
-            }
+          value={cadenceText}
+          onChange={(e) => setCadenceText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(cadenceText, 10);
+            const clamped = isNaN(val) ? 60 : Math.max(5, Math.min(1440, val));
+            setCadenceText(String(clamped));
           }}
         />
       </Row>
@@ -283,14 +292,16 @@ function ScanForm() {
         defaultValue="10"
       >
         <input
-          type="number"
+          type="text"
+          inputMode="numeric"
           className={styles.input}
-          min={1}
-          max={50}
-          value={shortlistMaxCandidates}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            if (val >= 1 && val <= 50) setShortlistMaxCandidates(val);
+          value={candidatesText}
+          onChange={(e) => setCandidatesText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(candidatesText, 10);
+            const clamped = isNaN(val) ? 10 : Math.max(1, Math.min(50, val));
+            setCandidatesText(String(clamped));
+            setShortlistMaxCandidates(clamped);
           }}
         />
       </Row>
@@ -300,32 +311,35 @@ function ScanForm() {
         defaultValue="10"
       >
         <input
-          type="number"
+          type="text"
+          inputMode="numeric"
           className={styles.input}
-          min={1}
-          max={100}
-          value={maxContractsPerChain}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            if (val >= 1 && val <= 100) setMaxContractsPerChain(val);
+          value={chainsText}
+          onChange={(e) => setChainsText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(chainsText, 10);
+            const clamped = isNaN(val) ? 10 : Math.max(1, Math.min(100, val));
+            setChainsText(String(clamped));
+            setMaxContractsPerChain(clamped);
           }}
         />
       </Row>
       <Row
         label="Max contract price (USD)"
         hint="Hide contracts whose ask price exceeds this threshold — keeps premium cost manageable"
-        defaultValue="$50"
+        defaultValue="$500"
       >
         <input
-          type="number"
+          type="text"
+          inputMode="decimal"
           className={styles.input}
-          min={0.5}
-          max={500}
-          step={0.5}
-          value={maxContractPrice}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            if (val >= 0.5 && val <= 500) setMaxContractPrice(val);
+          value={priceText}
+          onChange={(e) => setPriceText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(priceText);
+            const clamped = isNaN(val) ? 500 : Math.max(0.01, Math.min(10000, val));
+            setPriceText(String(clamped));
+            setMaxContractPrice(clamped);
           }}
         />
       </Row>
@@ -372,7 +386,7 @@ function RiskForm() {
     <>
       <SectionIntro
         title="Risk limits"
-        blurb="Hard stops that prevent accidental over-concentration. Exposure is calculated as notional (contracts × 100 × mid) divided by portfolio value."
+        blurb="Enforced by the app before order submission — the screener blocks trades that breach these thresholds. The backend also has independent defaults in risk_rules.yaml; those are not configurable here and will apply server-side once trade execution is connected."
       />
       <Row
         label="Portfolio value"
@@ -545,6 +559,87 @@ function RegimeForm({
           }}
         />
       </Row>
+    </>
+  );
+}
+
+function NotificationForm() {
+  const [gmailEnabled, setGmailEnabled] = useState(false);
+  const [gmailTo, setGmailTo] = useState('');
+  const [gmailUser, setGmailUser] = useState('');
+  const [gmailPassword, setGmailPassword] = useState('');
+  const [telegramEnabled, setTelegramEnabled] = useState(false);
+  const [telegramToken, setTelegramToken] = useState('');
+  const [telegramChatId, setTelegramChatId] = useState('');
+  const [testing, setTesting] = useState<('gmail' | 'telegram') | null>(null);
+  const [testResult, setTestResult] = useState('');
+
+  async function sendTest(channel: 'gmail' | 'telegram') {
+    setTesting(channel);
+    setTestResult('');
+    try {
+      const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+      const res = await fetch(`${BASE_URL}/alerts/notifications/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel }),
+      });
+      setTestResult(res.ok ? 'Test sent successfully' : `Failed: ${res.status}`);
+    } catch (e: any) {
+      setTestResult(`Error: ${e.message}`);
+    } finally {
+      setTesting(null);
+    }
+  }
+
+  return (
+    <>
+      <SectionIntro title="Notifications" blurb="Configure alert delivery. Gmail uses SMTP (App Password), Telegram uses Bot API. Credentials are stored as backend environment variables. Use this panel to test your setup." />
+
+      <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '16px', marginBottom: '16px' }}>
+        <Text size={14} weight={600}>Gmail</Text>
+        <Row label="Enable Gmail alerts">
+          <Toggle defaultOn={gmailEnabled} onChange={setGmailEnabled} />
+        </Row>
+        {gmailEnabled && (<>
+          <Row label="To address" hint="Email that receives alerts">
+            <input className={styles.input} placeholder="you@gmail.com" value={gmailTo} onChange={(e) => setGmailTo(e.target.value)} />
+          </Row>
+          <Row label="SMTP User" hint="Your Gmail address">
+            <input className={styles.input} placeholder="you@gmail.com" value={gmailUser} onChange={(e) => setGmailUser(e.target.value)} />
+          </Row>
+          <Row label="Password" hint="Gmail App Password">
+            <input className={styles.input} type="password" placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'} value={gmailPassword} onChange={(e) => setGmailPassword(e.target.value)} />
+          </Row>
+          <Row label="Test">
+            <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => sendTest('gmail')} disabled={testing === 'gmail'}>
+              {testing === 'gmail' ? 'Sending...' : 'Send test email'}
+            </button>
+            {testResult ? <Text size={12} tone="secondary">{testResult}</Text> : null}
+          </Row>
+        </>)}
+      </div>
+
+      <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '16px' }}>
+        <Text size={14} weight={600}>Telegram</Text>
+        <Row label="Enable Telegram alerts">
+          <Toggle defaultOn={telegramEnabled} onChange={setTelegramEnabled} />
+        </Row>
+        {telegramEnabled && (<>
+          <Row label="Bot token" hint="From @BotFather">
+            <input className={styles.input} placeholder="1234567890:ABC..." value={telegramToken} onChange={(e) => setTelegramToken(e.target.value)} />
+          </Row>
+          <Row label="Chat ID" hint="Your chat or group ID">
+            <input className={styles.input} placeholder="987654321" value={telegramChatId} onChange={(e) => setTelegramChatId(e.target.value)} />
+          </Row>
+          <Row label="Test">
+            <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => sendTest('telegram')} disabled={testing === 'telegram'}>
+              {testing === 'telegram' ? 'Sending...' : 'Send test message'}
+            </button>
+            {testResult ? <Text size={12} tone="secondary">{testResult}</Text> : null}
+          </Row>
+        </>)}
+      </div>
     </>
   );
 }
