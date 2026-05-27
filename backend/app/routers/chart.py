@@ -81,8 +81,10 @@ async def stream(
                         # Phase 4: evaluate alert rules on candle-close
                         try:
                             from app.routers.chart_alerts import evaluate_and_notify_for_symbol
+                            # candles[-2] is the just-closed candle; candles[-1] is the new open
+                            closed = candles[-2] if len(candles) >= 2 else candles[-1]
                             triggered = await evaluate_and_notify_for_symbol(
-                                symbol, interval, candles[-1], candles, signals,
+                                symbol, interval, closed, candles, signals,
                             )
                             for entry in triggered:
                                 await websocket.send_json({

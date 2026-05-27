@@ -5,6 +5,7 @@ import { useChartStore, type IndicatorConfig, type Interval } from '@/lib/chartS
 import { ChartWSClient, type WSMessage } from '@/lib/chartWS';
 import { calcEMA, calcSMA, calcRSI, calcMACD, calcBB, calcATR, calcVWAP, type Candle } from '@/lib/indicators';
 import { useStructureStore } from '@/lib/structureStore';
+import type { StructureSignal } from '@/types/structure';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
 import { evaluateRules } from '@/lib/chartAlertEngine';
 import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
@@ -75,6 +76,8 @@ function getIndicatorPoints(candles: Candle[], indicators: IndicatorConfig[]): R
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+const NO_SIGNALS: StructureSignal[] = [];
+
 export default function ChartWorkspace() {
   const params = useSearchParams();
   const { symbol, interval, activeIndicators, setSymbol, setInterval } = useChartStore();
@@ -97,7 +100,7 @@ export default function ChartWorkspace() {
     interval === '1W' ? 'weekly' :
     interval;
 
-  const structureSignals = useStructureStore((s) => s.signals[`${symbol}:${backendInterval}`] ?? []);
+  const structureSignals = useStructureStore((s) => s.signals[`${symbol}:${backendInterval}`] ?? NO_SIGNALS);
 
   // Deep-link: read ?symbol= and ?interval= query params once on mount
   useEffect(() => {
@@ -141,6 +144,9 @@ export default function ChartWorkspace() {
       }
       if (msg.type === 'alert_triggered') {
         useChartAlertStore.getState().addHistory(msg.entry);
+        useChartAlertStore.getState().updateRule(msg.entry.rule_id, {
+          last_triggered_at: msg.entry.triggered_at,
+        });
         useChartAlertStore.getState().pushToast({
           id: msg.entry.id,
           message: `${msg.entry.symbol} \u00b7 ${msg.entry.reason}`,

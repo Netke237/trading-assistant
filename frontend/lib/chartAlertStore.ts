@@ -125,11 +125,24 @@ export const useChartAlertStore = create<ChartAlertState>()(
       },
 
       addHistory: (entry) => {
-        set((s) => ({
-          history: [entry, ...s.history].slice(0, HISTORY_LIMIT),
-          newSinceView: s.newSinceView + 1,
-        }));
-        pushHistoryToAPI(entry);
+        let added = false;
+        set((s) => {
+          // Dedup: skip if same rule triggered within the same candle period (60s window)
+          const isDupe = s.history.some(
+            (h) =>
+              h.rule_id === entry.rule_id &&
+              Math.abs(
+                new Date(h.triggered_at).getTime() - new Date(entry.triggered_at).getTime(),
+              ) < 60_000,
+          );
+          if (isDupe) return s;
+          added = true;
+          return {
+            history: [entry, ...s.history].slice(0, HISTORY_LIMIT),
+            newSinceView: s.newSinceView + 1,
+          };
+        });
+        if (added) pushHistoryToAPI(entry);
       },
 
       clearHistory: () => set({ history: [] }),
@@ -173,7 +186,11 @@ export const useChartAlertStore = create<ChartAlertState>()(
     }),
     {
       name: 'bamendjou:alerts',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') return undefined as unknown as Storage;
+        return localStorage;
+      }),
+      skipHydration: true,
       partialize: (state) => ({
         rules: state.rules,
         history: state.history,

@@ -71,7 +71,7 @@ export const useSettingsStore = create<SettingsState>()(
       markov:                  { ...DEFAULT_MARKOV },
       shortlistMaxCandidates: 10,
       maxContractsPerChain: 10,
-      maxContractPrice:     50,
+      maxContractPrice:     500,
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
       setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
@@ -88,12 +88,16 @@ export const useSettingsStore = create<SettingsState>()(
         markov:                  { ...DEFAULT_MARKOV },
         shortlistMaxCandidates: 10,
         maxContractsPerChain: 10,
-        maxContractPrice:     50,
+        maxContractPrice:     500,
       }),
     }),
     {
       name: SETTINGS_STORAGE_KEY,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') return undefined as unknown as Storage;
+        return localStorage;
+      }),
+      skipHydration: true,
       version: 9,
       partialize: (state) => ({
         broker:                  state.broker,

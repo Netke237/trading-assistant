@@ -24,12 +24,23 @@ interface Props {
 
 export default function StructurePanel({ onClose }: Props) {
   const visibility = useStructureStore((s) => s.visibility);
+  const structureVisible = useStructureStore((s) => s.structureVisible);
   const toggleKind = useStructureStore((s) => s.toggleKind);
+  const toggleStructure = useStructureStore((s) => s.toggleStructure);
 
   return (
     <div className={styles.panel}>
       <div className={styles.header}>
         <span className={styles.title}>Structure</span>
+        <button
+          className={`${styles.toggle} ${structureVisible ? styles.toggleOn : ''}`}
+          onClick={toggleStructure}
+          type="button"
+          aria-label="Show / hide all overlays"
+          title="Show / hide all overlays"
+        >
+          <div className={styles.toggleKnob} />
+        </button>
         <button className={styles.close} onClick={onClose} type="button">
           x
         </button>

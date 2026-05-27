@@ -68,7 +68,11 @@ export const useChartStore = create<ChartState>()(
     }),
     {
       name: 'bamendjou:chart',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') return undefined as unknown as Storage;
+        return localStorage;
+      }),
+      skipHydration: true,
       partialize: (state) => ({
         symbol: state.symbol,
         interval: state.interval,
