@@ -78,6 +78,19 @@ async def stream(
                             "interval": interval,
                             "signals": signals,
                         })
+                        # Phase 4: evaluate alert rules on candle-close
+                        try:
+                            from app.routers.chart_alerts import evaluate_and_notify_for_symbol
+                            triggered = await evaluate_and_notify_for_symbol(
+                                symbol, interval, candles[-1], candles, signals,
+                            )
+                            for entry in triggered:
+                                await websocket.send_json({
+                                    "type": "alert_triggered",
+                                    "entry": entry,
+                                })
+                        except Exception:
+                            logger.debug("Alert evaluation failed", exc_info=True)
                     except Exception:
                         logger.debug("Failed to re-compute structure on candle close", exc_info=True)
             except asyncio.TimeoutError:
