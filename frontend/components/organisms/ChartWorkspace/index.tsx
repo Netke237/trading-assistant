@@ -68,7 +68,14 @@ export default function ChartWorkspace() {
 
   const structureVisible = useStructureStore((s) => s.structureVisible);
   const structureVisibility = useStructureStore((s) => s.visibility);
-  const structureSignals = useStructureStore((s) => s.signals[`${symbol}:${interval}`] ?? []);
+
+  // Map UI interval to backend interval for WS + store key consistency
+  const backendInterval =
+    interval === '1D' ? 'daily' :
+    interval === '1W' ? 'weekly' :
+    interval;
+
+  const structureSignals = useStructureStore((s) => s.signals[`${symbol}:${backendInterval}`] ?? []);
 
   // Deep-link: read ?symbol= and ?interval= query params once on mount
   useEffect(() => {
@@ -82,12 +89,6 @@ export default function ChartWorkspace() {
   // Connect/reconnect WebSocket when symbol or interval changes
   useEffect(() => {
     wsRef.current?.destroy();
-
-    // Map store interval labels to backend interval strings
-    const backendInterval =
-      interval === '1D' ? 'daily' :
-      interval === '1W' ? 'weekly' :
-      interval;
 
     const client = new ChartWSClient(symbol, backendInterval);
     const unsubscribe = client.onMessage((msg: WSMessage) => {

@@ -63,7 +63,7 @@ async def stream(
                 await websocket.send_json({"type": "tick", "data": tick})
 
                 # Phase 2: re-send structure on new candle close
-                tick_time = tick.get("timestamp", "")[:10] if isinstance(tick, dict) else ""
+                tick_time = tick.get("timestamp", "") if isinstance(tick, dict) else ""
                 if tick_time and tick_time != last_candle_time:
                     last_candle_time = tick_time
                     try:
