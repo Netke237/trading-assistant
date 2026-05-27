@@ -19,6 +19,7 @@ const ITEMS: NavItemDef[] = [
   { label: 'Watchlist', match: '/watchlist', href: '/watchlist', Icon: WatchlistIcon },
   { label: 'Portfolio', match: '/portfolio', href: '/portfolio', Icon: PortfolioIcon },
   { label: 'Calendar',  match: '/calendar',  href: '/calendar',  Icon: CalendarIcon  },
+  { label: 'Chart',     match: '/chart',     href: '/chart',     Icon: ChartIcon     },
   { label: 'Alerts',    match: '/alerts',    href: '/alerts',    Icon: AlertsIcon    },
   { label: 'Settings',  match: '/settings',  href: '/settings',  Icon: SettingsIcon  },
 ];
@@ -111,6 +112,13 @@ function CalendarIcon() {
     <svg {...svgProps()}>
       <rect x="3" y="4" width="18" height="18" rx="2" />
       <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  );
+}
+function ChartIcon() {
+  return (
+    <svg {...svgProps()}>
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
     </svg>
   );
 }
