@@ -81,6 +81,10 @@ class NotificationTestRequest(BaseModel):
     channel: str
     to: Optional[str] = None
     subject: Optional[str] = None
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    bot_token: Optional[str] = None
+    chat_id: Optional[str] = None
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -313,11 +317,17 @@ async def test_notification(body: NotificationTestRequest):
             to=to,
             subject=body.subject or 'Bamendjou - Test Notification',
             body='This is a test notification from Bamendjou.',
+            smtp_user=body.smtp_user or os.getenv('BAMENDJOU_GMAIL_USER', ''),
+            smtp_password=body.smtp_password or os.getenv('BAMENDJOU_GMAIL_PASSWORD', ''),
         )
         return {'status': 'sent', 'channel': 'gmail'}
     elif body.channel == 'telegram':
         from app.services.notifications.telegram import send_telegram as _send_tg
-        await _send_tg(text='<b>Bamendjou</b> - Test notification from your trading assistant.')
+        await _send_tg(
+            text='<b>Bamendjou</b> - Test notification from your trading assistant.',
+            bot_token=body.bot_token or os.getenv('BAMENDJOU_TELEGRAM_BOT_TOKEN', ''),
+            chat_id=body.chat_id or os.getenv('BAMENDJOU_TELEGRAM_CHAT_ID', ''),
+        )
         return {'status': 'sent', 'channel': 'telegram'}
     raise HTTPException(status_code=400, detail=f'Unknown channel: {body.channel}')
 

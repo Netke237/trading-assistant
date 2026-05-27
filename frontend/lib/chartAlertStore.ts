@@ -46,6 +46,20 @@ async function pushRuleToAPI(rule: AlertRule): Promise<void> {
   } catch { /* fire-and-forget */ }
 }
 
+async function putRuleToAPI(rule: AlertRule): Promise<void> {
+  try {
+    await fetch(`${BASE_URL}/alerts/rules/${encodeURIComponent(rule.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: rule.name, symbol: rule.symbol, interval: rule.interval,
+        enabled: rule.enabled, group: rule.group,
+        cooldown_minutes: rule.cooldown_minutes, expiry_date: rule.expiry_date,
+      }),
+    });
+  } catch {}
+}
+
 async function deleteRuleFromAPI(id: string): Promise<void> {
   try { await fetch(`${BASE_URL}/alerts/rules/${encodeURIComponent(id)}`, { method: 'DELETE' }); } catch {}
 }
@@ -99,7 +113,7 @@ export const useChartAlertStore = create<ChartAlertState>()(
           rules: s.rules.map((r) => (r.id === id ? { ...r, ...patch } : r)),
         }));
         const updated = get().rules.find((r) => r.id === id);
-        if (updated) pushRuleToAPI(updated);
+        if (updated) putRuleToAPI(updated);
       },
 
       deleteRule: (id) => {

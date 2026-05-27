@@ -579,10 +579,19 @@ function NotificationForm() {
     setTestResult('');
     try {
       const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+      const body: Record<string, string> = { channel };
+      if (channel === 'gmail') {
+        if (gmailTo) body.to = gmailTo;
+        if (gmailUser) body.smtp_user = gmailUser;
+        if (gmailPassword) body.smtp_password = gmailPassword;
+      } else {
+        if (telegramToken) body.bot_token = telegramToken;
+        if (telegramChatId) body.chat_id = telegramChatId;
+      }
       const res = await fetch(`${BASE_URL}/alerts/notifications/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel }),
+        body: JSON.stringify(body),
       });
       setTestResult(res.ok ? 'Test sent successfully' : `Failed: ${res.status}`);
     } catch (e: any) {
