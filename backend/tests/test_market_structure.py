@@ -28,28 +28,28 @@ def _make_bar(time: str, open_: float, high: float, low: float, close: float, vo
 class TestFindSwings:
     def test_swing_high_detected(self):
         bars = [
-            _make_bar("2024-01-01", 100, 102, 99, 101),
-            _make_bar("2024-01-02", 101, 103, 100, 102),
-            _make_bar("2024-01-03", 102, 110, 101, 103),
-            _make_bar("2024-01-04", 103, 105, 102, 104),
-            _make_bar("2024-01-05", 104, 106, 103, 105),
-            _make_bar("2024-01-08", 105, 107, 104, 106),
-            _make_bar("2024-01-09", 106, 108, 105, 107),
-            _make_bar("2024-01-10", 107, 109, 106, 108),
-            _make_bar("2024-01-11", 108, 111, 107, 109),
-            _make_bar("2024-01-12", 109, 112, 108, 110),
+            _make_bar("2024-01-01", 100, 101, 99, 100),
+            _make_bar("2024-01-02", 100, 103, 99, 102),
+            _make_bar("2024-01-03", 102, 105, 101, 104),
+            _make_bar("2024-01-04", 104, 108, 103, 107),
+            _make_bar("2024-01-05", 107, 115, 106, 109),   # swing high at 115 (idx 4)
+            _make_bar("2024-01-08", 109, 112, 108, 111),
+            _make_bar("2024-01-09", 111, 108, 110, 107),
+            _make_bar("2024-01-10", 107, 105, 106, 104),
+            _make_bar("2024-01-11", 104, 103, 103, 103),
+            _make_bar("2024-01-12", 103, 105, 102, 104),
         ]
         highs, _ = find_swings(bars, lookback=3)
         assert len(highs) >= 1
-        assert any(h["price"] == 110 for h in highs)
+        assert any(h["price"] == 115 for h in highs)
 
     def test_swing_low_detected(self):
         bars = [
             _make_bar("2024-01-01", 100, 102, 99, 101),
             _make_bar("2024-01-02", 101, 103, 100, 102),
-            _make_bar("2024-01-03", 102, 104, 95, 103),
-            _make_bar("2024-01-04", 103, 105, 102, 104),
-            _make_bar("2024-01-05", 104, 106, 103, 105),
+            _make_bar("2024-01-03", 102, 104, 101, 103),
+            _make_bar("2024-01-04", 103, 105, 101, 104),
+            _make_bar("2024-01-05", 104, 106, 95, 105),   # swing low at index 4
             _make_bar("2024-01-08", 105, 107, 104, 106),
             _make_bar("2024-01-09", 106, 108, 105, 107),
             _make_bar("2024-01-10", 107, 109, 106, 108),
@@ -62,10 +62,18 @@ class TestFindSwings:
 
     def test_swings_both_detected_in_same_sequence(self):
         bars = [
-            _make_bar(f"2024-01-{i+1:02d}", 100 + i, 102 + i, 98 + i, 101 + i)
-            for i in range(20)
+            _make_bar("2024-01-01", 100, 101, 99, 100),
+            _make_bar("2024-01-02", 100, 103, 99, 102),
+            _make_bar("2024-01-03", 102, 106, 101, 105),
+            _make_bar("2024-01-04", 105, 112, 104, 108),
+            _make_bar("2024-01-05", 108, 107, 98, 102),
+            _make_bar("2024-01-08", 102, 104, 101, 103),
+            _make_bar("2024-01-09", 103, 105, 102, 104),
+            _make_bar("2024-01-10", 104, 107, 103, 106),
+            _make_bar("2024-01-11", 106, 108, 105, 107),
+            _make_bar("2024-01-12", 107, 110, 106, 109),
         ]
-        highs, lows = find_swings(bars)
+        highs, lows = find_swings(bars, lookback=3)
         assert len(highs) >= 1
         assert len(lows) >= 1
 
@@ -89,9 +97,9 @@ class TestDetectFvg:
 
     def test_fvg_bearish_detected(self):
         bars = [
-            _make_bar("2024-01-01", 110, 112, 109, 111),
-            _make_bar("2024-01-02", 111, 113, 108, 110),
-            _make_bar("2024-01-03", 110, 111, 107, 108),
+            _make_bar("2024-01-01", 115, 118, 114, 116),
+            _make_bar("2024-01-02", 116, 117, 112, 113),
+            _make_bar("2024-01-03", 113, 113, 105, 106),
         ]
         signals = detect_fvg(bars)
         bearish = [s for s in signals if s["direction"] == "bearish"]
@@ -125,8 +133,8 @@ class TestDetectFvg:
             _make_bar("2024-01-01", 100, 103, 99, 101),
             _make_bar("2024-01-02", 101, 105, 100, 104),
             _make_bar("2024-01-03", 104, 108, 106, 107),
-            _make_bar("2024-01-04", 107, 109, 107.1, 108),
-            _make_bar("2024-01-05", 108, 110, 107.5, 109),
+            _make_bar("2024-01-04", 107, 108, 106.5, 107.5),  # does NOT touch gap 103-106
+            _make_bar("2024-01-05", 107.5, 109, 106.5, 108),  # does NOT touch
         ]
         signals = detect_fvg(bars)
         unmitigated = [s for s in signals if not s.get("mitigated")]
@@ -140,15 +148,15 @@ class TestBosChoch:
     def test_bos_bullish_above_swing_high(self):
         bars = [
             _make_bar("2024-01-01", 100, 102, 98, 101),
-            _make_bar("2024-01-02", 101, 103, 100, 102),
-            _make_bar("2024-01-03", 102, 104, 101, 103),
-            _make_bar("2024-01-04", 103, 105, 102, 104),
-            _make_bar("2024-01-05", 104, 108, 103, 105),
-            _make_bar("2024-01-08", 105, 106, 104, 105),
-            _make_bar("2024-01-09", 105, 107, 104, 106),
-            _make_bar("2024-01-10", 106, 109, 105, 108),
-            _make_bar("2024-01-11", 108, 112, 107, 111),
-            _make_bar("2024-01-12", 111, 114, 110, 113),
+            _make_bar("2024-01-02", 101, 104, 100, 103),
+            _make_bar("2024-01-03", 103, 106, 102, 105),
+            _make_bar("2024-01-04", 105, 108, 104, 107),
+            _make_bar("2024-01-05", 107, 112, 106, 108),   # swing high at 112 (idx 4)
+            _make_bar("2024-01-08", 108, 109, 107, 108),
+            _make_bar("2024-01-09", 108, 109, 106, 107),
+            _make_bar("2024-01-10", 107, 108, 105, 106),
+            _make_bar("2024-01-11", 106, 107, 104, 105),
+            _make_bar("2024-01-12", 105, 116, 103, 114),   # close=114 > 112 → BOS
         ]
         signals = detect_bos_choch(bars, lookback=3)
         bos_signals = [s for s in signals if s["kind"] == "BOS" and s["direction"] == "bullish"]
@@ -156,23 +164,26 @@ class TestBosChoch:
 
     def test_choch_direction_change(self):
         bars = [
-            _make_bar("2024-01-01", 110, 112, 109, 111),
-            _make_bar("2024-01-02", 111, 113, 110, 112),
-            _make_bar("2024-01-03", 112, 114, 111, 113),
-            _make_bar("2024-01-04", 113, 115, 112, 114),
-            _make_bar("2024-01-05", 114, 116, 113, 115),
-            _make_bar("2024-01-08", 115, 117, 114, 116),
-            _make_bar("2024-01-09", 116, 118, 115, 117),
-            _make_bar("2024-01-10", 117, 119, 116, 118),
-            _make_bar("2024-01-11", 118, 120, 100, 105),
-            _make_bar("2024-01-12", 105, 107, 101, 103),
-            _make_bar("2024-01-15", 103, 106, 100, 102),
-            _make_bar("2024-01-16", 102, 104, 101, 103),
-            _make_bar("2024-01-17", 103, 108, 102, 107),
-            _make_bar("2024-01-18", 107, 121, 106, 120),
+            _make_bar("2024-01-01", 100, 102, 99, 101),
+            _make_bar("2024-01-02", 101, 104, 100, 103),
+            _make_bar("2024-01-03", 103, 106, 101, 105),
+            _make_bar("2024-01-04", 105, 109, 103, 108),
+            _make_bar("2024-01-05", 108, 112, 105, 111),
+            _make_bar("2024-01-08", 111, 115, 108, 113),   # swing high at 115
+            _make_bar("2024-01-09", 113, 113, 110, 112),
+            _make_bar("2024-01-10", 112, 112, 109, 111),
+            _make_bar("2024-01-11", 111, 111, 105, 108),
+            _make_bar("2024-01-12", 108, 109, 97, 101),
+            _make_bar("2024-01-15", 101, 103, 85, 95),      # swing low at 85
+            _make_bar("2024-01-16", 95, 97, 90, 92),
+            _make_bar("2024-01-17", 92, 94, 86, 86),
+            _make_bar("2024-01-18", 86, 90, 86, 84),        # close=84 < 85 → bearish BOS
+            _make_bar("2024-01-19", 84, 100, 84, 98),
+            _make_bar("2024-01-20", 98, 120, 97, 119),      # close=119 > 115 → CHoCH!
         ]
         signals = detect_bos_choch(bars, lookback=3)
-        assert len(signals) >= 1
+        choch_signals = [s for s in signals if s["kind"] == "CHoCH"]
+        assert len(choch_signals) >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +196,7 @@ class TestFibonacci:
             _make_bar("2024-12-23", 121, 124, 120, 123),
             _make_bar("2024-12-24", 123, 125, 122, 124),
             _make_bar("2024-12-26", 124, 200, 123, 199),
-            _make_bar("2024-12-27", 199, 201, 95, 100),
+            _make_bar("2024-12-27", 199, 200, 95, 100),
             _make_bar("2024-12-30", 100, 110, 99, 105),
         ]
         result = compute_fibonacci(bars, lookback=100)
