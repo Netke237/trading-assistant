@@ -24,9 +24,11 @@ interface Props {
   series: SeriesConfig[];
   onCrosshairMove?: (time: string | null, values: Record<string, number>) => void;
   height?: number;
+  chartApiRef?: React.MutableRefObject<IChartApi | null>;
+  mainSeriesRef?: React.MutableRefObject<ISeriesApi<'Candlestick'> | null>;
 }
 
-export default function ChartPane({ series, onCrosshairMove, height = 300 }: Props) {
+export default function ChartPane({ series, onCrosshairMove, height = 300, chartApiRef, mainSeriesRef }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesMap = useRef<Map<string, ISeriesApi<'Candlestick' | 'Line' | 'Histogram'>>>(new Map());
@@ -51,6 +53,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 300 }: Pro
       height,
     });
     chartRef.current = chart;
+    if (chartApiRef) chartApiRef.current = chart;
 
     chart.subscribeCrosshairMove((param) => {
       if (!param.time) { onCrosshairMoveRef.current?.(null, {}); return; }
@@ -104,6 +107,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 300 }: Pro
             wickUpColor: '#4caf50',
             wickDownColor: '#e05050',
           });
+          if (mainSeriesRef) mainSeriesRef.current = s as ISeriesApi<'Candlestick'>;
         } else if (cfg.type === 'Histogram') {
           s = chart.addSeries(HistogramSeries, {
             color: cfg.color ?? '#4a4a6a',

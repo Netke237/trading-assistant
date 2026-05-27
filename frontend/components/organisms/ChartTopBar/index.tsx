@@ -6,9 +6,10 @@ const INTERVALS: Interval[] = ['1min', '5min', '15min', '1h', '4h', '1D', '1W'];
 
 interface Props {
   onToggleIndicators: () => void;
+  onToggleStructure: () => void;
 }
 
-export default function ChartTopBar({ onToggleIndicators }: Props) {
+export default function ChartTopBar({ onToggleIndicators, onToggleStructure }: Props) {
   const { symbol, interval, chartType, setSymbol, setInterval, setChartType } = useChartStore();
 
   const handleSymbolKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -55,6 +56,7 @@ export default function ChartTopBar({ onToggleIndicators }: Props) {
       </select>
 
       <button className={styles.btn} onClick={onToggleIndicators}>Indicators</button>
+      <button className={styles.btn} onClick={onToggleStructure}>Structure</button>
 
       <div className={styles.spacer} />
 

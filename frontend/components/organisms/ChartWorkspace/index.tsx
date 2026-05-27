@@ -4,12 +4,16 @@ import { useSearchParams } from 'next/navigation';
 import { useChartStore, type IndicatorConfig, type Interval } from '@/lib/chartStore';
 import { ChartWSClient, type WSMessage } from '@/lib/chartWS';
 import { calcEMA, calcSMA, calcRSI, calcMACD, calcBB, calcATR, calcVWAP, type Candle } from '@/lib/indicators';
+import { useStructureStore } from '@/lib/structureStore';
 import type { SeriesConfig } from '@/components/organisms/ChartPane';
 import ChartPane from '@/components/organisms/ChartPane';
 import ChartTopBar from '@/components/organisms/ChartTopBar';
 import DrawingToolbar, { type DrawingTool } from '@/components/organisms/DrawingToolbar';
 import IndicatorPanel from '@/components/organisms/IndicatorPanel';
+import StructurePanel from '@/components/organisms/StructurePanel';
+import { ChartOverlays } from '@/components/organisms/ChartOverlays';
 import ChartRightPanel, { type DataValues } from '@/components/organisms/ChartRightPanel';
+import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import styles from './ChartWorkspace.module.css';
 
 // ── Indicator computation helpers ─────────────────────────────────────────────
@@ -56,8 +60,15 @@ export default function ChartWorkspace() {
   const [candles, setCandles] = useState<Candle[]>([]);
   const [drawingTool, setDrawingTool] = useState<DrawingTool>('cursor');
   const [showIndicators, setShowIndicators] = useState(false);
+  const [showStructure, setShowStructure] = useState(false);
   const [crosshair, setCrosshair] = useState<DataValues>({ time: null, indicators: {} });
   const wsRef = useRef<ChartWSClient | null>(null);
+  const chartApiRef = useRef<IChartApi | null>(null);
+  const mainSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+
+  const structureVisible = useStructureStore((s) => s.structureVisible);
+  const structureVisibility = useStructureStore((s) => s.visibility);
+  const structureSignals = useStructureStore((s) => s.signals[`${symbol}:${interval}`] ?? []);
 
   // Deep-link: read ?symbol= and ?interval= query params once on mount
   useEffect(() => {
@@ -96,6 +107,10 @@ export default function ChartWorkspace() {
           return [...prev, { time: msg.data.timestamp, open: msg.data.price, high: msg.data.price, low: msg.data.price, close: msg.data.price, volume: msg.data.volume }];
         });
       }
+      if (msg.type === 'structure') {
+        const key = `${msg.symbol}:${msg.interval}`;
+        useStructureStore.getState().setSignals(key, msg.signals);
+      }
     });
     client.connect();
     wsRef.current = client;
@@ -133,12 +148,31 @@ export default function ChartWorkspace() {
 
   return (
     <div className={styles.workspace}>
-      <ChartTopBar onToggleIndicators={() => setShowIndicators(v => !v)} />
+      <ChartTopBar
+        onToggleIndicators={() => setShowIndicators(v => !v)}
+        onToggleStructure={() => setShowStructure(v => !v)}
+      />
       {showIndicators && <IndicatorPanel onClose={() => setShowIndicators(false)} />}
+      {showStructure && <StructurePanel onClose={() => setShowStructure(false)} />}
       <div className={styles.body}>
         <DrawingToolbar active={drawingTool} onChange={setDrawingTool} />
         <div className={styles.charts}>
-          <ChartPane series={mainSeries} height={320} onCrosshairMove={handleCrosshair} />
+          <div style={{ position: 'relative' }}>
+            <ChartPane
+              series={mainSeries}
+              height={320}
+              onCrosshairMove={handleCrosshair}
+              chartApiRef={chartApiRef}
+              mainSeriesRef={mainSeriesRef}
+            />
+            <ChartOverlays
+              chart={chartApiRef.current}
+              mainSeries={mainSeriesRef.current}
+              signals={structureSignals}
+              visibility={structureVisibility}
+              visible={structureVisible}
+            />
+          </div>
           {subPanes.map(({ id, series }) => (
             <ChartPane key={id} series={series} height={100} />
           ))}

@@ -1,10 +1,12 @@
 import type { Candle } from './indicators';
+import type { StructureSignal } from '@/types/structure';
 
 export type WSMessage =
   | { type: 'history'; candles: Candle[] }
   | { type: 'tick'; data: { symbol: string; price: number; volume: number; timestamp: string } }
   | { type: 'ping' }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'structure'; symbol: string; interval: string; signals: StructureSignal[] };
 
 export type MessageHandler = (msg: WSMessage) => void;
 
