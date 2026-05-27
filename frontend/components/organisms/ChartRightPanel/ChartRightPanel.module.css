@@ -1,0 +1,46 @@
+.panel {
+  width: 180px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tab {
+  flex: 1;
+  padding: 6px 0;
+  font-size: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.tabActive {
+  color: var(--pass);
+  border-bottom: 2px solid var(--pass);
+}
+
+.list { flex: 1; overflow-y: auto; padding: 4px 0; }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.empty { padding: 8px; }
+
+.dataPanel { padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+
+.ohlcv { display: flex; flex-wrap: wrap; gap: 6px; font-size: 10px; color: var(--text-secondary); }
+
+.indicatorVal { display: flex; justify-content: space-between; }
