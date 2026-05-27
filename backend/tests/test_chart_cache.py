@@ -44,7 +44,27 @@ async def test_cache_expiry_refetches():
 
 
 @pytest.mark.asyncio
-async def test_semaphore_limits_concurrent_fetches():
-    """Chart semaphore allows at most 2 concurrent fetches."""
-    from app.data.chart_cache import _CHART_SEM
-    assert _CHART_SEM._value == 2
+async def test_at_most_2_concurrent_fetches():
+    """At most 2 concurrent chart fetches run simultaneously."""
+    import asyncio as _asyncio
+    peak = 0
+    current = 0
+
+    async def fake_thread(fn, *args):
+        nonlocal peak, current
+        current += 1
+        peak = max(peak, current)
+        await _asyncio.sleep(0.02)
+        current -= 1
+        return []
+
+    with patch("app.data.chart_cache.asyncio.to_thread", side_effect=fake_thread):
+        from app.data.chart_cache import get_intraday, _INTRADAY_CACHE
+        _INTRADAY_CACHE.clear()
+        await _asyncio.gather(
+            get_intraday("S1", "15min", 55),
+            get_intraday("S2", "15min", 55),
+            get_intraday("S3", "15min", 55),
+            get_intraday("S4", "15min", 55),
+        )
+    assert peak <= 2

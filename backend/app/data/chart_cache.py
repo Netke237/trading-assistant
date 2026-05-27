@@ -34,10 +34,10 @@ async def get_intraday(symbol: str, interval: str = "15min", days: int = 55) -> 
 
     async with _CHART_SEM:
         cached = _INTRADAY_CACHE.get(key)
-        if cached is not None and now < cached[1]:
+        if cached is not None and time.monotonic() < cached[1]:
             return cached[0]
 
         rows = await asyncio.to_thread(fetch_intraday_candles, symbol, interval, days)
-        ttl = _TTL_BY_INTERVAL.get(interval, 30 * 60)
+        ttl = _TTL_BY_INTERVAL.get(interval, 30 * 60) if rows else 60
         _INTRADAY_CACHE[key] = (rows, now + ttl)
         return rows
