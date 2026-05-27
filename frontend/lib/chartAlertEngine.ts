@@ -74,7 +74,7 @@ function evaluateCondition(
         if ('confidence' in s && (s.confidence ?? 0) < condition.min_confidence) return false;
       }
       const signalTime = 'time' in s ? s.time : 'time_start' in s ? s.time_start : '';
-      return signalTime === candleTime;
+      return signalTime >= candleTime;
     });
     if (matchingSignal) {
       triggerValues[condition.signal_kind] = 1;
@@ -93,7 +93,7 @@ function buildReason(rule: AlertRule, triggerValues: Record<string, number>): st
       if (c.kind === 'price') return `Price ${c.operator} ${c.value}`;
       if (c.kind === 'indicator') {
         const val = triggerValues[c.indicator];
-        const valStr = val != null ? ` (was ${val.toFixed(2)})` : '';
+        const valStr = ` (was ${val != null ? val.toFixed(2) : 'N/A'})`;
         return `${c.indicator} ${c.operator} ${c.value}${valStr}`;
       }
       if (c.kind === 'structure') {

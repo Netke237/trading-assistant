@@ -99,6 +99,18 @@ export default function AlertRuleBuilder({ onClose, editRule }: Props) {
       last_triggered_at: editRule?.last_triggered_at ?? null,
     };
     if (editRule) {
+      const existingRules = useChartAlertStore.getState().rules;
+      const collision = existingRules.some(
+        (r) =>
+          r.id !== editRule.id &&
+          r.symbol === symbol &&
+          r.interval === interval &&
+          JSON.stringify(r.group.conditions) === JSON.stringify(conditions),
+      );
+      if (collision) {
+        setError('Another rule with these conditions already exists');
+        return;
+      }
       updateRule(editRule.id, rule);
     } else {
       const added = addRule(rule);

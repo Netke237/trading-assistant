@@ -122,7 +122,7 @@ function conditionsSummary(rule: AlertRule): string {
 export default function AlertsPage() {
   const { toasts, config, setConfig, clearAll, clearOldAlerts, acknowledgeAlert } = useAlertStore();
   const { ivPassThreshold, ivCautionThreshold, setIvPassThreshold, setIvCautionThreshold } = useSettingsStore();
-  const { rules, updateRule, deleteRule } = useChartAlertStore();
+  const { rules, updateRule, deleteRule, addRule } = useChartAlertStore();
 
   const [tab, setTab] = useState<'alerts' | 'rules'>('alerts');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
@@ -163,6 +163,17 @@ export default function AlertsPage() {
   function handleEdit(rule: AlertRule) {
     setEditingRule(rule);
     setShowRuleBuilder(true);
+  }
+
+  function handleDuplicate(rule: AlertRule) {
+    const duplicate: AlertRule = {
+      ...rule,
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: `${rule.name} (copy)`,
+      created_at: new Date().toISOString(),
+      last_triggered_at: null,
+    };
+    addRule(duplicate);
   }
 
   function handleCloseBuilder() {
@@ -398,6 +409,13 @@ export default function AlertsPage() {
                       onClick={() => handleEdit(rule)}
                     >
                       Edit
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnSecondary}
+                      onClick={() => handleDuplicate(rule)}
+                    >
+                      Duplicate
                     </button>
                     <button
                       type="button"
