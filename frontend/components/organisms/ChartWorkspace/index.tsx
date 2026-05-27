@@ -5,6 +5,10 @@ import { useChartStore, type IndicatorConfig, type Interval } from '@/lib/chartS
 import { ChartWSClient, type WSMessage } from '@/lib/chartWS';
 import { calcEMA, calcSMA, calcRSI, calcMACD, calcBB, calcATR, calcVWAP, type Candle } from '@/lib/indicators';
 import { useStructureStore } from '@/lib/structureStore';
+import { useChartAlertStore } from '@/lib/chartAlertStore';
+import { evaluateRules } from '@/lib/chartAlertEngine';
+import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
+import AlertToast from '@/components/organisms/AlertToast';
 import type { SeriesConfig } from '@/components/organisms/ChartPane';
 import ChartPane from '@/components/organisms/ChartPane';
 import ChartTopBar from '@/components/organisms/ChartTopBar';
@@ -52,6 +56,23 @@ function buildSubSeries(candles: Candle[], ind: IndicatorConfig): SeriesConfig[]
   return [];
 }
 
+type Point = { time: string; value: number };
+
+function getIndicatorPoints(candles: Candle[], indicators: IndicatorConfig[]): Record<string, Point[]> {
+  const result: Record<string, Point[]> = {};
+  for (const ind of indicators) {
+    if (ind.type === 'EMA')  result[ind.id] = calcEMA(candles, ind.params.period ?? 20).map(p => ({ time: p.time, value: p.value }));
+    if (ind.type === 'SMA')  result[ind.id] = calcSMA(candles, ind.params.period ?? 20).map(p => ({ time: p.time, value: p.value }));
+    if (ind.type === 'RSI')  result[ind.id] = calcRSI(candles, ind.params.period ?? 14).map(p => ({ time: p.time, value: p.value }));
+    if (ind.type === 'ATR')  result[ind.id] = calcATR(candles, ind.params.period ?? 14).map(p => ({ time: p.time, value: p.value }));
+    if (ind.type === 'MACD') {
+      const m = calcMACD(candles, ind.params.fast ?? 12, ind.params.slow ?? 26, ind.params.signal ?? 9);
+      result[ind.id] = m.macd.map(p => ({ time: p.time, value: p.value }));
+    }
+  }
+  return result;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ChartWorkspace() {
@@ -61,6 +82,7 @@ export default function ChartWorkspace() {
   const [drawingTool, setDrawingTool] = useState<DrawingTool>('cursor');
   const [showIndicators, setShowIndicators] = useState(false);
   const [showStructure, setShowStructure] = useState(false);
+  const [showAlerts, setShowAlerts] = useState(false);
   const [crosshair, setCrosshair] = useState<DataValues>({ time: null, indicators: {} });
   const wsRef = useRef<ChartWSClient | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
@@ -122,6 +144,42 @@ export default function ChartWorkspace() {
     };
   }, [symbol, interval]);
 
+  // Alert evaluation on candle-close
+  const prevCandleCount = useRef(candles.length);
+  useEffect(() => {
+    if (candles.length > prevCandleCount.current && prevCandleCount.current > 0) {
+      const closedCandle = candles[prevCandleCount.current - 1];
+      const alertRules = useChartAlertStore.getState().rules.filter(
+        r => r.symbol === symbol && r.interval === interval
+      );
+      if (alertRules.length > 0) {
+        const indicatorPoints = getIndicatorPoints(candles, activeIndicators);
+        const triggered = evaluateRules(
+          alertRules,
+          closedCandle,
+          candles,
+          indicatorPoints,
+          structureSignals,
+          new Date(),
+          symbol,
+          interval,
+        );
+        for (const history of triggered) {
+          useChartAlertStore.getState().addHistory(history);
+          useChartAlertStore.getState().updateRule(history.rule_id, {
+            last_triggered_at: history.triggered_at,
+          });
+          useChartAlertStore.getState().pushToast({
+            id: history.id,
+            message: `${history.symbol} · ${history.reason}`,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+    prevCandleCount.current = candles.length;
+  }, [candles.length, symbol, interval, activeIndicators, structureSignals]);
+
   const candlesRef = useRef(candles);
   useEffect(() => { candlesRef.current = candles; }, [candles]);
 
@@ -152,6 +210,7 @@ export default function ChartWorkspace() {
       <ChartTopBar
         onToggleIndicators={() => setShowIndicators(v => !v)}
         onToggleStructure={() => setShowStructure(v => !v)}
+        onToggleAlerts={() => setShowAlerts(v => !v)}
       />
       {showIndicators && <IndicatorPanel onClose={() => setShowIndicators(false)} />}
       {showStructure && <StructurePanel onClose={() => setShowStructure(false)} />}
@@ -178,8 +237,10 @@ export default function ChartWorkspace() {
             <ChartPane key={id} series={series} height={100} />
           ))}
         </div>
-        <ChartRightPanel crosshairData={crosshair} />
+        <ChartRightPanel crosshairData={crosshair} symbol={symbol} />
       </div>
+      {showAlerts && <AlertRuleBuilder onClose={() => setShowAlerts(false)} />}
+      <AlertToast />
     </div>
   );
 }
