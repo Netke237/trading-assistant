@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.data.chart_cache import get_intraday
 from app.data.tradier_stream import get_stream_client
+from app.services.market_structure import compute_structure
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chart", tags=["chart"])
@@ -38,12 +39,47 @@ async def stream(
         candles = await get_intraday(symbol, interval)
         await websocket.send_json({"type": "history", "candles": candles})
 
+        # Phase 2: fetch higher timeframe candles for MTF alignment (1h → 1D)
+        ht_candles = None
+        if interval == "1h":
+            ht_candles = await get_intraday(symbol, "1D")
+
+        # Phase 2: compute and send market structure signals
+        signals = compute_structure(candles, interval, symbol, ht_candles)
+        await websocket.send_json({
+            "type": "structure",
+            "symbol": symbol,
+            "interval": interval,
+            "signals": signals,
+        })
+
+        last_candle_time = candles[-1]["time"] if candles else None
+
         queue = await sc.subscribe(symbol)
 
         while True:
             try:
                 tick = await asyncio.wait_for(queue.get(), timeout=30.0)
                 await websocket.send_json({"type": "tick", "data": tick})
+
+                # Phase 2: re-send structure on new candle close
+                tick_time = tick.get("timestamp", "")[:10] if isinstance(tick, dict) else ""
+                if tick_time and tick_time != last_candle_time:
+                    last_candle_time = tick_time
+                    try:
+                        candles = await get_intraday(symbol, interval)
+                        ht_candles = None
+                        if interval == "1h":
+                            ht_candles = await get_intraday(symbol, "1D")
+                        signals = compute_structure(candles, interval, symbol, ht_candles)
+                        await websocket.send_json({
+                            "type": "structure",
+                            "symbol": symbol,
+                            "interval": interval,
+                            "signals": signals,
+                        })
+                    except Exception:
+                        logger.debug("Failed to re-compute structure on candle close", exc_info=True)
             except asyncio.TimeoutError:
                 await websocket.send_json({"type": "ping"})
 
