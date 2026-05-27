@@ -12,5 +12,12 @@ netstat -ano 2>nul | findstr /L "127.0.0.1:8000" | findstr /L "LISTENING" >nul 2
 if not errorlevel 1 goto kill_8000
 
 call .venv\Scripts\activate.bat
-call uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+echo Running database migrations...
+call python -m alembic -c migrations/alembic.ini upgrade head
+if errorlevel 1 (
+    echo WARNING: Alembic migration failed. Continuing anyway...
+)
+
+call python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 pause
