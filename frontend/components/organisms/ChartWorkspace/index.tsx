@@ -106,9 +106,12 @@ export default function ChartWorkspace() {
     };
   }, [symbol, interval]);
 
+  const candlesRef = useRef(candles);
+  useEffect(() => { candlesRef.current = candles; }, [candles]);
+
   const handleCrosshair = useCallback((time: string | null, values: Record<string, number>) => {
     if (!time) { setCrosshair({ time: null, indicators: {} }); return; }
-    const last = candles.find(c => c.time === time);
+    const last = candlesRef.current.find(c => c.time === time);
     setCrosshair({
       time,
       open:   last?.open,
@@ -118,7 +121,7 @@ export default function ChartWorkspace() {
       volume: last?.volume,
       indicators: values,
     });
-  }, [candles]);
+  }, []);
 
   const mainSeries = buildMainSeries(candles, activeIndicators);
   const subIndicators = activeIndicators.filter(i => i.pane === 'sub');

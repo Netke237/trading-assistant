@@ -30,6 +30,8 @@ export default function ChartPane({ series, onCrosshairMove, height = 300 }: Pro
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesMap = useRef<Map<string, ISeriesApi<'Candlestick' | 'Line' | 'Histogram'>>>(new Map());
+  const onCrosshairMoveRef = useRef(onCrosshairMove);
+  useEffect(() => { onCrosshairMoveRef.current = onCrosshairMove; }, [onCrosshairMove]);
 
   const initChart = useCallback(() => {
     if (!containerRef.current) return;
@@ -50,19 +52,17 @@ export default function ChartPane({ series, onCrosshairMove, height = 300 }: Pro
     });
     chartRef.current = chart;
 
-    if (onCrosshairMove) {
-      chart.subscribeCrosshairMove((param) => {
-        if (!param.time) { onCrosshairMove(null, {}); return; }
-        const values: Record<string, number> = {};
-        seriesMap.current.forEach((s, id) => {
-          const v = param.seriesData.get(s);
-          if (v && 'close' in v) values[id] = (v as { close: number }).close;
-          else if (v && 'value' in v) values[id] = (v as { value: number }).value;
-        });
-        onCrosshairMove(String(param.time), values);
+    chart.subscribeCrosshairMove((param) => {
+      if (!param.time) { onCrosshairMoveRef.current?.(null, {}); return; }
+      const values: Record<string, number> = {};
+      seriesMap.current.forEach((s, id) => {
+        const v = param.seriesData.get(s);
+        if (v && 'close' in v) values[id] = (v as { close: number }).close;
+        else if (v && 'value' in v) values[id] = (v as { value: number }).value;
       });
-    }
-  }, [height, onCrosshairMove]);
+      onCrosshairMoveRef.current?.(String(param.time), values);
+    });
+  }, [height]);
 
   useEffect(() => {
     initChart();
