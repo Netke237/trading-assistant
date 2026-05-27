@@ -109,3 +109,26 @@
 .chevronOpen {
   transform: rotate(90deg);
 }
+
+.groupHeaderRow {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.groupHeaderRow .groupHeader {
+  border-bottom: 0;
+  flex: 1;
+}
+
+.chartBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0.4;
+  padding: 2px 3px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.chartBtn:hover { opacity: 1; }
