@@ -577,21 +577,23 @@ function NotificationForm() {
   const [testResult, setTestResult] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState('');
+  const [loaded, setLoaded] = useState(false);
 
   // Load saved config on mount
   useEffect(() => {
     fetch(`${BASE_URL}/settings/notifications`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (!data) return;
-        setGmailEnabled(data.gmail?.enabled ?? false);
-        setGmailTo(data.gmail?.to ?? '');
-        setGmailUser(data.gmail?.smtp_user ?? '');
-        setTelegramEnabled(data.telegram?.enabled ?? false);
-        setTelegramChatId(data.telegram?.chat_id ?? '');
-        // Passwords are never returned from the server \u2014 leave fields blank
+        if (data) {
+          setGmailEnabled(data.gmail?.enabled ?? false);
+          setGmailTo(data.gmail?.to ?? '');
+          setGmailUser(data.gmail?.smtp_user ?? '');
+          setTelegramEnabled(data.telegram?.enabled ?? false);
+          setTelegramChatId(data.telegram?.chat_id ?? '');
+        }
+        setLoaded(true);
       })
-      .catch(() => {/* backend not running \u2014 silent */});
+      .catch(() => setLoaded(true));
   }, [BASE_URL]);
 
   async function handleSave() {
@@ -660,7 +662,7 @@ function NotificationForm() {
     <>
       <SectionIntro title="Notifications" blurb="Configure alert delivery. Gmail uses SMTP (App Password), Telegram uses Bot API. Settings are persisted to the backend config file. Passwords are write-only \u2014 leave blank to keep the existing saved value." />
 
-      <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '16px', marginBottom: '16px' }}>
+      <div key={`gmail-${loaded}`} style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '16px', marginBottom: '16px' }}>
         <Text size={14} weight={600}>Gmail</Text>
         <Row label="Enable Gmail alerts">
           <Toggle defaultOn={gmailEnabled} onChange={setGmailEnabled} />
@@ -690,7 +692,7 @@ function NotificationForm() {
         )}
       </div>
 
-      <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '16px', marginBottom: '16px' }}>
+      <div key={`telegram-${loaded}`} style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '16px', marginBottom: '16px' }}>
         <Text size={14} weight={600}>Telegram</Text>
         <Row label="Enable Telegram alerts">
           <Toggle defaultOn={telegramEnabled} onChange={setTelegramEnabled} />
@@ -698,6 +700,7 @@ function NotificationForm() {
         <Row label="Bot token" hint="From @BotFather">
           <input
             className={styles.input}
+            type="password"
             placeholder="leave blank to keep saved value"
             value={telegramToken}
             onChange={(e) => setTelegramToken(e.target.value)}
