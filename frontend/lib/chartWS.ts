@@ -81,5 +81,7 @@ export class ChartWSClient {
     if (this.timer) clearTimeout(this.timer);
     this.ws?.close();
     this.ws = null;
+    this.stateHandler = undefined;
+    this.handlers.clear();
   }
 }
