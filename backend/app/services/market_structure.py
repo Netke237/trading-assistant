@@ -375,6 +375,40 @@ def _detect_divergence(candles: list[dict], indicator_vals: list[Union[float, No
                     "mtf_aligned": False,
                 })
 
+    # Hidden bullish divergence: price HL (higher low), indicator LL (lower low)
+    for i in range(1, len(price_swing_lows)):
+        pl0, pl1 = price_swing_lows[i - 1], price_swing_lows[i]
+        if pl1["price"] > pl0["price"]:   # price makes higher low
+            il0 = _closest_indicator_swing(ind_swing_lows, pl0)
+            il1 = _closest_indicator_swing(ind_swing_lows, pl1)
+            if il0 and il1 and il1["value"] < il0["value"]:  # indicator makes lower low
+                bar_count = abs(pl1["index"] - pl0["index"]) + 1
+                signals.append({
+                    "kind": "Divergence", "direction": "bullish",
+                    "indicator": indicator, "divergence_type": "hidden",
+                    "time_start": pl0["time"], "time_end": pl1["time"],
+                    "price_start": pl0["price"], "price_end": pl1["price"],
+                    "confidence": _divergence_confidence(False, bar_count),
+                    "mtf_aligned": False,
+                })
+
+    # Hidden bearish divergence: price LH (lower high), indicator HH (higher high)
+    for i in range(1, len(price_swing_highs)):
+        ph0, ph1 = price_swing_highs[i - 1], price_swing_highs[i]
+        if ph1["price"] < ph0["price"]:   # price makes lower high
+            ih0 = _closest_indicator_swing(ind_swing_highs, ph0)
+            ih1 = _closest_indicator_swing(ind_swing_highs, ph1)
+            if ih0 and ih1 and ih1["value"] > ih0["value"]:  # indicator makes higher high
+                bar_count = abs(ph1["index"] - ph0["index"]) + 1
+                signals.append({
+                    "kind": "Divergence", "direction": "bearish",
+                    "indicator": indicator, "divergence_type": "hidden",
+                    "time_start": ph0["time"], "time_end": ph1["time"],
+                    "price_start": ph0["price"], "price_end": ph1["price"],
+                    "confidence": _divergence_confidence(False, bar_count),
+                    "mtf_aligned": False,
+                })
+
     return signals
 
 
