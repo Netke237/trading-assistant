@@ -261,6 +261,7 @@ export interface MarketRegime {
   omm?:                 OmmData | null;
   intraday_hmm?:        IntraHmmData | null;
   intraday_hmm_status?: 'ok' | 'insufficient_data' | 'unavailable';
+  intraday_omm?:        OmmData | null;
   vix_pct_30d?:         number | null;
   vix_pct_252d?:        number | null;
   /** Legacy client-side field — kept for backward compat, not populated by backend. */

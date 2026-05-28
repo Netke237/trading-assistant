@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
@@ -42,6 +43,7 @@ function sortContracts(
 }
 
 export default function Step6Page() {
+  const router = useRouter();
   const [localContractsBySymbol, setLocalContractsBySymbol] = useState<Record<string, OptionContract[]>>({});
   const [expanded, setExpanded] = useState<string>('');
   const [pick, setPick]         = useState<string>('');
@@ -143,16 +145,25 @@ export default function Step6Page() {
             const chain  = sorted.filter((c) => c.id !== recommended?.id);
             return (
               <div key={candidate.symbol} className={tbl.group}>
-                <button
-                  type="button"
-                  className={tbl.groupHeader}
-                  onClick={() => setExpanded(isOpen ? '' : candidate.symbol)}
-                  aria-expanded={isOpen}
-                >
-                  <Text size={13} weight={500}>{candidate.symbol}</Text>
-                  <Text size={11} tone="secondary">{contracts.length} contracts</Text>
-                  <span className={`${tbl.chevron} ${isOpen ? tbl.chevronOpen : ''}`} aria-hidden>&#x203A;</span>
-                </button>
+                <div className={tbl.groupHeaderRow}>
+                  <button
+                    type="button"
+                    className={tbl.groupHeader}
+                    onClick={() => setExpanded(isOpen ? '' : candidate.symbol)}
+                    aria-expanded={isOpen}
+                  >
+                    <Text size={13} weight={500}>{candidate.symbol}</Text>
+                    <Text size={11} tone="secondary">{contracts.length} contracts</Text>
+                    <span className={`${tbl.chevron} ${isOpen ? tbl.chevronOpen : ''}`} aria-hidden>&#x203A;</span>
+                  </button>
+                  <button
+                    className={tbl.chartBtn}
+                    title="Open in Chart"
+                    onClick={(e) => { e.stopPropagation(); router.push(`/chart?symbol=${candidate.symbol}`); }}
+                  >
+                    📈
+                  </button>
+                </div>
 
                 {isOpen && (
                   <div className={tbl.groupBody}>

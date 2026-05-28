@@ -9,7 +9,7 @@ from functools import lru_cache
 from app.models.heston import HestonParams, CalibrationResult, heston_price
 from app.models.black_scholes import bs_iv
 
-_CALIBRATION_TIMEOUT = 2.0
+_CALIBRATION_TIMEOUT = 1.0
 _USE_FULL_GRID = os.getenv("HESTON_FULL_CALIBRATION", "").lower() in ("1", "true")
 
 
@@ -33,7 +33,7 @@ def _run_calibration(iv_key: str, chain_repr: str, S: float, r: float) -> Calibr
         sigma_v_grid = [0.2, 0.4, 0.6]
         rho_grid     = [-0.8, -0.5, -0.2]
     else:
-        v0_grid      = [0.01, 0.09]
+        v0_grid      = [0.04]          # single seed — BS fallback handles the rest if timeout
         kappa_grid   = [0.5, 3.0]
         theta_grid   = [0.02, 0.08]
         sigma_v_grid = [0.2, 0.6]

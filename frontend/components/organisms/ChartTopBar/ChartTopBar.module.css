@@ -1,0 +1,96 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 36px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.symbolInput {
+  width: 72px;
+  padding: 3px 8px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.intervals { display: flex; gap: 2px; }
+
+.tf {
+  padding: 2px 6px;
+  font-size: 11px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.tf:hover { background: var(--bg-surface-2); color: var(--text-primary); }
+
+.tfActive {
+  background: color-mix(in srgb, var(--pass) 15%, var(--bg-surface));
+  color: var(--pass);
+}
+
+.chartType {
+  padding: 3px 6px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.btn:hover { color: var(--text-primary); }
+
+.spacer { flex: 1; }
+
+.popOut {
+  padding: 3px 8px;
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--pass) 40%, transparent);
+  border-radius: 4px;
+  color: var(--pass);
+  cursor: pointer;
+}
+
+.connBadge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.connecting {
+  background: color-mix(in srgb, var(--caution) 18%, var(--bg-surface));
+  color: var(--caution);
+}
+
+.reconnecting {
+  background: color-mix(in srgb, var(--caution) 18%, var(--bg-surface));
+  color: var(--caution);
+}
+
+.error {
+  background: color-mix(in srgb, var(--reject) 18%, var(--bg-surface));
+  color: var(--reject);
+}

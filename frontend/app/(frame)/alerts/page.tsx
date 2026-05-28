@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text, Data } from '@/components/primitives';
 import { useAlertStore, DEFAULT_CONFIG } from '@/lib/alertStore';
@@ -8,7 +8,10 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
+import { useChartAlertStore } from '@/lib/chartAlertStore';
+import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
 import type { AlertType, ToastItem } from '@/types/domain';
+import type { AlertRule, Condition } from '@/types/alerts';
 import styles from './page.module.css';
 
 /* ─── helpers ─── */
@@ -99,11 +102,31 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   );
 }
 
+/* ─── conditions summary ─── */
+
+function conditionText(cond: Condition): string {
+  if (cond.kind === 'price') return `Price ${cond.operator} ${cond.value}`;
+  if (cond.kind === 'indicator') return `${cond.indicator} ${cond.operator} ${cond.value}`;
+  let text = cond.signal_kind;
+  if (cond.direction) text += ` ${cond.direction}`;
+  if (cond.min_confidence != null) text += ` (${cond.min_confidence}%)`;
+  return text;
+}
+
+function conditionsSummary(rule: AlertRule): string {
+  return rule.group.conditions.map(conditionText).join(` ${rule.group.logic} `);
+}
+
 /* ─── Main page ─── */
 
 export default function AlertsPage() {
   const { toasts, config, setConfig, clearAll, clearOldAlerts, acknowledgeAlert } = useAlertStore();
   const { ivPassThreshold, ivCautionThreshold, setIvPassThreshold, setIvCautionThreshold } = useSettingsStore();
+  const { rules, updateRule, deleteRule, addRule } = useChartAlertStore();
+
+  const [tab, setTab] = useState<'alerts' | 'rules'>('alerts');
+  const [showRuleBuilder, setShowRuleBuilder] = useState(false);
+  const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
 
   const candidates = useScanStore((s) => s.scanResult?.candidates) ?? [];
   const portfolioPositions = usePortfolioStore((s) => s.positions);
@@ -132,6 +155,32 @@ export default function AlertsPage() {
     toasts.filter((t) => !t.acknowledged).forEach((t) => acknowledgeAlert(t.id));
   }
 
+  function handleCreate() {
+    setEditingRule(null);
+    setShowRuleBuilder(true);
+  }
+
+  function handleEdit(rule: AlertRule) {
+    setEditingRule(rule);
+    setShowRuleBuilder(true);
+  }
+
+  function handleDuplicate(rule: AlertRule) {
+    const duplicate: AlertRule = {
+      ...rule,
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: `${rule.name} (copy)`,
+      created_at: new Date().toISOString(),
+      last_triggered_at: null,
+    };
+    addRule(duplicate);
+  }
+
+  function handleCloseBuilder() {
+    setShowRuleBuilder(false);
+    setEditingRule(null);
+  }
+
   return (
     <div className={styles.page}>
       {/* ── Header ── */}
@@ -154,6 +203,25 @@ export default function AlertsPage() {
         </div>
       </div>
 
+      {/* ── Tab strip ── */}
+      <div className={styles.pageTabStrip}>
+        <button
+          type="button"
+          className={[styles.pageTab, tab === 'alerts' ? styles.pageTabActive : ''].join(' ')}
+          onClick={() => setTab('alerts')}
+        >
+          Alerts
+        </button>
+        <button
+          type="button"
+          className={[styles.pageTab, tab === 'rules' ? styles.pageTabActive : ''].join(' ')}
+          onClick={() => setTab('rules')}
+        >
+          Rules
+        </button>
+      </div>
+
+      {tab === 'alerts' && (
       <div className={styles.layout}>
         {/* ── Left: Alert Settings ── */}
         <aside className={styles.colLeft}>
@@ -296,6 +364,80 @@ export default function AlertsPage() {
           </section>
         </aside>
       </div>
+      )}
+
+      {tab === 'rules' && (
+        <section className={styles.section}>
+          <div className={styles.rulesHeader}>
+            <Text size={11} tone="secondary" weight={600}>Chart Alert Rules</Text>
+            <button type="button" className={styles.btnPrimary} onClick={handleCreate}>
+              Create Alert
+            </button>
+          </div>
+          {rules.length === 0 ? (
+            <div className={styles.empty}>
+              <Text size={13} tone="secondary">No chart alert rules defined yet.</Text>
+            </div>
+          ) : (
+            <div className={styles.rulesTable}>
+              <div className={[styles.rulesTableRow, styles.rulesTableHeader].join(' ')}>
+                <Text size={11} tone="dim" weight={600}>Name</Text>
+                <Text size={11} tone="dim" weight={600}>Symbol</Text>
+                <Text size={11} tone="dim" weight={600}>Interval</Text>
+                <Text size={11} tone="dim" weight={600}>Conditions</Text>
+                <Text size={11} tone="dim" weight={600}>Status</Text>
+                <Text size={11} tone="dim" weight={600}>Last Triggered</Text>
+                <Text size={11} tone="dim" weight={600}>Actions</Text>
+              </div>
+              {rules.map((rule) => (
+                <div key={rule.id} className={styles.rulesTableRow}>
+                  <Text size={13}>{rule.name}</Text>
+                  <Data size={12} weight={500}>{rule.symbol}</Data>
+                  <Text size={12}>{rule.interval}</Text>
+                  <Text size={12}>{conditionsSummary(rule)}</Text>
+                  <Toggle
+                    on={rule.enabled}
+                    onChange={(on) => updateRule(rule.id, { enabled: on })}
+                  />
+                  <Text size={12} tone="dim">
+                    {rule.last_triggered_at ? timeAgo(rule.last_triggered_at) : 'never'}
+                  </Text>
+                  <div className={styles.rulesActions}>
+                    <button
+                      type="button"
+                      className={styles.btnSecondary}
+                      onClick={() => handleEdit(rule)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnSecondary}
+                      onClick={() => handleDuplicate(rule)}
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnDanger}
+                      onClick={() => deleteRule(rule.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {showRuleBuilder && (
+        <AlertRuleBuilder
+          onClose={handleCloseBuilder}
+          editRule={editingRule}
+        />
+      )}
     </div>
   );
 }

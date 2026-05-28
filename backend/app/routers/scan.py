@@ -35,9 +35,9 @@ from typing import Literal
 from app.data.market import (
     fetch_candles_async, fetch_price_async, fetch_option_chain_async,
     fetch_company_name_async, fetch_fundamentals_calendar,
-    fetch_market_cap_async,
+    fetch_market_cap_async, fetch_calendar_dates_async,
     _extract_earnings_date, _extract_dividend_date,
-    _earnings_date_yf, _dividend_date_yf, _compute_iv_bs,
+    _compute_iv_bs,
     TRADIER_BASE_URL, TRADIER_TOKEN,
 )
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
@@ -139,7 +139,10 @@ def _alt_reason(alt: dict, primary: dict, *, is_call: bool) -> str:
     return "; ".join(parts) if parts else "similar profile — alternative liquidity/spread characteristics"
 
 
-_SCAN_CONCURRENCY = 10
+# Kept at 3 to stay below Tradier's rate-limit threshold.
+# 10 concurrent × 5 calls = 50 simultaneous requests caused severe throttling (50-78s/symbol).
+# 3 concurrent × 5 calls = 15 simultaneous requests → consistent ~4-6s/symbol.
+_SCAN_CONCURRENCY = 3
 
 
 def _safe(model_cls, d: dict | None):
@@ -167,12 +170,22 @@ async def _process_symbol(
     max_cap_usd: float | None = None,
     overrides: dict | None = None,
 ) -> TradeCardData | RejectedCandidate:
-    """Process one symbol: fetch data, score stock, validate contracts, build trade card."""
+    """Process one symbol: fetch data, score stock, validate contracts, build trade card.
+
+    Two-pass fetch: pass 1 fetches candles/price/fundamentals (no chain) and pre-screens
+    the stock scorer.  ~70-80% of symbols are rejected here, avoiding the expensive option
+    chain fetch entirely.  Pass 2 fetches the chain only for survivors.
+    """
+    option_type: Literal["C", "P"] = "C" if direction == "Bullish" else "P"
+
+    # ── Pass 1: core data — no option chain ───────────────────────────────────
     async with sem:
-        # ── Fetch all market data ──────────────────────────────────────────────
-        candles = await fetch_candles_async(client, symbol)
-        price = await fetch_price_async(client, symbol)
-        company = await fetch_company_name_async(client, symbol)
+        candles, price, company, fund_data = await asyncio.gather(
+            fetch_candles_async(client, symbol),
+            fetch_price_async(client, symbol),
+            fetch_company_name_async(client, symbol),
+            fetch_fundamentals_calendar(client, symbol),
+        )
         company = company or symbol
 
         if not price or not candles:
@@ -198,23 +211,43 @@ async def _process_symbol(
                     max_b = max_cap_usd / 1e9
                     return RejectedCandidate(symbol=symbol, reason=f"cap filter (${cap_b:.1f}B > ${max_b:.1f}B max)")
 
-        option_type: Literal["C", "P"] = "C" if direction == "Bullish" else "P"
-        chain = await fetch_option_chain_async(client, symbol, option_type=option_type)
-
-        # Combined single call for earnings + dividend (deduplicated)
-        fund_data = await fetch_fundamentals_calendar(client, symbol)
         earnings_date = _extract_earnings_date(fund_data)
         dividend_date = _extract_dividend_date(fund_data)
 
-    # yfinance fallbacks when Tradier fundamentals unavailable (requires paid tier)
-    if earnings_date is None:
-        earnings_date = await asyncio.to_thread(_earnings_date_yf, symbol)
-    if dividend_date is None:
-        dividend_date = await asyncio.to_thread(_dividend_date_yf, symbol)
+    # ── yfinance calendar fallback (outside semaphore, has its own rate limiter) ─
+    if earnings_date is None or dividend_date is None:
+        yf_earn, yf_div = await fetch_calendar_dates_async(symbol)
+        if earnings_date is None:
+            earnings_date = yf_earn
+        if dividend_date is None:
+            dividend_date = yf_div
 
-    # ── Scoring (CPU-bound, outside semaphore) ─────────────────────────────────
+    # ── Pre-screen: score without IV rank ─────────────────────────────────────
+    # iv_rank is unknown until the chain is fetched (pass 2). Score with None to gate
+    # on trend/pullback/trigger/event — the components that drive most rejections.
+    # ~70-80% of symbols exit here, saving the option chain fetch entirely.
+    card_pre: StockScoreCard = score_stock(
+        symbol, direction, horizon, candles,
+        earnings_date=earnings_date,
+        dividend_date=dividend_date,
+        iv_rank=None,
+        overrides=overrides,
+    )
+    if card_pre.status == "REJECT":
+        bd = {r.name: r.score for r in card_pre.rules}
+        log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": f"stock REJECT (score {card_pre.score})"})
+        return RejectedCandidate(symbol=symbol, reason=f"stock REJECT (score {card_pre.score})", breakdown=bd)
 
-    atm = sorted(chain, key=lambda c: abs(float(c.get("strike", 0)) - price)) if chain else []
+    # ── Pass 2: fetch option chain only for survivors ─────────────────────────
+    async with sem:
+        chain = await fetch_option_chain_async(client, symbol, option_type=option_type)
+
+    if not chain:
+        log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
+        return RejectedCandidate(symbol=symbol, reason="no option chain")
+
+    # ── Final score with IV rank from chain ───────────────────────────────────
+    atm = sorted(chain, key=lambda c: abs(float(c.get("strike", 0)) - price))
     iv_rank: float | None = float(atm[0]["ivRank"]) if atm else None
 
     # Tradier returns implied_volatility=0 when no data — compute via Black-Scholes inversion
@@ -245,10 +278,6 @@ async def _process_symbol(
         bd = {r.name: r.score for r in card.rules}
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": f"stock REJECT (score {card.score})"})
         return RejectedCandidate(symbol=symbol, reason=f"stock REJECT (score {card.score})", breakdown=bd)
-
-    if not chain:
-        log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
-        return RejectedCandidate(symbol=symbol, reason="no option chain")
 
     augmented = [_augment(c, stock_price=price) for c in chain]
     scored = [(validate_contract(c, card.score, overrides=overrides), c) for c in augmented]

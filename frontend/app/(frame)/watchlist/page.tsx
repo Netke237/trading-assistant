@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
@@ -34,6 +35,7 @@ const COLUMNS          = '32px 72px 1.4fr 90px 80px 80px 90px 80px 60px 90px';
 const CONTRACT_COLUMNS = '28px 72px 1.3fr 120px 80px 72px 80px 80px 100px';
 
 export default function WatchlistPage() {
+  const router = useRouter();
   const [tab, setTab]         = useState<Tab>('stocks');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -44,12 +46,16 @@ export default function WatchlistPage() {
   const [contracts, setContracts]   = useState<OptionContract[]>([]);
   const [offline, setOffline]       = useState(false);
 
-  const watchedSymbols = useWatchlistStore((s) => s.added);
+  const watchedSymbols            = useWatchlistStore((s) => s.added);
+  const syncFromBackend           = useWatchlistStore((s) => s.syncFromBackend);
+  const syncContractsFromBackend  = useWatchedContractsStore((s) => s.syncFromBackend);
   const watchedIds = useWatchedContractsStore((s) => s.ids);
 
   useEffect(() => {
+    syncFromBackend();
+    syncContractsFromBackend();
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
-  }, []);
+  }, [syncFromBackend, syncContractsFromBackend]);
 
   useEffect(() => {
     if (watchedIds.length === 0) { setContracts([]); return; }
@@ -85,11 +91,6 @@ export default function WatchlistPage() {
     return rows;
   }, [watchlist, sortKey, sortDir]);
 
-  const watchedSet = useMemo(
-    () => new Set(watchedSymbols.map((s) => s.toUpperCase())),
-    [watchedSymbols],
-  );
-
   const offlineRows = useMemo<WatchlistRow[]>(
     () =>
       watchedSymbols.map((sym) => ({
@@ -110,23 +111,31 @@ export default function WatchlistPage() {
 
   const displayRows = useMemo<WatchlistRow[]>(() => {
     if (offline) return offlineRows;
-    const filtered = sorted.filter((r) => watchedSet.has(r.symbol.toUpperCase()));
-    return filtered.length > 0 ? filtered : offlineRows;
-  }, [offline, offlineRows, sorted, watchedSet]);
+    return sorted.length > 0 ? sorted : offlineRows;
+  }, [offline, offlineRows, sorted]);
 
-  const watchedContracts = useMemo<OptionContract[]>(
-    () => watchedIds.map((storedId) => {
-      const [sym, strike, , type] = storedId.split('|');
-      const exact = contracts.find((c) => c.id === storedId);
-      if (exact) return exact;
-      return contracts.find(
-        (c) => c.symbol === sym &&
-               String(c.strike) === strike &&
-               c.id.endsWith(`|${type ?? 'C'}`)
-      ) ?? null;
-    }).filter((c): c is OptionContract => c !== null),
-    [contracts, watchedIds],
-  );
+  const watchedContracts = useMemo<OptionContract[]>(() => {
+    const seen = new Set<string>();
+    return watchedIds
+      .map((storedId) => {
+        if (seen.has(storedId)) return null;
+        seen.add(storedId);
+        const [sym, strike, expiry, type] = storedId.split('|');
+        const exact = contracts.find((c) => c.id === storedId);
+        if (exact) return exact;
+        const storedStrike = String(Math.round(parseFloat(strike)));
+        const fallback = contracts.find(
+          (c) =>
+            c.symbol === sym &&
+            String(Math.round(parseFloat(String(c.strike)))) === storedStrike &&
+            c.expiry === expiry &&
+            c.right === ((type ?? 'C') as 'C' | 'P'),
+        );
+        // Normalise the id so ContractStar.isWatched(c.id) returns true
+        return fallback ? { ...fallback, id: storedId } : null;
+      })
+      .filter((c): c is OptionContract => c !== null);
+  }, [contracts, watchedIds]);
 
   const sortedContracts = useMemo<OptionContract[]>(() => {
     const list = [...watchedContracts];
@@ -225,6 +234,13 @@ export default function WatchlistPage() {
                     onClick={() => onSelect(row.symbol)}
                   >
                     <WatchStar symbol={row.symbol} size="sm" />
+                    <button
+                      className={styles.chartBtn}
+                      title="Open in Chart"
+                      onClick={(e) => { e.stopPropagation(); router.push(`/chart?symbol=${row.symbol}`); }}
+                    >
+                      📈
+                    </button>
                     <Data size={13} weight={500}>{row.symbol}</Data>
                     <Text size={12} tone="secondary">{row.company}</Text>
                     <Data size={12} weight={500} className={styles.right}>${row.price.toFixed(2)}</Data>

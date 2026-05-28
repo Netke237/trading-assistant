@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Sora, DM_Sans, JetBrains_Mono } from 'next/font/google';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { StoreHydration } from '@/components/StoreHydration';
 import { MinWidthGate } from '@/components/MinWidthGate';
 import './globals.css';
 
@@ -71,6 +72,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
       </head>
       <body>
+        <StoreHydration />
         <ThemeProvider>
           <MinWidthGate>{children}</MinWidthGate>
         </ThemeProvider>

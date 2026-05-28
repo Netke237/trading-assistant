@@ -31,6 +31,8 @@ interface ScanStoreState {
   scanState:  ScanState;
   /** ISO-ish local timestamp, e.g. "2026-04-21T09:42:00" (no TZ suffix). */
   scanAt:          string | null;
+  /** Elapsed milliseconds for the last completed/failed scan. Not persisted. */
+  scanDurationMs:  number | null;
   context:         ScanContext | null;
   regime:          Status;
   combinedRegime:  Status;
@@ -43,7 +45,7 @@ interface ScanStoreState {
   scanOverrides: Record<string, number | boolean | string>;
   pickedContracts:    Record<string, string>;
   contractsBySymbol:  Record<string, OptionContract[]>;
-  setScanState:    (s: ScanState, at?: string) => void;
+  setScanState:    (s: ScanState, at?: string, durationMs?: number) => void;
   setContext:      (c: ScanContext | null) => void;
   setRegime:       (r: Status) => void;
   setCombinedRegime: (r: Status) => void;
@@ -63,6 +65,7 @@ export const useScanStore = create<ScanStoreState>()(
     (set) => ({
       scanState:       'IDLE',
       scanAt:          null,
+      scanDurationMs:  null,
       context:         null,
       regime:          'PENDING',
       combinedRegime:  'PENDING',
@@ -74,7 +77,7 @@ export const useScanStore = create<ScanStoreState>()(
       scanOverrides:   {},
       pickedContracts:    {},
       contractsBySymbol:  {},
-      setScanState:    (s, at) => set({ scanState: s, scanAt: at ?? null }),
+      setScanState:    (s, at, durationMs) => set({ scanState: s, scanAt: at ?? null, scanDurationMs: durationMs ?? null }),
       setContext:      (c) => set({ context: c }),
       setRegime:       (r) => set({ regime: r }),
       setCombinedRegime: (r) => set({ combinedRegime: r }),
@@ -93,7 +96,11 @@ export const useScanStore = create<ScanStoreState>()(
     }),
     {
       name: 'bamendjou-scan-store',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') return undefined as unknown as Storage;
+        return localStorage;
+      }),
+      skipHydration: true,
       version: 2,
       migrate: (persistedState, version) => {
         const prev = (persistedState ?? {}) as any;
@@ -111,6 +118,7 @@ export const useScanStore = create<ScanStoreState>()(
         ...current,
         ...(persisted as Partial<ScanStoreState>),
         scanState: 'IDLE',
+        scanDurationMs: null,
       }),
     },
   ),

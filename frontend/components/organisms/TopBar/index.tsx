@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { RegimeIndicator } from '@/components/molecules/RegimeIndicator';
 import { TopBarActions } from '@/components/molecules/TopBarActions';
+import { MarketClock } from '@/components/molecules/MarketClock';
 import { useScanStore } from '@/lib/scanStore';
 import styles from './TopBar.module.css';
 
@@ -39,17 +40,40 @@ function labelWithDate(iso: string): string {
     : `${mon} ${day} ${scan.getFullYear()} ${hhmm}`;
 }
 
-function pillLabel(state: import('@/lib/scanStore').ScanState, iso: string | null, mounted: boolean): string {
+function formatDuration(ms: number): string {
+  if (ms < 500) return '';
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const s = Math.round(ms / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return r === 0 ? `${m}m` : `${m}m ${r}s`;
+}
+
+function pillLabel(
+  state: import('@/lib/scanStore').ScanState,
+  iso: string | null,
+  mounted: boolean,
+  durationMs: number | null,
+): string {
+  const showDuration =
+    state === 'COMPLETED' || state === 'PARTIAL' || state === 'FAILED' || state === 'CANCELLED';
   if ((state === 'COMPLETED' || state === 'PARTIAL' || state === 'CANCELLED') && iso) {
-    return `${state} ${mounted ? labelWithDate(iso) : hhmmFrom(iso)}`;
+    const base = `${state} ${mounted ? labelWithDate(iso) : hhmmFrom(iso)}`;
+    const dur = showDuration && durationMs ? formatDuration(durationMs) : '';
+    return dur ? `${base} · ${dur}` : base;
+  }
+  if (state === 'FAILED') {
+    const dur = durationMs ? formatDuration(durationMs) : '';
+    return dur ? `FAILED · ${dur}` : 'FAILED';
   }
   return state;
 }
 
 export function TopBar() {
-  const scanState = useScanStore((s) => s.scanState);
-  const scanAt    = useScanStore((s) => s.scanAt);
-  const context   = useScanStore((s) => s.context);
+  const scanState    = useScanStore((s) => s.scanState);
+  const scanAt       = useScanStore((s) => s.scanAt);
+  const scanDuration = useScanStore((s) => s.scanDurationMs);
+  const context      = useScanStore((s) => s.context);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -69,10 +93,12 @@ export function TopBar() {
       </div>
 
       <span className={[styles.pill, PILL_CLASS[scanState]].join(' ')}>
-        {pillLabel(scanState, scanAt, mounted)}
+        {pillLabel(scanState, scanAt, mounted, scanDuration)}
       </span>
 
       <RegimeIndicator />
+
+      <MarketClock />
 
       <TopBarActions />
     </header>

@@ -49,6 +49,12 @@ function ommStateIcon(state: string): string {
   return '≈';
 }
 
+function toneForOmmState(state: string): 'pass' | 'caution' | 'reject' {
+  if (state === 'Bull') return 'pass';
+  if (state === 'Bear') return 'reject';
+  return 'caution';
+}
+
 function hmmStateIcon(state: string): string {
   if (state === 'Trending')       return '▲';
   if (state === 'Mean-reverting') return '↕';
@@ -100,10 +106,11 @@ export default function Step1RegimePage() {
   const sectorsUp   = sectors.filter((s) => s.changePct >  0.05).length;
   const sectorsDown = sectors.filter((s) => s.changePct < -0.05).length;
 
-  const omm      = regime?.omm           ?? null;
-  const intraHmm = regime?.intraday_hmm  ?? null;
-  const vix30    = regime?.vix_pct_30d   ?? null;
-  const vix252   = regime?.vix_pct_252d  ?? null;
+  const omm       = regime?.omm           ?? null;
+  const intraHmm  = regime?.intraday_hmm  ?? null;
+  const intraOmm  = regime?.intraday_omm  ?? null;
+  const vix30     = regime?.vix_pct_30d   ?? null;
+  const vix252    = regime?.vix_pct_252d  ?? null;
 
   return (
     <div className={styles.main}>
@@ -198,7 +205,7 @@ export default function Step1RegimePage() {
       </div>
 
       {/* 5. Horizon regime card (Intraday | Swing | Position) */}
-      {(omm || intraHmm) && (
+      {(omm || intraHmm || intraOmm) && (
         <>
           <div className={pageStyles.sectionHeader}>
             <Text size={13} weight={600}>Regime by Horizon</Text>
@@ -206,7 +213,7 @@ export default function Step1RegimePage() {
           </div>
           <div className={pageStyles.horizonCard}>
 
-            {/* Intraday column — leads with HMM session state */}
+            {/* Intraday column — HMM session state, OMM fallback when hmmlearn unavailable */}
             <div className={pageStyles.horizonCol}>
               <Text size={11} tone="dim" weight={500}>INTRADAY</Text>
               {intraHmm ? (
@@ -214,16 +221,38 @@ export default function Step1RegimePage() {
                   <Data size={14} weight={500}>
                     {hmmStateIcon(intraHmm.state)} {intraHmm.state}
                   </Data>
-                  <Text size={12} tone="secondary">P(stay): {pct(intraHmm.p_stay)}</Text>
+                  <Text size={12} tone="secondary">{pct(intraHmm.p_stay)} chance of staying in this regime</Text>
                   {intraHmm.p_transition
                     .filter((t) => t.prob > 0.08)
                     .map((t) => (
                       <Text key={t.to} size={11} tone={t.prob > 0.2 ? 'caution' : 'dim'}>
-                        →{t.to} {pct(t.prob)}
+                        {pct(t.prob)} chance of switching to {t.to}
                       </Text>
                     ))}
                   {vix30 != null && (
-                    <Text size={11} tone="dim">VIX · {Math.round(vix30)}th pct (30d)</Text>
+                    <Text size={11} tone="dim">VIX at {Math.round(vix30)}th percentile (30-day window)</Text>
+                  )}
+                </>
+              ) : intraOmm ? (
+                <>
+                  <Data size={14} weight={500} tone={toneForOmmState(intraOmm.state)}>
+                    {ommStateIcon(intraOmm.state)} {intraOmm.state}
+                  </Data>
+                  <Text size={12} tone="secondary">
+                    Day {intraOmm.regime_age_days} · avg ~{Math.round(intraOmm.avg_regime_duration)} days · {intraOmm.stability}
+                  </Text>
+                  <Text size={12} tone="secondary">{pct(intraOmm.p_stay)} chance of staying in this regime</Text>
+                  {intraOmm.state_order.map((s, i) => {
+                    const prob = intraOmm.transition_row[i] ?? 0;
+                    if (s === intraOmm.state || prob < 0.08) return null;
+                    return (
+                      <Text key={s} size={11} tone={toneForOmmState(s)}>
+                        {pct(prob)} chance of switching to {s}
+                      </Text>
+                    );
+                  })}
+                  {vix30 != null && (
+                    <Text size={11} tone="dim">VIX at {Math.round(vix30)}th percentile (30-day window)</Text>
                   )}
                 </>
               ) : regime?.intraday_hmm_status === 'insufficient_data' ? (
@@ -235,53 +264,57 @@ export default function Step1RegimePage() {
               )}
             </div>
 
-            {/* Swing column — leads with OMM daily state + stability */}
+            {/* Swing column */}
             <div className={pageStyles.horizonCol}>
               <Text size={11} tone="dim" weight={500}>SWING</Text>
               {omm ? (
                 <>
-                  <Data size={14} weight={500}>
-                    {ommStateIcon(omm.state)} {omm.state} · {omm.stability}
+                  <Data size={14} weight={500} tone={toneForOmmState(omm.state)}>
+                    {ommStateIcon(omm.state)} {omm.state}
                   </Data>
-                  <Text size={12} tone="secondary">P(stay): {pct(omm.p_stay)}</Text>
+                  <Text size={12} tone="secondary">
+                    Day {omm.regime_age_days} · avg ~{Math.round(omm.avg_regime_duration)} days · {omm.stability}
+                  </Text>
+                  <Text size={12} tone="secondary">{pct(omm.p_stay)} chance of staying in this regime</Text>
                   {omm.state_order.map((s, i) => {
                     const prob = omm.transition_row[i] ?? 0;
                     if (s === omm.state || prob < 0.08) return null;
                     return (
-                      <Text key={s} size={11} tone={s === 'Bear' ? 'reject' : 'caution'}>
-                        →{s} {pct(prob)}
+                      <Text key={s} size={11} tone={toneForOmmState(s)}>
+                        {pct(prob)} chance of switching to {s}
                       </Text>
                     );
                   })}
                   {vix252 != null && (
-                    <Text size={11} tone="dim">VIX · {Math.round(vix252)}th pct (252d)</Text>
+                    <Text size={11} tone="dim">VIX at {Math.round(vix252)}th percentile (252-day window)</Text>
                   )}
                 </>
               ) : null}
             </div>
 
-            {/* Position column — leads with OMM regime age + longer-term VIX */}
+            {/* Position column */}
             <div className={pageStyles.horizonCol}>
               <Text size={11} tone="dim" weight={500}>POSITION</Text>
               {omm ? (
                 <>
-                  <Data size={14} weight={500}>
-                    {ommStateIcon(omm.state)} {omm.state} · Day {omm.regime_age_days}
+                  <Data size={14} weight={500} tone={toneForOmmState(omm.state)}>
+                    {ommStateIcon(omm.state)} {omm.state}
                   </Data>
                   <Text size={12} tone="secondary">
-                    of ~{Math.round(omm.avg_regime_duration)} avg · {omm.stability}
+                    Day {omm.regime_age_days} · avg ~{Math.round(omm.avg_regime_duration)} days · {omm.stability}
                   </Text>
+                  <Text size={12} tone="secondary">{pct(omm.p_stay)} chance of staying in this regime</Text>
                   {omm.state_order.map((s, i) => {
                     const prob = omm.transition_row[i] ?? 0;
                     if (s === omm.state || prob < 0.08) return null;
                     return (
-                      <Text key={s} size={11} tone={s === 'Bear' ? 'reject' : 'caution'}>
-                        →{s} {pct(prob)}
+                      <Text key={s} size={11} tone={toneForOmmState(s)}>
+                        {pct(prob)} chance of switching to {s}
                       </Text>
                     );
                   })}
                   {vix252 != null && (
-                    <Text size={11} tone="dim">VIX · {Math.round(vix252)}th pct (252d)</Text>
+                    <Text size={11} tone="dim">VIX at {Math.round(vix252)}th percentile (252-day window)</Text>
                   )}
                 </>
               ) : null}

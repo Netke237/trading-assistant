@@ -147,6 +147,7 @@ async def get_regime(
     # ── 4. Gaussian HMM (always computed — regime step is before horizon selection) ─
     intraday_hmm_out: IntraHmmData | None = None
     intraday_hmm_status: str = 'unavailable'
+    intra_bars: list[dict] = []
     try:
         intra_bars = fetch_intraday_candles('SPY', interval='15min', days=55)
         if intra_bars:
@@ -168,6 +169,28 @@ async def get_regime(
     except Exception:
         pass
 
+    # ── 5. Intraday OMM fallback (when hmmlearn is unavailable) ──────────────────
+    # Compute OMM on the same 15-min bars so the Intraday panel shows something
+    # meaningful even on Python versions where hmmlearn can't be installed.
+    intraday_omm_out: OmmData | None = None
+    if not intraday_hmm_out and intra_bars:
+        try:
+            closes_15m = [b['close'] for b in intra_bars]
+            # lookback=26: one full trading session (6.5 h × 4 bars/h ≈ 26 bars)
+            result_intra = compute_omm(closes_15m, lookback=26, threshold=0.002, smoothing=0.2)
+            if result_intra:
+                intraday_omm_out = OmmData(
+                    state=result_intra.state,
+                    p_stay=result_intra.p_stay,
+                    stability=result_intra.stability,
+                    regime_age_days=result_intra.regime_age_days,
+                    avg_regime_duration=result_intra.avg_regime_duration,
+                    transition_row=result_intra.transition_row,
+                    state_order=result_intra.state_order,
+                )
+        except Exception:
+            pass
+
     return MarketRegime(
         overall=overall,
         headline=headline,
@@ -175,6 +198,7 @@ async def get_regime(
         omm=omm_out,
         intraday_hmm=intraday_hmm_out,
         intraday_hmm_status=intraday_hmm_status,
+        intraday_omm=intraday_omm_out,
         vix_pct_30d=vix_pct_30d,
         vix_pct_252d=vix_pct_252d,
     )

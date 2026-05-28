@@ -63,6 +63,9 @@ def compute_intraday_hmm(bars: list[dict]) -> HmmResult | None:
     if len(bars) < MIN_BARS:
         return None
 
+    # Cap to most recent 800 bars — enough for reliable 3-state HMM while keeping fit fast
+    bars = bars[-800:]
+
     if len(bars) < _BARS_LOW_WARN:
         logger.warning(
             "compute_intraday_hmm: only %d bars available (ideal ≥ %d); "

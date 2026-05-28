@@ -175,8 +175,9 @@ class MarketRegime(BaseModel):
     headline: str
     metrics: list[RegimeMetric]
     omm: Optional[OmmData] = None                  # Position / Swing — None if insufficient data
-    intraday_hmm: Optional[IntraHmmData] = None    # Intraday — None if insufficient data
+    intraday_hmm: Optional[IntraHmmData] = None    # Intraday HMM — None if hmmlearn unavailable
     intraday_hmm_status: IntradayHmmStatus = 'unavailable'  # ok / insufficient_data / unavailable
+    intraday_omm: Optional[OmmData] = None         # Intraday OMM fallback when HMM unavailable
     vix_pct_30d: Optional[float] = None            # VIX percentile vs last 30 trading days
     vix_pct_252d: Optional[float] = None           # VIX percentile vs last 252 trading days
 

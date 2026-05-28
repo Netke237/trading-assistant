@@ -1,2 +1,14 @@
+notifications:
+  gmail:
+    enabled: true
+    smtp_host: smtp.gmail.com
+    smtp_password: secret
+    smtp_port: 465
+    smtp_user: u@b.com
+    to: a@b.com
+  telegram:
+    bot_token: ''
+    chat_id: ''
+    enabled: false
 scan:
   cadence_minutes: 60

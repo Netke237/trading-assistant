@@ -102,9 +102,6 @@ async def remove_symbol(symbol: str, db: AsyncSession = Depends(get_db)) -> None
     )
     row = result.scalar_one_or_none()
     if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Symbol '{symbol}' not found in watchlist.",
-        )
+        return  # Already removed — idempotent
     await db.delete(row)
     await db.commit()

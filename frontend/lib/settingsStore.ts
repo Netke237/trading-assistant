@@ -93,7 +93,11 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: SETTINGS_STORAGE_KEY,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') return undefined as unknown as Storage;
+        return localStorage;
+      }),
+      skipHydration: true,
       version: 9,
       partialize: (state) => ({
         broker:                  state.broker,

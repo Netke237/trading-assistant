@@ -3,15 +3,32 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import date, timedelta
+import time as _time
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+_EASTERN = ZoneInfo("America/New_York")
 from typing import Literal, Optional
 
 import httpx
+import pandas as pd
 
 TRADIER_BASE_URL = os.getenv("TRADIER_BASE_URL", "https://api.tradier.com")
 TRADIER_TOKEN = os.getenv("TRADIER_API_TOKEN", "")
 
 logger = logging.getLogger(__name__)
+
+# ── In-process caches ─────────────────────────────────────────────────────────
+# Candles: daily bars don't change within a trading session — 4-hour TTL.
+_candles_cache: dict[str, tuple[list[dict], float]] = {}
+_CANDLES_TTL = 4 * 3600
+
+# Company names: immutable; permanent cache for the process lifetime.
+_company_cache: dict[str, str] = {}
+
+# yfinance calendar: reset daily (overnight earnings updates).
+_yf_cal_cache: dict[str, tuple[Optional[date], Optional[date]]] = {}
+_yf_cal_cache_date: str = ""
 
 
 def _headers() -> dict:
@@ -73,19 +90,25 @@ def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 55) -> li
     try:
         import yfinance as yf
         capped_days = min(days, 55)
+        _end = date.today()
+        _start = _end - timedelta(days=capped_days)
         df = yf.download(
             symbol,
-            period=f"{capped_days}d",
+            start=_start.isoformat(),
+            end=_end.isoformat(),
             interval=interval,
             progress=False,
             auto_adjust=True,
         )
         if df is None or df.empty:
             return []
+        # yfinance ≥1.1 returns MultiIndex columns (Price, Ticker) for single-ticker downloads
+        if isinstance(df.columns, pd.MultiIndex):
+            df = df.droplevel(1, axis=1)
         rows = []
         for ts, row in df.iterrows():
             rows.append({
-                "time": str(ts),
+                "time": int(ts.timestamp()),
                 "open":   round(float(row["Open"]),   4),
                 "high":   round(float(row["High"]),   4),
                 "low":    round(float(row["Low"]),    4),
@@ -136,8 +159,16 @@ def fetch_intraday_candles(
                     data = [data]
                 rows = []
                 for d in data:
+                    raw_time = d.get("time", "")
+                    try:
+                        dt = datetime.fromisoformat(raw_time)
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=_EASTERN)
+                        unix_ts = int(dt.timestamp())
+                    except (ValueError, TypeError):
+                        unix_ts = 0
                     rows.append({
-                        "time":   d.get("time", ""),
+                        "time":   unix_ts,
                         "open":   round(float(d.get("open",   0)), 4),
                         "high":   round(float(d.get("high",   0)), 4),
                         "low":    round(float(d.get("low",    0)), 4),
@@ -146,8 +177,14 @@ def fetch_intraday_candles(
                     })
                 if rows:
                     logger.info("Tradier returned %d intraday bars for %s", len(rows), symbol)
-                    return rows
-                logger.warning("Tradier returned 0 intraday bars for %s — falling back to yfinance", symbol)
+                    if len(rows) >= 200:
+                        return rows
+                    logger.warning(
+                        "Tradier returned only %d bars for %s (free plan limit?) — trying yfinance for more",
+                        len(rows), symbol,
+                    )
+                else:
+                    logger.warning("Tradier returned 0 intraday bars for %s — falling back to yfinance", symbol)
             else:
                 logger.warning("Tradier timesales response had no 'series' for %s — falling back to yfinance", symbol)
         except Exception as exc:
@@ -594,40 +631,76 @@ def _yf_iv_for_chain(symbol: str, expiry: str, is_call: bool) -> dict[float, flo
         return {}
 
 
-def _earnings_date_yf(symbol: str) -> Optional[date]:
-    """Next earnings date via yfinance (fallback when Tradier fundamentals unavailable)."""
+def _calendar_dates_yf(symbol: str) -> tuple[Optional[date], Optional[date]]:
+    """Fetch earnings + dividend dates in ONE yfinance calendar call (avoids two round-trips)."""
     try:
         import yfinance as yf
         from datetime import datetime as _dt
+        today = date.today()
         cal = yf.Ticker(symbol).calendar
         if not cal:
-            return None
+            return None, None
+
+        # Earnings
+        earn: Optional[date] = None
         dates = cal.get("Earnings Date")
-        if not dates:
-            return None
-        raw = list(dates)[0] if hasattr(dates, "__iter__") else dates
-        # yfinance 1.x returns datetime.date; older versions return datetime.datetime
-        d: date = raw if isinstance(raw, date) and not isinstance(raw, _dt) else raw.date()
-        return d if d >= date.today() else None
+        if dates:
+            raw = list(dates)[0] if hasattr(dates, "__iter__") else dates
+            d: date = raw if isinstance(raw, date) and not isinstance(raw, _dt) else raw.date()
+            earn = d if d >= today else None
+
+        # Dividend
+        div: Optional[date] = None
+        raw_div = cal.get("Ex-Dividend Date") or cal.get("Dividend Date")
+        if raw_div is not None:
+            d2: date = raw_div if isinstance(raw_div, date) and not isinstance(raw_div, _dt) else raw_div.date()
+            div = d2 if d2 >= today else None
+
+        return earn, div
     except Exception:
-        return None
+        return None, None
+
+
+# Keep single-date shims so existing callers outside the scan hot-path still work
+def _earnings_date_yf(symbol: str) -> Optional[date]:
+    return _calendar_dates_yf(symbol)[0]
 
 
 def _dividend_date_yf(symbol: str) -> Optional[date]:
-    """Next ex-dividend date via yfinance (fallback when Tradier fundamentals unavailable)."""
-    try:
-        import yfinance as yf
-        from datetime import datetime as _dt
-        cal = yf.Ticker(symbol).calendar
-        if not cal:
-            return None
-        raw = cal.get("Ex-Dividend Date") or cal.get("Dividend Date")
-        if raw is None:
-            return None
-        d: date = raw if isinstance(raw, date) and not isinstance(raw, _dt) else raw.date()
-        return d if d >= date.today() else None
-    except Exception:
-        return None
+    return _calendar_dates_yf(symbol)[1]
+
+
+# Limits concurrent Yahoo Finance calendar fetches — prevents rate-limiting during batch scans
+_YF_CALENDAR_SEM: asyncio.Semaphore | None = None
+
+
+def _get_yf_sem() -> asyncio.Semaphore:
+    global _YF_CALENDAR_SEM
+    if _YF_CALENDAR_SEM is None:
+        _YF_CALENDAR_SEM = asyncio.Semaphore(5)
+    return _YF_CALENDAR_SEM
+
+
+async def fetch_calendar_dates_async(symbol: str) -> tuple[Optional[date], Optional[date]]:
+    """Rate-limited async wrapper — fetches earnings + dividend in one yfinance call.
+    Results are cached per calendar day; dates don't change within a trading session."""
+    global _yf_cal_cache_date, _yf_cal_cache
+    today = date.today().isoformat()
+    if today != _yf_cal_cache_date:
+        _yf_cal_cache_date = today
+        _yf_cal_cache = {}
+
+    if symbol in _yf_cal_cache:
+        return _yf_cal_cache[symbol]
+
+    async with _get_yf_sem():
+        # Double-check after acquiring semaphore — another coroutine may have populated it.
+        if symbol in _yf_cal_cache:
+            return _yf_cal_cache[symbol]
+        result = await asyncio.to_thread(_calendar_dates_yf, symbol)
+
+    _yf_cal_cache[symbol] = result
+    return result
 
 
 # ── Async functions for the scan hot-path ─────────────────────────────────────
@@ -636,7 +709,15 @@ def _dividend_date_yf(symbol: str) -> Optional[date]:
 async def fetch_candles_async(
     client: httpx.AsyncClient, symbol: str, bars: int = 252
 ) -> list[dict]:
-    """Async variant — uses the provided AsyncClient for connection reuse."""
+    """Async variant — uses the provided AsyncClient for connection reuse.
+    Results are cached for _CANDLES_TTL seconds (daily bars don't change intraday)."""
+    now = _time.monotonic()
+    cached = _candles_cache.get(symbol)
+    if cached is not None:
+        data, expires = cached
+        if now < expires:
+            return data
+
     try:
         end = date.today()
         calendar_days = max(400, int(bars * 1.75))
@@ -668,6 +749,8 @@ async def fetch_candles_async(
                 "close": round(float(d["close"]), 2),
                 "volume": int(d["volume"]),
             })
+        if rows:
+            _candles_cache[symbol] = (rows, now + _CANDLES_TTL)
         return rows
     except Exception:
         return []
@@ -859,7 +942,11 @@ async def fetch_contract_quote_async(
 async def fetch_company_name_async(
     client: httpx.AsyncClient, symbol: str
 ) -> Optional[str]:
-    """Async variant."""
+    """Async variant. Company names are permanent — cached for the process lifetime."""
+    cached_name = _company_cache.get(symbol)
+    if cached_name is not None:
+        return cached_name
+
     try:
         resp = await client.get(
             f"{TRADIER_BASE_URL}/beta/markets/fundamentals/company",
@@ -874,6 +961,7 @@ async def fetch_company_name_async(
             for result in entry.get("results", []):
                 name = result.get("tables", {}).get("company_profile", {}).get("company_name")
                 if name:
+                    _company_cache[symbol] = name
                     return name
         return None
     except Exception:

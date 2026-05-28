@@ -45,9 +45,10 @@ export const useWatchlistStore = create<WatchlistState>()(
           const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
           const res = await fetch(`${BASE_URL}/api/watchlist`);
           if (!res.ok) return;
-          const symbols: string[] = await res.json();
-          if (symbols.length === 0) return; // don't overwrite localStorage when backend has no data
-          set({ added: symbols.map((s) => s.toUpperCase()) });
+          const rows: Array<{ symbol: string }> = await res.json();
+          const syms = rows.map((r) => r.symbol).filter(Boolean);
+          if (syms.length === 0) return;
+          set({ added: syms.map((s) => s.toUpperCase()) });
         } catch {
           // network unavailable — keep localStorage state
         }
@@ -55,7 +56,11 @@ export const useWatchlistStore = create<WatchlistState>()(
     }),
     {
       name: WATCHLIST_STORAGE_KEY,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') return undefined as unknown as Storage;
+        return localStorage;
+      }),
+      skipHydration: true,
       partialize: (state) => ({ added: state.added }),
       version: 1,
       migrate: (persistedState, version) => {

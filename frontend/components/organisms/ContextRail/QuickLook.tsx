@@ -8,12 +8,13 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RailSection } from '@/components/organisms/ContextRail';
 import { Text, Data } from '@/components/primitives';
 import { QuickLookRow } from '@/components/molecules/QuickLookRow';
 import { api } from '@/lib/api';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
 import type { WatchlistRow } from '@/types/domain';
 import styles from './QuickLook.module.css';
 
@@ -21,13 +22,21 @@ export function RailQuickLook() {
   const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
   const portfolio       = usePortfolioStore((s) => s.positions);
   const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
+  const watchedSymbols  = useWatchlistStore((s) => s.added);
 
   useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => {});
     syncFromBackend();
   }, [syncFromBackend]);
 
-  const top = [...watchlist].sort((a, b) => b.score - a.score).slice(0, 5);
+  const top = useMemo(
+    () =>
+      watchlist
+        .filter((r) => watchedSymbols.includes(r.symbol.toUpperCase()))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5),
+    [watchlist, watchedSymbols],
+  );
 
   const deployed = portfolio.reduce(
     (s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1),

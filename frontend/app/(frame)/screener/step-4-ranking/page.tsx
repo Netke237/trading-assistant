@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
@@ -104,6 +105,7 @@ function SortHeader({ label, sortKey, currentKey, dir, onSort }: SortHeaderProps
 }
 
 export default function Step4Page() {
+  const router = useRouter();
   const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
   const [candles, setCandles]     = useState<Candle[]>([]);
   const [selectedSym, setSelectedSym] = useState<string>('');
@@ -242,6 +244,13 @@ export default function Step4Page() {
                 }}
               >
                 <WatchStar symbol={row.symbol} size="sm" />
+                <button
+                  className={styles.chartBtn}
+                  title="Open in Chart"
+                  onClick={(e) => { e.stopPropagation(); router.push(`/chart?symbol=${row.symbol}`); }}
+                >
+                  📈
+                </button>
                 <div className={styles.symCell}>
                   <Data size={12} weight={500}>{row.symbol}</Data>
                   <Text size={11} tone="secondary">{row.company}</Text>

@@ -16,7 +16,7 @@ function ema(data: number[], period: number): number[] {
 export function calculateRSI(
   candles: Candle[],
   period: number = 14,
-): Array<{ time: string; value: number }> {
+): Array<{ time: string | number; value: number }> {
   if (candles.length < period + 1) return [];
   const closes = candles.map((c) => c.close);
   const times = candles.map((c) => c.time);
@@ -31,7 +31,7 @@ export function calculateRSI(
   let avgGain = gains / period;
   let avgLoss = losses / period;
 
-  const result: Array<{ time: string; value: number }> = [];
+  const result: Array<{ time: string | number; value: number }> = [];
   const firstRsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
   result.push({ time: times[period], value: firstRsi });
 
@@ -53,7 +53,7 @@ export function calculateMACD(
   fast: number = 12,
   slow: number = 26,
   signal: number = 9,
-): Array<{ time: string; macd: number; signal: number; histogram: number }> {
+): Array<{ time: string | number; macd: number; signal: number; histogram: number }> {
   if (candles.length < slow + signal - 1) return [];
   const closes = candles.map((c) => c.close);
 
@@ -73,7 +73,7 @@ export function calculateMACD(
   const validMacd = macdLine.slice(validStart);
   const signalEmaArr = ema(validMacd, signal);
 
-  const result: Array<{ time: string; macd: number; signal: number; histogram: number }> = [];
+  const result: Array<{ time: string | number; macd: number; signal: number; histogram: number }> = [];
   for (let i = signal - 1; i < signalEmaArr.length; i++) {
     const idx = validStart + i;
     result.push({
@@ -88,7 +88,7 @@ export function calculateMACD(
 
 export function calculateVolume(
   candles: Candle[],
-): Array<{ time: string; value: number; color: string }> {
+): Array<{ time: string | number; value: number; color: string }> {
   return candles.map((c) => ({
     time: c.time,
     value: c.volume,

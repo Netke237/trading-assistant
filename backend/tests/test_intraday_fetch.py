@@ -123,3 +123,5 @@ def test_fetch_intraday_returns_partial_yf_bars_on_tradier_failure():
         result = fetch_intraday_candles("SPY")
 
     assert len(result) == 300
+
+

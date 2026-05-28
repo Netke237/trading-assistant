@@ -94,6 +94,7 @@ def client():
     from app.routers.scan      import router as scan_router
     from app.routers.news      import router as news_router
     from app.routers.ws_alerts import router as ws_alerts_router
+    from app.routers.notification_settings import router as notification_settings_router
 
     # ── Build test app ────────────────────────────────────────────────────────
     test_app = FastAPI(title="Test App", debug=True)
@@ -142,6 +143,7 @@ def client():
     test_app.include_router(scan_router)
     test_app.include_router(news_router)
     test_app.include_router(ws_alerts_router)
+    test_app.include_router(notification_settings_router)
 
     # Override get_db with the in-memory SQLite session
     test_app.dependency_overrides[get_db] = _override_get_db

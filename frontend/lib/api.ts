@@ -1,6 +1,7 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, OptionContract, NewsItem } from '@/types/domain';
 import type { Candle } from '@/types/chart';
+import type { AlertRule, AlertHistory } from '@/types/alerts';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
@@ -60,6 +61,9 @@ export const api = {
   getNews:         (symbols: string[]) => get<NewsItem[]>(`/api/news?symbols=${symbols.join(',')}`),
   addWatchlist:    (symbol: string) => post<{ symbol: string }>('/api/watchlist', { symbol }),
   removeWatchlist: (symbol: string) => del(`/api/watchlist/${encodeURIComponent(symbol)}`),
+  getWatchedContracts:    () => get<string[]>('/api/watched-contracts'),
+  addWatchedContract:     (contractId: string) => post<{ contract_id: string }>('/api/watched-contracts', { contract_id: contractId }),
+  removeWatchedContract:  (contractId: string) => del(`/api/watched-contracts/${encodeURIComponent(contractId)}`),
   postScan: (
     universe: string[],
     direction: string,
@@ -71,4 +75,35 @@ export const api = {
       '/api/scan',
       { universe, direction, horizon, overrides: overrides ?? {}, ...filters },
     ),
+
+  // Phase 4: Chart alert CRUD
+  createAlertRule: (body: {
+    name: string; symbol: string; interval: string; enabled: boolean;
+    group: { logic: string; conditions: unknown[] };
+    cooldown_minutes: number; expiry_date: string | null;
+  }) => post<AlertRule>('/alerts/rules', body),
+
+  getAlertRules: (symbol?: string) => {
+    const qs = symbol ? `?symbol=${encodeURIComponent(symbol)}` : '';
+    return get<AlertRule[]>(`/alerts/rules${qs}`);
+  },
+
+  deleteAlertRule: (id: string) => del(`/alerts/rules/${encodeURIComponent(id)}`),
+
+  getAlertHistory: (params?: { symbol?: string; interval?: string; limit?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.symbol) sp.set('symbol', params.symbol);
+    if (params?.interval) sp.set('interval', params.interval);
+    if (params?.limit) sp.set('limit', String(params.limit));
+    const qs = sp.toString();
+    return get<AlertHistory[]>(`/alerts/history${qs ? `?${qs}` : ''}`);
+  },
+
+  dismissAlertHistory: (id: string) => del(`/alerts/history/${encodeURIComponent(id)}`),
+
+  testAlertRule: (ruleId: string, body: { candles: Candle[]; indicators?: Record<string, unknown>; signals?: unknown[] }) =>
+    post<{ matches: unknown[] }>(`/alerts/rules/${encodeURIComponent(ruleId)}/test`, body),
+
+  testNotification: (channel: 'gmail' | 'telegram') =>
+    post<{ status: string }>('/alerts/notifications/test', { channel }),
 };

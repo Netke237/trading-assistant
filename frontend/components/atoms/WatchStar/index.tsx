@@ -44,10 +44,10 @@ export function WatchStar({ symbol, size = 'md', className }: WatchStarProps) {
         e.stopPropagation();
         if (watched) {
           removeSymbol(symbol);
-          api.removeWatchlist(symbol).catch(() => {});
+          api.removeWatchlist(symbol).catch(() => { addSymbol(symbol); });
         } else {
           addSymbol(symbol);
-          api.addWatchlist(symbol).catch(() => {});
+          api.addWatchlist(symbol).catch(() => { removeSymbol(symbol); });
         }
       }}
       aria-label={watched ? `Remove ${symbol} from watchlist` : `Add ${symbol} to watchlist`}

@@ -2,10 +2,12 @@
 
 /*
  * ContractStar — compact button that toggles an option contract in
- * useWatchedContractsStore. Visually identical to WatchStar; different store.
+ * useWatchedContractsStore and syncs to the backend.
+ * Visually identical to WatchStar; different store.
  */
 
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
+import { api } from '@/lib/api';
 import styles from '@/components/atoms/WatchStar/WatchStar.module.css';
 
 interface ContractStarProps {
@@ -16,7 +18,8 @@ interface ContractStarProps {
 
 export function ContractStar({ contractId, size = 'md', className }: ContractStarProps) {
   const isWatched = useWatchedContractsStore((s) => s.isWatched);
-  const toggle    = useWatchedContractsStore((s) => s.toggle);
+  const add       = useWatchedContractsStore((s) => s.add);
+  const remove    = useWatchedContractsStore((s) => s.remove);
   // Subscribe so toggles re-render.
   useWatchedContractsStore((s) => s.ids);
 
@@ -34,7 +37,13 @@ export function ContractStar({ contractId, size = 'md', className }: ContractSta
       ].filter(Boolean).join(' ')}
       onClick={(e) => {
         e.stopPropagation();
-        toggle(contractId);
+        if (watched) {
+          remove(contractId);
+          api.removeWatchedContract(contractId).catch(() => { add(contractId); });
+        } else {
+          add(contractId);
+          api.addWatchedContract(contractId).catch(() => { remove(contractId); });
+        }
       }}
       aria-label={watched ? 'Remove contract from watchlist' : 'Add contract to watchlist'}
       aria-pressed={watched}

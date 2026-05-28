@@ -15,6 +15,7 @@ import { EventFlag } from '@/components/atoms/EventFlag';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
+import { IV_PASS_MAX, IV_CAUTION_MAX } from '@/lib/ivThresholds';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import { eventProximity } from '@/lib/date';
 import { worstStatus, type Status } from '@/lib/status';
@@ -50,8 +51,8 @@ export default function Step5Page() {
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
   const context              = useScanStore((s) => s.context);
   const candidates           = scanResultCandidates ?? [];
-  const ivPassThreshold    = useSettingsStore((s) => s.ivPassThreshold);
-  const ivCautionThreshold = useSettingsStore((s) => s.ivCautionThreshold);
+  const ivPassFallback    = useSettingsStore((s) => s.ivPassThreshold);
+  const ivCautionFallback = useSettingsStore((s) => s.ivCautionThreshold);
   const watchlist = useMemo(() => candidates.map(cardToRow), [candidates]);
   const candidateMap = useMemo(
     () => Object.fromEntries(candidates.map((c) => [c.symbol, c])),
@@ -62,6 +63,10 @@ export default function Step5Page() {
     : context?.horizon?.startsWith('Position') ? 'Position'
     : 'Swing';
   const { caution: evCaution, reject: evReject } = EVENT_WINDOWS[horizonKey];
+
+  // Use per-horizon YAML defaults; fall back to settingsStore when no scan context yet.
+  const ivPassThreshold    = IV_PASS_MAX[horizonKey]    ?? ivPassFallback;
+  const ivCautionThreshold = IV_CAUTION_MAX[horizonKey] ?? ivCautionFallback;
 
   function ivStatus(rank: number): Status {
     if (rank <= ivPassThreshold)    return 'PASS';

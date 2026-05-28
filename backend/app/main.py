@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()  # Load root .env into os.environ before market.py reads TRADIER_API_TOKEN
 
 from contextlib import asynccontextmanager
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.routers.health import router as health_router
 
-from app.routers.watchlist  import router as watchlist_router
+from app.routers.watchlist          import router as watchlist_router
+from app.routers.watched_contracts  import router as watched_contracts_router
 from app.routers.contracts  import router as contracts_router
 from app.routers.candles    import router as candles_router
 from app.routers.regime     import router as regime_router
@@ -21,6 +23,9 @@ from app.routers.events     import router as events_router
 from app.routers.ws_alerts  import router as ws_alerts_router
 from app.routers.scan       import router as scan_router
 from app.routers.news       import router as news_router
+from app.routers.chart      import router as chart_router
+from app.routers.chart_alerts import router as chart_alerts_router
+from app.routers.notification_settings import router as notification_settings_router
 
 
 @asynccontextmanager
@@ -31,6 +36,9 @@ async def lifespan(app: FastAPI):
     if status == "running":
         _scheduler.bind(_scheduled_scan)
         await _scheduler.start()
+    # Phase 4: start notification worker
+    from app.services.notifications.queue import notification_worker
+    asyncio.create_task(notification_worker())
     yield
     # ── Shutdown ─────────────────────────────────────────────────────────
     if _scheduler._running:
@@ -59,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
 
     app.include_router(watchlist_router)
+    app.include_router(watched_contracts_router)
     app.include_router(contracts_router)
     app.include_router(candles_router)
     app.include_router(regime_router)
@@ -70,6 +79,9 @@ def create_app() -> FastAPI:
     app.include_router(ws_alerts_router)
     app.include_router(scan_router)
     app.include_router(news_router)
+    app.include_router(chart_router)
+    app.include_router(chart_alerts_router)
+    app.include_router(notification_settings_router)
 
     return app
 

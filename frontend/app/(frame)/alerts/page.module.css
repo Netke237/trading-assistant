@@ -269,3 +269,104 @@
   background: var(--bg-surface-2);
   color: var(--text-primary);
 }
+
+/* ── Tab strip ── */
+
+.pageTabStrip {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 2px;
+}
+
+.pageTab {
+  padding: 9px 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 150ms, border-color 150ms;
+}
+
+.pageTab:hover {
+  color: var(--text-primary);
+}
+
+.pageTabActive {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Rules table ── */
+
+.rulesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rulesTable {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.rulesTableRow {
+  display: grid;
+  grid-template-columns: 1.5fr 0.9fr 0.7fr 2.5fr 0.7fr 1fr 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.rulesTableRow:last-child {
+  border-bottom: none;
+}
+
+.rulesTableHeader {
+  background: var(--bg-surface-2);
+}
+
+.rulesActions {
+  display: flex;
+  gap: 6px;
+}
+
+.btnPrimary {
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 150ms;
+}
+
+.btnPrimary:hover {
+  opacity: 0.9;
+}
+
+.btnDanger {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--reject);
+  background: transparent;
+  color: var(--reject);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 150ms;
+}
+
+.btnDanger:hover {
+  background: color-mix(in srgb, var(--reject) 10%, transparent);
+}
