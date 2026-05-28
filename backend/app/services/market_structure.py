@@ -125,6 +125,17 @@ def detect_fvg(candles: list[dict]) -> list[dict]:
 # BOS / CHoCH
 # ---------------------------------------------------------------------------
 
+def _is_duplicate_bos(signals: list[dict], new_price: float, direction: str) -> bool:
+    """Return True if a same-direction BOS at a similar price (within 0.5%) was already emitted."""
+    recent = [s for s in signals if s.get("kind") == "BOS" and s.get("direction") == direction]
+    if not recent:
+        return False
+    last_price = recent[-1].get("price", 0)
+    if last_price == 0:
+        return False
+    return abs(new_price - last_price) / last_price * 100 < 0.5
+
+
 def detect_bos_choch(candles: list[dict], lookback: int = 5) -> list[dict]:
     """Detect Break of Structure and Change of Character."""
     highs, lows = find_swings(candles, lookback)
@@ -142,11 +153,12 @@ def detect_bos_choch(candles: list[dict], lookback: int = 5) -> list[dict]:
         if recent_high and c["close"] > recent_high["price"]:
             kind = "CHoCH" if trend == "down" else "BOS"
             confidence = _bos_confidence(candles, i)
-            signals.append({
-                "kind": kind, "direction": "bullish",
-                "time": c["time"], "price": recent_high["price"],
-                "confidence": confidence, "mtf_aligned": False,
-            })
+            if kind != "BOS" or not _is_duplicate_bos(signals, recent_high["price"], "bullish"):
+                signals.append({
+                    "kind": kind, "direction": "bullish",
+                    "time": c["time"], "price": recent_high["price"],
+                    "confidence": confidence, "mtf_aligned": False,
+                })
             trend = "up"
 
         # Bearish BOS: close below most recent swing low
@@ -158,11 +170,12 @@ def detect_bos_choch(candles: list[dict], lookback: int = 5) -> list[dict]:
         if recent_low and c["close"] < recent_low["price"]:
             kind = "CHoCH" if trend == "up" else "BOS"
             confidence = _bos_confidence(candles, i)
-            signals.append({
-                "kind": kind, "direction": "bearish",
-                "time": c["time"], "price": recent_low["price"],
-                "confidence": confidence, "mtf_aligned": False,
-            })
+            if kind != "BOS" or not _is_duplicate_bos(signals, recent_low["price"], "bearish"):
+                signals.append({
+                    "kind": kind, "direction": "bearish",
+                    "time": c["time"], "price": recent_low["price"],
+                    "confidence": confidence, "mtf_aligned": False,
+                })
             trend = "down"
 
     return signals
