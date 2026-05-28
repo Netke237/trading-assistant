@@ -3,6 +3,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import {
   createChart,
   CandlestickSeries,
+  BarSeries,
   LineSeries,
   HistogramSeries,
   type IChartApi,
@@ -14,7 +15,7 @@ import styles from './ChartPane.module.css';
 
 export interface SeriesConfig {
   id: string;
-  type: 'Candlestick' | 'Line' | 'Histogram';
+  type: 'Candlestick' | 'Bar' | 'Line' | 'Histogram';
   data: Candle[] | Point[];
   color?: string;
   priceScaleId?: string;
@@ -31,7 +32,7 @@ interface Props {
 export default function ChartPane({ series, onCrosshairMove, height = 0, chartApiRef, mainSeriesRef }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesMap = useRef<Map<string, ISeriesApi<'Candlestick' | 'Line' | 'Histogram'>>>(new Map());
+  const seriesMap = useRef<Map<string, ISeriesApi<'Candlestick' | 'Bar' | 'Line' | 'Histogram'>>>(new Map());
   const onCrosshairMoveRef = useRef(onCrosshairMove);
   useEffect(() => { onCrosshairMoveRef.current = onCrosshairMove; }, [onCrosshairMove]);
 
@@ -116,6 +117,10 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
             wickDownColor: '#e05050',
           });
           if (mainSeriesRef) mainSeriesRef.current = s as ISeriesApi<'Candlestick'>;
+        } else if (cfg.type === 'Bar') {
+          s = chart.addSeries(BarSeries, {
+            upColor: '#4caf50', downColor: '#e05050',
+          });
         } else if (cfg.type === 'Histogram') {
           s = chart.addSeries(HistogramSeries, {
             color: cfg.color ?? '#4a4a6a',
@@ -131,14 +136,11 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
         seriesMap.current.set(cfg.id, s);
       }
 
-      if (cfg.type === 'Candlestick') {
-        (s as ISeriesApi<'Candlestick'>).setData(
+      if (cfg.type === 'Candlestick' || cfg.type === 'Bar') {
+        (s as ISeriesApi<'Candlestick' | 'Bar'>).setData(
           (cfg.data as Candle[]).map(c => ({
             time: c.time as Time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
+            open: c.open, high: c.high, low: c.low, close: c.close,
           }))
         );
       } else {

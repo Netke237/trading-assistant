@@ -23,9 +23,18 @@ import styles from './ChartWorkspace.module.css';
 
 // ── Indicator computation helpers ─────────────────────────────────────────────
 
-function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[]): SeriesConfig[] {
+function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chartType: string): SeriesConfig[] {
+  const mainType: SeriesConfig['type'] =
+    chartType === 'bar'  ? 'Bar'  :
+    chartType === 'line' ? 'Line' :
+    'Candlestick';
+
+  const mainData: SeriesConfig['data'] = chartType === 'line'
+    ? candles.map(c => ({ time: c.time, value: c.close } as Point))
+    : candles;
+
   const series: SeriesConfig[] = [
-    { id: 'candles', type: 'Candlestick', data: candles },
+    { id: 'candles', type: mainType, data: mainData },
   ];
   for (const ind of indicators) {
     if (ind.pane !== 'main') continue;
@@ -80,7 +89,7 @@ const NO_SIGNALS: StructureSignal[] = [];
 
 export default function ChartWorkspace() {
   const params = useSearchParams();
-  const { symbol, interval, activeIndicators, setSymbol, setInterval } = useChartStore();
+  const { symbol, interval, chartType, activeIndicators, setSymbol, setInterval } = useChartStore();
   const [candles, setCandles] = useState<Candle[]>([]);
   const [drawingTool, setDrawingTool] = useState<DrawingTool>('cursor');
   const [showIndicators, setShowIndicators] = useState(false);
@@ -216,7 +225,10 @@ export default function ChartWorkspace() {
     });
   }, []);
 
-  const mainSeries = useMemo(() => buildMainSeries(candles, activeIndicators), [candles, activeIndicators]);
+  const mainSeries = useMemo(
+    () => buildMainSeries(candles, activeIndicators, chartType),
+    [candles, activeIndicators, chartType],
+  );
   const subPanes = useMemo(
     () => activeIndicators
       .filter(i => i.pane === 'sub')
