@@ -23,7 +23,7 @@ import styles from './ChartWorkspace.module.css';
 
 // ── Indicator computation helpers ─────────────────────────────────────────────
 
-function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chartType: ChartType): SeriesConfig[] {
+function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chartType: ChartType, interval: string): SeriesConfig[] {
   const mainType: SeriesConfig['type'] =
     chartType === 'bar'  ? 'Bar'  :
     chartType === 'line' ? 'Line' :
@@ -40,7 +40,9 @@ function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chart
     if (ind.pane !== 'main') continue;
     if (ind.type === 'EMA')  series.push({ id: ind.id, type: 'Line', data: calcEMA(candles, ind.params.period ?? 20), color: ind.color });
     if (ind.type === 'SMA')  series.push({ id: ind.id, type: 'Line', data: calcSMA(candles, ind.params.period ?? 20), color: ind.color });
-    if (ind.type === 'VWAP') series.push({ id: ind.id, type: 'Line', data: calcVWAP(candles), color: ind.color });
+    if (ind.type === 'VWAP' && interval !== '1D' && interval !== '1W') {
+      series.push({ id: ind.id, type: 'Line', data: calcVWAP(candles), color: ind.color });
+    }
     if (ind.type === 'BB') {
       const bb = calcBB(candles, ind.params.period ?? 20, ind.params.stdDev ?? 2);
       series.push({ id: `${ind.id}-upper`, type: 'Line', data: bb.upper, color: ind.color });
@@ -232,8 +234,8 @@ export default function ChartWorkspace() {
   }, []);
 
   const mainSeries = useMemo(
-    () => buildMainSeries(candles, activeIndicators, chartType),
-    [candles, activeIndicators, chartType],
+    () => buildMainSeries(candles, activeIndicators, chartType, interval),
+    [candles, activeIndicators, chartType, interval],
   );
   const subPanes = useMemo(
     () => activeIndicators
