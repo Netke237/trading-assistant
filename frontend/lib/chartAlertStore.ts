@@ -38,6 +38,7 @@ async function pushRuleToAPI(rule: AlertRule): Promise<void> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        id: rule.id,              // send client id so server preserves it
         name: rule.name, symbol: rule.symbol, interval: rule.interval,
         enabled: rule.enabled, group: rule.group,
         cooldown_minutes: rule.cooldown_minutes, expiry_date: rule.expiry_date,

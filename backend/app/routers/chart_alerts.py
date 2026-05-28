@@ -51,6 +51,7 @@ class ConditionGroupIn(BaseModel):
     conditions: list = Field(default_factory=list)
 
 class AlertRuleCreate(BaseModel):
+    id: Optional[str] = None
     name: str
     symbol: str
     interval: str
@@ -156,7 +157,7 @@ def _deserialize_rule(rule_json_str: str, row: AlertRuleModel) -> AlertRuleInput
 
 @router.post('/rules', status_code=status.HTTP_201_CREATED)
 async def create_rule(body: AlertRuleCreate, db: AsyncSession = Depends(get_db)):
-    rule_id = uuid.uuid4().hex
+    rule_id = body.id or uuid.uuid4().hex
     now = datetime.now().isoformat()
 
     rule = AlertRuleModel(
