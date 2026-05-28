@@ -89,7 +89,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
       chartRef.current = null;
       seriesMap.current.clear();
     };
-  }, [initChart, getHeight]);
+  }, [initChart]);
 
   useEffect(() => {
     const chart = chartRef.current;
