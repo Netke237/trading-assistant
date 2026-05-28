@@ -1,16 +1,26 @@
 'use client';
 import { useChartStore, type Interval, type ChartType } from '@/lib/chartStore';
+import type { ConnectionState } from '@/lib/chartWS';
 import styles from './ChartTopBar.module.css';
 
 const INTERVALS: Interval[] = ['1min', '5min', '15min', '1h', '4h', '1D', '1W'];
+
+const CONN_STATE_CLASS: Record<ConnectionState, string> = {
+  connecting:   styles.connecting,
+  connected:    '',
+  reconnecting: styles.reconnecting,
+  error:        styles.error,
+};
 
 interface Props {
   onToggleIndicators: () => void;
   onToggleStructure: () => void;
   onToggleAlerts?: () => void;
+  connState?: ConnectionState;
+  wsError?: string | null;
 }
 
-export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onToggleAlerts }: Props) {
+export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onToggleAlerts, connState, wsError }: Props) {
   const { symbol, interval, chartType, setSymbol, setInterval, setChartType } = useChartStore();
 
   const handleSymbolKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -59,6 +69,17 @@ export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onT
       <button className={styles.btn} onClick={onToggleIndicators}>Indicators</button>
       <button className={styles.btn} onClick={onToggleStructure}>Structure</button>
       {onToggleAlerts && <button className={styles.btn} onClick={onToggleAlerts}>Alerts</button>}
+
+      {connState && connState !== 'connected' && (
+        <span
+          className={`${styles.connBadge} ${CONN_STATE_CLASS[connState]}`}
+          title={wsError ?? connState}
+        >
+          {connState === 'connecting'   ? 'Connecting…'  :
+           connState === 'reconnecting' ? 'Reconnecting…' :
+           wsError ?? 'Error'}
+        </span>
+      )}
 
       <div className={styles.spacer} />
 

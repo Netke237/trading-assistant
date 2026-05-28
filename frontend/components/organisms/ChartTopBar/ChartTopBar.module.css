@@ -72,3 +72,25 @@
   color: var(--pass);
   cursor: pointer;
 }
+
+.connBadge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.connecting {
+  background: color-mix(in srgb, var(--caution) 18%, var(--bg-surface));
+  color: var(--caution);
+}
+
+.reconnecting {
+  background: color-mix(in srgb, var(--caution) 18%, var(--bg-surface));
+  color: var(--caution);
+}
+
+.error {
+  background: color-mix(in srgb, var(--reject) 18%, var(--bg-surface));
+  color: var(--reject);
+}

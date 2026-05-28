@@ -2,6 +2,8 @@ import type { Candle } from './indicators';
 import type { StructureSignal } from '@/types/structure';
 import type { AlertHistory } from '@/types/alerts';
 
+export type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'error';
+
 export type WSMessage =
   | { type: 'history'; candles: Candle[] }
   | { type: 'tick'; data: { symbol: string; price: number; volume: number; timestamp: string } }
@@ -23,6 +25,7 @@ export class ChartWSClient {
   private backoff = 1000;
   private destroyed = false;
   private handlers = new Set<MessageHandler>();
+  private stateHandler?: (s: ConnectionState) => void;
 
   constructor(
     public readonly symbol: string,
@@ -32,8 +35,14 @@ export class ChartWSClient {
 
   connect(): void {
     if (this.destroyed) return;
+    this.stateHandler?.('connecting');
     const url = `${this.baseUrl}/chart/stream/${encodeURIComponent(this.symbol)}?interval=${this.interval}`;
     this.ws = new WebSocket(url);
+
+    this.ws.onopen = () => {
+      this.backoff = 1000;
+      this.stateHandler?.('connected');
+    };
 
     this.ws.onmessage = (e) => {
       try {
@@ -44,6 +53,7 @@ export class ChartWSClient {
 
     this.ws.onclose = () => {
       if (!this.destroyed) {
+        this.stateHandler?.('reconnecting');
         this.timer = setTimeout(() => {
           this.backoff = Math.min(this.backoff * 2, 30_000);
           this.connect();
@@ -51,7 +61,14 @@ export class ChartWSClient {
       }
     };
 
-    this.ws.onerror = () => this.ws?.close();
+    this.ws.onerror = () => {
+      this.stateHandler?.('error');
+      this.ws?.close();
+    };
+  }
+
+  onStateChange(fn: (s: ConnectionState) => void): void {
+    this.stateHandler = fn;
   }
 
   onMessage(fn: MessageHandler): () => void {

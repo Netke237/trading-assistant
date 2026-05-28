@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useChartStore, type IndicatorConfig, type Interval, type ChartType } from '@/lib/chartStore';
-import { ChartWSClient, type WSMessage } from '@/lib/chartWS';
+import { ChartWSClient, type WSMessage, type ConnectionState } from '@/lib/chartWS';
 import { calcEMA, calcSMA, calcRSI, calcMACD, calcBB, calcATR, calcVWAP, type Candle, type Point } from '@/lib/indicators';
 import { useStructureStore } from '@/lib/structureStore';
 import type { StructureSignal } from '@/types/structure';
@@ -95,6 +95,8 @@ export default function ChartWorkspace() {
   const [showStructure, setShowStructure] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
   const [crosshair, setCrosshair] = useState<DataValues>({ time: null, indicators: {} });
+  const [connState, setConnState] = useState<ConnectionState>('connecting');
+  const [wsError, setWsError] = useState<string | null>(null);
   const wsRef = useRef<ChartWSClient | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const mainSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -129,9 +131,14 @@ export default function ChartWorkspace() {
     wsRef.current?.destroy();
 
     const client = new ChartWSClient(symbol, backendInterval);
+    client.onStateChange(setConnState);
     const unsubscribe = client.onMessage((msg: WSMessage) => {
       if (msg.type === 'history') {
         setCandles(msg.candles);
+        setWsError(null);
+      }
+      if (msg.type === 'error') {
+        setWsError(msg.message ?? 'Connection error');
       }
       if (msg.type === 'tick') {
         setCandles(prev => {
@@ -241,6 +248,8 @@ export default function ChartWorkspace() {
         onToggleIndicators={() => setShowIndicators(v => !v)}
         onToggleStructure={() => setShowStructure(v => !v)}
         onToggleAlerts={() => setShowAlerts(v => !v)}
+        connState={connState}
+        wsError={wsError}
       />
       {showIndicators && <IndicatorPanel onClose={() => setShowIndicators(false)} />}
       {showStructure && <StructurePanel onClose={() => setShowStructure(false)} />}
