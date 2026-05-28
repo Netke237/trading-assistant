@@ -1,15 +1,14 @@
-scan:
-  cadence_minutes: 60
-
 notifications:
   gmail:
-    enabled: false
-    to: ""
-    smtp_host: "smtp.gmail.com"
+    enabled: true
+    smtp_host: smtp.gmail.com
+    smtp_password: secret
     smtp_port: 465
-    smtp_user: ""
-    smtp_password: ""
+    smtp_user: u@b.com
+    to: a@b.com
   telegram:
+    bot_token: ''
+    chat_id: ''
     enabled: false
-    bot_token: ""
-    chat_id: ""
+scan:
+  cadence_minutes: 60

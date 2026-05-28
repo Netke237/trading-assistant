@@ -1,10 +1,11 @@
 /*
  * Chart data types — shared between mock fixtures and CandlestickChart.
- * v5 Lightweight Charts uses `time: string` (YYYY-MM-DD) or UTCTimestamp.
+ * v5 Lightweight Charts: daily bars use YYYY-MM-DD string; intraday uses
+ * UTCTimestamp (Unix seconds as number).
  */
 
 export interface Candle {
-  time:   string;   // "YYYY-MM-DD"
+  time:   number | string;  // UTCTimestamp (seconds) for intraday; "YYYY-MM-DD" for daily
   open:   number;
   high:   number;
   low:    number;

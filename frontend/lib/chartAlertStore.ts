@@ -128,14 +128,8 @@ export const useChartAlertStore = create<ChartAlertState>()(
       addHistory: (entry) => {
         let added = false;
         set((s) => {
-          // Dedup: skip if same rule triggered within the same candle period (60s window)
-          const isDupe = s.history.some(
-            (h) =>
-              h.rule_id === entry.rule_id &&
-              Math.abs(
-                new Date(h.triggered_at).getTime() - new Date(entry.triggered_at).getTime(),
-              ) < 60_000,
-          );
+          // Dedup: skip if exact same id already present (cooldown handled by alert engine)
+          const isDupe = s.history.some((h) => h.id === entry.id);
           if (isDupe) return s;
           added = true;
           return {

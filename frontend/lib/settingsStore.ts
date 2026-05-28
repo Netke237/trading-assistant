@@ -71,7 +71,7 @@ export const useSettingsStore = create<SettingsState>()(
       markov:                  { ...DEFAULT_MARKOV },
       shortlistMaxCandidates: 10,
       maxContractsPerChain: 10,
-      maxContractPrice:     500,
+      maxContractPrice:     50,
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
       setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
@@ -88,7 +88,7 @@ export const useSettingsStore = create<SettingsState>()(
         markov:                  { ...DEFAULT_MARKOV },
         shortlistMaxCandidates: 10,
         maxContractsPerChain: 10,
-        maxContractPrice:     500,
+        maxContractPrice:     50,
       }),
     }),
     {
