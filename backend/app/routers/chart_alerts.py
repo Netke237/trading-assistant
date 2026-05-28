@@ -158,6 +158,10 @@ def _deserialize_rule(rule_json_str: str, row: AlertRuleModel) -> AlertRuleInput
 @router.post('/rules', status_code=status.HTTP_201_CREATED)
 async def create_rule(body: AlertRuleCreate, db: AsyncSession = Depends(get_db)):
     rule_id = body.id or uuid.uuid4().hex
+    if body.id:
+        existing = await db.get(AlertRuleModel, rule_id)
+        if existing:
+            raise HTTPException(status_code=409, detail='Rule with this id already exists')
     now = datetime.now().isoformat()
 
     rule = AlertRuleModel(
