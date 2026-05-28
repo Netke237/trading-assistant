@@ -23,17 +23,22 @@ export interface SeriesConfig {
 interface Props {
   series: SeriesConfig[];
   onCrosshairMove?: (time: string | null, values: Record<string, number>) => void;
-  height?: number;
+  height?: number;   // 0 or omitted = fill container height
   chartApiRef?: React.MutableRefObject<IChartApi | null>;
   mainSeriesRef?: React.MutableRefObject<ISeriesApi<'Candlestick'> | null>;
 }
 
-export default function ChartPane({ series, onCrosshairMove, height = 300, chartApiRef, mainSeriesRef }: Props) {
+export default function ChartPane({ series, onCrosshairMove, height = 0, chartApiRef, mainSeriesRef }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesMap = useRef<Map<string, ISeriesApi<'Candlestick' | 'Line' | 'Histogram'>>>(new Map());
   const onCrosshairMoveRef = useRef(onCrosshairMove);
   useEffect(() => { onCrosshairMoveRef.current = onCrosshairMove; }, [onCrosshairMove]);
+
+  const getHeight = useCallback(() => {
+    if (height > 0) return height;
+    return containerRef.current?.clientHeight || 400;
+  }, [height]);
 
   const initChart = useCallback(() => {
     if (!containerRef.current) return;
@@ -50,7 +55,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 300, chart
       rightPriceScale: { borderColor: '#1e1e35' },
       timeScale: { borderColor: '#1e1e35', timeVisible: true },
       width: containerRef.current.clientWidth,
-      height,
+      height: getHeight(),
     });
     chartRef.current = chart;
     if (chartApiRef) chartApiRef.current = chart;
@@ -65,13 +70,16 @@ export default function ChartPane({ series, onCrosshairMove, height = 300, chart
       });
       onCrosshairMoveRef.current?.(String(param.time), values);
     });
-  }, [height]);
+  }, [getHeight]);
 
   useEffect(() => {
     initChart();
     const observer = new ResizeObserver(() => {
       if (chartRef.current && containerRef.current) {
-        chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
+        chartRef.current.applyOptions({
+          width: containerRef.current.clientWidth,
+          height: getHeight(),
+        });
       }
     });
     if (containerRef.current) observer.observe(containerRef.current);
@@ -81,7 +89,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 300, chart
       chartRef.current = null;
       seriesMap.current.clear();
     };
-  }, [initChart]);
+  }, [initChart, getHeight]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -141,5 +149,11 @@ export default function ChartPane({ series, onCrosshairMove, height = 300, chart
     });
   }, [series]);
 
-  return <div ref={containerRef} className={styles.pane} style={{ height }} />;
+  return (
+    <div
+      ref={containerRef}
+      className={styles.pane}
+      style={height > 0 ? { height } : { height: '100%' }}
+    />
+  );
 }

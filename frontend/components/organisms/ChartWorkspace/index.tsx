@@ -236,10 +236,9 @@ export default function ChartWorkspace() {
       <div className={styles.body}>
         <DrawingToolbar active={drawingTool} onChange={setDrawingTool} />
         <div className={styles.charts}>
-          <div style={{ position: 'relative' }}>
+          <div className={styles.mainPane}>
             <ChartPane
               series={mainSeries}
-              height={320}
               onCrosshairMove={handleCrosshair}
               chartApiRef={chartApiRef}
               mainSeriesRef={mainSeriesRef}
