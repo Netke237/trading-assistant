@@ -56,3 +56,64 @@
 
 .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .check { margin-left: auto; font-size: 11px; color: var(--pass); }
+
+.activeSection {
+  padding: 8px 12px 4px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.activeRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  flex-wrap: wrap;
+}
+
+.editBtn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 9px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.editBtn:hover { color: var(--text-secondary); }
+
+.removeBtn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+  margin-left: auto;
+}
+.removeBtn:hover { color: var(--reject); }
+
+.paramRow {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  padding: 4px 0 4px 16px;
+  flex-wrap: wrap;
+}
+
+.paramLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.paramInput {
+  width: 56px;
+  padding: 2px 4px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 11px;
+}
