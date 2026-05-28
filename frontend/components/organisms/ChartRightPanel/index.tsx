@@ -120,8 +120,9 @@ export default function ChartRightPanel({ crosshairData, symbol, structureSignal
                   {structureSignals.slice(0, 5).map((sig, i) => {
                     const direction = 'direction' in sig ? sig.direction : undefined;
                     const confidence = 'confidence' in sig ? sig.confidence : undefined;
+                    const timeKey = 'time_start' in sig ? sig.time_start : ('time' in sig ? sig.time : String(i));
                     return (
-                      <div key={i} className={styles.structureRow}>
+                      <div key={`${sig.kind}-${timeKey}`} className={styles.structureRow}>
                         <Text size={11} tone="secondary">{sig.kind}</Text>
                         {direction && (
                           <Text size={10} tone={direction === 'bullish' ? 'pass' : 'reject'}>
