@@ -564,6 +564,8 @@ function RegimeForm({
 }
 
 function NotificationForm() {
+  const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+
   const [gmailEnabled, setGmailEnabled] = useState(false);
   const [gmailTo, setGmailTo] = useState('');
   const [gmailUser, setGmailUser] = useState('');
@@ -573,12 +575,65 @@ function NotificationForm() {
   const [telegramChatId, setTelegramChatId] = useState('');
   const [testing, setTesting] = useState<('gmail' | 'telegram') | null>(null);
   const [testResult, setTestResult] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState('');
+
+  // Load saved config on mount
+  useEffect(() => {
+    fetch(`${BASE_URL}/settings/notifications`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setGmailEnabled(data.gmail?.enabled ?? false);
+        setGmailTo(data.gmail?.to ?? '');
+        setGmailUser(data.gmail?.smtp_user ?? '');
+        setTelegramEnabled(data.telegram?.enabled ?? false);
+        setTelegramChatId(data.telegram?.chat_id ?? '');
+        // Passwords are never returned from the server \u2014 leave fields blank
+      })
+      .catch(() => {/* backend not running \u2014 silent */});
+  }, [BASE_URL]);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveResult('');
+    try {
+      const res = await fetch(`${BASE_URL}/settings/notifications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gmail: {
+            enabled: gmailEnabled,
+            to: gmailTo,
+            smtp_user: gmailUser,
+            smtp_password: gmailPassword || null,
+          },
+          telegram: {
+            enabled: telegramEnabled,
+            bot_token: telegramToken || null,
+            chat_id: telegramChatId,
+          },
+        }),
+      });
+      if (res.ok) {
+        setSaveResult('Settings saved');
+        setGmailPassword('');   // clear password field after save
+        setTelegramToken('');
+      } else {
+        setSaveResult(`Save failed: ${res.status}`);
+      }
+    } catch (e: unknown) {
+      setSaveResult(`Error: ${e instanceof Error ? e.message : 'unknown'}`);
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveResult(''), 3000);
+    }
+  }
 
   async function sendTest(channel: 'gmail' | 'telegram') {
     setTesting(channel);
     setTestResult('');
     try {
-      const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
       const body: Record<string, string> = { channel };
       if (channel === 'gmail') {
         if (gmailTo) body.to = gmailTo;
@@ -594,8 +649,8 @@ function NotificationForm() {
         body: JSON.stringify(body),
       });
       setTestResult(res.ok ? 'Test sent successfully' : `Failed: ${res.status}`);
-    } catch (e: any) {
-      setTestResult(`Error: ${e.message}`);
+    } catch (e: unknown) {
+      setTestResult(`Error: ${e instanceof Error ? e.message : 'unknown'}`);
     } finally {
       setTesting(null);
     }
@@ -603,51 +658,74 @@ function NotificationForm() {
 
   return (
     <>
-      <SectionIntro title="Notifications" blurb="Configure alert delivery. Gmail uses SMTP (App Password), Telegram uses Bot API. Credentials are stored as backend environment variables. Use this panel to test your setup." />
+      <SectionIntro title="Notifications" blurb="Configure alert delivery. Gmail uses SMTP (App Password), Telegram uses Bot API. Settings are persisted to the backend config file. Passwords are write-only \u2014 leave blank to keep the existing saved value." />
 
       <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '16px', marginBottom: '16px' }}>
         <Text size={14} weight={600}>Gmail</Text>
         <Row label="Enable Gmail alerts">
           <Toggle defaultOn={gmailEnabled} onChange={setGmailEnabled} />
         </Row>
-        {gmailEnabled && (<>
-          <Row label="To address" hint="Email that receives alerts">
-            <input className={styles.input} placeholder="you@gmail.com" value={gmailTo} onChange={(e) => setGmailTo(e.target.value)} />
-          </Row>
-          <Row label="SMTP User" hint="Your Gmail address">
-            <input className={styles.input} placeholder="you@gmail.com" value={gmailUser} onChange={(e) => setGmailUser(e.target.value)} />
-          </Row>
-          <Row label="Password" hint="Gmail App Password">
-            <input className={styles.input} type="password" placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'} value={gmailPassword} onChange={(e) => setGmailPassword(e.target.value)} />
-          </Row>
+        <Row label="To address" hint="Email that receives alerts">
+          <input className={styles.input} placeholder="you@gmail.com" value={gmailTo} onChange={(e) => setGmailTo(e.target.value)} />
+        </Row>
+        <Row label="SMTP User" hint="Your Gmail address">
+          <input className={styles.input} placeholder="you@gmail.com" value={gmailUser} onChange={(e) => setGmailUser(e.target.value)} />
+        </Row>
+        <Row label="Password" hint="Gmail App Password">
+          <input
+            className={styles.input}
+            type="password"
+            placeholder="leave blank to keep saved value"
+            value={gmailPassword}
+            onChange={(e) => setGmailPassword(e.target.value)}
+          />
+        </Row>
+        {gmailEnabled && (
           <Row label="Test">
             <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => sendTest('gmail')} disabled={testing === 'gmail'}>
               {testing === 'gmail' ? 'Sending...' : 'Send test email'}
             </button>
             {testResult ? <Text size={12} tone="secondary">{testResult}</Text> : null}
           </Row>
-        </>)}
+        )}
       </div>
 
-      <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '16px' }}>
+      <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '16px', marginBottom: '16px' }}>
         <Text size={14} weight={600}>Telegram</Text>
         <Row label="Enable Telegram alerts">
           <Toggle defaultOn={telegramEnabled} onChange={setTelegramEnabled} />
         </Row>
-        {telegramEnabled && (<>
-          <Row label="Bot token" hint="From @BotFather">
-            <input className={styles.input} placeholder="1234567890:ABC..." value={telegramToken} onChange={(e) => setTelegramToken(e.target.value)} />
-          </Row>
-          <Row label="Chat ID" hint="Your chat or group ID">
-            <input className={styles.input} placeholder="987654321" value={telegramChatId} onChange={(e) => setTelegramChatId(e.target.value)} />
-          </Row>
+        <Row label="Bot token" hint="From @BotFather">
+          <input
+            className={styles.input}
+            placeholder="leave blank to keep saved value"
+            value={telegramToken}
+            onChange={(e) => setTelegramToken(e.target.value)}
+          />
+        </Row>
+        <Row label="Chat ID" hint="Your chat or group ID">
+          <input className={styles.input} placeholder="987654321" value={telegramChatId} onChange={(e) => setTelegramChatId(e.target.value)} />
+        </Row>
+        {telegramEnabled && (
           <Row label="Test">
             <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => sendTest('telegram')} disabled={testing === 'telegram'}>
               {testing === 'telegram' ? 'Sending...' : 'Send test message'}
             </button>
             {testResult ? <Text size={12} tone="secondary">{testResult}</Text> : null}
           </Row>
-        </>)}
+        )}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <button
+          type="button"
+          className={`${styles.btn} ${styles.btnPrimary}`}
+          onClick={handleSave}
+          disabled={saving}
+        >
+          {saving ? 'Saving...' : 'Save settings'}
+        </button>
+        {saveResult ? <Text size={12} tone="secondary">{saveResult}</Text> : null}
       </div>
     </>
   );

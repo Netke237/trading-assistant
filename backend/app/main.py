@@ -25,6 +25,7 @@ from app.routers.scan       import router as scan_router
 from app.routers.news       import router as news_router
 from app.routers.chart      import router as chart_router
 from app.routers.chart_alerts import router as chart_alerts_router
+from app.routers.notification_settings import router as notification_settings_router
 
 
 @asynccontextmanager
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(news_router)
     app.include_router(chart_router)
     app.include_router(chart_alerts_router)
+    app.include_router(notification_settings_router)
 
     return app
 
