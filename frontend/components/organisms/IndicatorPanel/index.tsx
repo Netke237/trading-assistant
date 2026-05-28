@@ -86,14 +86,19 @@ export default function IndicatorPanel({ onClose }: Props) {
                       <label key={key} className={styles.paramLabel}>
                         <Text size={10} tone="dim">{PARAM_LABELS[key] ?? key}</Text>
                         <input
+                          key={`${ind.id}-${key}`}
                           type="number"
                           className={styles.paramInput}
-                          value={ind.params[key]}
+                          defaultValue={ind.params[key]}
                           min={1}
                           step={1}
-                          onChange={e => {
+                          onBlur={e => {
                             const val = Number(e.target.value);
-                            if (val > 0) updateIndicator(ind.id, { params: { ...ind.params, [key]: val } });
+                            if (val > 0) {
+                              updateIndicator(ind.id, { params: { ...ind.params, [key]: val } });
+                            } else {
+                              e.target.value = String(ind.params[key]);
+                            }
                           }}
                         />
                       </label>

@@ -23,7 +23,7 @@ import styles from './ChartWorkspace.module.css';
 
 // ── Indicator computation helpers ─────────────────────────────────────────────
 
-function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chartType: ChartType, interval: string): SeriesConfig[] {
+function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chartType: ChartType, interval: Interval): SeriesConfig[] {
   const mainType: SeriesConfig['type'] =
     chartType === 'bar'  ? 'Bar'  :
     chartType === 'line' ? 'Line' :
