@@ -277,7 +277,7 @@ export default function ChartWorkspace() {
             <ChartPane key={id} series={series} height={100} />
           ))}
         </div>
-        <ChartRightPanel crosshairData={crosshair} symbol={symbol} />
+        <ChartRightPanel crosshairData={crosshair} symbol={symbol} structureSignals={structureSignals} />
       </div>
       {showAlerts && <AlertRuleBuilder onClose={() => setShowAlerts(false)} />}
       <AlertToast />

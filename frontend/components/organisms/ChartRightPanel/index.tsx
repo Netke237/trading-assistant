@@ -4,6 +4,7 @@ import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { Text } from '@/components/primitives';
+import type { StructureSignal } from '@/types/structure';
 import styles from './ChartRightPanel.module.css';
 
 type Tab = 'watchlist' | 'data' | 'alerts';
@@ -21,9 +22,10 @@ export interface DataValues {
 interface Props {
   crosshairData: DataValues;
   symbol: string;
+  structureSignals?: StructureSignal[];
 }
 
-export default function ChartRightPanel({ crosshairData, symbol }: Props) {
+export default function ChartRightPanel({ crosshairData, symbol, structureSignals }: Props) {
   const [tab, setTab] = useState<Tab>('watchlist');
   const added = useWatchlistStore((s) => s.added);
   const history = useChartAlertStore((s) => s.history);
@@ -110,6 +112,30 @@ export default function ChartRightPanel({ crosshairData, symbol }: Props) {
                   <Text size={10} tone="primary">{val.toFixed(4)}</Text>
                 </div>
               ))}
+              {structureSignals && structureSignals.length > 0 && (
+                <div className={styles.structureSection}>
+                  <div className={styles.structureHeader}>
+                    <Text size={10} tone="dim" weight={500}>STRUCTURE</Text>
+                  </div>
+                  {structureSignals.slice(0, 5).map((sig, i) => {
+                    const direction = 'direction' in sig ? sig.direction : undefined;
+                    const confidence = 'confidence' in sig ? sig.confidence : undefined;
+                    return (
+                      <div key={i} className={styles.structureRow}>
+                        <Text size={11} tone="secondary">{sig.kind}</Text>
+                        {direction && (
+                          <Text size={10} tone={direction === 'bullish' ? 'pass' : 'reject'}>
+                            {direction}
+                          </Text>
+                        )}
+                        {confidence != null && (
+                          <Text size={10} tone="dim">{confidence}%</Text>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           ) : (
             <Text size={11} tone="dim">Hover over chart</Text>
