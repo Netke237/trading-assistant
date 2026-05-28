@@ -34,7 +34,7 @@ function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chart
     : candles;
 
   const series: SeriesConfig[] = [
-    { id: 'candles', type: mainType, data: mainData },
+    { id: `candles-${chartType}`, type: mainType, data: mainData },
   ];
   for (const ind of indicators) {
     if (ind.pane !== 'main') continue;
