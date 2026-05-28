@@ -121,6 +121,8 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
           s = chart.addSeries(BarSeries, {
             upColor: '#4caf50', downColor: '#e05050',
           });
+          // Bar is used as main series — update ref so ChartOverlays still works
+          if (mainSeriesRef) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
         } else if (cfg.type === 'Histogram') {
           s = chart.addSeries(HistogramSeries, {
             color: cfg.color ?? '#4a4a6a',

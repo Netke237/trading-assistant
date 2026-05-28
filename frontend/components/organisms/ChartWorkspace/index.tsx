@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useChartStore, type IndicatorConfig, type Interval } from '@/lib/chartStore';
+import { useChartStore, type IndicatorConfig, type Interval, type ChartType } from '@/lib/chartStore';
 import { ChartWSClient, type WSMessage } from '@/lib/chartWS';
-import { calcEMA, calcSMA, calcRSI, calcMACD, calcBB, calcATR, calcVWAP, type Candle } from '@/lib/indicators';
+import { calcEMA, calcSMA, calcRSI, calcMACD, calcBB, calcATR, calcVWAP, type Candle, type Point } from '@/lib/indicators';
 import { useStructureStore } from '@/lib/structureStore';
 import type { StructureSignal } from '@/types/structure';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
@@ -23,7 +23,7 @@ import styles from './ChartWorkspace.module.css';
 
 // ── Indicator computation helpers ─────────────────────────────────────────────
 
-function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chartType: string): SeriesConfig[] {
+function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chartType: ChartType): SeriesConfig[] {
   const mainType: SeriesConfig['type'] =
     chartType === 'bar'  ? 'Bar'  :
     chartType === 'line' ? 'Line' :
@@ -66,7 +66,6 @@ function buildSubSeries(candles: Candle[], ind: IndicatorConfig): SeriesConfig[]
   return [];
 }
 
-type Point = { time: string; value: number };
 
 function getIndicatorPoints(candles: Candle[], indicators: IndicatorConfig[]): Record<string, Point[]> {
   const result: Record<string, Point[]> = {};
