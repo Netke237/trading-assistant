@@ -156,10 +156,12 @@ def detect_bos_choch(candles: list[dict], lookback: int = 5) -> list[dict]:
             kind = "CHoCH" if trend == "down" else "BOS"
             confidence = _bos_confidence(candles, i)
             if kind != "BOS" or not _is_duplicate_bos(signals, recent_high["price"], "bullish"):
+                _end_idx = min(i + 30, len(candles) - 1)
                 signals.append({
                     "kind": kind, "direction": "bullish",
                     "time": c["time"], "price": recent_high["price"],
                     "confidence": confidence, "mtf_aligned": False,
+                    "time_end": candles[_end_idx]["time"],
                 })
             trend = "up"
 
@@ -173,10 +175,12 @@ def detect_bos_choch(candles: list[dict], lookback: int = 5) -> list[dict]:
             kind = "CHoCH" if trend == "up" else "BOS"
             confidence = _bos_confidence(candles, i)
             if kind != "BOS" or not _is_duplicate_bos(signals, recent_low["price"], "bearish"):
+                _end_idx = min(i + 30, len(candles) - 1)
                 signals.append({
                     "kind": kind, "direction": "bearish",
                     "time": c["time"], "price": recent_low["price"],
                     "confidence": confidence, "mtf_aligned": False,
+                    "time_end": candles[_end_idx]["time"],
                 })
             trend = "down"
 

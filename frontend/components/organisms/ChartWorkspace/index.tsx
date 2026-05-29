@@ -45,9 +45,9 @@ function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chart
     }
     if (ind.type === 'BB') {
       const bb = calcBB(candles, ind.params.period ?? 20, ind.params.stdDev ?? 2);
-      series.push({ id: `${ind.id}-upper`, type: 'Line', data: bb.upper, color: ind.color });
-      series.push({ id: `${ind.id}-mid`,   type: 'Line', data: bb.middle, color: ind.color });
-      series.push({ id: `${ind.id}-lower`, type: 'Line', data: bb.lower, color: ind.color });
+      series.push({ id: `${ind.id}-upper`, type: 'Line', data: bb.upper,  color: '#4caf50' }); // green
+      series.push({ id: `${ind.id}-mid`,   type: 'Line', data: bb.middle, color: '#2196f3' }); // blue
+      series.push({ id: `${ind.id}-lower`, type: 'Line', data: bb.lower,  color: '#f44336' }); // red
     }
   }
   return series;

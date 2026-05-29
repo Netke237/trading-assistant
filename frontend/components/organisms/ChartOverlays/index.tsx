@@ -2,9 +2,10 @@
 
 import { useEffect, useRef } from 'react';
 import type { IChartApi, ISeriesApi, ISeriesPrimitive } from 'lightweight-charts';
-import type { SignalKind, StructureSignal } from '@/types/structure';
+import type { SignalKind, StructureSignal, ZoneSignal } from '@/types/structure';
 import { FVGPrimitive } from '@/lib/chartPrimitives/FVGPrimitive';
 import { BOSPrimitive } from '@/lib/chartPrimitives/BOSPrimitive';
+import { OrderBlockPrimitive } from '@/lib/chartPrimitives/OrderBlockPrimitive';
 import { FibPrimitive } from '@/lib/chartPrimitives/FibPrimitive';
 import { DivergencePrimitive } from '@/lib/chartPrimitives/DivergencePrimitive';
 import { ConfluencePrimitive } from '@/lib/chartPrimitives/ConfluencePrimitive';
@@ -36,8 +37,10 @@ export function ChartOverlays({ chart, mainSeries, signals, visibility, visible 
       let primitive: ISeriesPrimitive | null = null;
       switch (signal.kind) {
         case 'FVG':
-        case 'OrderBlock':
           primitive = new FVGPrimitive(signal);
+          break;
+        case 'OrderBlock':
+          primitive = new OrderBlockPrimitive(signal as ZoneSignal);
           break;
         case 'BOS':
         case 'CHoCH':
