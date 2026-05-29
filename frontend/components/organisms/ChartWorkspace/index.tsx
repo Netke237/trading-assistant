@@ -53,6 +53,33 @@ function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chart
   return series;
 }
 
+function buildIndicatorLabels(indicators: IndicatorConfig[]): Record<string, string> {
+  const labels: Record<string, string> = {};
+  for (const ind of indicators) {
+    const period = ind.params?.period;
+    const p = period ? `(${period})` : '';
+    if (ind.type === 'SMA')  labels[ind.id] = `SMA${p}`;
+    if (ind.type === 'EMA')  labels[ind.id] = `EMA${p}`;
+    if (ind.type === 'VWAP') labels[ind.id] = 'VWAP';
+    if (ind.type === 'RSI')  labels[ind.id] = `RSI${p}`;
+    if (ind.type === 'ATR')  labels[ind.id] = `ATR${p}`;
+    if (ind.type === 'BB') {
+      labels[`${ind.id}-upper`] = 'BB Upper';
+      labels[`${ind.id}-mid`]   = 'BB Mid';
+      labels[`${ind.id}-lower`] = 'BB Lower';
+    }
+    if (ind.type === 'MACD') {
+      labels[`${ind.id}-line`] = 'MACD';
+      labels[`${ind.id}-sig`]  = 'Signal';
+      labels[`${ind.id}-hist`] = 'Histogram';
+    }
+    if (ind.type === 'VOL') labels[`${ind.id}-vol`] = 'Volume';
+    // candle series id
+    labels[`candles-${ind.type}`] = 'Close'; // fallback for candles
+  }
+  return labels;
+}
+
 function buildSubSeries(candles: Candle[], ind: IndicatorConfig): SeriesConfig[] {
   if (ind.type === 'VOL')  return [{ id: `${ind.id}-vol`,  type: 'Histogram', data: candles.map(c => ({ time: c.time, value: c.volume })), color: ind.color }];
   if (ind.type === 'RSI')  return [{ id: `${ind.id}-rsi`,  type: 'Line',      data: calcRSI(candles, ind.params.period ?? 14), color: ind.color }];
@@ -244,6 +271,11 @@ export default function ChartWorkspace() {
     [candles, activeIndicators],
   );
 
+  const indicatorLabels = useMemo(
+    () => buildIndicatorLabels(activeIndicators),
+    [activeIndicators],
+  );
+
   return (
     <div className={styles.workspace}>
       <ChartTopBar
@@ -277,7 +309,7 @@ export default function ChartWorkspace() {
             <ChartPane key={id} series={series} height={100} />
           ))}
         </div>
-        <ChartRightPanel crosshairData={crosshair} symbol={symbol} structureSignals={structureSignals} />
+        <ChartRightPanel crosshairData={crosshair} symbol={symbol} structureSignals={structureSignals} indicatorLabels={indicatorLabels} />
       </div>
       {showAlerts && <AlertRuleBuilder onClose={() => setShowAlerts(false)} />}
       <AlertToast />

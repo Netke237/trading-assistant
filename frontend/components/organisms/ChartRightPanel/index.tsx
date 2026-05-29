@@ -23,9 +23,23 @@ interface Props {
   crosshairData: DataValues;
   symbol: string;
   structureSignals?: StructureSignal[];
+  indicatorLabels?: Record<string, string>;
 }
 
-export default function ChartRightPanel({ crosshairData, symbol, structureSignals }: Props) {
+function formatBarTime(t: string | null): string {
+  if (!t) return '';
+  const n = Number(t);
+  // Unix timestamps are > 1e9; format as local datetime
+  if (!isNaN(n) && n > 1_000_000_000) {
+    return new Date(n * 1000).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  }
+  return t; // already a readable date string (YYYY-MM-DD for daily bars)
+}
+
+export default function ChartRightPanel({ crosshairData, symbol, structureSignals, indicatorLabels = {} }: Props) {
   const [tab, setTab] = useState<Tab>('watchlist');
   const added = useWatchlistStore((s) => s.added);
   const history = useChartAlertStore((s) => s.history);
@@ -97,21 +111,27 @@ export default function ChartRightPanel({ crosshairData, symbol, structureSignal
         <div className={styles.dataPanel}>
           {crosshairData.time ? (
             <>
-              <Text size={10} tone="dim" as="p">{crosshairData.time}</Text>
+              <div className={styles.dataHeader} title="Hover over the chart to see OHLCV and indicator values at the crosshair position.">
+                <Text size={10} tone="dim">CROSSHAIR</Text>
+              </div>
+              <Text size={10} tone="dim" as="p">{formatBarTime(crosshairData.time)}</Text>
               {crosshairData.open !== undefined && (
                 <div className={styles.ohlcv}>
-                  <span>O <b>{crosshairData.open?.toFixed(2)}</b></span>
-                  <span>H <b>{crosshairData.high?.toFixed(2)}</b></span>
-                  <span>L <b>{crosshairData.low?.toFixed(2)}</b></span>
-                  <span>C <b>{crosshairData.close?.toFixed(2)}</b></span>
+                  <span title="Open"><b>O</b> {crosshairData.open?.toFixed(2)}</span>
+                  <span title="High"><b>H</b> {crosshairData.high?.toFixed(2)}</span>
+                  <span title="Low"><b>L</b> {crosshairData.low?.toFixed(2)}</span>
+                  <span title="Close"><b>C</b> {crosshairData.close?.toFixed(2)}</span>
                 </div>
               )}
-              {Object.entries(crosshairData.indicators).map(([id, val]) => (
-                <div key={id} className={styles.indicatorVal}>
-                  <Text size={10} tone="secondary">{id}</Text>
-                  <Text size={10} tone="primary">{val.toFixed(4)}</Text>
-                </div>
-              ))}
+              {Object.entries(crosshairData.indicators)
+                .filter(([id]) => !id.startsWith('candles-'))
+                .map(([id, val]) => (
+                  <div key={id} className={styles.indicatorVal}>
+                    <Text size={10} tone="secondary">{indicatorLabels[id] ?? id.split('-')[0]}</Text>
+                    <Text size={10} tone="primary">{val.toFixed(2)}</Text>
+                  </div>
+                ))
+              }
               {structureSignals && structureSignals.length > 0 && (
                 <div className={styles.structureSection}>
                   <div className={styles.structureHeader}>
