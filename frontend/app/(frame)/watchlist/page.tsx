@@ -236,6 +236,7 @@ export default function WatchlistPage() {
                   >
                     <WatchStar symbol={row.symbol} size="sm" />
                     <button
+                      type="button"
                       className={styles.chartBtn}
                       title="Open in Chart"
                       onClick={(e) => { e.stopPropagation(); router.push(`/chart?symbol=${row.symbol}`); }}
