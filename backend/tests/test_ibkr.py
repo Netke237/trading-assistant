@@ -213,3 +213,67 @@ def test_fetch_iv_metrics_gateway_down():
         result = ibkr_mod.fetch_iv_metrics_ibkr("AAPL")
 
     assert result is None
+
+
+# ── New tests (Minor #5, #6, #7) ─────────────────────────────────────────────
+
+
+def test_conid_fallback_no_stk_section():
+    """Returns conid from first result when no entry has an STK section."""
+    _reset_caches()
+    # No "sections" key at all — should still return the conid from first entry
+    secdef_resp = _mock_response([{"conid": "77777"}])
+
+    with patch("app.data.ibkr.httpx.post", return_value=secdef_resp):
+        result = ibkr_mod._conid("MSFT")
+
+    assert result == 77777
+    assert isinstance(result, int)
+
+
+def test_fetch_intraday_ibkr_4h_resamples():
+    """fetch_intraday_ibkr with '4h' resamples 1h bars; output has fewer bars."""
+    _reset_caches()
+
+    # 5 consecutive 1-hour bars (timestamps in ms, 1h apart)
+    base_ms = 1_700_000_000_000
+    one_hour_ms = 3_600_000
+    raw_bars = [
+        {"t": base_ms + i * one_hour_ms, "o": 100.0, "h": 102.0, "l": 99.0, "c": 101.0, "v": 500}
+        for i in range(5)
+    ]
+    history_resp = _mock_response({"data": raw_bars})
+
+    def _mock_get(url, **kwargs):
+        if "auth/status" in url:
+            return _mock_response({"authenticated": True})
+        return history_resp
+
+    def _mock_post(url, **kwargs):
+        if "tickle" in url:
+            return _mock_response({})
+        return _mock_response([{"conid": "99", "sections": [{"secType": "STK"}]}])
+
+    with patch("app.data.ibkr.httpx.get", side_effect=_mock_get), \
+         patch("app.data.ibkr.httpx.post", side_effect=_mock_post):
+        result = ibkr_mod.fetch_intraday_ibkr("AAPL", "4h", 180)
+
+    # 5 input 1h bars → 1 or 2 resampled 4h bars (fewer than 5)
+    assert len(result) < 5
+    assert len(result) >= 1
+    for bar in result:
+        assert set(bar.keys()) == {"time", "open", "high", "low", "close", "volume"}
+
+
+def test_conid_caches_failure():
+    """_conid caches failures as sentinel; second call does NOT fire HTTP again."""
+    _reset_caches()
+
+    with patch("app.data.ibkr.httpx.post", side_effect=Exception("timeout")) as mock_post:
+        r1 = ibkr_mod._conid("BAD")
+        r2 = ibkr_mod._conid("BAD")
+
+    assert r1 is None
+    assert r2 is None
+    # HTTP should only have been called ONCE; second call hit the sentinel in cache
+    mock_post.assert_called_once()

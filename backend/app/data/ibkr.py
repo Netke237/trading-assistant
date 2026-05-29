@@ -9,9 +9,9 @@ certificate — all requests use verify=False.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import warnings
-from typing import Optional
 
 import httpx
 import urllib3
@@ -30,7 +30,13 @@ _auth_cache: dict | None = None
 _AUTH_TTL = 60.0  # seconds
 
 # conid cache: symbol → int (permanent for process lifetime)
+# -1 is the failure sentinel (CONID_MISS_SENTINEL): symbol resolved but no conid found
 _conid_cache: dict[str, int] = {}
+CONID_MISS_SENTINEL = -1
+
+# Locks for thread-safe read-check-write on caches
+_auth_lock = threading.Lock()
+_conid_lock = threading.Lock()
 
 
 # ── Authentication / keep-alive ──────────────────────────────────────────────
@@ -45,8 +51,9 @@ def ibkr_available() -> bool:
     global _auth_cache
 
     now = time.monotonic()
-    if _auth_cache is not None and now < _auth_cache["expires"]:
-        return _auth_cache["result"]
+    with _auth_lock:
+        if _auth_cache is not None and now < _auth_cache["expires"]:
+            return _auth_cache["result"]
 
     try:
         resp = httpx.get(
@@ -58,10 +65,12 @@ def ibkr_available() -> bool:
         authenticated = bool(resp.json().get("authenticated", False))
     except Exception as exc:
         logger.debug("IBKR auth check failed: %s", exc)
-        _auth_cache = {"result": False, "expires": now + _AUTH_TTL}
+        with _auth_lock:
+            _auth_cache = {"result": False, "expires": now + _AUTH_TTL}
         return False
 
-    _auth_cache = {"result": authenticated, "expires": now + _AUTH_TTL}
+    with _auth_lock:
+        _auth_cache = {"result": authenticated, "expires": now + _AUTH_TTL}
 
     if authenticated:
         # Fire-and-forget keep-alive
@@ -77,9 +86,15 @@ def ibkr_available() -> bool:
 
 
 def _conid(symbol: str) -> int | None:
-    """Resolve symbol to IBKR contract ID. Results cached permanently in-process."""
-    if symbol in _conid_cache:
-        return _conid_cache[symbol]
+    """Resolve symbol to IBKR contract ID. Results cached permanently in-process.
+
+    Failures are cached as CONID_MISS_SENTINEL (-1) to prevent repeated gateway
+    hammering when a symbol cannot be resolved.
+    """
+    with _conid_lock:
+        cached = _conid_cache.get(symbol)
+    if cached is not None:  # covers both real conids and the sentinel
+        return None if cached == CONID_MISS_SENTINEL else cached
 
     try:
         resp = httpx.post(
@@ -91,10 +106,12 @@ def _conid(symbol: str) -> int | None:
         resp.raise_for_status()
         results = resp.json()
         if not results or not isinstance(results, list):
+            with _conid_lock:
+                _conid_cache[symbol] = CONID_MISS_SENTINEL
             return None
 
         # Try to find a result with STK in sections; otherwise take the first
-        conid_val: Optional[int] = None
+        conid_val: int | None = None
         for entry in results:
             sections = entry.get("sections", [])
             has_stk = any(
@@ -110,10 +127,17 @@ def _conid(symbol: str) -> int | None:
                     conid_val = int(raw_conid)
 
         if conid_val is not None:
-            _conid_cache[symbol] = conid_val
-        return conid_val
+            with _conid_lock:
+                _conid_cache[symbol] = conid_val
+            return conid_val
+
+        with _conid_lock:
+            _conid_cache[symbol] = CONID_MISS_SENTINEL
+        return None
     except Exception as exc:
         logger.debug("IBKR conid lookup failed for %s: %s", symbol, exc)
+        with _conid_lock:
+            _conid_cache[symbol] = CONID_MISS_SENTINEL
         return None
 
 
@@ -198,12 +222,18 @@ def fetch_intraday_ibkr(symbol: str, interval: str, lookback: int) -> list[dict]
             t = item.get("t")
             if t is None:
                 continue
+            o = item.get("o")
+            h = item.get("h")
+            l = item.get("l")
+            c = item.get("c")
+            if any(v is None for v in (o, h, l, c)):
+                continue
             bars.append({
                 "time":   int(t / 1000),
-                "open":   round(float(item.get("o", 0)), 4),
-                "high":   round(float(item.get("h", 0)), 4),
-                "low":    round(float(item.get("l", 0)), 4),
-                "close":  round(float(item.get("c", 0)), 4),
+                "open":   round(float(o), 4),
+                "high":   round(float(h), 4),
+                "low":    round(float(l), 4),
+                "close":  round(float(c), 4),
                 "volume": int(item.get("v", 0)),
             })
 
