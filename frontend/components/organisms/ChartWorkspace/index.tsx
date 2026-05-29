@@ -254,7 +254,6 @@ export default function ChartWorkspace() {
         wsError={wsError}
       />
       {showIndicators && <IndicatorPanel onClose={() => setShowIndicators(false)} />}
-      {showStructure && <StructurePanel onClose={() => setShowStructure(false)} />}
       <div className={styles.body}>
         <DrawingToolbar active={drawingTool} onChange={setDrawingTool} />
         <div className={styles.charts}>
@@ -272,6 +271,7 @@ export default function ChartWorkspace() {
               visibility={structureVisibility}
               visible={structureVisible}
             />
+            {showStructure && <StructurePanel onClose={() => setShowStructure(false)} />}
           </div>
           {subPanes.map(({ id, series }) => (
             <ChartPane key={id} series={series} height={100} />
