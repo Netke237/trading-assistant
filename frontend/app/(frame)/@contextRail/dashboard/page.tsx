@@ -86,7 +86,7 @@ export default function DashboardContextRail() {
         )}
       </RailSection>
 
-      <RailSection title="Upcoming Events (30d)">
+      <RailSection title="Upcoming Events">
         <div className={styles.eventStack}>
           {events.slice(0, 5).map((e) => (
             <div key={`${e.date}-${e.symbol}`} className={styles.eventRow}>
