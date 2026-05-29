@@ -45,12 +45,39 @@ function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chart
     }
     if (ind.type === 'BB') {
       const bb = calcBB(candles, ind.params.period ?? 20, ind.params.stdDev ?? 2);
-      series.push({ id: `${ind.id}-upper`, type: 'Line', data: bb.upper, color: ind.color });
-      series.push({ id: `${ind.id}-mid`,   type: 'Line', data: bb.middle, color: ind.color });
-      series.push({ id: `${ind.id}-lower`, type: 'Line', data: bb.lower, color: ind.color });
+      series.push({ id: `${ind.id}-upper`, type: 'Line', data: bb.upper,  color: '#4caf50' }); // green
+      series.push({ id: `${ind.id}-mid`,   type: 'Line', data: bb.middle, color: '#2196f3' }); // blue
+      series.push({ id: `${ind.id}-lower`, type: 'Line', data: bb.lower,  color: '#f44336' }); // red
     }
   }
   return series;
+}
+
+function buildIndicatorLabels(indicators: IndicatorConfig[]): Record<string, string> {
+  const labels: Record<string, string> = {};
+  for (const ind of indicators) {
+    const period = ind.params?.period;
+    const p = period ? `(${period})` : '';
+    if (ind.type === 'SMA')  labels[ind.id] = `SMA${p}`;
+    if (ind.type === 'EMA')  labels[ind.id] = `EMA${p}`;
+    if (ind.type === 'VWAP') labels[ind.id] = 'VWAP';
+    if (ind.type === 'RSI')  labels[ind.id] = `RSI${p}`;
+    if (ind.type === 'ATR')  labels[ind.id] = `ATR${p}`;
+    if (ind.type === 'BB') {
+      labels[`${ind.id}-upper`] = 'BB Upper';
+      labels[`${ind.id}-mid`]   = 'BB Mid';
+      labels[`${ind.id}-lower`] = 'BB Lower';
+    }
+    if (ind.type === 'MACD') {
+      labels[`${ind.id}-line`] = 'MACD';
+      labels[`${ind.id}-sig`]  = 'Signal';
+      labels[`${ind.id}-hist`] = 'Histogram';
+    }
+    if (ind.type === 'VOL') labels[`${ind.id}-vol`] = 'Volume';
+    // candle series id
+    labels[`candles-${ind.type}`] = 'Close'; // fallback for candles
+  }
+  return labels;
 }
 
 function buildSubSeries(candles: Candle[], ind: IndicatorConfig): SeriesConfig[] {
@@ -244,6 +271,11 @@ export default function ChartWorkspace() {
     [candles, activeIndicators],
   );
 
+  const indicatorLabels = useMemo(
+    () => buildIndicatorLabels(activeIndicators),
+    [activeIndicators],
+  );
+
   return (
     <div className={styles.workspace}>
       <ChartTopBar
@@ -254,7 +286,6 @@ export default function ChartWorkspace() {
         wsError={wsError}
       />
       {showIndicators && <IndicatorPanel onClose={() => setShowIndicators(false)} />}
-      {showStructure && <StructurePanel onClose={() => setShowStructure(false)} />}
       <div className={styles.body}>
         <DrawingToolbar active={drawingTool} onChange={setDrawingTool} />
         <div className={styles.charts}>
@@ -272,12 +303,13 @@ export default function ChartWorkspace() {
               visibility={structureVisibility}
               visible={structureVisible}
             />
+            {showStructure && <StructurePanel onClose={() => setShowStructure(false)} />}
           </div>
           {subPanes.map(({ id, series }) => (
             <ChartPane key={id} series={series} height={100} />
           ))}
         </div>
-        <ChartRightPanel crosshairData={crosshair} symbol={symbol} structureSignals={structureSignals} />
+        <ChartRightPanel crosshairData={crosshair} symbol={symbol} structureSignals={structureSignals} indicatorLabels={indicatorLabels} />
       </div>
       {showAlerts && <AlertRuleBuilder onClose={() => setShowAlerts(false)} />}
       <AlertToast />

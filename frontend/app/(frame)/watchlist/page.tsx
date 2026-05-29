@@ -31,7 +31,7 @@ type SortKey = 'score' | 'symbol' | 'price' | 'rank' | 'scoreDelta';
 type SortDir = 'asc' | 'desc';
 type ContractSortKey = 'score' | 'dte' | 'price';
 
-const COLUMNS          = '32px 72px 1.4fr 90px 80px 80px 90px 80px 60px 90px';
+const COLUMNS          = '32px 28px 72px 1.4fr 90px 80px 80px 90px 80px 60px 90px';
 const CONTRACT_COLUMNS = '28px 72px 1.3fr 120px 80px 72px 80px 80px 100px';
 
 export default function WatchlistPage() {
@@ -213,6 +213,7 @@ export default function WatchlistPage() {
             <div className={styles.tableWrap}>
               <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
                 <span aria-hidden />
+                <span aria-hidden />
                 <SortBtn label="SYMBOL"     active={sortKey === 'symbol'} dir={sortDir} onClick={() => toggleSort('symbol')} />
                 <Text size={11} tone="dim">NAME</Text>
                 <SortBtn label="PRICE"      active={sortKey === 'price'}  dir={sortDir} onClick={() => toggleSort('price')}  align="right" />
@@ -235,6 +236,7 @@ export default function WatchlistPage() {
                   >
                     <WatchStar symbol={row.symbol} size="sm" />
                     <button
+                      type="button"
                       className={styles.chartBtn}
                       title="Open in Chart"
                       onClick={(e) => { e.stopPropagation(); router.push(`/chart?symbol=${row.symbol}`); }}

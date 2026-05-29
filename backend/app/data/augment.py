@@ -43,5 +43,6 @@ def _augment(c: dict, stock_price: float = 0.0) -> dict:
         "bid": round(max(0.01, mid - spread / 2), 2),
         "ask": round(mid + spread / 2, 2),
         "delta": delta,
-        "iv_rank": int(c.get("ivRank", 0)),   # snake_case alias for contract_validator
+        "iv_rank":       round(float(c.get("ivRank", 0)), 1),       # snake_case alias for contract_validator
+        "iv_percentile": round(float(c.get("ivPercentile", 0)), 1),  # forwarded for future scoring rules
     }

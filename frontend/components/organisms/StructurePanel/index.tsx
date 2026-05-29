@@ -48,7 +48,16 @@ export default function StructurePanel({ onClose }: Props) {
       <div className={styles.list}>
         {SIGNAL_ORDER.map((kind) => (
           <div key={kind} className={styles.row}>
-            <span className={styles.label}>{SIGNAL_LABELS[kind]}</span>
+            <div className={styles.labelGroup}>
+              <span className={styles.label}>{SIGNAL_LABELS[kind]}</span>
+              {kind === 'Confluence' && (
+                <span
+                  className={styles.info}
+                  title="A zone where multiple signals (FVG, Order Block, Fibonacci) overlap — a stronger indication than any single pattern alone."
+                  aria-label="What is Confluence?"
+                >?</span>
+              )}
+            </div>
             <button
               className={`${styles.toggle} ${visibility[kind] ? styles.toggleOn : ''}`}
               onClick={() => toggleKind(kind)}

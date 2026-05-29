@@ -11,6 +11,7 @@ export interface ZoneSignal {
   mitigated: boolean;
   confidence: number;
   mtf_aligned: boolean;
+  multi_tf?: boolean;
 }
 
 export interface LineSignal {
@@ -20,6 +21,8 @@ export interface LineSignal {
   price: number;
   confidence: number;
   mtf_aligned: boolean;
+  time_end?: string | null;
+  multi_tf?: boolean;
 }
 
 export interface DivergenceSignal {

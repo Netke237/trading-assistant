@@ -18,13 +18,18 @@ class BOSRenderer implements IPrimitivePaneRenderer {
   ) {}
 
   draw(target: CanvasRenderingTarget2D): void {
-    target.useMediaCoordinateSpace(({ mediaSize, context: ctx }) => {
+    target.useMediaCoordinateSpace(({ context: ctx }) => {
       const toX = (t: string) => this.chart.timeScale().timeToCoordinate(t as Time);
       const toY = (p: number) => this.series.priceToCoordinate(p);
 
-      const x = toX(this.signal.time);
+      const xStart = toX(this.signal.time);
       const y = toY(this.signal.price);
-      if (x === null || y === null) return;
+      if (xStart === null || y === null) return;
+
+      // Use time_end if provided, else extend a fixed 200px from signal
+      const xEnd = this.signal.time_end
+        ? (toX(this.signal.time_end) ?? (xStart + 200))
+        : (xStart + 200);
 
       const isBullish = this.signal.direction === 'bullish';
       const isCHoCH = this.signal.kind === 'CHoCH';
@@ -34,15 +39,15 @@ class BOSRenderer implements IPrimitivePaneRenderer {
       ctx.lineWidth = this.signal.mtf_aligned ? 3 : 2;
       ctx.setLineDash([6, 3]);
       ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(mediaSize.width, y);
+      ctx.moveTo(xStart, y);
+      ctx.lineTo(xEnd, y);
       ctx.stroke();
       ctx.setLineDash([]);
 
       const label = this.signal.kind;
       ctx.font = '10px sans-serif';
       ctx.fillStyle = color;
-      ctx.fillText(label, mediaSize.width - 60, y - 4);
+      ctx.fillText(label, xStart + 4, y - 4);
     });
   }
 }

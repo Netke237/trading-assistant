@@ -12,3 +12,6 @@ notifications:
     enabled: false
 scan:
   cadence_minutes: 60
+ibkr:
+  enabled: true
+  base_url: https://localhost:5000/v1/api

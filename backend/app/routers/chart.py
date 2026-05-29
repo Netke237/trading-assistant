@@ -37,6 +37,13 @@ async def stream(
 
     try:
         candles = await get_intraday(symbol, interval)
+        if not candles:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"No chart data available for {symbol} at interval {interval}. "
+                           "Try a different timeframe or check the symbol.",
+            })
+            return
         await websocket.send_json({"type": "history", "candles": candles})
 
         # Phase 2: fetch higher timeframe candles for MTF alignment (1h → 1D)
@@ -103,7 +110,10 @@ async def stream(
     except Exception as exc:
         logger.error("WS error for %s: %s", symbol, exc)
         try:
-            await websocket.send_json({"type": "error", "message": str(exc)})
+            await websocket.send_json({
+                "type": "error",
+                "message": f"Chart stream error for {symbol}. Please try again.",
+            })
         except Exception:
             pass
     finally:

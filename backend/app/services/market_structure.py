@@ -93,6 +93,7 @@ def detect_fvg(candles: list[dict]) -> list[dict]:
                 "price_low": c0["high"], "price_high": c2["low"],
                 "mitigated": False, "confidence": confidence,
                 "mtf_aligned": False,
+                "multi_tf": False,
             })
         # Bearish FVG: c0.low > c2.high
         elif c0["low"] > c2["high"]:
@@ -104,6 +105,7 @@ def detect_fvg(candles: list[dict]) -> list[dict]:
                 "price_low": c2["high"], "price_high": c0["low"],
                 "mitigated": False, "confidence": confidence,
                 "mtf_aligned": False,
+                "multi_tf": False,
             })
     # Mark mitigated: price returns to gap after pattern completes (skip c0, c1, c2)
     for sig in signals:
@@ -154,10 +156,12 @@ def detect_bos_choch(candles: list[dict], lookback: int = 5) -> list[dict]:
             kind = "CHoCH" if trend == "down" else "BOS"
             confidence = _bos_confidence(candles, i)
             if kind != "BOS" or not _is_duplicate_bos(signals, recent_high["price"], "bullish"):
+                _end_idx = min(i + 30, len(candles) - 1)
                 signals.append({
                     "kind": kind, "direction": "bullish",
                     "time": c["time"], "price": recent_high["price"],
                     "confidence": confidence, "mtf_aligned": False,
+                    "time_end": candles[_end_idx]["time"],
                 })
             trend = "up"
 
@@ -171,10 +175,12 @@ def detect_bos_choch(candles: list[dict], lookback: int = 5) -> list[dict]:
             kind = "CHoCH" if trend == "up" else "BOS"
             confidence = _bos_confidence(candles, i)
             if kind != "BOS" or not _is_duplicate_bos(signals, recent_low["price"], "bearish"):
+                _end_idx = min(i + 30, len(candles) - 1)
                 signals.append({
                     "kind": kind, "direction": "bearish",
                     "time": c["time"], "price": recent_low["price"],
                     "confidence": confidence, "mtf_aligned": False,
+                    "time_end": candles[_end_idx]["time"],
                 })
             trend = "down"
 
@@ -557,11 +563,14 @@ def compute_confluence(signals: list[dict]) -> list[dict]:
 
 def _mtf_align(signals: list[dict], ht_candles: list[dict] | None) -> list[dict]:
     """Set mtf_aligned=True when signal direction matches higher-timeframe trend.
+    Also set multi_tf=True for FVG signals whose price range overlaps an HTF FVG.
 
     Higher timeframe trend: close[-1] > SMA(20) = bullish, else bearish.
     """
     if not ht_candles or len(ht_candles) < 21:
         return signals
+
+    # Existing SMA20 trend logic (unchanged)
     close_prices = [c["close"] for c in ht_candles[-20:]]
     sma20 = sum(close_prices) / 20
     ht_trend = "up" if close_prices[-1] > sma20 else "down"
@@ -571,6 +580,28 @@ def _mtf_align(signals: list[dict], ht_candles: list[dict] | None) -> list[dict]
             s["mtf_aligned"] = True
         elif s_direction == "bearish" and ht_trend == "down":
             s["mtf_aligned"] = True
+
+    # NEW: Multi-timeframe FVG overlap detection
+    if len(ht_candles) >= 3:
+        ht_fvgs = detect_fvg(ht_candles)
+        for s in signals:
+            if s.get("kind") != "FVG":
+                continue
+            s_low = s.get("price_low", 0)
+            s_high = s.get("price_high", 0)
+            s_direction = s.get("direction")
+            for ht_fvg in ht_fvgs:
+                if ht_fvg.get("mitigated"):
+                    continue   # skip already-mitigated HTF FVGs
+                if ht_fvg.get("direction") != s_direction:
+                    continue   # must be same direction
+                ht_low = ht_fvg.get("price_low", 0)
+                ht_high = ht_fvg.get("price_high", 0)
+                # Price range overlap: ranges overlap if max(low) < min(high)
+                if max(s_low, ht_low) < min(s_high, ht_high):
+                    s["multi_tf"] = True
+                    break       # one overlap is enough
+
     return signals
 
 

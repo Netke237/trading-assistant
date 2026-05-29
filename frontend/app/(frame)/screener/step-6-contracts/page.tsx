@@ -54,7 +54,8 @@ export default function Step6Page() {
   const { maxContractsPerChain, maxContractPrice } = useSettingsStore();
   const scanResult              = useScanStore((s) => s.scanResult);
   const context                 = useScanStore((s) => s.context);
-  const candidates              = useScanStore((s) => s.scanResult?.candidates ?? []);
+  const rawCandidates           = useScanStore((s) => s.scanResult?.candidates);
+  const candidates              = rawCandidates ?? [];
   const pickedContracts         = useScanStore((s) => s.pickedContracts);
   const setPickedContract       = useScanStore((s) => s.setPickedContract);
   const setContractsBySymbol    = useScanStore((s) => s.setContractsBySymbol);
@@ -88,7 +89,7 @@ export default function Step6Page() {
       })
       .catch(() => setOffline(true));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidates]);
+  }, [rawCandidates]);
 
   const toggleSort = (k: SortKey) => {
     if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -107,6 +108,13 @@ export default function Step6Page() {
           Scored by DTE fit, delta, IV attractiveness, liquidity and spread. Click a stock to
           expand its chain. Click a column header to sort. Star a contract to track it.
         </Text>
+        <button
+          type="button"
+          className={styles.backLink}
+          onClick={() => router.push('/screener/step-4-ranking')}
+        >
+          &larr; Back to Ranking
+        </button>
       </div>
 
       {offline && (
@@ -193,7 +201,7 @@ export default function Step6Page() {
                               <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>${c.price.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>{c.ivRank}</Data>
-                              <Data size={12} className={tbl.right}>{c.ivPercentile}</Data>
+                              <Data size={12} className={tbl.right}>{c.ivPercentile || '—'}</Data>
                               <Data size={12} className={tbl.right}>{c.theta.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>${c.spread.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>{c.volume.toLocaleString()}</Data>
@@ -236,7 +244,7 @@ export default function Step6Page() {
                               <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>${c.price.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>{c.ivRank}</Data>
-                              <Data size={12} className={tbl.right}>{c.ivPercentile}</Data>
+                              <Data size={12} className={tbl.right}>{c.ivPercentile || '—'}</Data>
                               <Data size={12} className={tbl.right}>{c.theta.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>${c.spread.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>{c.volume.toLocaleString()}</Data>
