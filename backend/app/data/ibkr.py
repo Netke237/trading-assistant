@@ -162,7 +162,7 @@ def _map_interval(interval: str, lookback: int) -> tuple[str, str]:
         return "5d", "15min"
 
     if iv in ("1h", "60m"):
-        return "1M", "1h"
+        return "3M", "1h"
 
     if iv == "4h":
         # Fetch 1h bars, resample to 4h in the caller

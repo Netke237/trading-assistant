@@ -408,6 +408,7 @@ async def _process_symbol(
             delta=float(contract.get("delta", 0.45)),
             theta=float(contract.get("theta", -0.05)),
             ivRank=int(contract.get("ivRank", 50)),
+            ivPercentile=int(contract.get("ivPercentile", 0) or 0),
             dte=int(contract.get("dte", 30)),
         ),
         entry=TradeEntry(

@@ -247,7 +247,10 @@ def detect_order_blocks(candles: list[dict], bos_signals: list[dict] | None = No
                     "mtf_aligned": False,
                 })
 
-    # Mark mitigated order blocks
+    # Mark mitigated order blocks.
+    # A bullish OB is mitigated when a candle closes below its low (price breaks through).
+    # A bearish OB is mitigated when a candle closes above its high.
+    # Merely touching the zone does not count — that is a normal OB interaction.
     for sig in signals:
         start_idx = None
         for i, c in enumerate(candles):
@@ -256,7 +259,11 @@ def detect_order_blocks(candles: list[dict], bos_signals: list[dict] | None = No
                 break
         if start_idx is not None:
             for c in candles[start_idx + 1:]:
-                if c["low"] <= sig["price_high"] and c["high"] >= sig["price_low"]:
+                if sig["direction"] == "bullish" and c["close"] < sig["price_low"]:
+                    sig["mitigated"] = True
+                    sig["time_end"] = c["time"]
+                    break
+                if sig["direction"] == "bearish" and c["close"] > sig["price_high"]:
                     sig["mitigated"] = True
                     sig["time_end"] = c["time"]
                     break
