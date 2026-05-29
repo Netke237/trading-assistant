@@ -49,3 +49,35 @@ async def test_ws_sends_history_on_connect():
                     msg = ws.receive_json()
                     assert msg["type"] == "history"
                     assert len(msg["candles"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_stream_empty_candles_sends_error():
+    """WebSocket sends error message when get_intraday returns empty list."""
+    with patch("app.routers.chart.get_intraday", return_value=[]):
+        with patch("app.routers.chart.get_stream_client") as mock_sc:
+            mock_sc.return_value.subscribe = AsyncMock(return_value=None)
+            mock_sc.return_value.unsubscribe = lambda *a: None
+
+            from starlette.testclient import TestClient
+            with TestClient(app) as client:
+                with client.websocket_connect("/chart/stream/CLX?interval=4h") as ws:
+                    msg = ws.receive_json()
+                    assert msg["type"] == "error"
+                    assert "No chart data" in msg["message"]
+
+
+@pytest.mark.asyncio
+async def test_stream_exception_sends_friendly_error():
+    """WebSocket sends friendly error message without exposing raw exception text."""
+    with patch("app.routers.chart.get_intraday", side_effect=Exception("internal boom")):
+        with patch("app.routers.chart.get_stream_client") as mock_sc:
+            mock_sc.return_value.subscribe = AsyncMock(return_value=None)
+            mock_sc.return_value.unsubscribe = lambda *a: None
+
+            from starlette.testclient import TestClient
+            with TestClient(app) as client:
+                with client.websocket_connect("/chart/stream/AAPL?interval=15min") as ws:
+                    msg = ws.receive_json()
+                    assert msg["type"] == "error"
+                    assert "boom" not in msg["message"]
