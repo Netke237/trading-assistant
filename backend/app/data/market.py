@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import io
 import logging
 import os
 import time as _time
@@ -85,37 +87,105 @@ def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
         return []
 
 
+# Tradier timesales only supports these intraday intervals.
+_TRADIER_INTRADAY_INTERVALS = {"1min", "5min", "15min"}
+
+# Maps our internal interval names to yfinance interval codes.
+_YF_INTERVAL_MAP: dict[str, str] = {
+    "1min":  "1m",
+    "5min":  "5m",
+    "15min": "15m",
+    "30min": "30m",
+    "1h":    "1h",
+    "4h":    "4h",    # fetched as 1h, resampled in _fetch_intraday_yf
+    "daily": "1d",
+    "weekly": "1wk",
+}
+
+# Maximum calendar days yfinance can return per interval.
+_YF_MAX_DAYS: dict[str, int] = {
+    "1m":  7,
+    "5m":  55, "15m": 55, "30m": 55, "90m": 55,
+    "1h":  730, "60m": 730,
+    "4h":  730,   # fetched as 1h then resampled
+    "1d":  3650,  # yfinance daily goes back ~10 years
+    "1wk": 3650,
+}
+
+
+def _resample_bars(bars: list[dict], target_minutes: int) -> list[dict]:
+    """Aggregate OHLCV bars to a coarser interval via pandas resample."""
+    if not bars:
+        return []
+    df = pd.DataFrame(bars)
+    df["time"] = pd.to_datetime(df["time"], unit="s", utc=True)
+    df = df.set_index("time")
+    rule = f"{target_minutes}min"
+    resampled = (
+        df.resample(rule, origin="epoch")
+        .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
+        .dropna(subset=["open", "close"])
+    )
+    return [
+        {
+            "time":   int(ts.timestamp()),
+            "open":   round(float(row["open"]),   4),
+            "high":   round(float(row["high"]),   4),
+            "low":    round(float(row["low"]),    4),
+            "close":  round(float(row["close"]),  4),
+            "volume": int(row["volume"]),
+        }
+        for ts, row in resampled.iterrows()
+    ]
+
+
 def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 55) -> list[dict]:
-    """yfinance fallback for intraday bars. Max 55 days for 15m resolution (hard cap 60; buffer 5)."""
+    """
+    Fetch intraday bars from yfinance.
+    - 15m / 5m / 30m: up to 55 calendar days
+    - 1h / 60m: up to 730 calendar days (2 years)
+    - 4h: fetched as 1h then resampled to 240-min bars (730 cal. days)
+    - 1m: up to 7 calendar days
+    """
+    if interval == "4h":
+        rows_1h = _fetch_intraday_yf(symbol, interval="1h", days=min(days, 730))
+        return _resample_bars(rows_1h, target_minutes=240)
+
+    max_days = _YF_MAX_DAYS.get(interval, 55)
+    capped_days = min(days, max_days)
     try:
         import yfinance as yf
-        capped_days = min(days, 55)
         _end = date.today()
         _start = _end - timedelta(days=capped_days)
-        df = yf.download(
-            symbol,
-            start=_start.isoformat(),
-            end=_end.isoformat(),
-            interval=interval,
-            progress=False,
-            auto_adjust=True,
-        )
+        _stderr_buf = io.StringIO()
+        with contextlib.redirect_stderr(_stderr_buf):
+            df = yf.download(
+                symbol,
+                start=_start.isoformat(),
+                end=_end.isoformat(),
+                interval=interval,
+                progress=False,
+                auto_adjust=True,
+            )
+        _yf_stderr = _stderr_buf.getvalue().strip()
+        if _yf_stderr:
+            logger.debug("yfinance stderr for %s [%s]: %s", symbol, interval, _yf_stderr[:200])
         if df is None or df.empty:
             return []
         # yfinance ≥1.1 returns MultiIndex columns (Price, Ticker) for single-ticker downloads
         if isinstance(df.columns, pd.MultiIndex):
             df = df.droplevel(1, axis=1)
-        rows = []
-        for ts, row in df.iterrows():
-            rows.append({
-                "time": int(ts.timestamp()),
+        return [
+            {
+                "time":   int(ts.timestamp()),
                 "open":   round(float(row["Open"]),   4),
                 "high":   round(float(row["High"]),   4),
                 "low":    round(float(row["Low"]),    4),
                 "close":  round(float(row["Close"]),  4),
                 "volume": int(row["Volume"]),
-            })
-        return rows
+            }
+            for ts, row in df.iterrows()
+        ]
     except Exception:
         return []
 
@@ -126,27 +196,33 @@ def fetch_intraday_candles(
     days: int = 55,
 ) -> list[dict]:
     """
-    Returns intraday OHLCV bars. Tries Tradier first, falls back to yfinance.
-    interval: '1min' | '5min' | '15min' (default 15min)
-    days: lookback in calendar days (default 55 — yfinance hard cap is 60d for 15m)
-    Returns [] only if all sources fail; returns partial results if any bars were fetched.
+    Returns intraday OHLCV bars merged from Tradier + yfinance.
+
+    Expected history per interval:
+      15min → ~60 calendar days  (Tradier ≤55d + yfinance ≤55d, overlap removed)
+      1h    → ~730 calendar days (yfinance only; Tradier doesn't support 1h timesales)
+      4h    → ~730 calendar days (yfinance 1h resampled to 4h; Tradier unsupported)
+      1min  → ~7 calendar days   (yfinance cap)
+
+    Tradier bars take precedence on timestamp conflicts (more accurate for recent data).
+    Returns [] only when both sources fail.
     """
     logger.info("Fetching intraday %s %s days=%s", symbol, interval, days)
-    capped_days = min(days, 55)
 
-    if TRADIER_TOKEN:
+    # ── Tradier (only for supported intervals) ───────────────────────────────
+    tradier_rows: list[dict] = []
+    if TRADIER_TOKEN and interval in _TRADIER_INTRADAY_INTERVALS:
         try:
             end = date.today()
-            start = end - timedelta(days=capped_days)
+            start = end - timedelta(days=min(days, 55))
             resp = httpx.get(
                 f"{TRADIER_BASE_URL}/v1/markets/timesales",
                 headers=_headers(),
                 params={
-                    "symbol": symbol,
-                    "interval": interval,
-                    "start": start.isoformat(),
-                    "end": end.isoformat(),
-                    # Use "all" instead of "open" — "open" silently drops bars during off-hours
+                    "symbol":         symbol,
+                    "interval":       interval,
+                    "start":          start.isoformat(),
+                    "end":            end.isoformat(),
                     "session_filter": "all",
                 },
                 timeout=30,
@@ -157,7 +233,6 @@ def fetch_intraday_candles(
                 data = series.get("data", [])
                 if isinstance(data, dict):
                     data = [data]
-                rows = []
                 for d in data:
                     raw_time = d.get("time", "")
                     try:
@@ -167,7 +242,7 @@ def fetch_intraday_candles(
                         unix_ts = int(dt.timestamp())
                     except (ValueError, TypeError):
                         unix_ts = 0
-                    rows.append({
+                    tradier_rows.append({
                         "time":   unix_ts,
                         "open":   round(float(d.get("open",   0)), 4),
                         "high":   round(float(d.get("high",   0)), 4),
@@ -175,26 +250,55 @@ def fetch_intraday_candles(
                         "close":  round(float(d.get("close",  0)), 4),
                         "volume": int(d.get("volume", 0)),
                     })
-                if rows:
-                    logger.info("Tradier returned %d intraday bars for %s", len(rows), symbol)
-                    if len(rows) >= 200:
-                        return rows
-                    logger.warning(
-                        "Tradier returned only %d bars for %s (free plan limit?) — trying yfinance for more",
-                        len(rows), symbol,
-                    )
-                else:
-                    logger.warning("Tradier returned 0 intraday bars for %s — falling back to yfinance", symbol)
+            if tradier_rows:
+                logger.info("Tradier returned %d bars for %s", len(tradier_rows), symbol)
             else:
-                logger.warning("Tradier timesales response had no 'series' for %s — falling back to yfinance", symbol)
+                logger.warning("Tradier returned 0 bars for %s", symbol)
         except Exception as exc:
-            logger.warning("Tradier intraday fetch failed for %s: %s — falling back to yfinance", symbol, exc)
+            logger.warning("Tradier intraday fetch failed for %s: %s", symbol, exc)
 
-    # yfinance fallback — hard cap 55 calendar days for 15m resolution
-    yf_interval = interval.replace("min", "m")  # "15min" → "15m"
-    rows = _fetch_intraday_yf(symbol, interval=yf_interval, days=capped_days)
-    logger.info("yfinance returned %d intraday bars for %s", len(rows), symbol)
-    return rows
+    # ── IBKR (for 1h/4h/daily/weekly and any interval beyond yfinance's window) ──
+    ibkr_rows: list[dict] = []
+    _ibkr_intervals = {"1h", "4h", "daily", "weekly"}
+    if interval in _ibkr_intervals:
+        try:
+            from .ibkr import fetch_intraday_ibkr
+            ibkr_rows = fetch_intraday_ibkr(symbol, interval, days)
+            if ibkr_rows:
+                logger.info("IBKR returned %d bars for %s [interval=%s]", len(ibkr_rows), symbol, interval)
+            else:
+                logger.debug("IBKR returned 0 bars for %s [interval=%s]", symbol, interval)
+        except Exception as exc:
+            logger.debug("IBKR fetch skipped for %s: %s", symbol, exc)
+
+    # ── yfinance (always; extended range for 1h/4h/daily/weekly) ─────────────
+    yf_interval = _YF_INTERVAL_MAP.get(interval, interval.replace("min", "m"))
+    yf_max = _YF_MAX_DAYS.get(yf_interval, 55)
+    yf_rows = _fetch_intraday_yf(symbol, interval=yf_interval, days=yf_max)
+    if yf_rows:
+        logger.info("yfinance returned %d bars for %s", len(yf_rows), symbol)
+    else:
+        logger.warning("yfinance returned 0 bars for %s [interval=%s]", symbol, yf_interval)
+
+    # ── Merge: yfinance baseline → IBKR → Tradier (highest priority) ─────────
+    if not tradier_rows and not ibkr_rows and not yf_rows:
+        logger.warning("No intraday data from any source for %s", symbol)
+        return []
+
+    merged: dict[int, dict] = {}
+    if yf_rows:
+        merged.update({b["time"]: b for b in yf_rows})
+    if ibkr_rows:
+        merged.update({b["time"]: b for b in ibkr_rows})   # IBKR overwrites yf
+    if tradier_rows:
+        merged.update({b["time"]: b for b in tradier_rows})  # Tradier overwrites all
+
+    result = sorted(merged.values(), key=lambda b: b["time"])
+    logger.info(
+        "Merged %d Tradier + %d IBKR + %d yf → %d total bars for %s",
+        len(tradier_rows), len(ibkr_rows), len(yf_rows), len(result), symbol,
+    )
+    return result
 
 
 def fetch_price(symbol: str) -> Optional[float]:
@@ -312,6 +416,17 @@ def fetch_option_chain(
                 "open_interest": oi,
                 "score": 0,
             })
+        # Enrich with IBKR IV Rank/Percentile if available
+        try:
+            from .ibkr import fetch_iv_metrics_ibkr
+            _ibkr_iv = fetch_iv_metrics_ibkr(symbol)
+            if _ibkr_iv:
+                for c in result:
+                    c["ivRank"] = round(_ibkr_iv["ivRank"], 1)
+                    c["ivPercentile"] = round(_ibkr_iv["ivPercentile"], 1)
+        except Exception:
+            pass  # keep existing fallback values
+
         zero_iv = sum(1 for c in result if c["ivRank"] == 0)
         if zero_iv > len(result) * 0.5 and result:
             yf_iv = _yf_iv_for_chain(symbol, target_exp, option_type == "C")
@@ -873,6 +988,17 @@ async def fetch_option_chain_async(
                 "open_interest": oi,
                 "score": 0,
             })
+        # Enrich with IBKR IV Rank/Percentile if available (async-safe via to_thread)
+        try:
+            from .ibkr import fetch_iv_metrics_ibkr
+            _ibkr_iv = await asyncio.to_thread(fetch_iv_metrics_ibkr, symbol)
+            if _ibkr_iv:
+                for c in result:
+                    c["ivRank"] = round(_ibkr_iv["ivRank"], 1)
+                    c["ivPercentile"] = round(_ibkr_iv["ivPercentile"], 1)
+        except Exception:
+            pass
+
         zero_iv = sum(1 for c in result if c["ivRank"] == 0)
         if zero_iv > len(result) * 0.5 and result:
             yf_iv = await asyncio.to_thread(_yf_iv_for_chain, symbol, target_exp, option_type == "C")
