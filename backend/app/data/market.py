@@ -139,6 +139,22 @@ def _resample_bars(bars: list[dict], target_minutes: int) -> list[dict]:
     ]
 
 
+def _days_to_yf_period(days: int) -> str:
+    """Convert a day count to a yfinance period string.
+
+    Using `period=` avoids explicit start/end date arithmetic and works
+    correctly regardless of the system clock being ahead of real-world time.
+    """
+    if days <= 7:   return "7d"
+    if days <= 30:  return "1mo"
+    if days <= 60:  return "60d"
+    if days <= 90:  return "3mo"
+    if days <= 180: return "6mo"
+    if days <= 365: return "1y"
+    if days <= 730: return "2y"
+    return "5y"
+
+
 def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 55) -> list[dict]:
     """
     Fetch intraday bars from yfinance.
@@ -146,6 +162,9 @@ def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 55) -> li
     - 1h / 60m: up to 730 calendar days (2 years)
     - 4h: fetched as 1h then resampled to 240-min bars (730 cal. days)
     - 1m: up to 7 calendar days
+
+    Uses period= parameter (not explicit start/end) to avoid failures when
+    the system clock is ahead of yfinance servers.
     """
     if interval == "4h":
         rows_1h = _fetch_intraday_yf(symbol, interval="1h", days=min(days, 730))
@@ -153,16 +172,14 @@ def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 55) -> li
 
     max_days = _YF_MAX_DAYS.get(interval, 55)
     capped_days = min(days, max_days)
+    period = _days_to_yf_period(capped_days)
     try:
         import yfinance as yf
-        _end = date.today()
-        _start = _end - timedelta(days=capped_days)
         _stderr_buf = io.StringIO()
         with contextlib.redirect_stderr(_stderr_buf):
             df = yf.download(
                 symbol,
-                start=_start.isoformat(),
-                end=_end.isoformat(),
+                period=period,
                 interval=interval,
                 progress=False,
                 auto_adjust=True,

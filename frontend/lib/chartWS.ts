@@ -24,6 +24,8 @@ export class ChartWSClient {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private backoff = 1000;
   private destroyed = false;
+  /** True after the server sends type:"error" (data unavailable). Stops auto-reconnect. */
+  private dataError = false;
   private handlers = new Set<MessageHandler>();
   private stateHandler?: (s: ConnectionState) => void;
 
@@ -34,25 +36,36 @@ export class ChartWSClient {
   ) {}
 
   connect(): void {
-    if (this.destroyed) return;
+    if (this.destroyed || this.dataError) return;
     this.stateHandler?.('connecting');
     const url = `${this.baseUrl}/chart/stream/${encodeURIComponent(this.symbol)}?interval=${this.interval}`;
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
-      this.backoff = 1000;
+      // Do NOT reset backoff here — the connection opens even when data is unavailable.
+      // Backoff only resets after a successful history load (see onmessage).
       this.stateHandler?.('connected');
     };
 
     this.ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data as string) as WSMessage;
+        if (msg.type === 'history') {
+          // Real data received — connection is healthy, reset backoff.
+          this.backoff = 1000;
+        }
+        if (msg.type === 'error') {
+          // Backend signals no data is available for this symbol/interval.
+          // Stop reconnecting so we don't hammer the server.
+          this.dataError = true;
+          this.stateHandler?.('error');
+        }
         this.handlers.forEach(h => h(msg));
       } catch { /* ignore malformed messages */ }
     };
 
     this.ws.onclose = () => {
-      if (!this.destroyed) {
+      if (!this.destroyed && !this.dataError) {
         this.stateHandler?.('reconnecting');
         this.timer = setTimeout(() => {
           this.backoff = Math.min(this.backoff * 2, 30_000);
@@ -62,7 +75,7 @@ export class ChartWSClient {
     };
 
     this.ws.onerror = () => {
-      this.stateHandler?.('error');
+      if (!this.dataError) this.stateHandler?.('error');
       this.ws?.close();
     };
   }

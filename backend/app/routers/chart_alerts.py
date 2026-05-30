@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
+import yaml
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, delete
@@ -25,6 +26,20 @@ from app.services.notifications.queue import enqueue
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/alerts', tags=['chart-alerts'])
+
+_SETTINGS_PATH = Path(__file__).parent.parent.parent / 'config' / 'settings.yaml'
+
+
+def _load_notification_config() -> dict:
+    """Read notification settings from settings.yaml (written by Settings → Notifications UI)."""
+    try:
+        if _SETTINGS_PATH.exists():
+            with open(_SETTINGS_PATH) as f:
+                cfg = yaml.safe_load(f) or {}
+                return cfg.get('notifications', {})
+    except Exception:
+        logger.debug('Could not load notification config', exc_info=True)
+    return {}
 
 
 # ── Pydantic request/response models ─────────────────────────────────────────
@@ -383,17 +398,25 @@ async def evaluate_and_notify_for_symbol(
 
             subject, plain_body, html_body = _build_notification_text(entry)
 
-            gmail_enabled = os.getenv('BAMENDJOU_GMAIL_ENABLED', 'false').lower() == 'true'
-            telegram_enabled = os.getenv('BAMENDJOU_TELEGRAM_ENABLED', 'false').lower() == 'true'
+            # Read notification settings from config file (set via Settings → Notifications UI)
+            _notif_cfg = _load_notification_config()
+            _gmail  = _notif_cfg.get('gmail', {})
+            _tg     = _notif_cfg.get('telegram', {})
 
-            if gmail_enabled:
+            if _gmail.get('enabled'):
                 await enqueue('gmail', {
-                    'to': os.getenv('BAMENDJOU_GMAIL_RECIPIENT', ''),
-                    'subject': subject,
-                    'body': plain_body,
+                    'to':            _gmail.get('to', ''),
+                    'subject':       subject,
+                    'body':          plain_body,
+                    'smtp_user':     _gmail.get('smtp_user', ''),
+                    'smtp_password': _gmail.get('smtp_password', ''),
                 })
-            if telegram_enabled:
-                await enqueue('telegram', {'text': html_body})
+            if _tg.get('enabled'):
+                await enqueue('telegram', {
+                    'bot_token': _tg.get('bot_token', ''),
+                    'chat_id':   _tg.get('chat_id', ''),
+                    'text':      html_body,
+                })
 
         await db.commit()
     return triggered
