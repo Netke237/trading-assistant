@@ -99,7 +99,7 @@ async def stream(
                                     "entry": entry,
                                 })
                         except Exception:
-                            logger.debug("Alert evaluation failed", exc_info=True)
+                            logger.warning("Alert evaluation failed", exc_info=True)
                     except Exception:
                         logger.debug("Failed to re-compute structure on candle close", exc_info=True)
             except asyncio.TimeoutError:

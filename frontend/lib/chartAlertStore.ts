@@ -21,7 +21,13 @@ interface ChartAlertState {
   addRule: (rule: AlertRule) => boolean;
   updateRule: (id: string, patch: Partial<AlertRule>) => void;
   deleteRule: (id: string) => void;
-  addHistory: (entry: AlertHistory) => void;
+  /**
+   * Add an alert history entry to the store.
+   * @param skipApiSync - set true when the entry comes from a backend
+   *   `alert_triggered` WebSocket message (backend already saved it to DB and
+   *   sent notifications; pushing again would create duplicates).
+   */
+  addHistory: (entry: AlertHistory, skipApiSync?: boolean) => void;
   clearHistory: () => void;
   dismissHistory: (id: string) => void;
   pushToast: (toast: ChartToast) => void;
@@ -125,7 +131,7 @@ export const useChartAlertStore = create<ChartAlertState>()(
         deleteRuleFromAPI(id);
       },
 
-      addHistory: (entry) => {
+      addHistory: (entry, skipApiSync = false) => {
         let added = false;
         set((s) => {
           // Dedup: skip if exact same id already present (cooldown handled by alert engine)
@@ -137,7 +143,11 @@ export const useChartAlertStore = create<ChartAlertState>()(
             newSinceView: s.newSinceView + 1,
           };
         });
-        if (added) pushHistoryToAPI(entry);
+        // Only push to API for locally-originated entries. Entries from the
+        // backend `alert_triggered` WebSocket message are already persisted and
+        // notified server-side — pushing again would create duplicate DB rows
+        // and fire duplicate email/telegram notifications.
+        if (added && !skipApiSync) pushHistoryToAPI(entry);
       },
 
       clearHistory: () => set({ history: [] }),

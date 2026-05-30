@@ -101,6 +101,11 @@ def _evaluate_condition(condition, closed_candle: dict, indicators: dict,
         if idx == -1:
             return False, trigger_values
         current_value = series[idx]['value']
+        # Indicator series returns None for warm-up candles (before EMA/RSI
+        # period is satisfied). Comparing None with a float raises TypeError —
+        # treat as condition not met rather than crashing the evaluator.
+        if current_value is None:
+            return False, trigger_values
         trigger_values[condition.indicator] = current_value
 
         if condition.operator == 'crosses_above':

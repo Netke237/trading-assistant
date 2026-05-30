@@ -37,6 +37,18 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.rowClickable {
+  cursor: pointer;
+}
+
+.rowClickable:hover {
+  background: var(--bg-hover);
+}
+
+.rowActive {
+  background: color-mix(in srgb, var(--pass) 10%, var(--bg-surface));
+}
+
 .empty { padding: 8px; }
 
 .dataPanel { padding: 8px; display: flex; flex-direction: column; gap: 4px; }

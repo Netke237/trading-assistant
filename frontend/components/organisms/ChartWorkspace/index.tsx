@@ -187,7 +187,10 @@ export default function ChartWorkspace() {
         useStructureStore.getState().setSignals(key, msg.signals);
       }
       if (msg.type === 'alert_triggered') {
-        useChartAlertStore.getState().addHistory(msg.entry);
+        // skipApiSync=true: backend already persisted this entry and sent
+        // email/telegram notifications. Re-posting would create a duplicate
+        // DB row and fire double notifications.
+        useChartAlertStore.getState().addHistory(msg.entry, true);
         useChartAlertStore.getState().updateRule(msg.entry.rule_id, {
           last_triggered_at: msg.entry.triggered_at,
         });

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
+import { useChartStore } from '@/lib/chartStore';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { Text } from '@/components/primitives';
 import type { StructureSignal } from '@/types/structure';
@@ -42,6 +43,7 @@ function formatBarTime(t: string | null): string {
 export default function ChartRightPanel({ crosshairData, symbol, structureSignals, indicatorLabels = {} }: Props) {
   const [tab, setTab] = useState<Tab>('watchlist');
   const added = useWatchlistStore((s) => s.added);
+  const setSymbol = useChartStore((s) => s.setSymbol);
   const history = useChartAlertStore((s) => s.history);
   const rules = useChartAlertStore((s) => s.rules);
   const dismissHistory = useChartAlertStore((s) => s.dismissHistory);
@@ -99,9 +101,17 @@ export default function ChartRightPanel({ crosshairData, symbol, structureSignal
             </div>
           )}
           {added.map((sym) => (
-            <div key={sym} className={styles.row}>
+            <div
+              key={sym}
+              className={`${styles.row} ${styles.rowClickable} ${sym === symbol ? styles.rowActive : ''}`}
+              role="button"
+              tabIndex={0}
+              title={`Switch chart to ${sym}`}
+              onClick={() => setSymbol(sym)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSymbol(sym); }}
+            >
               <WatchStar symbol={sym} size="sm" />
-              <Text size={12} tone="primary">{sym}</Text>
+              <Text size={12} tone={sym === symbol ? 'pass' : 'primary'}>{sym}</Text>
             </div>
           ))}
         </div>

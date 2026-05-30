@@ -272,7 +272,32 @@ async def create_history_entry(body: AlertHistoryCreate, db: AsyncSession = Depe
     )
     db.add(entry)
     await db.commit()
-    return _history_to_dict(entry)
+
+    # Send notifications (same path used by the backend WebSocket evaluator).
+    # This covers the client-side evaluation path where alerts fire in the
+    # browser and are then persisted here — without this, notifications would
+    # only be sent when the Tradier live stream triggers a server-side evaluation.
+    entry_dict = _history_to_dict(entry)
+    subject, plain_body, html_body = _build_notification_text(entry_dict)
+    _notif_cfg = _load_notification_config()
+    _gmail = _notif_cfg.get('gmail', {})
+    _tg    = _notif_cfg.get('telegram', {})
+    if _gmail.get('enabled'):
+        await enqueue('gmail', {
+            'to':            _gmail.get('to', ''),
+            'subject':       subject,
+            'body':          plain_body,
+            'smtp_user':     _gmail.get('smtp_user', ''),
+            'smtp_password': _gmail.get('smtp_password', ''),
+        })
+    if _tg.get('enabled'):
+        await enqueue('telegram', {
+            'bot_token': _tg.get('bot_token', ''),
+            'chat_id':   _tg.get('chat_id', ''),
+            'text':      html_body,
+        })
+
+    return entry_dict
 
 
 @router.get('/history')
