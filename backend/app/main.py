@@ -28,21 +28,31 @@ from app.routers.chart_alerts import router as chart_alerts_router
 from app.routers.notification_settings import router as notification_settings_router
 
 
+_notification_worker_task: asyncio.Task | None = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _notification_worker_task
     # ── Startup ──────────────────────────────────────────────────────────
     from app.routers.scan import restore_from_db, _scheduler, _scheduled_scan
     status = await restore_from_db()
     if status == "running":
         _scheduler.bind(_scheduled_scan)
         await _scheduler.start()
-    # Phase 4: start notification worker
+    # Keep a strong reference so the GC never collects the worker task.
     from app.services.notifications.queue import notification_worker
-    asyncio.create_task(notification_worker())
+    _notification_worker_task = asyncio.create_task(notification_worker())
     yield
     # ── Shutdown ─────────────────────────────────────────────────────────
     if _scheduler._running:
         await _scheduler.stop()
+    if _notification_worker_task:
+        _notification_worker_task.cancel()
+        try:
+            await _notification_worker_task
+        except asyncio.CancelledError:
+            pass
 
 
 def create_app() -> FastAPI:

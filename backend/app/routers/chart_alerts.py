@@ -2,8 +2,10 @@
 """Chart alert CRUD endpoints — alert rules and history (Phase 4)."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -22,10 +24,34 @@ from app.services.alert_evaluator import (
     ConditionGroup, evaluate_rules,
 )
 from app.services.indicator_compute import compute_indicators_for_conditions
-from app.services.notifications.queue import enqueue
+from app.services.notifications.gmail import send_gmail
+from app.services.notifications.telegram import send_telegram
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/alerts', tags=['chart-alerts'])
+
+# Strong references prevent the GC from collecting fire-and-forget notification tasks.
+_background_tasks: set = set()
+
+
+async def _safe_notify(channel: str, **kwargs) -> None:
+    """Wrapper so fire-and-forget tasks log their own errors instead of silently dying."""
+    try:
+        if channel == 'gmail':
+            await send_gmail(**kwargs)
+            logger.info('Alert email sent to %s', kwargs.get('to', '?'))
+        elif channel == 'telegram':
+            await send_telegram(**kwargs)
+            logger.info('Alert Telegram sent to chat %s', kwargs.get('chat_id', '?'))
+    except Exception:
+        logger.error('Alert notification failed (channel=%s)', channel, exc_info=True)
+
+
+def _dispatch(channel: str, **kwargs) -> None:
+    """Schedule a notification as a background task and keep a reference so it isn't GC'd."""
+    task = asyncio.create_task(_safe_notify(channel, **kwargs))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 _SETTINGS_PATH = Path(__file__).parent.parent.parent / 'config' / 'settings.yaml'
 
@@ -273,29 +299,22 @@ async def create_history_entry(body: AlertHistoryCreate, db: AsyncSession = Depe
     db.add(entry)
     await db.commit()
 
-    # Send notifications (same path used by the backend WebSocket evaluator).
-    # This covers the client-side evaluation path where alerts fire in the
-    # browser and are then persisted here — without this, notifications would
-    # only be sent when the Tradier live stream triggers a server-side evaluation.
     entry_dict = _history_to_dict(entry)
     subject, plain_body, html_body = _build_notification_text(entry_dict)
     _notif_cfg = _load_notification_config()
     _gmail = _notif_cfg.get('gmail', {})
     _tg    = _notif_cfg.get('telegram', {})
     if _gmail.get('enabled'):
-        await enqueue('gmail', {
-            'to':            _gmail.get('to', ''),
-            'subject':       subject,
-            'body':          plain_body,
-            'smtp_user':     _gmail.get('smtp_user', ''),
-            'smtp_password': _gmail.get('smtp_password', ''),
-        })
+        logger.info('Dispatching alert email for %s [%s]', entry_dict.get('symbol'), entry_dict.get('interval'))
+        _dispatch('gmail',
+            to=_gmail.get('to', ''), subject=subject, body=plain_body,
+            smtp_user=_gmail.get('smtp_user', ''), smtp_password=_gmail.get('smtp_password', ''),
+        )
     if _tg.get('enabled'):
-        await enqueue('telegram', {
-            'bot_token': _tg.get('bot_token', ''),
-            'chat_id':   _tg.get('chat_id', ''),
-            'text':      html_body,
-        })
+        logger.info('Dispatching alert Telegram for %s [%s]', entry_dict.get('symbol'), entry_dict.get('interval'))
+        _dispatch('telegram',
+            bot_token=_tg.get('bot_token', ''), chat_id=_tg.get('chat_id', ''), text=html_body,
+        )
 
     return entry_dict
 
@@ -423,25 +442,21 @@ async def evaluate_and_notify_for_symbol(
 
             subject, plain_body, html_body = _build_notification_text(entry)
 
-            # Read notification settings from config file (set via Settings → Notifications UI)
             _notif_cfg = _load_notification_config()
             _gmail  = _notif_cfg.get('gmail', {})
             _tg     = _notif_cfg.get('telegram', {})
 
             if _gmail.get('enabled'):
-                await enqueue('gmail', {
-                    'to':            _gmail.get('to', ''),
-                    'subject':       subject,
-                    'body':          plain_body,
-                    'smtp_user':     _gmail.get('smtp_user', ''),
-                    'smtp_password': _gmail.get('smtp_password', ''),
-                })
+                logger.info('Dispatching WS alert email for %s [%s]', entry['symbol'], entry['interval'])
+                _dispatch('gmail',
+                    to=_gmail.get('to', ''), subject=subject, body=plain_body,
+                    smtp_user=_gmail.get('smtp_user', ''), smtp_password=_gmail.get('smtp_password', ''),
+                )
             if _tg.get('enabled'):
-                await enqueue('telegram', {
-                    'bot_token': _tg.get('bot_token', ''),
-                    'chat_id':   _tg.get('chat_id', ''),
-                    'text':      html_body,
-                })
+                logger.info('Dispatching WS alert Telegram for %s [%s]', entry['symbol'], entry['interval'])
+                _dispatch('telegram',
+                    bot_token=_tg.get('bot_token', ''), chat_id=_tg.get('chat_id', ''), text=html_body,
+                )
 
         await db.commit()
     return triggered

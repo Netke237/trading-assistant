@@ -35,4 +35,6 @@ async def send_gmail(
             server.login(user, password)
             server.send_message(msg)
 
+    logger.info('Sending email to %s via %s:%s', to, smtp_host, smtp_port)
     await asyncio.to_thread(_send)
+    logger.info('Email delivered to %s', to)

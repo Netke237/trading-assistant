@@ -22,6 +22,7 @@ async def send_telegram(
         logger.warning('Telegram not configured; skipping send')
         return
 
+    logger.info('Sending Telegram message to chat %s', cid)
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f'{TELEGRAM_API}/bot{token}/sendMessage',
@@ -29,3 +30,4 @@ async def send_telegram(
             timeout=10,
         )
         resp.raise_for_status()
+    logger.info('Telegram message delivered to chat %s', cid)
