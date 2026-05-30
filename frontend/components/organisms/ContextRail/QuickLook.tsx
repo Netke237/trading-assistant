@@ -15,7 +15,6 @@ import { Text, Data } from '@/components/primitives';
 import { QuickLookRow } from '@/components/molecules/QuickLookRow';
 import { api } from '@/lib/api';
 import { usePortfolioStore } from '@/lib/portfolioStore';
-import { useWatchlistStore } from '@/lib/watchlistStore';
 import type { WatchlistRow } from '@/types/domain';
 import styles from './QuickLook.module.css';
 
@@ -24,20 +23,17 @@ export function RailQuickLook() {
   const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
   const portfolio       = usePortfolioStore((s) => s.positions);
   const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
-  const watchedSymbols  = useWatchlistStore((s) => s.added);
 
   useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => {});
     syncFromBackend();
   }, [syncFromBackend]);
 
+  // /api/watchlist already returns only the user's starred symbols —
+  // no need to cross-filter against the Zustand store here.
   const top = useMemo(
-    () =>
-      watchlist
-        .filter((r) => watchedSymbols.includes(r.symbol.toUpperCase()))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5),
-    [watchlist, watchedSymbols],
+    () => [...watchlist].sort((a, b) => b.score - a.score).slice(0, 5),
+    [watchlist],
   );
 
   const deployed = portfolio.reduce(

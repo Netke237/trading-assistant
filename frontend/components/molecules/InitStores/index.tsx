@@ -9,6 +9,10 @@ export function InitStores() {
   const syncWatchlist = useWatchlistStore((s) => s.syncFromBackend);
 
   useEffect(() => {
+    // Rehydrate from localStorage immediately (skipHydration is true on both stores).
+    usePortfolioStore.persist.rehydrate();
+    useWatchlistStore.persist.rehydrate();
+    // Then overlay with fresh backend data.
     syncPortfolio();
     syncWatchlist();
   }, [syncPortfolio, syncWatchlist]);
