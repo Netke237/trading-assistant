@@ -55,4 +55,17 @@ Thumbs.db
 .claude/
 .superpowers/
 .worktrees/
+.opencode/
+.playwright-mcp/
 backend/audit.log
+
+# SQLite WAL/SHM sidecars
+*.db-shm
+*.db-wal
+
+# Test / Playwright artifacts
+test-results/
+frontend/test-results/
+frontend/e2e/screenshots/
+playwright-integration-report/
+llm-contexts/e2e-output.log
