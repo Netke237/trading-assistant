@@ -4,7 +4,7 @@ import type { StructureSignal } from '@/types/structure';
 import type { Interval } from '@/lib/chartStore';
 
 interface Point {
-  time: string;
+  time: string | number;
   value: number;
 }
 
@@ -34,7 +34,7 @@ function evaluateCondition(
   closedCandle: Candle,
   indicators: Record<string, Point[]>,
   signals: StructureSignal[],
-  candleTime: string,
+  candleTime: string | number,
 ): { met: boolean; triggerValues: Record<string, number> } {
   const triggerValues: Record<string, number> = {};
 
@@ -74,7 +74,7 @@ function evaluateCondition(
         if ('confidence' in s && (s.confidence ?? 0) < condition.min_confidence) return false;
       }
       const signalTime = 'time' in s ? s.time : 'time_start' in s ? s.time_start : '';
-      return signalTime >= candleTime;
+      return String(signalTime) >= String(candleTime);
     });
     if (matchingSignal) {
       triggerValues[condition.signal_kind] = 1;

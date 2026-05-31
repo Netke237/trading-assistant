@@ -1,7 +1,7 @@
 // frontend/lib/indicators.ts
 
 export interface Candle {
-  time: string;
+  time: string | number;
   open: number;
   high: number;
   low: number;
@@ -10,7 +10,7 @@ export interface Candle {
 }
 
 export interface Point {
-  time: string;
+  time: string | number;
   value: number;
 }
 
@@ -81,7 +81,7 @@ export function calcMACD(candles: Candle[], fast = 12, slow = 26, signalPeriod =
   const fastMap = new Map(fastEMA.map(p => [p.time, p.value]));
   const macdLine: Point[] = slowEMA
     .map(p => ({ time: p.time, value: (fastMap.get(p.time) ?? p.value) - p.value }))
-    .sort((a, b) => a.time.localeCompare(b.time));
+    .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
 
   if (macdLine.length < signalPeriod) return { macd: macdLine, signal: [], histogram: [] };
   const k = 2 / (signalPeriod + 1);
