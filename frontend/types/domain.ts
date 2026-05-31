@@ -298,6 +298,7 @@ export interface AlertConfig {
   enabledTypes: AlertType[];
   soundEnabled: boolean;
   keepAlertsDays: number;          // default 10 — auto-purge after N days
+  retentionDays: number;           // default 30 — backend sent-message log retention (days)
 }
 
 export type AlertType =

@@ -143,6 +143,7 @@ export default function AlertsPage() {
             enabledTypes: data.enabledTypes ?? config.enabledTypes,
             dedupWindowMinutes: data.dedupWindowMinutes ?? config.dedupWindowMinutes,
             reminderIntervalHours: data.reminderIntervalHours ?? config.reminderIntervalHours,
+            retentionDays: data.retentionDays ?? config.retentionDays,
           });
         }
         deliveryLoaded.current = true;
@@ -164,13 +165,14 @@ export default function AlertsPage() {
           enabledTypes: config.enabledTypes,
           dedupWindowMinutes: config.dedupWindowMinutes,
           reminderIntervalHours: config.reminderIntervalHours,
+          retentionDays: config.retentionDays,
         }),
       }).catch(() => {});
     }, 800);
     return () => {
       if (deliverySyncTimer.current) clearTimeout(deliverySyncTimer.current);
     };
-  }, [BASE_URL, config.enabledTypes, config.dedupWindowMinutes, config.reminderIntervalHours]);
+  }, [BASE_URL, config.enabledTypes, config.dedupWindowMinutes, config.reminderIntervalHours, config.retentionDays]);
 
   const candidates = useScanStore((s) => s.scanResult?.candidates) ?? [];
   const portfolioPositions = usePortfolioStore((s) => s.positions);
@@ -313,6 +315,19 @@ export default function AlertsPage() {
                   onChange={(e) => {
                     const val = Number(e.target.value);
                     if (val >= 1 && val <= 168) setConfig({ ...config, reminderIntervalHours: val });
+                  }}
+                />
+              </SettingsRow>
+              <SettingsRow label="Keep sent-message log for (days)" hint="Delivered email / Telegram records older than this are auto-purged." defaultValue="30">
+                <input
+                  type="number"
+                  className={styles.input}
+                  min={1}
+                  max={365}
+                  value={config.retentionDays}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 1 && val <= 365) setConfig({ ...config, retentionDays: val });
                   }}
                 />
               </SettingsRow>
