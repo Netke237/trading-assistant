@@ -13,6 +13,8 @@ import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
+import { usePerformanceStore } from '@/lib/performanceStore';
 import type { PortfolioPosition } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -29,12 +31,21 @@ export default function PortfolioPage() {
   const positions      = usePortfolioStore((s) => s.positions);
   const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
   const updatePosition = usePortfolioStore((s) => s.updatePosition);
-  const closeInStore   = usePortfolioStore((s) => s.closePosition);
   const [editing, setEditing] = useState<string | null>(null);
+  const [tab, setTab] = useState<'open' | 'history'>('open');
+  const [closing, setClosing] = useState<string | null>(null); // contract being closed
+  const closeRemote = usePortfolioStore((s) => s.closePositionRemote);
+  const history = usePerformanceStore((s) => s.history);
+  const performance = usePerformanceStore((s) => s.performance);
+  const fetchHistory = usePerformanceStore((s) => s.fetchHistory);
+  const fetchPerformance = usePerformanceStore((s) => s.fetchPerformance);
+  const removeHistory = usePerformanceStore((s) => s.removeHistory);
 
   useEffect(() => {
     syncFromBackend();
   }, [syncFromBackend]);
+
+  useEffect(() => { fetchHistory(); fetchPerformance(); }, [fetchHistory, fetchPerformance]);
 
   const deployed = positions.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
   const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
@@ -42,9 +53,9 @@ export default function PortfolioPage() {
   const winners = positions.filter((p) => p.pnlDollar > 0).length;
   const losers  = positions.filter((p) => p.pnlDollar < 0).length;
 
-  const closePosition = (contract: string) => {
-    closeInStore(contract);
-    setEditing(null);
+  const confirmClose = async (p: PortfolioPosition, opts: { qtyToClose: number; exitPrice: number; exitDate: string }) => {
+    const ok = await closeRemote(p.recId, opts);
+    if (ok) { setClosing(null); fetchHistory(); fetchPerformance(); }
   };
 
   return (
@@ -54,7 +65,42 @@ export default function PortfolioPage() {
         <Text size={13} tone="secondary">{positions.length} open positions</Text>
       </div>
 
-      {positions.length === 0 ? (
+      <div className={styles.tabs}>
+        <button type="button" className={tab === 'open' ? styles.tabActive : styles.tab} onClick={() => setTab('open')}>
+          Open ({positions.length})
+        </button>
+        <button type="button" className={tab === 'history' ? styles.tabActive : styles.tab} onClick={() => setTab('history')}>
+          History ({history.length})
+        </button>
+      </div>
+
+      <div className={styles.perfStrip}>
+        <PerfStat label="Today"  value={performance.realizedToday} />
+        <PerfStat label="Week"   value={performance.realizedWeek} />
+        <PerfStat label="Month"  value={performance.realizedMonth} />
+        <PerfStat label="Year"   value={performance.realizedYear} />
+      </div>
+
+      {tab === 'history' && (
+        <div className={styles.historyWrap}>
+          {history.length === 0 ? (
+            <Text size={13} tone="secondary">No closed trades yet.</Text>
+          ) : history.map((h) => (
+            <div key={h.id} className={styles.historyRow}>
+              <Data size={13} weight={500}>{h.symbol}</Data>
+              <Text size={12} tone="secondary">{h.contract}</Text>
+              <Text size={11} tone="dim">{h.qtyClosed}x · {h.entryPrice.toFixed(2)} → {h.exitPrice.toFixed(2)}</Text>
+              <Text size={11} tone="dim">{h.exitDate}</Text>
+              <Data size={13} weight={500} tone={h.realizedPnlDollar > 0 ? 'pass' : h.realizedPnlDollar < 0 ? 'reject' : undefined}>
+                {h.realizedPnlDollar > 0 ? '+' : ''}${Math.round(h.realizedPnlDollar)}
+              </Data>
+              <button type="button" className={styles.historyRemove} onClick={() => removeHistory(h.id)} aria-label={`Remove ${h.symbol} from history`} title="Remove from history">×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'open' && (positions.length === 0 ? (
         <div className={styles.empty}>
           <Text size={14} tone="secondary">No open positions.</Text>
           <Text size={12} tone="dim">
@@ -130,7 +176,7 @@ export default function PortfolioPage() {
                     position={p}
                     onClose={() => setEditing(null)}
                     onChange={(patch) => updatePosition(p.contract, patch)}
-                    onRemove={() => closePosition(p.contract)}
+                    onRemove={() => { setEditing(null); setClosing(p.contract); }}
                   />
                 )}
               </div>
@@ -165,7 +211,28 @@ export default function PortfolioPage() {
             </div>
           </div>
         </div>
-      )}
+      ))}
+
+      {tab === 'open' && closing && (() => {
+        const p = positions.find((x) => x.contract === closing);
+        return p ? (
+          <ClosePositionDrawer
+            position={p}
+            onCancel={() => setClosing(null)}
+            onConfirm={(opts) => confirmClose(p, opts)}
+          />
+        ) : null;
+      })()}
+    </div>
+  );
+}
+
+function PerfStat({ label, value }: { label: string; value: number }) {
+  const tone = value > 0 ? 'pass' : value < 0 ? 'reject' : undefined;
+  return (
+    <div className={styles.perfStat}>
+      <Text size={11} tone="secondary">{label}</Text>
+      <Data size={16} weight={500} tone={tone}>{value > 0 ? '+' : ''}${Math.round(value)}</Data>
     </div>
   );
 }
