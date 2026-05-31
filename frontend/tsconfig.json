@@ -19,8 +19,7 @@
       "@/components/*": ["components/*"],
       "@/lib/*":        ["lib/*"],
       "@/styles/*":     ["styles/*"],
-      "@/types/*":      ["types/*"],
-      "@/mocks/*":      ["mocks/*"]
+      "@/types/*":      ["types/*"]
     },
     "plugins": [{ "name": "next" }]
   },
