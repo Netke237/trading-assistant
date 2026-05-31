@@ -9,6 +9,7 @@ import yaml
 
 from app.services.notifications.gmail import send_gmail
 from app.services.notifications.telegram import send_telegram
+from app.services.notifications.sent_log import log_sent
 
 logger = logging.getLogger(__name__)
 
@@ -18,21 +19,26 @@ _SETTINGS_PATH = Path(__file__).parent.parent.parent.parent / 'config' / 'settin
 _background_tasks: set = set()
 
 
-async def _safe_notify(channel: str, **kwargs) -> None:
+async def _safe_notify(channel: str, _subject: str = '', **kwargs) -> None:
     try:
         if channel == 'gmail':
-            await send_gmail(**kwargs)
-            logger.info('Alert email sent to %s', kwargs.get('to', '?'))
+            sent = await send_gmail(**kwargs)
+            recipient = kwargs.get('to', '')
         elif channel == 'telegram':
-            await send_telegram(**kwargs)
-            logger.info('Alert Telegram sent to chat %s', kwargs.get('chat_id', '?'))
+            sent = await send_telegram(**kwargs)
+            recipient = kwargs.get('chat_id', '')
+        else:
+            return
+        if sent:
+            log_sent(channel, recipient, _subject)
+            logger.info('Alert %s sent to %s', channel, recipient or '?')
     except Exception:
         logger.error('Alert notification failed (channel=%s)', channel, exc_info=True)
 
 
-def dispatch(channel: str, **kwargs) -> None:
+def dispatch(channel: str, *, _subject: str = '', **kwargs) -> None:
     """Schedule a notification as a background task, keeping a strong reference."""
-    task = asyncio.create_task(_safe_notify(channel, **kwargs))
+    task = asyncio.create_task(_safe_notify(channel, _subject=_subject, **kwargs))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
 
@@ -57,6 +63,7 @@ def notify_enabled_channels(subject: str, plain_body: str, html_body: str) -> No
 
     if gmail.get('enabled'):
         dispatch('gmail',
+            _subject=subject,
             to=gmail.get('to', ''),
             subject=subject,
             body=plain_body,
@@ -66,6 +73,7 @@ def notify_enabled_channels(subject: str, plain_body: str, html_body: str) -> No
 
     if tg.get('enabled'):
         dispatch('telegram',
+            _subject=subject,
             bot_token=tg.get('bot_token', ''),
             chat_id=tg.get('chat_id', ''),
             text=html_body,

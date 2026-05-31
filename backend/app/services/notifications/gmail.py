@@ -18,13 +18,13 @@ async def send_gmail(
     smtp_port: int = 465,
     smtp_user: str = '',
     smtp_password: str = '',
-) -> None:
+) -> bool:
     """Send plain-text email via SMTP. Runs smtplib in a thread to avoid blocking."""
     user = smtp_user or os.getenv('BAMENDJOU_GMAIL_USER', '')
     password = smtp_password or os.getenv('BAMENDJOU_GMAIL_PASSWORD', '')
     if not user or not password:
         logger.warning('Gmail not configured; skipping send')
-        return
+        return False
 
     def _send() -> None:
         msg = MIMEText(body, 'plain')
@@ -38,3 +38,4 @@ async def send_gmail(
     logger.info('Sending email to %s via %s:%s', to, smtp_host, smtp_port)
     await asyncio.to_thread(_send)
     logger.info('Email delivered to %s', to)
+    return True

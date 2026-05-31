@@ -14,13 +14,13 @@ async def send_telegram(
     bot_token: str = '',
     chat_id: str = '',
     text: str = '',
-) -> None:
+) -> bool:
     """Send message via Telegram Bot API."""
     token = bot_token or os.getenv('BAMENDJOU_TELEGRAM_BOT_TOKEN', '')
     cid = chat_id or os.getenv('BAMENDJOU_TELEGRAM_CHAT_ID', '')
     if not token or not cid:
         logger.warning('Telegram not configured; skipping send')
-        return
+        return False
 
     logger.info('Sending Telegram message to chat %s', cid)
     async with httpx.AsyncClient() as client:
@@ -31,3 +31,4 @@ async def send_telegram(
         )
         resp.raise_for_status()
     logger.info('Telegram message delivered to chat %s', cid)
+    return True
