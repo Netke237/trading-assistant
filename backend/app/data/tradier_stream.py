@@ -9,6 +9,7 @@ from typing import Optional
 import httpx
 
 logger = logging.getLogger(__name__)
+logging.getLogger("asyncio").setLevel(logging.ERROR)
 
 TRADIER_BASE_URL = os.getenv("TRADIER_BASE_URL", "https://api.tradier.com")
 TRADIER_TOKEN = os.getenv("TRADIER_API_TOKEN", "")
@@ -46,6 +47,9 @@ class TradierStreamClient:
             pass
         if not bucket:
             self._queues.pop(symbol, None)
+        if not self._queues and self._task is not None and not self._task.done():
+            self._task.cancel()
+            self._task = None
 
     def _dispatch(self, symbol: str, tick: dict) -> None:
         for q in self._queues.get(symbol, []):
@@ -78,8 +82,7 @@ class TradierStreamClient:
         backoff = 1
         while True:
             if not self._queues:
-                await asyncio.sleep(1)
-                continue
+                return  # no subscribers; _ensure_running() restarts when next client subscribes
 
             url = await self._create_session()
             if not url:
