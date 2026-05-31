@@ -267,7 +267,7 @@ function TargetEditor({
                   min={1}
                   step={1}
                   className={styles.targetInput}
-                  value={t.contractsToSell}
+                  value={t.contractsToSell ?? 0}
                   onChange={(e) => {
                     const n = Number(e.target.value);
                     if (!Number.isFinite(n) || n < 1) return;

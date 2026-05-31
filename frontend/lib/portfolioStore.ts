@@ -66,6 +66,42 @@ interface PortfolioStoreState {
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   closePosition:  (contract: string) => void;
   syncFromBackend: () => Promise<void>;
+  syncToBackend:  () => Promise<void>;
+}
+
+const _BASE_URL = () => process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+
+function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
+  return {
+    recId:         p.recId,
+    symbol:        p.symbol,
+    contract:      p.contract,
+    direction:     p.direction,
+    entryPrice:    p.entryPrice,
+    qty:           p.contracts ?? 1,
+    entryDate:     p.entryDate ?? new Date().toISOString().slice(0, 10),
+    stop:          p.stop ?? null,
+    targets:       p.targets ?? [],
+    dteTotal:      p.dteTotal ?? null,
+    portfolioValue,
+  };
+}
+
+async function postPosition(p: PortfolioPosition): Promise<void> {
+  try {
+    await fetch(`${_BASE_URL()}/api/portfolio`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(toBackendPayload(p)),
+    });
+    // 409 = already exists → fine. Other errors silently ignored (backend may be offline).
+  } catch { /* network unavailable */ }
+}
+
+async function deletePosition(recId: string): Promise<void> {
+  try {
+    await fetch(`${_BASE_URL()}/api/portfolio/${recId}`, { method: 'DELETE' });
+  } catch { /* network unavailable */ }
 }
 
 function generateRecId(): string {
@@ -112,10 +148,12 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             (p as PortfolioPosition).recId ? p : { ...p, recId: generateRecId() }
           ),
         }),
-      addPosition: (p) =>
+      addPosition: (p) => {
+        let resolvedPosition: PortfolioPosition | null = null;
         set((s) => {
           const recId = (p as PortfolioPosition & { recId?: string }).recId || generateRecId();
           const incoming = { ...p, recId } as PortfolioPosition;
+          resolvedPosition = incoming;
 
           const idxByRecId = s.positions.findIndex((x) => x.recId === incoming.recId);
           if (idxByRecId >= 0) {
@@ -147,19 +185,27 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           }
 
           return { positions: [...s.positions, incoming] };
-        }),
+        });
+        // Fire-and-forget sync to backend so the monitor sees new positions
+        if (resolvedPosition) postPosition(resolvedPosition);
+      },
       updatePosition: (contract, patch) =>
         set((s) => ({
           positions: s.positions.map((r) =>
             r.contract === contract ? { ...r, ...patch } : r
           ),
         })),
-      closePosition: (contract) =>
-        set((s) => ({ positions: s.positions.filter((r) => r.contract !== contract) })),
+      closePosition: (contract) => {
+        let closedRecId: string | undefined;
+        set((s) => {
+          closedRecId = s.positions.find((r) => r.contract === contract)?.recId;
+          return { positions: s.positions.filter((r) => r.contract !== contract) };
+        });
+        if (closedRecId) deletePosition(closedRecId);
+      },
       syncFromBackend: async () => {
         try {
-          const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
-          const res = await fetch(`${BASE_URL}/api/portfolio`);
+          const res = await fetch(`${_BASE_URL()}/api/portfolio`);
           if (!res.ok) return;
           const positions: BackendPosition[] = await res.json();
           if (positions.length > 0) {
@@ -168,6 +214,11 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         } catch {
           // network unavailable — keep localStorage state
         }
+      },
+      syncToBackend: async () => {
+        // Push all local positions to the backend (409 = already there, safe to ignore).
+        const { positions } = usePortfolioStore.getState();
+        await Promise.all(positions.map(postPosition));
       },
     }),
     {

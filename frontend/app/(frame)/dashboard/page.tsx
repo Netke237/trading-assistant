@@ -60,7 +60,10 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   useEffect(() => {
-    usePortfolioStore.getState().syncFromBackend?.().catch(() => {});
+    const store = usePortfolioStore.getState();
+    // Pull live prices/DTE from backend, then push any local positions the backend doesn't know about yet
+    store.syncFromBackend?.().catch(() => {});
+    store.syncToBackend?.().catch(() => {});
   }, []);
 
   useEffect(() => {
