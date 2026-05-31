@@ -5,6 +5,10 @@
   padding: 0 var(--space-3) var(--space-2);
   border-bottom: 1px solid var(--border-subtle);
   min-width: max-content;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-canvas);
 }
 
 .right {
