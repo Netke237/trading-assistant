@@ -5,3 +5,4 @@ from app.models.portfolio import PortfolioPositionModel  # noqa: F401
 from app.models.watchlist import WatchlistSymbolModel  # noqa: F401
 from app.models.audit_event import AuditEventModel  # noqa: F401
 from app.models.alert import AlertRuleModel, AlertHistoryModel  # noqa: F401
+from app.models.closed_position import ClosedPositionModel, EquitySnapshotModel  # noqa: F401
