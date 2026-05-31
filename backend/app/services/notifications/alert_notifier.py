@@ -91,7 +91,7 @@ def _build_notification(symbol: str, alert_type: str, reason: str,
     # Date/Time always reflect the ORIGINAL trigger, even on reminders.
     date_str, time_str = _format_dt(timestamp)
     tag = ' (reminder)' if is_reminder else ''
-    subject = f'Bamendjou Alert{tag} — {symbol} [{alert_type}]'
+    subject = f'Bamendjou Portfolio Alert{tag} — {symbol} [{alert_type}]'
     # On a reminder, note that the condition is still active as of now, without
     # disturbing the original Date/Time above.
     still_plain = ''
