@@ -46,7 +46,7 @@ class NotificationConfig(BaseModel):
     telegram: TelegramConfig
 
 
-_SUPPORTED_TYPES = ['TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP', 'REGIME_CHANGE']
+_SUPPORTED_TYPES = ['TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP', 'EVENT_RISK', 'REGIME_CHANGE']
 
 _DEFAULT_DELIVERY = {
     'masterEnabled': True,

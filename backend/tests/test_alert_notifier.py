@@ -104,3 +104,18 @@ def test_first_send_with_none_timestamp_falls_back_and_reminder_reuses_it(captur
     assert an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', None) is True
     assert _time_line(captured[1][1]) == first_time
     assert '(reminder)' in captured[1][0]
+
+
+def test_event_risk_dispatches_when_enabled(monkeypatch):
+    import app.services.notifications.alert_notifier as an
+    sent = []
+    monkeypatch.setattr(an, '_load_delivery_config',
+        lambda: {'masterEnabled': True,
+                 'enabledTypes': ['EVENT_RISK'],
+                 'reminderIntervalHours': 4})
+    monkeypatch.setattr(an, 'notify_enabled_channels',
+        lambda subject, plain, html: sent.append(subject))
+    an._fired.clear(); an._first_seen.clear()
+    ok = an.notify_alert('AAPL', 'EVENT_RISK', 'Earnings in 2 days', 'REC-X')
+    assert ok is True
+    assert len(sent) == 1
