@@ -58,6 +58,12 @@
   min-width: 96px;
 }
 
+/* ---------- earnings graph ---------- */
+
+.earnings {
+  width: 100%;
+}
+
 /* ---------- bento rows ---------- */
 
 .bentoTop {

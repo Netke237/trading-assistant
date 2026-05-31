@@ -21,6 +21,8 @@ import { EventFlag } from '@/components/atoms/EventFlag';
 import { useScanStore } from '@/lib/scanStore';
 import { useAlertStore } from '@/lib/alertStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { usePerformanceStore } from '@/lib/performanceStore';
+import { EarningsChart } from '@/components/organisms/EarningsChart';
 import { scanPortfolio } from '@/lib/alertEngine';
 import { api } from '@/lib/api';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
@@ -54,6 +56,10 @@ export default function DashboardPage() {
 
   const portfolio = usePortfolioStore((s) => s.positions);
 
+  const performance = usePerformanceStore((s) => s.performance);
+  const fetchPerformance = usePerformanceStore((s) => s.fetchPerformance);
+  const [showEarnings, setShowEarnings] = useState<boolean>(false);
+
   const toasts = useAlertStore((s) => s.toasts);
   const top5Alerts = [...toasts]
     .sort((a, b) => new Date(b.firedAt).getTime() - new Date(a.firedAt).getTime())
@@ -65,6 +71,19 @@ export default function DashboardPage() {
     store.syncFromBackend?.().catch(() => {});
     store.syncToBackend?.().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setShowEarnings(localStorage.getItem('bamendjou:showEarnings') === '1');
+    fetchPerformance();
+  }, [fetchPerformance]);
+
+  const toggleEarnings = () => {
+    setShowEarnings((v) => {
+      const next = !v;
+      localStorage.setItem('bamendjou:showEarnings', next ? '1' : '0');
+      return next;
+    });
+  };
 
   useEffect(() => {
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
@@ -135,6 +154,27 @@ export default function DashboardPage() {
           ))}
         </div>
       </section>
+
+      {/* Earnings graph — toggleable, persists to localStorage */}
+      <div className={styles.earnings}>
+        <SectionCard
+          title="Earnings"
+          action={{ label: showEarnings ? 'Hide graph' : 'Show graph', onClick: toggleEarnings }}
+        >
+          {showEarnings ? (
+            performance.equityCurve.length === 0 && performance.realizedCurve.length === 0 ? (
+              <Text size={12} tone="dim">No earnings data yet — close a trade to start the curve.</Text>
+            ) : (
+              <EarningsChart
+                realizedCurve={performance.realizedCurve}
+                equityCurve={performance.equityCurve}
+              />
+            )
+          ) : (
+            <Text size={12} tone="dim">Graph hidden. Use “Show graph” to display realized profit and account value over time.</Text>
+          )}
+        </SectionCard>
+      </div>
 
       {/* Row 1: Watchlist + Portfolio */}
       <div className={styles.bentoTop}>
