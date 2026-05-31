@@ -1,5 +1,4 @@
 import type { AlertKind, AlertType, TargetLevel } from '@/types/domain';
-import { useScanStore } from '@/lib/scanStore';
 
 export interface AlertPosition {
   recId: string;
@@ -25,12 +24,9 @@ export interface AlertReason {
 }
 
 export function scanPortfolio(positions: AlertPosition[]): AlertReason[] {
-  const conflicted = useScanStore.getState().conflictedSymbols;
   const out: AlertReason[] = [];
 
   for (const p of positions) {
-    if (conflicted && conflicted.includes(p.symbol)) continue;
-
     // TP_HIT
     const firstTarget = p.targets[0];
     if (firstTarget && p.currentPrice >= firstTarget.stockPrice) {
