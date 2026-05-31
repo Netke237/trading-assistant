@@ -119,3 +119,28 @@ def test_event_risk_dispatches_when_enabled(monkeypatch):
     ok = an.notify_alert('AAPL', 'EVENT_RISK', 'Earnings in 2 days', 'REC-X')
     assert ok is True
     assert len(sent) == 1
+
+
+def test_dedup_state_persists_across_reload(monkeypatch, tmp_path):
+    import app.services.notifications.alert_notifier as an
+
+    # Point persistence at a temp file and reset state.
+    dedup_file = tmp_path / 'alert_dedup.json'
+    monkeypatch.setattr(an, '_DEDUP_PATH', dedup_file)
+    an._fired.clear(); an._first_seen.clear()
+    monkeypatch.setattr(an, '_load_delivery_config',
+        lambda: {'masterEnabled': True,
+                 'enabledTypes': ['STOP_REACHED'],
+                 'reminderIntervalHours': 4})
+    monkeypatch.setattr(an, 'notify_enabled_channels', lambda s, p, h: None)
+
+    # First send writes the dedup file.
+    assert an.notify_alert('AAPL', 'STOP_REACHED', 'Stop breached', 'REC-1') is True
+    assert dedup_file.exists()
+
+    # Simulate a restart: wipe in-memory dicts, then reload from disk.
+    an._fired.clear(); an._first_seen.clear()
+    an._load_dedup()
+
+    # Same condition must now be SUPPRESSED (deduped), not re-sent.
+    assert an.notify_alert('AAPL', 'STOP_REACHED', 'Stop breached', 'REC-1') is False

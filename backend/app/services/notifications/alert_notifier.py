@@ -12,6 +12,7 @@ the other is deduped.
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -37,7 +38,7 @@ _DEFAULT_REMINDER_HOURS = 4
 # could resurrect a still-true condition into a duplicate email.
 _MIN_DEDUP_SECONDS = 20 * 60
 
-# key "recId|alertType" -> monotonic timestamp of last send
+# key "recId|alertType" -> wall-clock timestamp of last send
 _fired: dict[str, float] = {}
 # key "recId|alertType" -> ISO timestamp of the FIRST time this condition fired.
 # Survives the dedup-window purge so every reminder keeps the original trigger
@@ -45,6 +46,35 @@ _fired: dict[str, float] = {}
 # position closes (forget_alerts).
 _first_seen: dict[str, str] = {}
 _fired_lock = threading.Lock()
+
+# Persisted across restarts so a backend restart does NOT re-email every
+# currently-breached position. Stored as wall-clock seconds (time.time()),
+# NOT monotonic — monotonic resets each process and is meaningless on disk.
+_DEDUP_PATH = Path(__file__).parent.parent.parent.parent / 'alert_dedup.json'
+
+
+def _save_dedup() -> None:
+    """Persist dedup state. Caller must hold _fired_lock."""
+    try:
+        with open(_DEDUP_PATH, 'w', encoding='utf-8') as f:
+            json.dump({'fired': _fired, 'first_seen': _first_seen}, f)
+    except Exception:
+        logger.debug('Could not persist dedup state', exc_info=True)
+
+
+def _load_dedup() -> None:
+    """Load dedup state from disk into the in-memory dicts (idempotent)."""
+    try:
+        if _DEDUP_PATH.exists():
+            with open(_DEDUP_PATH, encoding='utf-8') as f:
+                data = json.load(f) or {}
+            _fired.update({k: float(v) for k, v in data.get('fired', {}).items()})
+            _first_seen.update(data.get('first_seen', {}))
+    except Exception:
+        logger.debug('Could not load dedup state', exc_info=True)
+
+
+_load_dedup()
 
 
 def _load_delivery_config() -> dict:
@@ -135,7 +165,7 @@ def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
         return False
 
     key = f'{rec_id}|{alert_type}'
-    now = time.monotonic()
+    now = time.time()
     window = _dedup_seconds(delivery)
 
     with _fired_lock:
@@ -155,6 +185,7 @@ def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
         if not is_reminder:
             original_ts = timestamp or datetime.now(timezone.utc).isoformat()
             _first_seen[key] = original_ts
+        _save_dedup()
     subject, plain, html = _build_notification(
         symbol, alert_type, reason, original_ts, is_reminder=is_reminder)
     try:
@@ -182,5 +213,6 @@ def forget_alerts(rec_ids: set[str]) -> None:
         stale_first = {k for k in _first_seen if k.split('|', 1)[0] in rec_ids}
         for k in stale_first:
             _first_seen.pop(k, None)
+        _save_dedup()
     if to_remove:
         logger.info('Cleared %d dedup entries for closed positions', len(to_remove))
