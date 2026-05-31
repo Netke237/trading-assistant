@@ -1,18 +1,40 @@
 import asyncio
-from datetime import date
+import uuid
+from datetime import date, datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from app.database import get_db
 from app.models.portfolio import PortfolioPositionModel
-from app.schemas import PortfolioPositionCreate, PortfolioPositionSchema
+from app.models.closed_position import ClosedPositionModel, EquitySnapshotModel
+from app.schemas import (
+    PortfolioPositionCreate, PortfolioPositionSchema,
+    ClosePositionRequest, ClosedPositionSchema,
+    PerformanceResponse, PerformancePoint,
+)
 from app.services.portfolio_risk import check_position_risk, PortfolioPosition as RiskPosition
+from app.services.portfolio_performance import (
+    realized_pnl, bucket_realized_by_calendar, cumulative_curve,
+)
 from app.data.market import fetch_contract_quote_async
 
 router = APIRouter(prefix='/api', tags=['trading'])
+
+
+# ── Broker integration (NOT ACTIVE YET) ───────────────────────────────────────
+# Future feature: when a trade is closed, optionally route the closing order to
+# the connected broker — mirrors the "Send basket to broker" flow in Step 7,
+# which is wired in the UI but not yet executed against a live broker. This stub
+# is intentionally a no-op so the request shape (ClosePositionRequest.sendToBroker)
+# and call site already exist; flip the body on when the broker API lands.
+def _maybe_send_close_to_broker(closed: ClosedPositionModel, send: bool) -> None:
+    if not send:
+        return
+    # TODO(broker): submit the closing order to the broker API. Inactive for now.
+    return
 
 
 @router.get('/portfolio', response_model=list[PortfolioPositionSchema])
@@ -132,4 +154,88 @@ async def delete_position(rec_id: str, db: AsyncSession = Depends(get_db)) -> No
             detail=f"Position with rec_id '{rec_id}' not found.",
         )
     await db.delete(position)
+    await db.commit()
+
+
+@router.post('/portfolio/{rec_id}/close',
+             response_model=ClosedPositionSchema,
+             status_code=status.HTTP_201_CREATED)
+async def close_position(
+    rec_id: str,
+    body: ClosePositionRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ClosedPositionSchema:
+    position = (await db.execute(
+        select(PortfolioPositionModel).where(PortfolioPositionModel.rec_id == rec_id)
+    )).scalar_one_or_none()
+    if position is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Position with rec_id '{rec_id}' not found.")
+
+    # qty to close: default = full; clamp 1..position.qty
+    qty_to_close = body.qtyToClose if body.qtyToClose is not None else position.qty
+    qty_to_close = max(1, min(int(qty_to_close), position.qty))
+
+    # exit price: explicit, else fetch the live quote, else 422
+    exit_price = body.exitPrice
+    if exit_price is None:
+        async with httpx.AsyncClient(timeout=10) as client:
+            quote = await fetch_contract_quote_async(client, position.contract)
+        exit_price = (quote or {}).get("price") if isinstance(quote, dict) else None
+        if not exit_price:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Could not fetch a live exit price — please enter one.",
+            )
+
+    exit_date = body.exitDate or date.today().isoformat()
+    dollar, pct = realized_pnl(position.entry_price, float(exit_price), qty_to_close)
+
+    closed = ClosedPositionModel(
+        id=uuid.uuid4().hex,
+        rec_id=position.rec_id,
+        symbol=position.symbol,
+        contract=position.contract,
+        direction=position.direction,
+        entry_price=position.entry_price,
+        entry_date=position.entry_date,
+        exit_price=float(exit_price),
+        exit_date=exit_date,
+        qty_closed=qty_to_close,
+        realized_pnl_dollar=dollar,
+        realized_pnl_pct=pct,
+        source=getattr(position, "source", None),
+    )
+    db.add(closed)
+
+    # Reduce or remove the open position
+    if qty_to_close >= position.qty:
+        await db.delete(position)
+    else:
+        position.qty -= qty_to_close
+
+    await db.commit()
+    await db.refresh(closed)
+
+    _maybe_send_close_to_broker(closed, body.sendToBroker)
+    return ClosedPositionSchema.from_orm_model(closed)
+
+
+@router.get('/portfolio/history', response_model=list[ClosedPositionSchema])
+async def get_history(db: AsyncSession = Depends(get_db)) -> list[ClosedPositionSchema]:
+    rows = (await db.execute(
+        select(ClosedPositionModel).order_by(ClosedPositionModel.closed_at.desc())
+    )).scalars().all()
+    return [ClosedPositionSchema.from_orm_model(r) for r in rows]
+
+
+@router.delete('/portfolio/history/{history_id}', status_code=status.HTTP_204_NO_CONTENT)
+async def delete_history(history_id: str, db: AsyncSession = Depends(get_db)) -> None:
+    row = (await db.execute(
+        select(ClosedPositionModel).where(ClosedPositionModel.id == history_id)
+    )).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"History entry '{history_id}' not found.")
+    await db.delete(row)
     await db.commit()
