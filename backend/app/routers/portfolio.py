@@ -76,6 +76,8 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
                     (schema.currentPrice - schema.entryPrice) / schema.entryPrice * 100, 2
                 )
 
+    open_value = sum(s.currentPrice * 100 * s.qty for s in schemas)
+    await _upsert_equity_snapshot(db, open_value)
     return schemas
 
 
@@ -239,3 +241,48 @@ async def delete_history(history_id: str, db: AsyncSession = Depends(get_db)) ->
                             detail=f"History entry '{history_id}' not found.")
     await db.delete(row)
     await db.commit()
+
+
+async def _upsert_equity_snapshot(db: AsyncSession, open_value: float) -> None:
+    """Record/refresh today's total-account-value point (one row per calendar day)."""
+    today = date.today().isoformat()
+    realized_cum = sum(
+        r.realized_pnl_dollar
+        for r in (await db.execute(select(ClosedPositionModel))).scalars().all()
+    )
+    total = round(realized_cum + open_value, 2)
+    snap = (await db.execute(
+        select(EquitySnapshotModel).where(EquitySnapshotModel.snapshot_date == today)
+    )).scalar_one_or_none()
+    if snap is None:
+        db.add(EquitySnapshotModel(
+            id=uuid.uuid4().hex, snapshot_date=today,
+            realized_cumulative=round(realized_cum, 2),
+            open_value=round(open_value, 2), total_value=total,
+        ))
+    else:
+        snap.realized_cumulative = round(realized_cum, 2)
+        snap.open_value = round(open_value, 2)
+        snap.total_value = total
+    await db.commit()
+
+
+@router.get('/portfolio/performance', response_model=PerformanceResponse)
+async def get_performance(db: AsyncSession = Depends(get_db)) -> PerformanceResponse:
+    closed = (await db.execute(select(ClosedPositionModel))).scalars().all()
+    rows = [{"exit_date": c.exit_date, "realized_pnl_dollar": c.realized_pnl_dollar}
+            for c in closed]
+    buckets = bucket_realized_by_calendar(rows, today=date.today())
+    realized_curve = cumulative_curve(rows)
+
+    snaps = (await db.execute(
+        select(EquitySnapshotModel).order_by(EquitySnapshotModel.snapshot_date)
+    )).scalars().all()
+    equity_curve = [PerformancePoint(date=s.snapshot_date, value=s.total_value) for s in snaps]
+
+    return PerformanceResponse(
+        realizedToday=buckets["today"], realizedWeek=buckets["week"],
+        realizedMonth=buckets["month"], realizedYear=buckets["year"],
+        realizedCurve=[PerformancePoint(**p) for p in realized_curve],
+        equityCurve=equity_curve,
+    )

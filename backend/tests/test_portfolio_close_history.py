@@ -97,3 +97,28 @@ async def test_close_auto_fills_exit_price_from_quote(client):
 async def test_close_missing_position_404(client):
     r = await client.post("/api/portfolio/NOPE/close", json={"exitPrice": 1.0})
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_performance_buckets_and_curve(client):
+    await _add(client, qty=4, entry=1.00, rec="REC-A")
+    # close 2 today at 1.50 -> +100
+    await client.post("/api/portfolio/REC-A/close",
+                      json={"qtyToClose": 2, "exitPrice": 1.50, "exitDate": "2026-05-31"})
+    perf = (await client.get("/api/portfolio/performance")).json()
+    assert perf["realizedYear"] == 100.0
+    assert perf["realizedCurve"][-1]["value"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_upserts_one_snapshot_per_day(client):
+    await _add(client, qty=1, entry=1.00)
+    with patch("app.routers.portfolio.fetch_contract_quote_async",
+               return_value={"price": 1.20}):
+        await client.get("/api/portfolio")
+        await client.get("/api/portfolio")  # second call same day must not duplicate
+    perf = (await client.get("/api/portfolio/performance")).json()
+    # exactly one equity point for today
+    assert len(perf["equityCurve"]) == 1
+    # total = realized(0) + open(1.20*100*1 = 120)
+    assert perf["equityCurve"][0]["value"] == 120.0
