@@ -54,3 +54,20 @@ def test_post_notifications_password_not_cleared_when_empty(client, tmp_path, mo
     saved_path = ns_module._SETTINGS_PATH
     saved = yaml.safe_load(saved_path.read_text())
     assert saved["notifications"]["gmail"]["smtp_password"] == "secret"
+
+
+def test_alert_delivery_roundtrips_retention_days(client):
+    """POST /settings/alert-delivery echoes retentionDays and GET returns the same value."""
+    resp = client.post('/settings/alert-delivery', json={
+        'masterEnabled': True,
+        'enabledTypes': ['STOP_REACHED'],
+        'dedupWindowMinutes': 15,
+        'reminderIntervalHours': 4,
+        'retentionDays': 45,
+    })
+    assert resp.status_code == 200
+    assert resp.json()['retentionDays'] == 45
+
+    get_resp = client.get('/settings/alert-delivery')
+    assert get_resp.status_code == 200
+    assert get_resp.json()['retentionDays'] == 45

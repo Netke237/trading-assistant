@@ -54,6 +54,7 @@ _DEFAULT_DELIVERY = {
     'dedupWindowMinutes': 15,
     # While a condition stays true, how often email/Telegram reminds you.
     'reminderIntervalHours': 4,
+    'retentionDays': 30,
 }
 
 
@@ -62,6 +63,7 @@ class AlertDeliveryConfig(BaseModel):
     enabledTypes: list[str] = _SUPPORTED_TYPES
     dedupWindowMinutes: int = 15
     reminderIntervalHours: int = 4
+    retentionDays: int = 30
 
 
 @router.get('/alert-delivery')
@@ -73,6 +75,7 @@ async def get_alert_delivery() -> dict:
         'enabledTypes': d.get('enabledTypes', _SUPPORTED_TYPES),
         'dedupWindowMinutes': int(d.get('dedupWindowMinutes', 15)),
         'reminderIntervalHours': int(d.get('reminderIntervalHours', 4)),
+        'retentionDays': int(d.get('retentionDays', 30)),
     }
 
 
@@ -84,6 +87,7 @@ async def save_alert_delivery(body: AlertDeliveryConfig) -> dict:
         'enabledTypes': body.enabledTypes,
         'dedupWindowMinutes': body.dedupWindowMinutes,
         'reminderIntervalHours': body.reminderIntervalHours,
+        'retentionDays': body.retentionDays,
     }
     _save_yaml(cfg)
     return cfg['alert_delivery']

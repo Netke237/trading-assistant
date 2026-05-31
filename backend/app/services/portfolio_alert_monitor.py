@@ -44,6 +44,14 @@ async def _run_once() -> None:
     global _last_regime, _known_rec_ids
 
     delivery = _load_delivery_config()
+
+    # Prune the sent-message log to its retention window (default 30 days).
+    try:
+        from app.services.notifications.sent_log import prune_sent_log
+        prune_sent_log(int(delivery.get('retentionDays', 30)))
+    except Exception:
+        logger.debug('sent-message log prune failed', exc_info=True)
+
     if not delivery.get('masterEnabled', True):
         return
 
