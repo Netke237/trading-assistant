@@ -13,9 +13,15 @@ Covers:
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+# fetch_option_chain only selects expiries at least 21 days out, so tests must
+# use a date computed relative to "today" — a hard-coded date eventually drifts
+# inside the 21-day window and makes the chain come back empty.
+_FUTURE_EXPIRY = (date.today() + timedelta(days=30)).isoformat()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -258,7 +264,7 @@ def test_iv_enrichment_applied_when_ibkr_available():
             # First call: expirations
             exp_resp = MagicMock()
             exp_resp.raise_for_status.return_value = None
-            exp_resp.json.return_value = {"expirations": {"date": ["2026-06-20"]}}
+            exp_resp.json.return_value = {"expirations": {"date": [_FUTURE_EXPIRY]}}
 
             # Second call: option chain
             chain_resp = MagicMock()
@@ -305,7 +311,7 @@ def test_iv_enrichment_skipped_when_ibkr_returns_none():
         with patch("app.data.market.httpx.get") as mock_get:
             exp_resp = MagicMock()
             exp_resp.raise_for_status.return_value = None
-            exp_resp.json.return_value = {"expirations": {"date": ["2026-06-20"]}}
+            exp_resp.json.return_value = {"expirations": {"date": [_FUTURE_EXPIRY]}}
 
             chain_resp = MagicMock()
             chain_resp.raise_for_status.return_value = None
