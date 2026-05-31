@@ -39,6 +39,11 @@ _MIN_DEDUP_SECONDS = 20 * 60
 
 # key "recId|alertType" -> monotonic timestamp of last send
 _fired: dict[str, float] = {}
+# key "recId|alertType" -> ISO timestamp of the FIRST time this condition fired.
+# Survives the dedup-window purge so every reminder keeps the original trigger
+# time (a reminder must not look like a brand-new alert). Cleared only when the
+# position closes (forget_alerts).
+_first_seen: dict[str, str] = {}
 _fired_lock = threading.Lock()
 
 
@@ -81,22 +86,35 @@ def _format_dt(timestamp: str | None) -> tuple[str, str]:
 
 
 def _build_notification(symbol: str, alert_type: str, reason: str,
-                        timestamp: str | None) -> tuple[str, str, str]:
+                        timestamp: str | None,
+                        is_reminder: bool = False) -> tuple[str, str, str]:
+    # Date/Time always reflect the ORIGINAL trigger, even on reminders.
     date_str, time_str = _format_dt(timestamp)
-    subject = f'Bamendjou Alert — {symbol} [{alert_type}]'
+    tag = ' (reminder)' if is_reminder else ''
+    subject = f'Bamendjou Alert{tag} — {symbol} [{alert_type}]'
+    # On a reminder, note that the condition is still active as of now, without
+    # disturbing the original Date/Time above.
+    still_plain = ''
+    still_html = ''
+    if is_reminder:
+        _, now_time = _format_dt(None)  # current local time
+        still_plain = f'Status:  Still active as of {now_time}\n'
+        still_html = f'<b>Status:</b> Still active as of {now_time}\n'
     plain = (
         f'Symbol:  {symbol}\n'
         f'Type:    {alert_type}\n'
         f'Trigger: {reason}\n'
         f'Date:    {date_str}\n'
         f'Time:    {time_str}\n'
+        f'{still_plain}'
     )
     html = (
-        f'<b>Bamendjou Alert</b> — {symbol}\n\n'
+        f'<b>Bamendjou Alert{tag}</b> — {symbol}\n\n'
         f'<b>Type:</b> {alert_type}\n'
         f'<b>Trigger:</b> {reason}\n'
         f'<b>Date:</b> {date_str}\n'
         f'<b>Time:</b> {time_str}\n'
+        f'{still_html}'
     )
     return subject, plain, html
 
@@ -130,7 +148,15 @@ def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
             return False  # already sent within the window
 
         _fired[key] = now
-    subject, plain, html = _build_notification(symbol, alert_type, reason, timestamp)
+        # First-ever send for this condition records the trigger time; later
+        # sends are reminders and reuse it. _first_seen outlives the dedup purge.
+        original_ts = _first_seen.get(key)
+        is_reminder = original_ts is not None
+        if not is_reminder:
+            original_ts = timestamp or datetime.now(timezone.utc).isoformat()
+            _first_seen[key] = original_ts
+    subject, plain, html = _build_notification(
+        symbol, alert_type, reason, original_ts, is_reminder=is_reminder)
     try:
         notify_enabled_channels(subject, plain, html)
     except Exception:
@@ -151,5 +177,10 @@ def forget_alerts(rec_ids: set[str]) -> None:
         to_remove = {k for k in _fired if k.split('|', 1)[0] in rec_ids}
         for k in to_remove:
             _fired.pop(k, None)
+        # Drop original-trigger records too, so a genuine re-entry later starts
+        # a fresh trigger timestamp instead of inheriting the closed one.
+        stale_first = {k for k in _first_seen if k.split('|', 1)[0] in rec_ids}
+        for k in stale_first:
+            _first_seen.pop(k, None)
     if to_remove:
         logger.info('Cleared %d dedup entries for closed positions', len(to_remove))

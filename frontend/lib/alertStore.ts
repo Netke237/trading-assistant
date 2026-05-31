@@ -133,12 +133,13 @@ export const useAlertStore = create<AlertStoreState>()(
             firedAt: nowIso,
           }];
         } else {
+          // Still-true condition refreshing in place: keep the ORIGINAL firedAt
+          // so the row (and the reminder notifications) reflect the first trigger.
           nextToasts = [...toasts];
           nextToasts[existingIdx] = {
             ...nextToasts[existingIdx]!,
             kind: item.kind,
             reason: item.reason,
-            firedAt: nowIso,
           };
         }
 

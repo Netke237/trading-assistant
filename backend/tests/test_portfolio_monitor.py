@@ -1,4 +1,12 @@
-"""Tests for portfolio_alert_monitor: fire-once suppress and enabledType filtering."""
+"""Tests for portfolio_alert_monitor._run_once.
+
+The monitor no longer owns dedup state — it generates alert conditions and
+funnels every one through the shared ``notify_alert`` (which enforces
+masterEnabled/enabledTypes and dedups). These tests therefore verify the
+monitor's orchestration: master gate, per-alert dispatch, closed-position
+cleanup, and regime-flip detection. The dedup/reminder behaviour itself is
+covered in ``test_alert_notifier.py``.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -21,14 +29,17 @@ def _make_alert(alert_type: str, rec_id: str = 'pos1') -> AlertItem:
     )
 
 
+def _make_position(rec_id: str, symbol: str = 'AAPL') -> MagicMock:
+    p = MagicMock()
+    p.symbol = symbol
+    p.rec_id = rec_id
+    p.contract = None  # None → skip the live option-price httpx branch
+    return p
+
+
 def _fake_db_with_positions(rec_ids: list[str], symbol: str = 'AAPL'):
-    """Return a context-manager mock whose positions list has the given recIds."""
-    positions = []
-    for rec_id in rec_ids:
-        p = MagicMock()
-        p.symbol = symbol
-        p.rec_id = rec_id
-        positions.append(p)
+    """Return an async-context-manager mock whose positions have the given recIds."""
+    positions = [_make_position(rid, symbol) for rid in rec_ids]
 
     fake_db = AsyncMock()
     fake_db.__aenter__ = AsyncMock(return_value=fake_db)
@@ -41,158 +52,121 @@ def _fake_db_with_positions(rec_ids: list[str], symbol: str = 'AAPL'):
 
 def _reset_monitor_state():
     from app.services import portfolio_alert_monitor as mon
-    mon._fired_once.clear()
+    from app.services.notifications import alert_notifier as an
     mon._known_rec_ids.clear()
     mon._last_regime = None
-
-
-@pytest.mark.asyncio
-async def test_disabled_type_is_not_dispatched():
-    """An alert whose type is not in enabledTypes must not call notify_enabled_channels."""
-    from app.services import portfolio_alert_monitor as mon
-    _reset_monitor_state()
-
-    delivery_cfg = {
-        'masterEnabled': True,
-        'enabledTypes': ['TP_HIT'],  # STOP_REACHED excluded
-    }
-
-    fake_db = _fake_db_with_positions(['pos1'])
-
-    with (
-        patch.object(mon, '_load_delivery_config', return_value=delivery_cfg),
-        patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[
-            _make_alert('STOP_REACHED'),
-        ])),
-        patch.object(mon, 'notify_enabled_channels') as mock_notify,
-        patch.object(mon, 'compute_overall_regime', return_value='PASS'),
-        patch('app.services.portfolio_alert_monitor.AsyncSessionLocal', return_value=fake_db),
-        patch('app.services.portfolio_alert_monitor.asyncio.to_thread',
-              new=AsyncMock(return_value={'AAPL': {'last': 150.0}})),
-    ):
-        await mon._run_once()
-
-    mock_notify.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_enabled_type_is_dispatched():
-    """An alert whose type is in enabledTypes fires notify_enabled_channels on first trigger."""
-    from app.services import portfolio_alert_monitor as mon
-    _reset_monitor_state()
-
-    delivery_cfg = {'masterEnabled': True, 'enabledTypes': ['TP_HIT']}
-
-    fake_db = _fake_db_with_positions(['pos1'])
-
-    with (
-        patch.object(mon, '_load_delivery_config', return_value=delivery_cfg),
-        patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[_make_alert('TP_HIT')])),
-        patch.object(mon, 'notify_enabled_channels') as mock_notify,
-        patch.object(mon, 'compute_overall_regime', return_value='PASS'),
-        patch('app.services.portfolio_alert_monitor.AsyncSessionLocal', return_value=fake_db),
-        patch('app.services.portfolio_alert_monitor.asyncio.to_thread',
-              new=AsyncMock(return_value={'AAPL': {'last': 150.0}})),
-    ):
-        await mon._run_once()
-
-    mock_notify.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_fire_once_suppresses_repeat():
-    """Once an alert has been dispatched, repeat triggers for the same position are silenced."""
-    from app.services import portfolio_alert_monitor as mon
-    _reset_monitor_state()
-    mon._fired_once.add('pos1|TP_HIT')  # already sent this lifetime
-
-    delivery_cfg = {'masterEnabled': True, 'enabledTypes': ['TP_HIT']}
-
-    fake_db = _fake_db_with_positions(['pos1'])
-
-    with (
-        patch.object(mon, '_load_delivery_config', return_value=delivery_cfg),
-        patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[_make_alert('TP_HIT')])),
-        patch.object(mon, 'notify_enabled_channels') as mock_notify,
-        patch.object(mon, 'compute_overall_regime', return_value='PASS'),
-        patch('app.services.portfolio_alert_monitor.AsyncSessionLocal', return_value=fake_db),
-        patch('app.services.portfolio_alert_monitor.asyncio.to_thread',
-              new=AsyncMock(return_value={'AAPL': {'last': 150.0}})),
-    ):
-        await mon._run_once()
-
-    mock_notify.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_fire_once_clears_when_position_closes():
-    """When a position disappears, its fired_once entry is removed so a future re-entry can alert."""
-    from app.services import portfolio_alert_monitor as mon
-    _reset_monitor_state()
-
-    # Simulate: position was open last tick, alert already fired
-    mon._known_rec_ids = {'pos1'}
-    mon._fired_once.add('pos1|TP_HIT')
-
-    delivery_cfg = {'masterEnabled': True, 'enabledTypes': ['TP_HIT']}
-
-    # This tick: no positions (position was closed)
-    fake_db = _fake_db_with_positions([])
-
-    with (
-        patch.object(mon, '_load_delivery_config', return_value=delivery_cfg),
-        patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[])),
-        patch.object(mon, 'notify_enabled_channels'),
-        patch.object(mon, 'compute_overall_regime', return_value='PASS'),
-        patch('app.services.portfolio_alert_monitor.AsyncSessionLocal', return_value=fake_db),
-        patch('app.services.portfolio_alert_monitor.asyncio.to_thread',
-              new=AsyncMock(return_value={})),
-    ):
-        await mon._run_once()
-
-    # fired_once entry must have been cleared on position close
-    assert 'pos1|TP_HIT' not in mon._fired_once
+    an._fired.clear()
+    an._first_seen.clear()
 
 
 @pytest.mark.asyncio
 async def test_master_disabled_skips_all():
-    """When masterEnabled is false, no alerts are dispatched."""
+    """masterEnabled=False short-circuits before any dispatch."""
     from app.services import portfolio_alert_monitor as mon
     _reset_monitor_state()
 
-    delivery_cfg = {'masterEnabled': False, 'enabledTypes': ['TP_HIT']}
-
     with (
-        patch.object(mon, '_load_delivery_config', return_value=delivery_cfg),
-        patch.object(mon, 'notify_enabled_channels') as mock_notify,
+        patch.object(mon, '_load_delivery_config', return_value={'masterEnabled': False}),
+        patch.object(mon, 'notify_alert') as m_notify,
     ):
         await mon._run_once()
 
-    mock_notify.assert_not_called()
+    m_notify.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_position_alert_dispatched_via_notify_alert():
+    """Each generated alert is handed to notify_alert with (symbol, type, reason, recId, ts)."""
+    from app.services import portfolio_alert_monitor as mon
+    _reset_monitor_state()
+
+    fake_db = _fake_db_with_positions(['pos1'])
+
+    with (
+        patch.object(mon, '_load_delivery_config',
+                     return_value={'masterEnabled': True, 'enabledTypes': ['TP_HIT']}),
+        patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[_make_alert('TP_HIT')])),
+        patch.object(mon, 'notify_alert') as m_notify,
+        patch.object(mon.alert_service, 'broadcast', new=AsyncMock()),
+        patch('app.services.portfolio_alert_monitor.AsyncSessionLocal', return_value=fake_db),
+        patch.object(mon.asyncio, 'to_thread', new=AsyncMock(return_value={'AAPL': {'last': 150.0}})),
+    ):
+        await mon._run_once()
+
+    m_notify.assert_called_once()
+    symbol, alert_type, _reason, rec_id, _ts = m_notify.call_args[0]
+    assert alert_type == 'TP_HIT'
+    assert rec_id == 'pos1'
+    assert symbol == 'AAPL'
+
+
+@pytest.mark.asyncio
+async def test_closed_position_calls_forget_alerts():
+    """A position present last tick but gone this tick triggers forget_alerts for its recId."""
+    from app.services import portfolio_alert_monitor as mon
+    _reset_monitor_state()
+    mon._known_rec_ids = {'pos1'}
+
+    fake_db = _fake_db_with_positions([])  # position closed this tick
+
+    with (
+        patch.object(mon, '_load_delivery_config',
+                     return_value={'masterEnabled': True, 'enabledTypes': ['TP_HIT']}),
+        patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[])),
+        patch.object(mon, 'notify_alert'),
+        patch.object(mon, 'forget_alerts') as m_forget,
+        patch.object(mon.alert_service, 'broadcast', new=AsyncMock()),
+        patch('app.services.portfolio_alert_monitor.AsyncSessionLocal', return_value=fake_db),
+    ):
+        await mon._run_once()
+
+    m_forget.assert_called_once_with({'pos1'})
 
 
 @pytest.mark.asyncio
 async def test_regime_flip_dispatched():
-    """A regime change from one state to another fires a REGIME_CHANGE alert."""
+    """A regime change from the prior state fires a REGIME_CHANGE alert via notify_alert."""
     from app.services import portfolio_alert_monitor as mon
     _reset_monitor_state()
-    mon._last_regime = 'PASS'  # previous state
+    mon._last_regime = 'PASS'
 
-    delivery_cfg = {'masterEnabled': True, 'enabledTypes': ['REGIME_CHANGE']}
-
-    fake_db = _fake_db_with_positions([])  # no positions — only testing regime flip
+    fake_db = _fake_db_with_positions([])  # no positions — only testing the flip
 
     with (
-        patch.object(mon, '_load_delivery_config', return_value=delivery_cfg),
+        patch.object(mon, '_load_delivery_config',
+                     return_value={'masterEnabled': True, 'enabledTypes': ['REGIME_CHANGE']}),
         patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[])),
-        patch.object(mon, 'notify_enabled_channels') as mock_notify,
+        patch.object(mon, 'notify_alert') as m_notify,
+        patch.object(mon.alert_service, 'broadcast', new=AsyncMock()),
         patch('app.services.portfolio_alert_monitor.AsyncSessionLocal', return_value=fake_db),
-        patch('app.services.portfolio_alert_monitor.asyncio.to_thread',
-              new=AsyncMock(return_value='REJECT')),
+        patch.object(mon.asyncio, 'to_thread', new=AsyncMock(return_value='REJECT')),
     ):
         await mon._run_once()
 
-    mock_notify.assert_called_once()
-    subject, plain, _html = mock_notify.call_args[0]
-    assert 'REGIME_CHANGE' in subject
-    assert 'REJECT' in plain
+    m_notify.assert_called_once()
+    _symbol, alert_type, reason, _rec_id, _ts = m_notify.call_args[0]
+    assert alert_type == 'REGIME_CHANGE'
+    assert 'PASS' in reason and 'REJECT' in reason
+
+
+@pytest.mark.asyncio
+async def test_no_regime_flip_when_state_unchanged():
+    """Same regime state as last tick must NOT fire a REGIME_CHANGE alert."""
+    from app.services import portfolio_alert_monitor as mon
+    _reset_monitor_state()
+    mon._last_regime = 'PASS'
+
+    fake_db = _fake_db_with_positions([])
+
+    with (
+        patch.object(mon, '_load_delivery_config',
+                     return_value={'masterEnabled': True, 'enabledTypes': ['REGIME_CHANGE']}),
+        patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[])),
+        patch.object(mon, 'notify_alert') as m_notify,
+        patch.object(mon.alert_service, 'broadcast', new=AsyncMock()),
+        patch('app.services.portfolio_alert_monitor.AsyncSessionLocal', return_value=fake_db),
+        patch.object(mon.asyncio, 'to_thread', new=AsyncMock(return_value='PASS')),
+    ):
+        await mon._run_once()
+
+    m_notify.assert_not_called()
