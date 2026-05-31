@@ -465,3 +465,62 @@ class PortfolioPositionSchema(BaseModel):
             dteTotal=obj.dte_total,
             createdAt=obj.created_at.isoformat() if obj.created_at else "",
         )
+
+
+class ClosePositionRequest(BaseModel):
+    """Body for POST /api/portfolio/{rec_id}/close."""
+    model_config = ConfigDict(populate_by_name=True)
+    qtyToClose: Optional[int] = None        # None -> close the whole position
+    exitPrice: Optional[float] = None       # None -> server fetches the live quote
+    exitDate: Optional[str] = None          # None -> today (YYYY-MM-DD)
+    # Reserved for the future broker feature (see router stub) — inactive for now.
+    sendToBroker: bool = False
+
+
+class ClosedPositionSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, from_attributes=True)
+    id: str
+    recId: str
+    symbol: str
+    contract: str
+    direction: str
+    entryPrice: float
+    entryDate: Optional[str] = None
+    exitPrice: float
+    exitDate: str
+    qtyClosed: int
+    realizedPnlDollar: float
+    realizedPnlPct: float
+    closedAt: str
+
+    @classmethod
+    def from_orm_model(cls, obj) -> "ClosedPositionSchema":
+        return cls(
+            id=str(obj.id),
+            recId=obj.rec_id,
+            symbol=obj.symbol,
+            contract=obj.contract,
+            direction=obj.direction,
+            entryPrice=obj.entry_price,
+            entryDate=obj.entry_date,
+            exitPrice=obj.exit_price,
+            exitDate=obj.exit_date,
+            qtyClosed=obj.qty_closed,
+            realizedPnlDollar=obj.realized_pnl_dollar,
+            realizedPnlPct=obj.realized_pnl_pct,
+            closedAt=obj.closed_at.isoformat() if obj.closed_at else "",
+        )
+
+
+class PerformancePoint(BaseModel):
+    date: str
+    value: float
+
+
+class PerformanceResponse(BaseModel):
+    realizedToday: float = 0.0
+    realizedWeek: float = 0.0
+    realizedMonth: float = 0.0
+    realizedYear: float = 0.0
+    realizedCurve: list[PerformancePoint] = []   # cumulative realized profit line
+    equityCurve: list[PerformancePoint] = []      # total account value line (from snapshots)
