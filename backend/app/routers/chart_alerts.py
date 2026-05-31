@@ -8,10 +8,8 @@ import logging
 import os
 import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, delete
@@ -24,48 +22,11 @@ from app.services.alert_evaluator import (
     ConditionGroup, evaluate_rules,
 )
 from app.services.indicator_compute import compute_indicators_for_conditions
-from app.services.notifications.gmail import send_gmail
-from app.services.notifications.telegram import send_telegram
+from app.services.notifications.dispatch import dispatch as _dispatch, load_notification_config as _load_notification_config
+from app.services.notifications.alert_notifier import _format_dt
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/alerts', tags=['chart-alerts'])
-
-# Strong references prevent the GC from collecting fire-and-forget notification tasks.
-_background_tasks: set = set()
-
-
-async def _safe_notify(channel: str, **kwargs) -> None:
-    """Wrapper so fire-and-forget tasks log their own errors instead of silently dying."""
-    try:
-        if channel == 'gmail':
-            await send_gmail(**kwargs)
-            logger.info('Alert email sent to %s', kwargs.get('to', '?'))
-        elif channel == 'telegram':
-            await send_telegram(**kwargs)
-            logger.info('Alert Telegram sent to chat %s', kwargs.get('chat_id', '?'))
-    except Exception:
-        logger.error('Alert notification failed (channel=%s)', channel, exc_info=True)
-
-
-def _dispatch(channel: str, **kwargs) -> None:
-    """Schedule a notification as a background task and keep a reference so it isn't GC'd."""
-    task = asyncio.create_task(_safe_notify(channel, **kwargs))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
-
-_SETTINGS_PATH = Path(__file__).parent.parent.parent / 'config' / 'settings.yaml'
-
-
-def _load_notification_config() -> dict:
-    """Read notification settings from settings.yaml (written by Settings → Notifications UI)."""
-    try:
-        if _SETTINGS_PATH.exists():
-            with open(_SETTINGS_PATH) as f:
-                cfg = yaml.safe_load(f) or {}
-                return cfg.get('notifications', {})
-    except Exception:
-        logger.debug('Could not load notification config', exc_info=True)
-    return {}
 
 
 # ── Pydantic request/response models ─────────────────────────────────────────
@@ -146,14 +107,22 @@ def _history_to_dict(row: AlertHistoryModel) -> dict:
         'trigger_values': json.loads(row.trigger_values), 'reason': row.reason,
     }
 
-def _build_notification_text(entry: dict) -> tuple[str, str, str]:
-    """Returns (subject, plain_body, html_body)."""
+def _build_notification_text(entry: dict, rule_name: str | None = None) -> tuple[str, str, str]:
+    """Returns (subject, plain_body, html_body).
+
+    ``rule_name`` is the human-readable name of the alert rule; it falls back to
+    the rule id when the name is unavailable. The trigger time is rendered as a
+    local Date/Time (no microseconds) to match the portfolio alert format.
+    """
     sym = entry.get('symbol', '?')
     ival = entry.get('interval', '?')
     reason = entry.get('reason', '')
     triggered_at = entry.get('triggered_at', '')
     tv = entry.get('trigger_values', {})
     rule_id = entry.get('rule_id', '')
+
+    date_str, time_str = _format_dt(triggered_at)
+    rule_label = rule_name or rule_id or '(unnamed rule)'
 
     subject = f'Bamendjou Alert - {sym} [{ival}]'
 
@@ -165,12 +134,13 @@ def _build_notification_text(entry: dict) -> tuple[str, str, str]:
             values_lines.append(f'{k}={v}')
     values_str = '  '.join(values_lines)
 
-    plain = (f'Symbol:    {sym}\nInterval:  {ival}\nTime:      {triggered_at}\n'
-             f'Trigger:   {reason}\nValues:    {values_str}\nRule:      (id: {rule_id})\n')
+    plain = (f'Symbol:    {sym}\nInterval:  {ival}\n'
+             f'Date:      {date_str}\nTime:      {time_str}\n'
+             f'Trigger:   {reason}\nValues:    {values_str}\nRule:      {rule_label}\n')
 
     html = (f'<b>Bamendjou Alert</b> - {sym} [{ival}]\n\n'
-            f'<b>Trigger:</b> {reason}\n<b>Time:</b> {triggered_at}\n'
-            f'<b>Values:</b> {values_str}\n<b>Rule:</b> {rule_id}\n')
+            f'<b>Trigger:</b> {reason}\n<b>Date:</b> {date_str}\n<b>Time:</b> {time_str}\n'
+            f'<b>Values:</b> {values_str}\n<b>Rule:</b> {rule_label}\n')
 
     return subject, plain, html
 
@@ -300,7 +270,11 @@ async def create_history_entry(body: AlertHistoryCreate, db: AsyncSession = Depe
     await db.commit()
 
     entry_dict = _history_to_dict(entry)
-    subject, plain_body, html_body = _build_notification_text(entry_dict)
+    rule_row = (await db.execute(
+        select(AlertRuleModel).where(AlertRuleModel.id == body.rule_id)
+    )).scalar_one_or_none()
+    rule_name = rule_row.name if rule_row else None
+    subject, plain_body, html_body = _build_notification_text(entry_dict, rule_name)
     _notif_cfg = _load_notification_config()
     _gmail = _notif_cfg.get('gmail', {})
     _tg    = _notif_cfg.get('telegram', {})
@@ -437,10 +411,11 @@ async def evaluate_and_notify_for_symbol(
             rule_row = (await db.execute(
                 select(AlertRuleModel).where(AlertRuleModel.id == entry['rule_id'])
             )).scalar_one_or_none()
+            rule_name = rule_row.name if rule_row else None
             if rule_row:
                 rule_row.last_triggered_at = entry['triggered_at']
 
-            subject, plain_body, html_body = _build_notification_text(entry)
+            subject, plain_body, html_body = _build_notification_text(entry, rule_name)
 
             _notif_cfg = _load_notification_config()
             _gmail  = _notif_cfg.get('gmail', {})
