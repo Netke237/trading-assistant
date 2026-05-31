@@ -124,7 +124,7 @@ def _build_notification_text(entry: dict, rule_name: str | None = None) -> tuple
     date_str, time_str = _format_dt(triggered_at)
     rule_label = rule_name or rule_id or '(unnamed rule)'
 
-    subject = f'Bamendjou Alert - {sym} [{ival}]'
+    subject = f'Bamendjou Alert - {rule_label} - {sym} [{ival}]'
 
     values_lines = []
     for k, v in tv.items():
