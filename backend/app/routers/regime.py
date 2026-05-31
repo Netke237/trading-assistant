@@ -61,6 +61,26 @@ def _vix_percentile(history: list[float], current: float) -> float:
     return round(100.0 * below / len(history), 1)
 
 
+def compute_overall_regime() -> str:
+    """Return the current market overall status (PASS/CAUTION/REJECT/PENDING) without a full MarketRegime object."""
+    try:
+        spx = _spx_ndx_metric('SPX', 'SPX trend (200 EMA)')
+        ndx = _spx_ndx_metric('NDX', 'NDX trend (200 EMA)')
+    except Exception:
+        return 'PENDING'
+
+    try:
+        vix = fetch_price('VIX')
+        vix_status = _vix_status(vix) if vix is not None else 'PENDING'
+    except Exception:
+        vix_status = 'PENDING'
+
+    statuses = [m.status for m in (spx, ndx) if m is not None] + [vix_status]
+    if not statuses:
+        return 'PENDING'
+    return min(statuses, key=lambda s: _PRIORITY.get(s, 2))
+
+
 @router.get('/regime', response_model=MarketRegime)
 async def get_regime(
     horizon:   str   = Query(default='swing',  description="'intraday' | 'swing' | 'position'"),
