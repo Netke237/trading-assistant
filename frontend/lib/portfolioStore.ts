@@ -65,6 +65,10 @@ interface PortfolioStoreState {
   addPosition:    (p: PortfolioPosition) => void;
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   closePosition:  (contract: string) => void;
+  closePositionRemote: (
+    recId: string,
+    opts: { qtyToClose?: number | null; exitPrice?: number | null; exitDate?: string | null; sendToBroker?: boolean },
+  ) => Promise<boolean>;
   syncFromBackend: () => Promise<void>;
   syncToBackend:  () => Promise<void>;
 }
@@ -203,14 +207,32 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         });
         if (closedRecId) deletePosition(closedRecId);
       },
+      closePositionRemote: async (recId, opts) => {
+        try {
+          const res = await fetch(`${_BASE_URL()}/api/portfolio/${recId}/close`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              qtyToClose: opts.qtyToClose ?? null,
+              exitPrice: opts.exitPrice ?? null,
+              exitDate: opts.exitDate ?? null,
+              sendToBroker: opts.sendToBroker ?? false,
+            }),
+          });
+          if (!res.ok) return false;
+          // Re-pull authoritative open positions (partial closes change qty)
+          await usePortfolioStore.getState().syncFromBackend();
+          return true;
+        } catch {
+          return false;
+        }
+      },
       syncFromBackend: async () => {
         try {
           const res = await fetch(`${_BASE_URL()}/api/portfolio`);
           if (!res.ok) return;
           const positions: BackendPosition[] = await res.json();
-          if (positions.length > 0) {
-            set({ positions: positions.map(fromBackend) });
-          }
+          set({ positions: positions.map(fromBackend) });
         } catch {
           // network unavailable — keep localStorage state
         }
