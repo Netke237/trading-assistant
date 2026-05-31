@@ -46,6 +46,49 @@ class NotificationConfig(BaseModel):
     telegram: TelegramConfig
 
 
+_SUPPORTED_TYPES = ['TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP', 'REGIME_CHANGE']
+
+_DEFAULT_DELIVERY = {
+    'masterEnabled': True,
+    'enabledTypes': _SUPPORTED_TYPES,
+    'dedupWindowMinutes': 15,
+    # While a condition stays true, how often email/Telegram reminds you.
+    'reminderIntervalHours': 4,
+}
+
+
+class AlertDeliveryConfig(BaseModel):
+    masterEnabled: bool = True
+    enabledTypes: list[str] = _SUPPORTED_TYPES
+    dedupWindowMinutes: int = 15
+    reminderIntervalHours: int = 4
+
+
+@router.get('/alert-delivery')
+async def get_alert_delivery() -> dict:
+    cfg = _load_yaml()
+    d = cfg.get('alert_delivery', _DEFAULT_DELIVERY)
+    return {
+        'masterEnabled': bool(d.get('masterEnabled', True)),
+        'enabledTypes': d.get('enabledTypes', _SUPPORTED_TYPES),
+        'dedupWindowMinutes': int(d.get('dedupWindowMinutes', 15)),
+        'reminderIntervalHours': int(d.get('reminderIntervalHours', 4)),
+    }
+
+
+@router.post('/alert-delivery')
+async def save_alert_delivery(body: AlertDeliveryConfig) -> dict:
+    cfg = _load_yaml()
+    cfg['alert_delivery'] = {
+        'masterEnabled': body.masterEnabled,
+        'enabledTypes': body.enabledTypes,
+        'dedupWindowMinutes': body.dedupWindowMinutes,
+        'reminderIntervalHours': body.reminderIntervalHours,
+    }
+    _save_yaml(cfg)
+    return cfg['alert_delivery']
+
+
 @router.get('/notifications')
 async def get_notifications() -> dict:
     cfg = _load_yaml()

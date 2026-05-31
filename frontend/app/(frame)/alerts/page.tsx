@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text, Data } from '@/components/primitives';
 import { useAlertStore, DEFAULT_CONFIG } from '@/lib/alertStore';
@@ -128,6 +128,50 @@ export default function AlertsPage() {
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
 
+  const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+  const deliverySyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deliveryLoaded = useRef(false);
+
+  // Load delivery prefs from backend on mount and merge into store
+  useEffect(() => {
+    fetch(`${BASE_URL}/settings/alert-delivery`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) {
+          setConfig({
+            ...config,
+            enabledTypes: data.enabledTypes ?? config.enabledTypes,
+            dedupWindowMinutes: data.dedupWindowMinutes ?? config.dedupWindowMinutes,
+            reminderIntervalHours: data.reminderIntervalHours ?? config.reminderIntervalHours,
+          });
+        }
+        deliveryLoaded.current = true;
+      })
+      .catch(() => { deliveryLoaded.current = true; });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [BASE_URL]);
+
+  // Debounced save of delivery-relevant prefs to backend
+  useEffect(() => {
+    if (!deliveryLoaded.current) return;
+    if (deliverySyncTimer.current) clearTimeout(deliverySyncTimer.current);
+    deliverySyncTimer.current = setTimeout(() => {
+      fetch(`${BASE_URL}/settings/alert-delivery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          masterEnabled: true,
+          enabledTypes: config.enabledTypes,
+          dedupWindowMinutes: config.dedupWindowMinutes,
+          reminderIntervalHours: config.reminderIntervalHours,
+        }),
+      }).catch(() => {});
+    }, 800);
+    return () => {
+      if (deliverySyncTimer.current) clearTimeout(deliverySyncTimer.current);
+    };
+  }, [BASE_URL, config.enabledTypes, config.dedupWindowMinutes, config.reminderIntervalHours]);
+
   const candidates = useScanStore((s) => s.scanResult?.candidates) ?? [];
   const portfolioPositions = usePortfolioStore((s) => s.positions);
   const watchlistSymbols = useWatchlistStore((s) => s.added);
@@ -227,7 +271,7 @@ export default function AlertsPage() {
         <aside className={styles.colLeft}>
           <section className={styles.section}>
             <Text size={11} tone="secondary" weight={600}>Alert Settings</Text>
-            <Text size={12} tone="secondary">In-app alerts only. Email / push arrive in Phase 8.</Text>
+            <Text size={12} tone="secondary">Toggles control both in-app and Telegram / email delivery.</Text>
 
             <div className={styles.settingsGrid}>
               <SettingsRow label="Keep alerts for (days)" hint="Alerts older than this are auto-purged." defaultValue="10">
@@ -256,6 +300,19 @@ export default function AlertsPage() {
                   onChange={(e) => {
                     const val = Number(e.target.value);
                     if (val >= 1 && val <= 120) setConfig({ ...config, dedupWindowMinutes: val });
+                  }}
+                />
+              </SettingsRow>
+              <SettingsRow label="Reminder interval (hours)" hint="While a condition stays true, how often email / Telegram reminds you." defaultValue="4">
+                <input
+                  type="number"
+                  className={styles.input}
+                  min={1}
+                  max={168}
+                  value={config.reminderIntervalHours}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 1 && val <= 168) setConfig({ ...config, reminderIntervalHours: val });
                   }}
                 />
               </SettingsRow>

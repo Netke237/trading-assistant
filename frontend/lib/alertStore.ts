@@ -22,6 +22,7 @@ interface AlertStoreState {
 
 export const DEFAULT_CONFIG: AlertConfig = {
   dedupWindowMinutes: 15,
+  reminderIntervalHours: 4,
   keepAlertsDays: 30,
   enabledTypes: [
     'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP',
@@ -35,6 +36,66 @@ function makeDedupKey(recId: string, alertType: AlertType | string): string {
   return `${recId}-${alertType}`;
 }
 
+// Collapse un-acknowledged duplicates down to one row per (recId, alertType),
+// keeping the most recent. Acknowledged rows are left untouched as history.
+// Used on hydration to clean up any pre-existing pile-up.
+function collapseToasts(toasts: ToastItem[]): ToastItem[] {
+  const latestActive = new Map<string, ToastItem>();
+  const acknowledged: ToastItem[] = [];
+  for (const t of toasts) {
+    if (t.acknowledged) {
+      acknowledged.push(t);
+      continue;
+    }
+    const key = makeDedupKey(t.recId, t.alertType);
+    const existing = latestActive.get(key);
+    if (!existing || new Date(t.firedAt).getTime() >= new Date(existing.firedAt).getTime()) {
+      latestActive.set(key, t);
+    }
+  }
+  return [...acknowledged, ...latestActive.values()];
+}
+
+// Portfolio alert types that should trigger an email/Telegram. Scan lifecycle
+// types (SCAN_COMPLETE/SCAN_FAILED) are deliberately excluded.
+const NOTIFIABLE_TYPES = new Set<string>([
+  'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP', 'EVENT_RISK', 'REGIME_CHANGE',
+]);
+
+const NOTIFY_BASE_URL = () =>
+  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+
+// Fire-and-forget: tell the backend to deliver this alert. The backend enforces
+// masterEnabled/enabledTypes and dedups (shared with the headless monitor), so
+// the browser just reports every NEW alert it shows.
+function notifyBackend(item: {
+  symbol: string;
+  alertType: string;
+  reason: string;
+  recId: string;
+  firedAt: string;
+}): void {
+  if (typeof window === 'undefined') return;
+  if (!NOTIFIABLE_TYPES.has(item.alertType)) return;
+  try {
+    void fetch(`${NOTIFY_BASE_URL()}/api/alerts/notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        symbol: item.symbol,
+        alertType: item.alertType,
+        reason: item.reason,
+        recId: item.recId,
+        timestamp: item.firedAt,
+      }),
+    }).catch(() => {
+      /* backend offline — in-app alert still shows */
+    });
+  } catch {
+    /* network unavailable */
+  }
+}
+
 export const useAlertStore = create<AlertStoreState>()(
   persist(
     (set, get) => ({
@@ -46,32 +107,66 @@ export const useAlertStore = create<AlertStoreState>()(
       addToast: (item) => {
         const { toasts, config, firedAlerts, suppressedAlerts } = get();
         const now = Date.now();
-        const windowMs = config.dedupWindowMinutes * 60_000;
+        const nowIso = new Date(now).toISOString();
 
         const compositeKey = makeDedupKey(item.recId, item.alertType);
 
         // permanently suppressed after acknowledge
         if (suppressedAlerts[compositeKey]) return;
 
-        // time-window dedup
-        const evicted: Record<string, number> = {};
-        for (const [key, ts] of Object.entries(firedAlerts)) {
-          if (now - ts <= windowMs) evicted[key] = ts;
+        // ── In-app: one row per active condition. A still-true condition that
+        //    keeps re-checking updates its existing (un-acknowledged) row in
+        //    place instead of spawning a new one — no pile-up.
+        const existingIdx = toasts.findIndex(
+          (t) => t.recId === item.recId && t.alertType === item.alertType && !t.acknowledged,
+        );
+        const isNewRow = existingIdx < 0;
+
+        let nextToasts: ToastItem[];
+        if (isNewRow) {
+          const id = now.toString(36) + Math.random().toString(36).slice(2, 6);
+          nextToasts = [...toasts, {
+            ...item,
+            id,
+            dismissed: false,
+            acknowledged: false,
+            firedAt: nowIso,
+          }];
+        } else {
+          nextToasts = [...toasts];
+          nextToasts[existingIdx] = {
+            ...nextToasts[existingIdx]!,
+            kind: item.kind,
+            reason: item.reason,
+            firedAt: nowIso,
+          };
         }
-        if (compositeKey in evicted) return;
 
-        evicted[compositeKey] = now;
-        const id = now.toString(36) + Math.random().toString(36).slice(2, 6);
-        const toast: ToastItem = {
-          ...item,
-          id,
-          dismissed: false,
-          acknowledged: false,
-          firedAt: new Date(now).toISOString(),
-        };
-        set({ toasts: [...toasts, toast], firedAlerts: evicted });
+        // ── Notification: throttle re-POSTs to once per dedupWindowMinutes so we
+        //    don't hit the backend every 30s tick. The backend enforces the real
+        //    reminder gap (reminderIntervalHours), so a short throttle here is
+        //    enough — it just needs to re-POST soon after each reminder window
+        //    opens. dedupWindowMinutes (15m) ≪ reminderIntervalHours (4h).
+        const throttleMs = Math.max(config.dedupWindowMinutes, 1) * 60_000;
+        const lastSent = firedAlerts[compositeKey];
+        const shouldNotify = lastSent == null || now - lastSent >= throttleMs;
+        const nextFired = { ...firedAlerts };
+        if (shouldNotify) nextFired[compositeKey] = now;
 
-        if (config.soundEnabled && typeof window !== 'undefined') {
+        set({ toasts: nextToasts, firedAlerts: nextFired });
+
+        if (shouldNotify) {
+          notifyBackend({
+            symbol: item.symbol,
+            alertType: item.alertType,
+            reason: item.reason,
+            recId: item.recId,
+            firedAt: nowIso,
+          });
+        }
+
+        // Only chime on a genuinely new alert, not on silent in-place refreshes.
+        if (isNewRow && config.soundEnabled && typeof window !== 'undefined') {
           const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
           const osc = ctx.createOscillator();
           osc.connect(ctx.destination);
@@ -142,9 +237,11 @@ export const useAlertStore = create<AlertStoreState>()(
           config: { ...DEFAULT_CONFIG, ...(ps?.config ?? {}) },
           suppressedAlerts: ps?.suppressedAlerts ?? {},
         };
-        // purge old alerts on hydration
+        // purge old alerts, then collapse any pre-existing duplicate pile-up
         const cutoff = Date.now() - merged.config.keepAlertsDays * 86_400_000;
-        merged.toasts = merged.toasts.filter((t) => new Date(t.firedAt).getTime() > cutoff);
+        merged.toasts = collapseToasts(
+          merged.toasts.filter((t) => new Date(t.firedAt).getTime() > cutoff),
+        );
         return merged;
       },
     }

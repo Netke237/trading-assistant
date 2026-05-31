@@ -29,30 +29,34 @@ from app.routers.notification_settings import router as notification_settings_ro
 
 
 _notification_worker_task: asyncio.Task | None = None
+_portfolio_monitor_task: asyncio.Task | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _notification_worker_task
+    global _notification_worker_task, _portfolio_monitor_task
     # ── Startup ──────────────────────────────────────────────────────────
     from app.routers.scan import restore_from_db, _scheduler, _scheduled_scan
     status = await restore_from_db()
     if status == "running":
         _scheduler.bind(_scheduled_scan)
         await _scheduler.start()
-    # Keep a strong reference so the GC never collects the worker task.
+    # Keep strong references so the GC never collects background tasks.
     from app.services.notifications.queue import notification_worker
     _notification_worker_task = asyncio.create_task(notification_worker())
+    from app.services.portfolio_alert_monitor import run_portfolio_alert_monitor
+    _portfolio_monitor_task = asyncio.create_task(run_portfolio_alert_monitor())
     yield
     # ── Shutdown ─────────────────────────────────────────────────────────
     if _scheduler._running:
         await _scheduler.stop()
-    if _notification_worker_task:
-        _notification_worker_task.cancel()
-        try:
-            await _notification_worker_task
-        except asyncio.CancelledError:
-            pass
+    for task in (_notification_worker_task, _portfolio_monitor_task):
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 def create_app() -> FastAPI:
