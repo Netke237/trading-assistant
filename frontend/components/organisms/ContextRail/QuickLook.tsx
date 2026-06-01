@@ -21,11 +21,14 @@ import styles from './QuickLook.module.css';
 export function RailQuickLook() {
   const router = useRouter();
   const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
+  const [watchlistError, setWatchlistError] = useState(false);
   const portfolio       = usePortfolioStore((s) => s.positions);
   const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
 
   useEffect(() => {
-    api.getWatchlist().then(setWatchlist).catch(() => {});
+    api.getWatchlist()
+      .then(setWatchlist)
+      .catch(() => setWatchlistError(true));
     syncFromBackend();
   }, [syncFromBackend]);
 
@@ -47,6 +50,9 @@ export function RailQuickLook() {
     <>
       <RailSection title="Watchlist · Top 5">
         <div className={styles.watchlistStack}>
+          {watchlistError && (
+            <Text size={12} tone="dim">Could not load watchlist</Text>
+          )}
           {top.map((r) => (
             <QuickLookRow
               key={r.symbol}

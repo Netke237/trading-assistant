@@ -14,6 +14,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 
 import { ChartPanelHeader } from '@/components/molecules/ChartPanelHeader';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
+import { Text } from '@/components/primitives/Text';
 import { api } from '@/lib/api';
 import type { Candle } from '@/types/chart';
 import styles from './InlineChartPanel.module.css';
@@ -26,10 +27,14 @@ interface InlineChartPanelProps {
 
 export function InlineChartPanel({ open, symbol, onClose }: InlineChartPanelProps) {
   const [candles, setCandles] = useState<Candle[]>([]);
+  const [candleError, setCandleError] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    api.getCandles(symbol).then(setCandles).catch(() => {});
+    setCandleError(false);
+    api.getCandles(symbol)
+      .then(setCandles)
+      .catch(() => setCandleError(true));
   }, [open, symbol]);
 
   return (
@@ -46,7 +51,11 @@ export function InlineChartPanel({ open, symbol, onClose }: InlineChartPanelProp
         >
           <ChartPanelHeader symbol={symbol} onClose={onClose} />
           <div className={styles.chartArea}>
-            <CandlestickChart data={candles} height={360} />
+            {candleError ? (
+              <Text size={12} tone="dim">Chart unavailable</Text>
+            ) : (
+              <CandlestickChart data={candles} height={360} />
+            )}
           </div>
         </motion.section>
       )}
