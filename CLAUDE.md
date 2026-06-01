@@ -19,7 +19,7 @@ Repo: github.com/Netke237/trading-assistant (private).
 | Charts | lightweight-charts v5 (TradingView) |
 | Animation | framer-motion (minimal use) |
 | State | Zustand v5 — one store per domain |
-| Data | Deterministic mocks in `mocks/` — no backend yet |
+| Data | FastAPI backend via `frontend/lib/api.ts`; Jest mocks in `frontend/__mocks__/` |
 | Typecheck | `npm run typecheck` (`tsc --noEmit`) — must be clean before every commit |
 
 ---
@@ -51,7 +51,6 @@ frontend/
     molecules/            # Composed: TableRow, SymbolHeader, CandidateNav…
     organisms/            # Full sections: TopBar, StepNavBar, TradeCard, SendToBrokerDialog…
   lib/                    # Zustand stores + pure helpers
-  mocks/                  # Deterministic fixture data (replace with fetch() later)
   types/
     domain.ts             # Shared domain types (WatchlistRow, PortfolioPosition…)
     chart.ts              # Candle type
@@ -88,33 +87,15 @@ frontend/
 | `watchlistStore.ts` | Starred symbols — symmetric add/remove, versioned migrate |
 | `watchedContractsStore.ts` | Starred contracts |
 | `portfolioStore.ts` | Open positions — `addPosition` merges duplicate contracts |
+| `settingsStore.ts` | `premiumStopPct` — stop-loss fraction, default 0.60; configurable in Settings |
 
 `scanStore.regime` is set by Step 3 on mount and read by StepNavBar for the REJECT gate.
 
 ---
 
-## Mocks (`mocks/`)
-
-| File | Feeds |
-|---|---|
-| `watchlist.ts` | Steps 4, 5; Watchlist page stocks tab |
-| `contracts.ts` | Step 6; Watchlist contracts tab |
-| `candles.ts` | Steps 3, 4 charts — seeded RNG (Mulberry32), stable across reloads |
-| `regime.ts` | Step 3 banner + metric grid |
-| `sectors.ts` | Step 3 sector heatmap |
-| `tradecards.ts` | Step 7 per-candidate trade cards |
-| `portfolio.ts` | Portfolio page seed data |
-| `alerts.ts` | Dashboard alert feed |
-| `events.ts` | Calendar page |
-
-All mocks are replaced by `fetch()` calls when the FastAPI backend lands.
-Contract canonical ID format: `SYMBOL|STRIKE|EXPIRY|C/P` (e.g. `AAPL|185|2025-05-16|C`).
-
----
-
 ## Backend (`backend/`)
 
-Not yet connected to the frontend — all data still served from `mocks/`.
+Connected to the frontend via `frontend/lib/api.ts`.
 
 | Layer | Choice |
 |---|---|
@@ -228,5 +209,4 @@ Min-width gate: 1200px (`MinWidthGate.tsx`) — shows a "rotate / resize" messag
 
 ## What's next
 
-- Backend integration — FastAPI; replace mocks with `fetch()`
 - Persist Settings (weights + custom params) to localStorage or backend
