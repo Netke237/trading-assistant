@@ -18,6 +18,8 @@ import json as _json
 
 _RR_CONFIG_PATH = _Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
+# NOTE: lru_cache caches this at first call. Restart the backend to pick up
+# changes to risk_rules.yaml (premium_stop_pct, target %, etc.).
 @_lru_cache(maxsize=1)
 def _rr_cfg() -> dict:
     import yaml as _yaml

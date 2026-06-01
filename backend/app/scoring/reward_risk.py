@@ -76,6 +76,8 @@ def estimate_targets(
     For Bullish calls: T2 = stock_price + 1.5 * (T1 - stock_price)
     For Bearish puts:  T2 = stock_price - 1.5 * (stock_price - T1)
     Each level repriced via Heston if available, else delta approximation.
+
+    premium_stop_pct: fraction of current_premium used as risk basis for R/R (default 0.60).
     """
     from app.schemas import TargetLevel as TargetLevelSchema, PricingMethod
 

@@ -117,8 +117,37 @@ def test_heston_path_not_used_when_params_none():
 
 
 def test_estimate_rr_uses_premium_stop_pct():
-    """risk should equal premium * premium_stop_pct, not full premium."""
+    """risk = current_premium * premium_stop_pct, so halving premium_stop_pct doubles rr_ratio."""
     from app.scoring.reward_risk import estimate_rr
+
+    base_kwargs = dict(
+        stock_price=100.0,
+        target_price=108.0,
+        invalidation_price=97.0,
+        strike=100.0,
+        expiry_years=0.25,
+        current_premium=2.00,
+        is_call=True,
+    )
+
+    result_60 = estimate_rr(**base_kwargs, premium_stop_pct=0.60)
+    result_30 = estimate_rr(**base_kwargs, premium_stop_pct=0.30)
+
+    # 0.30 stop_pct = half the risk basis → rr_ratio should be double
+    assert result_60.rr_ratio > 0
+    assert result_30.rr_ratio > 0
+    # Allow floating-point tolerance
+    assert abs(result_30.rr_ratio - result_60.rr_ratio * 2) < 0.05
+
+    # Also verify the 0.60 case matches expected math:
+    # exit_premium = 2.00 + 0.5*(108-100) = 6.00; reward=4.00; risk=1.20; rr=3.33
+    assert abs(result_60.rr_ratio - 3.33) < 0.01
+
+
+def test_estimate_rr_zero_stop_pct_returns_zero():
+    """premium_stop_pct=0 means risk=0, guard should return rr_ratio=0.0."""
+    from app.scoring.reward_risk import estimate_rr
+
     result = estimate_rr(
         stock_price=100.0,
         target_price=108.0,
@@ -127,12 +156,6 @@ def test_estimate_rr_uses_premium_stop_pct():
         expiry_years=0.25,
         current_premium=2.00,
         is_call=True,
-        premium_stop_pct=0.60,
+        premium_stop_pct=0.0,
     )
-    # With delta-approx (no heston_params):
-    #   exit_premium = 2.00 + 0.5 * (108-100) = 6.00
-    #   reward = 6.00 - 2.00 = 4.00
-    #   risk = 2.00 * 0.60 = 1.20
-    #   rr = round(4.00 / 1.20, 2) = 3.33
-    assert result.rr_ratio > 0
-    assert abs(result.rr_ratio - round(4.00 / 1.20, 2)) < 0.01
+    assert result.rr_ratio == 0.0
