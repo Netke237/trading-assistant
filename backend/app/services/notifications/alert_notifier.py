@@ -25,6 +25,16 @@ from app.services.notifications.dispatch import notify_enabled_channels
 
 logger = logging.getLogger(__name__)
 
+# All alert timestamps are shown in Central European time, pinned to the
+# Europe/Berlin zone so the displayed clock does not depend on the server's
+# local timezone. Falls back to the server local zone if tz data is missing.
+try:
+    from zoneinfo import ZoneInfo
+    _CET = ZoneInfo('Europe/Berlin')
+except Exception:
+    _CET = None
+_TZ_LABEL = 'CET'
+
 _SETTINGS_PATH = Path(__file__).parent.parent.parent.parent / 'config' / 'settings.yaml'
 
 _DEFAULT_ENABLED_TYPES = [
@@ -111,7 +121,7 @@ def _format_dt(timestamp: str | None) -> tuple[str, str]:
             dt = None
     if dt is None:
         dt = datetime.now(timezone.utc)
-    local = dt.astimezone()  # convert to the server's local timezone
+    local = dt.astimezone(_CET) if _CET else dt.astimezone()
     return local.strftime('%d.%m.%Y'), local.strftime('%H:%M:%S')
 
 
@@ -127,23 +137,26 @@ def _build_notification(symbol: str, alert_type: str, reason: str,
     still_plain = ''
     still_html = ''
     if is_reminder:
-        _, now_time = _format_dt(None)  # current local time
-        still_plain = f'Status:  Still active as of {now_time}\n'
-        still_html = f'<b>Status:</b> Still active as of {now_time}\n'
+        _, now_time = _format_dt(None)  # current CET time
+        still_plain = f'Status:  Still active as of {now_time} {_TZ_LABEL}\n'
+        still_html = f'<b>Status:</b> Still active as of {now_time} {_TZ_LABEL}\n'
     plain = (
         f'Symbol:  {symbol}\n'
         f'Type:    {alert_type}\n'
         f'Trigger: {reason}\n'
         f'Date:    {date_str}\n'
-        f'Time:    {time_str}\n'
+        f'Time:    {time_str} {_TZ_LABEL}\n'
         f'{still_plain}'
     )
+    # Telegram mirrors the email body exactly (same fields, same order), with a
+    # bold first line equal to the email subject.
     html = (
-        f'<b>Bamendjou Alert{tag}</b> — {symbol}\n\n'
-        f'<b>Type:</b> {alert_type}\n'
+        f'<b>{subject}</b>\n\n'
+        f'<b>Symbol:</b>  {symbol}\n'
+        f'<b>Type:</b>    {alert_type}\n'
         f'<b>Trigger:</b> {reason}\n'
-        f'<b>Date:</b> {date_str}\n'
-        f'<b>Time:</b> {time_str}\n'
+        f'<b>Date:</b>    {date_str}\n'
+        f'<b>Time:</b>    {time_str} {_TZ_LABEL}\n'
         f'{still_html}'
     )
     return subject, plain, html

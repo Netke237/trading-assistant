@@ -313,5 +313,5 @@
 .perfStrip { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); margin-bottom: var(--space-4); }
 .perfStat { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border-subtle); border-radius: 8px; padding: var(--space-2) var(--space-3); }
 .historyWrap { display: flex; flex-direction: column; gap: 6px; }
-.historyRow { display: grid; grid-template-columns: 64px 1.6fr 1fr 96px 80px 28px; align-items: center; gap: var(--space-2); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 10px; }
+.historyRow { display: grid; grid-template-columns: 64px 1.6fr 1fr 168px 80px 28px; align-items: center; gap: var(--space-2); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 10px; }
 .historyRemove { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 16px; }

@@ -38,7 +38,7 @@ export function MarketClock() {
       : formatMinutes(minutesUntilChange);
 
   return (
-    <div className={`${styles.clock} ${STATUS_CLASS[status]}`} title="US equity market hours (ET)">
+    <div className={`${styles.clock} ${STATUS_CLASS[status]}`} title="US equity market hours (open time shown in CET)">
       <span className={styles.dot} aria-hidden />
       <span className={styles.label}>{STATUS_LABEL[status]}</span>
       <span className={styles.sep} aria-hidden>·</span>

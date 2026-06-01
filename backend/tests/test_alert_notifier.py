@@ -121,6 +121,26 @@ def test_event_risk_dispatches_when_enabled(monkeypatch):
     assert len(sent) == 1
 
 
+def test_telegram_mirrors_email_and_shows_cet(captured):
+    assert an.notify_alert('CLX', 'STOP_REACHED', 'Stop breached — CLX below $89.79',
+                           'rec-1', _TS) is True
+    subject, plain, html = captured[0]
+
+    # Time is labelled CET in both channels.
+    assert 'CET' in _time_line(plain)
+    assert 'CET' in html
+
+    # Telegram body carries the SAME fields as the email body, in order.
+    for field in ('Symbol:', 'Type:', 'Trigger:', 'Date:', 'Time:'):
+        assert field in plain
+        assert field in html
+    # Telegram's bold first line equals the email subject.
+    assert html.startswith(f'<b>{subject}</b>')
+    # Symbol and trigger text appear in the Telegram message.
+    assert 'CLX' in html
+    assert 'Stop breached — CLX below $89.79' in html
+
+
 def test_dedup_state_persists_across_reload(monkeypatch, tmp_path):
     import app.services.notifications.alert_notifier as an
 

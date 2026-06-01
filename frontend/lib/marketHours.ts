@@ -38,9 +38,28 @@ function etComponents(now: Date): { day: number; minuteOfDay: number } {
   };
 }
 
+/**
+ * Converts an ET time-of-day to the equivalent CET wall-clock label.
+ * Uses the live ET↔CET offset so it stays correct across DST shifts
+ * (e.g. 9:30 ET → "15:30").
+ */
+function etTimeToCetLabel(etHour: number, etMin: number, now: Date): string {
+  const etNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const cetNow = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+  const offsetMin = Math.round((cetNow.getTime() - etNow.getTime()) / 60000);
+  let total = etHour * 60 + etMin + offsetMin;
+  total = ((total % DAY_MINS) + DAY_MINS) % DAY_MINS;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${h}:${String(m).padStart(2, '0')} CET`;
+}
+
 export function getMarketState(now: Date): MarketState {
   const { day, minuteOfDay } = etComponents(now);
   const isWeekday = day >= 1 && day <= 5;
+  // Regular session opens 9:30 ET — shown to the user in CET.
+  const openLabel = etTimeToCetLabel(9, 30, now);
+  const monOpenLabel = `Mon ${openLabel}`;
 
   // --- Weekends ---
   if (!isWeekday) {
@@ -48,7 +67,7 @@ export function getMarketState(now: Date): MarketState {
     return {
       status: 'CLOSED',
       minutesUntilChange: daysToMon * DAY_MINS - minuteOfDay + OPEN_START,
-      nextOpenLabel: 'Mon 9:30',
+      nextOpenLabel: monOpenLabel,
     };
   }
 
@@ -57,7 +76,7 @@ export function getMarketState(now: Date): MarketState {
     return {
       status: 'CLOSED',
       minutesUntilChange: OPEN_START - minuteOfDay,
-      nextOpenLabel: '9:30',
+      nextOpenLabel: openLabel,
     };
   }
 
@@ -66,7 +85,7 @@ export function getMarketState(now: Date): MarketState {
     return {
       status: 'PRE',
       minutesUntilChange: OPEN_START - minuteOfDay,
-      nextOpenLabel: '9:30',
+      nextOpenLabel: openLabel,
     };
   }
 
@@ -75,7 +94,7 @@ export function getMarketState(now: Date): MarketState {
     return {
       status: 'OPEN',
       minutesUntilChange: AFTER_START - minuteOfDay,
-      nextOpenLabel: '9:30',
+      nextOpenLabel: openLabel,
     };
   }
 
@@ -84,12 +103,12 @@ export function getMarketState(now: Date): MarketState {
     return {
       status: 'AFTER',
       minutesUntilChange: CLOSED_EVE - minuteOfDay,
-      nextOpenLabel: day === 5 ? 'Mon 9:30' : '9:30',
+      nextOpenLabel: day === 5 ? monOpenLabel : openLabel,
     };
   }
 
   // --- Late evening (after 8 PM) ---
-  const nextOpenLabel = day === 5 ? 'Mon 9:30' : '9:30';
+  const nextOpenLabel = day === 5 ? monOpenLabel : openLabel;
   return {
     status: 'CLOSED',
     minutesUntilChange: DAY_MINS - minuteOfDay + OPEN_START,

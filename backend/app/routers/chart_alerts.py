@@ -23,7 +23,7 @@ from app.services.alert_evaluator import (
 )
 from app.services.indicator_compute import compute_indicators_for_conditions
 from app.services.notifications.dispatch import dispatch as _dispatch, load_notification_config as _load_notification_config
-from app.services.notifications.alert_notifier import _format_dt
+from app.services.notifications.alert_notifier import _format_dt, _TZ_LABEL
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/alerts', tags=['chart-alerts'])
@@ -135,12 +135,16 @@ def _build_notification_text(entry: dict, rule_name: str | None = None) -> tuple
     values_str = '  '.join(values_lines)
 
     plain = (f'Symbol:    {sym}\nInterval:  {ival}\n'
-             f'Date:      {date_str}\nTime:      {time_str}\n'
+             f'Date:      {date_str}\nTime:      {time_str} {_TZ_LABEL}\n'
              f'Trigger:   {reason}\nValues:    {values_str}\nRule:      {rule_label}\n')
 
-    html = (f'<b>Bamendjou Alert</b> - {sym} [{ival}]\n\n'
-            f'<b>Trigger:</b> {reason}\n<b>Date:</b> {date_str}\n<b>Time:</b> {time_str}\n'
-            f'<b>Values:</b> {values_str}\n<b>Rule:</b> {rule_label}\n')
+    # Telegram mirrors the email body exactly (same fields, same order), with a
+    # bold first line equal to the email subject (which carries the rule name).
+    html = (f'<b>{subject}</b>\n\n'
+            f'<b>Symbol:</b>    {sym}\n<b>Interval:</b>  {ival}\n'
+            f'<b>Date:</b>      {date_str}\n<b>Time:</b>      {time_str} {_TZ_LABEL}\n'
+            f'<b>Trigger:</b>   {reason}\n<b>Values:</b>    {values_str}\n'
+            f'<b>Rule:</b>      {rule_label}\n')
 
     return subject, plain, html
 

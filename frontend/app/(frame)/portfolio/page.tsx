@@ -53,6 +53,13 @@ export default function PortfolioPage() {
   const winners = positions.filter((p) => p.pnlDollar > 0).length;
   const losers  = positions.filter((p) => p.pnlDollar < 0).length;
 
+  const now = new Date();
+  const todayLabel = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+  const weekLabel = `${monthStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} – ${todayLabel}`;
+  const monthLabel = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const yearLabel = String(now.getFullYear());
+
   const confirmClose = async (p: PortfolioPosition, opts: { qtyToClose: number; exitPrice: number; exitDate: string }) => {
     const ok = await closeRemote(p.recId, opts);
     if (ok) { setClosing(null); fetchHistory(); fetchPerformance(); }
@@ -75,10 +82,10 @@ export default function PortfolioPage() {
       </div>
 
       <div className={styles.perfStrip}>
-        <PerfStat label="Today"  value={performance.realizedToday} />
-        <PerfStat label="Week"   value={performance.realizedWeek} />
-        <PerfStat label="Month"  value={performance.realizedMonth} />
-        <PerfStat label="Year"   value={performance.realizedYear} />
+        <PerfStat label="Today"  value={performance.realizedToday} period={todayLabel} />
+        <PerfStat label="Week"   value={performance.realizedWeek}  period={weekLabel} />
+        <PerfStat label="Month"  value={performance.realizedMonth} period={monthLabel} />
+        <PerfStat label="Year"   value={performance.realizedYear}  period={yearLabel} />
       </div>
 
       {tab === 'history' && (
@@ -90,7 +97,7 @@ export default function PortfolioPage() {
               <Data size={13} weight={500}>{h.symbol}</Data>
               <Text size={12} tone="secondary">{h.contract}</Text>
               <Text size={11} tone="dim">{h.qtyClosed}x · {h.entryPrice.toFixed(2)} → {h.exitPrice.toFixed(2)}</Text>
-              <Text size={11} tone="dim">{h.exitDate}</Text>
+              <Text size={11} tone="secondary">{h.entryDate ? `${h.entryDate} → ${h.exitDate}` : h.exitDate}</Text>
               <Data size={13} weight={500} tone={h.realizedPnlDollar > 0 ? 'pass' : h.realizedPnlDollar < 0 ? 'reject' : undefined}>
                 {h.realizedPnlDollar > 0 ? '+' : ''}${Math.round(h.realizedPnlDollar)}
               </Data>
@@ -227,12 +234,13 @@ export default function PortfolioPage() {
   );
 }
 
-function PerfStat({ label, value }: { label: string; value: number }) {
+function PerfStat({ label, value, period }: { label: string; value: number; period?: string }) {
   const tone = value > 0 ? 'pass' : value < 0 ? 'reject' : undefined;
   return (
     <div className={styles.perfStat}>
       <Text size={11} tone="secondary">{label}</Text>
       <Data size={16} weight={500} tone={tone}>{value > 0 ? '+' : ''}${Math.round(value)}</Data>
+      {period && <Text size={10} tone="dim">{period}</Text>}
     </div>
   );
 }
