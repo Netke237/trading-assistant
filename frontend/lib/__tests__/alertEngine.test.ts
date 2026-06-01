@@ -1,7 +1,7 @@
 import { scanPortfolio, type AlertPosition } from '@/lib/alertEngine';
 import { useScanStore } from '@/lib/scanStore';
 
-function pos(overrides: Partial<AlertPosition> = {}): AlertPosition {
+function makePosition(overrides: Partial<AlertPosition> = {}): AlertPosition {
   return {
     recId: 'r1',
     symbol: 'NVDA',
@@ -17,6 +17,9 @@ function pos(overrides: Partial<AlertPosition> = {}): AlertPosition {
   };
 }
 
+// Keep the old alias for the existing test
+const pos = makePosition;
+
 describe('scanPortfolio', () => {
   it('fires STOP_REACHED even when the symbol is flagged as a scan conflict', () => {
     useScanStore.getState().setConflictedSymbols(['NVDA']);
@@ -24,8 +27,15 @@ describe('scanPortfolio', () => {
     expect(out.some((a) => a.symbol === 'NVDA' && a.alertType === 'STOP_REACHED')).toBe(true);
   });
 
-  it('fires PREMIUM_STOP when option is down 40%+', () => {
-    const out = scanPortfolio([pos({ stop: 0, pnlPct: -45 })]);
-    expect(out.some((a) => a.alertType === 'PREMIUM_STOP')).toBe(true);
+  it('fires PREMIUM_STOP when pnlPct crosses the 60% stop threshold', () => {
+    const position = makePosition({ pnlPct: -65 });  // beyond -60% threshold
+    const results = scanPortfolio([position], { premiumStopPct: 0.60 });
+    expect(results.some(r => r.alertType === 'PREMIUM_STOP')).toBe(true);
+  });
+
+  it('does NOT fire PREMIUM_STOP when loss is below threshold', () => {
+    const position = makePosition({ pnlPct: -50 });  // not yet at -60%
+    const results = scanPortfolio([position], { premiumStopPct: 0.60 });
+    expect(results.some(r => r.alertType === 'PREMIUM_STOP')).toBe(false);
   });
 });

@@ -23,7 +23,17 @@ export interface AlertReason {
   reason: string;
 }
 
-export function scanPortfolio(positions: AlertPosition[]): AlertReason[] {
+export interface ScanOptions {
+  premiumStopPct?: number;  // fraction of premium lost at stop; default 0.60
+}
+
+export function scanPortfolio(
+  positions: AlertPosition[],
+  options: ScanOptions = {},
+): AlertReason[] {
+  const premiumStopPct = options.premiumStopPct ?? 0.60;
+  const premiumStopThreshold = -(premiumStopPct * 100);  // e.g. -60 for 0.60
+
   const out: AlertReason[] = [];
 
   for (const p of positions) {
@@ -50,8 +60,8 @@ export function scanPortfolio(positions: AlertPosition[]): AlertReason[] {
       });
     }
 
-    // PREMIUM_STOP — option lost 40%+ (entry * 0.60 threshold)
-    if (p.pnlPct <= -40) {
+    // PREMIUM_STOP — option lost premiumStopPct of its value
+    if (p.pnlPct <= premiumStopThreshold) {
       out.push({
         recId: p.recId,
         kind: 'Critical',

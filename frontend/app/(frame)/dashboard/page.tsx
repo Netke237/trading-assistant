@@ -22,6 +22,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { useAlertStore } from '@/lib/alertStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { usePerformanceStore } from '@/lib/performanceStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import { EarningsChart } from '@/components/organisms/EarningsChart';
 import { scanPortfolio } from '@/lib/alertEngine';
 import { api } from '@/lib/api';
@@ -55,6 +56,7 @@ export default function DashboardPage() {
   const [marketNewsError, setMarketNewsError] = useState(false);
 
   const portfolio = usePortfolioStore((s) => s.positions);
+  const premiumStopPct = useSettingsStore((s) => s.premiumStopPct);
 
   const performance = usePerformanceStore((s) => s.performance);
   const fetchPerformance = usePerformanceStore((s) => s.fetchPerformance);
@@ -104,7 +106,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const tick = () => {
-      const reasons = scanPortfolio(portfolio);
+      const reasons = scanPortfolio(portfolio, { premiumStopPct });
       const addToast = useAlertStore.getState().addToast;
       for (const r of reasons) {
         addToast(r);
@@ -113,7 +115,7 @@ export default function DashboardPage() {
     tick();
     const id = setInterval(tick, 30_000);
     return () => clearInterval(id);
-  }, [portfolio]);
+  }, [portfolio, premiumStopPct]);
 
   const top5 = watchlist.slice(0, 5);
 
