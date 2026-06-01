@@ -6,7 +6,7 @@ beforeEach(() => {
   useSettingsStore.setState(initial, true);
 });
 
-describe('settingsStore v9', () => {
+describe('settingsStore', () => {
   it('has correct defaults', () => {
     const state = useSettingsStore.getState();
     expect(state.maxContractsPerChain).toBe(10);
@@ -33,7 +33,5 @@ describe('settingsStore — premiumStopPct', () => {
   it('setPremiumStopPct updates the value', () => {
     useSettingsStore.getState().setPremiumStopPct(0.50);
     expect(useSettingsStore.getState().premiumStopPct).toBe(0.50);
-    // reset for other tests
-    useSettingsStore.getState().setPremiumStopPct(0.60);
   });
 });
