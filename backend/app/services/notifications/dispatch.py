@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 
 import yaml
@@ -63,7 +64,6 @@ def notify_enabled_channels(subject: str, plain_body: str, html_body: str) -> No
     BAMENDJOU_TELEGRAM_BOT_TOKEN) and gmail.py / telegram.py pick them up
     automatically when the argument is empty string.
     """
-    import os
     cfg = load_notification_config()
     gmail = cfg.get('gmail', {})
     tg = cfg.get('telegram', {})

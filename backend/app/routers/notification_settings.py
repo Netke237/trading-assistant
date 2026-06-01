@@ -32,12 +32,12 @@ class GmailConfig(BaseModel):
     enabled: bool = False
     to: str = ''
     smtp_user: str = ''
-    smtp_password: Optional[str] = None  # None / empty = "don't change existing"
+    smtp_password: Optional[str] = None  # accepted for backward compat but NOT persisted — credential lives in .env (BAMENDJOU_GMAIL_PASSWORD)
 
 
 class TelegramConfig(BaseModel):
     enabled: bool = False
-    bot_token: Optional[str] = None
+    bot_token: Optional[str] = None  # accepted for backward compat but NOT persisted — credential lives in .env (BAMENDJOU_TELEGRAM_BOT_TOKEN)
     chat_id: str = ''
 
 
