@@ -15,6 +15,7 @@ interface AlertStoreState {
   clearOldAlerts: () => void;
   clearAll: () => void;
   setConfig: (c: AlertConfig) => void;
+  testSound: () => void;
 
   // derived
   unacknowledgedCount: () => number;
@@ -97,6 +98,39 @@ function notifyBackend(item: {
   }
 }
 
+// Single shared AudioContext. Creating a fresh one per beep leaks contexts
+// (browsers cap them at ~6, after which new ones fail silently).
+let _audioCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  const Ctor =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) return null;
+  if (!_audioCtx) _audioCtx = new Ctor();
+  return _audioCtx;
+}
+
+// 880 Hz (A5) sine beep, 0.1s. Resumes the context first because browsers
+// auto-suspend an idle AudioContext, which otherwise makes the beep silent.
+function playBeep(): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const start = () => {
+    const osc = ctx.createOscillator();
+    osc.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.start();
+    osc.stop(ctx.currentTime + 0.1);
+  };
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(start).catch(() => { /* autoplay blocked */ });
+  } else {
+    start();
+  }
+}
+
 export const useAlertStore = create<AlertStoreState>()(
   persist(
     (set, get) => ({
@@ -168,13 +202,8 @@ export const useAlertStore = create<AlertStoreState>()(
         }
 
         // Only chime on a genuinely new alert, not on silent in-place refreshes.
-        if (isNewRow && config.soundEnabled && typeof window !== 'undefined') {
-          const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-          const osc = ctx.createOscillator();
-          osc.connect(ctx.destination);
-          osc.frequency.value = 880;
-          osc.start();
-          osc.stop(ctx.currentTime + 0.1);
+        if (isNewRow && config.soundEnabled) {
+          playBeep();
         }
       },
 
@@ -221,6 +250,10 @@ export const useAlertStore = create<AlertStoreState>()(
       setConfig: (c) => {
         set({ config: c });
       },
+
+      // Explicit user action (Settings "Test sound"), so it plays regardless of
+      // the soundEnabled toggle — the click itself satisfies autoplay rules.
+      testSound: () => playBeep(),
 
       unacknowledgedCount: () => get().toasts.filter((t) => !t.acknowledged).length,
     }),

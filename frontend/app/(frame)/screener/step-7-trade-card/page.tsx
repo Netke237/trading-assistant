@@ -24,8 +24,6 @@ import type { PortfolioPosition, TradeCardData } from '@/types/domain';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
-
 function nowISOLocal(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -172,37 +170,19 @@ export default function Step7Page() {
   const handleSubmit = (orders: DraftOrder[], _riskOverridden: boolean) => {
     let auto = 0, manual = 0;
     for (const o of orders) {
-      const pos = positionFromOrder(o);
+      // One canonical recId per order: addPosition syncs it to the backend
+      // (a single POST), so there is no second POST to conflict (409) with.
       const recId = recIdMap[o.card.symbol] ?? generateRecId();
-      addPosition(pos);
+      addPosition({ ...positionFromOrder(o), recId });
 
       if (o.autoSend) auto++;
       else manual++;
 
-      const body = JSON.stringify({
-        recId,
-        symbol: pos.symbol,
-        contract: pos.contract,
-        direction: pos.direction,
-        entryPrice: pos.entryPrice,
-        qty: pos.contracts ?? 1,
-        entryDate: pos.entryDate,
-        stop: pos.stop,
-        targets: pos.targets,
-        dteTotal: pos.dteTotal,
+      logAudit('APPROVE', recId, {
+        symbol: o.card.symbol,
+        contract: o.card.contract,
+        contracts: o.contracts,
       });
-
-      fetch(`${BASE_URL}/api/portfolio`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
-        .then(() => {
-          logAudit('APPROVE', recId, {
-            symbol: o.card.symbol,
-            contract: o.card.contract,
-            contracts: o.contracts,
-          });
-        })
-        .catch(() => {
-          // network error — position is still in local store
-        });
     }
     setDialogOpen(false);
     setBasket([]);

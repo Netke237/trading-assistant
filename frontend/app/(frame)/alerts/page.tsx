@@ -120,7 +120,7 @@ function conditionsSummary(rule: AlertRule): string {
 /* ─── Main page ─── */
 
 export default function AlertsPage() {
-  const { toasts, config, setConfig, clearAll, clearOldAlerts, acknowledgeAlert } = useAlertStore();
+  const { toasts, config, setConfig, clearAll, clearOldAlerts, acknowledgeAlert, testSound } = useAlertStore();
   const { ivPassThreshold, ivCautionThreshold, setIvPassThreshold, setIvCautionThreshold } = useSettingsStore();
   const { rules, updateRule, deleteRule, addRule } = useChartAlertStore();
 
@@ -332,7 +332,12 @@ export default function AlertsPage() {
                 />
               </SettingsRow>
               <SettingsRow label="Sound" hint="Play a short tone when a new alert fires." defaultValue="Off">
-                <Toggle on={config.soundEnabled} onChange={(on) => setConfig({ ...config, soundEnabled: on })} />
+                <div className={styles.soundControl}>
+                  <button type="button" className={styles.btnSecondary} onClick={testSound}>
+                    Test
+                  </button>
+                  <Toggle on={config.soundEnabled} onChange={(on) => setConfig({ ...config, soundEnabled: on })} />
+                </div>
               </SettingsRow>
               <SettingsRow label="IV Pass Threshold" hint="IV rank above this is considered PASS." defaultValue="34">
                 <input

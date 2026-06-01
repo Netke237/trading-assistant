@@ -192,6 +192,12 @@
   flex-shrink: 0;
 }
 
+.soundControl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .defaultTag {
   font-size: 10px;
   padding: 1px 5px;
