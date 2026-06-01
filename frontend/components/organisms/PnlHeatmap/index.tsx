@@ -32,8 +32,7 @@ function fmtDay(d: Date): string {
 }
 
 export function PnlHeatmap({ history }: { history: ClosedPosition[] }) {
-  const currentIsoYear = useMemo(() => isoWeek(new Date()).isoYear, []);
-  const [year, setYear] = useState(currentIsoYear);
+  const [year, setYear] = useState(() => isoWeek(new Date()).isoYear);
 
   const { weeks, maxAbs } = useMemo(() => {
     const w: WeekAgg[] = aggregateWeeks(history, year);
@@ -74,7 +73,7 @@ export function PnlHeatmap({ history }: { history: ClosedPosition[] }) {
 
         {weeks.map((wk) => {
           const tone = wk.totalDollar > 0 ? 'pass' as const : wk.totalDollar < 0 ? 'reject' as const : 'primary' as const;
-          const hasTrades = wk.totalCostBasis > 0;
+          const hasTrades = wk.days.some((d) => d !== undefined);
           return (
             <div key={wk.isoWeek} className={styles.weekRow}>
               <span className={styles.weekLabel}>
