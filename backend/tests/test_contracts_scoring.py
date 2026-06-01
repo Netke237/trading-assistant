@@ -247,6 +247,17 @@ async def test_get_contracts_max_price_filter():
     assert data[0]["strike"] == 200
 
 
+def test_oi_score_is_populated():
+    """oi_score in the breakdown should reflect open interest, not always be 0."""
+    contract = {
+        'symbol': 'AAPL', 'strike': 185.0, 'expiry': '2025-09-19',
+        'is_call': True, 'bid': 3.50, 'ask': 3.60,
+        'delta': 0.45, 'volume': 500, 'open_interest': 2000,
+    }
+    card = validate_contract(contract, stock_score=70)
+    assert card.breakdown.oi_score > 0, 'oi_score should reflect open interest'
+
+
 @pytest.mark.asyncio
 async def test_get_contracts_empty_chain():
     """Returns empty list when fetch_option_chain returns nothing."""

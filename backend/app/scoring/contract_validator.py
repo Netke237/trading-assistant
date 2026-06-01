@@ -85,7 +85,8 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     return reasons
 
 
-def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, list[str]]:
+def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, int, list[str]]:
+    """Returns (liquidity_score, oi_score, flags)."""
     sr = cfg["soft_rank"]
     flags = []
     volume = contract.get("volume") or 0
@@ -99,7 +100,7 @@ def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, list[str]]:
         flags.append("low_volume")
     if oi < sr["preferred_oi_min"]:
         flags.append("low_open_interest")
-    return score, flags
+    return score, oi_score, flags
 
 
 def _score_spread(contract: dict, cfg: dict) -> tuple[int, list[str]]:
@@ -215,7 +216,7 @@ def validate_contract(
 
     reject_reasons = _hard_reject_reasons(contract, cfg)
 
-    liq_score, liq_flags = _score_liquidity(contract, cfg)
+    liq_score, oi_score_val, liq_flags = _score_liquidity(contract, cfg)
     spread_score, spread_flags = _score_spread(contract, cfg)
     delta_score, delta_flags = _score_delta(contract, cfg)
     dte_score, dte_flags = _score_dte(contract, cfg)
@@ -244,7 +245,7 @@ def validate_contract(
                 delta_score=delta_score,
                 dte_score=dte_score,
                 iv_rank_score=iv_score,
-                oi_score=0,
+                oi_score=oi_score_val,
             ),
         )
 
