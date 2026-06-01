@@ -123,15 +123,13 @@ async def save_notifications(body: NotificationConfig) -> dict:
     g['enabled']   = body.gmail.enabled
     g['to']        = body.gmail.to
     g['smtp_user'] = body.gmail.smtp_user
-    # Only overwrite password when client sends a non-empty value
-    if body.gmail.smtp_password:
-        g['smtp_password'] = body.gmail.smtp_password
+    # smtp_password intentionally NOT written to yaml — lives in .env only.
+    # Silently ignore any password sent by the client.
 
     t = cfg['notifications'].setdefault('telegram', {})
     t['enabled']  = body.telegram.enabled
     t['chat_id']  = body.telegram.chat_id
-    if body.telegram.bot_token:
-        t['bot_token'] = body.telegram.bot_token
+    # bot_token intentionally NOT written to yaml — lives in .env only.
 
     _save_yaml(cfg)
 

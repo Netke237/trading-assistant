@@ -1,0 +1,30 @@
+# Copy this to settings.yaml and fill in non-secret values.
+# Secrets (passwords, tokens) live in .env — do NOT put them here.
+
+notifications:
+  gmail:
+    enabled: false
+    smtp_host: smtp.gmail.com
+    smtp_port: 465
+  telegram:
+    enabled: false
+
+scan:
+  cadence_minutes: 60
+
+alert_delivery:
+  masterEnabled: true
+  enabledTypes:
+    - TP_HIT
+    - STOP_REACHED
+    - PREMIUM_STOP
+    - TIME_STOP
+    - EVENT_RISK
+    - REGIME_CHANGE
+  dedupWindowMinutes: 15
+  reminderIntervalHours: 4
+  retentionDays: 30
+
+ibkr:
+  enabled: true
+  base_url: https://localhost:5000/v1/api

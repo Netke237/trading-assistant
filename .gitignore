@@ -58,6 +58,7 @@ Thumbs.db
 .opencode/
 .playwright-mcp/
 backend/audit.log
+backend/config/settings.yaml
 
 # SQLite WAL/SHM sidecars
 *.db-shm
