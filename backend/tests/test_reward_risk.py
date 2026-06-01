@@ -7,37 +7,39 @@ from app.models.heston import HestonParams
 # ── Delta approximation — call ────────────────────────────────────────────────
 
 def test_delta_approx_call_above_strike():
-    """Call, target(200) > strike(190) → delta=0.5, rr=3.0."""
+    """Call, target(200) > strike(190) → delta=0.5.
+    exit=10.0, reward=7.5, risk=2.50*0.60=1.50, rr=5.0."""
     rr = estimate_rr(
         stock_price=185, target_price=200, invalidation_price=175,
         strike=190, expiry_years=30/365, current_premium=2.50, is_call=True,
     )
     assert rr.model_used == "Delta approximation"
-    assert rr.rr_ratio == 3.0
+    assert rr.rr_ratio == 5.0
     assert rr.estimated_exit_premium == 10.0
 
 
 def test_delta_approx_call_below_strike():
-    """Call, target(188) < strike(190) → delta=0.3."""
+    """Call, target(188) < strike(190) → delta=0.3.
+    exit=1.90, reward=0.90, risk=1.00*0.60=0.60, rr=1.5."""
     rr = estimate_rr(
         stock_price=185, target_price=188, invalidation_price=175,
         strike=190, expiry_years=30/365, current_premium=1.00, is_call=True,
     )
-    # exit = 1.00 + 0.3 * 3 = 1.90 → reward = 0.90 → rr = 0.90
     assert rr.model_used == "Delta approximation"
-    assert rr.rr_ratio == 0.90
+    assert rr.rr_ratio == 1.5
 
 
 # ── Delta approximation — put ─────────────────────────────────────────────────
 
 def test_delta_approx_put_below_strike():
-    """Put, target(170) < strike(180) → delta=0.5, rr=3.75."""
+    """Put, target(170) < strike(180) → delta=0.5.
+    exit=9.50, reward=7.50, risk=2.00*0.60=1.20, rr=6.25."""
     rr = estimate_rr(
         stock_price=185, target_price=170, invalidation_price=195,
         strike=180, expiry_years=30/365, current_premium=2.00, is_call=False,
     )
     assert rr.model_used == "Delta approximation"
-    assert rr.rr_ratio == 3.75
+    assert rr.rr_ratio == 6.25
     assert rr.estimated_exit_premium == 9.50
 
 
@@ -112,3 +114,25 @@ def test_heston_path_not_used_when_params_none():
         heston_params=None,
     )
     assert rr.model_used == "Delta approximation"
+
+
+def test_estimate_rr_uses_premium_stop_pct():
+    """risk should equal premium * premium_stop_pct, not full premium."""
+    from app.scoring.reward_risk import estimate_rr
+    result = estimate_rr(
+        stock_price=100.0,
+        target_price=108.0,
+        invalidation_price=97.0,
+        strike=100.0,
+        expiry_years=0.25,
+        current_premium=2.00,
+        is_call=True,
+        premium_stop_pct=0.60,
+    )
+    # With delta-approx (no heston_params):
+    #   exit_premium = 2.00 + 0.5 * (108-100) = 6.00
+    #   reward = 6.00 - 2.00 = 4.00
+    #   risk = 2.00 * 0.60 = 1.20
+    #   rr = round(4.00 / 1.20, 2) = 3.33
+    assert result.rr_ratio > 0
+    assert abs(result.rr_ratio - round(4.00 / 1.20, 2)) < 0.01

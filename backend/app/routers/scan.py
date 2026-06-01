@@ -341,6 +341,7 @@ async def _process_symbol(
         current_premium=premium,
         is_call=(direction == "Bullish"),
         heston_params=heston_params,
+        premium_stop_pct=_rr["premium_stop_pct"],
     )
 
     targets = estimate_targets(
@@ -351,6 +352,7 @@ async def _process_symbol(
         current_premium=premium,
         is_call=(direction == "Bullish"),
         heston_params=heston_params,
+        premium_stop_pct=_rr["premium_stop_pct"],
     )
 
     # ── Build TradeCardData ────────────────────────────────────────────────────
@@ -442,6 +444,7 @@ async def _process_symbol(
             current_premium=alt_premium,
             is_call=(direction == "Bullish"),
             heston_params=heston_params,
+            premium_stop_pct=_rr["premium_stop_pct"],
         )
         alts.append(AlternativeContract(
             symbol=symbol,
