@@ -283,6 +283,6 @@ def validate_contract(
             delta_score=delta_score,
             dte_score=dte_score,
             iv_rank_score=iv_score,
-            oi_score=0,
+            oi_score=oi_score_val,
         ),
     )

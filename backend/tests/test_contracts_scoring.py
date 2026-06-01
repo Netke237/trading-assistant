@@ -258,6 +258,24 @@ def test_oi_score_is_populated():
     assert card.breakdown.oi_score > 0, 'oi_score should reflect open interest'
 
 
+def test_oi_score_populated_on_pass_path():
+    """oi_score must be populated even when contract passes all gates."""
+    import datetime
+    expiry = (datetime.date.today() + datetime.timedelta(days=45)).isoformat()
+    contract = {
+        'symbol': 'SPY', 'strike': 500.0, 'expiry': expiry,
+        'is_call': True,
+        'bid': 4.90, 'ask': 5.10,       # tight spread
+        'delta': 0.50,                   # centre of preferred range
+        'volume': 5000,                  # well above preferred_volume_min (200)
+        'open_interest': 10000,          # well above preferred_oi_min (1000)
+        'iv_rank': 30,                   # within preferred range
+    }
+    card = validate_contract(contract, stock_score=80)
+    assert card.status != 'REJECT', f'Expected PASS/CAUTION, got REJECT: {card.reject_reasons}'
+    assert card.breakdown.oi_score > 0, f'oi_score is 0 on PASS path: {card.breakdown}'
+
+
 @pytest.mark.asyncio
 async def test_get_contracts_empty_chain():
     """Returns empty list when fetch_option_chain returns nothing."""
