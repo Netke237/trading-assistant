@@ -40,8 +40,10 @@ function downloadCsv(filename: string, text: string): void {
   a.download = filename;
   document.body.appendChild(a);
   a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => {
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, 100);
 }
 
 export default function PortfolioPage() {
@@ -123,6 +125,7 @@ export default function PortfolioPage() {
             className={styles.downloadBtn}
             onClick={() => downloadCsv('trade-history.csv', toHistoryCsv(history))}
             disabled={history.length === 0}
+            aria-label="Download closed trade history as CSV"
           >
             Download CSV
           </button>
