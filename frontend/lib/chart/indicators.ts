@@ -1,3 +1,12 @@
+/**
+ * Chart-specific indicator adapters for lightweight-charts (CandlestickChart).
+ *
+ * Output shape differs from lib/indicators.ts: values are formatted as
+ * lightweight-charts HistogramData / LineData. Do NOT use in alertEngine.
+ *
+ * NOTE: Core logic lives in lib/indicators.ts. If you change RSI/MACD math
+ * there, sync the equivalent here or add a shared pure-function extraction.
+ */
 import type { Candle } from '@/types/chart';
 
 function ema(data: number[], period: number): number[] {

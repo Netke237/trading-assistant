@@ -1,3 +1,13 @@
+/**
+ * Core indicator library — RSI, MACD, SMA, EMA, BB, ATR, VWAP.
+ *
+ * Used by: alertEngine.ts, chartAlertEngine.ts, ChartPane, ChartWorkspace.
+ *
+ * NOTE: A second indicator file exists at lib/chart/indicators.ts.
+ * That file formats data for lightweight-charts CandlestickChart's native
+ * histogram/line series (different output shape). It is intentionally
+ * separate. If you change RSI/MACD logic here, review chart/indicators.ts too.
+ */
 // frontend/lib/indicators.ts
 
 export interface Candle {
