@@ -16,6 +16,7 @@ import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
+import { getRiskSettings, saveRiskSettings } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -370,16 +371,46 @@ function Toggle({ defaultOn, onChange }: { defaultOn?: boolean; onChange?: (on: 
 
 function RiskForm() {
   const { limits, setLimits } = useRiskStore();
+  const { premiumStopPct, setPremiumStopPct } = useSettingsStore();
   const [localLimits, setLocalLimits] = useState<RiskLimits>(limits);
+  const [localStopPct, setLocalStopPct] = useState(premiumStopPct);
+  const [saveResult, setSaveResult] = useState('');
 
   useEffect(() => {
     setLocalLimits(limits);
   }, [limits]);
 
+  useEffect(() => {
+    setLocalStopPct(premiumStopPct);
+  }, [premiumStopPct]);
+
+  // Fetch premiumStopPct from backend on mount
+  useEffect(() => {
+    getRiskSettings()
+      .then((s) => {
+        setPremiumStopPct(s.premiumStopPct);
+        setLocalStopPct(s.premiumStopPct);
+      })
+      .catch(() => {});
+  }, [setPremiumStopPct]);
+
   function updateLimit<K extends keyof RiskLimits>(key: K, value: RiskLimits[K]) {
     const next = { ...localLimits, [key]: value };
     setLocalLimits(next);
     setLimits(next);
+  }
+
+  async function handleSaveRisk() {
+    setSaveResult('');
+    try {
+      await saveRiskSettings({ premiumStopPct: localStopPct });
+      setPremiumStopPct(localStopPct);
+      setSaveResult('Saved');
+    } catch {
+      setSaveResult('Save failed');
+    } finally {
+      setTimeout(() => setSaveResult(''), 2500);
+    }
   }
 
   return (
@@ -461,6 +492,23 @@ function RiskForm() {
           value={localLimits.maxDailyRecommendations}
           onChange={(e) => updateLimit('maxDailyRecommendations', Math.max(1, Math.min(50, Number(e.target.value))))}
         />
+      </Row>
+      <Row
+        label="Premium stop loss"
+        hint="Fraction of premium lost before stop fires (0.60 = stop at −60%)"
+        defaultValue="0.60"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={0.10}
+          max={1.0}
+          step={0.05}
+          value={localStopPct}
+          onChange={(e) => setLocalStopPct(Math.max(0.10, Math.min(1.0, Number(e.target.value))))}
+          onBlur={handleSaveRisk}
+        />
+        {saveResult && <Text size={11} tone="secondary">{saveResult}</Text>}
       </Row>
     </>
   );
