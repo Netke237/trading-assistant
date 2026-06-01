@@ -23,3 +23,17 @@ describe('settingsStore v9', () => {
     expect(useSettingsStore.getState().maxContractPrice).toBe(20);
   });
 });
+
+describe('settingsStore — premiumStopPct', () => {
+  it('defaults to 0.60', () => {
+    const state = useSettingsStore.getState();
+    expect(state.premiumStopPct).toBe(0.60);
+  });
+
+  it('setPremiumStopPct updates the value', () => {
+    useSettingsStore.getState().setPremiumStopPct(0.50);
+    expect(useSettingsStore.getState().premiumStopPct).toBe(0.50);
+    // reset for other tests
+    useSettingsStore.getState().setPremiumStopPct(0.60);
+  });
+});

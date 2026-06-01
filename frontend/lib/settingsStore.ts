@@ -50,6 +50,7 @@ interface SettingsState {
   shortlistMaxCandidates:      number;
   maxContractsPerChain:        number;
   maxContractPrice:            number;
+  premiumStopPct:              number;   // fraction of premium lost at stop (0.60 = 60%)
   setBroker:                    (b: BrokerConfig) => void;
   setAlertDeduplicationHours:   (h: number) => void;
   setIvPassThreshold:           (n: number) => void;
@@ -58,6 +59,7 @@ interface SettingsState {
   setShortlistMaxCandidates:   (n: number) => void;
   setMaxContractsPerChain:     (n: number) => void;
   setMaxContractPrice:         (n: number) => void;
+  setPremiumStopPct:           (n: number) => void;
   resetToDefaults:              () => void;
 }
 
@@ -72,6 +74,7 @@ export const useSettingsStore = create<SettingsState>()(
       shortlistMaxCandidates: 10,
       maxContractsPerChain: 10,
       maxContractPrice:     50,
+      premiumStopPct:       0.60,
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
       setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
@@ -80,6 +83,7 @@ export const useSettingsStore = create<SettingsState>()(
       setShortlistMaxCandidates: (n) => set({ shortlistMaxCandidates: n }),
       setMaxContractsPerChain: (n) => set({ maxContractsPerChain: n }),
       setMaxContractPrice:     (n) => set({ maxContractPrice: n }),
+      setPremiumStopPct:       (n) => set({ premiumStopPct: n }),
       resetToDefaults: () => set({
         broker:                  { ...DEFAULT_BROKER },
         alertDeduplicationHours: 24,
@@ -89,6 +93,7 @@ export const useSettingsStore = create<SettingsState>()(
         shortlistMaxCandidates: 10,
         maxContractsPerChain: 10,
         maxContractPrice:     50,
+        premiumStopPct:       0.60,
       }),
     }),
     {
@@ -98,7 +103,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 9,
+      version: 10,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
@@ -108,6 +113,7 @@ export const useSettingsStore = create<SettingsState>()(
         shortlistMaxCandidates: state.shortlistMaxCandidates,
         maxContractsPerChain:   state.maxContractsPerChain,
         maxContractPrice:       state.maxContractPrice,
+        premiumStopPct:         state.premiumStopPct,
       }),
       migrate: (persistedState, version) => {
         const prev = (persistedState ?? {}) as Partial<SettingsState>;
@@ -119,6 +125,9 @@ export const useSettingsStore = create<SettingsState>()(
         }
         if (version < 9) {
           return { ...prev, maxContractsPerChain: 10, maxContractPrice: 50 } as unknown as SettingsState;
+        }
+        if (version < 10) {
+          return { ...prev, premiumStopPct: 0.60 } as unknown as SettingsState;
         }
         return prev as unknown as SettingsState;
       },
