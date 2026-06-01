@@ -97,7 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(chart_router)
     app.include_router(chart_alerts_router)
     app.include_router(notification_settings_router)
-    app.include_router(risk_settings_router, prefix='/api')
+    app.include_router(risk_settings_router)
 
     return app
 

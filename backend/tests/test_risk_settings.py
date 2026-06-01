@@ -7,7 +7,7 @@ from app.main import app
 @pytest.mark.asyncio
 async def test_get_risk_settings_returns_premium_stop():
     async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as ac:
-        resp = await ac.get('/api/settings/risk')
+        resp = await ac.get('/settings/risk')
     assert resp.status_code == 200
     data = resp.json()
     assert 'premiumStopPct' in data
@@ -27,6 +27,10 @@ async def test_post_risk_settings_updates_premium_stop(tmp_path, monkeypatch):
     monkeypatch.setattr(rs, '_RISK_PATH', fake_yaml)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as ac:
-        resp = await ac.post('/api/settings/risk', json={'premiumStopPct': 0.50})
+        resp = await ac.post('/settings/risk', json={'premiumStopPct': 0.50})
     assert resp.status_code == 200
     assert resp.json()['premiumStopPct'] == 0.50
+
+    import yaml
+    saved = yaml.safe_load(fake_yaml.read_text())
+    assert saved['reward_risk']['premium_stop_pct'] == 0.50
