@@ -36,24 +36,18 @@ def test_post_notifications_saves_enabled_flag(client):
     assert "smtp_password" not in r.json()["gmail"]
 
 
-def test_post_notifications_password_not_cleared_when_empty(client, tmp_path, monkeypatch):
-    """Sending empty password should not overwrite an existing saved password."""
-    # Use same tmp_path as the autouse fixture — monkeypatch already set _SETTINGS_PATH
-    # First save with a password
-    client.post("/settings/notifications", json={
+def test_post_notifications_password_never_written_to_yaml(client):
+    """smtp_password is never persisted to yaml regardless of what the client sends."""
+    # Post with a non-empty password — it should be silently ignored
+    r = client.post("/settings/notifications", json={
         "gmail": {"enabled": True, "to": "a@b.com", "smtp_user": "u@b.com", "smtp_password": "secret"},
         "telegram": {"enabled": False, "bot_token": "", "chat_id": ""},
     })
-    # Then save again with empty password
-    r = client.post("/settings/notifications", json={
-        "gmail": {"enabled": True, "to": "a@b.com", "smtp_user": "u@b.com", "smtp_password": ""},
-        "telegram": {"enabled": False, "bot_token": "", "chat_id": ""},
-    })
     assert r.status_code == 200
-    # Verify the YAML on disk still has the original password
+    # Verify the YAML on disk has NO smtp_password key at all
     saved_path = ns_module._SETTINGS_PATH
     saved = yaml.safe_load(saved_path.read_text())
-    assert saved["notifications"]["gmail"]["smtp_password"] == "secret"
+    assert "smtp_password" not in saved.get("notifications", {}).get("gmail", {})
 
 
 def test_alert_delivery_roundtrips_retention_days(client):
