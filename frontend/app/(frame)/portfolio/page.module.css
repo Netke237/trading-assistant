@@ -317,3 +317,33 @@
 .historyHeader { position: sticky; top: 0; z-index: 1; display: grid; align-items: center; gap: var(--space-2); padding: 8px 10px; border-radius: 6px; background: var(--bg-surface-2); border: 1px solid var(--border-subtle); }
 .historyRow { display: grid; grid-template-columns: 64px 1.6fr 1fr 168px 80px 28px; align-items: center; gap: var(--space-2); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 10px; }
 .historyRemove { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 16px; }
+
+.historyToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.downloadBtn {
+  height: 30px;
+  padding: 0 var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-family: var(--font-dm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.downloadBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.downloadBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -17,6 +17,7 @@ import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer'
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
 import { usePerformanceStore } from '@/lib/performanceStore';
+import { toHistoryCsv } from '@/lib/portfolioHistory';
 import type { PortfolioPosition } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -30,6 +31,18 @@ function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | und
 }
 
 const COLUMNS = '72px 1.6fr 72px 1fr 110px 104px 60px 56px 60px 90px 40px';
+
+function downloadCsv(filename: string, text: string): void {
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 export default function PortfolioPage() {
   const positions      = usePortfolioStore((s) => s.positions);
@@ -103,6 +116,17 @@ export default function PortfolioPage() {
 
       {tab === 'history' && (
         <>
+        <div className={styles.historyToolbar}>
+          <Text size={12} tone="secondary">{history.length} closed trades</Text>
+          <button
+            type="button"
+            className={styles.downloadBtn}
+            onClick={() => downloadCsv('trade-history.csv', toHistoryCsv(history))}
+            disabled={history.length === 0}
+          >
+            Download CSV
+          </button>
+        </div>
         <div className={styles.historyWrap}>
           {history.length === 0 ? (
             <Text size={13} tone="secondary">No closed trades yet.</Text>
