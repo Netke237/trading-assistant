@@ -33,6 +33,7 @@ class EquitySnapshotModel(Base):
     id = Column(String(36), primary_key=True)
     snapshot_date = Column(String, nullable=False, unique=True, index=True)  # 'YYYY-MM-DD'
     realized_cumulative = Column(Float, nullable=False, default=0.0)
-    open_value = Column(Float, nullable=False, default=0.0)
+    open_value = Column(Float, nullable=False, default=0.0)      # market value of open positions
+    open_pnl = Column(Float, nullable=False, default=0.0)        # unrealized P&L of open positions
     total_value = Column(Float, nullable=False, default=0.0)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

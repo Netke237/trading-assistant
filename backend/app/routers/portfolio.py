@@ -77,7 +77,8 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
                 )
 
     open_value = sum(s.currentPrice * 100 * s.qty for s in schemas)
-    await _upsert_equity_snapshot(db, open_value)
+    open_pnl = sum(s.pnlDollar or 0.0 for s in schemas)
+    await _upsert_equity_snapshot(db, open_value, open_pnl)
     return schemas
 
 
@@ -243,7 +244,7 @@ async def delete_history(history_id: str, db: AsyncSession = Depends(get_db)) ->
     await db.commit()
 
 
-async def _upsert_equity_snapshot(db: AsyncSession, open_value: float) -> None:
+async def _upsert_equity_snapshot(db: AsyncSession, open_value: float, open_pnl: float) -> None:
     """Record/refresh today's total-account-value point (one row per calendar day)."""
     today = date.today().isoformat()
     realized_cum = sum(
@@ -258,11 +259,13 @@ async def _upsert_equity_snapshot(db: AsyncSession, open_value: float) -> None:
         db.add(EquitySnapshotModel(
             id=uuid.uuid4().hex, snapshot_date=today,
             realized_cumulative=round(realized_cum, 2),
-            open_value=round(open_value, 2), total_value=total,
+            open_value=round(open_value, 2), open_pnl=round(open_pnl, 2),
+            total_value=total,
         ))
     else:
         snap.realized_cumulative = round(realized_cum, 2)
         snap.open_value = round(open_value, 2)
+        snap.open_pnl = round(open_pnl, 2)
         snap.total_value = total
     await db.commit()
 
@@ -279,10 +282,12 @@ async def get_performance(db: AsyncSession = Depends(get_db)) -> PerformanceResp
         select(EquitySnapshotModel).order_by(EquitySnapshotModel.snapshot_date)
     )).scalars().all()
     equity_curve = [PerformancePoint(date=s.snapshot_date, value=s.total_value) for s in snaps]
+    open_pnl_curve = [PerformancePoint(date=s.snapshot_date, value=s.open_pnl) for s in snaps]
 
     return PerformanceResponse(
         realizedToday=buckets["today"], realizedWeek=buckets["week"],
         realizedMonth=buckets["month"], realizedYear=buckets["year"],
         realizedCurve=[PerformancePoint(**p) for p in realized_curve],
         equityCurve=equity_curve,
+        openPnlCurve=open_pnl_curve,
     )

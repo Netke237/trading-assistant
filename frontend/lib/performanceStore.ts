@@ -26,11 +26,12 @@ export interface Performance {
   realizedYear: number;
   realizedCurve: PerfPoint[];
   equityCurve: PerfPoint[];
+  openPnlCurve: PerfPoint[];
 }
 
 const EMPTY_PERF: Performance = {
   realizedToday: 0, realizedWeek: 0, realizedMonth: 0, realizedYear: 0,
-  realizedCurve: [], equityCurve: [],
+  realizedCurve: [], equityCurve: [], openPnlCurve: [],
 };
 
 const BASE = () => process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';

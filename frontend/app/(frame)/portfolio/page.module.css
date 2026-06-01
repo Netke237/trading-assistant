@@ -312,6 +312,8 @@
 .tabActive { color: var(--text-primary); border-color: var(--accent); }
 .perfStrip { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); margin-bottom: var(--space-4); }
 .perfStat { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border-subtle); border-radius: 8px; padding: var(--space-2) var(--space-3); }
+.perfViews { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-4); }
 .historyWrap { display: flex; flex-direction: column; gap: 6px; }
+.historyHeader { position: sticky; top: 0; z-index: 1; display: grid; align-items: center; gap: var(--space-2); padding: 8px 10px; border-radius: 6px; background: var(--bg-surface-2); border: 1px solid var(--border-subtle); }
 .historyRow { display: grid; grid-template-columns: 64px 1.6fr 1fr 168px 80px 28px; align-items: center; gap: var(--space-2); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 10px; }
 .historyRemove { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 16px; }

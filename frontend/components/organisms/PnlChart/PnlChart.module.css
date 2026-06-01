@@ -1,0 +1,64 @@
+.wrap {
+  display: flex;
+  gap: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: var(--space-3);
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 116px;
+  flex-shrink: 0;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.chartArea {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.chart {
+  width: 100%;
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn,
+.btnActive {
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono), JetBrains Mono, monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.btnActive {
+  background: var(--bg-surface-2);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}

@@ -14,9 +14,13 @@ import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
+import { PnlChart } from '@/components/organisms/PnlChart';
+import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
 import { usePerformanceStore } from '@/lib/performanceStore';
 import type { PortfolioPosition } from '@/types/domain';
 import styles from './page.module.css';
+
+const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 28px';
 
 function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | undefined {
   if (rk === undefined) return undefined;
@@ -42,10 +46,15 @@ export default function PortfolioPage() {
   const removeHistory = usePerformanceStore((s) => s.removeHistory);
 
   useEffect(() => {
-    syncFromBackend();
-  }, [syncFromBackend]);
-
-  useEffect(() => { fetchHistory(); fetchPerformance(); }, [fetchHistory, fetchPerformance]);
+    // Sync open positions FIRST — GET /api/portfolio writes today's equity
+    // snapshot (including open P&L). Only then read performance, otherwise the
+    // curve races ahead of the write and shows a stale value.
+    (async () => {
+      await syncFromBackend();
+      fetchPerformance();
+    })();
+    fetchHistory();
+  }, [syncFromBackend, fetchHistory, fetchPerformance]);
 
   const deployed = positions.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
   const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
@@ -54,9 +63,13 @@ export default function PortfolioPage() {
   const losers  = positions.filter((p) => p.pnlDollar < 0).length;
 
   const now = new Date();
-  const todayLabel = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
-  const weekLabel = `${monthStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} – ${todayLabel}`;
+  const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  const todayLabel = fmtDay(now);
+  // Calendar week (Mon–Sun) containing today — matches the backend's week bucket.
+  const mondayOffset = (now.getDay() + 6) % 7;
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
+  const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
+  const weekLabel = `${fmtDay(weekStart)} – ${fmtDay(weekEnd)}`;
   const monthLabel = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   const yearLabel = String(now.getFullYear());
 
@@ -89,10 +102,21 @@ export default function PortfolioPage() {
       </div>
 
       {tab === 'history' && (
+        <>
         <div className={styles.historyWrap}>
           {history.length === 0 ? (
             <Text size={13} tone="secondary">No closed trades yet.</Text>
-          ) : history.map((h) => (
+          ) : (
+          <>
+          <div className={styles.historyHeader} style={{ gridTemplateColumns: HISTORY_COLUMNS }}>
+            <Text size={11} tone="dim">SYMBOL</Text>
+            <Text size={11} tone="dim">CONTRACT</Text>
+            <Text size={11} tone="dim">QTY · ENTRY → EXIT</Text>
+            <Text size={11} tone="dim">DATES</Text>
+            <Text size={11} tone="dim">P&L</Text>
+            <span aria-hidden />
+          </div>
+          {history.map((h) => (
             <div key={h.id} className={styles.historyRow}>
               <Data size={13} weight={500}>{h.symbol}</Data>
               <Text size={12} tone="secondary">{h.contract}</Text>
@@ -104,10 +128,23 @@ export default function PortfolioPage() {
               <button type="button" className={styles.historyRemove} onClick={() => removeHistory(h.id)} aria-label={`Remove ${h.symbol} from history`} title="Remove from history">×</button>
             </div>
           ))}
+          </>
+          )}
         </div>
+
+        <div className={styles.perfViews}>
+          <PnlChart
+            equityCurve={performance.equityCurve}
+            realizedCurve={performance.realizedCurve}
+            defaultKind="realized"
+          />
+          <PnlHeatmap history={history} />
+        </div>
+        </>
       )}
 
-      {tab === 'open' && (positions.length === 0 ? (
+      {tab === 'open' && (<>
+        {positions.length === 0 ? (
         <div className={styles.empty}>
           <Text size={14} tone="secondary">No open positions.</Text>
           <Text size={12} tone="dim">
@@ -218,7 +255,17 @@ export default function PortfolioPage() {
             </div>
           </div>
         </div>
-      ))}
+      )}
+
+        <div className={styles.perfViews}>
+          <PnlChart
+            equityCurve={performance.equityCurve}
+            realizedCurve={performance.realizedCurve}
+            openPnlCurve={performance.openPnlCurve}
+            defaultKind="open"
+          />
+        </div>
+      </>)}
 
       {tab === 'open' && closing && (() => {
         const p = positions.find((x) => x.contract === closing);

@@ -524,3 +524,4 @@ class PerformanceResponse(BaseModel):
     realizedYear: float = 0.0
     realizedCurve: list[PerformancePoint] = []   # cumulative realized profit line
     equityCurve: list[PerformancePoint] = []      # total account value line (from snapshots)
+    openPnlCurve: list[PerformancePoint] = []     # unrealized P&L of open positions (from snapshots)
