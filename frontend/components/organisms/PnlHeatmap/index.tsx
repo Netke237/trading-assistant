@@ -1,36 +1,22 @@
 'use client';
 
 /*
- * PnlHeatmap — calendar-week grid of daily realized P&L.
+ * PnlHeatmap — per-ISO-year calendar of daily realized P&L.
  *
- * One row per calendar week (Monday-anchored), labelled with the week's
- * start date; seven small cells per row, Mon→Sun. Each cell is tinted green
- * for a net-profit day and red for a net-loss day, scaled by magnitude.
- * Source: realized P&L summed by a closed trade's exit date.
+ * One row per ISO week (Mon→Sun): week number + date range on the left, seven
+ * day cells tinted green (profit) / red (loss) by magnitude, and the week's
+ * total realized $ and % on the right. ◀ ▶ switch the ISO year, so the view
+ * scales across years. Source: realized P&L summed by a closed trade's exit
+ * date (see lib/portfolioHistory.ts).
  */
 
-import { useMemo } from 'react';
-import { Text } from '@/components/primitives';
+import { useMemo, useState } from 'react';
+import { Text, Data } from '@/components/primitives';
 import type { ClosedPosition } from '@/lib/performanceStore';
+import { aggregateWeeks, isoWeek, type WeekAgg } from '@/lib/portfolioHistory';
 import styles from './PnlHeatmap.module.css';
 
-const WEEKS = 26;
 const DOW_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-interface DayCell {
-  key: string;
-  date: Date;
-  pnl: number | undefined; // undefined = no trades that day (or future)
-}
-
-interface WeekRow {
-  start: Date;
-  days: DayCell[];
-}
-
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 /** Tint by sign and magnitude, following the project's color-mix status pattern. */
 function cellColor(pnl: number | undefined, maxAbs: number): string {
@@ -41,44 +27,39 @@ function cellColor(pnl: number | undefined, maxAbs: number): string {
   return `color-mix(in srgb, ${base} ${pct}%, var(--bg-surface))`;
 }
 
+function fmtDay(d: Date): string {
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+}
+
 export function PnlHeatmap({ history }: { history: ClosedPosition[] }) {
+  const currentIsoYear = useMemo(() => isoWeek(new Date()).isoYear, []);
+  const [year, setYear] = useState(currentIsoYear);
+
   const { weeks, maxAbs } = useMemo(() => {
-    const byDay = new Map<string, number>();
-    for (const h of history) {
-      const key = (h.exitDate ?? '').slice(0, 10);
-      if (!key) continue;
-      byDay.set(key, (byDay.get(key) ?? 0) + h.realizedPnlDollar);
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const start = new Date(today);
-    const mondayOffset = (today.getDay() + 6) % 7;
-    start.setDate(today.getDate() - mondayOffset - (WEEKS - 1) * 7);
-
-    const rows: WeekRow[] = [];
+    const w: WeekAgg[] = aggregateWeeks(history, year);
     let max = 0;
-    const cursor = new Date(start);
-    for (let w = 0; w < WEEKS; w++) {
-      const weekStart = new Date(cursor);
-      const days: DayCell[] = [];
-      for (let d = 0; d < 7; d++) {
-        const key = ymd(cursor);
-        const future = cursor > today;
-        const pnl = !future && byDay.has(key) ? byDay.get(key)! : undefined;
-        if (pnl !== undefined) max = Math.max(max, Math.abs(pnl));
-        days.push({ key, date: new Date(cursor), pnl });
-        cursor.setDate(cursor.getDate() + 1);
+    for (const wk of w) {
+      for (const d of wk.days) {
+        if (d !== undefined) max = Math.max(max, Math.abs(d));
       }
-      rows.push({ start: weekStart, days });
     }
-    return { weeks: rows, maxAbs: max };
-  }, [history]);
+    return { weeks: w, maxAbs: max };
+  }, [history, year]);
+
+  const yearTotal = useMemo(() => weeks.reduce((s, w) => s + w.totalDollar, 0), [weeks]);
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.title}>
-        <Text size={11} tone="dim">Daily realized P&amp;L by calendar week — last {WEEKS} weeks</Text>
+      <div className={styles.header}>
+        <Text size={11} tone="dim">Realized P&amp;L by ISO week</Text>
+        <div className={styles.yearNav}>
+          <button type="button" className={styles.navBtn} onClick={() => setYear((y) => y - 1)} aria-label="Previous year">‹</button>
+          <Data size={13} weight={500}>{year}</Data>
+          <button type="button" className={styles.navBtn} onClick={() => setYear((y) => y + 1)} aria-label="Next year">›</button>
+          <Data size={12} weight={500} tone={yearTotal > 0 ? 'pass' : yearTotal < 0 ? 'reject' : 'primary'}>
+            {yearTotal > 0 ? '+' : ''}${Math.round(yearTotal)}
+          </Data>
+        </div>
       </div>
 
       <div className={styles.table}>
@@ -87,27 +68,36 @@ export function PnlHeatmap({ history }: { history: ClosedPosition[] }) {
           {DOW_LABELS.map((d) => (
             <span key={d} className={styles.dowLabel}>{d}</span>
           ))}
+          <span className={styles.amount}>P&amp;L</span>
+          <span className={styles.pct}>%</span>
         </div>
 
-        {weeks.map((week) => (
-          <div key={week.start.toISOString()} className={styles.weekRow}>
-            <span className={styles.weekLabel}>
-              {week.start.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-            </span>
-            {week.days.map((day) => (
-              <div
-                key={day.key}
-                className={styles.cell}
-                style={{ background: cellColor(day.pnl, maxAbs) }}
-                title={
-                  day.pnl === undefined
-                    ? `${day.key} — no trades`
-                    : `${day.key} — ${day.pnl > 0 ? '+' : ''}$${Math.round(day.pnl)}`
-                }
-              />
-            ))}
-          </div>
-        ))}
+        {weeks.map((wk) => {
+          const tone = wk.totalDollar > 0 ? 'pass' as const : wk.totalDollar < 0 ? 'reject' as const : 'primary' as const;
+          const hasTrades = wk.totalCostBasis > 0;
+          return (
+            <div key={wk.isoWeek} className={styles.weekRow}>
+              <span className={styles.weekLabel}>
+                <span className={styles.weekNum}>W{String(wk.isoWeek).padStart(2, '0')}</span>
+                <span className={styles.weekDates}>{fmtDay(wk.start)} – {fmtDay(wk.end)}</span>
+              </span>
+              {wk.days.map((d, i) => (
+                <div
+                  key={i}
+                  className={styles.cell}
+                  style={{ background: cellColor(d, maxAbs) }}
+                  title={d === undefined ? 'no trades' : `${d > 0 ? '+' : ''}$${Math.round(d)}`}
+                />
+              ))}
+              <Data size={12} weight={500} tone={tone} className={styles.amount}>
+                {hasTrades ? `${wk.totalDollar > 0 ? '+' : ''}$${Math.round(wk.totalDollar)}` : '—'}
+              </Data>
+              <Data size={11} tone={tone} className={styles.pct}>
+                {hasTrades ? `${wk.pct > 0 ? '+' : ''}${wk.pct.toFixed(1)}%` : '—'}
+              </Data>
+            </div>
+          );
+        })}
       </div>
 
       <div className={styles.legend}>

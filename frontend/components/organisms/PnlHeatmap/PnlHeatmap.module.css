@@ -7,47 +7,97 @@
   padding: var(--space-3);
 }
 
-.title {
-  flex-shrink: 0;
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.yearNav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.navBtn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.navBtn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
 }
 
 .table {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .headRow,
 .weekRow {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 
 .weekLabel {
-  width: 52px;
+  width: 128px;
   flex-shrink: 0;
-  font-size: 9px;
-  line-height: 12px;
-  color: var(--text-dim);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   font-family: var(--font-mono), JetBrains Mono, monospace;
+}
+
+.weekNum {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.weekDates {
+  font-size: 10px;
+  color: var(--text-dim);
   white-space: nowrap;
 }
 
 .dowLabel {
-  width: 12px;
+  width: 36px;
   text-align: center;
-  font-size: 9px;
-  line-height: 12px;
+  font-size: 10px;
   color: var(--text-dim);
   font-family: var(--font-mono), JetBrains Mono, monospace;
 }
 
 .cell {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
+  width: 36px;
+  height: 36px;
+  border-radius: 3px;
   border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.amount {
+  width: 72px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.pct {
+  width: 56px;
+  text-align: right;
   flex-shrink: 0;
 }
 
