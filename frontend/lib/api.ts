@@ -115,16 +115,9 @@ export interface RiskSettings {
 }
 
 export async function getRiskSettings(): Promise<RiskSettings> {
-  const res = await fetch(`${BASE_URL}/settings/risk`);
-  if (!res.ok) throw new Error(`API /settings/risk → ${res.status}`);
-  return res.json() as Promise<RiskSettings>;
+  return get<RiskSettings>('/settings/risk');
 }
 
 export async function saveRiskSettings(s: RiskSettings): Promise<void> {
-  const res = await fetch(`${BASE_URL}/settings/risk`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(s),
-  });
-  if (!res.ok) throw new Error(`API /settings/risk → ${res.status}`);
+  await post<unknown>('/settings/risk', s);
 }
