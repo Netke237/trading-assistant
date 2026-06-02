@@ -144,10 +144,12 @@ export function PnlHeatmap({ history }: { history: ClosedPosition[] }) {
         </div>
       </div>
 
-      {/* 3-column table */}
+      {/* 3-column table with vertical dividers */}
       <div className={styles.columns}>
         <WeekColumn weeks={col1} maxAbs={maxAbs} />
+        <div className={styles.divider} aria-hidden />
         <WeekColumn weeks={col2} maxAbs={maxAbs} />
+        <div className={styles.divider} aria-hidden />
         <WeekColumn weeks={col3} maxAbs={maxAbs} />
       </div>
 

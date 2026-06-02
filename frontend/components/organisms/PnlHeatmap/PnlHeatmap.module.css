@@ -45,7 +45,7 @@
 .columns {
   display: flex;
   flex-direction: row;
-  gap: 16px;
+  gap: 0;           /* spacing is handled by column padding so the divider sits centred */
   overflow-x: auto;
 }
 
@@ -54,7 +54,19 @@
   flex-direction: column;
   gap: 3px;
   flex: 1;          /* each column takes an equal share of the available width */
-  min-width: 0;     /* allow flex children to shrink below content size */
+  min-width: 0;
+  padding: 0 14px;
+}
+
+.column:first-child { padding-left: 0; }
+.column:last-child  { padding-right: 0; }
+
+/* Vertical separator line between columns */
+.divider {
+  width: 1px;
+  flex-shrink: 0;
+  align-self: stretch;
+  background: var(--border-subtle);
 }
 
 /* ── Compact row (shared by headRow and weekRow within a column) ──────────── */
