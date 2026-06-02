@@ -38,6 +38,12 @@ CONID_MISS_SENTINEL = -1
 _auth_lock = threading.Lock()
 _conid_lock = threading.Lock()
 
+# Warm-up cache: set of conids whose snapshot subscription is already active.
+# A freshly started subscription returns no data on the first request.
+# Subsequent requests (after ~1.5s) return live data.
+_snapshot_warmed: set[int] = set()
+_snapshot_lock = threading.Lock()
+
 
 # ── Authentication / keep-alive ──────────────────────────────────────────────
 
@@ -255,6 +261,11 @@ def fetch_iv_metrics_ibkr(symbol: str) -> dict | None:
     """Fetch IV Rank (field 7308) and IV Percentile (field 7309) from IBKR.
 
     Returns {"ivRank": float, "ivPercentile": float} or None if unavailable.
+
+    On the first call for a given conid the snapshot endpoint only starts the
+    subscription — it returns no data yet.  We fire a silent warm-up request,
+    wait 1.5 seconds, then make the real request.  Subsequent calls reuse the
+    active subscription and skip the warm-up.
     """
     if not ibkr_available():
         return None
@@ -263,10 +274,32 @@ def fetch_iv_metrics_ibkr(symbol: str) -> dict | None:
     if conid_val is None:
         return None
 
+    FIELDS = "7308,7309"
+
+    with _snapshot_lock:
+        needs_warmup = conid_val not in _snapshot_warmed
+
+    if needs_warmup:
+        # Fire the subscribe-only request (data will be empty — that is expected)
+        try:
+            httpx.get(
+                f"{_BASE}/iserver/marketdata/snapshot",
+                params={"conids": conid_val, "fields": FIELDS},
+                verify=False,
+                timeout=_TIMEOUT,
+            )
+        except Exception:
+            pass  # best-effort; the real request will fail gracefully if needed
+
+        time.sleep(1.5)
+
+        with _snapshot_lock:
+            _snapshot_warmed.add(conid_val)
+
     try:
         resp = httpx.get(
             f"{_BASE}/iserver/marketdata/snapshot",
-            params={"conids": conid_val, "fields": "7308,7309"},
+            params={"conids": conid_val, "fields": FIELDS},
             verify=False,
             timeout=_TIMEOUT,
         )
