@@ -29,21 +29,27 @@ _known_rec_ids: set[str] = set()
 _last_regime: str | None = None
 
 
-def _load_delivery_config() -> dict:
+def _load_settings() -> dict:
+    """Return the full settings.yaml content (or {} on error)."""
     try:
         if _SETTINGS_PATH.exists():
             with open(_SETTINGS_PATH) as f:
-                cfg = yaml.safe_load(f) or {}
-                return cfg.get('alert_delivery', {})
+                return yaml.safe_load(f) or {}
     except Exception:
-        logger.debug('Could not load alert_delivery config', exc_info=True)
+        logger.debug('Could not load settings config', exc_info=True)
     return {}
+
+
+def _load_delivery_config() -> dict:
+    return _load_settings().get('alert_delivery', {})
 
 
 async def _run_once() -> None:
     global _last_regime, _known_rec_ids
 
-    delivery = _load_delivery_config()
+    cfg = _load_settings()
+    delivery = cfg.get('alert_delivery', {})
+    retention_years = int(cfg.get('history_retention_years', 10))
 
     # Prune the sent-message log to its retention window (default 30 days).
     try:
@@ -51,6 +57,14 @@ async def _run_once() -> None:
         prune_sent_log(int(delivery.get('retentionDays', 30)))
     except Exception:
         logger.debug('sent-message log prune failed', exc_info=True)
+
+    # Prune old trade history rows that exceed the configured retention window.
+    try:
+        from app.services.history_cleanup import prune_old_history
+        async with AsyncSessionLocal() as db:
+            await prune_old_history(db, retention_years)
+    except Exception:
+        logger.debug('History prune failed', exc_info=True)
 
     if not delivery.get('masterEnabled', True):
         return

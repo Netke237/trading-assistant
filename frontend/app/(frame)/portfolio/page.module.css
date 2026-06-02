@@ -325,6 +325,50 @@
   margin-bottom: var(--space-2);
 }
 
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.clearBtn {
+  height: 30px;
+  padding: 0 var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-family: var(--font-dm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.clearBtn:hover:not(:disabled) {
+  color: var(--reject);
+  border-color: var(--reject);
+}
+
+.clearBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clearConfirmBtn {
+  height: 30px;
+  padding: 0 var(--space-4);
+  background: var(--reject);
+  border: 1px solid var(--reject);
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-family: var(--font-dm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.clearConfirmBtn:hover { opacity: 0.85; }
+
 .downloadBtn {
   height: 30px;
   padding: 0 var(--space-4);

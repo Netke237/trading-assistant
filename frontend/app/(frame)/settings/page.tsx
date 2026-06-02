@@ -16,7 +16,7 @@ import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
-import { getRiskSettings, saveRiskSettings } from '@/lib/api';
+import { getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -614,6 +614,29 @@ function RegimeForm({
 function NotificationForm() {
   const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
+  // ── History retention ────────────────────────────────────────────────────
+  const [retentionYears, setRetentionYears] = useState(10);
+  const [retentionText, setRetentionText] = useState('10');
+  const [retentionResult, setRetentionResult] = useState('');
+
+  useEffect(() => {
+    getHistoryRetention()
+      .then((r) => { setRetentionYears(r.historyRetentionYears); setRetentionText(String(r.historyRetentionYears)); })
+      .catch(() => {});
+  }, []);
+
+  async function handleSaveRetention(years: number) {
+    try {
+      await saveHistoryRetention({ historyRetentionYears: years });
+      setRetentionResult('Saved');
+    } catch {
+      setRetentionResult('Save failed');
+    } finally {
+      setTimeout(() => setRetentionResult(''), 2500);
+    }
+  }
+
+  // ── Gmail / Telegram ────────────────────────────────────────────────────
   const [gmailEnabled, setGmailEnabled] = useState(false);
   const [gmailTo, setGmailTo] = useState('');
   const [gmailUser, setGmailUser] = useState('');
@@ -709,6 +732,30 @@ function NotificationForm() {
   return (
     <>
       <SectionIntro title="Notifications" blurb="Configure alert delivery. Gmail uses SMTP (App Password), Telegram uses Bot API. Settings are persisted to the backend config file. Passwords are write-only \u2014 leave blank to keep the existing saved value." />
+
+      <Row
+        label="Trade history retention (years)"
+        hint="Closed trades older than this are pruned automatically every 15 min. Set to 100 to keep everything forever."
+        defaultValue="10"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={1}
+          max={100}
+          step={1}
+          value={retentionText}
+          onChange={(e) => setRetentionText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(retentionText, 10);
+            const clamped = isNaN(val) ? 10 : Math.max(1, Math.min(100, val));
+            setRetentionText(String(clamped));
+            setRetentionYears(clamped);
+            handleSaveRetention(clamped);
+          }}
+        />
+        {retentionResult && <Text size={11} tone="secondary">{retentionResult}</Text>}
+      </Row>
 
       <div key={`gmail-${loaded}`} style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '16px', marginBottom: '16px' }}>
         <Text size={14} weight={600}>Gmail</Text>

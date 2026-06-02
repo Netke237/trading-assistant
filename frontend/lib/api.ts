@@ -121,3 +121,21 @@ export async function getRiskSettings(): Promise<RiskSettings> {
 export async function saveRiskSettings(s: RiskSettings): Promise<void> {
   await post<unknown>('/settings/risk', s);
 }
+
+/* ---------- History retention ---------- */
+
+export interface HistoryRetention {
+  historyRetentionYears: number;
+}
+
+export async function getHistoryRetention(): Promise<HistoryRetention> {
+  return get<HistoryRetention>('/settings/history-retention');
+}
+
+export async function saveHistoryRetention(s: HistoryRetention): Promise<void> {
+  await post<unknown>('/settings/history-retention', s);
+}
+
+export async function clearAllHistory(): Promise<void> {
+  await del('/api/portfolio/history');
+}

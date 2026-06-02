@@ -59,6 +59,8 @@ export default function PortfolioPage() {
   const fetchHistory = usePerformanceStore((s) => s.fetchHistory);
   const fetchPerformance = usePerformanceStore((s) => s.fetchPerformance);
   const removeHistory = usePerformanceStore((s) => s.removeHistory);
+  const clearAllHistory = usePerformanceStore((s) => s.clearAllHistory);
+  const [clearConfirm, setClearConfirm] = useState(false);
 
   useEffect(() => {
     // Sync open positions FIRST — GET /api/portfolio writes today's equity
@@ -130,15 +132,50 @@ export default function PortfolioPage() {
         {/* 2. Toolbar + closed-trade list */}
         <div className={styles.historyToolbar}>
           <Text size={12} tone="secondary">{history.length} closed trades</Text>
-          <button
-            type="button"
-            className={styles.downloadBtn}
-            onClick={() => downloadCsv('trade-history.csv', toHistoryCsv(history))}
-            disabled={history.length === 0}
-            aria-label="Download closed trade history as CSV"
-          >
-            Download CSV
-          </button>
+          <div className={styles.toolbarActions}>
+            {clearConfirm ? (
+              <>
+                <Text size={12} tone="reject">Delete all {history.length} records?</Text>
+                <button
+                  type="button"
+                  className={styles.clearConfirmBtn}
+                  onClick={async () => {
+                    await clearAllHistory();
+                    fetchPerformance();
+                    setClearConfirm(false);
+                  }}
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  className={styles.downloadBtn}
+                  onClick={() => setClearConfirm(false)}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className={styles.clearBtn}
+                onClick={() => setClearConfirm(true)}
+                disabled={history.length === 0}
+                aria-label="Clear all trade history"
+              >
+                Clear all
+              </button>
+            )}
+            <button
+              type="button"
+              className={styles.downloadBtn}
+              onClick={() => downloadCsv('trade-history.csv', toHistoryCsv(history))}
+              disabled={history.length === 0}
+              aria-label="Download closed trade history as CSV"
+            >
+              Download CSV
+            </button>
+          </div>
         </div>
         <div className={styles.historyWrap}>
           {history.length === 0 ? (

@@ -66,6 +66,24 @@ class AlertDeliveryConfig(BaseModel):
     retentionDays: int = 30
 
 
+class HistoryRetentionConfig(BaseModel):
+    historyRetentionYears: int = 10
+
+
+@router.get('/history-retention')
+async def get_history_retention() -> dict:
+    cfg = _load_yaml()
+    return {'historyRetentionYears': int(cfg.get('history_retention_years', 10))}
+
+
+@router.post('/history-retention')
+async def save_history_retention(body: HistoryRetentionConfig) -> dict:
+    cfg = _load_yaml()
+    cfg['history_retention_years'] = max(1, min(100, body.historyRetentionYears))
+    _save_yaml(cfg)
+    return {'historyRetentionYears': cfg['history_retention_years']}
+
+
 @router.get('/alert-delivery')
 async def get_alert_delivery() -> dict:
     cfg = _load_yaml()

@@ -145,6 +145,17 @@ async def add_position(
     return PortfolioPositionSchema.from_orm_model(position)
 
 
+@router.delete('/portfolio/history', status_code=status.HTTP_204_NO_CONTENT)
+async def delete_all_history_early(db: AsyncSession = Depends(get_db)) -> None:
+    """Delete all closed trade history and equity snapshots (full reset).
+
+    Registered BEFORE /portfolio/{rec_id} so FastAPI does not greedily match
+    the literal path segment 'history' as a rec_id value.
+    """
+    from app.services.history_cleanup import clear_all_history as _clear
+    await _clear(db)
+
+
 @router.delete('/portfolio/{rec_id}', status_code=status.HTTP_204_NO_CONTENT)
 async def delete_position(rec_id: str, db: AsyncSession = Depends(get_db)) -> None:
     result = await db.execute(

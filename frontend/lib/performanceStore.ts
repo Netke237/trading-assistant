@@ -42,6 +42,7 @@ interface PerfState {
   fetchHistory: () => Promise<void>;
   fetchPerformance: () => Promise<void>;
   removeHistory: (id: string) => Promise<void>;
+  clearAllHistory: () => Promise<void>;
 }
 
 export const usePerformanceStore = create<PerfState>((set, get) => ({
@@ -63,6 +64,12 @@ export const usePerformanceStore = create<PerfState>((set, get) => ({
     try {
       await fetch(`${BASE()}/api/portfolio/history/${id}`, { method: 'DELETE' });
       set({ history: get().history.filter((h) => h.id !== id) });
+    } catch { /* backend offline */ }
+  },
+  clearAllHistory: async () => {
+    try {
+      const res = await fetch(`${BASE()}/api/portfolio/history`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) set({ history: [], performance: EMPTY_PERF });
     } catch { /* backend offline */ }
   },
 }));
