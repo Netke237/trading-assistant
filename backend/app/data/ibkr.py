@@ -264,8 +264,11 @@ def fetch_iv_metrics_ibkr(symbol: str) -> dict | None:
 
     On the first call for a given conid the snapshot endpoint only starts the
     subscription — it returns no data yet.  We fire a silent warm-up request,
-    wait 1.5 seconds, then make the real request.  Subsequent calls reuse the
-    active subscription and skip the warm-up.
+    wait 1.5 seconds, then make the real request.  The conid is marked as
+    warmed before the HTTP request, so concurrent threads always skip the
+    warm-up.  A failed warm-up request is logged at DEBUG level; the conid
+    remains marked warm and subsequent calls proceed directly to the real
+    request.
     """
     if not ibkr_available():
         return None
@@ -278,6 +281,8 @@ def fetch_iv_metrics_ibkr(symbol: str) -> dict | None:
 
     with _snapshot_lock:
         needs_warmup = conid_val not in _snapshot_warmed
+        if needs_warmup:
+            _snapshot_warmed.add(conid_val)  # mark eagerly so concurrent threads skip
 
     if needs_warmup:
         # Fire the subscribe-only request (data will be empty — that is expected)
@@ -288,13 +293,12 @@ def fetch_iv_metrics_ibkr(symbol: str) -> dict | None:
                 verify=False,
                 timeout=_TIMEOUT,
             )
-        except Exception:
-            pass  # best-effort; the real request will fail gracefully if needed
+        except Exception as exc:
+            logger.debug("IBKR snapshot warm-up request failed for conid %s: %s", conid_val, exc)
 
+        # Blocking sleep — this function must be called from a worker thread,
+        # not directly from an async route (use run_in_executor if needed).
         time.sleep(1.5)
-
-        with _snapshot_lock:
-            _snapshot_warmed.add(conid_val)
 
     try:
         resp = httpx.get(
