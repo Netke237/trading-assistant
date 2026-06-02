@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -15,7 +16,7 @@ router = APIRouter()
 class DataSourceStatus(BaseModel):
     id: str
     label: str
-    status: str          # "ok" | "unavailable" | "error" | "unconfigured"
+    status: Literal["ok", "unavailable", "error", "unconfigured"]
     provides: list[str]
     detail: str | None = None
 
@@ -51,47 +52,33 @@ def _probe_yfinance() -> tuple[str, str | None]:
 
 # ── Route ─────────────────────────────────────────────────────────────────────
 
-import sys as _sys
-
-_SOURCES: list[dict] = [
-    {
-        "id": "tradier",
-        "label": "Tradier",
-        "provides": ["candles", "option chains", "greeks", "news", "earnings"],
-        "probe": "_probe_tradier",
-    },
-    {
-        "id": "ibkr",
-        "label": "IBKR",
-        "provides": ["IV rank", "IV percentile", "intraday bars"],
-        "probe": "_probe_ibkr",
-    },
-    {
-        "id": "yfinance",
-        "label": "yfinance",
-        "provides": ["IV fallback", "earnings fallback"],
-        "probe": "_probe_yfinance",
-    },
-]
-
 
 @router.get("/api/data-sources", response_model=list[DataSourceStatus])
 def get_data_sources() -> list[DataSourceStatus]:
-    """Probe each data source and return its availability status."""
-    _mod = _sys.modules[__name__]
+    """Probe each data source and return its availability status.
+
+    This route handler is synchronous (``def``, not ``async def``) so FastAPI
+    runs it in a thread-pool executor.  ``_probe_ibkr`` may block up to 8 s
+    when the IBKR auth cache is cold — that is safe here but would stall the
+    event loop if this were accidentally converted to an async handler.
+    """
+    sources = [
+        ("tradier",  "Tradier",  ["candles", "option chains", "greeks", "news", "earnings"], _probe_tradier),
+        ("ibkr",     "IBKR",     ["IV rank", "IV percentile", "intraday bars"],               _probe_ibkr),
+        ("yfinance", "yfinance", ["IV fallback", "earnings fallback"],                        _probe_yfinance),
+    ]
     results: list[DataSourceStatus] = []
-    for src in _SOURCES:
+    for src_id, label, provides, probe in sources:
         try:
-            probe_fn = getattr(_mod, src["probe"])
-            status, detail = probe_fn()
+            status, detail = probe()
         except Exception as exc:
-            logger.warning("Data source probe failed for %s: %s", src["id"], exc)
+            logger.warning("Data source probe failed for %s: %s", src_id, exc)
             status, detail = "error", str(exc)
         results.append(DataSourceStatus(
-            id=src["id"],
-            label=src["label"],
+            id=src_id,
+            label=label,
             status=status,
-            provides=src["provides"],
+            provides=provides,
             detail=detail,
         ))
     return results

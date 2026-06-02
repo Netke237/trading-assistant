@@ -51,3 +51,21 @@ def test_data_sources_never_raises_on_probe_exception():
     assert resp.status_code == 200
     tradier = next(d for d in resp.json() if d["id"] == "tradier")
     assert tradier["status"] == "error"
+
+
+def test_probe_tradier_unconfigured(monkeypatch):
+    """_probe_tradier returns unconfigured when token env var is absent."""
+    monkeypatch.delenv("TRADIER_API_TOKEN", raising=False)
+    from app.routers.data_sources import _probe_tradier
+    status, detail = _probe_tradier()
+    assert status == "unconfigured"
+    assert detail is not None
+
+
+def test_probe_tradier_configured(monkeypatch):
+    """_probe_tradier returns ok when token env var is set."""
+    monkeypatch.setenv("TRADIER_API_TOKEN", "fake-token")
+    from app.routers.data_sources import _probe_tradier
+    status, detail = _probe_tradier()
+    assert status == "ok"
+    assert detail is None
