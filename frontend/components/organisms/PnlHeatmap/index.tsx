@@ -45,9 +45,12 @@ function WeekColumn({ weeks, maxAbs }: { weeks: WeekAgg[]; maxAbs: number }) {
       {/* Header row */}
       <div className={styles.headRow}>
         <span className={styles.weekNumLabel} />
-        {DOW_LABELS.map((d, i) => (
-          <span key={i} className={styles.dowLabelSm} title={DOW_FULL[i]}>{d}</span>
-        ))}
+        {/* cellGroup stretches to fill the available width between the week label and metric columns */}
+        <div className={styles.cellGroup}>
+          {DOW_LABELS.map((d, i) => (
+            <span key={i} className={styles.dowLabelSm} title={DOW_FULL[i]}>{d}</span>
+          ))}
+        </div>
         <span className={styles.amountSm} title={TOOLTIP_PNL}>P&amp;L</span>
         <span className={styles.pctSm}    title={TOOLTIP_PCT}>% Ret</span>
         <span className={styles.countSm}  title={TOOLTIP_COUNT}>#</span>
@@ -65,15 +68,17 @@ function WeekColumn({ weeks, maxAbs }: { weeks: WeekAgg[]; maxAbs: number }) {
               W{String(wk.isoWeek).padStart(2, '0')}
             </span>
 
-            {/* Day cells */}
-            {wk.days.map((d, i) => (
-              <div
-                key={i}
-                className={styles.cellSm}
-                style={{ background: cellColor(d, maxAbs) }}
-                title={d === undefined ? 'no trades' : `${DOW_FULL[i]}: ${d > 0 ? '+' : ''}$${Math.round(d)}`}
-              />
-            ))}
+            {/* Day cells — group stretches to fill available space */}
+            <div className={styles.cellGroup}>
+              {wk.days.map((d, i) => (
+                <div
+                  key={i}
+                  className={styles.cellSm}
+                  style={{ background: cellColor(d, maxAbs) }}
+                  title={d === undefined ? 'no trades' : `${DOW_FULL[i]}: ${d > 0 ? '+' : ''}$${Math.round(d)}`}
+                />
+              ))}
+            </div>
 
             {/* $ total */}
             <Data size={11} weight={500} tone={tone} className={styles.amountSm}>
