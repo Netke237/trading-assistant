@@ -40,66 +40,87 @@
   border-color: var(--border-strong);
 }
 
-.table {
+/* ── 3-column layout ─────────────────────────────────────────────────────── */
+
+.columns {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  overflow-x: auto;
+}
+
+.column {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
+  flex-shrink: 0;
 }
+
+/* ── Compact row (shared by headRow and weekRow within a column) ──────────── */
 
 .headRow,
 .weekRow {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
-.weekLabel {
-  width: 128px;
+/* Week number label — shows "W01" with the date range in title tooltip */
+.weekNumLabel {
+  width: 30px;
   flex-shrink: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
   font-family: var(--font-mono), JetBrains Mono, monospace;
-}
-
-.weekNum {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.weekDates {
   font-size: 10px;
-  color: var(--text-dim);
+  color: var(--text-secondary);
+  cursor: default;
   white-space: nowrap;
 }
 
-.dowLabel {
-  width: 36px;
+/* Day-of-week header letters (M T W T F S S) */
+.dowLabelSm {
+  width: 24px;
   text-align: center;
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-dim);
   font-family: var(--font-mono), JetBrains Mono, monospace;
+  cursor: default;
 }
 
-.cell {
-  width: 36px;
-  height: 36px;
-  border-radius: 3px;
+/* Compact day cell */
+.cellSm {
+  width: 24px;
+  height: 24px;
+  border-radius: 2px;
   border: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  cursor: default;
 }
 
-.amount {
-  width: 72px;
-  text-align: right;
+/* Column headers — add underline hint that they carry a tooltip */
+.amountSm,
+.pctSm,
+.countSm {
   flex-shrink: 0;
+  text-align: right;
+  cursor: help;
+  font-family: var(--font-dm);
 }
 
-.pct {
-  width: 56px;
-  text-align: right;
-  flex-shrink: 0;
+/* Header-row variants (plain text) */
+.headRow .amountSm,
+.headRow .pctSm,
+.headRow .countSm {
+  font-size: 9px;
+  color: var(--text-dim);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
 }
+
+.amountSm { width: 58px; }
+.pctSm    { width: 46px; }
+.countSm  { width: 24px; }
+
+/* ── Legend ──────────────────────────────────────────────────────────────── */
 
 .legend {
   display: flex;

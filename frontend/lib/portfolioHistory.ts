@@ -11,6 +11,7 @@ export interface WeekAgg {
   totalDollar: number;              // weekly realized $
   totalCostBasis: number;           // sum(entryPrice*100*qtyClosed) for the week
   pct: number;                      // weekly return % (totalDollar/totalCostBasis*100, 0 if no cost)
+  tradeCount: number;               // number of closed trade records in this week
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -45,14 +46,15 @@ function isoWeek1Monday(isoYear: number): Date {
 
 /** All ISO weeks of `isoYear`, each aggregated from `history` by exit date. */
 export function aggregateWeeks(history: ClosedPosition[], isoYear: number): WeekAgg[] {
-  const byDay = new Map<string, { dollar: number; cost: number }>();
+  const byDay = new Map<string, { dollar: number; cost: number; count: number }>();
   for (const h of history) {
     const key = (h.exitDate ?? '').slice(0, 10);
     if (!key) continue;
     const cost = h.entryPrice * 100 * h.qtyClosed;
-    const cur = byDay.get(key) ?? { dollar: 0, cost: 0 };
+    const cur = byDay.get(key) ?? { dollar: 0, cost: 0, count: 0 };
     cur.dollar += h.realizedPnlDollar;
     cur.cost += cost;
+    cur.count += 1;
     byDay.set(key, cur);
   }
 
@@ -66,12 +68,14 @@ export function aggregateWeeks(history: ClosedPosition[], isoYear: number): Week
     const days: (number | undefined)[] = [];
     let totalDollar = 0;
     let totalCost = 0;
+    let tradeCount = 0;
     for (let i = 0; i < 7; i++) {
       const rec = byDay.get(ymd(cursor));
       days.push(rec ? rec.dollar : undefined);
       if (rec) {
         totalDollar += rec.dollar;
         totalCost += rec.cost;
+        tradeCount += rec.count;
       }
       cursor.setDate(cursor.getDate() + 1);
     }
@@ -85,6 +89,7 @@ export function aggregateWeeks(history: ClosedPosition[], isoYear: number): Week
       totalDollar: Math.round(totalDollar * 100) / 100,
       totalCostBasis: Math.round(totalCost * 100) / 100,
       pct: totalCost > 0 ? (totalDollar / totalCost) * 100 : 0,
+      tradeCount,
     });
     wk++;
   }

@@ -118,6 +118,16 @@ export default function PortfolioPage() {
 
       {tab === 'history' && (
         <>
+        {/* 1. Equity curve — sits above the trade list */}
+        <div className={styles.perfViews}>
+          <PnlChart
+            equityCurve={performance.equityCurve}
+            realizedCurve={performance.realizedCurve}
+            defaultKind="realized"
+          />
+        </div>
+
+        {/* 2. Toolbar + closed-trade list */}
         <div className={styles.historyToolbar}>
           <Text size={12} tone="secondary">{history.length} closed trades</Text>
           <button
@@ -159,14 +169,8 @@ export default function PortfolioPage() {
           )}
         </div>
 
-        <div className={styles.perfViews}>
-          <PnlChart
-            equityCurve={performance.equityCurve}
-            realizedCurve={performance.realizedCurve}
-            defaultKind="realized"
-          />
-          <PnlHeatmap history={history} />
-        </div>
+        {/* 3. Realized P&L heatmap — below the list */}
+        <PnlHeatmap history={history} />
         </>
       )}
 

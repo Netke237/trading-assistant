@@ -3,11 +3,11 @@
 /*
  * PnlHeatmap — per-ISO-year calendar of daily realized P&L.
  *
- * One row per ISO week (Mon→Sun): week number + date range on the left, seven
- * day cells tinted green (profit) / red (loss) by magnitude, and the week's
- * total realized $ and % on the right. ◀ ▶ switch the ISO year, so the view
- * scales across years. Source: realized P&L summed by a closed trade's exit
- * date (see lib/portfolioHistory.ts).
+ * Weeks are split into three parallel columns so the panel stays compact
+ * even for years with 52–53 weeks. Each column is an independent sub-table
+ * with its own DOW header row. ◀ ▶ switch the ISO year.
+ *
+ * Columns per week: W## | Mon–Sun cells | P&L $ | % Ret | # trades
  */
 
 import { useMemo, useState } from 'react';
@@ -16,7 +16,8 @@ import type { ClosedPosition } from '@/lib/performanceStore';
 import { aggregateWeeks, isoWeek, type WeekAgg } from '@/lib/portfolioHistory';
 import styles from './PnlHeatmap.module.css';
 
-const DOW_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DOW_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const DOW_FULL   = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /** Tint by sign and magnitude, following the project's color-mix status pattern. */
 function cellColor(pnl: number | undefined, maxAbs: number): string {
@@ -30,6 +31,72 @@ function cellColor(pnl: number | undefined, maxAbs: number): string {
 function fmtDay(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 }
+
+// ── Column header tooltips ──────────────────────────────────────────────────
+const TOOLTIP_PNL   = 'Realized P&L — sum of (exit − entry) × 100 × contracts for all trades closed in this week, in dollars.';
+const TOOLTIP_PCT   = 'Return on cost — weekly P&L as a percentage of the total entry premium paid (entry price × 100 × contracts) for trades closed that week.';
+const TOOLTIP_COUNT = 'Number of individual trade legs closed in this week.';
+
+// ── WeekColumn ──────────────────────────────────────────────────────────────
+
+function WeekColumn({ weeks, maxAbs }: { weeks: WeekAgg[]; maxAbs: number }) {
+  return (
+    <div className={styles.column}>
+      {/* Header row */}
+      <div className={styles.headRow}>
+        <span className={styles.weekNumLabel} />
+        {DOW_LABELS.map((d, i) => (
+          <span key={i} className={styles.dowLabelSm} title={DOW_FULL[i]}>{d}</span>
+        ))}
+        <span className={styles.amountSm} title={TOOLTIP_PNL}>P&amp;L</span>
+        <span className={styles.pctSm}    title={TOOLTIP_PCT}>% Ret</span>
+        <span className={styles.countSm}  title={TOOLTIP_COUNT}>#</span>
+      </div>
+
+      {/* Week rows */}
+      {weeks.map((wk) => {
+        const tone = wk.totalDollar > 0 ? 'pass' as const : wk.totalDollar < 0 ? 'reject' as const : 'primary' as const;
+        const hasTrades = wk.tradeCount > 0;
+        const dateRange = `${fmtDay(wk.start)} – ${fmtDay(wk.end)}`;
+        return (
+          <div key={wk.isoWeek} className={styles.weekRow}>
+            {/* Week number — date range shown on hover */}
+            <span className={styles.weekNumLabel} title={dateRange}>
+              W{String(wk.isoWeek).padStart(2, '0')}
+            </span>
+
+            {/* Day cells */}
+            {wk.days.map((d, i) => (
+              <div
+                key={i}
+                className={styles.cellSm}
+                style={{ background: cellColor(d, maxAbs) }}
+                title={d === undefined ? 'no trades' : `${DOW_FULL[i]}: ${d > 0 ? '+' : ''}$${Math.round(d)}`}
+              />
+            ))}
+
+            {/* $ total */}
+            <Data size={11} weight={500} tone={tone} className={styles.amountSm}>
+              {hasTrades ? `${wk.totalDollar > 0 ? '+' : ''}$${Math.round(wk.totalDollar)}` : '—'}
+            </Data>
+
+            {/* % Ret */}
+            <Data size={11} tone={tone} className={styles.pctSm}>
+              {hasTrades ? `${wk.pct > 0 ? '+' : ''}${wk.pct.toFixed(1)}%` : '—'}
+            </Data>
+
+            {/* # trades */}
+            <Data size={11} tone="primary" className={styles.countSm}>
+              {hasTrades ? String(wk.tradeCount) : '—'}
+            </Data>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── PnlHeatmap ──────────────────────────────────────────────────────────────
 
 export function PnlHeatmap({ history }: { history: ClosedPosition[] }) {
   const [year, setYear] = useState(() => isoWeek(new Date()).isoYear);
@@ -47,8 +114,19 @@ export function PnlHeatmap({ history }: { history: ClosedPosition[] }) {
 
   const yearTotal = useMemo(() => weeks.reduce((s, w) => s + w.totalDollar, 0), [weeks]);
 
+  // Split into 3 roughly equal columns (left to right: earlier → later weeks).
+  const [col1, col2, col3] = useMemo(() => {
+    const size = Math.ceil(weeks.length / 3);
+    return [
+      weeks.slice(0, size),
+      weeks.slice(size, size * 2),
+      weeks.slice(size * 2),
+    ];
+  }, [weeks]);
+
   return (
     <div className={styles.wrap}>
+      {/* Header bar */}
       <div className={styles.header}>
         <Text size={11} tone="dim">Realized P&amp;L by ISO week</Text>
         <div className={styles.yearNav}>
@@ -61,44 +139,14 @@ export function PnlHeatmap({ history }: { history: ClosedPosition[] }) {
         </div>
       </div>
 
-      <div className={styles.table}>
-        <div className={styles.headRow}>
-          <span className={styles.weekLabel} />
-          {DOW_LABELS.map((d) => (
-            <span key={d} className={styles.dowLabel}>{d}</span>
-          ))}
-          <span className={styles.amount}>P&amp;L</span>
-          <span className={styles.pct}>%</span>
-        </div>
-
-        {weeks.map((wk) => {
-          const tone = wk.totalDollar > 0 ? 'pass' as const : wk.totalDollar < 0 ? 'reject' as const : 'primary' as const;
-          const hasTrades = wk.days.some((d) => d !== undefined);
-          return (
-            <div key={wk.isoWeek} className={styles.weekRow}>
-              <span className={styles.weekLabel}>
-                <span className={styles.weekNum}>W{String(wk.isoWeek).padStart(2, '0')}</span>
-                <span className={styles.weekDates}>{fmtDay(wk.start)} – {fmtDay(wk.end)}</span>
-              </span>
-              {wk.days.map((d, i) => (
-                <div
-                  key={i}
-                  className={styles.cell}
-                  style={{ background: cellColor(d, maxAbs) }}
-                  title={d === undefined ? 'no trades' : `${d > 0 ? '+' : ''}$${Math.round(d)}`}
-                />
-              ))}
-              <Data size={12} weight={500} tone={tone} className={styles.amount}>
-                {hasTrades ? `${wk.totalDollar > 0 ? '+' : ''}$${Math.round(wk.totalDollar)}` : '—'}
-              </Data>
-              <Data size={11} tone={tone} className={styles.pct}>
-                {hasTrades ? `${wk.pct > 0 ? '+' : ''}${wk.pct.toFixed(1)}%` : '—'}
-              </Data>
-            </div>
-          );
-        })}
+      {/* 3-column table */}
+      <div className={styles.columns}>
+        <WeekColumn weeks={col1} maxAbs={maxAbs} />
+        <WeekColumn weeks={col2} maxAbs={maxAbs} />
+        <WeekColumn weeks={col3} maxAbs={maxAbs} />
       </div>
 
+      {/* Loss–Profit legend */}
       <div className={styles.legend}>
         <Text size={10} tone="dim">Loss</Text>
         <span className={styles.swatch} style={{ background: 'color-mix(in srgb, var(--reject) 70%, var(--bg-surface))' }} />
