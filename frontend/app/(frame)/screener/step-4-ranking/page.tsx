@@ -33,7 +33,8 @@ import styles from './page.module.css';
 
 const PAGE_SIZE = 10;
 
-const COLUMNS = '28px 1fr 56px 54px 50px 64px 68px 80px';
+// icon(star+chart) | SYMBOL | NAME | HORIZON | Δ RNK | Δ SCR | SCORE | CONF | NEXT
+const COLUMNS = '44px 56px 1fr 60px 52px 50px 56px 68px 80px';
 
 const HORIZON_WEIGHTS: Record<string, { trend: number; pullback: number; trigger: number; event: number; volatility: number }> = {
   Intraday: { trend: 35, pullback: 20, trigger: 30, event: 5,  volatility: 10 },
@@ -224,6 +225,7 @@ export default function Step4Page() {
           <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
             <span aria-hidden />
             <SortHeader label="SYMBOL"   sortKey="symbol"        currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+            <Text size={11} tone="dim">NAME</Text>
             <Text size={11} tone="dim">HORIZON</Text>
             <SortHeader label="Δ RNK"    sortKey="rankDelta"     currentKey={sortKey} dir={sortDir} onSort={handleSort} />
             <SortHeader label="Δ SCR"    sortKey="scoreDelta"    currentKey={sortKey} dir={sortDir} onSort={handleSort} />
@@ -243,17 +245,21 @@ export default function Step4Page() {
                   setSelectedSymbol(row.symbol);
                 }}
               >
-                <WatchStar symbol={row.symbol} size="sm" />
-                <button
-                  className={styles.chartBtn}
-                  title="Open in Chart"
-                  onClick={(e) => { e.stopPropagation(); router.push(`/chart?symbol=${row.symbol}`); }}
-                >
-                  📈
-                </button>
-                <div className={styles.symCell}>
-                  <Data size={12} weight={500}>{row.symbol}</Data>
-                  <Text size={11} tone="secondary">{row.company}</Text>
+                {/* Area 1 — icon cluster (star + chart button, reduced width) */}
+                <div className={styles.iconCell}>
+                  <WatchStar symbol={row.symbol} size="sm" />
+                  <button
+                    className={styles.chartBtn}
+                    title="Open in Chart"
+                    onClick={(e) => { e.stopPropagation(); router.push(`/chart?symbol=${row.symbol}`); }}
+                  >
+                    📈
+                  </button>
+                </div>
+                {/* Area 2 split into two columns: ticker | company name */}
+                <Data size={12} weight={500}>{row.symbol}</Data>
+                <div className={styles.nameCell}>
+                  <Text size={12} tone="secondary">{row.company}</Text>
                 </div>
                 <Text size={11} tone="secondary">{row.horizon}</Text>
                 <RankDelta value={row.rankDelta}          context="rank"     />

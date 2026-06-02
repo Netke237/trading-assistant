@@ -58,7 +58,9 @@ function pillLabel(
   const showDuration =
     state === 'COMPLETED' || state === 'PARTIAL' || state === 'FAILED' || state === 'CANCELLED';
   if ((state === 'COMPLETED' || state === 'PARTIAL' || state === 'CANCELLED') && iso) {
-    const base = `${state} ${mounted ? labelWithDate(iso) : hhmmFrom(iso)}`;
+    // iso is the START time; show "COMPLETED started 18:03 · 15m 53s"
+    const startLabel = mounted ? labelWithDate(iso) : hhmmFrom(iso);
+    const base = `${state} · started ${startLabel}`;
     const dur = showDuration && durationMs ? formatDuration(durationMs) : '';
     return dur ? `${base} · ${dur}` : base;
   }
@@ -89,7 +91,7 @@ export function TopBar() {
           <Text size={12} tone="secondary">
             Last scan: {context.universe} · {context.direction} · {context.horizon}
             {scanAt && mounted && (
-              <> · {labelWithDate(scanAt)}</>
+              <> · started {labelWithDate(scanAt)}</>
             )}
             {scanDuration != null && scanDuration >= 500 && (
               <> · {formatDuration(scanDuration)}</>

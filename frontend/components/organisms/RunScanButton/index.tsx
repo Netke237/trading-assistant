@@ -114,7 +114,8 @@ export function RunScanButton() {
     const effectiveOverrides = { ...scanOverrides, shortlist_max_candidates: shortlistMaxCandidates };
 
     const t0 = Date.now();
-    setScanState('SCANNING');
+    const startISO = nowLocalISO();        // capture start time before the async call
+    setScanState('SCANNING', startISO);   // scanAt = START time (not end)
     useScanStore.getState().setRejectedLog([]);
     api.postScan(universe, direction, horizon, filters, effectiveOverrides)
       .then((result) => {
@@ -125,12 +126,12 @@ export function RunScanButton() {
           .map((c) => c.symbol)
           .filter((s) => portfolioSymbols.has(s));
         useScanStore.getState().setConflictedSymbols(conflicted);
-        setScanState('COMPLETED', nowLocalISO(), Date.now() - t0);
+        setScanState('COMPLETED', startISO, Date.now() - t0);  // keep same startISO
       })
       .catch(() => {
         console.error('[RunScanButton] scan failed, is backend running on port 8000?');
         useScanStore.getState().setRejectedLog([]);
-        setScanState('FAILED', undefined, Date.now() - t0);
+        setScanState('FAILED', startISO, Date.now() - t0);
         useAlertStore.getState().addToast({
           kind: 'Critical',
           symbol: 'SYSTEM',
