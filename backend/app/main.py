@@ -27,6 +27,7 @@ from app.routers.chart      import router as chart_router
 from app.routers.chart_alerts import router as chart_alerts_router
 from app.routers.notification_settings import router as notification_settings_router
 from app.routers.risk_settings import router as risk_settings_router
+from app.routers.data_sources  import router as data_sources_router
 
 
 _notification_worker_task: asyncio.Task | None = None
@@ -98,6 +99,7 @@ def create_app() -> FastAPI:
     app.include_router(chart_alerts_router)
     app.include_router(notification_settings_router)
     app.include_router(risk_settings_router)
+    app.include_router(data_sources_router)
 
     return app
 
