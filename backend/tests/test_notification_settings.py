@@ -36,18 +36,32 @@ def test_post_notifications_saves_enabled_flag(client):
     assert "smtp_password" not in r.json()["gmail"]
 
 
-def test_post_notifications_password_never_written_to_yaml(client):
-    """smtp_password is never persisted to yaml regardless of what the client sends."""
-    # Post with a non-empty password — it should be silently ignored
+def test_post_notifications_password_written_when_provided_preserved_when_blank(client):
+    """Credentials are written to yaml when provided; blank value keeps existing."""
+    saved_path = ns_module._SETTINGS_PATH
+
+    # First POST — supply a password; it must be persisted to yaml
     r = client.post("/settings/notifications", json={
         "gmail": {"enabled": True, "to": "a@b.com", "smtp_user": "u@b.com", "smtp_password": "secret"},
-        "telegram": {"enabled": False, "bot_token": "", "chat_id": ""},
+        "telegram": {"enabled": False, "bot_token": "tk", "chat_id": "123"},
     })
     assert r.status_code == 200
-    # Verify the YAML on disk has NO smtp_password key at all
-    saved_path = ns_module._SETTINGS_PATH
     saved = yaml.safe_load(saved_path.read_text())
-    assert "smtp_password" not in saved.get("notifications", {}).get("gmail", {})
+    assert saved["notifications"]["gmail"]["smtp_password"] == "secret"
+    assert saved["notifications"]["telegram"]["bot_token"] == "tk"
+    # Response must never echo credentials to the client
+    assert "smtp_password" not in r.json()["gmail"]
+    assert "bot_token" not in r.json()["telegram"]
+
+    # Second POST — blank password/token; existing yaml values must be preserved
+    r2 = client.post("/settings/notifications", json={
+        "gmail": {"enabled": False, "to": "a@b.com", "smtp_user": "u@b.com", "smtp_password": ""},
+        "telegram": {"enabled": False, "bot_token": "", "chat_id": "123"},
+    })
+    assert r2.status_code == 200
+    saved2 = yaml.safe_load(saved_path.read_text())
+    assert saved2["notifications"]["gmail"]["smtp_password"] == "secret"   # unchanged
+    assert saved2["notifications"]["telegram"]["bot_token"] == "tk"        # unchanged
 
 
 def test_alert_delivery_roundtrips_retention_days(client):

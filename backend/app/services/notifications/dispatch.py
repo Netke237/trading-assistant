@@ -59,10 +59,8 @@ def load_notification_config() -> dict:
 def notify_enabled_channels(subject: str, plain_body: str, html_body: str) -> None:
     """Dispatch to each channel that is enabled in settings.yaml.
 
-    Credentials (smtp_password, bot_token) are intentionally NOT read from
-    settings.yaml — they live in env vars (BAMENDJOU_GMAIL_PASSWORD,
-    BAMENDJOU_TELEGRAM_BOT_TOKEN) and gmail.py / telegram.py pick them up
-    automatically when the argument is empty string.
+    Credentials are read from settings.yaml first (UI-managed, gitignored file),
+    with env vars (BAMENDJOU_GMAIL_PASSWORD, BAMENDJOU_TELEGRAM_BOT_TOKEN) as fallback.
     """
     cfg = load_notification_config()
     gmail = cfg.get('gmail', {})
@@ -75,13 +73,13 @@ def notify_enabled_channels(subject: str, plain_body: str, html_body: str) -> No
             subject=subject,
             body=plain_body,
             smtp_user=gmail.get('smtp_user', '') or os.getenv('BAMENDJOU_GMAIL_USER', ''),
-            smtp_password='',  # empty → gmail.py falls back to BAMENDJOU_GMAIL_PASSWORD
+            smtp_password=gmail.get('smtp_password', ''),  # yaml first, gmail.py falls back to env var if empty
         )
 
     if tg.get('enabled'):
         dispatch('telegram',
             _subject=subject,
-            bot_token='',      # empty → telegram.py falls back to BAMENDJOU_TELEGRAM_BOT_TOKEN
+            bot_token=tg.get('bot_token', ''),  # yaml first, telegram.py falls back to env var if empty
             chat_id=tg.get('chat_id', '') or os.getenv('BAMENDJOU_TELEGRAM_CHAT_ID', ''),
             text=html_body,
         )
