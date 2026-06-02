@@ -14,7 +14,9 @@ import { RailSection } from '@/components/organisms/ContextRail';
 import { Text, Data } from '@/components/primitives';
 import { QuickLookRow } from '@/components/molecules/QuickLookRow';
 import { api } from '@/lib/api';
+import type { DataSourceInfo } from '@/lib/api';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useScanStore } from '@/lib/scanStore';
 import type { WatchlistRow } from '@/types/domain';
 import styles from './QuickLook.module.css';
 
@@ -24,13 +26,22 @@ export function RailQuickLook() {
   const [watchlistError, setWatchlistError] = useState(false);
   const portfolio       = usePortfolioStore((s) => s.positions);
   const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
+  const [dataSources, setDataSources] = useState<DataSourceInfo[]>([]);
+  const scanState = useScanStore((s) => s.scanState);
 
   useEffect(() => {
     api.getWatchlist()
       .then(setWatchlist)
       .catch(() => setWatchlistError(true));
     syncFromBackend();
+    api.getDataSources().then(setDataSources).catch(() => {});
   }, [syncFromBackend]);
+
+  useEffect(() => {
+    if (scanState === 'COMPLETED' || scanState === 'FAILED') {
+      api.getDataSources().then(setDataSources).catch(() => {});
+    }
+  }, [scanState]);
 
   // /api/watchlist already returns only the user's starred symbols —
   // no need to cross-filter against the Zustand store here.
@@ -81,6 +92,32 @@ export function RailQuickLook() {
           </Row>
         </div>
       </RailSection>
+
+      {dataSources.length > 0 && (
+        <RailSection title="Data Sources">
+          <div className={styles.dataSourceStack}>
+            {dataSources.map((src) => (
+              <div
+                key={src.id}
+                className={styles.dataSourceRow}
+                title={src.detail ?? src.provides.join(', ')}
+              >
+                <span
+                  className={styles.statusDot}
+                  data-status={src.status}
+                  aria-label={src.status}
+                />
+                <Text size={12} tone="secondary">{src.label}</Text>
+                <span className={styles.dataSourceStatus}>
+                  <Text size={11} tone="dim">
+                    {src.status === 'ok' ? 'connected' : src.status}
+                  </Text>
+                </span>
+              </div>
+            ))}
+          </div>
+        </RailSection>
+      )}
     </>
   );
 }

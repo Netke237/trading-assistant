@@ -26,6 +26,14 @@ async function del(path: string): Promise<void> {
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
 }
 
+export interface DataSourceInfo {
+  id: string;
+  label: string;
+  status: 'ok' | 'unavailable' | 'error' | 'unconfigured';
+  provides: string[];
+  detail: string | null;
+}
+
 export const api = {
   getWatchlist:  () => get<WatchlistRow[]>('/api/watchlist'),
   getPortfolio:  () => get<PortfolioPosition[]>('/api/portfolio'),
@@ -43,6 +51,7 @@ export const api = {
     return get<MarketRegime>(`/api/regime${qs ? `?${qs}` : ''}`);
   },
   getSectors:    () => get<SectorTile[]>('/api/sectors'),
+  getDataSources: () => get<DataSourceInfo[]>('/api/data-sources'),
   getEvents:     () => get<UpcomingEvent[]>('/api/events'),
   getContracts: (
     symbol: string,
