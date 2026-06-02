@@ -26,7 +26,7 @@ export function RailQuickLook() {
   const [watchlistError, setWatchlistError] = useState(false);
   const portfolio       = usePortfolioStore((s) => s.positions);
   const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
-  const [dataSources, setDataSources] = useState<DataSourceInfo[]>([]);
+  const [dataSources, setDataSources] = useState<DataSourceInfo[] | null>(null);
   const scanState = useScanStore((s) => s.scanState);
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export function RailQuickLook() {
         </div>
       </RailSection>
 
-      {dataSources.length > 0 && (
+      {dataSources !== null && dataSources.length > 0 && (
         <RailSection title="Data Sources">
           <div className={styles.dataSourceStack}>
             {dataSources.map((src) => (
