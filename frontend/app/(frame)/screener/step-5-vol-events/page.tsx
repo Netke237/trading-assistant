@@ -129,7 +129,7 @@ export default function Step5Page() {
                 )}
               </div>
 
-              <Data size={13} weight={500}>{pctl !== undefined ? pctl : '—'}</Data>
+              <Data size={13} weight={500}>{pctl !== undefined && pctl > 0 ? pctl : '—'}</Data>
 
               {r.nextEventDays != null
                 ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />

@@ -101,10 +101,11 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 2,
+      version: 3,
       migrate: (persistedState, version) => {
         const prev = (persistedState ?? {}) as any;
         if (version < 2) return { ...prev, pickedContracts: {} };
+        if (version < 3) return { ...prev, scanDurationMs: null };
         return prev;
       },
       partialize: (state) => ({
@@ -112,13 +113,16 @@ export const useScanStore = create<ScanStoreState>()(
         previousRun:     state.previousRun,
         context:         state.context,
         scanAt:          state.scanAt,
+        scanDurationMs:  state.scanDurationMs,
         pickedContracts: state.pickedContracts,
       }),
       merge: (persisted, current) => ({
         ...current,
         ...(persisted as Partial<ScanStoreState>),
+        // scanState always resets to IDLE on reload — a scan can't be "in progress"
+        // across sessions, but scanAt + scanDurationMs survive so the TopBar can
+        // still show when the last scan ran and how long it took.
         scanState: 'IDLE',
-        scanDurationMs: null,
       }),
     },
   ),

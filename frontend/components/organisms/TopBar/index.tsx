@@ -88,6 +88,12 @@ export function TopBar() {
         {context && (
           <Text size={12} tone="secondary">
             Last scan: {context.universe} · {context.direction} · {context.horizon}
+            {scanAt && mounted && (
+              <> · {labelWithDate(scanAt)}</>
+            )}
+            {scanDuration != null && scanDuration >= 500 && (
+              <> · {formatDuration(scanDuration)}</>
+            )}
           </Text>
         )}
       </div>

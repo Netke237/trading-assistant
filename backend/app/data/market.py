@@ -1085,10 +1085,22 @@ async def fetch_contract_quote_async(
 async def fetch_company_name_async(
     client: httpx.AsyncClient, symbol: str
 ) -> Optional[str]:
-    """Async variant. Company names are permanent — cached for the process lifetime."""
+    """Async variant. Company names are permanent — cached for the process lifetime.
+
+    Lookup order:
+    1. In-process cache (already resolved this session).
+    2. KNOWN_NAMES hardcoded table (covers ~150 common S&P 500 / NAS 100 tickers).
+    3. Tradier beta/fundamentals/company API call (requires higher API tier).
+    """
     cached_name = _company_cache.get(symbol)
     if cached_name is not None:
         return cached_name
+
+    from app.data.company_names import KNOWN_NAMES
+    known = KNOWN_NAMES.get(symbol)
+    if known:
+        _company_cache[symbol] = known
+        return known
 
     try:
         resp = await client.get(
