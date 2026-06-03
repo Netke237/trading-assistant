@@ -57,6 +57,7 @@ def test_fire_executes_and_disarms(mocker):
     svc.arm(armed)
     result = svc.fire()
     assert result.order_id == "999"
+    mock_execute.assert_called_once()
     assert svc.get_state().armed is False
     assert len(svc.get_state().history) == 1
 

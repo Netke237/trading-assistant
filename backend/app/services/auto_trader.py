@@ -73,15 +73,21 @@ class AutoTradeService:
             )
 
     def fire(self):
-        """Execute the armed strategy. Disarms after successful fire."""
+        """Execute the armed strategy. Disarms on the fire attempt (fail-closed).
+
+        The armed flag is cleared inside the same lock that reads the strategy, so a
+        manual /fire and the post-scan trigger cannot race into a double order. If the
+        order fails the system stays disarmed — re-arm to retry.
+        """
         with self._lock:
             if not self._state.armed or self._state.strategy is None:
                 raise RuntimeError("AutoTrader not armed — cannot fire")
             strategy = self._state.strategy
-        result = execute_option_order(strategy)
-        with self._lock:
+            # Clear armed state atomically so a concurrent fire sees unarmed immediately.
             self._state.armed = False
             self._state.strategy = None
+        result = execute_option_order(strategy)
+        with self._lock:
             self._state.history.append({
                 "order_id": result.order_id,
                 "status":   result.status,
