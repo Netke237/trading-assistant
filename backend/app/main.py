@@ -30,6 +30,7 @@ from app.routers.risk_settings import router as risk_settings_router
 from app.routers.data_sources  import router as data_sources_router
 from app.routers.credentials   import router as credentials_router
 from app.routers.broker        import router as broker_router
+from app.routers.stock_scan    import router as stock_scan_router
 
 
 _notification_worker_task: asyncio.Task | None = None
@@ -106,6 +107,7 @@ def create_app() -> FastAPI:
     # Importing credentials_router above already triggers this.
     app.include_router(credentials_router)
     app.include_router(broker_router)
+    app.include_router(stock_scan_router)
 
     return app
 
