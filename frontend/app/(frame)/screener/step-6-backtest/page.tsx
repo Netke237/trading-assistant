@@ -33,6 +33,7 @@ function BacktestRow({ c, selected, onClick }: { c: PositionCardData; selected: 
 
 export default function Step6BacktestPage() {
   const result = useScanStore((s) => s.stockScanResult);
+  const setSelectedSymbol = useScanStore((s) => s.setSelectedSymbol);
   const [selected, setSelected] = useState<string | null>(result?.candidates[0]?.symbol ?? null);
   const router = useRouter();
 
@@ -49,6 +50,7 @@ export default function Step6BacktestPage() {
 
   function proceedWith(symbol: string) {
     setSelected(symbol);
+    setSelectedSymbol(symbol);   // carry the choice to Step 7
     router.push('/screener/step-7-position-card');
   }
 

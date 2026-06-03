@@ -31,7 +31,12 @@ function ExecutionModeButton({ label, desc, active, disabled, onClick }:
 
 export default function Step7PositionCardPage() {
   const result = useScanStore((s) => s.stockScanResult);
-  const [selectedIdx, setSelectedIdx] = useState(0);
+  const selectedSymbol = useScanStore((s) => s.selectedSymbol);
+  const [selectedIdx, setSelectedIdx] = useState(() => {
+    const passing = result?.candidates.filter((c) => c.backtest.passes_gate) ?? [];
+    const i = passing.findIndex((c) => c.symbol === selectedSymbol);
+    return i >= 0 ? i : 0;
+  });
   const [execMode, setExecMode] = useState<ExecutionMode>('recommendation');
   const [placingType, setPlacingType] = useState<'LMT' | 'MKT' | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
