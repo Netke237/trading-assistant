@@ -1,0 +1,17 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--bg-surface);
+}
+.badge[data-tier='high'] {
+  background: color-mix(in srgb, var(--pass) 12%, var(--bg-surface));
+}
+.badge[data-tier='medium'] {
+  background: color-mix(in srgb, var(--caution) 12%, var(--bg-surface));
+}
+.badge[data-tier='low'] {
+  background: color-mix(in srgb, var(--reject) 12%, var(--bg-surface));
+}
