@@ -4,6 +4,7 @@ from app.scoring.signal_confidence import (
     evaluate_fire,
     aggregate,
     ConfidenceResult,
+    compute_confidence,
 )
 
 
@@ -61,3 +62,16 @@ def test_aggregate_below_min_samples_returns_none_confidence():
     res = aggregate(["win", "loss"], min_samples=20)
     assert res.confidence is None
     assert res.sample_size == 2
+
+
+def test_compute_confidence_runs_end_to_end_on_synthetic_uptrend():
+    # Rising series so the bullish signal fires repeatedly and mostly wins.
+    bars = []
+    price = 50.0
+    for i in range(400):
+        price *= 1.004
+        bars.append(_bar(price * 0.997, price * 1.01, price * 0.99, price, 1000 + i))
+    res = compute_confidence(bars, direction="Bullish", horizon="Swing")
+    assert res.sample_size >= 20
+    assert res.confidence is not None
+    assert 0 <= res.confidence <= 100

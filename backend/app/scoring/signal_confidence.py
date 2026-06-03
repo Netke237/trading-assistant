@@ -122,3 +122,40 @@ def interpret(confidence: int | None, *, sample_size: int, symbol: str) -> str:
         f"Weak history — only {confidence}% reliable on {symbol} "
         f"({sample_size} occurrences). Verdict capped down."
     )
+
+
+def compute_confidence(
+    bars: list[dict],
+    *,
+    direction: str,
+    horizon: str,
+) -> ConfidenceResult:
+    """Replay the entry signal across history and score its reliability.
+
+    A 'fire' = score_stock(...).status == 'PASS' on bars up to and including i,
+    using only price-derived rules (no event/iv inputs in the historical replay).
+    """
+    from app.scoring.stock_scorer import score_stock, _atr  # reuse existing helpers
+
+    bt = load_backtest_cfg(horizon)
+    n_days = int(bt["n_days"])
+    atr_mult = float(bt["atr_mult"])
+    atr_period = int(bt["atr_period"])
+    min_samples = int(bt["min_samples"])
+
+    warmup = 60  # need enough bars for MAs/ADX before the first meaningful score
+    outcomes: list[str] = []
+    last = len(bars) - n_days
+    for i in range(warmup, last):
+        window = bars[: i + 1]
+        card = score_stock(
+            symbol="_bt", direction=direction, horizon=horizon, bars=window
+        )
+        if card.status != "PASS":
+            continue
+        atr = _atr(window, atr_period)
+        forward = bars[i + 1 : i + 1 + n_days]
+        outcomes.append(
+            evaluate_fire(window, forward, direction=direction, atr=atr, atr_mult=atr_mult)
+        )
+    return aggregate(outcomes, min_samples=min_samples)
