@@ -246,6 +246,7 @@ function ScanForm() {
     shortlistMaxCandidates, setShortlistMaxCandidates,
     maxContractsPerChain, setMaxContractsPerChain,
     maxContractPrice, setMaxContractPrice,
+    confidenceGate, setConfidenceGate,
   } = useSettingsStore();
   const [continuous, setContinuous] = useState(false);
 
@@ -254,11 +255,15 @@ function ScanForm() {
   const [candidatesText, setCandidatesText] = useState(String(shortlistMaxCandidates));
   const [chainsText,     setChainsText]     = useState(String(maxContractsPerChain));
   const [priceText,      setPriceText]      = useState(String(maxContractPrice));
+  const [cautionText,    setCautionText]    = useState(String(confidenceGate.cautionBelow));
+  const [rejectText,     setRejectText]     = useState(String(confidenceGate.rejectBelow));
 
   // Sync text buffers when the store resets
   useEffect(() => { setCandidatesText(String(shortlistMaxCandidates)); }, [shortlistMaxCandidates]);
   useEffect(() => { setChainsText(String(maxContractsPerChain));        }, [maxContractsPerChain]);
   useEffect(() => { setPriceText(String(maxContractPrice));             }, [maxContractPrice]);
+  useEffect(() => { setCautionText(String(confidenceGate.cautionBelow)); }, [confidenceGate.cautionBelow]);
+  useEffect(() => { setRejectText(String(confidenceGate.rejectBelow));   }, [confidenceGate.rejectBelow]);
 
   return (
     <>
@@ -341,6 +346,57 @@ function ScanForm() {
             const clamped = isNaN(val) ? 500 : Math.max(0.01, Math.min(10000, val));
             setPriceText(String(clamped));
             setMaxContractPrice(clamped);
+          }}
+        />
+      </Row>
+
+      <SectionIntro
+        title="Confidence gate"
+        blurb="Confidence is how often a candidate's entry signal worked in the past (0–100%). The gate can only lower a verdict, never raise it — it protects you from setups with a weak track record."
+      />
+      <Row label="Enable gate" hint="When off, confidence is shown but never changes the verdict" defaultValue="On">
+        <Toggle
+          defaultOn={confidenceGate.enabled}
+          onChange={(on) => setConfidenceGate({ ...confidenceGate, enabled: on })}
+        />
+      </Row>
+      <Row
+        label="Caution below (%)"
+        hint="Confidence under this caps the verdict at CAUTION (0–100)"
+        defaultValue="50"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.input}
+          disabled={!confidenceGate.enabled}
+          value={cautionText}
+          onChange={(e) => setCautionText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(cautionText, 10);
+            const clamped = isNaN(val) ? 50 : Math.max(0, Math.min(100, val));
+            setCautionText(String(clamped));
+            setConfidenceGate({ ...confidenceGate, cautionBelow: clamped });
+          }}
+        />
+      </Row>
+      <Row
+        label="Reject below (%)"
+        hint="Confidence under this caps the verdict at REJECT (0–100)"
+        defaultValue="35"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.input}
+          disabled={!confidenceGate.enabled}
+          value={rejectText}
+          onChange={(e) => setRejectText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(rejectText, 10);
+            const clamped = isNaN(val) ? 35 : Math.max(0, Math.min(100, val));
+            setRejectText(String(clamped));
+            setConfidenceGate({ ...confidenceGate, rejectBelow: clamped });
           }}
         />
       </Row>

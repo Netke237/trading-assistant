@@ -89,6 +89,31 @@
   cursor: default;
 }
 
+.gateRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+.gateField {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.gateInput {
+  width: 44px;
+  padding: 2px 4px;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  text-align: right;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
 .tableHeader {
   display: grid;
   align-items: center;
