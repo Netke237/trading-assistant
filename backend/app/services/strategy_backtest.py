@@ -83,11 +83,15 @@ def run_strategy_backtest(
             n = len(self.data.Close)
             if n < 60:
                 return
+            # Only the trailing window is needed (mean_reversion_rsi needs ~219 bars,
+            # the largest of the four strategies). Capping at 250 avoids rebuilding
+            # the full history every bar (was O(n²) over a 5-year scan per symbol).
+            start = max(0, n - 250)
             slice_bars = [
                 {"open": float(self.data.Open[i]), "high": float(self.data.High[i]),
                  "low": float(self.data.Low[i]),   "close": float(self.data.Close[i]),
                  "volume": float(self.data.Volume[i])}
-                for i in range(n)
+                for i in range(start, n)
             ]
             if not self.position:
                 sig = fn(slice_bars)
