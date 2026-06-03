@@ -359,6 +359,8 @@ class TradeCardData(BaseModel):
     finalStatus: Status
     alternatives:      list[AlternativeContract] = []
     alternativesCount: int = 0
+    confidence:        Optional[int] = None
+    confidenceText:    Optional[str] = None
 
 
 # ── Scan ─────────────────────────────────────────────────────────────────────
@@ -373,6 +375,9 @@ class ScanRequest(BaseModel):
     max_price:   Optional[float] = None
     min_cap_usd: Optional[float] = None
     max_cap_usd: Optional[float] = None
+    # Per-scan confidence-gate overrides (snake_case, matching this model's style)
+    confidence_caution_below: Optional[int] = None
+    confidence_reject_below:  Optional[int] = None
 
 
 class RejectedCandidate(BaseModel):
