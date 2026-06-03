@@ -2,6 +2,8 @@ from app.scoring.signal_confidence import (
     load_backtest_cfg,
     load_gate_cfg,
     evaluate_fire,
+    aggregate,
+    ConfidenceResult,
 )
 
 
@@ -43,3 +45,19 @@ def test_evaluate_fire_neither_returns_flat():
     fwd = [_bar(100, 101, 99, 100) for _ in range(3)]  # never reaches +/-3
     outcome = evaluate_fire(history, fwd, direction="Bullish", atr=2.0, atr_mult=1.5)
     assert outcome == "flat"
+
+
+def test_aggregate_computes_hit_rate_and_score():
+    outcomes = ["win"] * 7 + ["loss"] * 3   # 70% hit rate
+    res = aggregate(outcomes, min_samples=5)
+    assert isinstance(res, ConfidenceResult)
+    assert res.sample_size == 10
+    assert res.hit_rate == 0.7
+    # payoff_ratio fixed at atr_mult symmetry -> 1.0, so confidence = 70
+    assert res.confidence == 70
+
+
+def test_aggregate_below_min_samples_returns_none_confidence():
+    res = aggregate(["win", "loss"], min_samples=20)
+    assert res.confidence is None
+    assert res.sample_size == 2

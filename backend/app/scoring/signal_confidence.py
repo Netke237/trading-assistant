@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -7,6 +8,14 @@ from typing import Literal
 import yaml
 
 Outcome = Literal["win", "loss", "flat"]
+
+
+@dataclass
+class ConfidenceResult:
+    confidence: int | None     # 0-100, or None if insufficient samples
+    hit_rate: float            # wins / (wins + losses)
+    sample_size: int           # wins + losses (flats excluded)
+    flats: int
 
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
 
@@ -58,3 +67,21 @@ def evaluate_fire(
             if b["low"] <= target:
                 return "win"
     return "flat"
+
+
+def aggregate(outcomes: list[str], *, min_samples: int) -> ConfidenceResult:
+    wins = sum(1 for o in outcomes if o == "win")
+    losses = sum(1 for o in outcomes if o == "loss")
+    flats = sum(1 for o in outcomes if o == "flat")
+    decisive = wins + losses
+    if decisive == 0:
+        return ConfidenceResult(None, 0.0, 0, flats)
+    hit_rate = wins / decisive
+    if decisive < min_samples:
+        return ConfidenceResult(None, round(hit_rate, 4), decisive, flats)
+    # Win and loss are both atr_mult*ATR by construction -> payoff_ratio = 1.0.
+    # confidence = 100 * hit_rate * min(1, payoff_ratio)  (formula per spec; tunable)
+    payoff_ratio = 1.0
+    confidence = round(100 * hit_rate * min(1.0, payoff_ratio))
+    confidence = max(0, min(100, confidence))
+    return ConfidenceResult(confidence, round(hit_rate, 4), decisive, flats)
