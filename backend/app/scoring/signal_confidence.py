@@ -85,3 +85,40 @@ def aggregate(outcomes: list[str], *, min_samples: int) -> ConfidenceResult:
     confidence = round(100 * hit_rate * min(1.0, payoff_ratio))
     confidence = max(0, min(100, confidence))
     return ConfidenceResult(confidence, round(hit_rate, 4), decisive, flats)
+
+
+Status = Literal["PASS", "CAUTION", "REJECT"]
+
+
+def status_cap(confidence: int | None, gate: dict) -> Status:
+    """The *most permissive* status this confidence allows. Demote-only:
+    callers combine this with the raw status and take the worse of the two."""
+    if not gate.get("enabled", True) or confidence is None:
+        return "PASS"
+    if confidence < gate["rejectBelow"]:
+        return "REJECT"
+    if confidence < gate["cautionBelow"]:
+        return "CAUTION"
+    return "PASS"
+
+
+def interpret(confidence: int | None, *, sample_size: int, symbol: str) -> str:
+    if confidence is None:
+        return (
+            f"Not enough history to judge this setup on {symbol} "
+            f"({sample_size} past occurrences). Confidence not applied."
+        )
+    if confidence >= 70:
+        return (
+            f"Strong history — this setup worked {confidence}% of the time on "
+            f"{symbol} across {sample_size} past occurrences."
+        )
+    if confidence >= 50:
+        return (
+            f"Mixed history — worked {confidence}% of the time on {symbol} "
+            f"({sample_size} occurrences). Treat with normal caution."
+        )
+    return (
+        f"Weak history — only {confidence}% reliable on {symbol} "
+        f"({sample_size} occurrences). Verdict capped down."
+    )
