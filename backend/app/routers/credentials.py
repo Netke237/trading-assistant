@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -9,7 +11,7 @@ router = APIRouter(prefix="/settings", tags=["credentials"])
 
 
 class CredentialUpdate(BaseModel):
-    key: str    # "ibkr_paper" | "ibkr_live" | "tradier_live" | "tradier_paper"
+    key: Literal["ibkr_live", "ibkr_paper", "tradier_live", "tradier_paper"]
     values: dict
 
 
