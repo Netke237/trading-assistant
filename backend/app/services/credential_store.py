@@ -39,8 +39,15 @@ class CredentialStore:
     def load(self) -> None:
         if not self._path:
             return
-        with self._lock:
+        try:
             raw = yaml.safe_load(self._path.read_text()) or {}
+        except (yaml.YAMLError, OSError) as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "credential_store: failed to load %s (%s) — using defaults", self._path, exc
+            )
+            return
+        with self._lock:
             for k, v in raw.items():
                 if isinstance(v, dict):
                     self._data[k] = {**self._data.get(k, {}), **v}
@@ -49,8 +56,12 @@ class CredentialStore:
         if not self._path:
             return
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._path.with_suffix(".yaml.tmp")
         with self._lock:
-            self._path.write_text(yaml.dump(self._data, default_flow_style=False))
+            data_copy = {k: dict(v) for k, v in self._data.items()}
+        tmp.write_text(yaml.dump(data_copy, default_flow_style=False))
+        import os as _os_save
+        _os_save.replace(tmp, self._path)
 
     def get(self, key: str) -> dict | None:
         with self._lock:
