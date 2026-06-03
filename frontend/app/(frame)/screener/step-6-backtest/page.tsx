@@ -24,7 +24,7 @@ function BacktestRow({ c, selected, onClick }: { c: PositionCardData; selected: 
       <Data size={12} tone={bt.total_return_pct >= 0 ? 'pass' : 'reject'}>
         {bt.total_return_pct.toFixed(1)}%
       </Data>
-      <Data size={12} tone="reject">{bt.max_drawdown_pct.toFixed(1)}%</Data>
+      <Data size={12} tone="reject">{Math.abs(bt.max_drawdown_pct).toFixed(1)}%</Data>
       <ConfidenceBadge confidence={c.confidence} title={c.confidence_text ?? undefined} />
       <StatusBadge status={pass ? 'PASS' : 'REJECT'} />
     </button>
@@ -85,8 +85,8 @@ export default function Step6BacktestPage() {
       {result.rejected.length > 0 && (
         <details className={styles.rejectedSection}>
           <summary><Text size={12} tone="dim">{result.rejected.length} rejected</Text></summary>
-          {result.rejected.map((r, i) => (
-            <Text key={i} size={11} tone="dim">{r.symbol}: {r.reason}</Text>
+          {result.rejected.map((r) => (
+            <Text key={r.symbol} size={11} tone="dim">{r.symbol}: {r.reason}</Text>
           ))}
         </details>
       )}
