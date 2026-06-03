@@ -49,3 +49,27 @@ def test_all_returns_masked_dict():
     store.set("ibkr_paper", {"base_url": "https://localhost:7499/v1/api", "account_id": ""})
     result = store.all_masked()
     assert "ibkr_paper" in result
+
+
+from fastapi.testclient import TestClient
+from fastapi import FastAPI
+
+
+def _make_app():
+    from app.routers.credentials import router
+    app = FastAPI()
+    app.include_router(router)
+    return app
+
+
+def test_post_credentials_stores_and_get_returns_masked():
+    client = TestClient(_make_app())
+    resp = client.post("/settings/credentials", json={
+        "key": "tradier_paper",
+        "values": {"token": "tok_secret", "account_id": "ACC123"}
+    })
+    assert resp.status_code == 200, resp.text
+    resp2 = client.get("/settings/credentials")
+    data = resp2.json()
+    assert "tradier_paper" in data
+    assert "secret" not in data["tradier_paper"].get("token", "")
