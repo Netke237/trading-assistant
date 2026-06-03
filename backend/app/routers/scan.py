@@ -646,6 +646,10 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         original_count=original_count,
     )
     _last_result = result
+    # Trigger #2: fire armed auto-trade if this scan produced any candidates
+    if result.candidates:
+        from app.services.auto_trader import auto_trader as _auto_trader
+        _auto_trader.maybe_fire_on_scan()
     await _upsert_session(db, req=_last_request, result=result, status="complete")
     return result
 
