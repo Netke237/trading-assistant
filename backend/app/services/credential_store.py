@@ -49,8 +49,10 @@ class CredentialStore:
             return
         with self._lock:
             for k, v in raw.items():
-                if isinstance(v, dict):
-                    self._data[k] = {**self._data.get(k, {}), **v}
+                # Only merge known broker slots; ignore stray/legacy keys in the file
+                # so load() mirrors the POST endpoint's key restriction.
+                if isinstance(v, dict) and k in self._data:
+                    self._data[k] = {**self._data[k], **v}
 
     def save(self) -> None:
         if not self._path:

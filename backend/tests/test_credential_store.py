@@ -51,6 +51,23 @@ def test_all_returns_masked_dict():
     assert "ibkr_paper" in result
 
 
+def test_load_ignores_unknown_broker_keys():
+    """Stray/legacy keys in the YAML file must not leak into the store."""
+    with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False) as f:
+        path = f.name
+    try:
+        Path(path).write_text(
+            "tradier_paper:\n  token: realtok\n  account_id: ACC\n"
+            "unknown_broker:\n  token: xyz\n"
+        )
+        store = CredentialStore(path=Path(path))  # loads on init
+        assert store.get("tradier_paper")["token"] == "realtok"
+        assert store.get("unknown_broker") is None
+        assert "unknown_broker" not in store.all_masked()
+    finally:
+        os.unlink(path)
+
+
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
