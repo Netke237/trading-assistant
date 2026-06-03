@@ -77,7 +77,10 @@ export const api = {
     universe: string[],
     direction: string,
     horizon: string,
-    filters?: { min_price?: number; max_price?: number; min_cap_usd?: number; max_cap_usd?: number },
+    filters?: {
+      min_price?: number; max_price?: number; min_cap_usd?: number; max_cap_usd?: number;
+      confidence_caution_below?: number; confidence_reject_below?: number;
+    },
     overrides?: Record<string, number | boolean | string>,
   ) =>
     post<{ scan_id: string; timestamp: string; candidates: TradeCardData[]; rejected: { symbol: string; reason: string }[] }>(

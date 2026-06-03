@@ -43,6 +43,8 @@ interface ScanStoreState {
   conflictedSymbols: string[];
   rejectedLog: { symbol: string; reason: string }[];
   scanOverrides: Record<string, number | boolean | string>;
+  /** Per-scan confidence-gate override (transient; null = use Settings default). */
+  confidenceOverride: { cautionBelow?: number; rejectBelow?: number } | null;
   pickedContracts:    Record<string, string>;
   contractsBySymbol:  Record<string, OptionContract[]>;
   setScanState:    (s: ScanState, at?: string, durationMs?: number) => void;
@@ -55,6 +57,7 @@ interface ScanStoreState {
   setConflictedSymbols: (symbols: string[]) => void;
   setRejectedLog:  (entries: { symbol: string; reason: string }[]) => void;
   setScanOverrides: (o: Record<string, number | boolean | string>) => void;
+  setConfidenceOverride: (o: { cautionBelow?: number; rejectBelow?: number } | null) => void;
   setPickedContract:    (symbol: string, contractId: string) => void;
   clearPickedContracts: () => void;
   setContractsBySymbol: (map: Record<string, OptionContract[]>) => void;
@@ -75,6 +78,7 @@ export const useScanStore = create<ScanStoreState>()(
       conflictedSymbols: [],
       rejectedLog: [],
       scanOverrides:   {},
+      confidenceOverride: null,
       pickedContracts:    {},
       contractsBySymbol:  {},
       setScanState:    (s, at, durationMs) => set({ scanState: s, scanAt: at ?? null, scanDurationMs: durationMs ?? null }),
@@ -90,6 +94,7 @@ export const useScanStore = create<ScanStoreState>()(
       setConflictedSymbols: (symbols) => set({ conflictedSymbols: symbols }),
       setRejectedLog: (entries) => set({ rejectedLog: entries }),
       setScanOverrides: (o) => set({ scanOverrides: o }),
+      setConfidenceOverride: (o) => set({ confidenceOverride: o }),
       setPickedContract:    (symbol, contractId) => set(s => ({ pickedContracts: { ...s.pickedContracts, [symbol]: contractId } })),
       clearPickedContracts: () => set({ pickedContracts: {} }),
       setContractsBySymbol: (map) => set({ contractsBySymbol: map }),

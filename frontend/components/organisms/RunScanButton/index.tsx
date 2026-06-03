@@ -113,6 +113,18 @@ export function RunScanButton() {
     const scanOverrides = useScanStore.getState().scanOverrides;
     const effectiveOverrides = { ...scanOverrides, shortlist_max_candidates: shortlistMaxCandidates };
 
+    // Confidence gate: persisted Settings default, overridden per-scan if set.
+    // Disabled gate -> send 0/0 thresholds so confidence can never demote.
+    const gate = useSettingsStore.getState().confidenceGate;
+    const perScan = useScanStore.getState().confidenceOverride;
+    if (gate.enabled) {
+      filters.confidence_caution_below = perScan?.cautionBelow ?? gate.cautionBelow;
+      filters.confidence_reject_below  = perScan?.rejectBelow  ?? gate.rejectBelow;
+    } else {
+      filters.confidence_caution_below = 0;
+      filters.confidence_reject_below  = 0;
+    }
+
     const t0 = Date.now();
     const startISO = nowLocalISO();        // capture start time before the async call
     setScanState('SCANNING', startISO);   // scanAt = START time (not end)
