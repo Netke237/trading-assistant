@@ -96,6 +96,12 @@ export const api = {
     min_price?: number; max_price?: number;
   }) => post<StockScanResult>('/api/stock-scan', req),
 
+  postStockOrder: (req: {
+    broker: string; symbol: string; action: 'BUY' | 'SELL';
+    quantity: number; order_type: 'MKT' | 'LMT';
+    limit_price: number | null; tif: 'DAY' | 'GTC';
+  }) => post<{ order_id: string; status: string; broker: string }>('/broker/stock-order', req),
+
   // Phase 4: Chart alert CRUD
   createAlertRule: (body: {
     name: string; symbol: string; interval: string; enabled: boolean;
