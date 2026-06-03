@@ -102,6 +102,27 @@ export const api = {
     limit_price: number | null; tif: 'DAY' | 'GTC';
   }) => post<{ order_id: string; status: string; broker: string }>('/broker/stock-order', req),
 
+  postOptionOrder: (req: {
+    broker: string; symbol: string; option_symbol: string;
+    action: 'BUY' | 'SELL'; quantity: number;
+    order_type: 'MKT' | 'LMT'; limit_price: number | null;
+    tif: 'DAY' | 'GTC'; conid?: number;
+  }) => post<{ order_id: string; status: string; broker: string }>('/broker/option-order', req),
+
+  armAutoTrade: (req: {
+    broker: string; symbol: string; option_symbol: string;
+    action: 'BUY' | 'SELL'; quantity: number;
+    order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;
+  }) => post<{ armed: boolean }>('/auto-trade/arm', req),
+
+  disarmAutoTrade: () => del('/auto-trade/arm'),
+
+  fireAutoTrade: () =>
+    post<{ order_id: string; status: string }>('/auto-trade/fire', {}),
+
+  getAutoTradeStatus: () =>
+    get<{ armed: boolean; symbol: string | null; option: string | null; last_order: unknown }>('/auto-trade/status'),
+
   // Phase 4: Chart alert CRUD
   createAlertRule: (body: {
     name: string; symbol: string; interval: string; enabled: boolean;
