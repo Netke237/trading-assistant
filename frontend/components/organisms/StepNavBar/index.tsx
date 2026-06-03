@@ -13,7 +13,7 @@ import { useEffect, useCallback, useState } from 'react';
 import { Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import {
-  SCREENER_STEPS,
+  getSteps,
   currentStepFromPath,
 } from '@/components/organisms/Stepper';
 import styles from './StepNavBar.module.css';
@@ -23,11 +23,13 @@ export function StepNavBar() {
   const pathname = usePathname();
   const current  = currentStepFromPath(pathname);
   const regime   = useScanStore((s) => s.combinedRegime);
+  const mode     = useScanStore((s) => s.screenerMode);
+  const steps    = getSteps(mode);
 
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const prev = SCREENER_STEPS[current - 2];
-  const next = SCREENER_STEPS[current];
+  const prev = steps[current - 2];
+  const next = steps[current];
 
   const goPrev = useCallback(() => {
     if (prev) router.push(`/screener/${prev.slug}`);
@@ -99,7 +101,7 @@ export function StepNavBar() {
 
         <div className={styles.center}>
           <Text size={11} tone="dim" weight={500}>
-            STEP {current} OF {SCREENER_STEPS.length}
+            STEP {current} OF {steps.length}
           </Text>
         </div>
 

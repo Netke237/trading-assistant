@@ -1,5 +1,6 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, OptionContract, NewsItem } from '@/types/domain';
+import type { StockScanResult } from '@/types/stockDomain';
 import type { Candle } from '@/types/chart';
 import type { AlertRule, AlertHistory } from '@/types/alerts';
 
@@ -87,6 +88,13 @@ export const api = {
       '/api/scan',
       { universe, direction, horizon, overrides: overrides ?? {}, ...filters },
     ),
+
+  postStockScan: (req: {
+    universe: string[]; direction: string; horizon: string;
+    strategy: string; account_size?: number; risk_pct?: number;
+    risk_fixed_usd?: number; bt_min_trades?: number; bt_min_win_rate?: number;
+    min_price?: number; max_price?: number;
+  }) => post<StockScanResult>('/api/stock-scan', req),
 
   // Phase 4: Chart alert CRUD
   createAlertRule: (body: {

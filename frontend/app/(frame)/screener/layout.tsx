@@ -1,10 +1,14 @@
+'use client';
+
 /*
  * Screener nested layout — spec §4.
- * Adds the 52px StepNavBar at the bottom of the workspace column.
+ * Adds the mode toggle, scrollable step content, and 52px StepNavBar.
  * The persistent frame (TopBar, NavRail, ContextRail) comes from (frame)/layout.tsx.
  *
  * Structure inside the workspace grid cell:
  *   ┌───────────────────────────────────┐
+ *   │  Options / Stocks mode toggle     │
+ *   ├───────────────────────────────────┤
  *   │  scrollable step content          │
  *   │  (children)                       │
  *   ├───────────────────────────────────┤
@@ -12,12 +16,31 @@
  *   └───────────────────────────────────┘
  */
 
+import { useScanStore } from '@/lib/scanStore';
 import { StepNavBar } from '@/components/organisms/StepNavBar';
 import styles from './screenerLayout.module.css';
 
 export default function ScreenerLayout({ children }: { children: React.ReactNode }) {
+  const mode    = useScanStore((s) => s.screenerMode);
+  const setMode = useScanStore((s) => s.setScreenerMode);
   return (
     <div className={styles.wrap}>
+      <div className={styles.modeToggle}>
+        <button
+          type="button"
+          className={`${styles.modeBtn} ${mode === 'options' ? styles.modeBtnActive : ''}`}
+          onClick={() => setMode('options')}
+        >
+          Options
+        </button>
+        <button
+          type="button"
+          className={`${styles.modeBtn} ${mode === 'stocks' ? styles.modeBtnActive : ''}`}
+          onClick={() => setMode('stocks')}
+        >
+          Stocks
+        </button>
+      </div>
       <div className={styles.scroll}>{children}</div>
       <StepNavBar />
     </div>
