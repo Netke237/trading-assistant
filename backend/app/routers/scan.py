@@ -186,6 +186,7 @@ async def _process_symbol(
     max_cap_usd: float | None = None,
     overrides: dict | None = None,
     gate: dict | None = None,
+    atr_mult: float | None = None,
 ) -> TradeCardData | RejectedCandidate:
     """Process one symbol: fetch data, score stock, validate contracts, build trade card.
 
@@ -288,11 +289,12 @@ async def _process_symbol(
     _conf: int | None = None
     _conf_n: int = 0
     if gate is not None:
-        _ck = confidence_cache.cache_key(symbol, direction, horizon)
+        _atr_for_key = atr_mult if atr_mult is not None else 1.5
+        _ck = confidence_cache.cache_key(symbol, direction, horizon, _atr_for_key)
         _cached = confidence_cache.get_cached(_ck)
         if _cached is None:
             _res = await asyncio.to_thread(
-                compute_confidence, candles, direction=direction, horizon=horizon
+                compute_confidence, candles, direction=direction, horizon=horizon, atr_mult=atr_mult
             )
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
             confidence_cache.set_cached(_ck, _cached)
@@ -570,6 +572,7 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         raise HTTPException(status_code=400, detail=str(e))
 
     gate = _resolve_gate(req)
+    atr_mult = getattr(req, "confidence_atr_mult", None)
 
     candidates: list[TradeCardData] = []
     rejected: list[RejectedCandidate] = []
@@ -593,6 +596,7 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 max_cap_usd=req.max_cap_usd,
                 overrides=dict(req.overrides) if req.overrides else None,
                 gate=gate,
+                atr_mult=atr_mult,
             )
             for symbol in symbols
         ]

@@ -14,6 +14,11 @@ def test_cache_key_is_stable_and_distinct():
     assert cache_key("AAPL", "Bullish", "Swing") != cache_key("AAPL", "Bearish", "Swing")
 
 
+def test_cache_key_includes_atr_mult():
+    assert cache_key("AAPL", "Bullish", "Swing", 1.5) != cache_key("AAPL", "Bullish", "Swing", 2.0)
+    assert cache_key("AAPL", "Bullish", "Swing", 1.5) == cache_key("AAPL", "Bullish", "Swing", 1.5)
+
+
 def test_ttl_evicts_stale_entries(monkeypatch):
     import app.data.confidence_cache as cc
 

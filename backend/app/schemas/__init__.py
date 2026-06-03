@@ -378,6 +378,7 @@ class ScanRequest(BaseModel):
     # Per-scan confidence-gate overrides (snake_case, matching this model's style)
     confidence_caution_below: Optional[int] = None
     confidence_reject_below:  Optional[int] = None
+    confidence_atr_mult:      Optional[float] = None
 
 
 class RejectedCandidate(BaseModel):

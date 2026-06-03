@@ -9,8 +9,10 @@ _store: dict[str, dict] = {}
 _TTL_SECONDS = 7 * 24 * 3600  # weekly
 
 
-def cache_key(symbol: str, direction: str, horizon: str) -> str:
-    return f"{symbol.upper()}|{direction.lower()}|{horizon.lower()}"
+def cache_key(symbol: str, direction: str, horizon: str, atr_mult: float = 1.5) -> str:
+    # atr_mult is part of the key: changing it changes the computed confidence,
+    # so cached results under a different multiple must not be reused.
+    return f"{symbol.upper()}|{direction.lower()}|{horizon.lower()}|{float(atr_mult):g}"
 
 
 def set_cached(key: str, value: dict) -> None:

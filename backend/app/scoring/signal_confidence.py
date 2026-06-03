@@ -129,17 +129,21 @@ def compute_confidence(
     *,
     direction: str,
     horizon: str,
+    atr_mult: float | None = None,
 ) -> ConfidenceResult:
     """Replay the entry signal across history and score its reliability.
 
     A 'fire' = score_stock(...).status == 'PASS' on bars up to and including i,
     using only price-derived rules (no event/iv inputs in the historical replay).
+
+    `atr_mult` overrides the configured ATR multiple for the win/loss barriers;
+    when None, the per-horizon default from config is used.
     """
     from app.scoring.stock_scorer import score_stock, _atr  # reuse existing helpers
 
     bt = load_backtest_cfg(horizon)
     n_days = int(bt["n_days"])
-    atr_mult = float(bt["atr_mult"])
+    atr_mult = float(atr_mult) if atr_mult is not None else float(bt["atr_mult"])
     atr_period = int(bt["atr_period"])
     min_samples = int(bt["min_samples"])
 
