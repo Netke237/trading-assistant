@@ -9,5 +9,6 @@
 .card:hover:not(:disabled) { border-color: var(--border-strong); }
 .card:disabled { opacity: .5; cursor: wait; }
 .cardActive { border-color: var(--pass); background: color-mix(in srgb, var(--pass) 6%, var(--bg-surface)); }
+.cardActive:hover:not(:disabled) { border-color: var(--pass); }
 .cardHeader { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--space-3); }
 .cardBody { display: flex; flex-direction: column; gap: 4px; }

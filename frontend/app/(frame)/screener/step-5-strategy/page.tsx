@@ -48,12 +48,13 @@ export default function Step5StrategyPage() {
   const activeStrategy = useScanStore((s) => s.activeStrategy);
   const setActiveStrategy = useScanStore((s) => s.setActiveStrategy);
   const setStockScanResult = useScanStore((s) => s.setStockScanResult);
-  const [loading, setLoading] = useState(false);
+  const [loadingStrategy, setLoadingStrategy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function runScan(stratKey: string) {
     setActiveStrategy(stratKey);
-    setLoading(true);
+    setStockScanResult(null);   // clear any prior result so Step 6 can't show stale data
+    setLoadingStrategy(stratKey);
     setError(null);
     try {
       const result = await api.postStockScan({
@@ -69,7 +70,7 @@ export default function Step5StrategyPage() {
     } catch (e) {
       setError(String(e));
     } finally {
-      setLoading(false);
+      setLoadingStrategy(null);
     }
   }
 
@@ -89,7 +90,7 @@ export default function Step5StrategyPage() {
             key={s.key}
             className={`${styles.card} ${activeStrategy === s.key ? styles.cardActive : ''}`}
             onClick={() => runScan(s.key)}
-            disabled={loading}
+            disabled={loadingStrategy !== null}
           >
             <div className={styles.cardHeader}>
               <Text size={14} weight={600}>{s.label}</Text>
@@ -100,7 +101,7 @@ export default function Step5StrategyPage() {
               <Text size={11} tone="dim">Stop: {s.stop}</Text>
               <Text size={11} tone="dim">Exit: {s.exit}</Text>
             </div>
-            {loading && activeStrategy === s.key && (
+            {loadingStrategy === s.key && (
               <Text size={11} tone="secondary">Running backtest scan…</Text>
             )}
           </button>
