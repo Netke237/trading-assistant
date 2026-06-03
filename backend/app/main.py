@@ -28,6 +28,8 @@ from app.routers.chart_alerts import router as chart_alerts_router
 from app.routers.notification_settings import router as notification_settings_router
 from app.routers.risk_settings import router as risk_settings_router
 from app.routers.data_sources  import router as data_sources_router
+from app.routers.credentials   import router as credentials_router
+from app.routers.broker        import router as broker_router
 
 
 _notification_worker_task: asyncio.Task | None = None
@@ -100,6 +102,10 @@ def create_app() -> FastAPI:
     app.include_router(notification_settings_router)
     app.include_router(risk_settings_router)
     app.include_router(data_sources_router)
+    # Credential store singleton loads from local_credentials.yaml on import (side-effect).
+    # Importing credentials_router above already triggers this.
+    app.include_router(credentials_router)
+    app.include_router(broker_router)
 
     return app
 
