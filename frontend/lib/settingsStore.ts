@@ -45,12 +45,14 @@ export interface ConfidenceGate {
   enabled:      boolean;
   cautionBelow: number;   // confidence < this -> cap at CAUTION
   rejectBelow:  number;   // confidence < this -> cap at REJECT
+  atrMult:      number;   // ATR multiple for the backtest win/loss barriers
 }
 
 export const DEFAULT_CONFIDENCE_GATE: ConfidenceGate = {
   enabled: true,
   cautionBelow: 50,
   rejectBelow: 35,
+  atrMult: 1.5,
 };
 
 interface SettingsState {
@@ -95,6 +97,7 @@ export function migrateSettings(
   }
   if (version < 10) next.premiumStopPct = 0.60;
   if (version < 11) next.confidenceGate = { ...DEFAULT_CONFIDENCE_GATE };
+  if (version < 12) next.confidenceGate = { ...DEFAULT_CONFIDENCE_GATE, ...(next.confidenceGate ?? {}) };
   return next as unknown as SettingsState;
 }
 
@@ -141,7 +144,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 11,
+      version: 12,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,

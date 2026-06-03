@@ -257,6 +257,7 @@ function ScanForm() {
   const [priceText,      setPriceText]      = useState(String(maxContractPrice));
   const [cautionText,    setCautionText]    = useState(String(confidenceGate.cautionBelow));
   const [rejectText,     setRejectText]     = useState(String(confidenceGate.rejectBelow));
+  const [atrText,        setAtrText]        = useState(String(confidenceGate.atrMult));
 
   // Sync text buffers when the store resets
   useEffect(() => { setCandidatesText(String(shortlistMaxCandidates)); }, [shortlistMaxCandidates]);
@@ -264,6 +265,7 @@ function ScanForm() {
   useEffect(() => { setPriceText(String(maxContractPrice));             }, [maxContractPrice]);
   useEffect(() => { setCautionText(String(confidenceGate.cautionBelow)); }, [confidenceGate.cautionBelow]);
   useEffect(() => { setRejectText(String(confidenceGate.rejectBelow));   }, [confidenceGate.rejectBelow]);
+  useEffect(() => { setAtrText(String(confidenceGate.atrMult));          }, [confidenceGate.atrMult]);
 
   return (
     <>
@@ -397,6 +399,25 @@ function ScanForm() {
             const clamped = isNaN(val) ? 35 : Math.max(0, Math.min(100, val));
             setRejectText(String(clamped));
             setConfidenceGate({ ...confidenceGate, rejectBelow: clamped });
+          }}
+        />
+      </Row>
+      <Row
+        label="ATR multiple"
+        hint="Backtest win/loss barrier = this × ATR. Higher = bigger move required (0.5–5)"
+        defaultValue="1.5"
+      >
+        <input
+          type="text"
+          inputMode="decimal"
+          className={styles.input}
+          value={atrText}
+          onChange={(e) => setAtrText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(atrText);
+            const clamped = isNaN(val) ? 1.5 : Math.max(0.5, Math.min(5, val));
+            setAtrText(String(clamped));
+            setConfidenceGate({ ...confidenceGate, atrMult: clamped });
           }}
         />
       </Row>

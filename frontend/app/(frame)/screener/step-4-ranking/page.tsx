@@ -120,8 +120,6 @@ export default function Step4Page() {
   const context = useScanStore((s) => s.context);
   const setSelectedSymbol = useScanStore((s) => s.setSelectedSymbol);
   const scanOverrides = useScanStore((s) => s.scanOverrides);
-  const confidenceOverride = useScanStore((s) => s.confidenceOverride);
-  const setConfidenceOverride = useScanStore((s) => s.setConfidenceOverride);
 
   const maType   = (scanOverrides.ma_type  as string | undefined) ?? 'EMA';
   const fastMa   = (scanOverrides.fast_ema as number | undefined) ?? 50;
@@ -225,48 +223,6 @@ export default function Step4Page() {
               Export .xlsx
             </button>
           </header>
-          <div className={styles.gateRow}>
-            <Text size={11} tone="dim">Confidence gate (next scan)</Text>
-            <label className={styles.gateField}>
-              <Text size={10} tone="dim">CAUTION&lt;</Text>
-              <input
-                type="text"
-                inputMode="numeric"
-                className={styles.gateInput}
-                placeholder="def"
-                value={confidenceOverride?.cautionBelow ?? ''}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10);
-                  setConfidenceOverride({
-                    ...(confidenceOverride ?? {}),
-                    cautionBelow: isNaN(v) ? undefined : Math.max(0, Math.min(100, v)),
-                  });
-                }}
-              />
-            </label>
-            <label className={styles.gateField}>
-              <Text size={10} tone="dim">REJECT&lt;</Text>
-              <input
-                type="text"
-                inputMode="numeric"
-                className={styles.gateInput}
-                placeholder="def"
-                value={confidenceOverride?.rejectBelow ?? ''}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10);
-                  setConfidenceOverride({
-                    ...(confidenceOverride ?? {}),
-                    rejectBelow: isNaN(v) ? undefined : Math.max(0, Math.min(100, v)),
-                  });
-                }}
-              />
-            </label>
-            {confidenceOverride && (
-              <button className={styles.exportBtn} onClick={() => setConfidenceOverride(null)}>
-                Reset
-              </button>
-            )}
-          </div>
           <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
             <span aria-hidden />
             <SortHeader label="SYMBOL"   sortKey="symbol"        currentKey={sortKey} dir={sortDir} onSort={handleSort} />

@@ -6,6 +6,7 @@
 import { Text, Data } from '@/components/primitives';
 import { ScoreBar } from '@/components/atoms/ScoreBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import type { Status } from '@/lib/status';
 import styles from './ScoreCardPanel.module.css';
 
@@ -23,6 +24,9 @@ interface ScoreCardPanelProps {
   total: number;
   totalMax?: number;
   confidence: Status;
+  /** Optional numeric signal-confidence (0–100); when set, shown left of the status badge. */
+  confidenceScore?: number | null;
+  confidenceText?: string | null;
   className?: string;
 }
 
@@ -32,6 +36,8 @@ export function ScoreCardPanel({
   total,
   totalMax = 100,
   confidence,
+  confidenceScore,
+  confidenceText,
   className,
 }: ScoreCardPanelProps) {
   return (
@@ -65,7 +71,12 @@ export function ScoreCardPanel({
             {total}/{totalMax}
           </Data>
         </div>
-        <StatusBadge status={confidence} />
+        <div className={styles.statusGroup}>
+          {confidenceScore !== undefined && (
+            <ConfidenceBadge confidence={confidenceScore} title={confidenceText ?? undefined} />
+          )}
+          <StatusBadge status={confidence} />
+        </div>
       </div>
     </div>
   );

@@ -58,17 +58,28 @@ describe('settingsStore — migrate is cumulative', () => {
     const result = migrateSettings({}, 10) as unknown as Record<string, unknown>;
     expect(result.confidenceGate).toEqual(DEFAULT_CONFIDENCE_GATE);
   });
+
+  it('migrating from v11 adds atrMult to an existing gate', () => {
+    const result = migrateSettings(
+      { confidenceGate: { enabled: true, cautionBelow: 60, rejectBelow: 40 } },
+      11,
+    ) as unknown as Record<string, unknown>;
+    const gate = result.confidenceGate as Record<string, unknown>;
+    expect(gate.atrMult).toBe(1.5);
+    expect(gate.cautionBelow).toBe(60); // existing value preserved
+  });
 });
 
 describe('settingsStore — confidenceGate', () => {
-  it('defaults to enabled 50/35', () => {
+  it('defaults to enabled 50/35 with ATR 1.5', () => {
     expect(useSettingsStore.getState().confidenceGate).toEqual({
-      enabled: true, cautionBelow: 50, rejectBelow: 35,
+      enabled: true, cautionBelow: 50, rejectBelow: 35, atrMult: 1.5,
     });
   });
 
   it('setConfidenceGate updates the value', () => {
-    useSettingsStore.getState().setConfidenceGate({ enabled: true, cautionBelow: 60, rejectBelow: 40 });
+    useSettingsStore.getState().setConfidenceGate({ enabled: true, cautionBelow: 60, rejectBelow: 40, atrMult: 2.0 });
     expect(useSettingsStore.getState().confidenceGate.cautionBelow).toBe(60);
+    expect(useSettingsStore.getState().confidenceGate.atrMult).toBe(2.0);
   });
 });
