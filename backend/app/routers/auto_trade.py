@@ -10,7 +10,7 @@ router = APIRouter(prefix="/auto-trade", tags=["auto-trade"])
 
 
 class ArmRequest(BaseModel):
-    broker:        str
+    broker:        Literal["ibkr_paper", "tradier_paper"]
     symbol:        str
     option_symbol: str
     action:        Literal["BUY", "SELL"]
@@ -39,7 +39,9 @@ async def fire_now() -> dict:
     """Trigger #1: manually fire the armed strategy immediately."""
     try:
         result = auto_trader.fire()
-    except RuntimeError as exc:
+    except (ValueError, RuntimeError) as exc:
+        # ValueError: unknown/blocked broker key from the router.
+        # RuntimeError: not armed, or a broker adapter failure.
         raise HTTPException(status_code=400, detail=str(exc))
     return {"order_id": result.order_id, "status": result.status, "broker": result.broker}
 
