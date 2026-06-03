@@ -795,6 +795,13 @@ def _status_from_score(score: int, thresholds: dict) -> Status:
     return "REJECT"
 
 
+_STATUS_RANK = {"PASS": 2, "CAUTION": 1, "REJECT": 0}
+
+
+def _worse(a: Status, b: Status) -> Status:
+    return a if _STATUS_RANK[a] <= _STATUS_RANK[b] else b
+
+
 def score_stock(
     symbol: str,
     direction: Direction,
@@ -805,6 +812,9 @@ def score_stock(
     iv_rank: float | None = None,
     overrides: dict | None = None,
     benchmark_candles: list[dict] | None = None,
+    confidence: int | None = None,
+    confidence_gate: dict | None = None,
+    confidence_sample_size: int = 0,
 ) -> StockScoreCard:
     """
     Score a stock for the given direction and horizon.
@@ -899,6 +909,24 @@ def score_stock(
     weighted_score = sum(r.score * name_to_weight[r.name] for r in rules)
     final_score    = round(weighted_score)
     final_status   = _status_from_score(final_score, thresholds)
+
+    # Confidence gate: demote-only. Append a confidence RuleResult and cap status.
+    if confidence_gate is not None:
+        from app.scoring.signal_confidence import status_cap, interpret
+        cap = status_cap(confidence, confidence_gate)
+        final_status = _worse(final_status, cap)
+        rules.append(RuleResult(
+            name="confidence",
+            status=cap,
+            score=confidence if confidence is not None else 0,
+            detail={
+                "confidence": confidence,
+                "sample_size": confidence_sample_size,
+                "interpretation": interpret(
+                    confidence, sample_size=confidence_sample_size, symbol=symbol
+                ),
+            },
+        ))
 
     return StockScoreCard(
         symbol=symbol,
