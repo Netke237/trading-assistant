@@ -34,6 +34,7 @@ export const useAutoTradeStore = create<AutoTradeState>()(
         return localStorage;
       }),
       skipHydration: true,
+      version: 1,
       partialize: (s) => ({
         selectedBroker: s.selectedBroker,
         autoMode: s.autoMode,
