@@ -4,6 +4,31 @@ score_thresholds:
   pass: 55
   caution: 35
 
+confidence_gate:
+  enabled: true
+  cautionBelow: 50   # confidence < 50 -> cap final status at CAUTION
+  rejectBelow: 35    # confidence < 35 -> cap final status at REJECT
+
+confidence_backtest:
+  swing:
+    n_days: 10
+    atr_mult: 1.5
+    atr_period: 14
+    history_years: 4
+    min_samples: 20
+  position:
+    n_days: 40
+    atr_mult: 1.5
+    atr_period: 14
+    history_years: 5
+    min_samples: 20
+  intraday:
+    n_days: 5
+    atr_mult: 1.5
+    atr_period: 14
+    history_years: 2
+    min_samples: 20
+
 horizons:
   swing:
     weights:
