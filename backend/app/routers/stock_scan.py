@@ -55,14 +55,16 @@ async def _process_stock(symbol: str, req: StockScanRequest, scan_id: str) -> Po
             )
         if not price:
             return {"symbol": symbol, "reason": "no price data"}
-        if req.min_price and price < req.min_price:
+        if req.min_price is not None and price < req.min_price:
             return {"symbol": symbol, "reason": f"price ${price:.2f} < min"}
-        if req.max_price and price > req.max_price:
+        if req.max_price is not None and price > req.max_price:
             return {"symbol": symbol, "reason": f"price ${price:.2f} > max"}
 
         end = date.today()
         start = end - timedelta(days=_HISTORY_YEARS * 365)
-        bars = fetch_historical_candles(symbol, start, end)
+        # Sync httpx call — offload to a thread so it doesn't block the event loop
+        # while many symbols are scanned concurrently via asyncio.gather.
+        bars = await asyncio.to_thread(fetch_historical_candles, symbol, start, end)
         if not bars or len(bars) < 60:
             return {"symbol": symbol, "reason": "insufficient history"}
 
