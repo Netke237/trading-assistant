@@ -1,4 +1,4 @@
-import { useSettingsStore, migrateSettings } from '@/lib/settingsStore';
+import { useSettingsStore, migrateSettings, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
 
 // Reset store state before each test
 beforeEach(() => {
@@ -52,5 +52,23 @@ describe('settingsStore — migrate is cumulative', () => {
     expect(result.shortlistMaxCandidates).toBe(10);
     expect(result.maxContractsPerChain).toBe(10);
     expect(result.premiumStopPct).toBe(0.60);
+  });
+
+  it('migrating from v10 injects the confidenceGate default', () => {
+    const result = migrateSettings({}, 10) as unknown as Record<string, unknown>;
+    expect(result.confidenceGate).toEqual(DEFAULT_CONFIDENCE_GATE);
+  });
+});
+
+describe('settingsStore — confidenceGate', () => {
+  it('defaults to enabled 50/35', () => {
+    expect(useSettingsStore.getState().confidenceGate).toEqual({
+      enabled: true, cautionBelow: 50, rejectBelow: 35,
+    });
+  });
+
+  it('setConfidenceGate updates the value', () => {
+    useSettingsStore.getState().setConfidenceGate({ enabled: true, cautionBelow: 60, rejectBelow: 40 });
+    expect(useSettingsStore.getState().confidenceGate.cautionBelow).toBe(60);
   });
 });

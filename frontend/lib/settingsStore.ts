@@ -41,6 +41,18 @@ export interface BrokerConfig {
   paperTrading: boolean;
 }
 
+export interface ConfidenceGate {
+  enabled:      boolean;
+  cautionBelow: number;   // confidence < this -> cap at CAUTION
+  rejectBelow:  number;   // confidence < this -> cap at REJECT
+}
+
+export const DEFAULT_CONFIDENCE_GATE: ConfidenceGate = {
+  enabled: true,
+  cautionBelow: 50,
+  rejectBelow: 35,
+};
+
 interface SettingsState {
   broker:                  BrokerConfig;
   alertDeduplicationHours: number;
@@ -51,6 +63,7 @@ interface SettingsState {
   maxContractsPerChain:        number;
   maxContractPrice:            number;
   premiumStopPct:              number;   // fraction of premium lost at stop (0.60 = 60%)
+  confidenceGate:              ConfidenceGate;
   setBroker:                    (b: BrokerConfig) => void;
   setAlertDeduplicationHours:   (h: number) => void;
   setIvPassThreshold:           (n: number) => void;
@@ -60,6 +73,7 @@ interface SettingsState {
   setMaxContractsPerChain:     (n: number) => void;
   setMaxContractPrice:         (n: number) => void;
   setPremiumStopPct:           (n: number) => void;
+  setConfidenceGate:           (g: ConfidenceGate) => void;
   resetToDefaults:              () => void;
 }
 
@@ -80,6 +94,7 @@ export function migrateSettings(
     next.maxContractPrice = 50;
   }
   if (version < 10) next.premiumStopPct = 0.60;
+  if (version < 11) next.confidenceGate = { ...DEFAULT_CONFIDENCE_GATE };
   return next as unknown as SettingsState;
 }
 
@@ -95,6 +110,7 @@ export const useSettingsStore = create<SettingsState>()(
       maxContractsPerChain: 10,
       maxContractPrice:     50,
       premiumStopPct:       0.60,
+      confidenceGate:       { ...DEFAULT_CONFIDENCE_GATE },
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
       setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
@@ -104,6 +120,7 @@ export const useSettingsStore = create<SettingsState>()(
       setMaxContractsPerChain: (n) => set({ maxContractsPerChain: n }),
       setMaxContractPrice:     (n) => set({ maxContractPrice: n }),
       setPremiumStopPct:       (n) => set({ premiumStopPct: n }),
+      setConfidenceGate:       (g) => set({ confidenceGate: g }),
       resetToDefaults: () => set({
         broker:                  { ...DEFAULT_BROKER },
         alertDeduplicationHours: 24,
@@ -114,6 +131,7 @@ export const useSettingsStore = create<SettingsState>()(
         maxContractsPerChain: 10,
         maxContractPrice:     50,
         premiumStopPct:       0.60,
+        confidenceGate:       { ...DEFAULT_CONFIDENCE_GATE },
       }),
     }),
     {
@@ -123,7 +141,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 10,
+      version: 11,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
@@ -134,6 +152,7 @@ export const useSettingsStore = create<SettingsState>()(
         maxContractsPerChain:   state.maxContractsPerChain,
         maxContractPrice:       state.maxContractPrice,
         premiumStopPct:         state.premiumStopPct,
+        confidenceGate:         state.confidenceGate,
       }),
       migrate: (persistedState, version) => migrateSettings(persistedState, version),
     }
