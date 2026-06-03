@@ -8,7 +8,6 @@ import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
-import type { Status } from '@/lib/status';
 import styles from './page.module.css';
 
 type ExecutionMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper';
@@ -34,12 +33,12 @@ export default function Step7PositionCardPage() {
   const result = useScanStore((s) => s.stockScanResult);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [execMode, setExecMode] = useState<ExecutionMode>('recommendation');
-  const [placing, setPlacing] = useState(false);
+  const [placingType, setPlacingType] = useState<'LMT' | 'MKT' | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const settings = useSettingsStore();
 
-  const ibkrConfigured = !!settings.ibkrPaper.accountId;
+  const ibkrConfigured = !!settings.ibkrPaper.accountId && !!settings.ibkrPaper.baseUrl;
   const tradierConfigured = !!settings.tradierPaper.token && !!settings.tradierPaper.accountId;
 
   const candidates = result?.candidates.filter((c) => c.backtest.passes_gate) ?? [];
@@ -55,7 +54,7 @@ export default function Step7PositionCardPage() {
 
   async function submit(orderType: 'LMT' | 'MKT') {
     if (!card || execMode === 'recommendation') return;
-    setPlacing(true);
+    setPlacingType(orderType);
     setError(null);
     try {
       const res = await api.postStockOrder({
@@ -71,7 +70,7 @@ export default function Step7PositionCardPage() {
     } catch (e) {
       setError(String(e));
     } finally {
-      setPlacing(false);
+      setPlacingType(null);
     }
   }
 
@@ -100,7 +99,7 @@ export default function Step7PositionCardPage() {
           </div>
           <div className={styles.badges}>
             <ConfidenceBadge confidence={card.confidence} title={card.confidence_text ?? undefined} />
-            <StatusBadge status={card.stock_status as Status} />
+            <StatusBadge status={card.stock_status} />
           </div>
         </div>
 
@@ -134,12 +133,12 @@ export default function Step7PositionCardPage() {
       {execMode !== 'recommendation' && (
         <div className={styles.actions}>
           <button type="button" className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => submit('LMT')} disabled={placing}>
-            {placing ? 'Placing…' : `Place Limit Order @ $${card.strategy.entry_price}`}
+            onClick={() => submit('LMT')} disabled={placingType !== null}>
+            {placingType === 'LMT' ? 'Placing…' : `Place Limit Order @ $${card.strategy.entry_price}`}
           </button>
           <button type="button" className={`${styles.btn} ${styles.btnMarket}`}
-            onClick={() => submit('MKT')} disabled={placing}>
-            {placing ? 'Placing…' : 'Right Now — Market Order'}
+            onClick={() => submit('MKT')} disabled={placingType !== null}>
+            {placingType === 'MKT' ? 'Placing…' : 'Right Now — Market Order'}
           </button>
         </div>
       )}

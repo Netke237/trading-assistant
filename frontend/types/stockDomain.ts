@@ -1,3 +1,5 @@
+import type { Status } from '@/lib/status';
+
 export interface StrategySignalData {
   strategy: string; entry_price: number; stop_price: number;
   target_price: number; rr_ratio: number; atr: number; detail: Record<string, unknown>;
@@ -10,7 +12,7 @@ export interface BacktestData {
 export interface PositionCardData {
   symbol: string; company: string; price: number; direction: string;
   strategy: StrategySignalData; backtest: BacktestData;
-  stock_score: number; stock_status: string;
+  stock_score: number; stock_status: Status;
   shares: number; dollar_risk: number; dollar_size: number;
   confidence: number | null; confidence_text: string | null;
 }
