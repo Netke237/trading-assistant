@@ -20,7 +20,8 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { SCREENER_STEPS } from '@/components/organisms/Stepper';
+import { getSteps } from '@/components/organisms/Stepper';
+import { useScanStore } from '@/lib/scanStore';
 
 function isEditable(t: EventTarget | null): boolean {
   if (!(t instanceof HTMLElement)) return false;
@@ -30,6 +31,7 @@ function isEditable(t: EventTarget | null): boolean {
 export function KeyboardShortcuts() {
   const router = useRouter();
   const pathname = usePathname();
+  const screenerMode = useScanStore((s) => s.screenerMode);
   const gLeader = useRef<number>(0); // timestamp of last "g" press
 
   useEffect(() => {
@@ -40,7 +42,7 @@ export function KeyboardShortcuts() {
       if (pathname?.startsWith('/screener') && /^[1-7]$/.test(e.key)) {
         e.preventDefault();
         const idx = parseInt(e.key, 10) - 1;
-        const step = SCREENER_STEPS[idx];
+        const step = getSteps(screenerMode)[idx];
         if (step) router.push(`/screener/${step.slug}`);
         return;
       }
@@ -72,7 +74,7 @@ export function KeyboardShortcuts() {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [router, pathname]);
+  }, [router, pathname, screenerMode]);
 
   return null;
 }
