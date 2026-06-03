@@ -63,6 +63,26 @@ interface SettingsState {
   resetToDefaults:              () => void;
 }
 
+/**
+ * Cumulative persisted-state migration. Each branch ADDS the fields introduced
+ * at that version; branches must stack (no early returns) so a store saved at
+ * an old version picks up every field added since — not just the next one.
+ */
+export function migrateSettings(
+  persistedState: unknown,
+  version: number,
+): SettingsState {
+  const next = { ...((persistedState ?? {}) as Partial<SettingsState>) };
+  if (version < 7) next.markov = DEFAULT_MARKOV;
+  if (version < 8) next.shortlistMaxCandidates = 10;
+  if (version < 9) {
+    next.maxContractsPerChain = 10;
+    next.maxContractPrice = 50;
+  }
+  if (version < 10) next.premiumStopPct = 0.60;
+  return next as unknown as SettingsState;
+}
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
@@ -115,22 +135,7 @@ export const useSettingsStore = create<SettingsState>()(
         maxContractPrice:       state.maxContractPrice,
         premiumStopPct:         state.premiumStopPct,
       }),
-      migrate: (persistedState, version) => {
-        const prev = (persistedState ?? {}) as Partial<SettingsState>;
-        if (version < 7) {
-          return { ...prev, markov: DEFAULT_MARKOV } as unknown as SettingsState;
-        }
-        if (version < 8) {
-          return { ...prev, shortlistMaxCandidates: 10 } as unknown as SettingsState;
-        }
-        if (version < 9) {
-          return { ...prev, maxContractsPerChain: 10, maxContractPrice: 50 } as unknown as SettingsState;
-        }
-        if (version < 10) {
-          return { ...prev, premiumStopPct: 0.60 } as unknown as SettingsState;
-        }
-        return prev as unknown as SettingsState;
-      },
+      migrate: (persistedState, version) => migrateSettings(persistedState, version),
     }
   )
 );

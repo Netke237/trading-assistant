@@ -38,7 +38,7 @@ _TZ_LABEL = 'CET'
 _SETTINGS_PATH = Path(__file__).parent.parent.parent.parent / 'config' / 'settings.yaml'
 
 _DEFAULT_ENABLED_TYPES = [
-    'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP', 'REGIME_CHANGE',
+    'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP', 'EVENT_RISK', 'REGIME_CHANGE',
 ]
 # While a condition stays true we re-send (remind) at most once per this window.
 _DEFAULT_REMINDER_HOURS = 4

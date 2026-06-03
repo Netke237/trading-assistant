@@ -18,7 +18,7 @@ class RrResult:
 def estimate_rr(
     stock_price: float,
     target_price: float,
-    invalidation_price: float,
+    invalidation_price: float,   # reserved: kept for call-site symmetry; risk is now premium * premium_stop_pct, not invalidation-based
     strike: float,
     expiry_years: float,
     current_premium: float,
@@ -49,7 +49,7 @@ def estimate_rr(
     reward = exit_premium - current_premium
 
     if reward <= 0 or risk <= 0:
-        return RrResult(rr_ratio=0.0, model_used=model_used, estimated_exit_premium=exit_premium)
+        return RrResult(rr_ratio=0.0, model_used=model_used, estimated_exit_premium=round(exit_premium, 2))
 
     rr_ratio = round(reward / risk, 2)
     return RrResult(

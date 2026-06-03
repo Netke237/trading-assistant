@@ -121,6 +121,23 @@ def test_event_risk_dispatches_when_enabled(monkeypatch):
     assert len(sent) == 1
 
 
+def test_event_risk_in_default_enabled_types(monkeypatch):
+    """When settings.yaml has no enabledTypes key, the notifier falls back to
+    _DEFAULT_ENABLED_TYPES — which must include EVENT_RISK so earnings/dividend
+    alerts are not silently dropped by the headless monitor."""
+    import app.services.notifications.alert_notifier as an
+    sent = []
+    # Config WITHOUT 'enabledTypes' → notify_alert uses _DEFAULT_ENABLED_TYPES.
+    monkeypatch.setattr(an, '_load_delivery_config',
+        lambda: {'masterEnabled': True, 'reminderIntervalHours': 4})
+    monkeypatch.setattr(an, 'notify_enabled_channels',
+        lambda subject, plain, html: sent.append(subject))
+    an._fired.clear(); an._first_seen.clear()
+    ok = an.notify_alert('AAPL', 'EVENT_RISK', 'Earnings in 2 days', 'REC-DEF')
+    assert ok is True
+    assert len(sent) == 1
+
+
 def test_telegram_mirrors_email_and_shows_cet(captured):
     assert an.notify_alert('CLX', 'STOP_REACHED', 'Stop breached — CLX below $89.79',
                            'rec-1', _TS) is True

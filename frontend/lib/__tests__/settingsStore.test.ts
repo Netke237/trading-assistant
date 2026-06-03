@@ -1,4 +1,4 @@
-import { useSettingsStore } from '@/lib/settingsStore';
+import { useSettingsStore, migrateSettings } from '@/lib/settingsStore';
 
 // Reset store state before each test
 beforeEach(() => {
@@ -33,5 +33,24 @@ describe('settingsStore — premiumStopPct', () => {
   it('setPremiumStopPct updates the value', () => {
     useSettingsStore.getState().setPremiumStopPct(0.50);
     expect(useSettingsStore.getState().premiumStopPct).toBe(0.50);
+  });
+});
+
+describe('settingsStore — migrate is cumulative', () => {
+  it('migrating from v8 includes every field added after v8', () => {
+    const result = migrateSettings({ ivPassThreshold: 30 }, 8) as unknown as Record<string, unknown>;
+    // Fields added in v9 and v10 must all be present, not just the v9 ones.
+    expect(result.maxContractsPerChain).toBe(10);
+    expect(result.maxContractPrice).toBe(50);
+    expect(result.premiumStopPct).toBe(0.60);
+    // Existing persisted values are preserved.
+    expect(result.ivPassThreshold).toBe(30);
+  });
+
+  it('migrating from v6 resets markov and adds all later fields', () => {
+    const result = migrateSettings({}, 6) as unknown as Record<string, unknown>;
+    expect(result.shortlistMaxCandidates).toBe(10);
+    expect(result.maxContractsPerChain).toBe(10);
+    expect(result.premiumStopPct).toBe(0.60);
   });
 });

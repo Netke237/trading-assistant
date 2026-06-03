@@ -144,6 +144,18 @@ def test_estimate_rr_uses_premium_stop_pct():
     assert abs(result_60.rr_ratio - 3.33) < 0.01
 
 
+def test_estimate_exit_premium_rounded_on_zero_reward():
+    """The early-return (zero-reward) path must round estimated_exit_premium to
+    2 decimals, matching the success path."""
+    rr = estimate_rr(
+        stock_price=100.0, target_price=100.0, invalidation_price=90.0,
+        strike=90.0, expiry_years=30 / 365, current_premium=2.567, is_call=True,
+    )
+    # target == stock → price_move 0 → reward 0 → early return.
+    assert rr.rr_ratio == 0.0
+    assert rr.estimated_exit_premium == 2.57
+
+
 def test_estimate_rr_zero_stop_pct_returns_zero():
     """premium_stop_pct=0 means risk=0, guard should return rr_ratio=0.0."""
     from app.scoring.reward_risk import estimate_rr
