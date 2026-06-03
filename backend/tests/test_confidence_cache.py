@@ -19,7 +19,8 @@ def test_ttl_evicts_stale_entries(monkeypatch):
 
     cc.clear_cache()
     key = cc.cache_key("MSFT", "Bullish", "Swing")
-    cc.set_cached(key, {"confidence": 50, "sample_size": 30})
-    # jump time past TTL
-    monkeypatch.setattr(cc.time, "time", lambda: cc._TTL_SECONDS + 10_000)
+    base = cc.time.time()
+    cc.set_cached(key, {"confidence": 50, "sample_size": 30})  # stores _ts ~= base
+    # jump time well past the TTL relative to when it was stored
+    monkeypatch.setattr(cc.time, "time", lambda: base + cc._TTL_SECONDS + 10_000)
     assert cc.get_cached(key) is None
