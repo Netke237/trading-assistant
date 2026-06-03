@@ -74,6 +74,8 @@ export interface WatchlistRow {
   breakdown:    ScoreBreakdown;
   nextEventDays?: number | null;   // days until earnings / dividend / etc; null = no event known
   nextEventLabel?: string | null;
+  confidence?: number | null;      // signal confidence 0–100; null = thin history
+  confidenceText?: string | null;  // plain-English interpretation
 }
 
 export interface TargetLevel {
@@ -168,6 +170,9 @@ export interface TradeCardData {
   rrRatio:  number;
   rrModel:  'Heston repriced' | 'Delta approximation';
   finalStatus: Status;
+  /** Signal confidence 0–100 (null when history is too thin to judge). */
+  confidence?: number | null;
+  confidenceText?: string | null;
 }
 
 // --- Option contracts ---

@@ -41,5 +41,7 @@ export function cardToRow(
     breakdown: c.stockBreakdown,
     nextEventDays: c.nextEventDays,
     nextEventLabel: c.nextEventLabel,
+    confidence: c.confidence ?? null,
+    confidenceText: c.confidenceText ?? null,
   };
 }

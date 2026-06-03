@@ -18,6 +18,7 @@ import { TableRow } from '@/components/molecules/TableRow';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { Pagination } from '@/components/molecules/Pagination';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
@@ -265,7 +266,7 @@ export default function Step4Page() {
                 <RankDelta value={row.rankDelta}          context="rank"     />
                 <RankDelta value={row.scoreDelta ?? 0}    context="score pt" />
                 <Data size={13} weight={500}>{row.score}</Data>
-                <StatusBadge status={row.status} />
+                <ConfidenceBadge confidence={row.confidence} title={row.confidenceText ?? undefined} />
                 {row.nextEventDays != null
                   ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel ?? undefined} />
                   : <Text size={11} tone="dim">—</Text>}
