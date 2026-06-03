@@ -55,6 +55,36 @@ export const DEFAULT_CONFIDENCE_GATE: ConfidenceGate = {
   atrMult: 1.5,
 };
 
+export interface IbkrPaperConfig {
+  baseUrl:   string;
+  accountId: string;
+}
+
+export interface TradierPaperConfig {
+  token:     string;
+  accountId: string;
+}
+
+export interface IbkrLiveConfig {
+  enabled: false;   // always false until manually unlocked in a future release
+  note:    string;
+}
+
+export const DEFAULT_IBKR_PAPER: IbkrPaperConfig = {
+  baseUrl:   'https://localhost:7499/v1/api',
+  accountId: '',
+};
+
+export const DEFAULT_TRADIER_PAPER: TradierPaperConfig = {
+  token:     '',
+  accountId: '',
+};
+
+export const DEFAULT_IBKR_LIVE: IbkrLiveConfig = {
+  enabled: false,
+  note:    'Live IBKR trading is prepared but not yet activated.',
+};
+
 interface SettingsState {
   broker:                  BrokerConfig;
   alertDeduplicationHours: number;
@@ -66,6 +96,9 @@ interface SettingsState {
   maxContractPrice:            number;
   premiumStopPct:              number;   // fraction of premium lost at stop (0.60 = 60%)
   confidenceGate:              ConfidenceGate;
+  ibkrPaper:                   IbkrPaperConfig;
+  tradierPaper:                TradierPaperConfig;
+  ibkrLive:                    IbkrLiveConfig;
   setBroker:                    (b: BrokerConfig) => void;
   setAlertDeduplicationHours:   (h: number) => void;
   setIvPassThreshold:           (n: number) => void;
@@ -76,6 +109,8 @@ interface SettingsState {
   setMaxContractPrice:         (n: number) => void;
   setPremiumStopPct:           (n: number) => void;
   setConfidenceGate:           (g: ConfidenceGate) => void;
+  setIbkrPaper:                (c: IbkrPaperConfig)    => void;
+  setTradierPaper:             (c: TradierPaperConfig) => void;
   resetToDefaults:              () => void;
 }
 
@@ -98,6 +133,11 @@ export function migrateSettings(
   if (version < 10) next.premiumStopPct = 0.60;
   if (version < 11) next.confidenceGate = { ...DEFAULT_CONFIDENCE_GATE };
   if (version < 12) next.confidenceGate = { ...DEFAULT_CONFIDENCE_GATE, ...(next.confidenceGate ?? {}) };
+  if (version < 13) {
+    next.ibkrPaper    = { ...DEFAULT_IBKR_PAPER };
+    next.tradierPaper = { ...DEFAULT_TRADIER_PAPER };
+    next.ibkrLive     = { ...DEFAULT_IBKR_LIVE };
+  }
   return next as unknown as SettingsState;
 }
 
@@ -114,6 +154,9 @@ export const useSettingsStore = create<SettingsState>()(
       maxContractPrice:     50,
       premiumStopPct:       0.60,
       confidenceGate:       { ...DEFAULT_CONFIDENCE_GATE },
+      ibkrPaper:            { ...DEFAULT_IBKR_PAPER },
+      tradierPaper:         { ...DEFAULT_TRADIER_PAPER },
+      ibkrLive:             { ...DEFAULT_IBKR_LIVE },
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
       setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
@@ -124,6 +167,8 @@ export const useSettingsStore = create<SettingsState>()(
       setMaxContractPrice:     (n) => set({ maxContractPrice: n }),
       setPremiumStopPct:       (n) => set({ premiumStopPct: n }),
       setConfidenceGate:       (g) => set({ confidenceGate: g }),
+      setIbkrPaper:    (c) => set({ ibkrPaper: c }),
+      setTradierPaper: (c) => set({ tradierPaper: c }),
       resetToDefaults: () => set({
         broker:                  { ...DEFAULT_BROKER },
         alertDeduplicationHours: 24,
@@ -135,6 +180,8 @@ export const useSettingsStore = create<SettingsState>()(
         maxContractPrice:     50,
         premiumStopPct:       0.60,
         confidenceGate:       { ...DEFAULT_CONFIDENCE_GATE },
+        ibkrPaper:    { ...DEFAULT_IBKR_PAPER },
+        tradierPaper: { ...DEFAULT_TRADIER_PAPER },
       }),
     }),
     {
@@ -144,7 +191,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 12,
+      version: 13,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
@@ -156,6 +203,8 @@ export const useSettingsStore = create<SettingsState>()(
         maxContractPrice:       state.maxContractPrice,
         premiumStopPct:         state.premiumStopPct,
         confidenceGate:         state.confidenceGate,
+        ibkrPaper:    state.ibkrPaper,
+        tradierPaper: state.tradierPaper,
       }),
       migrate: (persistedState, version) => migrateSettings(persistedState, version),
     }

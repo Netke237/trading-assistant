@@ -1,4 +1,4 @@
-import { useSettingsStore, migrateSettings, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
+import { useSettingsStore, migrateSettings, DEFAULT_CONFIDENCE_GATE, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER } from '@/lib/settingsStore';
 
 // Reset store state before each test
 beforeEach(() => {
@@ -81,5 +81,20 @@ describe('settingsStore — confidenceGate', () => {
     useSettingsStore.getState().setConfidenceGate({ enabled: true, cautionBelow: 60, rejectBelow: 40, atrMult: 2.0 });
     expect(useSettingsStore.getState().confidenceGate.cautionBelow).toBe(60);
     expect(useSettingsStore.getState().confidenceGate.atrMult).toBe(2.0);
+  });
+});
+
+describe('settingsStore — broker accounts', () => {
+  it('has ibkrPaper and tradierPaper defaults', () => {
+    const s = useSettingsStore.getState();
+    expect(s.ibkrPaper.baseUrl).toBe('https://localhost:7499/v1/api');
+    expect(s.tradierPaper.accountId).toBe('');
+    expect(s.ibkrLive.enabled).toBe(false);
+  });
+
+  it('setIbkrPaper updates the config', () => {
+    const s = useSettingsStore.getState();
+    s.setIbkrPaper({ ...s.ibkrPaper, accountId: 'DU999' });
+    expect(useSettingsStore.getState().ibkrPaper.accountId).toBe('DU999');
   });
 });
