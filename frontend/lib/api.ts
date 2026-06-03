@@ -118,6 +118,16 @@ export const api = {
 
   testNotification: (channel: 'gmail' | 'telegram') =>
     post<{ status: string }>('/alerts/notifications/test', { channel }),
+
+  postCredentials: (key: string, values: Record<string, string>) =>
+    post<{ ok: boolean; key: string }>('/settings/credentials', { key, values }),
+
+  getBrokerStatus: () =>
+    get<{
+      ibkr_paper:    { configured: boolean };
+      tradier_paper: { configured: boolean };
+      ibkr_live:     { configured: boolean; enabled: boolean; note: string };
+    }>('/broker/status'),
 };
 
 /* ---------- Risk settings ---------- */
