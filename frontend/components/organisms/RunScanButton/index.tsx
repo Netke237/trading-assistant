@@ -111,7 +111,12 @@ export function RunScanButton() {
     if (Number.isFinite(maxCap) && maxCapRaw !== '') filters.max_cap_usd = maxCap * capMultiplier;
 
     const scanOverrides = useScanStore.getState().scanOverrides;
-    const effectiveOverrides = { ...scanOverrides, shortlist_max_candidates: shortlistMaxCandidates };
+    // Confidence gate keys live in scanOverrides for Step-3 panel editing, but
+    // they must go in top-level filters, NOT in the score overrides dict.
+    // Strip them here so they don't pollute the backend overrides map.
+    const { confidence_caution_below: _cb, confidence_reject_below: _rb,
+            confidence_atr_mult: _am, ...scoreOnlyOverrides } = scanOverrides;
+    const effectiveOverrides = { ...scoreOnlyOverrides, shortlist_max_candidates: shortlistMaxCandidates };
 
     // Confidence gate: persisted Settings default, overridden per-scan by the
     // Execution Parameters panel (Step 3, Stocks section) which writes scanOverrides.

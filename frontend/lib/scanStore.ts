@@ -115,15 +115,21 @@ export const useScanStore = create<ScanStoreState>()(
         scanAt:          state.scanAt,
         scanDurationMs:  state.scanDurationMs,
         pickedContracts: state.pickedContracts,
+        // Persist terminal states so the COMPLETED/FAILED pill survives a restart.
+        // SCANNING / IDLE are never persisted — they'd be stale after reload.
+        scanState:       state.scanState,
       }),
-      merge: (persisted, current) => ({
-        ...current,
-        ...(persisted as Partial<ScanStoreState>),
-        // scanState always resets to IDLE on reload — a scan can't be "in progress"
-        // across sessions, but scanAt + scanDurationMs survive so the TopBar can
-        // still show when the last scan ran and how long it took.
-        scanState: 'IDLE',
-      }),
+      merge: (persisted, current) => {
+        const p = persisted as Partial<ScanStoreState>;
+        const lastState = p.scanState;
+        // Restore only terminal states; an in-progress state from before a crash
+        // or server restart is meaningless — reset to IDLE.
+        const restoredState: ScanState =
+          lastState === 'COMPLETED' || lastState === 'PARTIAL' || lastState === 'FAILED'
+            ? lastState
+            : 'IDLE';
+        return { ...current, ...p, scanState: restoredState };
+      },
     },
   ),
 );
