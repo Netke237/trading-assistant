@@ -21,12 +21,12 @@ def upgrade() -> None:
         'ohlcv_daily',
         sa.Column('symbol', sa.String(length=10), nullable=False),
         sa.Column('date', sa.Date(), nullable=False),
-        sa.Column('open', sa.Float(), nullable=False),
-        sa.Column('high', sa.Float(), nullable=False),
-        sa.Column('low', sa.Float(), nullable=False),
-        sa.Column('close', sa.Float(), nullable=False),
+        sa.Column('open',  sa.Numeric(precision=12, scale=4), nullable=False),
+        sa.Column('high',  sa.Numeric(precision=12, scale=4), nullable=False),
+        sa.Column('low',   sa.Numeric(precision=12, scale=4), nullable=False),
+        sa.Column('close', sa.Numeric(precision=12, scale=4), nullable=False),
         sa.Column('volume', sa.BigInteger(), nullable=False),
-        sa.Column('fetched_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('fetched_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.PrimaryKeyConstraint('symbol', 'date'),
     )
 

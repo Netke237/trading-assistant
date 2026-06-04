@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from sqlalchemy import BigInteger, Column, Date, DateTime, Float, String
+from sqlalchemy import BigInteger, Column, Date, DateTime, Numeric, String, func
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -23,13 +23,14 @@ class OhlcvDailyModel(OhlcvBase):
 
     symbol     = Column(String(10), primary_key=True, nullable=False)
     date       = Column(Date,        primary_key=True, nullable=False)
-    open       = Column(Float,  nullable=False)
-    high       = Column(Float,  nullable=False)
-    low        = Column(Float,  nullable=False)
-    close      = Column(Float,  nullable=False)
+    open       = Column(Numeric(precision=12, scale=4), nullable=False)
+    high       = Column(Numeric(precision=12, scale=4), nullable=False)
+    low        = Column(Numeric(precision=12, scale=4), nullable=False)
+    close      = Column(Numeric(precision=12, scale=4), nullable=False)
     volume     = Column(BigInteger, nullable=False)
     fetched_at = Column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
     )

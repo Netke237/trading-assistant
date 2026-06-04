@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.models.base import Base
 from app.database import Base as DatabaseBase
 from app.models.scan_session import ScanSessionBase
-from app.models.ohlcv_daily import OhlcvBase   # noqa: F401
+from app.models.ohlcv_daily import OhlcvBase
 
 # Load all ORM models so both metadata registries are populated before autogenerate.
 from app.models.admin import Admin  # noqa: F401
