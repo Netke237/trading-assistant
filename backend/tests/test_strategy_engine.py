@@ -69,3 +69,71 @@ def test_strategy_signal_has_required_fields():
     assert sig.risk == pytest.approx(4.0)
     assert sig.reward == pytest.approx(10.0)
     assert sig.rr_ratio == pytest.approx(2.5)
+
+
+# ── Relaxed tolerance tests ───────────────────────────────────────────────────
+
+def _uptrend_with_pullback_pct(pct: float, n: int = 200) -> list[dict]:
+    """Rising bars that end with a pullback of exactly `pct` above the 20-EMA."""
+    bars = []
+    price = 100.0
+    for _ in range(n - 20):
+        price += 0.5
+        bars.append({"open": price - 0.1, "high": price + 0.3,
+                     "low": price - 0.3, "close": price, "volume": 1_000})
+
+    ema_approx = price
+    pullback_price = ema_approx * (1 + pct)
+
+    for _ in range(20):
+        bars.append({"open": pullback_price - 0.1, "high": pullback_price + 0.2,
+                     "low": pullback_price - 0.2, "close": pullback_price, "volume": 1_000})
+    bars[-1]["close"] = bars[-1]["open"] + 0.3
+    return bars
+
+
+def test_pullback_ema_fires_at_2pct_above_ema():
+    """2% above EMA is inside the new 4% tolerance — should fire."""
+    bars = _uptrend_with_pullback_pct(0.02, n=200)
+    signal = pullback_ema_signal(bars)
+    assert signal is not None, "Expected a signal at 2% above EMA with 4% tolerance"
+    assert signal.strategy == "pullback_ema"
+
+
+def test_pullback_ema_still_rejects_at_5pct_above_ema():
+    """5% above EMA is outside the new 4% tolerance — should return None."""
+    bars = _uptrend_with_pullback_pct(0.05, n=200)
+    signal = pullback_ema_signal(bars)
+    assert signal is None, "Expected None at 5% above EMA (outside tolerance)"
+
+
+def _crossover_bars(cross_bars_ago: int, n: int = 200) -> list[dict]:
+    """Bars where 20-SMA crossed above 50-SMA exactly `cross_bars_ago` bars ago."""
+    bars = []
+    for _ in range(60):
+        bars.append({"open": 79.9, "high": 80.5, "low": 79.5, "close": 80.0, "volume": 1_000})
+    price = 80.0
+    rise_bars = n - 60 - cross_bars_ago
+    for i in range(rise_bars):
+        price += 2.0
+        bars.append({"open": price - 0.1, "high": price + 0.5,
+                     "low": price - 0.5, "close": price, "volume": 1_000})
+    for _ in range(cross_bars_ago):
+        bars.append({"open": price - 0.1, "high": price + 0.2,
+                     "low": price - 0.2, "close": price, "volume": 1_000})
+    return bars
+
+
+def test_ma_crossover_fires_within_10_bars():
+    """Cross that happened 5 bars ago should fire with 10-bar lookback."""
+    bars = _crossover_bars(cross_bars_ago=5, n=200)
+    signal = ma_crossover_signal(bars)
+    assert signal is not None, "Expected a signal when cross is 5 bars old with 10-bar lookback"
+    assert signal.strategy == "ma_crossover"
+
+
+def test_ma_crossover_still_rejects_at_12_bars():
+    """Cross that happened 12 bars ago is outside the 10-bar window — should return None."""
+    bars = _crossover_bars(cross_bars_ago=12, n=220)
+    signal = ma_crossover_signal(bars)
+    assert signal is None, "Expected None when cross is 12 bars old"

@@ -112,7 +112,7 @@ def pullback_ema_signal(
     if len(sma50) >= 5 and sma50[-1] <= sma50[-5]:
         return None
     # Pullback: price within 1.5% of 20-EMA from above
-    if not (0 <= (current - ema_val) / ema_val <= 0.015):
+    if not (0 <= (current - ema_val) / ema_val <= 0.04):
         return None
     # Reversal candle: close > open (bullish bar)
     last = bars[-1]
@@ -139,7 +139,7 @@ def breakout_base_signal(
     *,
     base_lookback: int = 20,
     atr_tight_max: float = 1.5,
-    volume_mult: float = 1.3,
+    volume_mult: float = 1.1,
     rr_target_mult: float = 2.0,
 ) -> StrategySignal | None:
     """Bullish: break above N-day high after a narrow (ATR-tight) base with volume expansion."""
@@ -196,7 +196,7 @@ def ma_crossover_signal(
     if len(fast_ma) < 4 or len(slow_ma) < 4:
         return None
     # Recent cross: fast crossed above slow within last 3 bars
-    for i in range(-3, 0):
+    for i in range(-10, 0):
         if fast_ma[i - 1] <= slow_ma[i - 1] and fast_ma[i] > slow_ma[i]:
             current = closes[-1]
             atr = _atr(bars)
