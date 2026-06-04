@@ -8,6 +8,7 @@ Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_revers
 
 class StockScanRequest(BaseModel):
     universe:    list[str]
+    symbols:     Optional[list[str]] = None   # when set, scan only these tickers
     direction:   Literal["Bullish", "Bearish"]
     horizon:     Literal["Intraday", "Swing", "Position"]
     strategy:    Strategy
