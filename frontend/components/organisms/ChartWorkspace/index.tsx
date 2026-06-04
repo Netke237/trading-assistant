@@ -26,6 +26,8 @@ import { ChartOverlays } from '@/components/organisms/ChartOverlays';
 import DrawingOverlays from '@/components/organisms/DrawingOverlays';
 import ChartRightPanel, { type DataValues } from '@/components/organisms/ChartRightPanel';
 import { useDrawingStore } from '@/lib/drawingStore';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { buildPaperStockPosition } from '@/lib/paperTrade';
 import type { DrawingPoint } from '@/types/overlays';
 import type { IChartApi, ISeriesApi, MouseEventParams } from 'lightweight-charts';
 import { createSeriesMarkers, type Time, type ISeriesMarkersPluginApi } from 'lightweight-charts';
@@ -159,6 +161,7 @@ export default function ChartWorkspace() {
   const [showAlerts, setShowAlerts] = useState(false);
   const [clickPopover, setClickPopover] = useState<{ kind: 'alert' | 'buy'; price: number; time: number } | null>(null);
   const [prefillPrice, setPrefillPrice] = useState<number | null>(null);
+  const [buyQty, setBuyQty] = useState(1);
   const [crosshair, setCrosshair] = useState<DataValues>({ time: null, indicators: {} });
   const [connState, setConnState] = useState<ConnectionState>('connecting');
   const [wsError, setWsError] = useState<string | null>(null);
@@ -358,7 +361,7 @@ export default function ChartWorkspace() {
     const chart = chartApiRef.current;
     const series = mainSeriesRef.current;
     if (!chart || !series) return;
-    if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert') {
+    if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy') {
       pendingPtsRef.current = [];
       return;
     }
@@ -368,6 +371,7 @@ export default function ChartWorkspace() {
       if (price == null) return;
       const time = Number(param.time ?? 0);
       if (drawingTool === 'alert') { setClickPopover({ kind: 'alert', price, time }); return; }
+      if (drawingTool === 'buy') { setClickPopover({ kind: 'buy', price, time }); return; }
       if (drawingTool === 'hline') {
         addDrawing({ id: rid(), symbol, interval, kind: 'hline', points: [{ time, price }], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });
         return;
@@ -437,6 +441,19 @@ export default function ChartWorkspace() {
           qty={1}
           onCancel={() => setClickPopover(null)}
           onConfirm={() => { setPrefillPrice(clickPopover.price); setShowAlerts(true); setClickPopover(null); }}
+        />
+      )}
+      {clickPopover && clickPopover.kind === 'buy' && (
+        <ChartClickPopover
+          kind="buy"
+          price={clickPopover.price}
+          qty={buyQty}
+          onQty={setBuyQty}
+          onCancel={() => setClickPopover(null)}
+          onConfirm={() => {
+            usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, clickPopover.price, buyQty));
+            setClickPopover(null);
+          }}
         />
       )}
       <AlertToast />
