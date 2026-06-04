@@ -127,6 +127,9 @@ export default function Step7Page() {
     if (active) setSelectedSymbol(active);
   }, [active, setSelectedSymbol]);
 
+  // Clear paper order feedback when the user navigates to a different candidate.
+  useEffect(() => { setPaperOrderId(null); setOrderError(null); }, [active]);
+
   const addPosition = usePortfolioStore((s) => s.addPosition);
 
   const cardIndex = useMemo(

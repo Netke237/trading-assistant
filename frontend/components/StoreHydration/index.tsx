@@ -9,6 +9,7 @@ import { useStructureStore } from '@/lib/structureStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
 import { useThemeStore } from '@/lib/theme';
+import { useAutoTradeStore } from '@/lib/autoTradeStore';
 
 export function StoreHydration() {
   useEffect(() => {
@@ -20,6 +21,7 @@ export function StoreHydration() {
     useWatchlistStore.persist.rehydrate();
     useWatchedContractsStore.persist.rehydrate();
     useThemeStore.persist.rehydrate();
+    useAutoTradeStore.persist.rehydrate();
   }, []);
 
   return null;
