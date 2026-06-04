@@ -1,4 +1,4 @@
-import { calcAnchoredVWAP, calcKeyLevels } from './overlays';
+import { calcAnchoredVWAP, calcKeyLevels, calcCrossSignals, calcSignalMarkers } from './overlays';
 import type { Candle } from '@/lib/indicators';
 
 const c = (time: number, price: number, vol: number): Candle =>
@@ -23,5 +23,21 @@ describe('calcAnchoredVWAP', () => {
     expect(out[0].value).toBeNull();          // before anchor
     expect(out[1].value).toBeCloseTo(20);     // first anchored bar
     expect(out[2].value).toBeCloseTo(25);     // (20*10 + 30*10) / 20
+  });
+});
+
+const series = (closes: number[]): Candle[] =>
+  closes.map((p, i) => ({ time: i + 1, open: p, high: p, low: p, close: p, volume: 1 }));
+
+describe('cross signals', () => {
+  it('emits an arrowUp marker when EMA crosses above SMA', () => {
+    const candles = series([1,1,1,1,1,1,1,1,1,10,11,12,13,14,15]);
+    const m = calcCrossSignals(candles, 3, 5);
+    expect(m.some((x) => x.shape === 'arrowUp')).toBe(true);
+  });
+  it('signal markers return an array', () => {
+    const candles = series(Array.from({ length: 40 }, (_, i) => i));
+    const m = calcSignalMarkers(candles, 9, 21, 14);
+    expect(Array.isArray(m)).toBe(true);
   });
 });

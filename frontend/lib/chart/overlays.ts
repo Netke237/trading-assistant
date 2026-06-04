@@ -1,7 +1,8 @@
 // frontend/lib/chart/overlays.ts
+import { calcEMA, calcSMA, calcRSI } from '@/lib/indicators';
 import type { Candle, Point } from '@/lib/indicators';
 import type { Interval } from '@/lib/chartStore';
-import type { KeyLevels } from '@/types/overlays';
+import type { KeyLevels, MarkerPoint } from '@/types/overlays';
 
 const hlc3 = (c: Candle) => (c.high + c.low + c.close) / 3;
 
@@ -29,6 +30,48 @@ export function calcKeyLevels(candles: Candle[], _interval: Interval): KeyLevels
   const [pdh, pdl] = prevBucketHL(candles, 'day');
   const [pwh, pwl] = prevBucketHL(candles, 'week');
   return { pdh, pdl, pwh, pwl };
+}
+
+type TimeVal = Map<string | number, number>;
+
+function toMap(pts: Point[]): TimeVal {
+  return new Map(pts.map((p) => [p.time, p.value]));
+}
+
+function crossMarkers(
+  candles: Candle[], a: Point[], b: Point[], upColor: string, dnColor: string,
+): MarkerPoint[] {
+  const am = toMap(a), bm = toMap(b);
+  const out: MarkerPoint[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    const a0 = am.get(candles[i - 1].time), a1 = am.get(candles[i].time);
+    const b0 = bm.get(candles[i - 1].time), b1 = bm.get(candles[i].time);
+    if (a0 == null || a1 == null || b0 == null || b1 == null) continue;
+    if (a0 <= b0 && a1 > b1) out.push({ time: candles[i].time, position: 'belowBar', color: upColor, shape: 'arrowUp', text: 'X↑' });
+    if (a0 >= b0 && a1 < b1) out.push({ time: candles[i].time, position: 'aboveBar', color: dnColor, shape: 'arrowDown', text: 'X↓' });
+  }
+  return out;
+}
+
+/** EMA(emaLen) crossing SMA(smaLen). */
+export function calcCrossSignals(candles: Candle[], emaLen: number, smaLen: number): MarkerPoint[] {
+  return crossMarkers(candles, calcEMA(candles, emaLen), calcSMA(candles, smaLen), '#26a69a', '#ef5350');
+}
+
+/** Fast EMA × slow EMA with RSI>50 / <50 confirmation. */
+export function calcSignalMarkers(candles: Candle[], fast: number, slow: number, rsiLen: number): MarkerPoint[] {
+  const ef = calcEMA(candles, fast), es = calcEMA(candles, slow), rsi = calcRSI(candles, rsiLen);
+  const efm = toMap(ef), esm = toMap(es), rsim = toMap(rsi);
+  const out: MarkerPoint[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    const f0 = efm.get(candles[i - 1].time), f1 = efm.get(candles[i].time);
+    const s0 = esm.get(candles[i - 1].time), s1 = esm.get(candles[i].time);
+    const r = rsim.get(candles[i].time);
+    if (f0 == null || f1 == null || s0 == null || s1 == null || r == null) continue;
+    if (f0 <= s0 && f1 > s1 && r > 50) out.push({ time: candles[i].time, position: 'belowBar', color: '#26a69a', shape: 'arrowUp', text: 'BUY' });
+    if (f0 >= s0 && f1 < s1 && r < 50) out.push({ time: candles[i].time, position: 'aboveBar', color: '#ef5350', shape: 'arrowDown', text: 'SELL' });
+  }
+  return out;
 }
 
 /** Cumulative VWAP measured from the first candle whose time >= anchorMs. */
