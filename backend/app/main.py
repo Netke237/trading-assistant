@@ -33,6 +33,7 @@ from app.routers.broker        import router as broker_router
 from app.routers.stock_scan    import router as stock_scan_router
 from app.routers.auto_trade    import router as auto_trade_router
 from app.routers.historical_data import router as historical_data_router
+from app.routers.chart_drawings  import router as chart_drawings_router
 
 
 _notification_worker_task: asyncio.Task | None = None
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(stock_scan_router)
     app.include_router(auto_trade_router)
     app.include_router(historical_data_router)
+    app.include_router(chart_drawings_router)
 
     return app
 

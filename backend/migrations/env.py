@@ -23,6 +23,7 @@ from app.models.portfolio import PortfolioPositionModel  # noqa: F401
 from app.models.watchlist import WatchlistSymbolModel  # noqa: F401
 from app.models.watched_contracts import WatchedContractModel  # noqa: F401
 from app.models.alert import AlertRuleModel, AlertHistoryModel  # noqa: F401
+from app.models.drawing import DrawingModel  # noqa: F401
 
 settings = get_settings()
 config = context.config
