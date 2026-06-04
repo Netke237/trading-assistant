@@ -12,8 +12,8 @@ from app.schemas.stock_scan import (
     StockScanRequest, StockScanResult, PositionCardOut,
     StrategySignalOut, BacktestOut,
 )
-from app.data.tiingo import fetch_historical_candles
 from app.data.market import fetch_price_async, fetch_company_name_async
+from app.services.historical_store import get_bars as get_historical_bars
 from app.scoring.stock_scorer import score_stock
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
@@ -62,9 +62,9 @@ async def _process_stock(symbol: str, req: StockScanRequest, scan_id: str) -> Po
 
         end = date.today()
         start = end - timedelta(days=_HISTORY_YEARS * 365)
-        # Sync httpx call — offload to a thread so it doesn't block the event loop
-        # while many symbols are scanned concurrently via asyncio.gather.
-        bars = await asyncio.to_thread(fetch_historical_candles, symbol, start, end)
+        # DB-first: reads from ohlcv_daily table; fetches delta from Tiingo if stale.
+        # Eliminates parallel Tiingo calls for large universes (avoids rate-limit errors).
+        bars = await get_historical_bars(symbol, start, end)
         if not bars or len(bars) < 60:
             return {"symbol": symbol, "reason": "insufficient history"}
 
