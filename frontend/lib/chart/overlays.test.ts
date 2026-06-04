@@ -41,3 +41,17 @@ describe('cross signals', () => {
     expect(Array.isArray(m)).toBe(true);
   });
 });
+
+import { calcVolumeProfile } from './overlays';
+
+describe('calcVolumeProfile', () => {
+  it('bins volume by price and reports a POC', () => {
+    const candles = [
+      { time: 1, open: 10, high: 10, low: 10, close: 10, volume: 100 },
+      { time: 2, open: 20, high: 20, low: 20, close: 20, volume: 10 },
+    ];
+    const vp = calcVolumeProfile(candles, 2, 4);
+    expect(vp.bins.length).toBe(4);
+    expect(vp.poc).toBeCloseTo(10, 0);
+  });
+});

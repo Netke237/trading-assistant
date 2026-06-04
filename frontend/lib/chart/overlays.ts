@@ -2,7 +2,7 @@
 import { calcEMA, calcSMA, calcRSI } from '@/lib/indicators';
 import type { Candle, Point } from '@/lib/indicators';
 import type { Interval } from '@/lib/chartStore';
-import type { KeyLevels, MarkerPoint } from '@/types/overlays';
+import type { KeyLevels, MarkerPoint, VolumeProfile } from '@/types/overlays';
 
 const hlc3 = (c: Candle) => (c.high + c.low + c.close) / 3;
 
@@ -72,6 +72,31 @@ export function calcSignalMarkers(candles: Candle[], fast: number, slow: number,
     if (f0 >= s0 && f1 < s1 && r < 50) out.push({ time: candles[i].time, position: 'aboveBar', color: '#ef5350', shape: 'arrowDown', text: 'SELL' });
   }
   return out;
+}
+
+export function calcVolumeProfile(candles: Candle[], lookback: number, rows: number): VolumeProfile {
+  const slice = candles.slice(-lookback);
+  if (slice.length === 0 || rows < 1) return { bins: [], poc: null, vah: null, val: null };
+  const hi = Math.max(...slice.map((c) => c.high));
+  const lo = Math.min(...slice.map((c) => c.low));
+  const rng = hi - lo;
+  if (rng <= 0) return { bins: [], poc: null, vah: null, val: null };
+  const binSz = rng / rows;
+  const vols = new Array<number>(rows).fill(0);
+  for (const c of slice) {
+    const idx = Math.min(rows - 1, Math.max(0, Math.floor((hlc3(c) - lo) / binSz)));
+    vols[idx] += c.volume;
+  }
+  const bins = vols.map((v, i) => ({ price: lo + i * binSz, volume: v }));
+  const total = vols.reduce((a, b) => a + b, 0);
+  const pocIdx = vols.indexOf(Math.max(...vols));
+  let loI = pocIdx, hiI = pocIdx, acc = vols[pocIdx];
+  while (acc < total * 0.7 && (loI > 0 || hiI < rows - 1)) {
+    const down = loI > 0 ? vols[loI - 1] : -1;
+    const up = hiI < rows - 1 ? vols[hiI + 1] : -1;
+    if (up >= down) { hiI++; acc += Math.max(0, up); } else { loI--; acc += Math.max(0, down); }
+  }
+  return { bins, poc: bins[pocIdx].price, vah: bins[hiI].price, val: bins[loI].price };
 }
 
 /** Cumulative VWAP measured from the first candle whose time >= anchorMs. */
