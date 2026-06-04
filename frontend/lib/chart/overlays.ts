@@ -99,6 +99,29 @@ export function calcVolumeProfile(candles: Candle[], lookback: number, rows: num
   return { bins, poc: bins[pocIdx].price, vah: bins[hiI].price, val: bins[loI].price };
 }
 
+/** Aggregate candles into buckets of `tfMin` minutes (numeric-time candles only). */
+export function resample(candles: Candle[], tfMin: number): Candle[] {
+  if (tfMin <= 0 || candles.length === 0) return candles;
+  const bucketMs = tfMin * 60 * 1000;
+  const norm = (v: number | string) => typeof v === 'number' ? (v < 1e12 ? v * 1000 : v) : Date.parse(String(v));
+  const out: Candle[] = [];
+  let cur: Candle | null = null; let curKey = NaN;
+  for (const c of candles) {
+    const key = Math.floor(norm(c.time) / bucketMs);
+    if (cur === null || key !== curKey) {
+      if (cur) out.push(cur);
+      cur = { ...c }; curKey = key;
+    } else {
+      cur.high = Math.max(cur.high, c.high);
+      cur.low = Math.min(cur.low, c.low);
+      cur.close = c.close;
+      cur.volume += c.volume;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
 /** Cumulative VWAP measured from the first candle whose time >= anchorMs. */
 export function calcAnchoredVWAP(candles: Candle[], anchorMs: number): Point[] {
   let cumPV = 0, cumV = 0;

@@ -4,6 +4,11 @@ import { useSearchParams } from 'next/navigation';
 import { useChartStore, type IndicatorConfig, type Interval, type ChartType } from '@/lib/chartStore';
 import { ChartWSClient, type WSMessage, type ConnectionState } from '@/lib/chartWS';
 import { calcEMA, calcSMA, calcRSI, calcMACD, calcBB, calcATR, calcVWAP, type Candle, type Point } from '@/lib/indicators';
+import { calcAnchoredVWAP, calcKeyLevels, calcCrossSignals, calcSignalMarkers, calcVolumeProfile, resample } from '@/lib/chart/overlays';
+import { VolumeProfilePrimitive } from '@/lib/chartPrimitives/VolumeProfilePrimitive';
+import MtfDashboard from '@/components/organisms/MtfDashboard';
+import { buildMtfRow } from '@/lib/chart/mtf';
+import type { MtfRow } from '@/types/overlays';
 import { useStructureStore } from '@/lib/structureStore';
 import type { StructureSignal } from '@/types/structure';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
@@ -19,6 +24,7 @@ import StructurePanel from '@/components/organisms/StructurePanel';
 import { ChartOverlays } from '@/components/organisms/ChartOverlays';
 import ChartRightPanel, { type DataValues } from '@/components/organisms/ChartRightPanel';
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import { createSeriesMarkers, type Time, type ISeriesMarkersPluginApi } from 'lightweight-charts';
 import styles from './ChartWorkspace.module.css';
 
 // ── Indicator computation helpers ─────────────────────────────────────────────
@@ -48,6 +54,28 @@ function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chart
       series.push({ id: `${ind.id}-upper`, type: 'Line', data: bb.upper,  color: '#4caf50' }); // green
       series.push({ id: `${ind.id}-mid`,   type: 'Line', data: bb.middle, color: '#2196f3' }); // blue
       series.push({ id: `${ind.id}-lower`, type: 'Line', data: bb.lower,  color: '#f44336' }); // red
+    }
+    if (ind.type === 'MASUITE') {
+      const lens = [ind.params.ma1, ind.params.ma2, ind.params.ma3, ind.params.ma4].filter((n) => n && n > 0);
+      const cols = ['#4f8ef7', '#e0a030', '#e0e040', '#e040e0'];
+      lens.forEach((len, i) => series.push({ id: `${ind.id}-ma${i}`, type: 'Line', data: calcEMA(candles, len), color: cols[i] }));
+    }
+    if (ind.type === 'AVWAP') {
+      series.push({ id: ind.id, type: 'Line', data: calcAnchoredVWAP(candles, ind.params.anchorMs), color: ind.color });
+    }
+    if (ind.type === 'KEYLEVELS') {
+      const lv = calcKeyLevels(candles, interval);
+      const flat = (v: number | null): Point[] => v == null ? [] : candles.map((c) => ({ time: c.time, value: v }));
+      if (ind.params.day)  { series.push({ id: `${ind.id}-pdh`, type: 'Line', data: flat(lv.pdh), color: '#808080' }); series.push({ id: `${ind.id}-pdl`, type: 'Line', data: flat(lv.pdl), color: '#808080' }); }
+      if (ind.params.week) { series.push({ id: `${ind.id}-pwh`, type: 'Line', data: flat(lv.pwh), color: '#4a90a4' }); series.push({ id: `${ind.id}-pwl`, type: 'Line', data: flat(lv.pwl), color: '#4a90a4' }); }
+    }
+    if (ind.type === 'HTFLEVELS') {
+      const htf = resample(candles, ind.params.tfMin || 240);
+      const lastBar = htf[htf.length - 1];
+      const flatN = (v: number | undefined): Point[] => v == null ? [] : candles.map((c) => ({ time: c.time, value: v }));
+      series.push({ id: `${ind.id}-hh`, type: 'Line', data: flatN(lastBar?.high), color: '#30a060' });
+      series.push({ id: `${ind.id}-hl`, type: 'Line', data: flatN(lastBar?.low),  color: '#c04040' });
+      series.push({ id: `${ind.id}-hc`, type: 'Line', data: flatN(lastBar?.close), color: '#808080' });
     }
   }
   return series;
@@ -129,6 +157,8 @@ export default function ChartWorkspace() {
   const wsRef = useRef<ChartWSClient | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const mainSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const vpPrimRef = useRef<VolumeProfilePrimitive | null>(null);
+  const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
   const structureVisible = useStructureStore((s) => s.structureVisible);
   const structureVisibility = useStructureStore((s) => s.visibility);
@@ -279,6 +309,33 @@ export default function ChartWorkspace() {
     [activeIndicators],
   );
 
+  const mtfRows: MtfRow[] = useMemo(
+    () => activeIndicators.some((i) => i.type === 'MTF') ? [buildMtfRow(interval, candles, 14)] : [],
+    [activeIndicators, interval, candles],
+  );
+
+  useEffect(() => {
+    const series = mainSeriesRef.current;
+    if (!series) return;
+    // markers
+    const markers: { time: Time; position: 'aboveBar' | 'belowBar'; color: string; shape: 'arrowUp' | 'arrowDown'; text: string }[] = [];
+    for (const ind of activeIndicators) {
+      if (ind.type === 'XSIGNAL') for (const m of calcCrossSignals(candles, ind.params.emaLen, ind.params.smaLen)) markers.push({ time: m.time as Time, position: m.position, color: m.color, shape: m.shape, text: m.text });
+      if (ind.type === 'SIGNALS') for (const m of calcSignalMarkers(candles, ind.params.fast, ind.params.slow, ind.params.rsi)) markers.push({ time: m.time as Time, position: m.position, color: m.color, shape: m.shape, text: m.text });
+    }
+    markers.sort((a, b) => Number(a.time) - Number(b.time));
+    if (!markersApiRef.current) markersApiRef.current = createSeriesMarkers(series, []);
+    markersApiRef.current.setMarkers(markers);
+    // volume profile
+    if (vpPrimRef.current) { try { series.detachPrimitive(vpPrimRef.current); } catch { /* ignore */ } vpPrimRef.current = null; }
+    const vpCfg = activeIndicators.find((i) => i.type === 'VPROFILE');
+    if (vpCfg) {
+      const vp = calcVolumeProfile(candles, vpCfg.params.lookback, vpCfg.params.rows);
+      vpPrimRef.current = new VolumeProfilePrimitive(vp);
+      series.attachPrimitive(vpPrimRef.current);
+    }
+  }, [candles, activeIndicators]);
+
   return (
     <div className={styles.workspace}>
       <ChartTopBar
@@ -306,6 +363,7 @@ export default function ChartWorkspace() {
               visibility={structureVisibility}
               visible={structureVisible}
             />
+            {mtfRows.length > 0 && <MtfDashboard rows={mtfRows} />}
             {showStructure && <StructurePanel onClose={() => setShowStructure(false)} />}
           </div>
           {subPanes.map(({ id, series }) => (

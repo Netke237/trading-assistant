@@ -55,3 +55,17 @@ describe('calcVolumeProfile', () => {
     expect(vp.poc).toBeCloseTo(10, 0);
   });
 });
+
+import { resample } from './overlays';
+describe('resample', () => {
+  it('merges two 1-min bars into one 2-min bar', () => {
+    const base = [
+      { time: 0, open: 1, high: 5, low: 1, close: 4, volume: 10 },
+      { time: 60, open: 4, high: 6, low: 2, close: 3, volume: 20 },
+    ];
+    const r = resample(base, 2);
+    expect(r.length).toBe(1);
+    expect(r[0].high).toBe(6);
+    expect(r[0].volume).toBe(30);
+  });
+});
