@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from app.models.ohlcv_daily import OhlcvBase, OhlcvDailyModel
@@ -51,7 +52,7 @@ async def test_store_bars_inserts_rows(db):
     await _store_bars("AAPL", bars, db)
     await db.commit()
     result = await db.execute(
-        __import__("sqlalchemy", fromlist=["select"]).select(OhlcvDailyModel)
+        select(OhlcvDailyModel)
         .where(OhlcvDailyModel.symbol == "AAPL")
     )
     rows = result.scalars().all()

@@ -12,13 +12,23 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os as _os
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _dialect_insert():
+    """Return the correct dialect-specific insert for the current DATABASE_URL."""
+    url = _os.environ.get("DATABASE_URL", "sqlite")
+    if "postgresql" in url:
+        from sqlalchemy.dialects.postgresql import insert
+    else:
+        from sqlalchemy.dialects.sqlite import insert
+    return insert
 
 from app.database import AsyncSessionLocal
 from app.data.tiingo import fetch_historical_candles
@@ -63,16 +73,16 @@ async def _store_bars(symbol: str, bars: list[dict], db: AsyncSession) -> None:
         }
         for b in bars
     ]
-    # SQLite: INSERT OR REPLACE handles the composite PK upsert.
-    stmt = sqlite_insert(OhlcvDailyModel).values(rows)
+    insert = _dialect_insert()
+    stmt = insert(OhlcvDailyModel).values(rows)
     stmt = stmt.on_conflict_do_update(
         index_elements=["symbol", "date"],
         set_={
-            "open": stmt.excluded.open,
-            "high": stmt.excluded.high,
-            "low":  stmt.excluded.low,
-            "close": stmt.excluded.close,
-            "volume": stmt.excluded.volume,
+            "open":       stmt.excluded.open,
+            "high":       stmt.excluded.high,
+            "low":        stmt.excluded.low,
+            "close":      stmt.excluded.close,
+            "volume":     stmt.excluded.volume,
             "fetched_at": stmt.excluded.fetched_at,
         },
     )
@@ -100,7 +110,7 @@ async def _read_bars(
             "high":   float(row.high),
             "low":    float(row.low),
             "close":  float(row.close),
-            "volume": row.volume,
+            "volume": int(row.volume),
         }
         for row in rows
     ]
@@ -129,7 +139,7 @@ async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
     async with AsyncSessionLocal() as db:
         last = await _last_stored_date(symbol, db)
 
-        fetch_needed = (last is None) or (last < end - timedelta(days=1))
+        fetch_needed = (last is None) or (last < end)
         if fetch_needed:
             fetch_start = (last + timedelta(days=1)) if last else start
             try:
@@ -142,6 +152,11 @@ async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
                     logger.debug(
                         "historical_store: stored %d new bars for %s (delta %s → %s)",
                         len(new_bars), symbol, fetch_start, end,
+                    )
+                else:
+                    logger.debug(
+                        "historical_store: no new bars returned for %s (Tiingo may have failed or symbol has no data for %s → %s)",
+                        symbol, fetch_start, end,
                     )
             except Exception as exc:
                 logger.warning("historical_store: Tiingo fetch failed for %s — %s", symbol, exc)
@@ -167,27 +182,35 @@ async def _run_prefetch(symbols: list[str], years: int, delay_secs: float) -> No
         "started_at":     datetime.now(timezone.utc).isoformat(),
     })
 
-    for symbol in symbols:
-        _prefetch_state["current_symbol"] = symbol
-        _prefetch_state["elapsed_secs"]   = round(time.monotonic() - start_time, 1)
-        try:
-            await get_bars(symbol, fetch_start, fetch_end)
-            _prefetch_state["done"] += 1
-        except Exception as exc:
-            logger.warning("historical_store prefetch: %s failed — %s", symbol, exc)
-            _prefetch_state["failed"] += 1
-        # Rate-limit: respect Tiingo's free-tier daily quota.
-        await asyncio.sleep(delay_secs)
+    try:
+        for symbol in symbols:
+            _prefetch_state["current_symbol"] = symbol
+            _prefetch_state["elapsed_secs"]   = round(time.monotonic() - start_time, 1)
+            try:
+                await get_bars(symbol, fetch_start, fetch_end)
+                _prefetch_state["done"] += 1
+            except Exception as exc:
+                logger.warning("historical_store prefetch: %s failed — %s", symbol, exc)
+                _prefetch_state["failed"] += 1
+            # Rate-limit: respect Tiingo's free-tier daily quota.
+            await asyncio.sleep(delay_secs)
 
-    _prefetch_state.update({
-        "status":         "completed",
-        "current_symbol": None,
-        "elapsed_secs":   round(time.monotonic() - start_time, 1),
-    })
-    logger.info(
-        "historical_store prefetch complete: %d done, %d failed in %.0fs",
-        _prefetch_state["done"], _prefetch_state["failed"], _prefetch_state["elapsed_secs"],
-    )
+        _prefetch_state.update({
+            "status":         "completed",
+            "current_symbol": None,
+            "elapsed_secs":   round(time.monotonic() - start_time, 1),
+        })
+        logger.info(
+            "historical_store prefetch complete: %d done, %d failed in %.0fs",
+            _prefetch_state["done"], _prefetch_state["failed"], _prefetch_state["elapsed_secs"],
+        )
+    except Exception as exc:
+        _prefetch_state.update({
+            "status":         "error",
+            "current_symbol": None,
+            "elapsed_secs":   round(time.monotonic() - start_time, 1),
+        })
+        logger.error("historical_store prefetch crashed: %s", exc, exc_info=True)
 
 
 def prefetch_universe(symbols: list[str], years: int = 5, delay_secs: float = 0.5) -> None:
@@ -200,7 +223,6 @@ def prefetch_universe(symbols: list[str], years: int = 5, delay_secs: float = 0.
     if _prefetch_state.get("status") == "running":
         logger.warning("historical_store: prefetch already running — ignoring new request")
         return
-    _prefetch_state["status"] = "running"
     _prefetch_task = asyncio.create_task(
         _run_prefetch(symbols, years, delay_secs)
     )
