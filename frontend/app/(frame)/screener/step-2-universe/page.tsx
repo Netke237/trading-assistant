@@ -96,7 +96,7 @@ export default function Step1Page() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (histStatus.status === 'running') {
+    if (histStatus.status === 'running' && !pollRef.current) {
       pollRef.current = setInterval(async () => {
         try {
           const s = await api.getHistoryPrefetchStatus();
