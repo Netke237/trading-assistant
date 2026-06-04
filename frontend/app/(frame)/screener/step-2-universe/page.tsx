@@ -87,7 +87,10 @@ export default function Step1Page() {
 
   const symbols  = useMemo(() => parseSymbols(customRaw), [customRaw]);
 
+  const isWatchlistPick = pick === 'Watchlist';
+
   const [histYears,  setHistYears]  = useState(5);
+  const [loadError,  setLoadError]  = useState<string | null>(null);
   const [histStatus, setHistStatus] = useState<{
     status: 'idle' | 'running' | 'completed' | 'error';
     total: number; done: number; failed: number;
@@ -114,20 +117,16 @@ export default function Step1Page() {
   }, [histStatus.status]);
 
   const handleLoadHistory = useCallback(async () => {
-    // Determine which universe to pass to the backend.
-    // 'pick' is the currently selected universe preset (e.g. 'SP500', 'Custom', 'Watchlist').
-    // For Custom, pass the list of symbols; for presets, pass [pick].
-    const universe = pick === 'Custom'
-      ? symbols
-      : pick === 'Watchlist'
-        ? ['SP500']   // watchlist symbols not available as plain list here — fallback to SP500
-        : [pick];
+    const universe = pick === 'Custom' ? symbols : [pick];
     if (!universe.length) return;
     try {
       await api.startHistoryPrefetch({ universe, years: histYears });
       const s = await api.getHistoryPrefetchStatus();
       setHistStatus(s);
+      setLoadError(null);
     } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to start history load';
+      setLoadError(msg);
       console.error('History prefetch failed to start:', e);
     }
   }, [pick, symbols, histYears]);
@@ -464,7 +463,7 @@ export default function Step1Page() {
             type="button"
             className={`${formStyles.loadBtn} ${histStatus.status === 'running' ? formStyles.loadBtnRunning : ''}`}
             onClick={handleLoadHistory}
-            disabled={histStatus.status === 'running'}
+            disabled={histStatus.status === 'running' || isWatchlistPick}
           >
             {histStatus.status === 'running'
               ? `Loading… ${histStatus.done}/${histStatus.total}`
@@ -473,6 +472,16 @@ export default function Step1Page() {
                 : 'Load history in background'}
           </button>
         </div>
+
+        {isWatchlistPick && (
+          <Text size={11} tone="dim">
+            History pre-load is not available for the Watchlist universe. Select a preset (e.g. SP500) or Custom symbols instead.
+          </Text>
+        )}
+
+        {loadError && (
+          <Text size={11} tone="reject">{loadError}</Text>
+        )}
 
         {(histStatus.status === 'running' || histStatus.status === 'completed') && (
           <div className={formStyles.progressWrap}>
