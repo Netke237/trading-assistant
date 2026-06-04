@@ -7,7 +7,7 @@
  * market-cap filters that apply to any selected universe.
  */
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
@@ -86,6 +86,51 @@ export default function Step1Page() {
   }, []);
 
   const symbols  = useMemo(() => parseSymbols(customRaw), [customRaw]);
+
+  const [histYears,  setHistYears]  = useState(5);
+  const [histStatus, setHistStatus] = useState<{
+    status: 'idle' | 'running' | 'completed' | 'error';
+    total: number; done: number; failed: number;
+    current_symbol: string | null; elapsed_secs: number;
+  }>({ status: 'idle', total: 0, done: 0, failed: 0, current_symbol: null, elapsed_secs: 0 });
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (histStatus.status === 'running') {
+      pollRef.current = setInterval(async () => {
+        try {
+          const s = await api.getHistoryPrefetchStatus();
+          setHistStatus(s);
+          if (s.status !== 'running' && pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
+        } catch { /* silent — backend may be restarting */ }
+      }, 2000);
+    }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [histStatus.status]);
+
+  const handleLoadHistory = useCallback(async () => {
+    // Determine which universe to pass to the backend.
+    // 'pick' is the currently selected universe preset (e.g. 'SP500', 'Custom', 'Watchlist').
+    // For Custom, pass the list of symbols; for presets, pass [pick].
+    const universe = pick === 'Custom'
+      ? symbols
+      : pick === 'Watchlist'
+        ? ['SP500']   // watchlist symbols not available as plain list here — fallback to SP500
+        : [pick];
+    if (!universe.length) return;
+    try {
+      await api.startHistoryPrefetch({ universe, years: histYears });
+      const s = await api.getHistoryPrefetchStatus();
+      setHistStatus(s);
+    } catch (e) {
+      console.error('History prefetch failed to start:', e);
+    }
+  }, [pick, symbols, histYears]);
 
   const OPTIONS: { key: Universe; label: string; count: number | string; desc: string }[] = [
     { key: 'SP500',       label: 'S&P 500',      count: 503,  desc: 'Large-cap US equities. Recommended for most users.' },
@@ -385,6 +430,68 @@ export default function Step1Page() {
                 </button>
               </span>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Historical data pre-load */}
+      <div className={formStyles.historyPanel}>
+        <div className={formStyles.historyPanelHeader}>
+          <div>
+            <Text size={13} weight={600}>Historical data</Text>
+            <Text size={11} tone="secondary">
+              Pre-load OHLCV history for the selected universe so stock scans read from the
+              local database instead of hitting Tiingo live.
+            </Text>
+          </div>
+        </div>
+
+        <div className={formStyles.historyControls}>
+          <Text size={12} tone="dim">Horizon:</Text>
+          <select
+            className={formStyles.horizonSelect}
+            value={histYears}
+            onChange={(e) => setHistYears(Number(e.target.value))}
+            disabled={histStatus.status === 'running'}
+          >
+            <option value={1}>1 year</option>
+            <option value={2}>2 years</option>
+            <option value={3}>3 years</option>
+            <option value={5}>5 years (recommended)</option>
+          </select>
+
+          <button
+            type="button"
+            className={`${formStyles.loadBtn} ${histStatus.status === 'running' ? formStyles.loadBtnRunning : ''}`}
+            onClick={handleLoadHistory}
+            disabled={histStatus.status === 'running'}
+          >
+            {histStatus.status === 'running'
+              ? `Loading… ${histStatus.done}/${histStatus.total}`
+              : histStatus.status === 'completed'
+                ? `Reload history (${histStatus.done} symbols)`
+                : 'Load history in background'}
+          </button>
+        </div>
+
+        {(histStatus.status === 'running' || histStatus.status === 'completed') && (
+          <div className={formStyles.progressWrap}>
+            <div className={formStyles.progressBar}>
+              <div
+                className={formStyles.progressFill}
+                style={{ width: histStatus.total > 0 ? `${(histStatus.done / histStatus.total) * 100}%` : '0%' }}
+              />
+            </div>
+            <div className={formStyles.progressLabel}>
+              <Text size={11} tone="dim">
+                {histStatus.status === 'running' && histStatus.current_symbol
+                  ? `Fetching ${histStatus.current_symbol}…`
+                  : histStatus.status === 'completed'
+                    ? `Complete — ${histStatus.done} loaded, ${histStatus.failed} failed`
+                    : ''}
+              </Text>
+              <Text size={11} tone="dim">{histStatus.elapsed_secs}s</Text>
+            </div>
           </div>
         )}
       </div>

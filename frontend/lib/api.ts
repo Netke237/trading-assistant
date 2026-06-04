@@ -163,6 +163,23 @@ export const api = {
       tradier_paper: { configured: boolean };
       ibkr_live:     { configured: boolean; enabled: boolean; note: string };
     }>('/broker/status'),
+
+  startHistoryPrefetch: (req: {
+    universe: string[];
+    years?: number;
+    delay_secs?: number;
+  }) => post<{ message: string; total: number }>('/api/historical-data/prefetch', req),
+
+  getHistoryPrefetchStatus: () =>
+    get<{
+      status: 'idle' | 'running' | 'completed' | 'error';
+      total: number;
+      done: number;
+      failed: number;
+      current_symbol: string | null;
+      elapsed_secs: number;
+      started_at: string | null;
+    }>('/api/historical-data/prefetch/status'),
 };
 
 /* ---------- Risk settings ---------- */

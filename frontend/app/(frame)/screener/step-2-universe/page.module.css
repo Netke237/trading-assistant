@@ -329,3 +329,95 @@
   border: 1px solid var(--reject-border);
   border-radius: var(--radius-sm);
 }
+
+/* ---------- Load History panel ---------- */
+
+.historyPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  margin-top: var(--space-2);
+}
+
+.historyPanelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.historyControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.horizonSelect {
+  height: 32px;
+  padding: 0 var(--space-3);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-dm);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.loadBtn {
+  height: 32px;
+  padding: 0 var(--space-4);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-family: var(--font-dm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms;
+  white-space: nowrap;
+}
+
+.loadBtn:hover:not(:disabled) {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.loadBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.loadBtnRunning {
+  border-color: var(--pass);
+  color: var(--pass);
+}
+
+.progressWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progressBar {
+  height: 4px;
+  background: var(--border-subtle);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--pass);
+  border-radius: 2px;
+  transition: width 500ms ease;
+}
+
+.progressLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
