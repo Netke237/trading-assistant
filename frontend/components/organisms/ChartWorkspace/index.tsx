@@ -4,12 +4,18 @@ import { useSearchParams } from 'next/navigation';
 import { useChartStore, type IndicatorConfig, type Interval, type ChartType } from '@/lib/chartStore';
 import { ChartWSClient, type WSMessage, type ConnectionState } from '@/lib/chartWS';
 import { calcEMA, calcSMA, calcRSI, calcMACD, calcBB, calcATR, calcVWAP, type Candle, type Point } from '@/lib/indicators';
+import { calcAnchoredVWAP, calcKeyLevels, calcCrossSignals, calcSignalMarkers, calcVolumeProfile, resample } from '@/lib/chart/overlays';
+import { VolumeProfilePrimitive } from '@/lib/chartPrimitives/VolumeProfilePrimitive';
+import MtfDashboard from '@/components/organisms/MtfDashboard';
+import { buildMtfRow } from '@/lib/chart/mtf';
+import type { MtfRow } from '@/types/overlays';
 import { useStructureStore } from '@/lib/structureStore';
 import type { StructureSignal } from '@/types/structure';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
 import { evaluateRules } from '@/lib/chartAlertEngine';
 import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
 import AlertToast from '@/components/organisms/AlertToast';
+import ChartClickPopover from '@/components/molecules/ChartClickPopover';
 import type { SeriesConfig } from '@/components/organisms/ChartPane';
 import ChartPane from '@/components/organisms/ChartPane';
 import ChartTopBar from '@/components/organisms/ChartTopBar';
@@ -17,8 +23,14 @@ import DrawingToolbar, { type DrawingTool } from '@/components/organisms/Drawing
 import IndicatorPanel from '@/components/organisms/IndicatorPanel';
 import StructurePanel from '@/components/organisms/StructurePanel';
 import { ChartOverlays } from '@/components/organisms/ChartOverlays';
+import DrawingOverlays from '@/components/organisms/DrawingOverlays';
 import ChartRightPanel, { type DataValues } from '@/components/organisms/ChartRightPanel';
-import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import { useDrawingStore } from '@/lib/drawingStore';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { buildPaperStockPosition } from '@/lib/paperTrade';
+import type { DrawingPoint } from '@/types/overlays';
+import type { IChartApi, ISeriesApi, MouseEventParams } from 'lightweight-charts';
+import { createSeriesMarkers, type Time, type ISeriesMarkersPluginApi } from 'lightweight-charts';
 import styles from './ChartWorkspace.module.css';
 
 // ── Indicator computation helpers ─────────────────────────────────────────────
@@ -48,6 +60,28 @@ function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chart
       series.push({ id: `${ind.id}-upper`, type: 'Line', data: bb.upper,  color: '#4caf50' }); // green
       series.push({ id: `${ind.id}-mid`,   type: 'Line', data: bb.middle, color: '#2196f3' }); // blue
       series.push({ id: `${ind.id}-lower`, type: 'Line', data: bb.lower,  color: '#f44336' }); // red
+    }
+    if (ind.type === 'MASUITE') {
+      const lens = [ind.params.ma1, ind.params.ma2, ind.params.ma3, ind.params.ma4].filter((n) => n && n > 0);
+      const cols = ['#4f8ef7', '#e0a030', '#e0e040', '#e040e0'];
+      lens.forEach((len, i) => series.push({ id: `${ind.id}-ma${i}`, type: 'Line', data: calcEMA(candles, len), color: cols[i] }));
+    }
+    if (ind.type === 'AVWAP') {
+      series.push({ id: ind.id, type: 'Line', data: calcAnchoredVWAP(candles, ind.params.anchorMs), color: ind.color });
+    }
+    if (ind.type === 'KEYLEVELS') {
+      const lv = calcKeyLevels(candles, interval);
+      const flat = (v: number | null): Point[] => v == null ? [] : candles.map((c) => ({ time: c.time, value: v }));
+      if (ind.params.day)  { series.push({ id: `${ind.id}-pdh`, type: 'Line', data: flat(lv.pdh), color: '#808080' }); series.push({ id: `${ind.id}-pdl`, type: 'Line', data: flat(lv.pdl), color: '#808080' }); }
+      if (ind.params.week) { series.push({ id: `${ind.id}-pwh`, type: 'Line', data: flat(lv.pwh), color: '#4a90a4' }); series.push({ id: `${ind.id}-pwl`, type: 'Line', data: flat(lv.pwl), color: '#4a90a4' }); }
+    }
+    if (ind.type === 'HTFLEVELS') {
+      const htf = resample(candles, ind.params.tfMin || 240);
+      const lastBar = htf[htf.length - 1];
+      const flatN = (v: number | undefined): Point[] => v == null ? [] : candles.map((c) => ({ time: c.time, value: v }));
+      series.push({ id: `${ind.id}-hh`, type: 'Line', data: flatN(lastBar?.high), color: '#30a060' });
+      series.push({ id: `${ind.id}-hl`, type: 'Line', data: flatN(lastBar?.low),  color: '#c04040' });
+      series.push({ id: `${ind.id}-hc`, type: 'Line', data: flatN(lastBar?.close), color: '#808080' });
     }
   }
   return series;
@@ -115,6 +149,8 @@ function getIndicatorPoints(candles: Candle[], indicators: IndicatorConfig[]): R
 
 const NO_SIGNALS: StructureSignal[] = [];
 
+const rid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
 export default function ChartWorkspace() {
   const params = useSearchParams();
   const { symbol, interval, chartType, activeIndicators, setSymbol, setInterval } = useChartStore();
@@ -123,12 +159,21 @@ export default function ChartWorkspace() {
   const [showIndicators, setShowIndicators] = useState(false);
   const [showStructure, setShowStructure] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
+  const [clickPopover, setClickPopover] = useState<{ kind: 'alert' | 'buy'; price: number; time: number } | null>(null);
+  const [prefillPrice, setPrefillPrice] = useState<number | null>(null);
+  const [buyQty, setBuyQty] = useState(1);
   const [crosshair, setCrosshair] = useState<DataValues>({ time: null, indicators: {} });
   const [connState, setConnState] = useState<ConnectionState>('connecting');
   const [wsError, setWsError] = useState<string | null>(null);
   const wsRef = useRef<ChartWSClient | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const mainSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const vpPrimRef = useRef<VolumeProfilePrimitive | null>(null);
+  const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const pendingPtsRef = useRef<DrawingPoint[]>([]);
+
+  const drawings = useDrawingStore((s) => s.drawings);
+  const addDrawing = useDrawingStore((s) => s.addDrawing);
 
   const structureVisible = useStructureStore((s) => s.structureVisible);
   const structureVisibility = useStructureStore((s) => s.visibility);
@@ -154,6 +199,11 @@ export default function ChartWorkspace() {
   useEffect(() => {
     useChartAlertStore.getState().syncRules();
   }, []);
+
+  // Sync drawings from backend when symbol/interval change
+  useEffect(() => {
+    useDrawingStore.getState().syncFromBackend(symbol, interval);
+  }, [symbol, interval]);
 
   // Connect/reconnect WebSocket when symbol or interval changes
   useEffect(() => {
@@ -279,6 +329,67 @@ export default function ChartWorkspace() {
     [activeIndicators],
   );
 
+  const mtfRows: MtfRow[] = useMemo(
+    () => activeIndicators.some((i) => i.type === 'MTF') ? [buildMtfRow(interval, candles, 14)] : [],
+    [activeIndicators, interval, candles],
+  );
+
+  useEffect(() => {
+    const series = mainSeriesRef.current;
+    if (!series) return;
+    // markers
+    const markers: { time: Time; position: 'aboveBar' | 'belowBar'; color: string; shape: 'arrowUp' | 'arrowDown'; text: string }[] = [];
+    for (const ind of activeIndicators) {
+      if (ind.type === 'XSIGNAL') for (const m of calcCrossSignals(candles, ind.params.emaLen, ind.params.smaLen)) markers.push({ time: m.time as Time, position: m.position, color: m.color, shape: m.shape, text: m.text });
+      if (ind.type === 'SIGNALS') for (const m of calcSignalMarkers(candles, ind.params.fast, ind.params.slow, ind.params.rsi)) markers.push({ time: m.time as Time, position: m.position, color: m.color, shape: m.shape, text: m.text });
+    }
+    markers.sort((a, b) => Number(a.time) - Number(b.time));
+    if (!markersApiRef.current) markersApiRef.current = createSeriesMarkers(series, []);
+    markersApiRef.current.setMarkers(markers);
+    // volume profile
+    if (vpPrimRef.current) { try { series.detachPrimitive(vpPrimRef.current); } catch { /* ignore */ } vpPrimRef.current = null; }
+    const vpCfg = activeIndicators.find((i) => i.type === 'VPROFILE');
+    if (vpCfg) {
+      const vp = calcVolumeProfile(candles, vpCfg.params.lookback, vpCfg.params.rows);
+      vpPrimRef.current = new VolumeProfilePrimitive(vp);
+      series.attachPrimitive(vpPrimRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candles.length, activeIndicators]);
+
+  // Click-to-draw for trendline / hline / rect tools
+  useEffect(() => {
+    const chart = chartApiRef.current;
+    const series = mainSeriesRef.current;
+    if (!chart || !series) return;
+    if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy') {
+      pendingPtsRef.current = [];
+      return;
+    }
+    const onClick = (param: MouseEventParams<Time>) => {
+      if (!param.point) return;
+      const price = series.coordinateToPrice(param.point.y);
+      if (price == null) return;
+      const time = Number(param.time ?? 0);
+      if (drawingTool === 'alert') { setClickPopover({ kind: 'alert', price, time }); return; }
+      if (drawingTool === 'buy') { setClickPopover({ kind: 'buy', price, time }); return; }
+      if (drawingTool === 'hline') {
+        addDrawing({ id: rid(), symbol, interval, kind: 'hline', points: [{ time, price }], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });
+        return;
+      }
+      // 2-point tools: ignore clicks in chart whitespace (no time → off-screen endpoint at epoch 0)
+      if ((drawingTool === 'trendline' || drawingTool === 'rect') && param.time == null) return;
+      pendingPtsRef.current.push({ time, price });
+      if (pendingPtsRef.current.length === 2) {
+        addDrawing({ id: rid(), symbol, interval, kind: drawingTool, points: [...pendingPtsRef.current], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });
+        pendingPtsRef.current = [];
+      }
+    };
+    chart.subscribeClick(onClick);
+    return () => { chart.unsubscribeClick(onClick); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawingTool, symbol, interval]);
+
   return (
     <div className={styles.workspace}>
       <ChartTopBar
@@ -306,6 +417,12 @@ export default function ChartWorkspace() {
               visibility={structureVisibility}
               visible={structureVisible}
             />
+            <DrawingOverlays
+              chart={chartApiRef.current}
+              mainSeries={mainSeriesRef.current}
+              drawings={drawings.filter((d) => d.symbol === symbol && d.interval === interval)}
+            />
+            {mtfRows.length > 0 && <MtfDashboard rows={mtfRows} />}
             {showStructure && <StructurePanel onClose={() => setShowStructure(false)} />}
           </div>
           {subPanes.map(({ id, series }) => (
@@ -314,7 +431,34 @@ export default function ChartWorkspace() {
         </div>
         <ChartRightPanel crosshairData={crosshair} symbol={symbol} structureSignals={structureSignals} indicatorLabels={indicatorLabels} />
       </div>
-      {showAlerts && <AlertRuleBuilder onClose={() => setShowAlerts(false)} />}
+      {showAlerts && (
+        <AlertRuleBuilder
+          onClose={() => { setShowAlerts(false); setPrefillPrice(null); }}
+          prefill={prefillPrice != null ? { price: prefillPrice } : null}
+        />
+      )}
+      {clickPopover && clickPopover.kind === 'alert' && (
+        <ChartClickPopover
+          kind="alert"
+          price={clickPopover.price}
+          qty={1}
+          onCancel={() => setClickPopover(null)}
+          onConfirm={() => { setPrefillPrice(clickPopover.price); setShowAlerts(true); setClickPopover(null); }}
+        />
+      )}
+      {clickPopover && clickPopover.kind === 'buy' && (
+        <ChartClickPopover
+          kind="buy"
+          price={clickPopover.price}
+          qty={buyQty}
+          onQty={setBuyQty}
+          onCancel={() => setClickPopover(null)}
+          onConfirm={() => {
+            usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, clickPopover.price, buyQty));
+            setClickPopover(null);
+          }}
+        />
+      )}
       <AlertToast />
     </div>
   );

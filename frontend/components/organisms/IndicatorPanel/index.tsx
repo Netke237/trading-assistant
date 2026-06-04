@@ -16,10 +16,23 @@ const AVAILABLE: Array<{
   { type: 'MACD', label: 'MACD',            pane: 'sub',  defaultParams: { fast: 12, slow: 26, signal: 9 }, color: '#c080c0' },
   { type: 'ATR',  label: 'ATR',             pane: 'sub',  defaultParams: { period: 14 },                    color: '#c0a040' },
   { type: 'VOL',  label: 'Volume',          pane: 'sub',  defaultParams: {},                                color: '#4a4a6a' },
+  // ── New chart overlays (params editable in-panel) ──
+  { type: 'MASUITE',   label: 'MA Suite (4)',     pane: 'main', defaultParams: { ma1: 9, ma2: 21, ma3: 50, ma4: 200 }, color: '#4f8ef7' },
+  { type: 'XSIGNAL',   label: 'EMA/SMA Cross',    pane: 'main', defaultParams: { emaLen: 9, smaLen: 20 },              color: '#e0a030' },
+  { type: 'AVWAP',     label: 'Anchored VWAP',    pane: 'main', defaultParams: { anchorMs: 1735689600000 },           color: '#b070e0' },
+  { type: 'KEYLEVELS', label: 'Key Levels',       pane: 'main', defaultParams: { day: 1, week: 1 },                   color: '#808080' },
+  { type: 'HTFLEVELS', label: 'Higher-TF Levels', pane: 'main', defaultParams: { tfMin: 240 },                        color: '#30a060' },
+  { type: 'SIGNALS',   label: 'Signal Markers',   pane: 'main', defaultParams: { fast: 9, slow: 21, rsi: 14 },        color: '#26a69a' },
+  { type: 'MTF',       label: 'MTF Dashboard',    pane: 'main', defaultParams: { rsi: 14 },                           color: '#888888' },
+  { type: 'VPROFILE',  label: 'Volume Profile',   pane: 'main', defaultParams: { lookback: 200, rows: 24 },           color: '#5a6acf' },
 ];
 
 const PARAM_LABELS: Record<string, string> = {
   period: 'Period', fast: 'Fast', slow: 'Slow', signal: 'Signal', stdDev: 'StdDev',
+  ma1: 'MA1', ma2: 'MA2', ma3: 'MA3', ma4: 'MA4',
+  emaLen: 'EMA len', smaLen: 'SMA len', anchorMs: 'Anchor (ms)',
+  day: 'Prev day', week: 'Prev week', tfMin: 'HTF (min)',
+  lookback: 'Lookback', rows: 'Rows',
 };
 
 interface Props { onClose: () => void; }
