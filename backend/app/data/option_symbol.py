@@ -41,6 +41,10 @@ def pipe_to_occ(contract_id: str) -> str:
         )
     symbol, strike_str, year, month, day, right = m.groups()
     strike_millis = int(round(float(strike_str) * 1000))
+    if not (0 < strike_millis <= 99_999_999):
+        raise ValueError(
+            f"Strike {strike_str!r} out of OCC range (must be > 0 and < 100000)."
+        )
     return f"{symbol}{year[2:]}{month}{day}{right}{strike_millis:08d}"
 
 
