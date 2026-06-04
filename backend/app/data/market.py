@@ -182,7 +182,6 @@ def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 55) -> li
                 period=period,
                 interval=interval,
                 progress=False,
-                auto_adjust=True,
             )
         _yf_stderr = _stderr_buf.getvalue().strip()
         if _yf_stderr:
@@ -1051,8 +1050,8 @@ async def fetch_market_cap_async(symbol: str) -> float | None:
         cap = info.get("marketCap")
         if cap:
             result = float(cap)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("market cap fetch failed for %s: %s", symbol, exc)
     _market_cap_cache[symbol] = result
     return result
 
