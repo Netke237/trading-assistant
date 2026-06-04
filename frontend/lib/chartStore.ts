@@ -49,6 +49,20 @@ const DEFAULT_PANE_LAYOUT: PaneLayout = {
   ],
 };
 
+// Default param sets for the new chart overlays. The IndicatorPanel reads these
+// to build toggle entries; ChartWorkspace reads ind.params to render. Every value
+// is a user-overwritable default.
+export const OVERLAY_DEFAULTS: Record<string, { pane: 'main' | 'sub'; params: Record<string, number>; color: string; label: string }> = {
+  MASUITE:   { pane: 'main', label: 'MA Suite (4)',     color: '#4f8ef7', params: { ma1: 9, ma2: 21, ma3: 50, ma4: 200 } },
+  XSIGNAL:   { pane: 'main', label: 'EMA/SMA Cross',    color: '#e0a030', params: { emaLen: 9, smaLen: 20 } },
+  AVWAP:     { pane: 'main', label: 'Anchored VWAP',    color: '#b070e0', params: { anchorMs: 1735689600000 } },
+  KEYLEVELS: { pane: 'main', label: 'Key Levels',       color: '#808080', params: { day: 1, week: 1 } },
+  HTFLEVELS: { pane: 'main', label: 'Higher-TF Levels', color: '#30a060', params: { tfMin: 240 } },
+  SIGNALS:   { pane: 'main', label: 'Signal Markers',   color: '#26a69a', params: { fast: 9, slow: 21, rsi: 14 } },
+  MTF:       { pane: 'main', label: 'MTF Dashboard',    color: '#888888', params: { rsi: 14 } },
+  VPROFILE:  { pane: 'main', label: 'Volume Profile',   color: '#5a6acf', params: { lookback: 200, rows: 24 } },
+};
+
 export const useChartStore = create<ChartState>()(
   persist(
     (set) => ({
