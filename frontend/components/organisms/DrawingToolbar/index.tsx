@@ -18,7 +18,6 @@ const TOOLS: { id: DrawingTool; label: string; icon: string }[] = [
   { id: 'rect',      label: 'Rectangle',       icon: '□' },
   { id: 'alert',     label: 'Set alert',       icon: '🔔' },
   { id: 'buy',       label: 'Paper buy',       icon: '＄' },
-  { id: 'fib',       label: 'Fibonacci',       icon: 'Φ' },
 ];
 
 export default function DrawingToolbar({ active, onChange }: Props) {

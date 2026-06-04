@@ -29,6 +29,10 @@ const AVAILABLE: Array<{
 
 const PARAM_LABELS: Record<string, string> = {
   period: 'Period', fast: 'Fast', slow: 'Slow', signal: 'Signal', stdDev: 'StdDev',
+  ma1: 'MA1', ma2: 'MA2', ma3: 'MA3', ma4: 'MA4',
+  emaLen: 'EMA len', smaLen: 'SMA len', anchorMs: 'Anchor (ms)',
+  day: 'Prev day', week: 'Prev week', tfMin: 'HTF (min)',
+  lookback: 'Lookback', rows: 'Rows',
 };
 
 interface Props { onClose: () => void; }

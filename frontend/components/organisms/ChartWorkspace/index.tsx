@@ -354,7 +354,8 @@ export default function ChartWorkspace() {
       vpPrimRef.current = new VolumeProfilePrimitive(vp);
       series.attachPrimitive(vpPrimRef.current);
     }
-  }, [candles, activeIndicators]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candles.length, activeIndicators]);
 
   // Click-to-draw for trendline / hline / rect tools
   useEffect(() => {
@@ -376,6 +377,8 @@ export default function ChartWorkspace() {
         addDrawing({ id: rid(), symbol, interval, kind: 'hline', points: [{ time, price }], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });
         return;
       }
+      // 2-point tools: ignore clicks in chart whitespace (no time → off-screen endpoint at epoch 0)
+      if ((drawingTool === 'trendline' || drawingTool === 'rect') && param.time == null) return;
       pendingPtsRef.current.push({ time, price });
       if (pendingPtsRef.current.length === 2) {
         addDrawing({ id: rid(), symbol, interval, kind: drawingTool, points: [...pendingPtsRef.current], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });

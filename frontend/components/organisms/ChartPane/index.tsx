@@ -134,6 +134,10 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
             lineWidth: 1,
             priceScaleId: cfg.priceScaleId ?? 'right',
           });
+          // Line is used as main series (line chart mode) — update ref so ChartOverlays still works
+          if (mainSeriesRef && cfg.id.startsWith('candles-')) {
+            mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
+          }
         }
         seriesMap.current.set(cfg.id, s);
       }
