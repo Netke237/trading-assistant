@@ -1,4 +1,5 @@
-"""Unit tests for StockScanRequest schema."""
+"""Unit tests for /stock-scan endpoint — schema and routing logic only (no live API calls)."""
+import pytest
 from app.schemas.stock_scan import StockScanRequest
 
 

@@ -136,10 +136,14 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
     from app.data.universe_presets import expand_universe, PresetUnavailableError
 
     scan_id = new_rec_id()
-    try:
-        symbols = expand_universe(req.universe)
-    except PresetUnavailableError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+
+    if req.symbols:
+        symbols = req.symbols
+    else:
+        try:
+            symbols = expand_universe(req.universe)
+        except PresetUnavailableError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     tasks = [_process_stock(s, req, scan_id) for s in symbols]
     results = await asyncio.gather(*tasks, return_exceptions=True)
