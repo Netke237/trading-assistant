@@ -6,6 +6,8 @@ from typing import Literal, Optional
 
 import httpx
 
+from app.data.option_symbol import to_occ
+
 logger = logging.getLogger(__name__)
 
 _SANDBOX_BASE = "https://sandbox.tradier.com/v1"
@@ -67,7 +69,7 @@ class TradierPaperAdapter:
         if order.order_type == "LMT" and order.limit_price is not None:
             params["price"] = str(order.limit_price)
         if is_option:
-            params["option_symbol"] = order.option_symbol
+            params["option_symbol"] = to_occ(order.option_symbol)
         return params
 
     def place_order(self, order: BrokerOrder) -> OrderResult:

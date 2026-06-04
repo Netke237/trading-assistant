@@ -58,3 +58,30 @@ def test_place_order_failure():
                         order_type="MKT", limit_price=None, tif="DAY")
     with pytest.raises(RuntimeError, match="Tradier paper order failed"):
         adapter.place_order(order)
+
+
+# ── OCC conversion in _build_params ──────────────────────────────────────────
+
+def test_build_params_converts_pipe_to_occ():
+    """Adapter converts Bamendjou pipe id to OCC when building option params."""
+    adapter = _adapter()
+    order = BrokerOrder(
+        symbol="AAPL", action="BUY", quantity=1,
+        order_type="LMT", limit_price=2.50, tif="DAY",
+        option_symbol="AAPL|185|2025-05-16|C",   # pipe format in
+    )
+    params = adapter._build_params(order)
+    assert params["option_symbol"] == "AAPL250516C00185000"  # OCC out
+    assert params["class"] == "option"
+
+
+def test_build_params_passthrough_occ():
+    """Adapter passes already-OCC symbols through unchanged."""
+    adapter = _adapter()
+    order = BrokerOrder(
+        symbol="AAPL", action="BUY", quantity=1,
+        order_type="LMT", limit_price=2.50, tif="DAY",
+        option_symbol="AAPL250516C00185000",   # already OCC
+    )
+    params = adapter._build_params(order)
+    assert params["option_symbol"] == "AAPL250516C00185000"
