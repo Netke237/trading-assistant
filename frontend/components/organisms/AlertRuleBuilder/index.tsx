@@ -10,6 +10,7 @@ import styles from './AlertRuleBuilder.module.css';
 interface Props {
   onClose: () => void;
   editRule?: AlertRule | null;
+  prefill?: { price: number } | null;
 }
 
 const OPERATORS: { value: ConditionOperator; label: string }[] = [
@@ -45,12 +46,13 @@ function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-export default function AlertRuleBuilder({ onClose, editRule }: Props) {
+export default function AlertRuleBuilder({ onClose, editRule, prefill }: Props) {
   const { symbol, interval, activeIndicators } = useChartStore();
   const { addRule, updateRule } = useChartAlertStore();
   const [name, setName] = useState(editRule?.name ?? '');
   const [conditions, setConditions] = useState<Condition[]>(
-    editRule?.group.conditions ?? [emptyPriceCondition()],
+    editRule?.group.conditions
+    ?? (prefill ? [{ kind: 'price', operator: 'crosses_above', value: prefill.price } as PriceCondition] : [emptyPriceCondition()]),
   );
   const [logic, setLogic] = useState<LogicOperator>(editRule?.group.logic ?? 'AND');
   const [cooldown, setCooldown] = useState(editRule?.cooldown_minutes ?? 60);
