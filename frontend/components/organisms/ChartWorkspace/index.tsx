@@ -22,8 +22,11 @@ import DrawingToolbar, { type DrawingTool } from '@/components/organisms/Drawing
 import IndicatorPanel from '@/components/organisms/IndicatorPanel';
 import StructurePanel from '@/components/organisms/StructurePanel';
 import { ChartOverlays } from '@/components/organisms/ChartOverlays';
+import DrawingOverlays from '@/components/organisms/DrawingOverlays';
 import ChartRightPanel, { type DataValues } from '@/components/organisms/ChartRightPanel';
-import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import { useDrawingStore } from '@/lib/drawingStore';
+import type { DrawingPoint } from '@/types/overlays';
+import type { IChartApi, ISeriesApi, MouseEventParams } from 'lightweight-charts';
 import { createSeriesMarkers, type Time, type ISeriesMarkersPluginApi } from 'lightweight-charts';
 import styles from './ChartWorkspace.module.css';
 
@@ -143,6 +146,8 @@ function getIndicatorPoints(candles: Candle[], indicators: IndicatorConfig[]): R
 
 const NO_SIGNALS: StructureSignal[] = [];
 
+const rid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
 export default function ChartWorkspace() {
   const params = useSearchParams();
   const { symbol, interval, chartType, activeIndicators, setSymbol, setInterval } = useChartStore();
@@ -159,6 +164,10 @@ export default function ChartWorkspace() {
   const mainSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const vpPrimRef = useRef<VolumeProfilePrimitive | null>(null);
   const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const pendingPtsRef = useRef<DrawingPoint[]>([]);
+
+  const drawings = useDrawingStore((s) => s.drawings);
+  const addDrawing = useDrawingStore((s) => s.addDrawing);
 
   const structureVisible = useStructureStore((s) => s.structureVisible);
   const structureVisibility = useStructureStore((s) => s.visibility);
@@ -184,6 +193,11 @@ export default function ChartWorkspace() {
   useEffect(() => {
     useChartAlertStore.getState().syncRules();
   }, []);
+
+  // Sync drawings from backend when symbol/interval change
+  useEffect(() => {
+    useDrawingStore.getState().syncFromBackend(symbol, interval);
+  }, [symbol, interval]);
 
   // Connect/reconnect WebSocket when symbol or interval changes
   useEffect(() => {
@@ -336,6 +350,35 @@ export default function ChartWorkspace() {
     }
   }, [candles, activeIndicators]);
 
+  // Click-to-draw for trendline / hline / rect tools
+  useEffect(() => {
+    const chart = chartApiRef.current;
+    const series = mainSeriesRef.current;
+    if (!chart || !series) return;
+    if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect') {
+      pendingPtsRef.current = [];
+      return;
+    }
+    const onClick = (param: MouseEventParams<Time>) => {
+      if (!param.point) return;
+      const price = series.coordinateToPrice(param.point.y);
+      if (price == null) return;
+      const time = Number(param.time ?? 0);
+      if (drawingTool === 'hline') {
+        addDrawing({ id: rid(), symbol, interval, kind: 'hline', points: [{ time, price }], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });
+        return;
+      }
+      pendingPtsRef.current.push({ time, price });
+      if (pendingPtsRef.current.length === 2) {
+        addDrawing({ id: rid(), symbol, interval, kind: drawingTool, points: [...pendingPtsRef.current], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });
+        pendingPtsRef.current = [];
+      }
+    };
+    chart.subscribeClick(onClick);
+    return () => { chart.unsubscribeClick(onClick); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawingTool, symbol, interval]);
+
   return (
     <div className={styles.workspace}>
       <ChartTopBar
@@ -362,6 +405,11 @@ export default function ChartWorkspace() {
               signals={structureSignals}
               visibility={structureVisibility}
               visible={structureVisible}
+            />
+            <DrawingOverlays
+              chart={chartApiRef.current}
+              mainSeries={mainSeriesRef.current}
+              drawings={drawings.filter((d) => d.symbol === symbol && d.interval === interval)}
             />
             {mtfRows.length > 0 && <MtfDashboard rows={mtfRows} />}
             {showStructure && <StructurePanel onClose={() => setShowStructure(false)} />}
