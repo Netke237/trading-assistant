@@ -21,8 +21,13 @@ import { statusForScore } from '@/lib/status';
 import type { Status } from '@/lib/status';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import type { PortfolioPosition, TradeCardData } from '@/types/domain';
+import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
+import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
+import { useAutoTradeStore } from '@/lib/autoTradeStore';
+import { api }               from '@/lib/api';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
+import paperStyles from './page.module.css';
 
 function nowISOLocal(): string {
   const d = new Date();
@@ -97,6 +102,12 @@ export default function Step7Page() {
     });
   }, [cards]);
 
+  const { selectedBroker, setSelectedBroker } = useAutoTradeStore();
+  const [limitPlacing,   setLimitPlacing]     = useState(false);
+  const [marketPlacing,  setMarketPlacing]    = useState(false);
+  const [paperOrderId,   setPaperOrderId]     = useState<string | null>(null);
+  const [orderError,     setOrderError]       = useState<string | null>(null);
+
   const scanResult          = useScanStore((s) => s.scanResult);
   const setSelectedSymbol   = useScanStore((s) => s.setSelectedSymbol);
   const pickedContracts     = useScanStore((s) => s.pickedContracts);
@@ -157,6 +168,52 @@ export default function Step7Page() {
     () => basket.map((s) => cardIndex[s]).filter((c): c is TradeCardData => !!c),
     [basket, cardIndex],
   );
+
+  async function placeLimitPaper() {
+    const card = effectiveCard;
+    if (!card || !selectedBroker) return;
+    setLimitPlacing(true); setOrderError(null);
+    try {
+      const res = await api.postOptionOrder({
+        broker:        selectedBroker,
+        symbol:        card.symbol,
+        option_symbol: card.contract,
+        action:        card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        quantity:      1,
+        order_type:    'LMT',
+        limit_price:   card.entry.limit,
+        tif:           'DAY',
+      });
+      setPaperOrderId(res.order_id);
+    } catch (e) {
+      setOrderError(String(e));
+    } finally {
+      setLimitPlacing(false);
+    }
+  }
+
+  async function placeMarketNow() {
+    const card = effectiveCard;
+    if (!card || !selectedBroker) return;
+    setMarketPlacing(true); setOrderError(null);
+    try {
+      const res = await api.postOptionOrder({
+        broker:        selectedBroker,
+        symbol:        card.symbol,
+        option_symbol: card.contract,
+        action:        card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        quantity:      1,
+        order_type:    'MKT',
+        limit_price:   null,
+        tif:           'DAY',
+      });
+      setPaperOrderId(res.order_id);
+    } catch (e) {
+      setOrderError(String(e));
+    } finally {
+      setMarketPlacing(false);
+    }
+  }
 
   const idx = symbols.indexOf(active);
 
@@ -232,6 +289,38 @@ export default function Step7Page() {
             sendDisabled={basketEmpty}
           />
         </>
+      )}
+
+      {/* Paper broker execution */}
+      {effectiveCard && (
+        <div className={paperStyles.paperSection}>
+          <BrokerPicker selected={selectedBroker} onChange={setSelectedBroker} />
+          {selectedBroker && (
+            <>
+              <div className={paperStyles.paperButtons}>
+                <button
+                  type="button"
+                  className={paperStyles.paperBtnLimit}
+                  onClick={placeLimitPaper}
+                  disabled={limitPlacing || marketPlacing}
+                >
+                  {limitPlacing ? 'Placing…' : `Place Limit @ $${effectiveCard.entry.limit}`}
+                </button>
+                <button
+                  type="button"
+                  className={paperStyles.paperBtnMarket}
+                  onClick={placeMarketNow}
+                  disabled={limitPlacing || marketPlacing}
+                >
+                  {marketPlacing ? 'Placing…' : 'Right Now — Market'}
+                </button>
+              </div>
+              {paperOrderId && <Text size={12} tone="pass">Order placed — ID: {paperOrderId}</Text>}
+              {orderError   && <Text size={12} tone="reject">{orderError}</Text>}
+              <AutoTradeArm card={effectiveCard} broker={selectedBroker} />
+            </>
+          )}
+        </div>
       )}
 
       {dialogOpen && (
