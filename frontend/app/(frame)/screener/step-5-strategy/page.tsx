@@ -45,20 +45,27 @@ const STRATEGIES = [
 export default function Step5StrategyPage() {
   const router = useRouter();
   const context = useScanStore((s) => s.context);
+  const scanResult = useScanStore((s) => s.scanResult);
   const activeStrategy = useScanStore((s) => s.activeStrategy);
   const setActiveStrategy = useScanStore((s) => s.setActiveStrategy);
   const setStockScanResult = useScanStore((s) => s.setStockScanResult);
   const [loadingStrategy, setLoadingStrategy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [prefetchStatus, setPrefetchStatus] = useState<
+    'idle' | 'running' | 'completed' | 'error' | null
+  >(null);
+  const [prefetchProgress, setPrefetchProgress] = useState<{ done: number; total: number } | null>(null);
 
   async function runScan(stratKey: string) {
     setActiveStrategy(stratKey);
-    setStockScanResult(null);   // clear any prior result so Step 6 can't show stale data
+    setStockScanResult(null);
     setLoadingStrategy(stratKey);
     setError(null);
     try {
+      const candidateSymbols = scanResult?.candidates.map((c) => c.symbol);
       const result = await api.postStockScan({
         universe: context?.universe ? [context.universe] : ['SP500'],
+        symbols: candidateSymbols?.length ? candidateSymbols : undefined,
         direction: context?.direction ?? 'Bullish',
         horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
         strategy: stratKey,
@@ -74,12 +81,43 @@ export default function Step5StrategyPage() {
     }
   }
 
+  async function startPrefetch() {
+    try {
+      const universe = context?.universe ? [context.universe] : ['SP500'];
+      await api.startHistoryPrefetch({ universe });
+      setPrefetchStatus('running');
+      const poll = setInterval(async () => {
+        try {
+          const s = await api.getHistoryPrefetchStatus();
+          setPrefetchProgress({ done: s.done, total: s.total });
+          if (s.status === 'completed' || s.status === 'error') {
+            setPrefetchStatus(s.status);
+            clearInterval(poll);
+          }
+        } catch {
+          clearInterval(poll);
+        }
+      }, 5_000);
+    } catch {
+      setPrefetchStatus('error');
+    }
+  }
+
   return (
     <div className={styles.main}>
       <div className={styles.header}>
         <Text size={11} tone="dim" weight={500}>STEP 5 OF 7</Text>
         <Title as="h1" size={24}>Strategy</Title>
         <Text size={13} tone="secondary">Pick an entry/exit rule — your historical backtest runs automatically.</Text>
+        {scanResult?.candidates.length ? (
+          <Text size={12} tone="secondary">
+            Scanning {scanResult.candidates.length} candidates from Stock Ranking
+          </Text>
+        ) : (
+          <Text size={12} tone="caution">
+            No Stock Ranking results — scanning full universe
+          </Text>
+        )}
       </div>
 
       {error && <Text size={12} tone="reject">{error}</Text>}
@@ -106,6 +144,27 @@ export default function Step5StrategyPage() {
             )}
           </button>
         ))}
+      </div>
+
+      <div className={styles.prefetchRow}>
+        <Text size={12} tone="secondary">
+          Historical data:{' '}
+          {prefetchStatus === 'running' && prefetchProgress
+            ? `warming up ${prefetchProgress.done}/${prefetchProgress.total}`
+            : prefetchStatus === 'completed'
+            ? 'ready'
+            : prefetchStatus === 'error'
+            ? 'error — retry below'
+            : 'not pre-warmed'}
+        </Text>
+        {prefetchStatus !== 'running' && (
+          <button
+            className={styles.prefetchBtn}
+            onClick={startPrefetch}
+          >
+            {prefetchStatus === 'completed' ? 'Re-warm' : 'Pre-warm history'}
+          </button>
+        )}
       </div>
     </div>
   );

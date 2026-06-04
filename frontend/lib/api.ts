@@ -91,7 +91,8 @@ export const api = {
 
   postStockScan: (req: {
     universe: string[]; direction: string; horizon: string;
-    strategy: string; account_size?: number; risk_pct?: number;
+    strategy: string; symbols?: string[];
+    account_size?: number; risk_pct?: number;
     risk_fixed_usd?: number; bt_min_trades?: number; bt_min_win_rate?: number;
     min_price?: number; max_price?: number;
   }) => post<StockScanResult>('/api/stock-scan', req),
