@@ -16,16 +16,17 @@ import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
-import { getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention } from '@/lib/api';
+import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
-type Section = 'broker' | 'theme' | 'scan' | 'risk' | 'regime' | 'notifications';
+type Section = 'broker' | 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications';
 
 const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'broker',  label: 'Broker',     desc: 'Credentials + paper trade toggle' },
   { key: 'theme',   label: 'Appearance', desc: 'Theme + density' },
   { key: 'scan',    label: 'Scan',       desc: 'Continuous scan + cadence' },
+  { key: 'brokers', label: 'Brokers',   desc: 'Paper trading accounts + live IBKR preparation' },
   { key: 'risk',    label: 'Risk',       desc: 'Exposure limits and portfolio value' },
   { key: 'regime',  label: 'Regime',     desc: 'Daily OMM parameters' },
   { key: 'notifications', label: 'Notifications', desc: 'Gmail + Telegram alert delivery' },
@@ -61,6 +62,7 @@ export default function SettingsPage() {
           {active === 'broker'  && <BrokerForm  />}
           {active === 'theme'   && <ThemeForm   />}
           {active === 'scan'    && <ScanForm    />}
+          {active === 'brokers' && <BrokersForm />}
           {active === 'risk'    && <RiskForm    />}
           {active === 'regime'  && <RegimeForm markov={markov} setMarkov={setMarkov} />}
           {active === 'notifications' && <NotificationForm />}
@@ -246,6 +248,7 @@ function ScanForm() {
     shortlistMaxCandidates, setShortlistMaxCandidates,
     maxContractsPerChain, setMaxContractsPerChain,
     maxContractPrice, setMaxContractPrice,
+    confidenceGate, setConfidenceGate,
   } = useSettingsStore();
   const [continuous, setContinuous] = useState(false);
 
@@ -254,11 +257,17 @@ function ScanForm() {
   const [candidatesText, setCandidatesText] = useState(String(shortlistMaxCandidates));
   const [chainsText,     setChainsText]     = useState(String(maxContractsPerChain));
   const [priceText,      setPriceText]      = useState(String(maxContractPrice));
+  const [cautionText,    setCautionText]    = useState(String(confidenceGate.cautionBelow));
+  const [rejectText,     setRejectText]     = useState(String(confidenceGate.rejectBelow));
+  const [atrText,        setAtrText]        = useState(String(confidenceGate.atrMult));
 
   // Sync text buffers when the store resets
   useEffect(() => { setCandidatesText(String(shortlistMaxCandidates)); }, [shortlistMaxCandidates]);
   useEffect(() => { setChainsText(String(maxContractsPerChain));        }, [maxContractsPerChain]);
   useEffect(() => { setPriceText(String(maxContractPrice));             }, [maxContractPrice]);
+  useEffect(() => { setCautionText(String(confidenceGate.cautionBelow)); }, [confidenceGate.cautionBelow]);
+  useEffect(() => { setRejectText(String(confidenceGate.rejectBelow));   }, [confidenceGate.rejectBelow]);
+  useEffect(() => { setAtrText(String(confidenceGate.atrMult));          }, [confidenceGate.atrMult]);
 
   return (
     <>
@@ -341,6 +350,76 @@ function ScanForm() {
             const clamped = isNaN(val) ? 500 : Math.max(0.01, Math.min(10000, val));
             setPriceText(String(clamped));
             setMaxContractPrice(clamped);
+          }}
+        />
+      </Row>
+
+      <SectionIntro
+        title="Confidence gate"
+        blurb="Confidence is how often a candidate's entry signal worked in the past (0–100%). The gate can only lower a verdict, never raise it — it protects you from setups with a weak track record."
+      />
+      <Row label="Enable gate" hint="When off, confidence is shown but never changes the verdict" defaultValue="On">
+        <Toggle
+          defaultOn={confidenceGate.enabled}
+          onChange={(on) => setConfidenceGate({ ...confidenceGate, enabled: on })}
+        />
+      </Row>
+      <Row
+        label="Caution below (%)"
+        hint="Confidence under this caps the verdict at CAUTION (0–100)"
+        defaultValue="50"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.input}
+          disabled={!confidenceGate.enabled}
+          value={cautionText}
+          onChange={(e) => setCautionText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(cautionText, 10);
+            const clamped = isNaN(val) ? 50 : Math.max(0, Math.min(100, val));
+            setCautionText(String(clamped));
+            setConfidenceGate({ ...confidenceGate, cautionBelow: clamped });
+          }}
+        />
+      </Row>
+      <Row
+        label="Reject below (%)"
+        hint="Confidence under this caps the verdict at REJECT (0–100)"
+        defaultValue="35"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.input}
+          disabled={!confidenceGate.enabled}
+          value={rejectText}
+          onChange={(e) => setRejectText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(rejectText, 10);
+            const clamped = isNaN(val) ? 35 : Math.max(0, Math.min(100, val));
+            setRejectText(String(clamped));
+            setConfidenceGate({ ...confidenceGate, rejectBelow: clamped });
+          }}
+        />
+      </Row>
+      <Row
+        label="ATR multiple"
+        hint="Backtest win/loss barrier = this × ATR. Higher = bigger move required (0.5–5)"
+        defaultValue="1.5"
+      >
+        <input
+          type="text"
+          inputMode="decimal"
+          className={styles.input}
+          value={atrText}
+          onChange={(e) => setAtrText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(atrText);
+            const clamped = isNaN(val) ? 1.5 : Math.max(0.5, Math.min(5, val));
+            setAtrText(String(clamped));
+            setConfidenceGate({ ...confidenceGate, atrMult: clamped });
           }}
         />
       </Row>
@@ -825,6 +904,119 @@ function NotificationForm() {
         </button>
         {saveResult ? <Text size={12} tone="secondary">{saveResult}</Text> : null}
       </div>
+    </>
+  );
+}
+
+/* ---------- Brokers ---------- */
+
+function BrokersForm() {
+  const {
+    ibkrPaper, setIbkrPaper,
+    tradierPaper, setTradierPaper,
+    ibkrLive,
+  } = useSettingsStore();
+
+  const [ibkrUrl,     setIbkrUrl]     = useState(ibkrPaper.baseUrl);
+  const [ibkrAcct,    setIbkrAcct]    = useState(ibkrPaper.accountId);
+  const [tradierTok,  setTradierTok]  = useState(tradierPaper.token);
+  const [tradierAcct, setTradierAcct] = useState(tradierPaper.accountId);
+  const [saving, setSaving] = useState<string | null>(null);
+
+  // Sync when store resets
+  useEffect(() => { setIbkrUrl(ibkrPaper.baseUrl); },    [ibkrPaper.baseUrl]);
+  useEffect(() => { setIbkrAcct(ibkrPaper.accountId); }, [ibkrPaper.accountId]);
+  useEffect(() => { setTradierTok(tradierPaper.token); },     [tradierPaper.token]);
+  useEffect(() => { setTradierAcct(tradierPaper.accountId); }, [tradierPaper.accountId]);
+
+  async function saveIbkrPaper() {
+    setSaving('ibkr');
+    setIbkrPaper({ baseUrl: ibkrUrl, accountId: ibkrAcct });
+    await api.postCredentials('ibkr_paper', { base_url: ibkrUrl, account_id: ibkrAcct });
+    setSaving(null);
+  }
+
+  async function saveTradierPaper() {
+    setSaving('tradier');
+    setTradierPaper({ token: tradierTok, accountId: tradierAcct });
+    await api.postCredentials('tradier_paper', { token: tradierTok, account_id: tradierAcct });
+    setSaving(null);
+  }
+
+  return (
+    <>
+      <SectionIntro
+        title="IBKR Paper account"
+        blurb="Connect to your IBKR paper gateway (runs locally on a separate port from the live gateway). Typical URL: https://localhost:7499/v1/api"
+      />
+      <Row label="Gateway URL" hint="Paper gateway port is usually 7499" defaultValue="https://localhost:7499/v1/api">
+        <input
+          className={styles.input}
+          value={ibkrUrl}
+          onChange={(e) => setIbkrUrl(e.target.value)}
+        />
+      </Row>
+      <Row label="Account ID" hint="Your IBKR paper account ID (DU...)" defaultValue="—">
+        <input
+          className={styles.input}
+          value={ibkrAcct}
+          onChange={(e) => setIbkrAcct(e.target.value)}
+        />
+      </Row>
+      <div className={styles.row}>
+        <div className={styles.rowLabel} />
+        <div className={styles.rowControl}>
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={saveIbkrPaper}
+            disabled={saving === 'ibkr'}
+          >
+            {saving === 'ibkr' ? 'Saving…' : 'Save IBKR Paper'}
+          </button>
+        </div>
+      </div>
+
+      <SectionIntro
+        title="Tradier Paper (Sandbox)"
+        blurb="Tradier sandbox uses a separate token from your live account. Get one at developer.tradier.com."
+      />
+      <Row label="Sandbox token" hint="Different from your live Tradier token" defaultValue="—">
+        <input
+          className={styles.input}
+          type="password"
+          value={tradierTok}
+          onChange={(e) => setTradierTok(e.target.value)}
+        />
+      </Row>
+      <Row label="Account ID" hint="Your Tradier sandbox account ID (VA...)" defaultValue="—">
+        <input
+          className={styles.input}
+          value={tradierAcct}
+          onChange={(e) => setTradierAcct(e.target.value)}
+        />
+      </Row>
+      <div className={styles.row}>
+        <div className={styles.rowLabel} />
+        <div className={styles.rowControl}>
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={saveTradierPaper}
+            disabled={saving === 'tradier'}
+          >
+            {saving === 'tradier' ? 'Saving…' : 'Save Tradier Paper'}
+          </button>
+        </div>
+      </div>
+
+      <SectionIntro
+        title="IBKR Live (Locked)"
+        blurb={ibkrLive.note}
+      />
+      <Row label="Live trading" hint="Requires explicit activation — not yet enabled" defaultValue="Off">
+        <button className={styles.btn} disabled title="Locked until manually activated">
+          🔒 Activate live IBKR
+        </button>
+      </Row>
     </>
   );
 }

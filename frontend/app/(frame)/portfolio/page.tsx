@@ -242,7 +242,9 @@ export default function PortfolioPage() {
                   <Data size={13} weight={500}>{p.symbol}</Data>
                   <span className={styles.contractCell}>
                     <Text size={12} tone="secondary">{p.contract}</Text>
-                    {p.source === 'manual' && <span className={styles.srcManual}>MANUAL</span>}
+                    {p.source === 'manual'     && <span className={styles.srcManual}>MANUAL</span>}
+                    {p.source === 'paper'      && <span className={styles.srcPaper} title={p.sourceLabel ?? 'Paper broker execution'}>PAPER</span>}
+                    {p.source === 'auto-trade' && <span className={styles.srcAuto}  title={p.sourceLabel ?? 'Auto-trade execution'}>AUTO</span>}
                   </span>
                   <span className={p.direction === 'Bullish' ? styles.dirBull : styles.dirBear}>
                     {p.direction === 'Bullish' ? 'Bull' : 'Bear'}

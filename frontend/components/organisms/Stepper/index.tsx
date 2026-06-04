@@ -10,6 +10,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { StepIndicator } from '@/components/molecules/StepIndicator';
 import type { StepState } from '@/components/molecules/StepIndicator';
 import { Text } from '@/components/primitives';
+import { useScanStore } from '@/lib/scanStore';
 import styles from './Stepper.module.css';
 
 export interface ScreenerStep {
@@ -18,7 +19,7 @@ export interface ScreenerStep {
   label: string;           // e.g. "Stock Ranking"
 }
 
-export const SCREENER_STEPS: ScreenerStep[] = [
+export const SCREENER_STEPS_OPTIONS: ScreenerStep[] = [
   { index: 1, slug: 'step-1-regime',      label: 'Market Regime'        },
   { index: 2, slug: 'step-2-universe',    label: 'Universe'             },
   { index: 3, slug: 'step-3-direction',   label: 'Direction + Horizon'  },
@@ -27,6 +28,23 @@ export const SCREENER_STEPS: ScreenerStep[] = [
   { index: 6, slug: 'step-6-contracts',   label: 'Contracts'            },
   { index: 7, slug: 'step-7-trade-card',  label: 'Trade Card'           },
 ];
+
+export const SCREENER_STEPS_STOCKS: ScreenerStep[] = [
+  { index: 1, slug: 'step-1-regime',        label: 'Market Regime'      },
+  { index: 2, slug: 'step-2-universe',      label: 'Universe'           },
+  { index: 3, slug: 'step-3-direction',     label: 'Direction + Horizon'},
+  { index: 4, slug: 'step-4-ranking',       label: 'Stock Ranking'      },
+  { index: 5, slug: 'step-5-strategy',      label: 'Strategy'           },
+  { index: 6, slug: 'step-6-backtest',      label: 'Backtest Gate'      },
+  { index: 7, slug: 'step-7-position-card', label: 'Position Card'      },
+];
+
+// Backward-compat export (existing imports keep working):
+export const SCREENER_STEPS = SCREENER_STEPS_OPTIONS;
+
+export function getSteps(mode: 'options' | 'stocks'): ScreenerStep[] {
+  return mode === 'stocks' ? SCREENER_STEPS_STOCKS : SCREENER_STEPS_OPTIONS;
+}
 
 export function currentStepFromPath(pathname: string | null): number {
   if (!pathname) return 1;
@@ -38,10 +56,12 @@ export function Stepper() {
   const pathname = usePathname();
   const router   = useRouter();
   const current  = currentStepFromPath(pathname);
+  const mode     = useScanStore((s) => s.screenerMode);
+  const steps    = getSteps(mode);
 
   return (
     <div className={styles.wrap}>
-      {SCREENER_STEPS.map((s) => {
+      {steps.map((s) => {
         const state: StepState =
           s.index < current ? 'completed' :
           s.index === current ? 'current' :

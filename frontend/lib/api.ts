@@ -1,5 +1,6 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, OptionContract, NewsItem } from '@/types/domain';
+import type { StockScanResult } from '@/types/stockDomain';
 import type { Candle } from '@/types/chart';
 import type { AlertRule, AlertHistory } from '@/types/alerts';
 
@@ -77,13 +78,50 @@ export const api = {
     universe: string[],
     direction: string,
     horizon: string,
-    filters?: { min_price?: number; max_price?: number; min_cap_usd?: number; max_cap_usd?: number },
+    filters?: {
+      min_price?: number; max_price?: number; min_cap_usd?: number; max_cap_usd?: number;
+      confidence_caution_below?: number; confidence_reject_below?: number;
+    },
     overrides?: Record<string, number | boolean | string>,
   ) =>
     post<{ scan_id: string; timestamp: string; candidates: TradeCardData[]; rejected: { symbol: string; reason: string }[] }>(
       '/api/scan',
       { universe, direction, horizon, overrides: overrides ?? {}, ...filters },
     ),
+
+  postStockScan: (req: {
+    universe: string[]; direction: string; horizon: string;
+    strategy: string; account_size?: number; risk_pct?: number;
+    risk_fixed_usd?: number; bt_min_trades?: number; bt_min_win_rate?: number;
+    min_price?: number; max_price?: number;
+  }) => post<StockScanResult>('/api/stock-scan', req),
+
+  postStockOrder: (req: {
+    broker: string; symbol: string; action: 'BUY' | 'SELL';
+    quantity: number; order_type: 'MKT' | 'LMT';
+    limit_price: number | null; tif: 'DAY' | 'GTC';
+  }) => post<{ order_id: string; status: string; broker: string }>('/broker/stock-order', req),
+
+  postOptionOrder: (req: {
+    broker: string; symbol: string; option_symbol: string;
+    action: 'BUY' | 'SELL'; quantity: number;
+    order_type: 'MKT' | 'LMT'; limit_price: number | null;
+    tif: 'DAY' | 'GTC'; conid?: number;
+  }) => post<{ order_id: string; status: string; broker: string }>('/broker/option-order', req),
+
+  armAutoTrade: (req: {
+    broker: string; symbol: string; option_symbol: string;
+    action: 'BUY' | 'SELL'; quantity: number;
+    order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;
+  }) => post<{ armed: boolean }>('/auto-trade/arm', req),
+
+  disarmAutoTrade: () => del('/auto-trade/arm'),
+
+  fireAutoTrade: () =>
+    post<{ order_id: string; status: string }>('/auto-trade/fire', {}),
+
+  getAutoTradeStatus: () =>
+    get<{ armed: boolean; symbol: string | null; option: string | null; last_order: unknown }>('/auto-trade/status'),
 
   // Phase 4: Chart alert CRUD
   createAlertRule: (body: {
@@ -115,6 +153,33 @@ export const api = {
 
   testNotification: (channel: 'gmail' | 'telegram') =>
     post<{ status: string }>('/alerts/notifications/test', { channel }),
+
+  postCredentials: (key: string, values: Record<string, string>) =>
+    post<{ ok: boolean; key: string }>('/settings/credentials', { key, values }),
+
+  getBrokerStatus: () =>
+    get<{
+      ibkr_paper:    { configured: boolean };
+      tradier_paper: { configured: boolean };
+      ibkr_live:     { configured: boolean; enabled: boolean; note: string };
+    }>('/broker/status'),
+
+  startHistoryPrefetch: (req: {
+    universe: string[];
+    years?: number;
+    delay_secs?: number;
+  }) => post<{ message: string; total: number }>('/api/historical-data/prefetch', req),
+
+  getHistoryPrefetchStatus: () =>
+    get<{
+      status: 'idle' | 'running' | 'completed' | 'error';
+      total: number;
+      done: number;
+      failed: number;
+      current_symbol: string | null;
+      elapsed_secs: number;
+      started_at: string | null;
+    }>('/api/historical-data/prefetch/status'),
 };
 
 /* ---------- Risk settings ---------- */

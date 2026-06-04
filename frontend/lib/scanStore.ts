@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Status } from './status';
 import type { Direction, OptionContract, TradeCardData } from '@/types/domain';
+import type { StockScanResult } from '@/types/stockDomain';
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
@@ -58,6 +59,12 @@ interface ScanStoreState {
   setPickedContract:    (symbol: string, contractId: string) => void;
   clearPickedContracts: () => void;
   setContractsBySymbol: (map: Record<string, OptionContract[]>) => void;
+  screenerMode:        'options' | 'stocks';
+  setScreenerMode:     (m: 'options' | 'stocks') => void;
+  stockScanResult:     StockScanResult | null;
+  setStockScanResult:  (r: StockScanResult | null) => void;
+  activeStrategy:      string | null;
+  setActiveStrategy:   (s: string | null) => void;
 }
 
 export const useScanStore = create<ScanStoreState>()(
@@ -93,6 +100,12 @@ export const useScanStore = create<ScanStoreState>()(
       setPickedContract:    (symbol, contractId) => set(s => ({ pickedContracts: { ...s.pickedContracts, [symbol]: contractId } })),
       clearPickedContracts: () => set({ pickedContracts: {} }),
       setContractsBySymbol: (map) => set({ contractsBySymbol: map }),
+      screenerMode:        'options',
+      stockScanResult:     null,
+      activeStrategy:      null,
+      setScreenerMode:     (m) => set({ screenerMode: m }),
+      setStockScanResult:  (r) => set({ stockScanResult: r }),
+      setActiveStrategy:   (s) => set({ activeStrategy: s }),
     }),
     {
       name: 'bamendjou-scan-store',
@@ -101,11 +114,12 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 3,
+      version: 4,
       migrate: (persistedState, version) => {
         const prev = (persistedState ?? {}) as any;
         if (version < 2) return { ...prev, pickedContracts: {} };
         if (version < 3) return { ...prev, scanDurationMs: null };
+        if (version < 4) return { ...prev, screenerMode: 'options', stockScanResult: null, activeStrategy: null };
         return prev;
       },
       partialize: (state) => ({
@@ -115,15 +129,24 @@ export const useScanStore = create<ScanStoreState>()(
         scanAt:          state.scanAt,
         scanDurationMs:  state.scanDurationMs,
         pickedContracts: state.pickedContracts,
+        // Persist terminal states so the COMPLETED/FAILED pill survives a restart.
+        // SCANNING / IDLE are never persisted — they'd be stale after reload.
+        scanState:       state.scanState,
+        screenerMode:    state.screenerMode,
+        activeStrategy:  state.activeStrategy,
+        stockScanResult: state.stockScanResult,
       }),
-      merge: (persisted, current) => ({
-        ...current,
-        ...(persisted as Partial<ScanStoreState>),
-        // scanState always resets to IDLE on reload — a scan can't be "in progress"
-        // across sessions, but scanAt + scanDurationMs survive so the TopBar can
-        // still show when the last scan ran and how long it took.
-        scanState: 'IDLE',
-      }),
+      merge: (persisted, current) => {
+        const p = persisted as Partial<ScanStoreState>;
+        const lastState = p.scanState;
+        // Restore only terminal states; an in-progress state from before a crash
+        // or server restart is meaningless — reset to IDLE.
+        const restoredState: ScanState =
+          lastState === 'COMPLETED' || lastState === 'PARTIAL' || lastState === 'FAILED'
+            ? lastState
+            : 'IDLE';
+        return { ...current, ...p, scanState: restoredState };
+      },
     },
   ),
 );

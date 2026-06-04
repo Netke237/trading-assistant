@@ -5,13 +5,14 @@ import { Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { Pagination } from '@/components/molecules/Pagination';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { statusForScore } from '@/lib/status';
 import type { TradeCardData } from '@/types/domain';
 import styles from './ValidationTable.module.css';
 
 const PAGE_SIZE = 10;
 
-const COLUMNS = '1fr 56px 48px 48px 48px 48px 48px 48px 64px';
+const COLUMNS = '1fr 56px 48px 48px 48px 48px 48px 48px 56px 64px';
 
 interface ValidationTableProps {
   candidates: TradeCardData[];
@@ -49,6 +50,7 @@ export function ValidationTable({ candidates }: ValidationTableProps) {
         <Text size={11} tone="dim">EVENT</Text>
         <Text size={11} tone="dim">VOL</Text>
         <Text size={11} tone="dim">SCORE</Text>
+        <Text size={11} tone="dim">CONF</Text>
         <Text size={11} tone="dim">STATUS</Text>
       </div>
 
@@ -83,6 +85,7 @@ export function ValidationTable({ candidates }: ValidationTableProps) {
                 {c.stockBreakdown.volatility}
               </Data>
               <Data size={13} weight={500}>{c.stockScore}</Data>
+              <ConfidenceBadge confidence={c.confidence} title={c.confidenceText ?? undefined} />
               <StatusBadge status={c.finalStatus} />
             </TableRow>
           );

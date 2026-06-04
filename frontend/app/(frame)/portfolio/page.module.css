@@ -86,6 +86,22 @@
   letter-spacing: 0.08em;
 }
 
+.srcPaper {
+  display: inline-flex; align-items: center;
+  padding: 1px 5px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--pass) 15%, var(--bg-surface));
+  color: var(--pass); border: 1px solid var(--pass);
+  font-family: var(--font-dm); font-size: 9px; font-weight: 600; letter-spacing: 0.08em;
+}
+
+.srcAuto {
+  display: inline-flex; align-items: center;
+  padding: 1px 5px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--text-secondary) 12%, var(--bg-surface));
+  color: var(--text-secondary); border: 1px solid var(--border-subtle);
+  font-family: var(--font-dm); font-size: 9px; font-weight: 600; letter-spacing: 0.08em;
+}
+
 .footer {
   display: flex;
   justify-content: flex-end;

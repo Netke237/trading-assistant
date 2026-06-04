@@ -1,2 +1,3 @@
 alert_dedup.json
 sent_messages.log
+config/local_credentials.yaml

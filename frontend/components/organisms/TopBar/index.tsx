@@ -26,18 +26,18 @@ function startOfDay(d: Date): number {
 }
 
 function labelWithDate(iso: string): string {
-  const hhmm = hhmmFrom(iso);
   const scan = new Date(iso);
   const now  = new Date();
   const diffDays = Math.round((startOfDay(now) - startOfDay(scan)) / 86_400_000);
-  if (diffDays === 0) return hhmm;
-  if (diffDays === 1) return `Yesterday ${hhmm}`;
-  const sameYear = scan.getFullYear() === now.getFullYear();
+  const timeStr = scan.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   const mon = scan.toLocaleString(undefined, { month: 'short' });
   const day = scan.getDate();
+  if (diffDays === 1) return `Yesterday · ${timeStr}`;
+  const sameYear = scan.getFullYear() === now.getFullYear();
+  // Always show date (even today) so the label survives server restarts visually.
   return sameYear
-    ? `${mon} ${day} ${hhmm}`
-    : `${mon} ${day} ${scan.getFullYear()} ${hhmm}`;
+    ? `${mon} ${day} · ${timeStr}`
+    : `${mon} ${day} ${scan.getFullYear()} · ${timeStr}`;
 }
 
 function formatDuration(ms: number): string {

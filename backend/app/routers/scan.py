@@ -45,6 +45,8 @@ from app.data.market import (
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
 from app.data.augment import _augment
 from app.scoring.stock_scorer import score_stock, StockScoreCard
+from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
+from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.entry_quality import assess_entry
 from app.scoring.reward_risk import estimate_rr, estimate_targets
@@ -93,6 +95,18 @@ def _rule_score(card: StockScoreCard, name: str) -> int:
 
 def _final_status(s1: str, s2: str, s3: str) -> str:
     return min([s1, s2, s3], key=lambda s: _ORDER.get(s, 1))
+
+
+def _resolve_gate(req: ScanRequest) -> dict:
+    """Confidence gate = YAML default, overridden by any per-scan request values."""
+    gate = dict(load_gate_cfg())
+    cb = getattr(req, "confidence_caution_below", None)
+    rb = getattr(req, "confidence_reject_below", None)
+    if cb is not None:
+        gate["cautionBelow"] = cb
+    if rb is not None:
+        gate["rejectBelow"] = rb
+    return gate
 
 
 def _compute_deltas(current: ScanResult, previous: ScanResult | None) -> list[ScanDelta]:
@@ -171,6 +185,8 @@ async def _process_symbol(
     min_cap_usd: float | None = None,
     max_cap_usd: float | None = None,
     overrides: dict | None = None,
+    gate: dict | None = None,
+    atr_mult: float | None = None,
 ) -> TradeCardData | RejectedCandidate:
     """Process one symbol: fetch data, score stock, validate contracts, build trade card.
 
@@ -269,12 +285,31 @@ async def _process_symbol(
                     c["ivRank"] = int(iv_rank)
                     c["implied_volatility"] = round(iv_bs, 4)
 
+    # ── Signal confidence (cached; computed in a thread to avoid blocking loop) ─
+    _conf: int | None = None
+    _conf_n: int = 0
+    if gate is not None:
+        _atr_for_key = atr_mult if atr_mult is not None else 1.5
+        _ck = confidence_cache.cache_key(symbol, direction, horizon, _atr_for_key)
+        _cached = confidence_cache.get_cached(_ck)
+        if _cached is None:
+            _res = await asyncio.to_thread(
+                compute_confidence, candles, direction=direction, horizon=horizon, atr_mult=atr_mult
+            )
+            _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
+            confidence_cache.set_cached(_ck, _cached)
+        _conf = _cached["confidence"]
+        _conf_n = _cached["sample_size"]
+
     card: StockScoreCard = score_stock(
         symbol, direction, horizon, candles,
         earnings_date=earnings_date,
         dividend_date=dividend_date,
         iv_rank=iv_rank,
         overrides=overrides,
+        confidence=_conf,
+        confidence_gate=gate,
+        confidence_sample_size=_conf_n,
     )
     if card.status == "REJECT":
         bd = {r.name: r.score for r in card.rules}
@@ -430,6 +465,8 @@ async def _process_symbol(
         rrRatio=rr.rr_ratio,
         rrModel=rr.model_used,
         finalStatus=_final_status(card.status, contract_card.status, entry.quality_status),
+        confidence=(_conf_rule.detail.get("confidence") if (_conf_rule := next((r for r in card.rules if r.name == "confidence"), None)) else None),
+        confidenceText=(_conf_rule.detail.get("interpretation") if _conf_rule else None),
     )
 
     alts: list[AlternativeContract] = []
@@ -534,6 +571,9 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
     except PresetUnavailableError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    gate = _resolve_gate(req)
+    atr_mult = getattr(req, "confidence_atr_mult", None)
+
     candidates: list[TradeCardData] = []
     rejected: list[RejectedCandidate] = []
     has_exception = False
@@ -555,6 +595,8 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 min_cap_usd=req.min_cap_usd,
                 max_cap_usd=req.max_cap_usd,
                 overrides=dict(req.overrides) if req.overrides else None,
+                gate=gate,
+                atr_mult=atr_mult,
             )
             for symbol in symbols
         ]
@@ -604,6 +646,11 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         original_count=original_count,
     )
     _last_result = result
+    # Trigger #2: fire armed auto-trade if this scan produced any candidates.
+    # Run off the event loop — the broker call inside is synchronous network I/O.
+    if result.candidates:
+        from app.services.auto_trader import auto_trader as _auto_trader
+        await asyncio.to_thread(_auto_trader.maybe_fire_on_scan)
     await _upsert_session(db, req=_last_request, result=result, status="complete")
     return result
 

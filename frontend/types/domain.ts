@@ -74,6 +74,8 @@ export interface WatchlistRow {
   breakdown:    ScoreBreakdown;
   nextEventDays?: number | null;   // days until earnings / dividend / etc; null = no event known
   nextEventLabel?: string | null;
+  confidence?: number | null;      // signal confidence 0–100; null = thin history
+  confidenceText?: string | null;  // plain-English interpretation
 }
 
 export interface TargetLevel {
@@ -109,7 +111,9 @@ export interface PortfolioPosition {
   vega?:         number;       // $/vol point
   contracts?:    number;       // number of option contracts held
   /** How the order was placed. Missing = legacy/seed data, treated as broker. */
-  source?:       'broker' | 'manual';
+  source?:       'broker' | 'manual' | 'paper' | 'auto-trade';
+  /** Human-readable execution label, e.g. "Tradier Paper — Limit". */
+  sourceLabel?:  string;
   /** ISO timestamp of when the order was created (from Step 7). */
   orderedAt?:    string;
   /** Unique recommendation / position ID. */
@@ -168,6 +172,9 @@ export interface TradeCardData {
   rrRatio:  number;
   rrModel:  'Heston repriced' | 'Delta approximation';
   finalStatus: Status;
+  /** Signal confidence 0–100 (null when history is too thin to judge). */
+  confidence?: number | null;
+  confidenceText?: string | null;
 }
 
 // --- Option contracts ---

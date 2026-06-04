@@ -247,6 +247,8 @@ export function TradeCard({
           bars={stockBars}
           total={data.stockScore}
           confidence={data.stockConfidence}
+          confidenceScore={data.confidence ?? null}
+          confidenceText={data.confidenceText ?? null}
         />
 
         {/* 3. Contract Scorecard */}

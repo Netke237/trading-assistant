@@ -15,14 +15,20 @@ import { TradeCard } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { contractId as buildContractId } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
 import { logAudit } from '@/lib/audit';
 import { statusForScore } from '@/lib/status';
 import type { Status } from '@/lib/status';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import type { PortfolioPosition, TradeCardData } from '@/types/domain';
+import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
+import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
+import { useAutoTradeStore } from '@/lib/autoTradeStore';
+import { api }               from '@/lib/api';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
+import paperStyles from './page.module.css';
 
 function nowISOLocal(): string {
   const d = new Date();
@@ -97,6 +103,12 @@ export default function Step7Page() {
     });
   }, [cards]);
 
+  const { selectedBroker, setSelectedBroker } = useAutoTradeStore();
+  const [limitPlacing,   setLimitPlacing]     = useState(false);
+  const [marketPlacing,  setMarketPlacing]    = useState(false);
+  const [paperOrderId,   setPaperOrderId]     = useState<string | null>(null);
+  const [orderError,     setOrderError]       = useState<string | null>(null);
+
   const scanResult          = useScanStore((s) => s.scanResult);
   const setSelectedSymbol   = useScanStore((s) => s.setSelectedSymbol);
   const pickedContracts     = useScanStore((s) => s.pickedContracts);
@@ -115,6 +127,9 @@ export default function Step7Page() {
   useEffect(() => {
     if (active) setSelectedSymbol(active);
   }, [active, setSelectedSymbol]);
+
+  // Clear paper order feedback when the user navigates to a different candidate.
+  useEffect(() => { setPaperOrderId(null); setOrderError(null); }, [active]);
 
   const addPosition = usePortfolioStore((s) => s.addPosition);
 
@@ -157,6 +172,97 @@ export default function Step7Page() {
     () => basket.map((s) => cardIndex[s]).filter((c): c is TradeCardData => !!c),
     [basket, cardIndex],
   );
+
+  /** Build the pipe-delimited option id the OCC converter and broker adapters expect. */
+  function toOptionSymbol(card: TradeCardData): string {
+    const cd = card.contractDetails;
+    if (cd?.strike != null && cd.expiry && cd.right) {
+      return buildContractId(card.symbol, cd.strike, cd.expiry, cd.right);
+    }
+    return card.contract; // fallback (display label — broker may reject, best effort)
+  }
+
+  /** Add a successfully executed paper order to the portfolio for tracking. */
+  function addPaperPosition(card: TradeCardData, orderType: 'LMT' | 'MKT', broker: string, orderId: string) {
+    const cd  = card.contractDetails;
+    const mid = cd?.mid ?? card.entry.limit;
+    const dte = cd?.dte ?? 24;
+    const brokerLabel = broker === 'tradier_paper' ? 'Tradier Paper' : 'IBKR Paper';
+    const typeLabel   = orderType === 'LMT' ? 'Limit' : 'Market';
+    addPosition({
+      symbol:        card.symbol,
+      contract:      card.contract,
+      direction:     card.direction,
+      entryDate:     todayISO(),
+      expiry:        cd?.expiry ?? '2026-12-31',
+      dteRemaining:  dte,
+      dteTotal:      dte,
+      entryPrice:    mid,
+      currentPrice:  mid,
+      pnlDollar:     0,
+      pnlPct:        0,
+      stop:          card.exit.invalidation,
+      targets:       card.exit.targets,
+      status:        card.finalStatus,
+      ivRank:        cd?.ivRank,
+      delta:         cd?.delta,
+      theta:         cd?.theta,
+      vega:          0.20,
+      contracts:     1,
+      source:        'paper',
+      sourceLabel:   `${brokerLabel} — ${typeLabel} (ID: ${orderId})`,
+      orderedAt:     nowISOLocal(),
+      recId:         generateRecId(),
+    });
+  }
+
+  async function placeLimitPaper() {
+    const card = effectiveCard;
+    if (!card || !selectedBroker) return;
+    setLimitPlacing(true); setOrderError(null);
+    try {
+      const res = await api.postOptionOrder({
+        broker:        selectedBroker,
+        symbol:        card.symbol,
+        option_symbol: toOptionSymbol(card),   // pipe format → OCC converter
+        action:        card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        quantity:      1,
+        order_type:    'LMT',
+        limit_price:   card.entry.limit,
+        tif:           'DAY',
+      });
+      setPaperOrderId(res.order_id);
+      addPaperPosition(card, 'LMT', selectedBroker, res.order_id);
+    } catch (e) {
+      setOrderError(String(e));
+    } finally {
+      setLimitPlacing(false);
+    }
+  }
+
+  async function placeMarketNow() {
+    const card = effectiveCard;
+    if (!card || !selectedBroker) return;
+    setMarketPlacing(true); setOrderError(null);
+    try {
+      const res = await api.postOptionOrder({
+        broker:        selectedBroker,
+        symbol:        card.symbol,
+        option_symbol: toOptionSymbol(card),   // pipe format → OCC converter
+        action:        card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        quantity:      1,
+        order_type:    'MKT',
+        limit_price:   null,
+        tif:           'DAY',
+      });
+      setPaperOrderId(res.order_id);
+      addPaperPosition(card, 'MKT', selectedBroker, res.order_id);
+    } catch (e) {
+      setOrderError(String(e));
+    } finally {
+      setMarketPlacing(false);
+    }
+  }
 
   const idx = symbols.indexOf(active);
 
@@ -232,6 +338,38 @@ export default function Step7Page() {
             sendDisabled={basketEmpty}
           />
         </>
+      )}
+
+      {/* Paper broker execution */}
+      {effectiveCard && (
+        <div className={paperStyles.paperSection}>
+          <BrokerPicker selected={selectedBroker} onChange={setSelectedBroker} />
+          {selectedBroker && (
+            <>
+              <div className={paperStyles.paperButtons}>
+                <button
+                  type="button"
+                  className={paperStyles.paperBtnLimit}
+                  onClick={placeLimitPaper}
+                  disabled={limitPlacing || marketPlacing}
+                >
+                  {limitPlacing ? 'Placing…' : `Place Limit @ $${effectiveCard.entry.limit}`}
+                </button>
+                <button
+                  type="button"
+                  className={paperStyles.paperBtnMarket}
+                  onClick={placeMarketNow}
+                  disabled={limitPlacing || marketPlacing}
+                >
+                  {marketPlacing ? 'Placing…' : 'Right Now — Market'}
+                </button>
+              </div>
+              {paperOrderId && <Text size={12} tone="pass">Order placed — ID: {paperOrderId}</Text>}
+              {orderError   && <Text size={12} tone="reject">{orderError}</Text>}
+              <AutoTradeArm card={effectiveCard} broker={selectedBroker} />
+            </>
+          )}
+        </div>
       )}
 
       {dialogOpen && (

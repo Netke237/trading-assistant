@@ -141,4 +141,16 @@ describe('cardToRow', () => {
     const row = cardToRow(current.candidates[0], 1, null, undefined);
     expect(row.horizon).toBe('Swing');
   });
+
+  it('carries confidence and interpretation text into the row', () => {
+    const card = { ...mockCurrentRun.candidates[0], confidence: 62, confidenceText: 'Mixed history' };
+    const row = cardToRow(card, 1, null, 'Swing (5–15d)');
+    expect(row.confidence).toBe(62);
+    expect(row.confidenceText).toContain('Mixed');
+  });
+
+  it('defaults confidence to null when absent', () => {
+    const row = cardToRow(mockCurrentRun.candidates[0], 1, null, 'Swing (5–15d)');
+    expect(row.confidence).toBeNull();
+  });
 });

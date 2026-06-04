@@ -1,4 +1,4 @@
-import { useSettingsStore, migrateSettings } from '@/lib/settingsStore';
+import { useSettingsStore, migrateSettings, DEFAULT_CONFIDENCE_GATE, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER } from '@/lib/settingsStore';
 
 // Reset store state before each test
 beforeEach(() => {
@@ -52,5 +52,49 @@ describe('settingsStore — migrate is cumulative', () => {
     expect(result.shortlistMaxCandidates).toBe(10);
     expect(result.maxContractsPerChain).toBe(10);
     expect(result.premiumStopPct).toBe(0.60);
+  });
+
+  it('migrating from v10 injects the confidenceGate default', () => {
+    const result = migrateSettings({}, 10) as unknown as Record<string, unknown>;
+    expect(result.confidenceGate).toEqual(DEFAULT_CONFIDENCE_GATE);
+  });
+
+  it('migrating from v11 adds atrMult to an existing gate', () => {
+    const result = migrateSettings(
+      { confidenceGate: { enabled: true, cautionBelow: 60, rejectBelow: 40 } },
+      11,
+    ) as unknown as Record<string, unknown>;
+    const gate = result.confidenceGate as Record<string, unknown>;
+    expect(gate.atrMult).toBe(1.5);
+    expect(gate.cautionBelow).toBe(60); // existing value preserved
+  });
+});
+
+describe('settingsStore — confidenceGate', () => {
+  it('defaults to enabled 50/35 with ATR 1.5', () => {
+    expect(useSettingsStore.getState().confidenceGate).toEqual({
+      enabled: true, cautionBelow: 50, rejectBelow: 35, atrMult: 1.5,
+    });
+  });
+
+  it('setConfidenceGate updates the value', () => {
+    useSettingsStore.getState().setConfidenceGate({ enabled: true, cautionBelow: 60, rejectBelow: 40, atrMult: 2.0 });
+    expect(useSettingsStore.getState().confidenceGate.cautionBelow).toBe(60);
+    expect(useSettingsStore.getState().confidenceGate.atrMult).toBe(2.0);
+  });
+});
+
+describe('settingsStore — broker accounts', () => {
+  it('has ibkrPaper and tradierPaper defaults', () => {
+    const s = useSettingsStore.getState();
+    expect(s.ibkrPaper.baseUrl).toBe('https://localhost:7499/v1/api');
+    expect(s.tradierPaper.accountId).toBe('');
+    expect(s.ibkrLive.enabled).toBe(false);
+  });
+
+  it('setIbkrPaper updates the config', () => {
+    const s = useSettingsStore.getState();
+    s.setIbkrPaper({ ...s.ibkrPaper, accountId: 'DU999' });
+    expect(useSettingsStore.getState().ibkrPaper.accountId).toBe('DU999');
   });
 });

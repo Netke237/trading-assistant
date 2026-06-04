@@ -209,6 +209,10 @@ const PARAM_DEFS: ParamDef[] = [
   { key: 'iv_rank_pass_max', label: 'IV rank pass max',  type: 'number',  section: 'stocks', subGroup: 'Volatility', min: 0, max: 100, step: 1 },
   { key: 'iv_rank_lookback', label: 'IV rank lookback',  type: 'display', section: 'stocks', subGroup: 'Volatility' },
   { key: 'hv_lookback',      label: 'HV period',         type: 'display', section: 'stocks', subGroup: 'Volatility' },
+  // STOCKS — Confidence (signal backtest gate)
+  { key: 'confidence_caution_below', label: 'Confidence caution below', type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0,   max: 100, step: 1,   unit: '%' },
+  { key: 'confidence_reject_below',  label: 'Confidence reject below',  type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0,   max: 100, step: 1,   unit: '%' },
+  { key: 'confidence_atr_mult',      label: 'Confidence ATR multiple',  type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0.5, max: 5,   step: 0.1 },
   // OPTIONS — Contract
   { key: 'max_delta',              label: 'Max delta',             type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01 },
   { key: 'max_bid_ask_spread_pct', label: 'Bid-ask spread ceiling', type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,    step: 0.01 },
@@ -223,6 +227,7 @@ type ParamDefaults = Record<string, number | boolean | string | null>;
 
 const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
   Intraday: {
+    confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
     weight_trend: 35, weight_pullback: 20, weight_trigger: 30, weight_event: 5,  weight_vol: 10,
     ma_type: 'EMA', fast_ema: 20, slow_ema: 50, adx_period: 7, ema_required: false, rsi_period: 14,
     swing_high_lookback_bars: 20, atr_caution_max: 2.5,
@@ -240,6 +245,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     rs_period: 2, rs_pass_threshold: 1.0, rs_caution_threshold: -0.5, rs_benchmark: 'NDX',
   },
   Swing: {
+    confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
     weight_trend: 30, weight_pullback: 20, weight_trigger: 25, weight_event: 15, weight_vol: 10,
     ma_type: 'EMA', fast_ema: 50, slow_ema: 200, adx_period: 14, ema_required: true, rsi_period: 14,
     swing_high_lookback_bars: 40, atr_caution_max: 2.5,
@@ -257,6 +263,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     rs_period: 20, rs_pass_threshold: 2.0, rs_caution_threshold: -1.0, rs_benchmark: 'NDX',
   },
   Position: {
+    confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
     weight_trend: 30, weight_pullback: 20, weight_trigger: 20, weight_event: 20, weight_vol: 10,
     ma_type: 'EMA', fast_ema: 50, slow_ema: 200, adx_period: 14, ema_required: true, rsi_period: 14,
     swing_high_lookback_bars: 15, atr_caution_max: 2.5,
@@ -274,6 +281,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     rs_period: 50, rs_pass_threshold: 3.0, rs_caution_threshold: -1.5, rs_benchmark: 'SPX',
   },
   Custom: {
+    confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
     weight_trend: 30, weight_pullback: 20, weight_trigger: 25, weight_event: 15, weight_vol: 10,
     ma_type: 'EMA', fast_ema: 50, slow_ema: 200, adx_period: 14, ema_required: true, rsi_period: 14,
     swing_high_lookback_bars: 40, atr_caution_max: 2.5,
