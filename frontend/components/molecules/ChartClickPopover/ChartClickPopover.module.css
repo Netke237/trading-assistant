@@ -1,0 +1,16 @@
+.pop {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+  min-width: 180px;
+}
+.qty { display: grid; gap: 4px; }
+.qty input { width: 100%; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; }

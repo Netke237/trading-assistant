@@ -15,6 +15,7 @@ import { useChartAlertStore } from '@/lib/chartAlertStore';
 import { evaluateRules } from '@/lib/chartAlertEngine';
 import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
 import AlertToast from '@/components/organisms/AlertToast';
+import ChartClickPopover from '@/components/molecules/ChartClickPopover';
 import type { SeriesConfig } from '@/components/organisms/ChartPane';
 import ChartPane from '@/components/organisms/ChartPane';
 import ChartTopBar from '@/components/organisms/ChartTopBar';
@@ -156,6 +157,8 @@ export default function ChartWorkspace() {
   const [showIndicators, setShowIndicators] = useState(false);
   const [showStructure, setShowStructure] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
+  const [clickPopover, setClickPopover] = useState<{ kind: 'alert' | 'buy'; price: number; time: number } | null>(null);
+  const [prefillPrice, setPrefillPrice] = useState<number | null>(null);
   const [crosshair, setCrosshair] = useState<DataValues>({ time: null, indicators: {} });
   const [connState, setConnState] = useState<ConnectionState>('connecting');
   const [wsError, setWsError] = useState<string | null>(null);
@@ -355,7 +358,7 @@ export default function ChartWorkspace() {
     const chart = chartApiRef.current;
     const series = mainSeriesRef.current;
     if (!chart || !series) return;
-    if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect') {
+    if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert') {
       pendingPtsRef.current = [];
       return;
     }
@@ -364,6 +367,7 @@ export default function ChartWorkspace() {
       const price = series.coordinateToPrice(param.point.y);
       if (price == null) return;
       const time = Number(param.time ?? 0);
+      if (drawingTool === 'alert') { setClickPopover({ kind: 'alert', price, time }); return; }
       if (drawingTool === 'hline') {
         addDrawing({ id: rid(), symbol, interval, kind: 'hline', points: [{ time, price }], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });
         return;
@@ -420,7 +424,21 @@ export default function ChartWorkspace() {
         </div>
         <ChartRightPanel crosshairData={crosshair} symbol={symbol} structureSignals={structureSignals} indicatorLabels={indicatorLabels} />
       </div>
-      {showAlerts && <AlertRuleBuilder onClose={() => setShowAlerts(false)} />}
+      {showAlerts && (
+        <AlertRuleBuilder
+          onClose={() => { setShowAlerts(false); setPrefillPrice(null); }}
+          prefill={prefillPrice != null ? { price: prefillPrice } : null}
+        />
+      )}
+      {clickPopover && clickPopover.kind === 'alert' && (
+        <ChartClickPopover
+          kind="alert"
+          price={clickPopover.price}
+          qty={1}
+          onCancel={() => setClickPopover(null)}
+          onConfirm={() => { setPrefillPrice(clickPopover.price); setShowAlerts(true); setClickPopover(null); }}
+        />
+      )}
       <AlertToast />
     </div>
   );
