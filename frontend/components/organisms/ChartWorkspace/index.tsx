@@ -197,10 +197,17 @@ export default function ChartWorkspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally run only once on mount
 
-  // Attach PreviewPrimitive to main series once (detach on cleanup)
+  // Attach PreviewPrimitive once the main series is ready.
+  // candles.length transitions from 0 → N after the WS history message arrives,
+  // which is always after ChartPane has assigned mainSeriesRef.current.
+  // Using candles.length (same pattern as the VP/markers effect below) ensures
+  // this re-runs if the series was null on the first render.
   useEffect(() => {
     const series = mainSeriesRef.current;
     if (!series) return;
+    // Avoid double-attaching if candles.length fires more than once while the
+    // same series instance is mounted.
+    if (previewRef.current) return;
     const prim = new PreviewPrimitive();
     series.attachPrimitive(prim);
     previewRef.current = prim;
@@ -208,9 +215,8 @@ export default function ChartWorkspace() {
       try { series.detachPrimitive(prim); } catch { /* ignore */ }
       previewRef.current = null;
     };
-  // mainSeriesRef is a stable ref — this runs once after the series is assigned
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainSeriesRef.current]);
+  }, [candles.length]);
 
   // Sync alert rules from backend on mount
   useEffect(() => {
