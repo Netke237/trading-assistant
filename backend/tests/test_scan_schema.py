@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from app.schemas import ScanRequest, TradeCardData
 from app.schemas.stock_scan import StockScanRequest
 
@@ -53,3 +56,12 @@ def test_new_fields_accept_custom_values():
     assert req.pullback_tolerance_pct == 0.06
     assert req.ma_crossover_lookback == 15
     assert req.breakout_volume_mult == 1.3
+
+
+def test_new_fields_reject_invalid_values():
+    with pytest.raises(ValidationError):
+        StockScanRequest(**_base(), pullback_tolerance_pct=-0.01)
+    with pytest.raises(ValidationError):
+        StockScanRequest(**_base(), ma_crossover_lookback=0)
+    with pytest.raises(ValidationError):
+        StockScanRequest(**_base(), breakout_volume_mult=0.8)
