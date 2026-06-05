@@ -94,6 +94,7 @@ def pullback_ema_signal(
     trend_sma: int = 50,
     atr_stop_mult: float = 1.5,
     rr_target_mult: float = 2.0,
+    tolerance: float = 0.04,
 ) -> StrategySignal | None:
     """Bullish: uptrend (price > rising 50-SMA) + pullback toward 20-EMA + reversal candle."""
     if len(bars) < trend_sma + 10:
@@ -111,8 +112,8 @@ def pullback_ema_signal(
         return None
     if len(sma50) >= 5 and sma50[-1] <= sma50[-5]:
         return None
-    # Pullback: price within 1.5% of 20-EMA from above
-    if not (0 <= (current - ema_val) / ema_val <= 0.04):
+    # Pullback: price within `tolerance` of 20-EMA from above
+    if not (0 <= (current - ema_val) / ema_val <= tolerance):
         return None
     # Reversal candle: close > open (bullish bar)
     last = bars[-1]
@@ -186,17 +187,18 @@ def ma_crossover_signal(
     *,
     fast: int = 20,
     slow: int = 50,
+    lookback: int = 10,
 ) -> StrategySignal | None:
-    """Bullish: 20-SMA crosses above 50-SMA within the last 3 bars."""
+    """Bullish: 20-SMA crosses above 50-SMA within the last `lookback` bars."""
     if len(bars) < slow + 5:
         return None
     closes = [b["close"] for b in bars]
     fast_ma = _sma(closes, fast)
     slow_ma = _sma(closes, slow)
-    if len(fast_ma) < 4 or len(slow_ma) < 4:
+    if len(fast_ma) < lookback + 1 or len(slow_ma) < lookback + 1:
         return None
-    # Recent cross: fast crossed above slow within last 3 bars
-    for i in range(-10, 0):
+    # Recent cross: fast crossed above slow within last `lookback` bars
+    for i in range(-lookback, 0):
         if fast_ma[i - 1] <= slow_ma[i - 1] and fast_ma[i] > slow_ma[i]:
             current = closes[-1]
             atr = _atr(bars)
