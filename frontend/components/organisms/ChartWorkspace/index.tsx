@@ -17,6 +17,7 @@ import { evaluateRules } from '@/lib/chartAlertEngine';
 import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
 import AlertToast from '@/components/organisms/AlertToast';
 import ChartClickPopover from '@/components/molecules/ChartClickPopover';
+import TextInputPopover from '@/components/molecules/TextInputPopover';
 import type { SeriesConfig } from '@/components/organisms/ChartPane';
 import ChartPane from '@/components/organisms/ChartPane';
 import ChartTopBar from '@/components/organisms/ChartTopBar';
@@ -161,6 +162,7 @@ export default function ChartWorkspace() {
   const [showStructure, setShowStructure] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
   const [clickPopover, setClickPopover] = useState<{ kind: 'alert' | 'buy'; price: number; time: number } | null>(null);
+  const [textDraft, setTextDraft] = useState<{ time: number; price: number } | null>(null);
   const [prefillPrice, setPrefillPrice] = useState<number | null>(null);
   const [buyQty, setBuyQty] = useState(1);
   const [crosshair, setCrosshair] = useState<DataValues>({ time: null, indicators: {} });
@@ -385,7 +387,7 @@ export default function ChartWorkspace() {
     const chart = chartApiRef.current;
     const series = mainSeriesRef.current;
     if (!chart || !series) return;
-    if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy') {
+    if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy' && drawingTool !== 'text') {
       pendingPtsRef.current = [];
       // Clear any leftover preview when switching away from a drawing tool
       previewRef.current?.setState({ kind: null, origin: null, cursor: null });
@@ -403,6 +405,7 @@ export default function ChartWorkspace() {
       const time = Number(param.time ?? 0);
       if (drawingTool === 'alert') { setClickPopover({ kind: 'alert', price, time }); return; }
       if (drawingTool === 'buy') { setClickPopover({ kind: 'buy', price, time }); return; }
+      if (drawingTool === 'text') { setTextDraft({ time, price }); return; }
       if (drawingTool === 'hline') {
         addDrawing({ id: rid(), symbol, interval, kind: 'hline', points: [{ time, price }], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });
         return;
@@ -507,6 +510,15 @@ export default function ChartWorkspace() {
             usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, clickPopover.price, buyQty));
             setClickPopover(null);
           }}
+        />
+      )}
+      {textDraft && (
+        <TextInputPopover
+          onSave={(text) => {
+            addDrawing({ id: rid(), symbol, interval, kind: 'text', points: [{ time: textDraft.time, price: textDraft.price }], color: '#dddddd', width: 1, text, createdAt: new Date().toISOString() });
+            setTextDraft(null);
+          }}
+          onCancel={() => setTextDraft(null)}
         />
       )}
       <AlertToast />

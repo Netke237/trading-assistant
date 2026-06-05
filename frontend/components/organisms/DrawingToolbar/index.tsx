@@ -16,6 +16,7 @@ const TOOLS: { id: DrawingTool; label: string; icon: string }[] = [
   { id: 'trendline', label: 'Trendline',       icon: '╱' },
   { id: 'hline',     label: 'Horizontal line', icon: '─' },
   { id: 'rect',      label: 'Rectangle',       icon: '□' },
+  { id: 'text',      label: 'Text',            icon: 'T' },
   { id: 'alert',     label: 'Set alert',       icon: '🔔' },
   { id: 'buy',       label: 'Paper buy',       icon: '＄' },
 ];
