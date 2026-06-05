@@ -16,16 +16,18 @@ import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
+import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
-type Section = 'broker' | 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications';
+type Section = 'broker' | 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy';
 
 const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'broker',  label: 'Broker',     desc: 'Credentials + paper trade toggle' },
   { key: 'theme',   label: 'Appearance', desc: 'Theme + density' },
   { key: 'scan',    label: 'Scan',       desc: 'Continuous scan + cadence' },
+  { key: 'strategy',  label: 'Strategy scan',   desc: 'Signal tolerances + backtest thresholds' },
   { key: 'brokers', label: 'Brokers',   desc: 'Paper trading accounts + live IBKR preparation' },
   { key: 'risk',    label: 'Risk',       desc: 'Exposure limits and portfolio value' },
   { key: 'regime',  label: 'Regime',     desc: 'Daily OMM parameters' },
@@ -66,6 +68,7 @@ export default function SettingsPage() {
           {active === 'risk'    && <RiskForm    />}
           {active === 'regime'  && <RegimeForm markov={markov} setMarkov={setMarkov} />}
           {active === 'notifications' && <NotificationForm />}
+          {active === 'strategy' && <StrategyScanForm />}
         </div>
       </div>
 
@@ -1018,5 +1021,115 @@ function BrokersForm() {
         </button>
       </Row>
     </>
+  );
+}
+
+/* ---------- Strategy scan form ---------- */
+
+function StrategyScanForm() {
+  const store = useScanParamsStore();
+
+  return (
+    <div>
+      <SectionIntro
+        title="Strategy scan parameters"
+        blurb="These values control how strictly each strategy filter and backtest gate applies. Lower tolerances mean fewer matches; higher means more (but potentially noisier) signals."
+      />
+
+      <Row
+        label="Pullback tolerance"
+        hint="How far above the 20-EMA price can be and still count as a pullback"
+        defaultValue="4%"
+      >
+        <input
+          type="number"
+          className={styles.numInput}
+          value={Math.round(store.pullbackTolerancePct * 100 * 10) / 10}
+          min={0.5} max={15} step={0.5}
+          onChange={(e) =>
+            store.setParam('pullbackTolerancePct', Number(e.target.value) / 100)
+          }
+        />
+        <Text size={12} tone="secondary">%</Text>
+      </Row>
+
+      <Row
+        label="MA crossover lookback"
+        hint="How many bars ago the 20/50-SMA cross can have occurred"
+        defaultValue="10 bars"
+      >
+        <input
+          type="number"
+          className={styles.numInput}
+          value={store.maCrossoverLookback}
+          min={1} max={30} step={1}
+          onChange={(e) =>
+            store.setParam('maCrossoverLookback', Number(e.target.value))
+          }
+        />
+        <Text size={12} tone="secondary">bars</Text>
+      </Row>
+
+      <Row
+        label="Breakout volume multiplier"
+        hint="Today's volume must exceed N × the 20-day average"
+        defaultValue="1.1×"
+      >
+        <input
+          type="number"
+          className={styles.numInput}
+          value={store.breakoutVolumeMult}
+          min={1.0} max={3.0} step={0.05}
+          onChange={(e) =>
+            store.setParam('breakoutVolumeMult', Number(e.target.value))
+          }
+        />
+        <Text size={12} tone="secondary">×</Text>
+      </Row>
+
+      <Row
+        label="Min backtest trades"
+        hint="Minimum number of qualifying historical trades for backtest gate to pass"
+        defaultValue="10"
+      >
+        <input
+          type="number"
+          className={styles.numInput}
+          value={store.btMinTrades}
+          min={1} max={50} step={1}
+          onChange={(e) =>
+            store.setParam('btMinTrades', Number(e.target.value))
+          }
+        />
+        <Text size={12} tone="secondary">trades</Text>
+      </Row>
+
+      <Row
+        label="Min win rate"
+        hint="Minimum historical win rate for the backtest gate to pass"
+        defaultValue="45%"
+      >
+        <input
+          type="number"
+          className={styles.numInput}
+          value={Math.round(store.btMinWinRate * 100)}
+          min={10} max={80} step={5}
+          onChange={(e) =>
+            store.setParam('btMinWinRate', Number(e.target.value) / 100)
+          }
+        />
+        <Text size={12} tone="secondary">%</Text>
+      </Row>
+
+      <div style={{ marginTop: '16px' }}>
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={store.resetToDefaults}
+        >
+          Reset to defaults
+        </button>
+      </div>
+    </div>
   );
 }

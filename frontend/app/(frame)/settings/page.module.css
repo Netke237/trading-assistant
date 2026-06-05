@@ -378,3 +378,19 @@
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
+
+.numInput {
+  width: 72px;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.numInput:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
