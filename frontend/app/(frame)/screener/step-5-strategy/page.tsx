@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
-import { useScanParamsStore, SCAN_PARAM_DEFAULTS } from '@/lib/scanParamsStore';
+import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { api } from '@/lib/api';
 import styles from './page.module.css';
 
@@ -50,7 +50,13 @@ export default function Step5StrategyPage() {
   const activeStrategy = useScanStore((s) => s.activeStrategy);
   const setActiveStrategy = useScanStore((s) => s.setActiveStrategy);
   const setStockScanResult = useScanStore((s) => s.setStockScanResult);
-  const savedParams = useScanParamsStore();
+  const savedParams = useScanParamsStore((s) => ({
+    pullbackTolerancePct: s.pullbackTolerancePct,
+    maCrossoverLookback:  s.maCrossoverLookback,
+    breakoutVolumeMult:   s.breakoutVolumeMult,
+    btMinTrades:          s.btMinTrades,
+    btMinWinRate:         s.btMinWinRate,
+  }));
   const [params, setParams] = useState(() => ({
     pullbackTolerancePct: savedParams.pullbackTolerancePct,
     maCrossoverLookback:  savedParams.maCrossoverLookback,

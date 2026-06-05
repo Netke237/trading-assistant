@@ -51,6 +51,7 @@
 }
 
 .paramsSummary::-webkit-details-marker { display: none; }
+.paramsSummary::marker { display: none; }
 
 .paramsGrid {
   display: grid;
