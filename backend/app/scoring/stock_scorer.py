@@ -763,7 +763,8 @@ def _rule_vol(iv_rank: float | None, cfg: dict) -> RuleResult:
     vc = cfg["vol"]
 
     if vc["iv_rank_pass_max"] is None:
-        # Intraday — not scored
+        # iv_rank_pass_max is None → skip vol scoring
+        # (Intraday always; Swing/Position in stock-scan path where no IV data is available)
         return RuleResult("vol", "PASS", 90, {"iv_rank": iv_rank, "scored": False})
 
     if iv_rank is None:
@@ -877,7 +878,7 @@ def score_stock(
             elif key == "atr_caution_max":         cfg["pullback"]["atr_caution_max"]        = float(val)
             elif key == "event_reject_days":       cfg["event"]["reject_days"]               = int(val)
             elif key == "event_caution_days":      cfg["event"]["caution_days"]              = int(val)
-            elif key == "iv_rank_pass_max":        cfg["vol"]["iv_rank_pass_max"]            = float(val)
+            elif key == "iv_rank_pass_max":        cfg["vol"]["iv_rank_pass_max"]            = None if val is None else float(val)
             elif key == "volume_lookback_bars":    cfg["trigger"]["volume_lookback_bars"]    = int(val)
             elif key == "volume_multiplier":       cfg["trigger"]["volume_multiplier"]       = float(val)
 

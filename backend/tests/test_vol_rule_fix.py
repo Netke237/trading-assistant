@@ -38,4 +38,5 @@ def test_intraday_vol_rule_already_pass():
     bars = _flat_bars(200)
     card = score_stock(symbol="TEST", direction="Bullish", horizon="Intraday", bars=bars)
     vol_rules = [r for r in card.rules if r.name == "vol"]
-    assert not vol_rules or vol_rules[0].status == "PASS"
+    assert vol_rules, "vol rule must be present"
+    assert vol_rules[0].status == "PASS"
