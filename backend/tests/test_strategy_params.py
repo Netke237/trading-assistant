@@ -1,7 +1,7 @@
 """Verify strategy signal functions respect caller-supplied tolerance/lookback params."""
 import pytest
 from app.services.strategy_engine import (
-    pullback_ema_signal, ma_crossover_signal, breakout_base_signal,
+    pullback_ema_signal, ma_crossover_signal,
 )
 
 
@@ -16,9 +16,11 @@ def _uptrend(n: int = 200) -> list[dict]:
 
 def test_pullback_ema_respects_tight_tolerance():
     """With tolerance=0.001 (0.1%), the 2% pullback must return None."""
+    from app.services.strategy_engine import _ema as _ema_fn
     bars = _uptrend(200)
-    ema_approx = bars[-21]["close"]
-    target = ema_approx * 1.02
+    closes = [b["close"] for b in bars]
+    ema_val = _ema_fn(closes, 20)[-1]
+    target = ema_val * 1.02
     for i in range(-20, 0):
         bars[i] = {"open": target - 0.1, "high": target + 0.2,
                    "low": target - 0.2, "close": target + 0.1, "volume": 1_000}
@@ -28,9 +30,11 @@ def test_pullback_ema_respects_tight_tolerance():
 
 def test_pullback_ema_respects_wide_tolerance():
     """With tolerance=0.10 (10%), a 5% pullback must fire."""
+    from app.services.strategy_engine import _ema as _ema_fn
     bars = _uptrend(200)
-    ema_approx = bars[-21]["close"]
-    target = ema_approx * 1.05
+    closes = [b["close"] for b in bars]
+    ema_val = _ema_fn(closes, 20)[-1]
+    target = ema_val * 1.05
     for i in range(-20, 0):
         bars[i] = {"open": target - 0.1, "high": target + 0.2,
                    "low": target - 0.2, "close": target + 0.1, "volume": 1_000}
