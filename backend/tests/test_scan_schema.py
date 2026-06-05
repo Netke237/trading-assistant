@@ -1,4 +1,5 @@
 from app.schemas import ScanRequest, TradeCardData
+from app.schemas.stock_scan import StockScanRequest
 
 
 def test_scan_request_accepts_confidence_overrides():
@@ -26,3 +27,29 @@ def test_confidence_overrides_default_none():
 def test_trade_card_has_optional_confidence_fields():
     assert "confidence" in TradeCardData.model_fields
     assert "confidenceText" in TradeCardData.model_fields
+
+
+# ── New StockScanRequest tolerance field tests ──────────────────────────────────
+
+def _base() -> dict:
+    return dict(universe=["SP500"], direction="Bullish",
+                horizon="Swing", strategy="pullback_ema")
+
+
+def test_new_fields_have_correct_defaults():
+    req = StockScanRequest(**_base())
+    assert req.pullback_tolerance_pct == 0.04
+    assert req.ma_crossover_lookback == 10
+    assert req.breakout_volume_mult == 1.1
+
+
+def test_new_fields_accept_custom_values():
+    req = StockScanRequest(
+        **_base(),
+        pullback_tolerance_pct=0.06,
+        ma_crossover_lookback=15,
+        breakout_volume_mult=1.3,
+    )
+    assert req.pullback_tolerance_pct == 0.06
+    assert req.ma_crossover_lookback == 15
+    assert req.breakout_volume_mult == 1.3

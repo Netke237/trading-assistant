@@ -12,6 +12,9 @@ class StockScanRequest(BaseModel):
     direction:   Literal["Bullish", "Bearish"]
     horizon:     Literal["Intraday", "Swing", "Position"]
     strategy:    Strategy
+    pullback_tolerance_pct: float = 0.04   # ← new
+    ma_crossover_lookback:  int   = 10     # ← new
+    breakout_volume_mult:   float = 1.1    # ← new
     min_price:   Optional[float] = None
     max_price:   Optional[float] = None
     min_cap_usd: Optional[float] = None
