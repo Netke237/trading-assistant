@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone, date, timedelta
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -12,7 +14,7 @@ from app.schemas.stock_scan import (
     StockScanRequest, StockScanResult, PositionCardOut,
     StrategySignalOut, BacktestOut,
 )
-from app.data.market import fetch_price_async, fetch_company_name_async, fetch_quotes
+from app.data.market import fetch_company_name_async, fetch_quotes
 from app.services.historical_store import get_bars as get_historical_bars
 from app.scoring.stock_scorer import score_stock
 from app.services.strategy_engine import (
@@ -33,7 +35,7 @@ _SIGNAL_FNS = {
     "mean_reversion_rsi":  mean_reversion_rsi_signal,
 }
 
-_SIGNAL_KWARGS: dict[str, object] = {
+_SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
     "pullback_ema":       lambda r: {"tolerance":   r.pullback_tolerance_pct},
     "breakout_base":      lambda r: {"volume_mult": r.breakout_volume_mult},
     "ma_crossover":       lambda r: {"lookback":    r.ma_crossover_lookback},
@@ -63,7 +65,7 @@ async def _process_stock(
     async with _SCAN_SEM:
         try:
             quote = price_map.get(symbol)
-            price = float(quote["last"]) if quote else None
+            price = (float(quote.get("last") or 0) or None) if quote else None
             if not price:
                 return {"symbol": symbol, "reason": "no price data"}
 
