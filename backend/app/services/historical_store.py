@@ -49,6 +49,23 @@ _prefetch_state: dict[str, Any] = {
 }
 _prefetch_task: asyncio.Task | None = None
 
+# ── Trading-day helpers ───────────────────────────────────────────────────────
+
+def most_recent_trading_day() -> date:
+    """Return the most recent US market close date (Mon–Fri, no holiday check).
+
+    On weekends returns the preceding Friday. During live market hours today
+    is returned (data may still be updating).
+    """
+    today = date.today()
+    weekday = today.weekday()   # 0=Mon … 6=Sun
+    if weekday == 5:             # Saturday → Friday
+        return today - timedelta(days=1)
+    if weekday == 6:             # Sunday → Friday
+        return today - timedelta(days=2)
+    return today
+
+
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _bar_date(bar: dict) -> date:
@@ -139,7 +156,7 @@ async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
     async with AsyncSessionLocal() as db:
         last = await _last_stored_date(symbol, db)
 
-        fetch_needed = (last is None) or (last < end)
+        fetch_needed = (last is None) or (last < most_recent_trading_day())
         if fetch_needed:
             fetch_start = (last + timedelta(days=1)) if last else start
             try:
