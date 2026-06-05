@@ -12,7 +12,7 @@ from app.schemas.stock_scan import (
     StockScanRequest, StockScanResult, PositionCardOut,
     StrategySignalOut, BacktestOut,
 )
-from app.data.market import fetch_price_async, fetch_company_name_async
+from app.data.market import fetch_price_async, fetch_company_name_async, fetch_quotes
 from app.services.historical_store import get_bars as get_historical_bars
 from app.scoring.stock_scorer import score_stock
 from app.services.strategy_engine import (
@@ -33,6 +33,13 @@ _SIGNAL_FNS = {
     "mean_reversion_rsi":  mean_reversion_rsi_signal,
 }
 
+_SIGNAL_KWARGS: dict[str, object] = {
+    "pullback_ema":       lambda r: {"tolerance":   r.pullback_tolerance_pct},
+    "breakout_base":      lambda r: {"volume_mult": r.breakout_volume_mult},
+    "ma_crossover":       lambda r: {"lookback":    r.ma_crossover_lookback},
+    "mean_reversion_rsi": lambda r: {},
+}
+
 _HISTORY_YEARS = 5
 _SCAN_SEM = asyncio.Semaphore(5)
 
@@ -47,16 +54,21 @@ def _position_size(account: float, risk_pct: float | None, risk_fixed: float | N
     return shares, round(dollar_risk, 2)
 
 
-async def _process_stock(symbol: str, req: StockScanRequest, scan_id: str) -> PositionCardOut | dict:
+async def _process_stock(
+    symbol: str,
+    req: StockScanRequest,
+    scan_id: str,
+    price_map: dict[str, dict],
+) -> PositionCardOut | dict:
     async with _SCAN_SEM:
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                price, company = await asyncio.gather(
-                    fetch_price_async(client, symbol),
-                    fetch_company_name_async(client, symbol),
-                )
+            quote = price_map.get(symbol)
+            price = float(quote["last"]) if quote else None
             if not price:
                 return {"symbol": symbol, "reason": "no price data"}
+
+            async with httpx.AsyncClient(timeout=10) as client:
+                company = await fetch_company_name_async(client, symbol)
             if req.min_price is not None and price < req.min_price:
                 return {"symbol": symbol, "reason": f"price ${price:.2f} < min"}
             if req.max_price is not None and price > req.max_price:
@@ -78,7 +90,8 @@ async def _process_stock(symbol: str, req: StockScanRequest, scan_id: str) -> Po
             signal_fn = _SIGNAL_FNS.get(req.strategy)
             if not signal_fn:
                 return {"symbol": symbol, "reason": f"unknown strategy {req.strategy}"}
-            signal = signal_fn(bars[-120:])
+            signal_kwargs = _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req)
+            signal = signal_fn(bars[-120:], **signal_kwargs)
             if signal is None:
                 return {"symbol": symbol, "reason": f"no {req.strategy} setup"}
 
@@ -145,7 +158,14 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
         except PresetUnavailableError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    tasks = [_process_stock(s, req, scan_id) for s in symbols]
+    # Pre-fetch all prices in one Tradier call (removes 519 individual HTTP requests)
+    try:
+        price_map = await asyncio.to_thread(fetch_quotes, symbols)
+    except Exception as exc:
+        logger.warning("stock_scan: batch price fetch failed (%s) — falling back to empty map", exc)
+        price_map = {}
+
+    tasks = [_process_stock(s, req, scan_id, price_map) for s in symbols]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     candidates, rejected = [], []
