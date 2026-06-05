@@ -6,6 +6,7 @@ import type { Drawing } from '@/types/overlays';
 import { HorizontalLinePrimitive } from '@/lib/chartPrimitives/HorizontalLinePrimitive';
 import { TrendLinePrimitive } from '@/lib/chartPrimitives/TrendLinePrimitive';
 import { RectanglePrimitive } from '@/lib/chartPrimitives/RectanglePrimitive';
+import { TextPrimitive } from '@/lib/chartPrimitives/TextPrimitive';
 
 interface Props {
   chart: IChartApi | null;
@@ -36,6 +37,9 @@ export default function DrawingOverlays({ chart, mainSeries, drawings }: Props) 
           break;
         case 'rect':
           primitive = new RectanglePrimitive(drawing);
+          break;
+        case 'text':
+          primitive = new TextPrimitive(drawing);
           break;
       }
       if (primitive) {
