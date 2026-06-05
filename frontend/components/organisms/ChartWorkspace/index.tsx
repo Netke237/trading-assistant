@@ -183,6 +183,7 @@ export default function ChartWorkspace() {
     startDrawing: Drawing;
     startX: number;
     startY: number;
+    lastUpdateMs?: number;
   }
   const dragRef = useRef<DragState | null>(null);
 
@@ -473,11 +474,17 @@ export default function ChartWorkspace() {
           }));
         }
       }
-      updateDrawing(drag.id, { points: updatedPoints });
+      // Throttle updateDrawing: call at most every 50ms during drag
+      const now = Date.now();
+      if (now - (drag.lastUpdateMs ?? 0) >= 50) {
+        drag.lastUpdateMs = now;
+        updateDrawing(drag.id, { points: updatedPoints });
+      }
     };
 
     const onPointerUp = () => {
       if (!dragRef.current) return;
+      // Ensure final position is synced before clearing drag state
       dragRef.current = null;
       chart.applyOptions({ handleScroll: true, handleScale: true });
     };
@@ -490,6 +497,9 @@ export default function ChartWorkspace() {
       el.removeEventListener('pointerdown', onPointerDown);
       el.removeEventListener('pointermove', onPointerMove);
       el.removeEventListener('pointerup', onPointerUp);
+      // Re-enable chart scroll/zoom in case effect re-runs during drag
+      chart.applyOptions({ handleScroll: true, handleScale: true });
+      dragRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawingTool, symbol, interval, updateDrawing]);
