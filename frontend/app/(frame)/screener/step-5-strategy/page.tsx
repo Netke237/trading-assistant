@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
+import { useScanParamsStore, SCAN_PARAM_DEFAULTS } from '@/lib/scanParamsStore';
 import { api } from '@/lib/api';
 import styles from './page.module.css';
 
@@ -49,6 +50,25 @@ export default function Step5StrategyPage() {
   const activeStrategy = useScanStore((s) => s.activeStrategy);
   const setActiveStrategy = useScanStore((s) => s.setActiveStrategy);
   const setStockScanResult = useScanStore((s) => s.setStockScanResult);
+  const savedParams = useScanParamsStore();
+  const [params, setParams] = useState(() => ({
+    pullbackTolerancePct: savedParams.pullbackTolerancePct,
+    maCrossoverLookback:  savedParams.maCrossoverLookback,
+    breakoutVolumeMult:   savedParams.breakoutVolumeMult,
+    btMinTrades:          savedParams.btMinTrades,
+    btMinWinRate:         savedParams.btMinWinRate,
+  }));
+
+  function resetParams() {
+    setParams({
+      pullbackTolerancePct: savedParams.pullbackTolerancePct,
+      maCrossoverLookback:  savedParams.maCrossoverLookback,
+      breakoutVolumeMult:   savedParams.breakoutVolumeMult,
+      btMinTrades:          savedParams.btMinTrades,
+      btMinWinRate:         savedParams.btMinWinRate,
+    });
+  }
+
   const [loadingStrategy, setLoadingStrategy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [prefetchStatus, setPrefetchStatus] = useState<
@@ -69,6 +89,11 @@ export default function Step5StrategyPage() {
         direction: context?.direction ?? 'Bullish',
         horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
         strategy: stratKey,
+        pullback_tolerance_pct: params.pullbackTolerancePct,
+        ma_crossover_lookback:  params.maCrossoverLookback,
+        breakout_volume_mult:   params.breakoutVolumeMult,
+        bt_min_trades:          params.btMinTrades,
+        bt_min_win_rate:        params.btMinWinRate,
         account_size: 50_000,
         risk_pct: 0.01,
       });
@@ -119,6 +144,93 @@ export default function Step5StrategyPage() {
           </Text>
         )}
       </div>
+
+      <details className={styles.paramsPanel}>
+        <summary className={styles.paramsSummary}>
+          <Text size={12} tone="secondary">Scan parameters</Text>
+        </summary>
+
+        <div className={styles.paramsGrid}>
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">Pullback tolerance</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={Math.round(params.pullbackTolerancePct * 100 * 10) / 10}
+                min={0.5} max={15} step={0.5}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, pullbackTolerancePct: Number(e.target.value) / 100 }))
+                }
+              />
+              <Text size={11} tone="dim">%</Text>
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">MA crossover lookback</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={params.maCrossoverLookback}
+                min={1} max={30} step={1}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, maCrossoverLookback: Number(e.target.value) }))
+                }
+              />
+              <Text size={11} tone="dim">bars</Text>
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">Breakout vol multiplier</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={params.breakoutVolumeMult}
+                min={1.0} max={3.0} step={0.05}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, breakoutVolumeMult: Number(e.target.value) }))
+                }
+              />
+              <Text size={11} tone="dim">×</Text>
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">Min backtest trades</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={params.btMinTrades}
+                min={1} max={50} step={1}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, btMinTrades: Number(e.target.value) }))
+                }
+              />
+              <Text size={11} tone="dim">trades</Text>
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">Min win rate</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={Math.round(params.btMinWinRate * 100)}
+                min={10} max={80} step={5}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, btMinWinRate: Number(e.target.value) / 100 }))
+                }
+              />
+              <Text size={11} tone="dim">%</Text>
+            </div>
+          </label>
+
+          <button type="button" className={styles.resetBtn} onClick={resetParams}>
+            Reset to saved
+          </button>
+        </div>
+      </details>
 
       {error && <Text size={12} tone="reject">{error}</Text>}
 
