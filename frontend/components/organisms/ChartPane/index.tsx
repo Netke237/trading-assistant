@@ -35,6 +35,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
   const chartRef = useRef<IChartApi | null>(null);
   const seriesMap = useRef<Map<string, ISeriesApi<'Candlestick' | 'Bar' | 'Line' | 'Histogram'>>>(new Map());
   const onCrosshairMoveRef = useRef(onCrosshairMove);
+  const prevPaneCountRef = useRef(0);
   useEffect(() => { onCrosshairMoveRef.current = onCrosshairMove; }, [onCrosshairMove]);
 
   const getHeight = useCallback(() => {
@@ -105,6 +106,15 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
       }
     });
 
+    // Remove panes that are now empty (lightweight-charts does not auto-remove them).
+    // Iterate from the last pane downward so that removing by index stays correct.
+    const panesAfterRemove = chart.panes();
+    for (let i = panesAfterRemove.length - 1; i >= 1; i--) {
+      if (panesAfterRemove[i].getSeries().length === 0) {
+        chart.removePane(i);
+      }
+    }
+
     // Add or update series
     series.forEach((cfg) => {
       let s = seriesMap.current.get(cfg.id);
@@ -157,16 +167,20 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
       }
     });
 
-    // Set proportional pane heights when multiple panes exist.
+    // Set proportional pane heights only when the pane count changes, not on every data tick.
     // Main pane (0) gets 60%, remaining 40% is split evenly among sub-panes.
     const panes = chart.panes();
-    if (panes.length > 1) {
-      const totalHeight = containerRef.current?.clientHeight || getHeight();
-      const mainHeight = Math.round(totalHeight * 0.6);
-      const subHeight = Math.round((totalHeight - mainHeight) / (panes.length - 1));
-      panes[0].setHeight(mainHeight);
-      for (let i = 1; i < panes.length; i++) {
-        panes[i].setHeight(subHeight);
+    const currentPaneCount = panes.length;
+    if (currentPaneCount !== prevPaneCountRef.current) {
+      prevPaneCountRef.current = currentPaneCount;
+      if (currentPaneCount > 1) {
+        const totalHeight = containerRef.current?.clientHeight || getHeight();
+        const mainHeight = Math.round(totalHeight * 0.6);
+        const subHeight = Math.round((totalHeight - mainHeight) / (currentPaneCount - 1));
+        panes[0].setHeight(mainHeight);
+        for (let i = 1; i < currentPaneCount; i++) {
+          panes[i].setHeight(subHeight);
+        }
       }
     }
   }, [series, getHeight]);
