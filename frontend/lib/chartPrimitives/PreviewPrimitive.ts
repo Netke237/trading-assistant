@@ -76,6 +76,7 @@ export class PreviewPrimitive implements ISeriesPrimitive {
   }
 
   paneViews(): readonly IPrimitivePaneView[] {
+    if (!this.state.origin) return [];
     return [new PreviewPaneView(this.state)];
   }
 }
