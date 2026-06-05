@@ -19,6 +19,7 @@ export interface SeriesConfig {
   data: Candle[] | Point[];
   color?: string;
   priceScaleId?: string;
+  paneIndex?: number;
 }
 
 interface Props {
@@ -115,25 +116,25 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
             borderVisible: false,
             wickUpColor: '#4caf50',
             wickDownColor: '#e05050',
-          });
+          }, cfg.paneIndex ?? 0);
           if (mainSeriesRef) mainSeriesRef.current = s as ISeriesApi<'Candlestick'>;
         } else if (cfg.type === 'Bar') {
           s = chart.addSeries(BarSeries, {
             upColor: '#4caf50', downColor: '#e05050',
-          });
+          }, cfg.paneIndex ?? 0);
           // Bar is used as main series — update ref so ChartOverlays still works
           if (mainSeriesRef) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
         } else if (cfg.type === 'Histogram') {
           s = chart.addSeries(HistogramSeries, {
             color: cfg.color ?? '#4a4a6a',
             priceScaleId: cfg.priceScaleId ?? 'right',
-          });
+          }, cfg.paneIndex ?? 0);
         } else {
           s = chart.addSeries(LineSeries, {
             color: cfg.color ?? '#4f8ef7',
             lineWidth: 1,
             priceScaleId: cfg.priceScaleId ?? 'right',
-          });
+          }, cfg.paneIndex ?? 0);
           // Line is used as main series (line chart mode) — update ref so ChartOverlays still works
           if (mainSeriesRef && cfg.id.startsWith('candles-')) {
             mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
