@@ -25,6 +25,7 @@ interface DrawingStoreState {
   addDrawing: (d: Drawing) => void;
   removeDrawing: (id: string) => void;
   clearForSymbol: (symbol: string, interval: string) => void;
+  updateDrawing: (id: string, patch: Partial<Drawing>) => void;
   syncFromBackend: (symbol: string, interval: string) => Promise<void>;
 }
 
@@ -44,11 +45,23 @@ export const useDrawingStore = create<DrawingStoreState>()(
       },
 
       clearForSymbol: (symbol, interval) => {
+        const toDelete = get().drawings.filter(
+          (d) => d.symbol === symbol && d.interval === interval,
+        );
         set((s) => ({
           drawings: s.drawings.filter(
             (d) => !(d.symbol === symbol && d.interval === interval),
           ),
         }));
+        toDelete.forEach((d) => deleteDrawingFromAPI(d.id));
+      },
+
+      updateDrawing: (id, patch) => {
+        set((s) => ({
+          drawings: s.drawings.map((d) => (d.id === id ? { ...d, ...patch } : d)),
+        }));
+        const d = get().drawings.find((x) => x.id === id);
+        if (d) pushDrawingToAPI(d);
       },
 
       syncFromBackend: async (symbol, interval) => {
