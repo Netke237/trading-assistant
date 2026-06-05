@@ -42,15 +42,16 @@ export interface MtfRow {
   changePct: number;
 }
 
-export type DrawingKind = 'trendline' | 'hline' | 'rect';
+export type DrawingKind = 'trendline' | 'hline' | 'rect' | 'text';
 export interface DrawingPoint { time: number; price: number; }
 export interface Drawing {
   id: string;
   symbol: string;
   interval: Interval;
   kind: DrawingKind;
-  points: DrawingPoint[];   // hline: 1 pt; trendline/rect: 2 pts
+  points: DrawingPoint[];   // hline: 1 pt; trendline/rect: 2 pts; text: 1 pt
   color: string;
   width: number;
+  text?: string;
   createdAt: string;
 }
