@@ -28,10 +28,10 @@ import { ChartOverlays } from '@/components/organisms/ChartOverlays';
 import DrawingOverlays from '@/components/organisms/DrawingOverlays';
 import ChartRightPanel, { type DataValues } from '@/components/organisms/ChartRightPanel';
 import { useDrawingStore } from '@/lib/drawingStore';
-import { hitTestDrawing } from '@/lib/chart/hitTest';
+import { hitTestDrawing, type Handle } from '@/lib/chart/hitTest';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
-import type { DrawingPoint } from '@/types/overlays';
+import type { DrawingPoint, Drawing } from '@/types/overlays';
 import type { IChartApi, ISeriesApi, MouseEventParams } from 'lightweight-charts';
 import { createSeriesMarkers, type Time, type ISeriesMarkersPluginApi } from 'lightweight-charts';
 import styles from './ChartWorkspace.module.css';
@@ -177,9 +177,19 @@ export default function ChartWorkspace() {
   const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const pendingPtsRef = useRef<DrawingPoint[]>([]);
 
+  interface DragState {
+    id: string;
+    handle: Handle;
+    startDrawing: Drawing;
+    startX: number;
+    startY: number;
+  }
+  const dragRef = useRef<DragState | null>(null);
+
   const drawings = useDrawingStore((s) => s.drawings);
   const addDrawing = useDrawingStore((s) => s.addDrawing);
   const removeDrawing = useDrawingStore((s) => s.removeDrawing);
+  const updateDrawing = useDrawingStore((s) => s.updateDrawing);
   const clearForSymbol = useDrawingStore((s) => s.clearForSymbol);
 
   const structureVisible = useStructureStore((s) => s.structureVisible);
@@ -384,6 +394,105 @@ export default function ChartWorkspace() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles.length, activeIndicators]);
+
+  // Drag-to-move drawings (cursor tool only)
+  useEffect(() => {
+    if (drawingTool !== 'cursor') return;
+    const chart = chartApiRef.current;
+    const series = mainSeriesRef.current;
+    if (!chart || !series) return;
+    const el = chart.chartElement();
+
+    const toX = (t: number): number | null => {
+      const coord = chart.timeScale().timeToCoordinate(t as unknown as Time);
+      return coord ?? null;
+    };
+    const toY = (p: number): number | null => {
+      const coord = series.priceToCoordinate(p);
+      return coord ?? null;
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const candidates = useDrawingStore.getState().drawings.filter(
+        (d) => d.symbol === symbol && d.interval === interval,
+      );
+      const hit = candidates.find((d) => hitTestDrawing(d, x, y, toX, toY, 8).hit);
+      if (!hit) return;
+      const result = hitTestDrawing(hit, x, y, toX, toY, 8);
+      dragRef.current = {
+        id: hit.id,
+        handle: result.handle,
+        startDrawing: { ...hit, points: hit.points.map((p) => ({ ...p })) },
+        startX: x,
+        startY: y,
+      };
+      chart.applyOptions({ handleScroll: false, handleScale: false });
+      e.stopPropagation();
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const newTime = chart.timeScale().coordinateToTime(x);
+      const newPrice = series.coordinateToPrice(y);
+      if (newTime == null || newPrice == null) return;
+      const { handle, startDrawing, startX, startY } = drag;
+      const startTime0 = chart.timeScale().coordinateToTime(startX);
+      const startPrice0 = series.coordinateToPrice(startY);
+      if (startTime0 == null || startPrice0 == null) return;
+      const dt = Number(newTime) - Number(startTime0);
+      const dp = newPrice - startPrice0;
+      let updatedPoints: DrawingPoint[];
+      if (handle === 'p0') {
+        updatedPoints = [
+          { time: Number(newTime), price: newPrice },
+          ...startDrawing.points.slice(1),
+        ];
+      } else if (handle === 'p1') {
+        updatedPoints = [
+          startDrawing.points[0],
+          { time: Number(newTime), price: newPrice },
+        ];
+      } else {
+        // 'whole' — translate all points; hline: price-only delta, keep time
+        if (startDrawing.kind === 'hline') {
+          updatedPoints = startDrawing.points.map((p) => ({
+            time: p.time,
+            price: p.price + dp,
+          }));
+        } else {
+          updatedPoints = startDrawing.points.map((p) => ({
+            time: p.time + dt,
+            price: p.price + dp,
+          }));
+        }
+      }
+      updateDrawing(drag.id, { points: updatedPoints });
+    };
+
+    const onPointerUp = () => {
+      if (!dragRef.current) return;
+      dragRef.current = null;
+      chart.applyOptions({ handleScroll: true, handleScale: true });
+    };
+
+    el.addEventListener('pointerdown', onPointerDown);
+    el.addEventListener('pointermove', onPointerMove);
+    el.addEventListener('pointerup', onPointerUp);
+
+    return () => {
+      el.removeEventListener('pointerdown', onPointerDown);
+      el.removeEventListener('pointermove', onPointerMove);
+      el.removeEventListener('pointerup', onPointerUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawingTool, symbol, interval, updateDrawing]);
 
   // Click-to-draw for trendline / hline / rect tools
   useEffect(() => {
