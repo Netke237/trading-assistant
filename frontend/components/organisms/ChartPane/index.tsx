@@ -147,7 +147,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
             priceScaleId: cfg.priceScaleId ?? 'right',
           }, cfg.paneIndex ?? 0);
           // Line is used as main series (line chart mode) — update ref so ChartOverlays still works (pane 0 only)
-          if (mainSeriesRef && cfg.id.startsWith('candles-') && (cfg.paneIndex ?? 0) === 0) {
+          if (mainSeriesRef && (cfg.paneIndex ?? 0) === 0) {
             mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
           }
         }
