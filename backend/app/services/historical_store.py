@@ -156,7 +156,7 @@ async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
     async with AsyncSessionLocal() as db:
         last = await _last_stored_date(symbol, db)
 
-        fetch_needed = (last is None) or (last < most_recent_trading_day())
+        fetch_needed = (last is None) or (last < min(end, most_recent_trading_day()))
         if fetch_needed:
             fetch_start = (last + timedelta(days=1)) if last else start
             try:
