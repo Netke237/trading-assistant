@@ -97,7 +97,7 @@ horizons:
       caution_days: 21
     vol:
       iv_rank_compressed_caution: 5
-      iv_rank_pass_max: 34
+      iv_rank_pass_max: null
       iv_rank_caution_max: 55
 
   intraday:
@@ -237,7 +237,7 @@ horizons:
       caution_days: 60
     vol:
       iv_rank_compressed_caution: 5
-      iv_rank_pass_max: 44
+      iv_rank_pass_max: null
       iv_rank_caution_max: 65
 
 # Entry quality thresholds (FR-45)
