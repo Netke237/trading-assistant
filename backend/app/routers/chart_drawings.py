@@ -33,6 +33,7 @@ class DrawingIn(BaseModel):
     points: list[DrawingPoint] = Field(default_factory=list)
     color: str
     width: int = 1
+    text: str | None = None
     createdAt: str
 
 
@@ -44,6 +45,7 @@ class DrawingOut(BaseModel):
     points: list[DrawingPoint]
     color: str
     width: int
+    text: str | None
     created_at: str
 
 
@@ -58,6 +60,7 @@ def _row_to_dict(row: DrawingModel) -> dict:
         'points': json.loads(row.points_json),
         'color': row.color,
         'width': row.width,
+        'text': row.text,
         'created_at': row.created_at,
     }
 
@@ -75,6 +78,7 @@ async def upsert_drawing(body: DrawingIn, db: AsyncSession = Depends(get_db)):
         existing.points_json = json.dumps([p.model_dump() for p in body.points])
         existing.color = body.color
         existing.width = body.width
+        existing.text = body.text
         existing.created_at = body.createdAt
         await db.commit()
         return _row_to_dict(existing)
@@ -87,6 +91,7 @@ async def upsert_drawing(body: DrawingIn, db: AsyncSession = Depends(get_db)):
         points_json=json.dumps([p.model_dump() for p in body.points]),
         color=body.color,
         width=body.width,
+        text=body.text,
         created_at=body.createdAt,
     )
     db.add(drawing)

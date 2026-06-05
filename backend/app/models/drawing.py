@@ -16,6 +16,7 @@ class DrawingModel(Base):
     points_json = Column(Text(), nullable=False)   # JSON list of {time, price}
     color = Column(String(20), nullable=False)
     width = Column(Integer(), nullable=False, default=1)
+    text = Column(String, nullable=True)
     created_at = Column(Text(), nullable=False)
 
     __table_args__ = (

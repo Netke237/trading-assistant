@@ -122,3 +122,30 @@ async def test_list_filters_by_symbol_and_interval():
         resp = await client.get('/chart/drawings', params={'symbol': 'AAPL', 'interval': '1D'})
         ids = [d['id'] for d in resp.json()]
         assert ids == ['x1']
+
+
+@pytest.mark.asyncio
+async def test_text_drawing_round_trips_text_field():
+    """POSTing a text-box drawing with text='hello' should return text='hello' on GET."""
+    app = await _make_app()
+    payload = {
+        'id': 't1',
+        'symbol': 'AAPL',
+        'interval': '1D',
+        'kind': 'text',
+        'points': [{'time': 1000, 'price': 155.0}],
+        'color': '#fff',
+        'width': 1,
+        'createdAt': '2026-06-05T00:00:00Z',
+        'text': 'hello',
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        resp = await client.post('/chart/drawings', json=payload)
+        assert resp.status_code in (200, 201), resp.text
+
+        resp2 = await client.get('/chart/drawings', params={'symbol': 'AAPL', 'interval': '1D'})
+        assert resp2.status_code == 200
+        drawings = resp2.json()
+        match = next((d for d in drawings if d['id'] == 't1'), None)
+        assert match is not None
+        assert match['text'] == 'hello'
