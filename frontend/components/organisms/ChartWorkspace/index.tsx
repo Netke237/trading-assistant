@@ -6,6 +6,7 @@ import { ChartWSClient, type WSMessage, type ConnectionState } from '@/lib/chart
 import { calcEMA, calcSMA, calcRSI, calcMACD, calcBB, calcATR, calcVWAP, type Candle, type Point } from '@/lib/indicators';
 import { calcAnchoredVWAP, calcKeyLevels, calcCrossSignals, calcSignalMarkers, calcVolumeProfile, resample } from '@/lib/chart/overlays';
 import { VolumeProfilePrimitive } from '@/lib/chartPrimitives/VolumeProfilePrimitive';
+import { PreviewPrimitive } from '@/lib/chartPrimitives/PreviewPrimitive';
 import MtfDashboard from '@/components/organisms/MtfDashboard';
 import { buildMtfRow } from '@/lib/chart/mtf';
 import type { MtfRow } from '@/types/overlays';
@@ -169,6 +170,7 @@ export default function ChartWorkspace() {
   const chartApiRef = useRef<IChartApi | null>(null);
   const mainSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const vpPrimRef = useRef<VolumeProfilePrimitive | null>(null);
+  const previewRef = useRef<PreviewPrimitive | null>(null);
   const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const pendingPtsRef = useRef<DrawingPoint[]>([]);
 
@@ -194,6 +196,21 @@ export default function ChartWorkspace() {
     if (iv)  setInterval(iv as Interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally run only once on mount
+
+  // Attach PreviewPrimitive to main series once (detach on cleanup)
+  useEffect(() => {
+    const series = mainSeriesRef.current;
+    if (!series) return;
+    const prim = new PreviewPrimitive();
+    series.attachPrimitive(prim);
+    previewRef.current = prim;
+    return () => {
+      try { series.detachPrimitive(prim); } catch { /* ignore */ }
+      previewRef.current = null;
+    };
+  // mainSeriesRef is a stable ref — this runs once after the series is assigned
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainSeriesRef.current]);
 
   // Sync alert rules from backend on mount
   useEffect(() => {
@@ -364,8 +381,15 @@ export default function ChartWorkspace() {
     if (!chart || !series) return;
     if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy') {
       pendingPtsRef.current = [];
+      // Clear any leftover preview when switching away from a drawing tool
+      previewRef.current?.setState({ kind: null, origin: null, cursor: null });
       return;
     }
+
+    // Clear preview whenever the tool changes (covers switching between trendline/rect/hline)
+    previewRef.current?.setState({ kind: null, origin: null, cursor: null });
+    pendingPtsRef.current = [];
+
     const onClick = (param: MouseEventParams<Time>) => {
       if (!param.point) return;
       const price = series.coordinateToPrice(param.point.y);
@@ -380,13 +404,36 @@ export default function ChartWorkspace() {
       // 2-point tools: ignore clicks in chart whitespace (no time → off-screen endpoint at epoch 0)
       if ((drawingTool === 'trendline' || drawingTool === 'rect') && param.time == null) return;
       pendingPtsRef.current.push({ time, price });
-      if (pendingPtsRef.current.length === 2) {
+      if (pendingPtsRef.current.length === 1) {
+        // First point recorded — show origin marker
+        previewRef.current?.setState({
+          kind: drawingTool as 'trendline' | 'rect',
+          origin: { x: param.point.x, y: param.point.y },
+          cursor: null,
+        });
+      } else if (pendingPtsRef.current.length === 2) {
+        // Second point (commit) — clear preview then finalise drawing
+        previewRef.current?.setState({ kind: null, origin: null, cursor: null });
         addDrawing({ id: rid(), symbol, interval, kind: drawingTool, points: [...pendingPtsRef.current], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });
         pendingPtsRef.current = [];
       }
     };
     chart.subscribeClick(onClick);
-    return () => { chart.unsubscribeClick(onClick); };
+
+    // Crosshair subscription — active only while a first point is pending
+    const onCrosshair = (param: MouseEventParams<Time>) => {
+      if (pendingPtsRef.current.length !== 1) return;
+      previewRef.current?.setState({
+        ...previewRef.current.state,
+        cursor: param.point ? { x: param.point.x, y: param.point.y } : null,
+      });
+    };
+    chart.subscribeCrosshairMove(onCrosshair);
+
+    return () => {
+      chart.unsubscribeClick(onClick);
+      chart.unsubscribeCrosshairMove(onCrosshair);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawingTool, symbol, interval]);
 
