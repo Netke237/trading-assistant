@@ -156,7 +156,20 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
         );
       }
     });
-  }, [series]);
+
+    // Set proportional pane heights when multiple panes exist.
+    // Main pane (0) gets 60%, remaining 40% is split evenly among sub-panes.
+    const panes = chart.panes();
+    if (panes.length > 1) {
+      const totalHeight = containerRef.current?.clientHeight || getHeight();
+      const mainHeight = Math.round(totalHeight * 0.6);
+      const subHeight = Math.round((totalHeight - mainHeight) / (panes.length - 1));
+      panes[0].setHeight(mainHeight);
+      for (let i = 1; i < panes.length; i++) {
+        panes[i].setHeight(subHeight);
+      }
+    }
+  }, [series, getHeight]);
 
   return (
     <div

@@ -313,16 +313,16 @@ export default function ChartWorkspace() {
     });
   }, []);
 
-  const mainSeries = useMemo(
-    () => buildMainSeries(candles, activeIndicators, chartType, interval),
-    [candles, activeIndicators, chartType, interval],
-  );
-  const subPanes = useMemo(
-    () => activeIndicators
-      .filter(i => i.pane === 'sub')
-      .map(ind => ({ id: ind.id, series: buildSubSeries(candles, ind) })),
-    [candles, activeIndicators],
-  );
+  const allSeries = useMemo(() => {
+    const main = buildMainSeries(candles, activeIndicators, chartType, interval); // pane 0
+    const subs: SeriesConfig[] = [];
+    let pane = 1;
+    for (const ind of activeIndicators.filter((i) => i.pane === 'sub')) {
+      for (const s of buildSubSeries(candles, ind)) subs.push({ ...s, paneIndex: pane });
+      pane += 1;
+    }
+    return [...main, ...subs];
+  }, [candles, activeIndicators, chartType, interval]);
 
   const indicatorLabels = useMemo(
     () => buildIndicatorLabels(activeIndicators),
@@ -405,7 +405,7 @@ export default function ChartWorkspace() {
         <div className={styles.charts}>
           <div className={styles.mainPane}>
             <ChartPane
-              series={mainSeries}
+              series={allSeries}
               onCrosshairMove={handleCrosshair}
               chartApiRef={chartApiRef}
               mainSeriesRef={mainSeriesRef}
@@ -425,9 +425,6 @@ export default function ChartWorkspace() {
             {mtfRows.length > 0 && <MtfDashboard rows={mtfRows} />}
             {showStructure && <StructurePanel onClose={() => setShowStructure(false)} />}
           </div>
-          {subPanes.map(({ id, series }) => (
-            <ChartPane key={id} series={series} height={100} />
-          ))}
         </div>
         <ChartRightPanel crosshairData={crosshair} symbol={symbol} structureSignals={structureSignals} indicatorLabels={indicatorLabels} />
       </div>
