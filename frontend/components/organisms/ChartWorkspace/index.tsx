@@ -28,6 +28,7 @@ import { ChartOverlays } from '@/components/organisms/ChartOverlays';
 import DrawingOverlays from '@/components/organisms/DrawingOverlays';
 import ChartRightPanel, { type DataValues } from '@/components/organisms/ChartRightPanel';
 import { useDrawingStore } from '@/lib/drawingStore';
+import { hitTestDrawing } from '@/lib/chart/hitTest';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
 import type { DrawingPoint } from '@/types/overlays';
@@ -178,6 +179,8 @@ export default function ChartWorkspace() {
 
   const drawings = useDrawingStore((s) => s.drawings);
   const addDrawing = useDrawingStore((s) => s.addDrawing);
+  const removeDrawing = useDrawingStore((s) => s.removeDrawing);
+  const clearForSymbol = useDrawingStore((s) => s.clearForSymbol);
 
   const structureVisible = useStructureStore((s) => s.structureVisible);
   const structureVisibility = useStructureStore((s) => s.visibility);
@@ -387,7 +390,7 @@ export default function ChartWorkspace() {
     const chart = chartApiRef.current;
     const series = mainSeriesRef.current;
     if (!chart || !series) return;
-    if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy' && drawingTool !== 'text') {
+    if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy' && drawingTool !== 'text' && drawingTool !== 'eraser') {
       pendingPtsRef.current = [];
       // Clear any leftover preview when switching away from a drawing tool
       previewRef.current?.setState({ kind: null, origin: null, cursor: null });
@@ -403,6 +406,14 @@ export default function ChartWorkspace() {
       const price = series.coordinateToPrice(param.point.y);
       if (price == null) return;
       const time = Number(param.time ?? 0);
+      if (drawingTool === 'eraser') {
+        const toX = (t: number): number | null => chartApiRef.current?.timeScale().timeToCoordinate(t as unknown as Time) ?? null;
+        const toY = (p: number): number | null => mainSeriesRef.current?.priceToCoordinate(p) ?? null;
+        const eraserDrawings = useDrawingStore.getState().drawings.filter(d => d.symbol === symbol && d.interval === interval);
+        const hit = eraserDrawings.find(d => hitTestDrawing(d, param.point!.x, param.point!.y, toX, toY, 6).hit);
+        if (hit) removeDrawing(hit.id);
+        return;
+      }
       if (drawingTool === 'alert') { setClickPopover({ kind: 'alert', price, time }); return; }
       if (drawingTool === 'buy') { setClickPopover({ kind: 'buy', price, time }); return; }
       if (drawingTool === 'text') { setTextDraft({ time, price }); return; }
@@ -457,7 +468,7 @@ export default function ChartWorkspace() {
       />
       {showIndicators && <IndicatorPanel onClose={() => setShowIndicators(false)} />}
       <div className={styles.body}>
-        <DrawingToolbar active={drawingTool} onChange={setDrawingTool} />
+        <DrawingToolbar active={drawingTool} onChange={setDrawingTool} onClear={() => { clearForSymbol(symbol, interval); }} />
         <div className={styles.charts}>
           <div className={styles.mainPane}>
             <ChartPane

@@ -4,11 +4,13 @@ import styles from './DrawingToolbar.module.css';
 export type DrawingTool =
   | 'cursor' | 'trendline' | 'hline' | 'rect'
   | 'alert'  | 'buy'
-  | 'fib' | 'text' | 'measure' | 'zoom';
+  | 'fib' | 'text' | 'measure' | 'zoom'
+  | 'eraser';
 
 interface Props {
   active: DrawingTool;
   onChange: (t: DrawingTool) => void;
+  onClear: () => void;
 }
 
 const TOOLS: { id: DrawingTool; label: string; icon: string }[] = [
@@ -19,9 +21,10 @@ const TOOLS: { id: DrawingTool; label: string; icon: string }[] = [
   { id: 'text',      label: 'Text',            icon: 'T' },
   { id: 'alert',     label: 'Set alert',       icon: '🔔' },
   { id: 'buy',       label: 'Paper buy',       icon: '＄' },
+  { id: 'eraser',    label: 'Eraser',          icon: '⌫' },
 ];
 
-export default function DrawingToolbar({ active, onChange }: Props) {
+export default function DrawingToolbar({ active, onChange, onClear }: Props) {
   return (
     <div className={styles.toolbar}>
       {TOOLS.map(t => (
@@ -34,6 +37,13 @@ export default function DrawingToolbar({ active, onChange }: Props) {
           {t.icon}
         </button>
       ))}
+      <button
+        className={styles.tool}
+        title="Clear all drawings"
+        onClick={onClear}
+      >
+        ✕
+      </button>
     </div>
   );
 }
