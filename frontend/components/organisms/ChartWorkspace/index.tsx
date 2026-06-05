@@ -163,7 +163,7 @@ export default function ChartWorkspace() {
   const [showStructure, setShowStructure] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
   const [clickPopover, setClickPopover] = useState<{ kind: 'alert' | 'buy'; price: number; time: number } | null>(null);
-  const [textDraft, setTextDraft] = useState<{ time: number; price: number } | null>(null);
+  const [textDraft, setTextDraft] = useState<{ time: number; price: number; editId?: string } | null>(null);
   const [prefillPrice, setPrefillPrice] = useState<number | null>(null);
   const [buyQty, setBuyQty] = useState(1);
   const [crosshair, setCrosshair] = useState<DataValues>({ time: null, indicators: {} });
@@ -186,6 +186,9 @@ export default function ChartWorkspace() {
     lastUpdateMs?: number;
   }
   const dragRef = useRef<DragState | null>(null);
+  // Tracks whether the last pointer-down resulted in a drag (pointer moved > 4px).
+  // Used to suppress the text-edit popover when the user drags a drawing instead of clicking it.
+  const wasDragRef = useRef(false);
 
   const drawings = useDrawingStore((s) => s.drawings);
   const addDrawing = useDrawingStore((s) => s.addDrawing);
@@ -414,6 +417,7 @@ export default function ChartWorkspace() {
     };
 
     const onPointerDown = (e: PointerEvent) => {
+      wasDragRef.current = false;
       const rect = el.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
@@ -437,6 +441,7 @@ export default function ChartWorkspace() {
     const onPointerMove = (e: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
+      wasDragRef.current = true;
       const rect = el.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
@@ -509,7 +514,7 @@ export default function ChartWorkspace() {
     const chart = chartApiRef.current;
     const series = mainSeriesRef.current;
     if (!chart || !series) return;
-    if (drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy' && drawingTool !== 'text' && drawingTool !== 'eraser') {
+    if (drawingTool !== 'cursor' && drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy' && drawingTool !== 'text' && drawingTool !== 'eraser') {
       pendingPtsRef.current = [];
       // Clear any leftover preview when switching away from a drawing tool
       previewRef.current?.setState({ kind: null, origin: null, cursor: null });
@@ -525,6 +530,24 @@ export default function ChartWorkspace() {
       const price = series.coordinateToPrice(param.point.y);
       if (price == null) return;
       const time = Number(param.time ?? 0);
+      if (drawingTool === 'cursor' || drawingTool === 'text') {
+        // Check if clicking (not dragging) on an existing text drawing — open popover in edit mode
+        if (!wasDragRef.current) {
+          const toX = (t: number): number | null => chartApiRef.current?.timeScale().timeToCoordinate(t as unknown as Time) ?? null;
+          const toY = (p: number): number | null => mainSeriesRef.current?.priceToCoordinate(p) ?? null;
+          const textDrawings = useDrawingStore.getState().drawings.filter(
+            d => d.symbol === symbol && d.interval === interval && d.kind === 'text',
+          );
+          const hitText = textDrawings.find(d => hitTestDrawing(d, param.point!.x, param.point!.y, toX, toY, 8).hit);
+          if (hitText) {
+            setTextDraft({ time: hitText.points[0].time, price: hitText.points[0].price, editId: hitText.id });
+            return;
+          }
+        }
+        // For cursor tool: do nothing further (drag handles moves)
+        if (drawingTool === 'cursor') return;
+        // For text tool: fall through to create a new annotation
+      }
       if (drawingTool === 'eraser') {
         const toX = (t: number): number | null => chartApiRef.current?.timeScale().timeToCoordinate(t as unknown as Time) ?? null;
         const toY = (p: number): number | null => mainSeriesRef.current?.priceToCoordinate(p) ?? null;
@@ -644,8 +667,13 @@ export default function ChartWorkspace() {
       )}
       {textDraft && (
         <TextInputPopover
+          initial={textDraft.editId ? drawings.find(d => d.id === textDraft.editId)?.text : undefined}
           onSave={(text) => {
-            addDrawing({ id: rid(), symbol, interval, kind: 'text', points: [{ time: textDraft.time, price: textDraft.price }], color: '#dddddd', width: 1, text, createdAt: new Date().toISOString() });
+            if (textDraft.editId) {
+              updateDrawing(textDraft.editId, { text });
+            } else {
+              addDrawing({ id: rid(), symbol, interval, kind: 'text', points: [{ time: textDraft.time, price: textDraft.price }], color: '#dddddd', width: 1, text, createdAt: new Date().toISOString() });
+            }
             setTextDraft(null);
           }}
           onCancel={() => setTextDraft(null)}
