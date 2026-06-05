@@ -54,23 +54,33 @@ bt_min_win_rate:        float = 0.45      # already existed; now surfaced
 
 #### A2. Backend router (`backend/app/routers/stock_scan.py`)
 
-Pass the three new fields through to their signal functions inside `_process_stock`:
+Add a `_SIGNAL_KWARGS` dispatch table alongside the existing `_SIGNAL_FNS` table. Each entry is a lambda that extracts the relevant kwargs from the request:
 
 ```python
-signal = signal_fn(bars[-120:], tolerance=req.pullback_tolerance_pct)  # pullback_ema
-# ma_crossover: pass lookback
-# breakout_base: pass volume_mult
+_SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict]] = {
+    "pullback_ema":       lambda r: {"tolerance":   r.pullback_tolerance_pct},
+    "breakout_base":      lambda r: {"volume_mult": r.breakout_volume_mult},
+    "ma_crossover":       lambda r: {"lookback":    r.ma_crossover_lookback},
+    "mean_reversion_rsi": lambda r: {},
+}
 ```
 
-Each strategy function already accepts keyword args; no signature changes needed beyond wiring the call sites.
+Inside `_process_stock`, replace the bare `signal_fn(bars[-120:])` call with:
+
+```python
+signal_kwargs = _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req)
+signal = signal_fn(bars[-120:], **signal_kwargs)
+```
+
+Also add `price_map: dict[str, float]` as a new parameter to `_process_stock` and remove the `fetch_price_async` call (see B3 below).
 
 #### A3. Strategy engine (`backend/app/services/strategy_engine.py`)
 
-Three targeted changes — replace the three hardcoded literals with function parameters:
+Two signature changes required (one function already has its parameter):
 
-- `pullback_ema_signal`: add `tolerance: float = 0.04` parameter; replace `0.04` literal with `tolerance`.
-- `ma_crossover_signal`: add `lookback: int = 10` parameter; replace `range(-10, 0)` with `range(-lookback, 0)`.
-- `breakout_base_signal`: already has `volume_mult` as a parameter — no change needed, just ensure the router passes it.
+- `pullback_ema_signal`: add `tolerance: float = 0.04` keyword parameter; replace the hardcoded `0.04` literal at line 115 with `tolerance`.
+- `ma_crossover_signal`: add `lookback: int = 10` keyword parameter; replace `range(-10, 0)` with `range(-lookback, 0)`.
+- `breakout_base_signal`: already has `volume_mult: float = 1.1` as a parameter — no signature change needed.
 
 #### A4. Zustand store (`frontend/lib/scanParamsStore.ts`) — new file
 
@@ -104,7 +114,7 @@ Each input is an `<input type="number">` styled with existing CSS tokens. No new
 
 #### A6. Step 5 page — collapsible override panel
 
-Add a `<details>` / `<summary>` collapsible section labelled "⚙ Scan parameters" above the strategy grid. Pre-fills from `useScanParamsStore`. Values held in local `useState` — not written back to the store. Includes a "Reset to defaults" button that resets local state to store values.
+Add a `<details>` / `<summary>` collapsible section labelled "⚙ Scan parameters" above the strategy grid. Pre-fills from `useScanParamsStore`. Values held in local `useState` — not written back to the store. Includes a "Reset to saved" button that resets local state back to the values currently in the store (i.e., the user's saved Settings defaults, not the hardcoded system defaults).
 
 The 5 values are passed into `api.postStockScan()` at call time.
 
@@ -128,16 +138,16 @@ def most_recent_trading_day() -> date:
     return today
 ```
 
-In `get_bars()`, change the stale-check condition from:
+In `get_bars()`, the actual stale-check condition is:
 
 ```python
-if last_date < date.today():
+fetch_needed = (last is None) or (last < end)
 ```
 
-to:
+where `end` is the caller-supplied end date (typically `date.today()`). Change the `last < end` branch to compare against `most_recent_trading_day()` instead:
 
 ```python
-if last_date < most_recent_trading_day():
+fetch_needed = (last is None) or (last < most_recent_trading_day())
 ```
 
 This eliminates Tiingo delta fetches on non-first runs after the trading session closes.
@@ -149,10 +159,11 @@ This eliminates Tiingo delta fetches on non-first runs after the trading session
 Current behaviour: in-memory dict with 7-day TTL. Clears on every server restart → cold start for all symbols.
 
 Change:
-- Add a `confidence_cache` table to the existing SQLite DB (same connection used by `historical_store`): columns `cache_key TEXT PRIMARY KEY`, `value TEXT` (JSON), `expires_at REAL` (Unix timestamp).
-- `get_cached(key)`: check in-memory first (L1), then DB (L2). On L2 hit, populate L1.
-- `set_cached(key, value)`: write to both L1 and L2.
-- On startup, load all non-expired rows into L1.
+- Open a **dedicated SQLite file** (`backend/data/confidence_cache.db`) using Python's stdlib `sqlite3` module directly — `historical_store.py` uses SQLAlchemy async sessions and does not expose a raw connection, so sharing it would be complex. A separate lightweight file is simpler and has no dependency on SQLAlchemy.
+- Create `confidence_cache` table on first open: columns `cache_key TEXT PRIMARY KEY`, `value TEXT` (JSON), `expires_at REAL` (Unix timestamp).
+- `get_cached(key)`: check in-memory dict first (L1), then `sqlite3` DB (L2). On L2 hit, populate L1.
+- `set_cached(key, value)`: write to both L1 and L2 via `sqlite3`.
+- On module import, load all non-expired rows from the DB into L1 (warm start).
 
 Schema:
 
@@ -171,15 +182,15 @@ TTL remains 7 days. No change to the `cache_key` format or the calling code in `
 Before spawning per-symbol tasks, pre-fetch all prices in one call:
 
 ```python
-# Before the task list
-price_map: dict[str, float] = await fetch_quotes_batch(symbols)
+# Before the task list — fetch_quotes is synchronous; wrap in asyncio.to_thread
+price_map: dict[str, float] = await asyncio.to_thread(fetch_quotes, symbols)
 
-# _process_stock receives price directly — no per-symbol price fetch
+# _process_stock receives price_map directly — no per-symbol price fetch
 async def _process_stock(symbol, req, scan_id, price_map): ...
     price = price_map.get(symbol)
 ```
 
-`fetch_quotes(symbols)` already exists in `backend/app/data/market.py` (line 462). Wire it up and remove the `fetch_price_async` call from inside `_process_stock`.
+`fetch_quotes(symbols)` already exists in `backend/app/data/market.py` as a **synchronous** function that calls Tradier's batch quotes endpoint and returns `dict[str, float]`. Wrap it in `asyncio.to_thread` for non-blocking use. Remove the `fetch_price_async` call from inside `_process_stock`.
 
 **Edge case:** If a symbol is missing from `price_map` (Tradier returned no quote), return `{"symbol": symbol, "reason": "no price data"}` — same as the current `if not price:` check.
 
@@ -193,7 +204,7 @@ Company name fetches remain per-symbol (cached after first run, negligible cost)
 
 For Swing and Position horizons, find the `vol` rule block and set `iv_rank_pass_max: null` (same as the current Intraday config). When `iv_rank` is `None`, `_rule_vol` returns PASS 90 instead of CAUTION 50.
 
-This is a one-line-per-horizon YAML change. No Python changes required.
+This is a two-line YAML change (one for Swing, one for Position). No Python changes required.
 
 **Verification:** After the change, a stock scan on Swing horizon with no IV data should show the vol rule contributing PASS 90 to the composite score rather than CAUTION 50.
 
@@ -213,7 +224,7 @@ api.postStockScan({ symbols, strategy, pullback_tolerance_pct, ... })
 POST /api/stock-scan → StockScanRequest (all 5 params present)
           ↓
 run_stock_scan():
-  fetch_quotes_batch(symbols) → price_map (1 HTTP call)
+  fetch_quotes(symbols) → price_map (1 HTTP call)
   [per symbol, semaphore=5]:
     most_recent_trading_day() guard → skip Tiingo if current
     score_stock() → vol rule now PASS when iv_rank=None
@@ -228,7 +239,7 @@ run_stock_scan():
 
 - **B1 (trading day):** If `most_recent_trading_day()` returns wrong date due to holiday, worst case is one extra Tiingo call — safe.
 - **B2 (cache DB):** Wrap all SQLite cache operations in try/except; fall through to live compute on any DB error. Never block a scan on a cache failure.
-- **B3 (batch price):** If `fetch_quotes_batch` throws, fall back to per-symbol `fetch_price_async` calls (existing behaviour). Log a warning.
+- **B3 (batch price):** If `fetch_quotes` throws, fall back to per-symbol `fetch_price_async` calls (existing behaviour). Log a warning.
 
 ---
 
