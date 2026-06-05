@@ -52,6 +52,9 @@ def _warm_load() -> None:
                 "SELECT cache_key, value, expires_at FROM confidence_cache WHERE expires_at > ?",
                 (now,),
             ).fetchall()
+            # Purge expired entries while the connection is open
+            conn.execute("DELETE FROM confidence_cache WHERE expires_at <= ?", (now,))
+            conn.commit()
         finally:
             conn.close()
         with _lock:
@@ -91,6 +94,9 @@ def set_cached(key: str, value: dict) -> None:
     expires_at = now + _TTL_SECONDS
     with _lock:
         _store[key] = {**value, "_ts": now}
+    # _write_db is intentionally called outside _lock: SQLite has its own
+    # write serialisation via file locking. For this cache (deterministic
+    # confidence scores, weekly TTL, low write rate) last-writer-wins is safe.
     _write_db(key, value, expires_at)
 
 
@@ -108,6 +114,15 @@ def get_cached(key: str) -> dict | None:
 def clear_cache() -> None:
     with _lock:
         _store.clear()
+    try:
+        conn = sqlite3.connect(_DB_PATH)
+        try:
+            conn.execute("DELETE FROM confidence_cache")
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
 
 
 # Warm-load on module import (once per process).

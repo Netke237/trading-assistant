@@ -2,7 +2,6 @@
 import time
 import tempfile
 import os
-import pytest
 
 
 def test_set_and_get_in_memory():
