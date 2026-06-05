@@ -127,13 +127,14 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
             wickUpColor: '#4caf50',
             wickDownColor: '#e05050',
           }, cfg.paneIndex ?? 0);
-          if (mainSeriesRef) mainSeriesRef.current = s as ISeriesApi<'Candlestick'>;
+          // Set mainSeriesRef only if this is the pane-0 candles series
+          if (mainSeriesRef && (cfg.paneIndex ?? 0) === 0) mainSeriesRef.current = s as ISeriesApi<'Candlestick'>;
         } else if (cfg.type === 'Bar') {
           s = chart.addSeries(BarSeries, {
             upColor: '#4caf50', downColor: '#e05050',
           }, cfg.paneIndex ?? 0);
-          // Bar is used as main series — update ref so ChartOverlays still works
-          if (mainSeriesRef) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
+          // Bar is used as main series — update ref so ChartOverlays still works (pane 0 only)
+          if (mainSeriesRef && (cfg.paneIndex ?? 0) === 0) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
         } else if (cfg.type === 'Histogram') {
           s = chart.addSeries(HistogramSeries, {
             color: cfg.color ?? '#4a4a6a',
@@ -145,8 +146,8 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
             lineWidth: 1,
             priceScaleId: cfg.priceScaleId ?? 'right',
           }, cfg.paneIndex ?? 0);
-          // Line is used as main series (line chart mode) — update ref so ChartOverlays still works
-          if (mainSeriesRef && cfg.id.startsWith('candles-')) {
+          // Line is used as main series (line chart mode) — update ref so ChartOverlays still works (pane 0 only)
+          if (mainSeriesRef && cfg.id.startsWith('candles-') && (cfg.paneIndex ?? 0) === 0) {
             mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
           }
         }
