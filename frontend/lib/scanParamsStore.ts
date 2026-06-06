@@ -5,8 +5,13 @@ export interface ScanParams {
   pullbackTolerancePct: number;   // fraction: 0.04 = 4%
   pullbackEmaPeriod:    number;   // EMA to pull back to (e.g. 50)
   pullbackTrendEma:     number;   // trend-confirmation EMA (e.g. 100)
+  maCrossoverFast:      number;   // fast MA period
+  maCrossoverSlow:      number;   // slow MA period
   maCrossoverLookback:  number;   // bars
   breakoutVolumeMult:   number;   // multiplier
+  rsiPeriod:            number;   // RSI look-back period
+  rsiOversold:          number;   // RSI oversold threshold (e.g. 30)
+  rsiTrendSma:          number;   // trend-confirmation SMA (e.g. 200)
   btMinTrades:          number;   // count
   btMinWinRate:         number;   // fraction: 0.45 = 45%
 }
@@ -15,8 +20,13 @@ const DEFAULTS: ScanParams = {
   pullbackTolerancePct: 0.04,
   pullbackEmaPeriod:    50,
   pullbackTrendEma:     100,
+  maCrossoverFast:      20,
+  maCrossoverSlow:      50,
   maCrossoverLookback:  10,
   breakoutVolumeMult:   1.1,
+  rsiPeriod:            14,
+  rsiOversold:          30,
+  rsiTrendSma:          200,
   btMinTrades:          10,
   btMinWinRate:         0.45,
 };
@@ -35,7 +45,7 @@ export const useScanParamsStore = create<ScanParamsStore>()(
     }),
     {
       name: 'bamendjou:scan-params',
-      version: 2,
+      version: 3,
       migrate: (state: unknown, v: number) => {
         if (v < 2) return { ...DEFAULTS, ...(state as Partial<ScanParams>) };
         return state as ScanParams;

@@ -55,32 +55,27 @@ export default function Step5StrategyPage() {
     pullbackTolerancePct: s.pullbackTolerancePct,
     pullbackEmaPeriod:    s.pullbackEmaPeriod,
     pullbackTrendEma:     s.pullbackTrendEma,
+    maCrossoverFast:      s.maCrossoverFast,
+    maCrossoverSlow:      s.maCrossoverSlow,
     maCrossoverLookback:  s.maCrossoverLookback,
     breakoutVolumeMult:   s.breakoutVolumeMult,
+    rsiPeriod:            s.rsiPeriod,
+    rsiOversold:          s.rsiOversold,
+    rsiTrendSma:          s.rsiTrendSma,
     btMinTrades:          s.btMinTrades,
     btMinWinRate:         s.btMinWinRate,
   })));
-  const [params, setParams] = useState(() => ({
-    pullbackTolerancePct: savedParams.pullbackTolerancePct,
-    pullbackEmaPeriod:    savedParams.pullbackEmaPeriod,
-    pullbackTrendEma:     savedParams.pullbackTrendEma,
-    maCrossoverLookback:  savedParams.maCrossoverLookback,
-    breakoutVolumeMult:   savedParams.breakoutVolumeMult,
-    btMinTrades:          savedParams.btMinTrades,
-    btMinWinRate:         savedParams.btMinWinRate,
-  }));
+  const [params, setParams] = useState(() => ({ ...savedParams }));
 
-  function resetParams() {
-    setParams({
-      pullbackTolerancePct: savedParams.pullbackTolerancePct,
-      pullbackEmaPeriod:    savedParams.pullbackEmaPeriod,
-      pullbackTrendEma:     savedParams.pullbackTrendEma,
-      maCrossoverLookback:  savedParams.maCrossoverLookback,
-      breakoutVolumeMult:   savedParams.breakoutVolumeMult,
-      btMinTrades:          savedParams.btMinTrades,
-      btMinWinRate:         savedParams.btMinWinRate,
-    });
-  }
+  function resetParams() { setParams({ ...savedParams }); }
+
+  // Dynamic card titles reflecting the current parameter values
+  const strategyLabel: Record<string, string> = {
+    pullback_ema:        `Pullback to ${params.pullbackEmaPeriod}-EMA`,
+    ma_crossover:        `MA Crossover ${params.maCrossoverFast}/${params.maCrossoverSlow}`,
+    mean_reversion_rsi:  `Mean Reversion RSI / ${params.rsiTrendSma}-SMA`,
+    breakout_base:       'Breakout from tight base',
+  };
 
   const [loadingStrategy, setLoadingStrategy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -105,8 +100,13 @@ export default function Step5StrategyPage() {
         pullback_tolerance_pct: params.pullbackTolerancePct,
         pullback_ema_period:    params.pullbackEmaPeriod,
         pullback_trend_ema:     params.pullbackTrendEma,
+        ma_crossover_fast:      params.maCrossoverFast,
+        ma_crossover_slow:      params.maCrossoverSlow,
         ma_crossover_lookback:  params.maCrossoverLookback,
         breakout_volume_mult:   params.breakoutVolumeMult,
+        rsi_period:             params.rsiPeriod,
+        rsi_oversold:           params.rsiOversold,
+        rsi_trend_sma:          params.rsiTrendSma,
         bt_min_trades:          params.btMinTrades,
         bt_min_win_rate:        params.btMinWinRate,
         account_size: 50_000,
@@ -210,6 +210,34 @@ export default function Step5StrategyPage() {
           </label>
 
           <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">MA crossover fast</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={params.maCrossoverFast}
+                min={2} max={100} step={1}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, maCrossoverFast: Number(e.target.value) }))
+                }
+              />
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">MA crossover slow</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={params.maCrossoverSlow}
+                min={5} max={300} step={5}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, maCrossoverSlow: Number(e.target.value) }))
+                }
+              />
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
             <Text size={11} tone="dim">MA crossover lookback</Text>
             <div className={styles.paramInput}>
               <input
@@ -221,6 +249,48 @@ export default function Step5StrategyPage() {
                 }
               />
               <Text size={11} tone="dim">bars</Text>
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">RSI period</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={params.rsiPeriod}
+                min={2} max={50} step={1}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, rsiPeriod: Number(e.target.value) }))
+                }
+              />
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">RSI oversold level</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={params.rsiOversold}
+                min={10} max={50} step={1}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, rsiOversold: Number(e.target.value) }))
+                }
+              />
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">RSI trend SMA</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={params.rsiTrendSma}
+                min={20} max={500} step={10}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, rsiTrendSma: Number(e.target.value) }))
+                }
+              />
             </div>
           </label>
 
@@ -286,7 +356,7 @@ export default function Step5StrategyPage() {
             disabled={loadingStrategy !== null}
           >
             <div className={styles.cardHeader}>
-              <Text size={14} weight={600}>{s.label}</Text>
+              <Text size={14} weight={600}>{strategyLabel[s.key] ?? s.label}</Text>
               <Text size={11} tone="secondary">{s.when}</Text>
             </div>
             <div className={styles.cardBody}>

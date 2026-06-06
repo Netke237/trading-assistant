@@ -95,8 +95,13 @@ export const api = {
     pullback_tolerance_pct?: number;
     pullback_ema_period?: number;
     pullback_trend_ema?: number;
+    ma_crossover_fast?: number;
+    ma_crossover_slow?: number;
     ma_crossover_lookback?: number;
     breakout_volume_mult?: number;
+    rsi_period?: number;
+    rsi_oversold?: number;
+    rsi_trend_sma?: number;
     account_size?: number; risk_pct?: number;
     risk_fixed_usd?: number; bt_min_trades?: number; bt_min_win_rate?: number;
     min_price?: number; max_price?: number;

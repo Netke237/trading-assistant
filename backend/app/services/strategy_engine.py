@@ -211,7 +211,7 @@ def ma_crossover_signal(
                 stop_price=round(stop, 2),
                 target_price=round(target, 2),
                 atr=round(atr, 2),
-                detail={"fast_ma": round(fast_ma[-1], 2), "slow_ma": round(slow_ma[-1], 2)},
+                detail={f"sma_{fast}": round(fast_ma[-1], 2), f"sma_{slow}": round(slow_ma[-1], 2)},
             )
     return None
 
@@ -249,5 +249,5 @@ def mean_reversion_rsi_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
-        detail={"rsi": round(rsi[-1], 1), "sma_200": round(trend[-1], 2)},
+        detail={"rsi": round(rsi[-1], 1), f"sma_{trend_sma}": round(trend[-1], 2)},
     )
