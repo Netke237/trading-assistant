@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Title, Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { useShallow } from 'zustand/shallow';
 import { api } from '@/lib/api';
 import styles from './page.module.css';
 
@@ -50,13 +51,13 @@ export default function Step5StrategyPage() {
   const activeStrategy = useScanStore((s) => s.activeStrategy);
   const setActiveStrategy = useScanStore((s) => s.setActiveStrategy);
   const setStockScanResult = useScanStore((s) => s.setStockScanResult);
-  const savedParams = useScanParamsStore((s) => ({
+  const savedParams = useScanParamsStore(useShallow((s) => ({
     pullbackTolerancePct: s.pullbackTolerancePct,
     maCrossoverLookback:  s.maCrossoverLookback,
     breakoutVolumeMult:   s.breakoutVolumeMult,
     btMinTrades:          s.btMinTrades,
     btMinWinRate:         s.btMinWinRate,
-  }));
+  })));
   const [params, setParams] = useState(() => ({
     pullbackTolerancePct: savedParams.pullbackTolerancePct,
     maCrossoverLookback:  savedParams.maCrossoverLookback,
