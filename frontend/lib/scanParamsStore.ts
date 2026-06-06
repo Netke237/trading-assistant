@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 
 export interface ScanParams {
   pullbackTolerancePct: number;   // fraction: 0.04 = 4%
+  pullbackEmaPeriod:    number;   // EMA to pull back to (e.g. 50)
+  pullbackTrendEma:     number;   // trend-confirmation EMA (e.g. 100)
   maCrossoverLookback:  number;   // bars
   breakoutVolumeMult:   number;   // multiplier
   btMinTrades:          number;   // count
@@ -11,6 +13,8 @@ export interface ScanParams {
 
 const DEFAULTS: ScanParams = {
   pullbackTolerancePct: 0.04,
+  pullbackEmaPeriod:    50,
+  pullbackTrendEma:     100,
   maCrossoverLookback:  10,
   breakoutVolumeMult:   1.1,
   btMinTrades:          10,
@@ -31,7 +35,11 @@ export const useScanParamsStore = create<ScanParamsStore>()(
     }),
     {
       name: 'bamendjou:scan-params',
-      version: 1,
+      version: 2,
+      migrate: (state: unknown, v: number) => {
+        if (v < 2) return { ...DEFAULTS, ...(state as Partial<ScanParams>) };
+        return state as ScanParams;
+      },
     },
   ),
 );

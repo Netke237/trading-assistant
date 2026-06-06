@@ -13,6 +13,8 @@ class StockScanRequest(BaseModel):
     horizon:     Literal["Intraday", "Swing", "Position"]
     strategy:    Strategy
     pullback_tolerance_pct: float = Field(0.04, gt=0, le=1.0)  # 0 < tolerance ≤ 100%
+    pullback_ema_period:    int   = Field(50,   gt=0)           # EMA to pull back to
+    pullback_trend_ema:     int   = Field(100,  gt=0)           # trend-confirmation EMA
     ma_crossover_lookback:  int   = Field(10,   gt=0)           # lookback ≥ 1
     breakout_volume_mult:   float = Field(1.1,  gt=1.0)         # must exceed 1× (volume expansion)
     min_price:   Optional[float] = None

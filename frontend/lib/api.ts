@@ -93,6 +93,8 @@ export const api = {
     universe: string[]; direction: string; horizon: string;
     strategy: string; symbols?: string[];
     pullback_tolerance_pct?: number;
+    pullback_ema_period?: number;
+    pullback_trend_ema?: number;
     ma_crossover_lookback?: number;
     breakout_volume_mult?: number;
     account_size?: number; risk_pct?: number;

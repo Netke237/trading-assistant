@@ -90,30 +90,30 @@ class StrategySignal:
 def pullback_ema_signal(
     bars: list[dict],
     *,
-    ema_period: int = 20,
-    trend_sma: int = 50,
+    ema_period: int = 50,
+    trend_ema: int = 100,
     atr_stop_mult: float = 1.5,
     rr_target_mult: float = 2.0,
     tolerance: float = 0.04,
 ) -> StrategySignal | None:
-    """Bullish: uptrend (price > rising 50-SMA) + pullback toward 20-EMA + reversal candle."""
-    if len(bars) < trend_sma + 10:
+    """Bullish: uptrend (price > ema_period-EMA > trend_ema-EMA) + pullback to ema_period-EMA + reversal candle."""
+    if len(bars) < trend_ema + 10:
         return None
     closes = [b["close"] for b in bars]
-    ema20 = _ema(closes, ema_period)
-    sma50 = _sma(closes, trend_sma)
-    if not ema20 or not sma50:
+    fast_ema = _ema(closes, ema_period)
+    slow_ema = _ema(closes, trend_ema)
+    if not fast_ema or not slow_ema:
         return None
     current = closes[-1]
-    ema_val = ema20[-1]
-    sma_val = sma50[-1]
-    # Trend: price above rising 50-SMA
-    if current <= sma_val:
+    fast_val = fast_ema[-1]
+    slow_val = slow_ema[-1]
+    # Trend: price above ema_period-EMA, ema_period-EMA above trend_ema-EMA (two-EMA stack)
+    if current <= fast_val:
         return None
-    if len(sma50) >= 5 and sma50[-1] <= sma50[-5]:
+    if fast_val <= slow_val:
         return None
-    # Pullback: price within `tolerance` of 20-EMA from above
-    if not (0 <= (current - ema_val) / ema_val <= tolerance):
+    # Pullback: price within `tolerance` of ema_period-EMA from above
+    if not (0 <= (current - fast_val) / fast_val <= tolerance):
         return None
     # Reversal candle: close > open (bullish bar)
     last = bars[-1]
@@ -129,7 +129,7 @@ def pullback_ema_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
-        detail={"ema_20": round(ema_val, 2), "sma_50": round(sma_val, 2)},
+        detail={f"ema_{ema_period}": round(fast_val, 2), f"ema_{trend_ema}": round(slow_val, 2)},
     )
 
 

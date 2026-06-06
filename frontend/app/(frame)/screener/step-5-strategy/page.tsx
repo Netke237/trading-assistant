@@ -53,6 +53,8 @@ export default function Step5StrategyPage() {
   const setStockScanResult = useScanStore((s) => s.setStockScanResult);
   const savedParams = useScanParamsStore(useShallow((s) => ({
     pullbackTolerancePct: s.pullbackTolerancePct,
+    pullbackEmaPeriod:    s.pullbackEmaPeriod,
+    pullbackTrendEma:     s.pullbackTrendEma,
     maCrossoverLookback:  s.maCrossoverLookback,
     breakoutVolumeMult:   s.breakoutVolumeMult,
     btMinTrades:          s.btMinTrades,
@@ -60,6 +62,8 @@ export default function Step5StrategyPage() {
   })));
   const [params, setParams] = useState(() => ({
     pullbackTolerancePct: savedParams.pullbackTolerancePct,
+    pullbackEmaPeriod:    savedParams.pullbackEmaPeriod,
+    pullbackTrendEma:     savedParams.pullbackTrendEma,
     maCrossoverLookback:  savedParams.maCrossoverLookback,
     breakoutVolumeMult:   savedParams.breakoutVolumeMult,
     btMinTrades:          savedParams.btMinTrades,
@@ -69,6 +73,8 @@ export default function Step5StrategyPage() {
   function resetParams() {
     setParams({
       pullbackTolerancePct: savedParams.pullbackTolerancePct,
+      pullbackEmaPeriod:    savedParams.pullbackEmaPeriod,
+      pullbackTrendEma:     savedParams.pullbackTrendEma,
       maCrossoverLookback:  savedParams.maCrossoverLookback,
       breakoutVolumeMult:   savedParams.breakoutVolumeMult,
       btMinTrades:          savedParams.btMinTrades,
@@ -97,6 +103,8 @@ export default function Step5StrategyPage() {
         horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
         strategy: stratKey,
         pullback_tolerance_pct: params.pullbackTolerancePct,
+        pullback_ema_period:    params.pullbackEmaPeriod,
+        pullback_trend_ema:     params.pullbackTrendEma,
         ma_crossover_lookback:  params.maCrossoverLookback,
         breakout_volume_mult:   params.breakoutVolumeMult,
         bt_min_trades:          params.btMinTrades,
@@ -170,6 +178,34 @@ export default function Step5StrategyPage() {
                 }
               />
               <Text size={11} tone="dim">%</Text>
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">Pullback EMA period</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={params.pullbackEmaPeriod}
+                min={5} max={200} step={5}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, pullbackEmaPeriod: Number(e.target.value) }))
+                }
+              />
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">Trend EMA period</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={params.pullbackTrendEma}
+                min={10} max={500} step={10}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, pullbackTrendEma: Number(e.target.value) }))
+                }
+              />
             </div>
           </label>
 

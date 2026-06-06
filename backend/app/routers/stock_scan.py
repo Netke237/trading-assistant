@@ -36,7 +36,7 @@ _SIGNAL_FNS = {
 }
 
 _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
-    "pullback_ema":       lambda r: {"tolerance":   r.pullback_tolerance_pct},
+    "pullback_ema":       lambda r: {"tolerance": r.pullback_tolerance_pct, "ema_period": r.pullback_ema_period, "trend_ema": r.pullback_trend_ema},
     "breakout_base":      lambda r: {"volume_mult": r.breakout_volume_mult},
     "ma_crossover":       lambda r: {"lookback":    r.ma_crossover_lookback},
     "mean_reversion_rsi": lambda r: {},
