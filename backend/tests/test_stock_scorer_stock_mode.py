@@ -75,8 +75,9 @@ def test_options_mode_vol_rule_unchanged():
     assert vol_rule.score == 90   # unchanged — always PASS 90 in options mode
 
 
-from app.scoring.stock_scorer import _rule_trigger, _horizon_cfg
+from app.scoring.stock_scorer import _rule_trigger, _horizon_cfg, _rule_event
 import copy
+from datetime import date, timedelta
 
 
 def _trigger_bars_macd_cross(n=80):
@@ -141,3 +142,22 @@ def test_trigger_options_mode_still_caps_no_candle_at_35():
     required = cfg["trigger"]["momentum_signals_for_pass"]
     if momentum_count >= required:
         assert result.score == 35
+
+
+def test_event_neutral_in_stock_mode():
+    """Stock mode: earnings tomorrow must return PASS 90 (event = flag not penalty)."""
+    cfg = copy.deepcopy(_horizon_cfg("Swing"))
+    tomorrow = date.today() + timedelta(days=1)
+    result = _rule_event(tomorrow, None, cfg, scoring_mode="stock")
+    assert result.status == "PASS"
+    assert result.score == 90
+    assert result.detail.get("days_to_event") is not None   # metadata still present
+
+
+def test_event_still_penalises_in_options_mode():
+    """Options mode: earnings tomorrow must return REJECT (unchanged behaviour)."""
+    cfg = copy.deepcopy(_horizon_cfg("Swing"))
+    tomorrow = date.today() + timedelta(days=1)
+    result = _rule_event(tomorrow, None, cfg, scoring_mode="options")
+    assert result.status == "REJECT"
+    assert result.score == 5

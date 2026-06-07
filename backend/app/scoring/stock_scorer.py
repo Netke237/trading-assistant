@@ -752,6 +752,7 @@ def _rule_event(
     earnings_date: date | None,
     dividend_date: date | None,
     cfg: dict,
+    scoring_mode: str = "options",
 ) -> RuleResult:
     ec = cfg["event"]
     today = date.today()
@@ -772,6 +773,12 @@ def _rule_event(
         return RuleResult("event", "PASS", 90, {"event": "none"})
 
     detail = {"event": event_label, "days_to_event": worst_days}
+
+    # ── Stock mode: event = informational flag only, no penalty ───────────────
+    if scoring_mode == "stock":
+        return RuleResult("event", "PASS", 90, detail)
+
+    # ── Options mode: unchanged original logic ────────────────────────────────
     if worst_days < ec["reject_days"]:
         return RuleResult("event", "REJECT", 5, detail)
     elif worst_days < ec["caution_days"]:
@@ -938,7 +945,7 @@ def score_stock(
     trend_result            = _rule_trend(closes, cfg, direction, ma_func=ma_func, bars=bars, benchmark_closes=benchmark_closes)
     pullback_result         = _rule_pullback(bars, cfg, direction)
     trigger_result, vol_bonus = _rule_trigger(bars, cfg, volumes, direction, scoring_mode=scoring_mode)
-    event_result            = _rule_event(earnings_date, dividend_date, cfg)
+    event_result            = _rule_event(earnings_date, dividend_date, cfg, scoring_mode=scoring_mode)
     vol_result              = _rule_vol(
         iv_rank, cfg,
         volumes=volumes,
