@@ -84,8 +84,13 @@ async def _process_stock(
             if not bars or len(bars) < 60:
                 return {"symbol": symbol, "reason": "insufficient history"}
 
-            card = score_stock(symbol=symbol, direction=req.direction,
-                               horizon=req.horizon, bars=bars[-120:])
+            card = score_stock(
+                symbol=symbol,
+                direction=req.direction,
+                horizon=req.horizon,
+                bars=bars[-120:],
+                scoring_mode="stock",
+            )
             if card.status == "REJECT":
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}
 

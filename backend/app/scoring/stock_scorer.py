@@ -759,21 +759,41 @@ def _rule_event(
 # Rule 5: Volatility Context
 # ---------------------------------------------------------------------------
 
-def _rule_vol(iv_rank: float | None, cfg: dict) -> RuleResult:
-    vc = cfg["vol"]
+def _rule_vol(
+    iv_rank: float | None,
+    cfg: dict,
+    *,
+    volumes: list[float] | None = None,
+    scoring_mode: str = "options",
+) -> RuleResult:
+    # ── Stock mode: Relative Volume ───────────────────────────────────────────
+    if scoring_mode == "stock":
+        if not volumes or len(volumes) < 21:
+            return RuleResult("vol", "CAUTION", 45, {"rvol": None, "reason": "insufficient_volume_data"})
+        avg_vol = sum(volumes[-21:-1]) / 20
+        if avg_vol <= 0:
+            return RuleResult("vol", "CAUTION", 45, {"rvol": None, "reason": "zero_avg_volume"})
+        rvol = volumes[-1] / avg_vol
+        detail = {"rvol": round(rvol, 2), "scored": True}
+        if rvol >= 2.0:
+            return RuleResult("vol", "PASS", 90, detail)
+        if rvol >= 1.2:
+            return RuleResult("vol", "PASS", 70, detail)
+        if rvol >= 0.8:
+            return RuleResult("vol", "CAUTION", 45, detail)
+        return RuleResult("vol", "CAUTION", 20, detail)
 
+    # ── Options mode: IV rank (unchanged) ────────────────────────────────────
+    vc = cfg["vol"]
     if vc["iv_rank_pass_max"] is None:
         # iv_rank_pass_max is None → skip vol scoring
         # (Intraday always; Swing/Position in stock-scan path where no IV data is available)
         return RuleResult("vol", "PASS", 90, {"iv_rank": iv_rank, "scored": False})
-
     if iv_rank is None:
         return RuleResult("vol", "CAUTION", 50, {"reason": "no_iv_data"})
-
     compressed = vc["iv_rank_compressed_caution"]
     pass_max = vc["iv_rank_pass_max"]
     caution_max = vc["iv_rank_caution_max"]
-
     detail = {"iv_rank": round(iv_rank, 1)}
     if compressed is not None and iv_rank < compressed:
         return RuleResult("vol", "CAUTION", 50, {**detail, "reason": "compressed_vol"})
@@ -895,7 +915,11 @@ def score_stock(
     pullback_result         = _rule_pullback(bars, cfg, direction)
     trigger_result, vol_bonus = _rule_trigger(bars, cfg, volumes, direction)
     event_result            = _rule_event(earnings_date, dividend_date, cfg)
-    vol_result              = _rule_vol(iv_rank, cfg)
+    vol_result              = _rule_vol(
+        iv_rank, cfg,
+        volumes=volumes,
+        scoring_mode=scoring_mode,
+    )
 
     rules = [trend_result, pullback_result, trigger_result, event_result, vol_result]
 
