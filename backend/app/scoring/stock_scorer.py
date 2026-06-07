@@ -816,6 +816,7 @@ def score_stock(
     confidence: int | None = None,
     confidence_gate: dict | None = None,
     confidence_sample_size: int = 0,
+    scoring_mode: Literal["stock", "options"] = "options",
 ) -> StockScoreCard:
     """
     Score a stock for the given direction and horizon.
