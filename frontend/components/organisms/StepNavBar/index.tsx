@@ -68,10 +68,19 @@ export function StepNavBar() {
             <p id="regime-dialog-title" className={styles.dialogTitle}>
               <Text size={14} weight={600}>Regime flagged as REJECT</Text>
             </p>
-            <Text size={13} tone="secondary">
-              Market conditions are unfavourable for new directional positions.
-              Step 4 (Stock Ranking) will still rank your candidates — but consider waiting for a better regime before trading.
-            </Text>
+            {mode === 'stocks' ? (
+              <Text size={13} tone="secondary">
+                Market conditions are unfavourable for broad directional positions.
+                Stock Ranking will still run — consider filtering to defensive sectors
+                (utilities · healthcare · consumer staples) before trading.
+              </Text>
+            ) : (
+              <Text size={13} tone="secondary">
+                Market conditions are unfavourable for new directional positions.
+                Step 4 (Stock Ranking) will still rank your candidates — but consider waiting
+                for a better regime before trading.
+              </Text>
+            )}
             <div className={styles.dialogActions}>
               <button type="button" className={styles.btn} onClick={() => setShowConfirm(false)}>
                 Cancel
