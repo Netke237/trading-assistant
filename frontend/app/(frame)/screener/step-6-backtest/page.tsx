@@ -25,6 +25,19 @@ function BacktestRow({ c, selected, onClick }: { c: PositionCardData; selected: 
         {bt.total_return_pct.toFixed(1)}%
       </Data>
       <Data size={12} tone="reject">{Math.abs(bt.max_drawdown_pct).toFixed(1)}%</Data>
+      <Data
+        size={12}
+        tone={
+          c.sector_rs_pct == null ? 'secondary'
+          : c.sector_rs_pct > 1   ? 'pass'
+          : c.sector_rs_pct < -1  ? 'reject'
+          : 'secondary'
+        }
+      >
+        {c.sector_rs_pct != null
+          ? `${c.sector_rs_pct > 0 ? '+' : ''}${c.sector_rs_pct.toFixed(1)}%`
+          : '—'}
+      </Data>
       <ConfidenceBadge confidence={c.confidence} title={c.confidence_text ?? undefined} />
       <StatusBadge status={pass ? 'PASS' : 'REJECT'} />
     </button>
@@ -72,6 +85,7 @@ export default function Step6BacktestPage() {
         <Text size={11} tone="dim">TRADES</Text>
         <Text size={11} tone="dim">RETURN</Text>
         <Text size={11} tone="dim">MAX DD</Text>
+        <Text size={11} tone="dim">VS SPX</Text>
         <Text size={11} tone="dim">CONF</Text>
         <Text size={11} tone="dim">GATE</Text>
       </div>

@@ -15,6 +15,7 @@ export interface PositionCardData {
   stock_score: number; stock_status: Status;
   shares: number; dollar_risk: number; dollar_size: number;
   confidence: number | null; confidence_text: string | null;
+  sector_rs_pct?: number | null;
 }
 export interface StockScanResult {
   scan_id: string; timestamp: string;

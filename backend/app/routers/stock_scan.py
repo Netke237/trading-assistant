@@ -61,6 +61,7 @@ async def _process_stock(
     req: StockScanRequest,
     scan_id: str,
     price_map: dict[str, dict],
+    benchmark_closes: list[float],
 ) -> PositionCardOut | dict:
     async with _SCAN_SEM:
         try:
@@ -126,6 +127,15 @@ async def _process_stock(
                 signal.entry_price, signal.stop_price,
             )
 
+            # Sector RS vs benchmark
+            horizon_period = {"Intraday": 2, "Swing": 20, "Position": 50}.get(req.horizon, 20)
+            stock_closes_all = [b["close"] for b in bars]
+            sector_rs_pct: float | None = None
+            if len(stock_closes_all) > horizon_period and len(benchmark_closes) > horizon_period:
+                stock_roc = (stock_closes_all[-1] - stock_closes_all[-(horizon_period + 1)]) / stock_closes_all[-(horizon_period + 1)] * 100
+                bench_roc = (benchmark_closes[-1] - benchmark_closes[-(horizon_period + 1)]) / benchmark_closes[-(horizon_period + 1)] * 100
+                sector_rs_pct = round(stock_roc - bench_roc, 2)
+
             return PositionCardOut(
                 symbol=symbol, company=company or symbol, price=price, direction=req.direction,
                 strategy=StrategySignalOut(
@@ -145,6 +155,7 @@ async def _process_stock(
                 shares=shares, dollar_risk=dollar_risk,
                 dollar_size=round(shares * signal.entry_price, 2),
                 confidence=conf_val, confidence_text=conf_txt,
+                sector_rs_pct=sector_rs_pct,
             )
         except Exception as exc:
             logger.exception("Error processing %s", symbol)
@@ -172,7 +183,17 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
         logger.warning("stock_scan: batch price fetch failed (%s) — falling back to empty map", exc)
         price_map = {}
 
-    tasks = [_process_stock(s, req, scan_id, price_map) for s in symbols]
+    # Fetch SPY closes once for sector RS calculation
+    benchmark_closes: list[float] = []
+    try:
+        spy_end = date.today()
+        spy_start = spy_end - timedelta(days=_HISTORY_YEARS * 365)
+        spy_bars = await get_historical_bars("SPY", spy_start, spy_end)
+        benchmark_closes = [b["close"] for b in spy_bars] if spy_bars else []
+    except Exception:
+        pass   # RS column shows None — non-fatal
+
+    tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes) for s in symbols]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     candidates, rejected = [], []

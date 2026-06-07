@@ -73,6 +73,7 @@ class PositionCardOut(BaseModel):
     dollar_size:  float
     confidence:   Optional[int] = None
     confidence_text: Optional[str] = None
+    sector_rs_pct: float | None = None   # stock ROC minus SPY ROC; positive = outperforming
 
 
 class StockScanResult(BaseModel):
