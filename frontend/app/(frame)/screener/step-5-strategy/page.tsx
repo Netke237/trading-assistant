@@ -72,10 +72,17 @@ export default function Step5StrategyPage() {
 
   // Dynamic card titles reflecting the current parameter values
   const strategyLabel: Record<string, string> = {
-    pullback_ema:        `Pullback to ${params.pullbackEmaPeriod}-EMA`,
+    pullback_ema:        `Pullback to ${params.pullbackEmaPeriod}-${params.pullbackMaType}`,
     ma_crossover:        `MA Crossover ${params.maCrossoverFast}/${params.maCrossoverSlow}`,
     mean_reversion_rsi:  `Mean Reversion RSI / ${params.rsiTrendSma}-SMA`,
     breakout_base:       'Breakout from tight base',
+  };
+
+  const entryLabel: Record<string, string> = {
+    pullback_ema:       `Dip to ${params.pullbackEmaPeriod}-${params.pullbackMaType} + reversal candle in uptrend`,
+    ma_crossover:       `${params.maCrossoverFast}-SMA crosses above ${params.maCrossoverSlow}-SMA`,
+    mean_reversion_rsi: `RSI < ${params.rsiOversold} while above ${params.rsiTrendSma}-SMA`,
+    breakout_base:      `Break above N-day high after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
   };
 
   const [loadingStrategy, setLoadingStrategy] = useState<string | null>(null);
@@ -378,7 +385,7 @@ export default function Step5StrategyPage() {
               <Text size={11} tone="secondary">{s.when}</Text>
             </div>
             <div className={styles.cardBody}>
-              <Text size={11} tone="dim">Entry: {s.entry}</Text>
+              <Text size={11} tone="dim">Entry: {entryLabel[s.key] ?? s.entry}</Text>
               <Text size={11} tone="dim">Stop: {s.stop}</Text>
               <Text size={11} tone="dim">Exit: {s.exit}</Text>
             </div>
