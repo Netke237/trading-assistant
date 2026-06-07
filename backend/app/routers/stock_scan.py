@@ -136,6 +136,22 @@ async def _process_stock(
                 bench_roc = (benchmark_closes[-1] - benchmark_closes[-(horizon_period + 1)]) / benchmark_closes[-(horizon_period + 1)] * 100
                 sector_rs_pct = round(stock_roc - bench_roc, 2)
 
+            # Event proximity from quote data
+            next_event_days: int | None = None
+            next_event_label: str | None = None
+            if quote:
+                for field_name, label in [("earnings_date", "earnings"), ("ex_dividend_date", "dividend")]:
+                    raw = quote.get(field_name)
+                    if raw:
+                        try:
+                            ev = date.fromisoformat(str(raw)[:10])
+                            days = (ev - date.today()).days
+                            if days >= 0 and (next_event_days is None or days < next_event_days):
+                                next_event_days = days
+                                next_event_label = label
+                        except (ValueError, TypeError):
+                            pass
+
             return PositionCardOut(
                 symbol=symbol, company=company or symbol, price=price, direction=req.direction,
                 strategy=StrategySignalOut(
@@ -156,6 +172,7 @@ async def _process_stock(
                 dollar_size=round(shares * signal.entry_price, 2),
                 confidence=conf_val, confidence_text=conf_txt,
                 sector_rs_pct=sector_rs_pct,
+                next_event_days=next_event_days, next_event_label=next_event_label,
             )
         except Exception as exc:
             logger.exception("Error processing %s", symbol)

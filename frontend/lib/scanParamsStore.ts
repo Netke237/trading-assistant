@@ -15,6 +15,7 @@ export interface ScanParams {
   rsiTrendSma:          number;   // trend-confirmation SMA (e.g. 200)
   btMinTrades:          number;   // count
   btMinWinRate:         number;   // fraction: 0.45 = 45%
+  eventFilter: 'include' | 'avoid' | 'only_pre_event';
 }
 
 const DEFAULTS: ScanParams = {
@@ -31,6 +32,7 @@ const DEFAULTS: ScanParams = {
   rsiTrendSma:          200,
   btMinTrades:          10,
   btMinWinRate:         0.45,
+  eventFilter:          'include' as const,
 };
 
 interface ScanParamsStore extends ScanParams {
@@ -47,10 +49,11 @@ export const useScanParamsStore = create<ScanParamsStore>()(
     }),
     {
       name: 'bamendjou:scan-params',
-      version: 4,
+      version: 5,
       migrate: (state: unknown, v: number) => {
         if (v < 2) return { ...DEFAULTS, ...(state as Partial<ScanParams>) };
         if (v < 4) return { ...DEFAULTS, ...(state as Partial<ScanParams>), pullbackMaType: 'EMA' as const };
+        if (v < 5) return { ...DEFAULTS, ...(state as Partial<ScanParams>), eventFilter: 'include' as const };
         return state as ScanParams;
       },
     },

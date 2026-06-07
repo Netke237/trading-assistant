@@ -6,6 +6,7 @@ import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { useScanStore } from '@/lib/scanStore';
+import { useScanParamsStore } from '@/lib/scanParamsStore';
 import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
 
@@ -38,6 +39,19 @@ function BacktestRow({ c, selected, onClick }: { c: PositionCardData; selected: 
           ? `${c.sector_rs_pct > 0 ? '+' : ''}${c.sector_rs_pct.toFixed(1)}%`
           : '—'}
       </Data>
+      <Text
+        size={11}
+        tone={
+          c.next_event_days == null   ? 'dim'
+          : c.next_event_days <= 3    ? 'reject'
+          : c.next_event_days <= 14   ? 'caution'
+          : 'secondary'
+        }
+      >
+        {c.next_event_days != null
+          ? `${(c.next_event_label ?? 'E')[0].toUpperCase()} ${c.next_event_days}d`
+          : '—'}
+      </Text>
       <ConfidenceBadge confidence={c.confidence} title={c.confidence_text ?? undefined} />
       <StatusBadge status={pass ? 'PASS' : 'REJECT'} />
     </button>
@@ -47,6 +61,7 @@ function BacktestRow({ c, selected, onClick }: { c: PositionCardData; selected: 
 export default function Step6BacktestPage() {
   const result = useScanStore((s) => s.stockScanResult);
   const setSelectedSymbol = useScanStore((s) => s.setSelectedSymbol);
+  const eventFilter = useScanParamsStore((s) => s.eventFilter);
   const [selected, setSelected] = useState<string | null>(result?.candidates[0]?.symbol ?? null);
   const router = useRouter();
 
@@ -59,6 +74,12 @@ export default function Step6BacktestPage() {
   }
 
   const passing = result.candidates.filter((c) => c.backtest.passes_gate);
+  const filteredPassing = passing.filter((c) => {
+    const days = c.next_event_days;
+    if (eventFilter === 'avoid')          return days == null || days > 7;
+    if (eventFilter === 'only_pre_event') return days != null && days <= 21;
+    return true;
+  });
   const rejected = result.rejected;
 
   function proceedWith(symbol: string) {
@@ -73,7 +94,7 @@ export default function Step6BacktestPage() {
         <Text size={11} tone="dim" weight={500}>STEP 6 OF 7</Text>
         <Title as="h1" size={24}>Backtest Gate</Title>
         <Text size={13} tone="secondary">
-          {passing.length} candidates passed · {result.candidates.length - passing.length} failed ·
+          {filteredPassing.length} candidates passed · {result.candidates.length - passing.length} failed ·
           {rejected.length} rejected before backtest
         </Text>
       </div>
@@ -86,12 +107,13 @@ export default function Step6BacktestPage() {
         <Text size={11} tone="dim">RETURN</Text>
         <Text size={11} tone="dim">MAX DD</Text>
         <Text size={11} tone="dim">VS SPX</Text>
+        <Text size={11} tone="dim">EVENT</Text>
         <Text size={11} tone="dim">CONF</Text>
         <Text size={11} tone="dim">GATE</Text>
       </div>
 
       <div className={styles.tableBody}>
-        {passing.map((c) => (
+        {filteredPassing.map((c) => (
           <BacktestRow key={c.symbol} c={c}
             selected={selected === c.symbol}
             onClick={() => proceedWith(c.symbol)} />

@@ -74,6 +74,8 @@ class PositionCardOut(BaseModel):
     confidence:   Optional[int] = None
     confidence_text: Optional[str] = None
     sector_rs_pct: float | None = None   # stock ROC minus SPY ROC; positive = outperforming
+    next_event_days: int | None = None    # days to nearest earnings or dividend (>=0)
+    next_event_label: str | None = None   # "earnings" | "dividend"
 
 
 class StockScanResult(BaseModel):

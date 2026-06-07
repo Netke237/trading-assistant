@@ -65,6 +65,7 @@ export default function Step5StrategyPage() {
     rsiTrendSma:          s.rsiTrendSma,
     btMinTrades:          s.btMinTrades,
     btMinWinRate:         s.btMinWinRate,
+    eventFilter:          s.eventFilter,
   })));
   const [params, setParams] = useState(() => ({ ...savedParams }));
 
@@ -361,6 +362,24 @@ export default function Step5StrategyPage() {
                 }
               />
               <Text size={11} tone="dim">%</Text>
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">Event exposure</Text>
+            <div className={styles.maToggle}>
+              {(['include', 'avoid', 'only_pre_event'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  className={`${styles.maToggleBtn} ${params.eventFilter === v ? styles.maToggleBtnActive : ''}`}
+                  onClick={() => setParams((p) => ({ ...p, eventFilter: v }))}
+                >
+                  <Text size={11} weight={500}>
+                    {v === 'include' ? 'Include' : v === 'avoid' ? 'Avoid' : 'Events only'}
+                  </Text>
+                </button>
+              ))}
             </div>
           </label>
 
