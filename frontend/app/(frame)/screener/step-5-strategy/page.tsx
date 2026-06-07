@@ -55,6 +55,7 @@ export default function Step5StrategyPage() {
     pullbackTolerancePct: s.pullbackTolerancePct,
     pullbackEmaPeriod:    s.pullbackEmaPeriod,
     pullbackTrendEma:     s.pullbackTrendEma,
+    pullbackMaType:       s.pullbackMaType,
     maCrossoverFast:      s.maCrossoverFast,
     maCrossoverSlow:      s.maCrossoverSlow,
     maCrossoverLookback:  s.maCrossoverLookback,
@@ -100,6 +101,7 @@ export default function Step5StrategyPage() {
         pullback_tolerance_pct: params.pullbackTolerancePct,
         pullback_ema_period:    params.pullbackEmaPeriod,
         pullback_trend_ema:     params.pullbackTrendEma,
+        pullback_ma_type:       params.pullbackMaType,
         ma_crossover_fast:      params.maCrossoverFast,
         ma_crossover_slow:      params.maCrossoverSlow,
         ma_crossover_lookback:  params.maCrossoverLookback,
@@ -192,6 +194,22 @@ export default function Step5StrategyPage() {
                   setParams((p) => ({ ...p, pullbackEmaPeriod: Number(e.target.value) }))
                 }
               />
+            </div>
+          </label>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">Pullback MA type</Text>
+            <div className={styles.maToggle}>
+              {(['EMA', 'SMA'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`${styles.maToggleBtn} ${params.pullbackMaType === t ? styles.maToggleBtnActive : ''}`}
+                  onClick={() => setParams((p) => ({ ...p, pullbackMaType: t }))}
+                >
+                  <Text size={11} weight={500}>{t}</Text>
+                </button>
+              ))}
             </div>
           </label>
 

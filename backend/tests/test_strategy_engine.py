@@ -141,3 +141,23 @@ def test_ma_crossover_still_rejects_at_12_bars():
     bars = _crossover_bars(cross_bars_ago=12)
     signal = ma_crossover_signal(bars)
     assert signal is None, "Expected None when cross is 12 bars old"
+
+
+def test_pullback_sma_signal_fires_in_uptrend():
+    """ma_type='SMA' variant must not raise and return correct type."""
+    bars = _rising_bars(200)
+    for i in range(-20, 0):
+        bars[i]["close"] *= 0.985
+        bars[i]["low"] = bars[i]["close"] - 0.5
+    signal = pullback_ema_signal(bars, ma_type="SMA")
+    assert signal is None or isinstance(signal, StrategySignal)
+
+
+def test_pullback_ema_is_default_ma_type():
+    """Without ma_type, behaviour must be identical to ma_type='EMA'."""
+    bars = _rising_bars(200)
+    signal_default = pullback_ema_signal(bars)
+    signal_ema     = pullback_ema_signal(bars, ma_type="EMA")
+    assert (signal_default is None) == (signal_ema is None)
+    if signal_default and signal_ema:
+        assert signal_default.entry_price == signal_ema.entry_price

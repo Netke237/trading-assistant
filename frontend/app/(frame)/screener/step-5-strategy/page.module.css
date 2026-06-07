@@ -105,3 +105,20 @@
   border-color: var(--border-default);
   color: var(--text-primary);
 }
+
+.maToggle { display: flex; gap: 4px; }
+.maToggleBtn {
+  padding: 3px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.maToggleBtn:hover { border-color: var(--border-default); color: var(--text-primary); }
+.maToggleBtnActive {
+  border-color: var(--pass);
+  background: color-mix(in srgb, var(--pass) 12%, var(--bg-surface));
+  color: var(--text-primary);
+}

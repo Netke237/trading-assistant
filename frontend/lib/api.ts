@@ -95,6 +95,7 @@ export const api = {
     pullback_tolerance_pct?: number;
     pullback_ema_period?: number;
     pullback_trend_ema?: number;
+    pullback_ma_type?: 'EMA' | 'SMA';
     ma_crossover_fast?: number;
     ma_crossover_slow?: number;
     ma_crossover_lookback?: number;

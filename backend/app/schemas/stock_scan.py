@@ -15,6 +15,7 @@ class StockScanRequest(BaseModel):
     pullback_tolerance_pct: float = Field(0.04, gt=0, le=1.0)  # 0 < tolerance ≤ 100%
     pullback_ema_period:    int   = Field(50,   gt=0)           # EMA to pull back to
     pullback_trend_ema:     int   = Field(100,  gt=0)           # trend-confirmation EMA
+    pullback_ma_type:       Literal["EMA", "SMA"] = "EMA"
     ma_crossover_fast:      int   = Field(20,   gt=0)           # fast MA period
     ma_crossover_slow:      int   = Field(50,   gt=0)           # slow MA period
     ma_crossover_lookback:  int   = Field(10,   gt=0)           # lookback ≥ 1

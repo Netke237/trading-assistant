@@ -95,33 +95,38 @@ def pullback_ema_signal(
     atr_stop_mult: float = 1.5,
     rr_target_mult: float = 2.0,
     tolerance: float = 0.04,
+    ma_type: str = "EMA",
 ) -> StrategySignal | None:
-    """Bullish: uptrend (price > ema_period-EMA > trend_ema-EMA) + pullback to ema_period-EMA + reversal candle."""
+    """Bullish: uptrend + pullback to ema_period-MA + reversal candle. ma_type='EMA'|'SMA'."""
     if len(bars) < trend_ema + 10:
         return None
     closes = [b["close"] for b in bars]
-    fast_ema = _ema(closes, ema_period)
-    slow_ema = _ema(closes, trend_ema)
-    if not fast_ema or not slow_ema:
+
+    _ma = _sma if ma_type.upper() == "SMA" else _ema
+
+    fast_ma = _ma(closes, ema_period)
+    slow_ma = _ma(closes, trend_ema)
+    if not fast_ma or not slow_ma:
         return None
-    current = closes[-1]
-    fast_val = fast_ema[-1]
-    slow_val = slow_ema[-1]
-    # Trend: price above ema_period-EMA, ema_period-EMA above trend_ema-EMA (two-EMA stack)
+    current  = closes[-1]
+    fast_val = fast_ma[-1]
+    slow_val = slow_ma[-1]
+    # Trend: price above ema_period-MA, ema_period-MA above trend_ema-MA (two-MA stack)
     if current <= fast_val:
         return None
     if fast_val <= slow_val:
         return None
-    # Pullback: price within `tolerance` of ema_period-EMA from above
+    # Pullback: price within `tolerance` of ema_period-MA from above
     if not (0 <= (current - fast_val) / fast_val <= tolerance):
         return None
     # Reversal candle: close > open (bullish bar)
     last = bars[-1]
     if last["close"] <= last["open"]:
         return None
-    atr = _atr(bars)
-    stop = _swing_low(bars, lookback=10) - atr * 0.2
+    atr    = _atr(bars)
+    stop   = _swing_low(bars, lookback=10) - atr * 0.2
     target = current + atr * rr_target_mult * atr_stop_mult
+    ma_label = ma_type.upper()
     return StrategySignal(
         strategy="pullback_ema",
         direction="Bullish",
@@ -129,7 +134,10 @@ def pullback_ema_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
-        detail={f"ema_{ema_period}": round(fast_val, 2), f"ema_{trend_ema}": round(slow_val, 2)},
+        detail={
+            f"{ma_label.lower()}_{ema_period}": round(fast_val, 2),
+            f"{ma_label.lower()}_{trend_ema}":  round(slow_val, 2),
+        },
     )
 
 
