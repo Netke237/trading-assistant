@@ -4,12 +4,14 @@ from app.scoring.stock_scorer import score_stock
 
 
 def _bars(n=120, trend="up"):
-    """Synthetic OHLCV bars."""
+    """Synthetic OHLCV bars. trend='up' rises, 'down' falls, else flat."""
     bars = []
     price = 100.0
     for i in range(n):
         if trend == "up":
             price += 0.4
+        elif trend == "down":
+            price -= 0.4
         vol = 1_000_000
         bars.append({"open": price - 0.2, "high": price + 0.5,
                      "low": price - 0.5, "close": price, "volume": vol})
