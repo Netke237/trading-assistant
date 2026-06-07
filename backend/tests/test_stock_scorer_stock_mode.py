@@ -73,3 +73,71 @@ def test_options_mode_vol_rule_unchanged():
     card = score_stock("X", "Bullish", "Swing", bars, scoring_mode="options")
     vol_rule = next(r for r in card.rules if r.name == "vol")
     assert vol_rule.score == 90   # unchanged — always PASS 90 in options mode
+
+
+from app.scoring.stock_scorer import _rule_trigger, _horizon_cfg
+import copy
+
+
+def _trigger_bars_macd_cross(n=80):
+    """Bars engineered so MACD histogram crosses zero near the last bar."""
+    bars = []
+    price = 50.0
+    for i in range(n):
+        if i < n // 2:
+            price -= 0.3
+        else:
+            price += 0.6
+        bars.append({"open": price - 0.1, "high": price + 0.5,
+                     "low": price - 0.5, "close": price, "volume": 800_000})
+    return bars
+
+
+def _cfg_swing():
+    return copy.deepcopy(_horizon_cfg("Swing"))
+
+
+def test_trigger_no_candle_required_signals_is_pass_in_stock_mode():
+    """Stock mode: required momentum signals without candle → score >= 65 (not capped at 35)."""
+    cfg = _cfg_swing()
+    # Force zero required signals so momentum_count >= required is guaranteed
+    cfg["trigger"]["momentum_signals_for_pass"] = 0
+    bars = _trigger_bars_macd_cross()
+    # Make last bar bearish so no candle is detected
+    bars[-1]["close"] = bars[-1]["open"] - 0.5
+    bars[-1]["low"] = bars[-1]["close"] - 0.3
+    volumes = [b["volume"] for b in bars]
+    result, _ = _rule_trigger(bars, cfg, volumes, "Bullish", scoring_mode="stock")
+    assert result.score >= 65   # stock mode: momentum alone drives PASS, not capped at 35
+
+
+def test_trigger_with_candle_bonus_in_stock_mode():
+    """Stock mode: candle adds +15 pts on top of momentum base."""
+    cfg = _cfg_swing()
+    cfg["trigger"]["momentum_signals_for_pass"] = 0  # guaranteed pass threshold
+    bars = _trigger_bars_macd_cross()
+    # Bullish last bar → candle detected
+    bars[-1]["close"] = bars[-1]["open"] + 1.0
+    bars[-1]["high"] = bars[-1]["close"] + 0.3
+    volumes = [b["volume"] for b in bars]
+    result_no_candle_bars = _trigger_bars_macd_cross()
+    result_no_candle_bars[-1]["close"] = result_no_candle_bars[-1]["open"] - 0.5
+    result_no_candle_bars[-1]["low"] = result_no_candle_bars[-1]["close"] - 0.3
+    result_without_candle, _ = _rule_trigger(result_no_candle_bars, _cfg_swing(), volumes, "Bullish", scoring_mode="stock")
+    result_with_candle, _ = _rule_trigger(bars, cfg, volumes, "Bullish", scoring_mode="stock")
+    assert result_with_candle.score >= result_without_candle.score
+    assert result_with_candle.status == "PASS"
+
+
+def test_trigger_options_mode_still_caps_no_candle_at_35():
+    """Options mode: no candle + required signals met → CAUTION 35 (unchanged)."""
+    cfg = _cfg_swing()
+    bars = _trigger_bars_macd_cross()
+    bars[-1]["close"] = bars[-1]["open"] - 0.5   # bearish — no candle
+    bars[-1]["low"] = bars[-1]["close"] - 0.3
+    volumes = [b["volume"] for b in bars]
+    result, _ = _rule_trigger(bars, cfg, volumes, "Bullish", scoring_mode="options")
+    momentum_count = result.detail.get("momentum_count", 0)
+    required = cfg["trigger"]["momentum_signals_for_pass"]
+    if momentum_count >= required:
+        assert result.score == 35

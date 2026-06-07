@@ -646,7 +646,13 @@ def _detect_candle(bars: list[dict], direction: Direction = "Bullish") -> tuple[
     return False, ""
 
 
-def _rule_trigger(bars: list[dict], cfg: dict, volumes: list[float], direction: Direction = "Bullish") -> tuple[RuleResult, bool]:
+def _rule_trigger(
+    bars: list[dict],
+    cfg: dict,
+    volumes: list[float],
+    direction: Direction = "Bullish",
+    scoring_mode: str = "options",
+) -> tuple[RuleResult, bool]:
     """Returns (RuleResult, volume_bonus)."""
     tc = cfg["trigger"]
     closes = [b["close"] for b in bars]
@@ -664,14 +670,13 @@ def _rule_trigger(bars: list[dict], cfg: dict, volumes: list[float], direction: 
     rsi_floor = tc["rsi_floor"]
     if len(rsi_vals) >= 2:
         rsi_pass = rsi_vals[-2] < rsi_floor <= rsi_vals[-1]
-        # Divergence: price lower low, RSI higher low within window
         if not rsi_pass:
             div_win = tc["rsi_div_window_bars"]
             if len(closes) >= div_win and len(rsi_vals) >= div_win:
-                price_low_now = min(closes[-div_win:])
+                price_low_now  = min(closes[-div_win:])
                 price_low_prev = min(closes[-2 * div_win: -div_win]) if len(closes) >= 2 * div_win else price_low_now
-                rsi_low_now = min(rsi_vals[-div_win:])
-                rsi_low_prev = min(rsi_vals[-2 * div_win: -div_win]) if len(rsi_vals) >= 2 * div_win else rsi_low_now
+                rsi_low_now    = min(rsi_vals[-div_win:])
+                rsi_low_prev   = min(rsi_vals[-2 * div_win: -div_win]) if len(rsi_vals) >= 2 * div_win else rsi_low_now
                 if price_low_now < price_low_prev and rsi_low_now > rsi_low_prev:
                     rsi_pass = True
 
@@ -700,6 +705,25 @@ def _rule_trigger(bars: list[dict], cfg: dict, volumes: list[float], direction: 
         "volume_bonus": vol_bonus,
     }
 
+    # ── Stock mode: candle = bonus (+15 pts), NOT a gate ─────────────────────
+    if scoring_mode == "stock":
+        if momentum_count >= required:
+            base = 65
+        elif momentum_count == 1:
+            base = 40
+        else:
+            base = 10
+            return RuleResult("trigger", "REJECT", base, detail), vol_bonus
+
+        if candle_found:
+            base = min(100, base + 15)
+        if vol_bonus:
+            base = min(100, base + tc["volume_bonus_pts"])
+
+        status: Status = "PASS" if base >= 55 else "CAUTION"
+        return RuleResult("trigger", status, base, detail), vol_bonus
+
+    # ── Options mode: unchanged original logic ────────────────────────────────
     if not candle_found:
         if momentum_count >= required:
             return RuleResult("trigger", "CAUTION", 35, detail), vol_bonus
@@ -913,7 +937,7 @@ def score_stock(
 
     trend_result            = _rule_trend(closes, cfg, direction, ma_func=ma_func, bars=bars, benchmark_closes=benchmark_closes)
     pullback_result         = _rule_pullback(bars, cfg, direction)
-    trigger_result, vol_bonus = _rule_trigger(bars, cfg, volumes, direction)
+    trigger_result, vol_bonus = _rule_trigger(bars, cfg, volumes, direction, scoring_mode=scoring_mode)
     event_result            = _rule_event(earnings_date, dividend_date, cfg)
     vol_result              = _rule_vol(
         iv_rank, cfg,
