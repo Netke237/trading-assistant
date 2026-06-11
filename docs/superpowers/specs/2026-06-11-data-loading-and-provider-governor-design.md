@@ -103,7 +103,24 @@ All four triggers (scheduler / manual / OS / startup-catch-up) invoke the same i
 6. Market cap — fundamentals, cached weekly.
 7. Pre-compute signal confidence from fresh bars.
 
-Cold-start first run (5y × full universe × 3 bases) is one-time, paced, finishes in minutes on Alpaca's 200/min.
+Cold-start first run (6y × ingestion universe × 3 bases) is one-time, paced, finishes in minutes on Alpaca's 200/min.
+
+### 5.3.1 Ingestion universe & retention
+
+**Universe is fully dynamic — never a hardcoded count.** The scanner expands whatever the user selects via `expand_universe()` (presets `SP500`/`NDX100`/`DOW30`, individual tickers, or a custom mix). The current `sp500.csv` holds **~640 symbols**.
+
+**Ingestion universe (the nightly pre-fill set)** is a configurable list, defaulting to the **union** of the presets the user scans: `SP500 ∪ NDX100 ∪ DOW30` ≈ **~680 unique symbols** (NDX100 contributes a few non-S&P names such as ASML/PDD/JD). The union guarantees a morning scan of any of those universes finds zero gaps. The config lives alongside the other scan settings; adding a new universe to scan means adding it to the ingestion union.
+
+**Retention: keep ~6 years.** Backtesting needs 5 years of *signal* history, but indicators evaluated at the first backtest bar need lookback *before* it (a 200-day MA needs ~200 prior bars). So ingestion fetches and retains **6 years** (5y backtest window + ~1y warm-up buffer) — correcting today's exactly-5×365-day fetch, which leaves the earliest backtest bars without warm-up. A single nightly prune step (`DELETE FROM ohlcv_daily WHERE date < today − 6y`) bounds the table.
+
+**Storage footprint (daily granularity, one row per symbol/day, raw + factors — bases derived on read, not stored as separate rows):**
+
+| | Rows | Size (incl. index) |
+|---|---|---|
+| 6y backfill, ~680 symbols | ~1.03M | **~155–190 MB** |
+| Daily growth | ~680 rows/day | **~20 MB/year** |
+
+Negligible on the Mini PC; the 6-year prune keeps it bounded indefinitely. Retention is a hygiene/correctness measure (warm-up buffer), not a space constraint.
 
 ### 5.4 Data model — multi-basis `ohlcv_daily`
 
@@ -240,7 +257,7 @@ MORNING (Scan)
 
 1. **Stage 1 — Provider Governor + 429 backoff + circuit breaker + reliable availability probes.** Immediate protection; no behavior change to data content.
 2. **Stage 2 — Alpaca data adapter + multi-basis `ohlcv_daily` migration + fallback router** (Alpaca primary, Tiingo/yfinance fallback) for daily bars.
-3. **Stage 3 — Ingestion job + triggers (scheduler / manual / OS / startup catch-up) + scan-path switch to DB-first reads + provenance logging.**
+3. **Stage 3 — Ingestion job + triggers (scheduler / manual / OS / startup catch-up) + configurable union ingestion universe + 6-year retention/prune + scan-path switch to DB-first reads + provenance logging.**
 4. **Stage 4 — Settings Alpaca slots + Alpaca Paper Position-Card execution venue.**
 
 Each stage is independently shippable and leaves the system working.
