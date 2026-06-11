@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from sqlalchemy import BigInteger, Column, Date, DateTime, Numeric, String, func
+from sqlalchemy import BigInteger, Column, Date, DateTime, Numeric, String
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -38,5 +38,4 @@ class OhlcvDailyModel(OhlcvBase):
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
-        server_default=func.now(),
     )

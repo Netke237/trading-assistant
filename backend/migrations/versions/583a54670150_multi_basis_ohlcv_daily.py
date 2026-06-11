@@ -23,7 +23,13 @@ def upgrade() -> None:
     op.add_column('ohlcv_daily', sa.Column('source',       sa.String(length=20),              nullable=True))
     # Existing rows store adjClose in close — set adj_factor=1.0 so the
     # invariant raw_close × adj_factor = fully_adjusted_close holds.
-    op.execute("UPDATE ohlcv_daily SET adj_factor = 1.0, split_factor = 1.0, div_cash = 0.0, source = 'tiingo_legacy' WHERE adj_factor IS NULL")
+    op.execute(
+        "UPDATE ohlcv_daily "
+        "SET adj_factor = 1.0, split_factor = 1.0, div_cash = 0.0, source = 'tiingo_legacy' "
+        "WHERE adj_factor IS NULL"
+        # div_cash = 0.0 (not NULL) so scanners can safely cast to float without NULL guards;
+        # legacy Tiingo rows stored adjClose directly and had no dividend metadata.
+    )
 
 
 def downgrade() -> None:
