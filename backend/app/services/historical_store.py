@@ -1,7 +1,7 @@
 """Persistent OHLCV daily history store backed by the application database.
 
 Design:
-- get_bars(symbol, start, end)      : DB-first lookup; fetches only the delta from Tiingo.
+- get_bars(symbol, start, end)      : DB-first lookup; fetches the delta via Alpaca → Tiingo → yfinance.
 - prefetch_universe(symbols, years) : Rate-limited background job that pre-fills the table.
 - get_prefetch_status()             : Returns the current prefetch job state.
 
@@ -152,7 +152,7 @@ async def _read_bars(
     for row in rows:
         raw_close = float(row.close)
         adj = float(row.adj_factor) if row.adj_factor is not None else None
-        fully_adj_close = round(raw_close * adj, 4) if adj is not None else raw_close
+        fully_adj_close = round(raw_close * adj, 6) if adj is not None else raw_close
         out.append({
             "time":   row.date.isoformat(),
             "open":   float(row.open),
@@ -208,7 +208,8 @@ def _yfinance_fetch(symbol: str, start: date, end: date) -> list[dict]:
                 "source":       "yfinance",
             })
         return rows
-    except Exception:
+    except Exception as exc:
+        logger.debug("_yfinance_fetch: failed for %s — %s", symbol, exc)
         return []
 
 
@@ -219,9 +220,9 @@ async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
 
     Algorithm:
     1. Check the DB for the last stored date.
-    2. If delta exists (DB is stale or empty), fetch from Tiingo and store it.
+    2. If a delta exists (DB is stale or empty), fetch via Alpaca → Tiingo → yfinance (first success wins).
     3. Return all bars from the DB in the requested range.
-    Falls back gracefully: if Tiingo fails and DB has partial data, returns what's there.
+    Falls back gracefully: if all providers fail and DB has partial data, returns what's there.
     """
     async with AsyncSessionLocal() as db:
         last = await _last_stored_date(symbol, db)
