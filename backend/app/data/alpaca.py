@@ -1,0 +1,158 @@
+"""Alpaca daily bars adapter — Governor-paced, multi-basis.
+
+Data API endpoint is always https://data.alpaca.markets (same for paper and live).
+Credentials are read from the credential store (alpaca_live preferred, alpaca_paper fallback).
+All calls pass through the Governor so the 200 req/min bucket is enforced.
+"""
+from __future__ import annotations
+
+import logging
+from datetime import date
+
+import httpx
+
+from app.services.credential_store import credential_store
+from app.data.governor import get_governor, RateLimited
+
+logger = logging.getLogger(__name__)
+
+_DATA_BASE = "https://data.alpaca.markets"
+_BARS_ENDPOINT = f"{_DATA_BASE}/v2/stocks/bars"
+
+
+class AlpacaClient:
+    """Thin wrapper around Alpaca v2 bars endpoint."""
+
+    def __init__(self, key_id: str, secret_key: str) -> None:
+        self._headers = {
+            "APCA-API-KEY-ID": key_id,
+            "APCA-API-SECRET-KEY": secret_key,
+        }
+
+    async def _get_bars_page(
+        self,
+        symbols: list[str],
+        adjustment: str,
+        start: date,
+        end: date,
+        page_token: str | None,
+    ) -> dict:
+        params: dict = {
+            "symbols": ",".join(symbols),
+            "timeframe": "1Day",
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "adjustment": adjustment,
+            "feed": "iex",
+            "limit": 10_000,
+        }
+        if page_token:
+            params["page_token"] = page_token
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(_BARS_ENDPOINT, headers=self._headers, params=params)
+        if resp.status_code == 429:
+            retry_after = float(resp.headers.get("Retry-After", 1.0))
+            raise RateLimited("429 from Alpaca", retry_after=retry_after)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def _fetch_all_pages(
+        self, symbols: list[str], adjustment: str, start: date, end: date
+    ) -> dict[str, list[dict]]:
+        result: dict[str, list] = {}
+        page_token: str | None = None
+        while True:
+            pt = page_token
+            data = await get_governor().call(
+                "alpaca",
+                lambda _pt=pt: self._get_bars_page(symbols, adjustment, start, end, _pt),
+            )
+            for sym, bars in (data.get("bars") or {}).items():
+                result.setdefault(sym, []).extend(bars)
+            page_token = data.get("next_page_token")
+            if not page_token:
+                break
+        return result
+
+    async def fetch_raw(self, symbols: list[str], start: date, end: date) -> dict[str, list[dict]]:
+        return await self._fetch_all_pages(symbols, "raw", start, end)
+
+    async def fetch_adj(self, symbols: list[str], start: date, end: date) -> dict[str, list[dict]]:
+        return await self._fetch_all_pages(symbols, "all", start, end)
+
+
+async def get_alpaca_client() -> AlpacaClient | None:
+    """Return a configured AlpacaClient, or None if no keys are set."""
+    for slot in ("alpaca_live", "alpaca_paper"):
+        creds = credential_store.get(slot) or {}
+        if creds.get("key_id") and creds.get("secret_key"):
+            return AlpacaClient(key_id=creds["key_id"], secret_key=creds["secret_key"])
+    return None
+
+
+def _normalize_bars(
+    raw_bars_by_symbol: dict[str, list[dict]],
+    adj_bars_by_symbol: dict[str, list[dict]],
+) -> dict[str, list[dict]]:
+    """Merge raw + adjusted bar lists into the multi-basis format.
+
+    Returns symbol -> list of bars with raw prices + adj_factor.
+    """
+    result: dict[str, list[dict]] = {}
+    for sym, raw_list in raw_bars_by_symbol.items():
+        adj_map = {b["t"]: float(b.get("c", 0) or 0) for b in adj_bars_by_symbol.get(sym, [])}
+        bars: list[dict] = []
+        for rb in raw_list:
+            ts = rb["t"]
+            raw_close = float(rb.get("c", 0) or 0)
+            adj_close = adj_map.get(ts, raw_close)
+            adj_factor = round(adj_close / raw_close, 8) if raw_close != 0 else 1.0
+            bars.append({
+                "time":         ts[:10],
+                "open":         round(float(rb.get("o", 0) or 0), 4),
+                "high":         round(float(rb.get("h", 0) or 0), 4),
+                "low":          round(float(rb.get("l", 0) or 0), 4),
+                "close":        round(raw_close,                   4),
+                "volume":       int(rb.get("v", 0) or 0),
+                "adj_factor":   adj_factor,
+                "split_factor": 1.0,
+                "div_cash":     0.0,
+                "source":       "alpaca",
+            })
+        result[sym] = bars
+    return result
+
+
+async def fetch_daily_bars_batch(
+    symbols: list[str],
+    start: date,
+    end: date,
+    client: AlpacaClient | None = None,
+) -> dict[str, list[dict]]:
+    """Fetch daily bars for multiple symbols from Alpaca.
+
+    Returns symbol -> list of multi-basis bars. Symbols not returned by Alpaca
+    are absent from the result dict.
+    """
+    if client is None:
+        client = await get_alpaca_client()
+    if client is None:
+        return {}
+    try:
+        raw_bars = await client.fetch_raw(symbols, start, end)
+        adj_bars = await client.fetch_adj(symbols, start, end)
+        return _normalize_bars(raw_bars, adj_bars)
+    except Exception as exc:
+        logger.warning("Alpaca batch fetch failed: %s", exc)
+        return {}
+
+
+async def fetch_daily_bars_single(
+    symbol: str,
+    start: date,
+    end: date,
+    client: AlpacaClient | None = None,
+) -> list[dict]:
+    """Fetch daily bars for a single symbol from Alpaca."""
+    result = await fetch_daily_bars_batch([symbol], start, end, client=client)
+    return result.get(symbol, [])
