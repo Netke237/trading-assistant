@@ -70,6 +70,16 @@ export interface IbkrLiveConfig {
   note:    string;
 }
 
+export interface AlpacaPaperConfig {
+  keyId:     string;
+  secretKey: string;
+}
+
+export interface AlpacaLiveConfig {
+  enabled: false;
+  note:    string;
+}
+
 export const DEFAULT_IBKR_PAPER: IbkrPaperConfig = {
   baseUrl:   'https://localhost:7499/v1/api',
   accountId: '',
@@ -83,6 +93,16 @@ export const DEFAULT_TRADIER_PAPER: TradierPaperConfig = {
 export const DEFAULT_IBKR_LIVE: IbkrLiveConfig = {
   enabled: false,
   note:    'Live IBKR trading is prepared but not yet activated.',
+};
+
+export const DEFAULT_ALPACA_PAPER: AlpacaPaperConfig = {
+  keyId:     '',
+  secretKey: '',
+};
+
+export const DEFAULT_ALPACA_LIVE: AlpacaLiveConfig = {
+  enabled: false,
+  note:    'Live Alpaca trading is prepared but not yet activated.',
 };
 
 interface SettingsState {
@@ -99,6 +119,8 @@ interface SettingsState {
   ibkrPaper:                   IbkrPaperConfig;
   tradierPaper:                TradierPaperConfig;
   ibkrLive:                    IbkrLiveConfig;
+  alpacaPaper:                 AlpacaPaperConfig;
+  alpacaLive:                  AlpacaLiveConfig;
   setBroker:                    (b: BrokerConfig) => void;
   setAlertDeduplicationHours:   (h: number) => void;
   setIvPassThreshold:           (n: number) => void;
@@ -111,6 +133,7 @@ interface SettingsState {
   setConfidenceGate:           (g: ConfidenceGate) => void;
   setIbkrPaper:                (c: IbkrPaperConfig)    => void;
   setTradierPaper:             (c: TradierPaperConfig) => void;
+  setAlpacaPaper:              (c: AlpacaPaperConfig)  => void;
   resetToDefaults:              () => void;
 }
 
@@ -138,6 +161,10 @@ export function migrateSettings(
     next.tradierPaper = { ...DEFAULT_TRADIER_PAPER };
     next.ibkrLive     = { ...DEFAULT_IBKR_LIVE };
   }
+  if (version < 14) {
+    next.alpacaPaper = { ...DEFAULT_ALPACA_PAPER };
+    next.alpacaLive  = { ...DEFAULT_ALPACA_LIVE };
+  }
   return next as unknown as SettingsState;
 }
 
@@ -157,6 +184,8 @@ export const useSettingsStore = create<SettingsState>()(
       ibkrPaper:            { ...DEFAULT_IBKR_PAPER },
       tradierPaper:         { ...DEFAULT_TRADIER_PAPER },
       ibkrLive:             { ...DEFAULT_IBKR_LIVE },
+      alpacaPaper:          { ...DEFAULT_ALPACA_PAPER },
+      alpacaLive:           { ...DEFAULT_ALPACA_LIVE },
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
       setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
@@ -169,6 +198,7 @@ export const useSettingsStore = create<SettingsState>()(
       setConfidenceGate:       (g) => set({ confidenceGate: g }),
       setIbkrPaper:    (c) => set({ ibkrPaper: c }),
       setTradierPaper: (c) => set({ tradierPaper: c }),
+      setAlpacaPaper:  (c) => set({ alpacaPaper: c }),
       resetToDefaults: () => set({
         broker:                  { ...DEFAULT_BROKER },
         alertDeduplicationHours: 24,
@@ -180,8 +210,9 @@ export const useSettingsStore = create<SettingsState>()(
         maxContractPrice:     50,
         premiumStopPct:       0.60,
         confidenceGate:       { ...DEFAULT_CONFIDENCE_GATE },
-        ibkrPaper:    { ...DEFAULT_IBKR_PAPER },
+        ibkrPaper:   { ...DEFAULT_IBKR_PAPER },
         tradierPaper: { ...DEFAULT_TRADIER_PAPER },
+        alpacaPaper:  { ...DEFAULT_ALPACA_PAPER },
       }),
     }),
     {
@@ -191,7 +222,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 13,
+      version: 14,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
@@ -205,6 +236,7 @@ export const useSettingsStore = create<SettingsState>()(
         confidenceGate:         state.confidenceGate,
         ibkrPaper:    state.ibkrPaper,
         tradierPaper: state.tradierPaper,
+        alpacaPaper:  state.alpacaPaper,
       }),
       migrate: (persistedState, version) => migrateSettings(persistedState, version),
     }

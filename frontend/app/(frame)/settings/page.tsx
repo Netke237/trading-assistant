@@ -21,10 +21,9 @@ import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistor
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
-type Section = 'broker' | 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy';
+type Section = 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy';
 
 const SECTIONS: { key: Section; label: string; desc: string }[] = [
-  { key: 'broker',  label: 'Broker',     desc: 'Credentials + paper trade toggle' },
   { key: 'theme',   label: 'Appearance', desc: 'Theme + density' },
   { key: 'scan',    label: 'Scan',       desc: 'Continuous scan + cadence' },
   { key: 'strategy',  label: 'Strategy scan',   desc: 'Signal tolerances + backtest thresholds' },
@@ -35,7 +34,7 @@ const SECTIONS: { key: Section; label: string; desc: string }[] = [
 ];
 
 export default function SettingsPage() {
-  const [active, setActive] = useState<Section>('broker');
+  const [active, setActive] = useState<Section>('brokers');
   // Alert settings moved to /alerts page
   const { resetToDefaults, markov, setMarkov } = useSettingsStore();
 
@@ -61,7 +60,6 @@ export default function SettingsPage() {
         </aside>
 
         <div className={styles.panel}>
-          {active === 'broker'  && <BrokerForm  />}
           {active === 'theme'   && <ThemeForm   />}
           {active === 'scan'    && <ScanForm    />}
           {active === 'brokers' && <BrokersForm />}
@@ -137,83 +135,6 @@ function SaveButton() {
     >
       {saved ? 'Saved' : 'Save changes'}
     </button>
-  );
-}
-
-/* ---------- Broker ---------- */
-
-function BrokerForm() {
-  const { broker, setBroker } = useSettingsStore();
-  const [localBroker, setLocalBroker] = useState(broker.broker);
-  const [localAccount, setLocalAccount] = useState(broker.account);
-  const [localToken, setLocalToken] = useState(broker.apiToken);
-  const [localPaper, setLocalPaper] = useState(broker.paperTrading);
-
-  // Sync local state when store updates (e.g. after reset)
-  useEffect(() => {
-    setLocalBroker(broker.broker);
-    setLocalAccount(broker.account);
-    setLocalToken(broker.apiToken);
-    setLocalPaper(broker.paperTrading);
-  }, [broker]);
-
-  function updateBroker(patch: Partial<typeof broker>) {
-    setBroker({ ...broker, ...patch });
-  }
-
-  return (
-    <>
-      <SectionIntro
-        title="Broker connection"
-        blurb="Where your trades execute. Paper mode is strongly recommended until you've run the app through a full cycle."
-      />
-      <Row label="Broker" hint="Interactive Brokers, Tradier, TastyTrade…" defaultValue="Interactive Brokers">
-        <select
-          className={styles.input}
-          value={localBroker}
-          onChange={(e) => {
-            setLocalBroker(e.target.value);
-            updateBroker({ broker: e.target.value });
-          }}
-        >
-          <option>Interactive Brokers</option>
-          <option>Tradier</option>
-          <option>TastyTrade</option>
-        </select>
-      </Row>
-      <Row label="Account ID" hint="Shown on your statements" defaultValue="—">
-        <input
-          className={styles.input}
-          placeholder="U1234567"
-          value={localAccount}
-          onChange={(e) => {
-            setLocalAccount(e.target.value);
-            updateBroker({ account: e.target.value });
-          }}
-        />
-      </Row>
-      <Row label="API token" hint="Stored locally. Never transmitted to our servers." defaultValue="—">
-        <input
-          className={styles.input}
-          type="password"
-          placeholder="••••••••••••"
-          value={localToken}
-          onChange={(e) => {
-            setLocalToken(e.target.value);
-            updateBroker({ apiToken: e.target.value });
-          }}
-        />
-      </Row>
-      <Row label="Paper trading" hint="Simulated fills — no real orders" defaultValue="On">
-        <Toggle
-          defaultOn={localPaper}
-          onChange={(on) => {
-            setLocalPaper(on);
-            updateBroker({ paperTrading: on });
-          }}
-        />
-      </Row>
-    </>
   );
 }
 
@@ -917,20 +838,25 @@ function BrokersForm() {
   const {
     ibkrPaper, setIbkrPaper,
     tradierPaper, setTradierPaper,
-    ibkrLive,
+    alpacaPaper, setAlpacaPaper,
+    ibkrLive, alpacaLive,
   } = useSettingsStore();
 
-  const [ibkrUrl,     setIbkrUrl]     = useState(ibkrPaper.baseUrl);
-  const [ibkrAcct,    setIbkrAcct]    = useState(ibkrPaper.accountId);
-  const [tradierTok,  setTradierTok]  = useState(tradierPaper.token);
-  const [tradierAcct, setTradierAcct] = useState(tradierPaper.accountId);
+  const [ibkrUrl,      setIbkrUrl]      = useState(ibkrPaper.baseUrl);
+  const [ibkrAcct,     setIbkrAcct]     = useState(ibkrPaper.accountId);
+  const [tradierTok,   setTradierTok]   = useState(tradierPaper.token);
+  const [tradierAcct,  setTradierAcct]  = useState(tradierPaper.accountId);
+  const [alpacaKeyId,  setAlpacaKeyId]  = useState(alpacaPaper.keyId);
+  const [alpacaSecret, setAlpacaSecret] = useState(alpacaPaper.secretKey);
   const [saving, setSaving] = useState<string | null>(null);
 
   // Sync when store resets
-  useEffect(() => { setIbkrUrl(ibkrPaper.baseUrl); },    [ibkrPaper.baseUrl]);
-  useEffect(() => { setIbkrAcct(ibkrPaper.accountId); }, [ibkrPaper.accountId]);
-  useEffect(() => { setTradierTok(tradierPaper.token); },     [tradierPaper.token]);
+  useEffect(() => { setIbkrUrl(ibkrPaper.baseUrl); },         [ibkrPaper.baseUrl]);
+  useEffect(() => { setIbkrAcct(ibkrPaper.accountId); },      [ibkrPaper.accountId]);
+  useEffect(() => { setTradierTok(tradierPaper.token); },      [tradierPaper.token]);
   useEffect(() => { setTradierAcct(tradierPaper.accountId); }, [tradierPaper.accountId]);
+  useEffect(() => { setAlpacaKeyId(alpacaPaper.keyId); },      [alpacaPaper.keyId]);
+  useEffect(() => { setAlpacaSecret(alpacaPaper.secretKey); }, [alpacaPaper.secretKey]);
 
   async function saveIbkrPaper() {
     setSaving('ibkr');
@@ -943,6 +869,13 @@ function BrokersForm() {
     setSaving('tradier');
     setTradierPaper({ token: tradierTok, accountId: tradierAcct });
     await api.postCredentials('tradier_paper', { token: tradierTok, account_id: tradierAcct });
+    setSaving(null);
+  }
+
+  async function saveAlpacaPaper() {
+    setSaving('alpaca');
+    setAlpacaPaper({ keyId: alpacaKeyId, secretKey: alpacaSecret });
+    await api.postCredentials('alpaca_paper', { key_id: alpacaKeyId, secret_key: alpacaSecret });
     setSaving(null);
   }
 
@@ -1012,12 +945,55 @@ function BrokersForm() {
       </div>
 
       <SectionIntro
+        title="Alpaca Paper account"
+        blurb="Stock orders via Alpaca Paper trading. Get your paper API keys at app.alpaca.markets under Paper Trading → API Keys."
+      />
+      <Row label="Key ID" hint="Your Alpaca paper API key ID (PK...)" defaultValue="—">
+        <input
+          className={styles.input}
+          value={alpacaKeyId}
+          onChange={(e) => setAlpacaKeyId(e.target.value)}
+        />
+      </Row>
+      <Row label="Secret key" hint="Write-only — leave blank to keep the saved value" defaultValue="—">
+        <input
+          className={styles.input}
+          type="password"
+          placeholder="leave blank to keep saved value"
+          value={alpacaSecret}
+          onChange={(e) => setAlpacaSecret(e.target.value)}
+        />
+      </Row>
+      <div className={styles.row}>
+        <div className={styles.rowLabel} />
+        <div className={styles.rowControl}>
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={saveAlpacaPaper}
+            disabled={saving === 'alpaca'}
+          >
+            {saving === 'alpaca' ? 'Saving…' : 'Save Alpaca Paper'}
+          </button>
+        </div>
+      </div>
+
+      <SectionIntro
         title="IBKR Live (Locked)"
         blurb={ibkrLive.note}
       />
       <Row label="Live trading" hint="Requires explicit activation — not yet enabled" defaultValue="Off">
         <button className={styles.btn} disabled title="Locked until manually activated">
-          🔒 Activate live IBKR
+          Activate live IBKR
+        </button>
+      </Row>
+
+      <SectionIntro
+        title="Alpaca Live (Locked)"
+        blurb={alpacaLive.note}
+      />
+      <Row label="Live trading" hint="Requires explicit activation — not yet enabled" defaultValue="Off">
+        <button className={styles.btn} disabled title="Locked until manually activated">
+          Activate live Alpaca
         </button>
       </Row>
     </>
