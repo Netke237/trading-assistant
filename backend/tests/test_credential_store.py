@@ -90,3 +90,22 @@ def test_post_credentials_stores_and_get_returns_masked():
     data = resp2.json()
     assert "tradier_paper" in data
     assert "secret" not in data["tradier_paper"].get("token", "")
+
+
+def test_alpaca_slots_exist_by_default(tmp_path):
+    store = CredentialStore(path=tmp_path / "creds.yaml")
+    assert store.get("alpaca_live") == {
+        "key_id": "", "secret_key": "", "base_url": "https://api.alpaca.markets",
+    }
+    assert store.get("alpaca_paper") == {
+        "key_id": "", "secret_key": "", "base_url": "https://paper-api.alpaca.markets",
+    }
+
+
+def test_secret_key_is_masked(tmp_path):
+    store = CredentialStore(path=tmp_path / "creds.yaml")
+    store.set("alpaca_paper", {"key_id": "PKID", "secret_key": "abcd1234SECRET"})
+    masked = store.get_masked("alpaca_paper")
+    assert masked["secret_key"].endswith("CRET")
+    assert masked["secret_key"].startswith("*")
+    assert masked["key_id"] == "PKID"  # key_id is not sensitive
