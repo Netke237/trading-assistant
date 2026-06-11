@@ -65,3 +65,32 @@ class CircuitBreaker:
         self._failures += 1
         if self._failures >= self.fail_threshold:
             self._opened_at = time.monotonic()
+
+
+class SymbolBudget:
+    """Tracks distinct symbols fetched within a rolling time window. Used for
+    Tiingo's free-tier unique-symbol/hour cap: re-fetching a symbol already
+    counted this window is free; a new symbol beyond `max_symbols` is refused."""
+
+    def __init__(self, max_symbols: int, window: float = 3600.0) -> None:
+        self.max_symbols = max_symbols
+        self.window = window
+        self._seen: dict[str, float] = {}  # symbol -> first-seen monotonic ts
+
+    def _evict(self, now: float) -> None:
+        cutoff = now - self.window
+        self._seen = {s: t for s, t in self._seen.items() if t >= cutoff}
+
+    def try_consume(self, symbol: str) -> bool:
+        now = time.monotonic()
+        self._evict(now)
+        if symbol in self._seen:
+            return True
+        if len(self._seen) >= self.max_symbols:
+            return False
+        self._seen[symbol] = now
+        return True
+
+    def remaining(self) -> int:
+        self._evict(time.monotonic())
+        return max(0, self.max_symbols - len(self._seen))

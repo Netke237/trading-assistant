@@ -54,3 +54,29 @@ def test_success_resets_failures():
     cb.record_success()
     cb.record_failure()
     assert cb.is_open is False  # counter was reset, only 1 failure since
+
+
+from app.data.governor import SymbolBudget
+
+
+def test_symbol_budget_counts_distinct_symbols():
+    budget = SymbolBudget(max_symbols=2, window=3600.0)
+    assert budget.try_consume("AAPL") is True
+    assert budget.try_consume("MSFT") is True
+    assert budget.try_consume("GOOG") is False   # over the cap
+    assert budget.remaining() == 0
+
+
+def test_symbol_budget_same_symbol_is_free_within_window():
+    budget = SymbolBudget(max_symbols=1, window=3600.0)
+    assert budget.try_consume("AAPL") is True
+    assert budget.try_consume("AAPL") is True     # already counted, still allowed
+    assert budget.remaining() == 0
+
+
+def test_symbol_budget_evicts_after_window():
+    budget = SymbolBudget(max_symbols=1, window=0.05)
+    assert budget.try_consume("AAPL") is True
+    assert budget.try_consume("MSFT") is False
+    time.sleep(0.06)
+    assert budget.try_consume("MSFT") is True     # AAPL evicted, slot freed
