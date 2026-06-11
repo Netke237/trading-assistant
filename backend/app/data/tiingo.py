@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from datetime import date
-from typing import Optional
 
 import httpx
 
@@ -22,10 +21,15 @@ def fetch_historical_candles(
     start: date,
     end: date,
 ) -> list[dict]:
-    """
-    Returns daily OHLCV bars for `symbol` between `start` and `end` (inclusive).
-    Each dict: {time: str (YYYY-MM-DD), open, high, low, close: float, volume: int}
-    Uses adjusted prices. Returns [] on any error.
+    """Return daily OHLCV bars for `symbol` between `start` and `end` (inclusive).
+
+    Each dict: raw prices (open/high/low/close/volume) + multi-basis fields
+    (adj_factor, split_factor, div_cash, source='tiingo').
+
+    adj_factor = adjClose / close -- multiply raw_close x adj_factor to get
+    the fully-adjusted close price.
+
+    Returns [] on any error (network, auth, symbol not found).
     """
     try:
         resp = httpx.get(
@@ -41,13 +45,20 @@ def fetch_historical_candles(
         resp.raise_for_status()
         rows = []
         for bar in resp.json():
+            raw_close = float(bar.get("close", 0) or 0)
+            adj_close = float(bar.get("adjClose", raw_close) or raw_close)
+            adj_factor = round(adj_close / raw_close, 8) if raw_close != 0 else 1.0
             rows.append({
-                "time":   bar["date"][:10],
-                "open":   round(float(bar["adjOpen"]),   2),
-                "high":   round(float(bar["adjHigh"]),   2),
-                "low":    round(float(bar["adjLow"]),    2),
-                "close":  round(float(bar["adjClose"]),  2),
-                "volume": int(bar["adjVolume"]),
+                "time":         bar["date"][:10],
+                "open":         round(float(bar.get("open", 0) or 0),   4),
+                "high":         round(float(bar.get("high", 0) or 0),   4),
+                "low":          round(float(bar.get("low",  0) or 0),   4),
+                "close":        round(raw_close,                         4),
+                "volume":       int(bar.get("volume", 0) or 0),
+                "adj_factor":   adj_factor,
+                "split_factor": round(float(bar.get("splitFactor", 1.0) or 1.0), 8),
+                "div_cash":     round(float(bar.get("divCash",      0.0) or 0.0), 4),
+                "source":       "tiingo",
             })
         return rows
     except Exception:

@@ -38,9 +38,9 @@
   background: var(--text-dim);
 }
 
-.statusDot[data-status="ok"]           { background: var(--pass);    }
-.statusDot[data-status="unavailable"]  { background: var(--reject);  }
-.statusDot[data-status="error"]        { background: var(--reject);  }
+.statusDot[data-status="connected"]    { background: var(--pass);    }
+.statusDot[data-status="degraded"]     { background: var(--caution); }
+.statusDot[data-status="down"]         { background: var(--reject);  }
 .statusDot[data-status="unconfigured"] { background: var(--caution); }
 
 .dataSourceStatus {

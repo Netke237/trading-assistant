@@ -110,7 +110,7 @@ export function RailQuickLook() {
                 <Text size={12} tone="secondary">{src.label}</Text>
                 <span className={styles.dataSourceStatus}>
                   <Text size={11} tone="dim">
-                    {src.status === 'ok' ? 'connected' : src.status}
+                    {src.status}
                   </Text>
                 </span>
               </div>

@@ -30,7 +30,7 @@ async function del(path: string): Promise<void> {
 export interface DataSourceInfo {
   id: string;
   label: string;
-  status: 'ok' | 'unavailable' | 'error' | 'unconfigured';
+  status: 'connected' | 'degraded' | 'down' | 'unconfigured';
   provides: string[];
   detail: string | null;
 }
