@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from datetime import datetime, timezone
+
+_log = logging.getLogger(__name__)
 
 import httpx
 import yaml
@@ -38,6 +41,7 @@ from app.data.market import (
     fetch_candles_async, fetch_price_async, fetch_option_chain_async,
     fetch_company_name_async, fetch_fundamentals_calendar,
     fetch_market_cap_async, fetch_calendar_dates_async,
+    fetch_quotes,
     _extract_earnings_date, _extract_dividend_date,
     _compute_iv_bs,
     TRADIER_BASE_URL, TRADIER_TOKEN,
@@ -50,11 +54,15 @@ from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.entry_quality import assess_entry
 from app.scoring.reward_risk import estimate_rr, estimate_targets
-from app.models.heston import calibrate_heston
 from app.services.audit import new_rec_id, log_event
 from app.services.scan_scheduler import ScanScheduler
+from pydantic import BaseModel
 
 router = APIRouter(prefix='/api', tags=['scan'])
+
+
+class _PrewarmRequest(BaseModel):
+    symbols: list[str]
 
 # Load settings once at module level (patchable in tests via app.routers.scan._settings)
 _settings: dict = yaml.safe_load(
@@ -158,7 +166,8 @@ def _alt_reason(alt: dict, primary: dict, *, is_call: bool) -> str:
 # Kept at 3 to stay below Tradier's rate-limit threshold.
 # 10 concurrent × 5 calls = 50 simultaneous requests caused severe throttling (50-78s/symbol).
 # 3 concurrent × 5 calls = 15 simultaneous requests → consistent ~4-6s/symbol.
-_SCAN_CONCURRENCY = 3
+# O-3 batch price fetch drops Pass 1 to 3 calls; 5 × 3 = 15 — same ceiling, more throughput.
+_SCAN_CONCURRENCY = 5
 
 
 def _safe(model_cls, d: dict | None):
@@ -187,6 +196,8 @@ async def _process_symbol(
     overrides: dict | None = None,
     gate: dict | None = None,
     atr_mult: float | None = None,
+    price_map: dict | None = None,
+    bars_map: dict | None = None,
 ) -> TradeCardData | RejectedCandidate:
     """Process one symbol: fetch data, score stock, validate contracts, build trade card.
 
@@ -197,13 +208,38 @@ async def _process_symbol(
     option_type: Literal["C", "P"] = "C" if direction == "Bullish" else "P"
 
     # ── Pass 1: core data — no option chain ───────────────────────────────────
+    prefetched_price = (price_map or {}).get(symbol, {}).get("last")
     async with sem:
-        candles, price, company, fund_data = await asyncio.gather(
-            fetch_candles_async(client, symbol),
-            fetch_price_async(client, symbol),
-            fetch_company_name_async(client, symbol),
-            fetch_fundamentals_calendar(client, symbol),
-        )
+        db_bars = (bars_map or {}).get(symbol) if bars_map else None
+        if prefetched_price:
+            if db_bars is not None:
+                company, fund_data = await asyncio.gather(
+                    fetch_company_name_async(client, symbol),
+                    fetch_fundamentals_calendar(client, symbol),
+                )
+                candles = db_bars
+            else:
+                candles, company, fund_data = await asyncio.gather(
+                    fetch_candles_async(client, symbol),
+                    fetch_company_name_async(client, symbol),
+                    fetch_fundamentals_calendar(client, symbol),
+                )
+            price = prefetched_price
+        else:
+            if db_bars is not None:
+                price, company, fund_data = await asyncio.gather(
+                    fetch_price_async(client, symbol),
+                    fetch_company_name_async(client, symbol),
+                    fetch_fundamentals_calendar(client, symbol),
+                )
+                candles = db_bars
+            else:
+                candles, price, company, fund_data = await asyncio.gather(
+                    fetch_candles_async(client, symbol),
+                    fetch_price_async(client, symbol),
+                    fetch_company_name_async(client, symbol),
+                    fetch_fundamentals_calendar(client, symbol),
+                )
         company = company or symbol
 
         if not price or not candles:
@@ -340,20 +376,6 @@ async def _process_symbol(
     contract_card: ContractScoreCard = best_score
     runner_ups = valid_scores[1:3]
 
-    # ── Heston calibration ─────────────────────────────────────────────────────
-    heston_chain = [
-        {
-            "strike": float(c.get("strike", 0)),
-            "expiry_years": c.get("dte", 30) / 365.0,
-            "mid_price": float(c.get("price", 0)),
-            "is_call": c.get("right", "C") == "C",
-        }
-        for c in chain
-        if float(c.get("price", 0)) > 0
-    ]
-    heston_result = calibrate_heston(heston_chain, price, r=0.05)
-    heston_params = heston_result.params
-
     # ── Entry quality ──────────────────────────────────────────────────────────
     bid = float(contract.get("bid", 0))
     ask = float(contract.get("ask", 0))
@@ -377,7 +399,7 @@ async def _process_symbol(
         expiry_years=expiry_years,
         current_premium=premium,
         is_call=(direction == "Bullish"),
-        heston_params=heston_params,
+        heston_params=None,
         premium_stop_pct=_rr["premium_stop_pct"],
     )
 
@@ -388,7 +410,7 @@ async def _process_symbol(
         expiry_years=expiry_years,
         current_premium=premium,
         is_call=(direction == "Bullish"),
-        heston_params=heston_params,
+        heston_params=None,
         premium_stop_pct=_rr["premium_stop_pct"],
     )
 
@@ -482,7 +504,7 @@ async def _process_symbol(
             expiry_years=alt_expiry_years,
             current_premium=alt_premium,
             is_call=(direction == "Bullish"),
-            heston_params=heston_params,
+            heston_params=None,
             premium_stop_pct=_rr["premium_stop_pct"],
         )
         alts.append(AlternativeContract(
@@ -578,6 +600,30 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
     rejected: list[RejectedCandidate] = []
     has_exception = False
 
+    # Pre-fetch all prices in one Tradier batch call (removes N individual HTTP requests)
+    try:
+        price_map = await asyncio.to_thread(fetch_quotes, symbols)
+    except Exception as exc:
+        _log.warning("scan: batch price fetch failed (%s) — using per-symbol fallback", exc)
+        price_map = {}
+
+    # Pre-fetch OHLCV bars from DB for all symbols — replaces per-symbol Tradier calls.
+    from app.services.historical_store import get_bars as _get_bars
+    from datetime import date as _date, timedelta as _td
+    _bar_end = _date.today()
+    _bar_start = _bar_end - _td(days=int(1.75 * 252))  # ~440 calendar days ≈ 252 trading days
+    _bars_results = await asyncio.gather(
+        *[_get_bars(sym, _bar_start, _bar_end) for sym in symbols],
+        return_exceptions=True,
+    )
+    bars_map = {
+        sym: result
+        for sym, result in zip(symbols, _bars_results)
+        if isinstance(result, list) and result
+    }
+    _bars_from_db = len(bars_map)
+    _bars_missed = len(symbols) - _bars_from_db
+
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
     async with httpx.AsyncClient(
         base_url=httpx.URL(TRADIER_BASE_URL),
@@ -597,10 +643,17 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 overrides=dict(req.overrides) if req.overrides else None,
                 gate=gate,
                 atr_mult=atr_mult,
+                price_map=price_map,
+                bars_map=bars_map,
             )
             for symbol in symbols
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    _log.info(
+        "SCAN %s data-provenance: bars_from_db=%d bars_missed=%d symbols=%d",
+        scan_id, _bars_from_db, _bars_missed, len(symbols),
+    )
 
     for result in results:
         if isinstance(result, Exception):
@@ -663,6 +716,18 @@ async def _scheduled_scan() -> ScanResult:
         raise RuntimeError("No previous scan request to repeat")
     async with AsyncSessionLocal() as db:
         return await run_scan(_last_request, db)
+
+
+@router.post('/scan/prewarm-candles')
+async def prewarm_candles(req: _PrewarmRequest) -> dict:
+    """Pre-populate the candle cache before the scan runs.
+
+    Called from the frontend when the user leaves Step 2 (direction). By the time
+    the actual scan executes (Step 4+), daily bars are already in-process cache.
+    """
+    from app.data.market import prewarm_candles_async
+    count = await prewarm_candles_async(req.symbols)
+    return {"prewarmed": count}
 
 
 @router.post('/scan/continuous', response_model=ContinuousScanConfig)
