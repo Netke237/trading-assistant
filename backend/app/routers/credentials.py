@@ -11,7 +11,7 @@ router = APIRouter(prefix="/settings", tags=["credentials"])
 
 
 class CredentialUpdate(BaseModel):
-    key: Literal["ibkr_live", "ibkr_paper", "tradier_live", "tradier_paper"]
+    key: Literal["ibkr_live", "ibkr_paper", "tradier_live", "tradier_paper", "alpaca_paper", "alpaca_live"]
     values: dict
 
 
