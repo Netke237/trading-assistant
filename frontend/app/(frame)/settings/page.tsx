@@ -1054,7 +1054,7 @@ function DataForm() {
     setTriggering(true);
     setTriggerResult('');
     try {
-      const r = await triggerIngestionNow(['SP500'], 6);
+      const r = await triggerIngestionNow(['SP500', 'NDX100', 'DOW30'], 6);
       setTriggerResult(`Started — ${r.total} symbols`);
     } catch {
       setTriggerResult('Trigger failed');

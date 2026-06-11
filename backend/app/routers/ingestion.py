@@ -26,11 +26,28 @@ class IngestRequest(BaseModel):
     years: int = Field(default=6, ge=1, le=10)
 
 
+_UNIVERSE_PRESETS = {"SP500", "NDX100", "DOW30"}
+
+
 @router.post("/ingest", status_code=202)
 async def trigger_ingest(req: IngestRequest) -> dict:
-    """Trigger a background ingestion run. Returns immediately."""
-    start_ingestion_task(req.symbols, years=req.years)
-    return {"status": "started", "total": len(req.symbols), "years": req.years}
+    """Trigger a background ingestion run. Returns immediately.
+
+    Symbols may include universe preset names (SP500, NDX100, DOW30) — these are
+    expanded server-side before the job starts.
+    """
+    symbols = req.symbols
+    if any(s in _UNIVERSE_PRESETS for s in symbols):
+        try:
+            from app.data.universe_presets import expand_universe
+            expanded: list[str] = []
+            for s in symbols:
+                expanded.extend(expand_universe([s]) if s in _UNIVERSE_PRESETS else [s])
+            symbols = list(dict.fromkeys(expanded))
+        except Exception:
+            pass
+    start_ingestion_task(symbols, years=req.years)
+    return {"status": "started", "total": len(symbols), "years": req.years}
 
 
 @router.get("/ingest/status")
