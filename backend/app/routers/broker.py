@@ -9,7 +9,7 @@ from app.services.broker_router import build_router_from_credentials
 
 router = APIRouter(prefix="/broker", tags=["broker"])
 
-BrokerKey = Literal["ibkr_paper", "tradier_paper"]
+BrokerKey = Literal["ibkr_paper", "tradier_paper", "alpaca_paper"]
 
 
 class StockOrderRequest(BaseModel):
@@ -84,10 +84,13 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
 async def broker_status() -> dict:
     """Return which brokers are configured (no credentials exposed)."""
     r = build_router_from_credentials()
-    ibkr_ok = "ibkr_paper" in r._adapters
-    trad_ok  = "tradier_paper" in r._adapters
+    ibkr_ok   = "ibkr_paper"   in r._adapters
+    trad_ok   = "tradier_paper" in r._adapters
+    alpaca_ok = "alpaca_paper"  in r._adapters
     return {
         "ibkr_paper":    {"configured": ibkr_ok},
         "tradier_paper": {"configured": trad_ok},
+        "alpaca_paper":  {"configured": alpaca_ok},
         "ibkr_live":     {"configured": False, "enabled": False, "note": "Locked — not yet activated"},
+        "alpaca_live":   {"configured": False, "enabled": False, "note": "Locked — not yet activated"},
     }

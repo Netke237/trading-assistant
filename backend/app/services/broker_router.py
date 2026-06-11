@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.data.ibkr_paper import BrokerOrder, OrderResult
 
-_LIVE_BROKERS = {"ibkr_live"}  # Blocked until manually enabled in a future release.
+_LIVE_BROKERS = {"ibkr_live", "alpaca_live"}  # Blocked until manually enabled in a future release.
 
 
 class BrokerRouter:
@@ -35,6 +35,7 @@ def build_router_from_credentials() -> BrokerRouter:
     from app.services.credential_store import credential_store
     from app.data.ibkr_paper import IbkrPaperAdapter
     from app.data.tradier_paper import TradierPaperAdapter
+    from app.data.alpaca_paper_execution import AlpacaPaperAdapter
 
     adapters = {}
     ibkr = credential_store.get("ibkr_paper")
@@ -48,5 +49,11 @@ def build_router_from_credentials() -> BrokerRouter:
         adapters["tradier_paper"] = TradierPaperAdapter(
             token=tradier["token"],
             account_id=tradier["account_id"],
+        )
+    alpaca = credential_store.get("alpaca_paper")
+    if alpaca and alpaca.get("key_id") and alpaca.get("secret_key"):
+        adapters["alpaca_paper"] = AlpacaPaperAdapter(
+            key_id=alpaca["key_id"],
+            secret_key=alpaca["secret_key"],
         )
     return BrokerRouter(adapters=adapters)
