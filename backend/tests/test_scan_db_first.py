@@ -25,9 +25,10 @@ async def test_process_symbol_uses_bars_map_not_tradier():
          patch("app.routers.scan.fetch_company_name_async", new_callable=AsyncMock, return_value="Apple Inc."), \
          patch("app.routers.scan.fetch_fundamentals_calendar", new_callable=AsyncMock, return_value={}), \
          patch("app.routers.scan.fetch_calendar_dates_async", new_callable=AsyncMock, return_value=(None, None)), \
-         patch("app.routers.scan.score_stock") as mock_score:
+         patch("app.routers.scan.score_stock") as mock_score, \
+         patch("app.routers.scan.log_event"):
 
-        mock_score.return_value = MagicMock(status="REJECT", score=20, components={})
+        mock_score.return_value = MagicMock(status="REJECT", score=20, rules=[], components={})
 
         result = await _process_symbol(
             symbol="AAPL",
