@@ -3,8 +3,11 @@ load_dotenv()  # Load root .env into os.environ before market.py reads TRADIER_A
 
 from contextlib import asynccontextmanager
 import asyncio
+import logging
 
 from fastapi import FastAPI
+
+logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
@@ -34,6 +37,7 @@ from app.routers.stock_scan    import router as stock_scan_router
 from app.routers.auto_trade    import router as auto_trade_router
 from app.routers.historical_data import router as historical_data_router
 from app.routers.chart_drawings  import router as chart_drawings_router
+from app.routers.ingestion       import router as ingestion_router
 
 
 _notification_worker_task: asyncio.Task | None = None
@@ -54,6 +58,28 @@ async def lifespan(app: FastAPI):
     _notification_worker_task = asyncio.create_task(notification_worker())
     from app.services.portfolio_alert_monitor import run_portfolio_alert_monitor
     _portfolio_monitor_task = asyncio.create_task(run_portfolio_alert_monitor())
+    # ── Startup catch-up: ingest if DB is stale ───────────────────────────
+    try:
+        from app.services.ingestion_job import _should_ingest, start_ingestion_task
+        from app.services.historical_store import _last_stored_date
+        from app.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as _db:
+            _last = await _last_stored_date("SPY", _db)
+        if _should_ingest(_last):
+            try:
+                from app.data.universe_presets import expand_universe
+                _universe = list(dict.fromkeys(
+                    expand_universe(["SP500"]) + expand_universe(["NDX100"]) + expand_universe(["DOW30"])
+                ))
+            except Exception:
+                _universe = ["SPY"]
+            start_ingestion_task(_universe, years=6)
+            logger.info(
+                "startup: DB stale (last SPY date=%s), started ingestion for %d symbols",
+                _last, len(_universe),
+            )
+    except Exception as _exc:
+        logger.warning("startup catch-up failed: %s", _exc)
     yield
     # ── Shutdown ─────────────────────────────────────────────────────────
     if _scheduler._running:
@@ -114,6 +140,7 @@ def create_app() -> FastAPI:
     app.include_router(auto_trade_router)
     app.include_router(historical_data_router)
     app.include_router(chart_drawings_router)
+    app.include_router(ingestion_router)
 
     return app
 

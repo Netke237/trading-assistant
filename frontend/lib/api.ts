@@ -174,6 +174,7 @@ export const api = {
       ibkr_paper:    { configured: boolean };
       tradier_paper: { configured: boolean };
       ibkr_live:     { configured: boolean; enabled: boolean; note: string };
+      alpaca_paper:  { configured: boolean };
     }>('/broker/status'),
 
   startHistoryPrefetch: (req: {

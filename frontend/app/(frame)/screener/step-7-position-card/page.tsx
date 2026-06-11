@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
@@ -10,7 +10,7 @@ import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
 
-type ExecutionMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper';
+type ExecutionMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper';
 
 function ExecutionModeButton({ label, desc, active, disabled, onClick }:
   { label: string; desc: string; active: boolean; disabled?: boolean; onClick: () => void }) {
@@ -45,6 +45,13 @@ export default function Step7PositionCardPage() {
 
   const ibkrConfigured = !!settings.ibkrPaper.accountId && !!settings.ibkrPaper.baseUrl;
   const tradierConfigured = !!settings.tradierPaper.token && !!settings.tradierPaper.accountId;
+  const [alpacaPaperConfigured, setAlpacaPaperConfigured] = useState(false);
+
+  useEffect(() => {
+    api.getBrokerStatus().then((s) => {
+      setAlpacaPaperConfigured(s.alpaca_paper?.configured ?? false);
+    }).catch(() => {/* silently ignore — button stays disabled */});
+  }, []);
 
   const candidates = result?.candidates.filter((c) => c.backtest.passes_gate) ?? [];
   const card: PositionCardData | undefined = candidates[selectedIdx];
@@ -132,6 +139,8 @@ export default function Step7PositionCardPage() {
             active={execMode === 'ibkr_paper'} disabled={!ibkrConfigured} onClick={() => setExecMode('ibkr_paper')} />
           <ExecutionModeButton label="Tradier Paper" desc="Simulated via Tradier sandbox"
             active={execMode === 'tradier_paper'} disabled={!tradierConfigured} onClick={() => setExecMode('tradier_paper')} />
+          <ExecutionModeButton label="Alpaca Paper" desc="Direct stock order"
+            active={execMode === 'alpaca_paper'} disabled={!alpacaPaperConfigured} onClick={() => setExecMode('alpaca_paper')} />
         </div>
       </div>
 
