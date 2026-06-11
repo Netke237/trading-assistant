@@ -97,3 +97,56 @@ def test_backoff_delay_grows_and_is_capped():
     assert d0 == pytest.approx(0.5)
     assert d1 == pytest.approx(1.0)
     assert d5 == 8.0  # capped
+
+
+from app.data.governor import Governor, ProviderUnavailable, build_default_governor
+
+
+@pytest.mark.asyncio
+async def test_governor_call_returns_result_and_marks_connected():
+    gov = Governor.for_testing(provider="alpaca", rate=100, capacity=100)
+
+    async def _ok():
+        return [1, 2, 3]
+
+    result = await gov.call("alpaca", _ok)
+    assert result == [1, 2, 3]
+    assert gov.health("alpaca") == "connected"
+
+
+@pytest.mark.asyncio
+async def test_governor_retries_on_rate_limited_then_succeeds():
+    gov = Governor.for_testing(provider="tiingo", rate=100, capacity=100)
+    calls = {"n": 0}
+
+    async def _flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RateLimited("429", retry_after=0.01)
+        return "ok"
+
+    result = await gov.call("tiingo", _flaky, retries=2)
+    assert result == "ok"
+    assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_governor_opens_circuit_and_reports_degraded():
+    gov = Governor.for_testing(provider="yf", rate=100, capacity=100, fail_threshold=2)
+
+    async def _broken():
+        raise RuntimeError("network down")
+
+    for _ in range(2):
+        with pytest.raises(RuntimeError):
+            await gov.call("yf", _broken)
+    # circuit now open → next call short-circuits with ProviderUnavailable
+    with pytest.raises(ProviderUnavailable):
+        await gov.call("yf", _broken)
+    assert gov.health("yf") == "degraded"
+
+
+def test_build_default_governor_has_all_providers():
+    gov = build_default_governor()
+    for name in ("alpaca", "tradier", "tiingo", "yfinance", "ibkr"):
+        assert gov.health(name) == "unknown"

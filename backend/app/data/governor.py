@@ -108,3 +108,134 @@ class RateLimited(Exception):
 def backoff_delay(attempt: int, base: float = 0.5, cap: float = 8.0) -> float:
     """Exponential backoff: base * 2**attempt, capped at `cap` seconds."""
     return min(cap, base * (2 ** attempt))
+
+
+import logging
+from dataclasses import dataclass
+from typing import Awaitable, Callable, TypeVar
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+class ProviderUnavailable(Exception):
+    """Raised when a provider's circuit is open, so callers can fall through to
+    the next provider in their chain without making a doomed network call."""
+
+
+@dataclass
+class _ProviderState:
+    name: str
+    bucket: "TokenBucket"
+    breaker: "CircuitBreaker"
+    budget: "SymbolBudget | None" = None
+    status: str = "unknown"  # unknown | connected | degraded | down | unconfigured
+
+
+class Governor:
+    """Single gate every provider call passes through. Enforces per-provider
+    rate limits, retries 429s with backoff, and opens a circuit on repeated
+    failures so callers fail fast to their fallback chain."""
+
+    def __init__(self, providers: dict[str, _ProviderState]) -> None:
+        self._providers = providers
+
+    @classmethod
+    def for_testing(
+        cls, provider: str, rate: float, capacity: float,
+        fail_threshold: int = 5,
+    ) -> "Governor":
+        state = _ProviderState(
+            name=provider,
+            bucket=TokenBucket(rate=rate, per=1.0, capacity=capacity),
+            breaker=CircuitBreaker(fail_threshold=fail_threshold, cooldown=60.0),
+        )
+        return cls({provider: state})
+
+    def health(self, provider: str) -> str:
+        ps = self._providers.get(provider)
+        if ps is None:
+            return "unconfigured"
+        if ps.breaker.is_open:
+            return "degraded"
+        return ps.status
+
+    def set_status(self, provider: str, status: str) -> None:
+        ps = self._providers.get(provider)
+        if ps is not None:
+            ps.status = status
+
+    def symbol_allowed(self, provider: str, symbol: str) -> bool:
+        """True if `provider` still has budget for `symbol` this window."""
+        ps = self._providers.get(provider)
+        if ps is None or ps.budget is None:
+            return True
+        return ps.budget.try_consume(symbol)
+
+    async def call(
+        self,
+        provider: str,
+        coro_factory: Callable[[], Awaitable[T]],
+        *,
+        retries: int = 3,
+    ) -> T:
+        ps = self._providers.get(provider)
+        if ps is None:
+            raise ProviderUnavailable(f"provider '{provider}' not registered")
+        if ps.breaker.is_open:
+            ps.status = "degraded"
+            raise ProviderUnavailable(f"{provider} circuit open")
+
+        attempt = 0
+        while True:
+            await ps.bucket.acquire()
+            try:
+                result = await coro_factory()
+                ps.breaker.record_success()
+                ps.status = "connected"
+                return result
+            except RateLimited as exc:
+                ps.status = "degraded"
+                ps.breaker.record_failure()
+                if attempt >= retries:
+                    logger.warning("%s rate-limited, retries exhausted", provider)
+                    raise
+                delay = exc.retry_after if exc.retry_after is not None else backoff_delay(attempt)
+                await asyncio.sleep(delay)
+                attempt += 1
+            except Exception:
+                ps.breaker.record_failure()
+                ps.status = "down"
+                raise
+
+
+def build_default_governor() -> Governor:
+    """Production Governor sized to Kenneth's tiers (spec §3)."""
+    def _state(name, rate, capacity, *, fail=5, budget=None):
+        return _ProviderState(
+            name=name,
+            bucket=TokenBucket(rate=rate, per=1.0, capacity=capacity),
+            breaker=CircuitBreaker(fail_threshold=fail, cooldown=60.0),
+            budget=budget,
+        )
+
+    providers = {
+        "alpaca":   _state("alpaca",   rate=200 / 60, capacity=20),
+        "tradier":  _state("tradier",  rate=120 / 60, capacity=15),
+        "tiingo":   _state("tiingo",   rate=1 / 72,  capacity=2,
+                           budget=SymbolBudget(max_symbols=50, window=3600.0)),
+        "yfinance": _state("yfinance", rate=2,        capacity=2),
+        "ibkr":     _state("ibkr",     rate=40,       capacity=40),
+    }
+    return Governor(providers)
+
+
+_GOVERNOR: Governor | None = None
+
+
+def get_governor() -> Governor:
+    global _GOVERNOR
+    if _GOVERNOR is None:
+        _GOVERNOR = build_default_governor()
+    return _GOVERNOR
