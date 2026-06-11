@@ -5,7 +5,6 @@ import contextlib
 import io
 import logging
 import os
-import time as _time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -21,9 +20,8 @@ TRADIER_TOKEN = os.getenv("TRADIER_API_TOKEN", "")
 logger = logging.getLogger(__name__)
 
 # ── In-process caches ─────────────────────────────────────────────────────────
-# Candles: daily bars don't change within a trading session — 4-hour TTL.
-_candles_cache: dict[str, tuple[list[dict], float]] = {}
-_CANDLES_TTL = 4 * 3600
+# Candles: daily bars don't change within a trading session — date-keyed cache.
+_candles_cache: dict[str, tuple[list[dict], str]] = {}
 
 # Company names: immutable; permanent cache for the process lifetime.
 _company_cache: dict[str, str] = {}
@@ -31,6 +29,15 @@ _company_cache: dict[str, str] = {}
 # yfinance calendar: reset daily (overnight earnings updates).
 _yf_cal_cache: dict[str, tuple[Optional[date], Optional[date]]] = {}
 _yf_cal_cache_date: str = ""
+
+# Yahoo Finance ticker equivalents for index symbols not served by Tradier quotes.
+_YF_SYMBOL_MAP: dict[str, str] = {
+    "SPX": "^GSPC",
+    "NDX": "^NDX",
+    "VIX": "^VIX",
+    "RUT": "^RUT",
+    "DJI": "^DJI",
+}
 
 
 def _headers() -> dict:
@@ -43,15 +50,51 @@ def _headers() -> dict:
 # ── Original synchronous functions (kept for backwards compat) ────────────────
 
 
+def _fetch_daily_yf(symbol: str) -> list[dict]:
+    """Daily OHLCV bars from yfinance (5-year window). Maps index tickers via _YF_SYMBOL_MAP.
+    Suppresses yfinance stderr noise. Returns [] on any error.
+    """
+    try:
+        import yfinance as yf
+        yf_symbol = _YF_SYMBOL_MAP.get(symbol, symbol)
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            df = yf.download(yf_symbol, period="5y", interval="1d", progress=False)
+        if df is None or df.empty:
+            return []
+        if isinstance(df.columns, pd.MultiIndex):
+            df = df.droplevel(1, axis=1)
+        return [
+            {
+                "time":   ts.strftime("%Y-%m-%d"),
+                "open":   round(float(row["Open"]),   2),
+                "high":   round(float(row["High"]),   2),
+                "low":    round(float(row["Low"]),    2),
+                "close":  round(float(row["Close"]),  2),
+                "volume": 0 if pd.isna(row["Volume"]) else int(row["Volume"]),
+            }
+            for ts, row in df.iterrows()
+        ]
+    except Exception:
+        return []
+
+
 def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
     """
     Returns up to `bars` daily OHLCV bars for `symbol`, newest last.
     Each dict: {time: str (YYYY-MM-DD), open, high, low, close: float, volume: int}
-    Returns [] on any error.
+    Tries Tradier first; falls back to yfinance (handles index tickers via _YF_SYMBOL_MAP).
+    Results are cached per calendar day; cache is shared with fetch_candles_async.
     """
+    cached = _candles_cache.get(symbol)
+    if cached is not None:
+        data, cached_date = cached
+        if cached_date == date.today().isoformat() and len(data) >= bars:
+            return data[-bars:]
+
+    rows: list[dict] = []
     try:
         end = date.today()
-        # 365/252 ≈ 1.45 calendar days per trading day; +20% buffer for holidays/gaps
         calendar_days = max(400, int(bars * 1.75))
         start = end - timedelta(days=calendar_days)
         resp = httpx.get(
@@ -67,24 +110,32 @@ def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
         )
         resp.raise_for_status()
         history = resp.json().get("history")
-        if not history:
-            return []
-        day_list = history.get("day", [])
-        if isinstance(day_list, dict):
-            day_list = [day_list]
-        rows = []
-        for d in day_list[-bars:]:
-            rows.append({
-                "time": d["date"],
-                "open": round(float(d["open"]), 2),
-                "high": round(float(d["high"]), 2),
-                "low": round(float(d["low"]), 2),
-                "close": round(float(d["close"]), 2),
-                "volume": int(d["volume"]),
-            })
-        return rows
+        if history:
+            day_list = history.get("day", [])
+            if isinstance(day_list, dict):
+                day_list = [day_list]
+            rows = [
+                {
+                    "time":   d["date"],
+                    "open":   round(float(d["open"]),   2),
+                    "high":   round(float(d["high"]),   2),
+                    "low":    round(float(d["low"]),    2),
+                    "close":  round(float(d["close"]),  2),
+                    "volume": int(d["volume"]),
+                }
+                for d in day_list
+            ]
     except Exception:
-        return []
+        pass
+
+    if not rows:
+        rows = _fetch_daily_yf(symbol)
+        if rows:
+            logger.info("fetch_candles: yfinance fallback for %s (%d bars)", symbol, len(rows))
+
+    if rows:
+        _candles_cache[symbol] = (rows, date.today().isoformat())
+    return rows[-bars:]
 
 
 # Tradier timesales only supports these intraday intervals.
@@ -331,6 +382,21 @@ def fetch_price(symbol: str) -> Optional[float]:
             quote = quote[0]
         last = quote.get("last") or quote.get("close")
         return round(float(last), 2) if last else None
+    except Exception:
+        pass
+
+    # yfinance fallback — serve from daily cache if warm, otherwise use fast_info.
+    cached = _candles_cache.get(symbol)
+    if cached is not None:
+        data, cached_date = cached
+        if cached_date == date.today().isoformat() and data:
+            return data[-1]["close"]
+    try:
+        import yfinance as yf
+        yf_symbol = _YF_SYMBOL_MAP.get(symbol, symbol)
+        fi = yf.Ticker(yf_symbol).fast_info
+        price = fi.last_price or fi.previous_close
+        return round(float(price), 2) if price else None
     except Exception:
         return None
 
@@ -841,12 +907,11 @@ async def fetch_candles_async(
     client: httpx.AsyncClient, symbol: str, bars: int = 252
 ) -> list[dict]:
     """Async variant — uses the provided AsyncClient for connection reuse.
-    Results are cached for _CANDLES_TTL seconds (daily bars don't change intraday)."""
-    now = _time.monotonic()
+    Results are cached for the current calendar day (daily bars don't change intraday)."""
     cached = _candles_cache.get(symbol)
     if cached is not None:
-        data, expires = cached
-        if now < expires:
+        data, cached_date = cached
+        if cached_date == date.today().isoformat():
             return data
 
     try:
@@ -881,10 +946,39 @@ async def fetch_candles_async(
                 "volume": int(d["volume"]),
             })
         if rows:
-            _candles_cache[symbol] = (rows, now + _CANDLES_TTL)
+            _candles_cache[symbol] = (rows, date.today().isoformat())
         return rows
     except Exception:
         return []
+
+
+# Lazy semaphore for candle pre-warm — wider than scan concurrency since candles are the
+# heaviest single call and pre-warming happens before the scan, not during it.
+_PREWARM_SEM: asyncio.Semaphore | None = None
+
+
+def _get_prewarm_sem() -> asyncio.Semaphore:
+    global _PREWARM_SEM
+    if _PREWARM_SEM is None:
+        _PREWARM_SEM = asyncio.Semaphore(15)
+    return _PREWARM_SEM
+
+
+async def prewarm_candles_async(symbols: list[str]) -> int:
+    """Pre-populate the candle cache for all symbols before the scan runs.
+
+    Returns the count of symbols for which candles were successfully fetched.
+    """
+    async with httpx.AsyncClient(timeout=15) as client:
+        sem = _get_prewarm_sem()
+
+        async def _one(symbol: str) -> bool:
+            async with sem:
+                rows = await fetch_candles_async(client, symbol)
+                return bool(rows)
+
+        results = await asyncio.gather(*(_one(s) for s in symbols), return_exceptions=True)
+    return sum(1 for r in results if r is True)
 
 
 async def fetch_price_async(
@@ -1017,7 +1111,8 @@ async def fetch_option_chain_async(
 
         zero_iv = sum(1 for c in result if c["ivRank"] == 0)
         if zero_iv > len(result) * 0.5 and result:
-            yf_iv = await asyncio.to_thread(_yf_iv_for_chain, symbol, target_exp, option_type == "C")
+            async with _get_yf_sem():
+                yf_iv = await asyncio.to_thread(_yf_iv_for_chain, symbol, target_exp, option_type == "C")
             for c in result:
                 if c["ivRank"] == 0:
                     yf_val = yf_iv.get(float(c["strike"]))
