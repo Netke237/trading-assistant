@@ -27,3 +27,30 @@ async def test_token_bucket_throttles_beyond_capacity():
     await bucket.acquire()                      # must wait for a refill
     waited = time.monotonic() - start
     assert 0.05 < waited < 0.3
+
+
+from app.data.governor import CircuitBreaker
+
+
+def test_circuit_opens_after_threshold_failures():
+    cb = CircuitBreaker(fail_threshold=3, cooldown=60.0)
+    assert cb.is_open is False
+    for _ in range(3):
+        cb.record_failure()
+    assert cb.is_open is True
+
+
+def test_circuit_closes_after_cooldown():
+    cb = CircuitBreaker(fail_threshold=1, cooldown=0.05)
+    cb.record_failure()
+    assert cb.is_open is True
+    time.sleep(0.06)
+    assert cb.is_open is False  # half-open: allows a trial
+
+
+def test_success_resets_failures():
+    cb = CircuitBreaker(fail_threshold=2, cooldown=60.0)
+    cb.record_failure()
+    cb.record_success()
+    cb.record_failure()
+    assert cb.is_open is False  # counter was reset, only 1 failure since

@@ -36,3 +36,32 @@ class TokenBucket:
                     return
                 deficit = tokens - self._tokens
                 await asyncio.sleep(deficit * (self.per / self.rate))
+
+
+class CircuitBreaker:
+    """Opens after `fail_threshold` consecutive failures, blocking calls for
+    `cooldown` seconds. After cooldown it reports closed (half-open trial); a
+    success resets the counter, a failure re-opens it."""
+
+    def __init__(self, fail_threshold: int = 5, cooldown: float = 60.0) -> None:
+        self.fail_threshold = fail_threshold
+        self.cooldown = cooldown
+        self._failures = 0
+        self._opened_at: float | None = None
+
+    @property
+    def is_open(self) -> bool:
+        if self._opened_at is None:
+            return False
+        if time.monotonic() - self._opened_at >= self.cooldown:
+            return False  # half-open: allow a trial call through
+        return True
+
+    def record_success(self) -> None:
+        self._failures = 0
+        self._opened_at = None
+
+    def record_failure(self) -> None:
+        self._failures += 1
+        if self._failures >= self.fail_threshold:
+            self._opened_at = time.monotonic()
