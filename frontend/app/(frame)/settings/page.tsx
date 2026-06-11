@@ -17,11 +17,11 @@ import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
-import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention } from '@/lib/api';
+import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, type IngestionSchedule } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
-type Section = 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy';
+type Section = 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy' | 'data';
 
 const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'theme',   label: 'Appearance', desc: 'Theme + density' },
@@ -31,6 +31,7 @@ const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'risk',    label: 'Risk',       desc: 'Exposure limits and portfolio value' },
   { key: 'regime',  label: 'Regime',     desc: 'Daily OMM parameters' },
   { key: 'notifications', label: 'Notifications', desc: 'Gmail + Telegram alert delivery' },
+  { key: 'data',    label: 'Data',       desc: 'Nightly OHLCV ingestion schedule' },
 ];
 
 export default function SettingsPage() {
@@ -67,6 +68,7 @@ export default function SettingsPage() {
           {active === 'regime'  && <RegimeForm markov={markov} setMarkov={setMarkov} />}
           {active === 'notifications' && <NotificationForm />}
           {active === 'strategy' && <StrategyScanForm />}
+          {active === 'data'    && <DataForm />}
         </div>
       </div>
 
@@ -996,6 +998,129 @@ function BrokersForm() {
           Activate live Alpaca
         </button>
       </Row>
+    </>
+  );
+}
+
+/* ---------- Data ---------- */
+
+function DataForm() {
+  const [enabled, setEnabled] = useState(false);
+  const [time, setTime] = useState('03:00');
+  const [nextRun, setNextRun] = useState<string | null>(null);
+  const [saveResult, setSaveResult] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [triggering, setTriggering] = useState(false);
+  const [triggerResult, setTriggerResult] = useState('');
+
+  useEffect(() => {
+    getIngestionSchedule()
+      .then((s) => {
+        setEnabled(s.enabled);
+        setTime(s.time);
+        setNextRun(s.next_run);
+      })
+      .catch(() => {});
+  }, []);
+
+  function formatNextRun(iso: string | null): string {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        weekday: 'short', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch {
+      return iso;
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveResult('');
+    try {
+      const result = await saveIngestionSchedule({ enabled, time });
+      setNextRun(result.next_run);
+      setSaveResult('Saved');
+    } catch {
+      setSaveResult('Save failed');
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveResult(''), 2500);
+    }
+  }
+
+  async function handleTriggerNow() {
+    setTriggering(true);
+    setTriggerResult('');
+    try {
+      const r = await triggerIngestionNow(['SP500'], 6);
+      setTriggerResult(`Started — ${r.total} symbols`);
+    } catch {
+      setTriggerResult('Trigger failed');
+    } finally {
+      setTriggering(false);
+      setTimeout(() => setTriggerResult(''), 4000);
+    }
+  }
+
+  return (
+    <>
+      <SectionIntro
+        title="Nightly OHLCV ingestion"
+        blurb="Automatically refreshes price history for the full SP500 + NDX100 + DOW30 universe at a fixed time each night. Keeps the screener's DB-first reads warm so scans run without live Tradier calls."
+      />
+      <Row label="Enable nightly schedule" hint="Runs the ingestion job at the configured time every day" defaultValue="Off">
+        <Toggle
+          defaultOn={enabled}
+          onChange={(on) => setEnabled(on)}
+        />
+      </Row>
+      <Row label="Run time (HH:MM)" hint="24-hour local server time, e.g. 03:00" defaultValue="03:00">
+        <input
+          type="time"
+          className={styles.input}
+          disabled={!enabled}
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+        />
+      </Row>
+      <Row label="Next scheduled run" hint="Calculated after saving">
+        <Text size={13} tone="secondary">{formatNextRun(nextRun)}</Text>
+      </Row>
+      <div className={styles.row}>
+        <div className={styles.rowLabel} />
+        <div className={styles.rowControl} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : 'Save schedule'}
+          </button>
+          {saveResult && <Text size={12} tone="secondary">{saveResult}</Text>}
+        </div>
+      </div>
+
+      <SectionIntro
+        title="Manual trigger"
+        blurb="Run the ingestion job immediately in the background. Useful after first setup or after a long gap. The job runs without blocking the app — check logs for progress."
+      />
+      <div className={styles.row}>
+        <div className={styles.rowLabel} />
+        <div className={styles.rowControl} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={handleTriggerNow}
+            disabled={triggering}
+          >
+            {triggering ? 'Starting…' : 'Run now'}
+          </button>
+          {triggerResult && <Text size={12} tone="secondary">{triggerResult}</Text>}
+        </div>
+      </div>
     </>
   );
 }

@@ -58,6 +58,15 @@ async def lifespan(app: FastAPI):
     _notification_worker_task = asyncio.create_task(notification_worker())
     from app.services.portfolio_alert_monitor import run_portfolio_alert_monitor
     _portfolio_monitor_task = asyncio.create_task(run_portfolio_alert_monitor())
+    # ── Nightly ingestion scheduler ──────────────────────────────────────
+    try:
+        from app.services.ingestion_schedule_store import ingestion_schedule_store as _sched_store
+        from app.services import ingestion_scheduler as _isched
+        _sched_cfg = _sched_store.get()
+        _isched.configure(_sched_cfg["enabled"], _sched_cfg["time"])
+        _isched.start()
+    except Exception as _exc:
+        logger.warning("ingestion_scheduler startup failed: %s", _exc)
     # ── Startup catch-up: ingest if DB is stale ───────────────────────────
     try:
         from app.services.ingestion_job import _should_ingest, start_ingestion_task
@@ -82,6 +91,11 @@ async def lifespan(app: FastAPI):
         logger.warning("startup catch-up failed: %s", _exc)
     yield
     # ── Shutdown ─────────────────────────────────────────────────────────
+    try:
+        from app.services import ingestion_scheduler as _isched
+        _isched.shutdown()
+    except Exception:
+        pass
     if _scheduler._running:
         await _scheduler.stop()
     for task in (_notification_worker_task, _portfolio_monitor_task):

@@ -226,3 +226,23 @@ export async function saveHistoryRetention(s: HistoryRetention): Promise<void> {
 export async function clearAllHistory(): Promise<void> {
   await del('/api/portfolio/history');
 }
+
+/* ---------- Ingestion schedule ---------- */
+
+export interface IngestionSchedule {
+  enabled: boolean;
+  time: string;       // "HH:MM"
+  next_run: string | null;
+}
+
+export async function getIngestionSchedule(): Promise<IngestionSchedule> {
+  return get<IngestionSchedule>('/api/data/ingest/schedule');
+}
+
+export async function saveIngestionSchedule(s: Pick<IngestionSchedule, 'enabled' | 'time'>): Promise<IngestionSchedule> {
+  return post<IngestionSchedule>('/api/data/ingest/schedule', s);
+}
+
+export async function triggerIngestionNow(symbols: string[], years = 6): Promise<{ status: string; total: number }> {
+  return post<{ status: string; total: number }>('/api/data/ingest', { symbols, years });
+}
