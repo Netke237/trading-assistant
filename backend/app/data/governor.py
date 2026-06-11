@@ -94,3 +94,17 @@ class SymbolBudget:
     def remaining(self) -> int:
         self._evict(time.monotonic())
         return max(0, self.max_symbols - len(self._seen))
+
+
+class RateLimited(Exception):
+    """Raised by a provider adapter when the API returns HTTP 429. Carries the
+    server's Retry-After hint (seconds) when present."""
+
+    def __init__(self, message: str, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+def backoff_delay(attempt: int, base: float = 0.5, cap: float = 8.0) -> float:
+    """Exponential backoff: base * 2**attempt, capped at `cap` seconds."""
+    return min(cap, base * (2 ** attempt))

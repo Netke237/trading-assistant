@@ -80,3 +80,20 @@ def test_symbol_budget_evicts_after_window():
     assert budget.try_consume("MSFT") is False
     time.sleep(0.06)
     assert budget.try_consume("MSFT") is True     # AAPL evicted, slot freed
+
+
+from app.data.governor import RateLimited, backoff_delay
+
+
+def test_rate_limited_carries_retry_after():
+    err = RateLimited("429", retry_after=12.5)
+    assert err.retry_after == 12.5
+
+
+def test_backoff_delay_grows_and_is_capped():
+    d0 = backoff_delay(0, base=0.5, cap=8.0)
+    d1 = backoff_delay(1, base=0.5, cap=8.0)
+    d5 = backoff_delay(5, base=0.5, cap=8.0)
+    assert d0 == pytest.approx(0.5)
+    assert d1 == pytest.approx(1.0)
+    assert d5 == 8.0  # capped
