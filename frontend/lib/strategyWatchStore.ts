@@ -55,13 +55,21 @@ export const useStrategyWatchStore = create<StrategyWatchStore>((set, get) => ({
   },
 
   remove: async (id) => {
-    await api.removeStrategyWatch(id);
-    await get().refresh();
+    try {
+      await api.removeStrategyWatch(id);
+      await get().refresh();
+    } catch (e) {
+      set({ error: (e as Error).message });
+    }
   },
 
   setEnabled: async (id, enabled) => {
-    await api.setStrategyWatchEnabled(id, enabled);
-    await get().refresh();
+    try {
+      await api.setStrategyWatchEnabled(id, enabled);
+      await get().refresh();
+    } catch (e) {
+      set({ error: (e as Error).message });
+    }
   },
 
   saveSchedule: async (cfg) => {
