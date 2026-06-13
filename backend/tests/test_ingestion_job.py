@@ -48,8 +48,9 @@ async def test_run_ingestion_returns_result():
 
 def test_should_ingest_when_stale():
     """_should_ingest returns True if last_date is more than 1 trading day behind."""
-    yesterday = date.today() - timedelta(days=2)  # clearly stale
-    assert _should_ingest(yesterday) is True
+    # Use 10 days to stay safely above the boundary on any day of the week
+    clearly_stale = date.today() - timedelta(days=10)
+    assert _should_ingest(clearly_stale) is True
 
 
 def test_should_ingest_when_no_data():

@@ -41,7 +41,12 @@ def test_tradier_probe_reports_down_on_401():
 
 
 def test_tradier_probe_unconfigured_without_token():
-    with patch.dict("os.environ", {"TRADIER_API_TOKEN": ""}, clear=False):
+    # TRADIER_TOKEN is read at module import time so env-patching alone is too late;
+    # also clear the credential store so neither live nor paper slots supply a token.
+    with (
+        patch("app.data.market.TRADIER_TOKEN", ""),
+        patch("app.services.credential_store.credential_store.get", return_value=None),
+    ):
         status, _ = _probe_tradier()
     assert status == "unconfigured"
 

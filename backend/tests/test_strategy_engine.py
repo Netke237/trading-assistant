@@ -106,11 +106,11 @@ def test_pullback_ema_fires_at_2pct_above_ema():
     assert signal.strategy == "pullback_ema"
 
 
-def test_pullback_ema_still_rejects_at_5pct_above_ema():
-    """5% above EMA is outside the new 4% tolerance — should return None."""
-    bars = _uptrend_with_pullback_pct(0.05)
+def test_pullback_ema_still_rejects_at_9pct_above_ema():
+    """9% above EMA is outside the 8% tolerance — should return None."""
+    bars = _uptrend_with_pullback_pct(0.09)
     signal = pullback_ema_signal(bars)
-    assert signal is None, "Expected None at 5% above EMA (outside tolerance)"
+    assert signal is None, "Expected None at 9% above EMA (outside 8% tolerance)"
 
 
 def _crossover_bars(cross_bars_ago: int, n_flat: int = 100) -> list[dict]:
