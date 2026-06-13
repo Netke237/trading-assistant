@@ -23,6 +23,26 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+async function patch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
 async function del(path: string): Promise<void> {
   const res = await fetch(`${BASE_URL}${path}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
@@ -34,6 +54,33 @@ export interface DataSourceInfo {
   status: 'connected' | 'degraded' | 'down' | 'unconfigured';
   provides: string[];
   detail: string | null;
+}
+
+export interface StrategyWatchState {
+  phase: 'idle' | 'armed';
+  direction: 'Bullish' | 'Bearish' | null;
+  entry_price: number | null;
+  stop_price: number | null;
+  target_price: number | null;
+  last_event: 'entry' | 'exit_stop' | 'exit_target' | 'reversal' | null;
+  last_event_at: string | null;
+}
+
+export interface StrategyWatch {
+  id: string;
+  symbol: string;
+  strategy_key: string;
+  params_override: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string;
+  last_state: StrategyWatchState;
+}
+
+export interface StrategyWatchSchedule {
+  enabled: boolean;
+  mode: 'eod' | 'poll';
+  eod_time: string;
+  poll_hours: number;
 }
 
 export const api = {
@@ -196,6 +243,25 @@ export const api = {
       elapsed_secs: number;
       started_at: string | null;
     }>('/api/historical-data/prefetch/status'),
+
+  getStrategyWatches: () =>
+    get<StrategyWatch[]>('/api/strategy-watch/'),
+  addStrategyWatch: (symbol: string, strategy_key: string) =>
+    post<StrategyWatch>('/api/strategy-watch/', { symbol, strategy_key }),
+  addStrategyWatchesBulk: (symbols: string[], strategy_key: string) =>
+    post<{ added: number; watches: StrategyWatch[] }>('/api/strategy-watch/bulk', { symbols, strategy_key }),
+  removeStrategyWatch: (id: string) =>
+    del(`/api/strategy-watch/${id}`),
+  setStrategyWatchEnabled: (id: string, enabled: boolean) =>
+    patch<{ id: string; enabled: boolean }>(`/api/strategy-watch/${id}`, { enabled }),
+  getStrategyWatchSchedule: () =>
+    get<StrategyWatchSchedule>('/api/strategy-watch/schedule'),
+  setStrategyWatchSchedule: (cfg: StrategyWatchSchedule) =>
+    put<StrategyWatchSchedule>('/api/strategy-watch/schedule', cfg),
+  evaluateStrategyWatches: () =>
+    post<{ fired: number; events: unknown[] }>('/api/strategy-watch/evaluate', {}),
+  getStrategyWatchStatus: () =>
+    get<{ running: boolean; last_run_at: string | null; mode: string; enabled: boolean }>('/api/strategy-watch/status'),
 };
 
 /* ---------- Risk settings ---------- */
