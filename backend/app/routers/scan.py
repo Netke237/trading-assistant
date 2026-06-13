@@ -32,7 +32,7 @@ def _rr_cfg() -> dict:
 from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
-    ScanDelta, ContinuousScanConfig, ScanState,
+    ScanDelta, ContinuousScanConfig, ScanState, OptionsPipeline,
     AlternativeContract,
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
 )
@@ -44,7 +44,7 @@ from app.data.market import (
     fetch_quotes,
     _extract_earnings_date, _extract_dividend_date,
     _compute_iv_bs,
-    TRADIER_BASE_URL, TRADIER_TOKEN,
+    get_tradier_creds,
 )
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
 from app.data.augment import _augment
@@ -211,35 +211,28 @@ async def _process_symbol(
     prefetched_price = (price_map or {}).get(symbol, {}).get("last")
     async with sem:
         db_bars = (bars_map or {}).get(symbol) if bars_map else None
-        if prefetched_price:
-            if db_bars is not None:
-                company, fund_data = await asyncio.gather(
-                    fetch_company_name_async(client, symbol),
-                    fetch_fundamentals_calendar(client, symbol),
-                )
-                candles = db_bars
-            else:
-                candles, company, fund_data = await asyncio.gather(
-                    fetch_candles_async(client, symbol),
-                    fetch_company_name_async(client, symbol),
-                    fetch_fundamentals_calendar(client, symbol),
-                )
+        if db_bars is not None:
+            # Bars already in hand — derive price from last close, no network call needed.
+            candles = db_bars
+            price = prefetched_price or float(db_bars[-1]["close"])
+            company, fund_data = await asyncio.gather(
+                fetch_company_name_async(client, symbol),
+                fetch_fundamentals_calendar(client, symbol),
+            )
+        elif prefetched_price:
+            candles, company, fund_data = await asyncio.gather(
+                fetch_candles_async(client, symbol),
+                fetch_company_name_async(client, symbol),
+                fetch_fundamentals_calendar(client, symbol),
+            )
             price = prefetched_price
         else:
-            if db_bars is not None:
-                price, company, fund_data = await asyncio.gather(
-                    fetch_price_async(client, symbol),
-                    fetch_company_name_async(client, symbol),
-                    fetch_fundamentals_calendar(client, symbol),
-                )
-                candles = db_bars
-            else:
-                candles, price, company, fund_data = await asyncio.gather(
-                    fetch_candles_async(client, symbol),
-                    fetch_price_async(client, symbol),
-                    fetch_company_name_async(client, symbol),
-                    fetch_fundamentals_calendar(client, symbol),
-                )
+            candles, price, company, fund_data = await asyncio.gather(
+                fetch_candles_async(client, symbol),
+                fetch_price_async(client, symbol),
+                fetch_company_name_async(client, symbol),
+                fetch_fundamentals_calendar(client, symbol),
+            )
         company = company or symbol
 
         if not price or not candles:
@@ -289,8 +282,8 @@ async def _process_symbol(
     )
     if card_pre.status == "REJECT":
         bd = {r.name: r.score for r in card_pre.rules}
-        log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": f"stock REJECT (score {card_pre.score})"})
-        return RejectedCandidate(symbol=symbol, reason=f"stock REJECT (score {card_pre.score})", breakdown=bd)
+        log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": f"Pre-screen: score {card_pre.score} rejected"})
+        return RejectedCandidate(symbol=symbol, reason=f"Pre-screen: score {card_pre.score} rejected", breakdown=bd)
 
     # ── Pass 2: fetch option chain only for survivors ─────────────────────────
     async with sem:
@@ -349,8 +342,8 @@ async def _process_symbol(
     )
     if card.status == "REJECT":
         bd = {r.name: r.score for r in card.rules}
-        log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": f"stock REJECT (score {card.score})"})
-        return RejectedCandidate(symbol=symbol, reason=f"stock REJECT (score {card.score})", breakdown=bd)
+        log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": f"Score gate: score {card.score} rejected"})
+        return RejectedCandidate(symbol=symbol, reason=f"Score gate: score {card.score} rejected", breakdown=bd)
 
     augmented = [_augment(c, stock_price=price) for c in chain]
     scored = [(validate_contract(c, card.score, overrides=overrides), c) for c in augmented]
@@ -625,10 +618,11 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
     _bars_missed = len(symbols) - _bars_from_db
 
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
+    _tradier_tok, _tradier_base = get_tradier_creds()
     async with httpx.AsyncClient(
-        base_url=httpx.URL(TRADIER_BASE_URL),
+        base_url=httpx.URL(_tradier_base),
         headers={
-            "Authorization": f"Bearer {TRADIER_TOKEN}",
+            "Authorization": f"Bearer {_tradier_tok}",
             "Accept": "application/json",
         },
         timeout=httpx.Timeout(10.0),
@@ -664,6 +658,23 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         elif isinstance(result, TradeCardData):
             candidates.append(result)
 
+    # ── Pipeline funnel counters ───────────────────────────────────────────────
+    _data_kw = ("no market data", "price filter", "cap filter")
+    _pipeline = OptionsPipeline(
+        scanned=len(symbols),
+        failed_data=sum(1 for r in rejected if any(k in r.reason for k in _data_kw)),
+        failed_pre_screen=sum(1 for r in rejected if r.reason.startswith("Pre-screen:")),
+        no_chain=sum(1 for r in rejected if r.reason == "no option chain"),
+        failed_score=sum(1 for r in rejected if r.reason.startswith("Score gate:")),
+        failed_contracts=sum(1 for r in rejected if "contracts rejected" in r.reason),
+        candidates=len(candidates),
+    )
+    _log.info(
+        "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d no_chain=%d score_fail=%d contract_fail=%d candidates=%d",
+        scan_id, _pipeline.scanned, _pipeline.failed_data, _pipeline.failed_pre_screen,
+        _pipeline.no_chain, _pipeline.failed_score, _pipeline.failed_contracts, _pipeline.candidates,
+    )
+
     # ── Shortlist cap ─────────────────────────────────────────────────────────
     max_candidates: int = int(
         req.overrides.get(
@@ -697,6 +708,7 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         deltas=deltas,
         shortlist_truncated=shortlist_truncated,
         original_count=original_count,
+        pipeline=_pipeline,
     )
     _last_result = result
     # Trigger #2: fire armed auto-trade if this scan produced any candidates.
