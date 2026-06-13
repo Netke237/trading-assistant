@@ -15,6 +15,7 @@ import { useScanStore } from '@/lib/scanStore';
 import type { RejectedEntry } from '@/lib/scanStore';
 import { api } from '@/lib/api';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
+import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
 
@@ -101,8 +102,9 @@ function StockRejectGroup({ reason, entries, horizonKey }: { reason: string; ent
 
 function ScanLogSection({ entries, horizonKey }: { entries: RejectedEntry[]; horizonKey: string }) {
   if (entries.length === 0) return null;
-  const stockRejects = entries.filter((e) => e.reason.startsWith('stock REJECT'));
-  const otherRejects = entries.filter((e) => !e.reason.startsWith('stock REJECT'));
+  const GROUPED_PREFIXES = ['Pre-screen:', 'Score gate:'];
+  const stockRejects = entries.filter((e) => GROUPED_PREFIXES.some((p) => e.reason.startsWith(p)));
+  const otherRejects = entries.filter((e) => !GROUPED_PREFIXES.some((p) => e.reason.startsWith(p)));
   const byReason = new Map<string, RejectedEntry[]>();
   for (const e of stockRejects) {
     const list = byReason.get(e.reason) ?? [];
@@ -155,6 +157,7 @@ interface ParamDef {
   max?: number;
   step?: number;
   unit?: string;
+  hint?: string;
   redundant?: true;
   deprecated?: true;
   visibleFor?: string[];   // if set, only show when scanOverrides.trend_method (or default) is in this list
@@ -162,66 +165,130 @@ interface ParamDef {
 
 const PARAM_DEFS: ParamDef[] = [
   // STOCKS — Score Weights
-  { key: 'weight_trend',    label: 'Trend weight',    type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%' },
-  { key: 'weight_pullback', label: 'Pullback weight', type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%' },
-  { key: 'weight_trigger',  label: 'Trigger weight',  type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%' },
-  { key: 'weight_event',    label: 'Event weight',    type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%' },
-  { key: 'weight_vol',      label: 'Vol weight',      type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%' },
+  { key: 'weight_trend',    label: 'Trend weight',    type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%',
+    hint: 'Share of composite score from trend analysis. ↑ Higher → only clear trends pass (fewer results) · ↓ Lower → sideways stocks qualify (more results)' },
+  { key: 'weight_pullback', label: 'Pullback weight', type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%',
+    hint: 'Share of score from pullback quality. ↑ Higher → only clean, shallow pullbacks pass (fewer) · ↓ Lower → any pullback depth qualifies (more)' },
+  { key: 'weight_trigger',  label: 'Trigger weight',  type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%',
+    hint: 'Share of score from momentum timing signals. ↑ Higher → only active buying pressure qualifies (fewer) · ↓ Lower → weaker signals still pass (more)' },
+  { key: 'weight_event',    label: 'Event weight',    type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%',
+    hint: 'Share of score from catalyst proximity. ↑ Higher → upcoming events penalise more stocks (fewer) · ↓ Lower → events count for less (more)' },
+  { key: 'weight_vol',      label: 'Vol weight',      type: 'number', section: 'stocks', subGroup: 'Score Weights', min: 0, max: 100, step: 1, unit: '%',
+    hint: 'Share of score from IV conditions. ↑ Higher → only calm-IV stocks qualify (fewer) · ↓ Lower → high-IV stocks still pass (more)' },
   // STOCKS — Trend
-  { key: 'trend_method',            label: 'Trend method',          type: 'select',  section: 'stocks', subGroup: 'Trend', options: ['additive', 'crossover', 'relative_strength'] },
+  { key: 'trend_method', label: 'Trend method', type: 'select', section: 'stocks', subGroup: 'Trend', options: ['additive', 'crossover', 'relative_strength'],
+    hint: 'Algorithm for scoring trend strength. Additive = price + slope + ADX combined; Crossover = MA crossover signal; Relative Strength = return vs. benchmark index' },
   // crossover
-  { key: 'ma_type',                 label: 'MA type',               type: 'select',  section: 'stocks', subGroup: 'Trend', options: ['EMA', 'SMA'],           visibleFor: ['crossover'] },
-  { key: 'fast_ema',                label: 'Fast MA period',        type: 'number',  section: 'stocks', subGroup: 'Trend', min: 5,   max: 200, step: 1,       visibleFor: ['crossover'] },
-  { key: 'slow_ema',                label: 'Slow MA period',        type: 'number',  section: 'stocks', subGroup: 'Trend', min: 10,  max: 500, step: 1,       visibleFor: ['crossover'] },
+  { key: 'ma_type',  label: 'MA type',        type: 'select', section: 'stocks', subGroup: 'Trend', options: ['EMA', 'SMA'], visibleFor: ['crossover'],
+    hint: 'Moving average type. EMA reacts faster to recent price (more signals, more results); SMA is smoother (fewer, calmer signals)' },
+  { key: 'fast_ema', label: 'Fast MA period', type: 'number', section: 'stocks', subGroup: 'Trend', min: 5,  max: 200, step: 1, visibleFor: ['crossover'],
+    hint: 'Short-period MA that detects momentum change. ↑ Higher → fewer, slower crossover signals · ↓ Lower → more frequent but noisier signals' },
+  { key: 'slow_ema', label: 'Slow MA period', type: 'number', section: 'stocks', subGroup: 'Trend', min: 10, max: 500, step: 1, visibleFor: ['crossover'],
+    hint: 'Long-period MA representing the primary trend. ↑ Higher → stronger trend required (fewer results) · ↓ Lower → shallower trends qualify (more)' },
   // additive
-  { key: 'additive_ma_type',        label: 'MA type',               type: 'select',  section: 'stocks', subGroup: 'Trend', options: ['EMA', 'SMA'],           visibleFor: ['additive'] },
-  { key: 'additive_ma_period',      label: 'MA period',             type: 'number',  section: 'stocks', subGroup: 'Trend', min: 5,   max: 200, step: 1,       visibleFor: ['additive'] },
-  { key: 'additive_slope_lookback', label: 'Slope lookback',        type: 'number',  section: 'stocks', subGroup: 'Trend', min: 1,   max: 50,  step: 1, unit: 'bars', visibleFor: ['additive'] },
-  { key: 'additive_adx_period',     label: 'ADX period',            type: 'number',  section: 'stocks', subGroup: 'Trend', min: 5,   max: 30,  step: 1,       visibleFor: ['additive'] },
-  { key: 'additive_adx_pass',       label: 'ADX pass threshold',    type: 'number',  section: 'stocks', subGroup: 'Trend', min: 0,   max: 60,  step: 1,       visibleFor: ['additive'] },
-  { key: 'additive_adx_caution',    label: 'ADX caution threshold', type: 'number',  section: 'stocks', subGroup: 'Trend', min: 0,   max: 50,  step: 1,       visibleFor: ['additive'] },
-  { key: 'additive_price_max',      label: 'Price factor max pts',  type: 'number',  section: 'stocks', subGroup: 'Trend', min: 0,   max: 100, step: 5,       visibleFor: ['additive'] },
-  { key: 'additive_slope_max',      label: 'Slope factor max pts',  type: 'number',  section: 'stocks', subGroup: 'Trend', min: 0,   max: 100, step: 5,       visibleFor: ['additive'] },
-  { key: 'additive_adx_max',        label: 'ADX factor max pts',    type: 'number',  section: 'stocks', subGroup: 'Trend', min: 0,   max: 100, step: 5,       visibleFor: ['additive'] },
+  { key: 'additive_ma_type',        label: 'MA type',              type: 'select', section: 'stocks', subGroup: 'Trend', options: ['EMA', 'SMA'], visibleFor: ['additive'],
+    hint: 'Moving average type for the additive model. EMA → faster reaction (more results); SMA → smoother baseline (fewer results)' },
+  { key: 'additive_ma_period',      label: 'MA period',            type: 'number', section: 'stocks', subGroup: 'Trend', min: 5,  max: 200, step: 1, visibleFor: ['additive'],
+    hint: 'Period of the trend-defining MA. ↑ Higher → longer trend baseline required (fewer) · ↓ Lower → more stocks qualify (more)' },
+  { key: 'additive_slope_lookback', label: 'Slope lookback',       type: 'number', section: 'stocks', subGroup: 'Trend', min: 1,  max: 50,  step: 1, unit: 'bars', visibleFor: ['additive'],
+    hint: 'Bars used to measure MA angle (steepness). ↑ Higher → smoother reading, misses early moves · ↓ Lower → reacts faster but noisier' },
+  { key: 'additive_adx_period',     label: 'ADX period',           type: 'number', section: 'stocks', subGroup: 'Trend', min: 5,  max: 30,  step: 1, visibleFor: ['additive'],
+    hint: 'Bars for the Average Directional Index. ↑ Higher → smoother but slower ADX · ↓ Lower → quicker but noisier' },
+  { key: 'additive_adx_pass',       label: 'ADX pass threshold',   type: 'number', section: 'stocks', subGroup: 'Trend', min: 0,  max: 60,  step: 1, visibleFor: ['additive'],
+    hint: 'Minimum ADX value for a PASS score. ↑ Higher → only strong trends qualify (fewer) · ↓ Lower → weak trends also pass (more)' },
+  { key: 'additive_adx_caution',    label: 'ADX caution threshold',type: 'number', section: 'stocks', subGroup: 'Trend', min: 0,  max: 50,  step: 1, visibleFor: ['additive'],
+    hint: 'ADX below this triggers CAUTION. ↑ Higher → broader caution zone, fewer clean passes · ↓ Lower → narrower caution zone, more passes' },
+  { key: 'additive_price_max',      label: 'Price factor max pts', type: 'number', section: 'stocks', subGroup: 'Trend', min: 0,  max: 100, step: 5, visibleFor: ['additive'],
+    hint: 'Max points the price-above-MA check can contribute. ↑ Higher → price position dominates the trend score · ↓ Lower → price position matters less' },
+  { key: 'additive_slope_max',      label: 'Slope factor max pts', type: 'number', section: 'stocks', subGroup: 'Trend', min: 0,  max: 100, step: 5, visibleFor: ['additive'],
+    hint: 'Max points MA steepness can contribute. ↑ Higher → trend angle matters more · ↓ Lower → slope carries less weight' },
+  { key: 'additive_adx_max',        label: 'ADX factor max pts',   type: 'number', section: 'stocks', subGroup: 'Trend', min: 0,  max: 100, step: 5, visibleFor: ['additive'],
+    hint: 'Max points ADX strength can contribute. ↑ Higher → directional strength required · ↓ Lower → ADX matters less' },
   // relative_strength
-  { key: 'rs_period',               label: 'RS period',             type: 'number',  section: 'stocks', subGroup: 'Trend', min: 1,   max: 252, step: 1, unit: 'days', visibleFor: ['relative_strength'] },
-  { key: 'rs_pass_threshold',       label: 'RS pass threshold',     type: 'number',  section: 'stocks', subGroup: 'Trend', min: -10, max: 20,  step: 0.5, unit: '%', visibleFor: ['relative_strength'] },
-  { key: 'rs_caution_threshold',    label: 'RS caution threshold',  type: 'number',  section: 'stocks', subGroup: 'Trend', min: -10, max: 10,  step: 0.5, unit: '%', visibleFor: ['relative_strength'] },
-  { key: 'rs_benchmark',            label: 'Benchmark index',       type: 'select',  section: 'stocks', subGroup: 'Trend', options: ['NDX', 'SPX'],            visibleFor: ['relative_strength'] },
+  { key: 'rs_period',            label: 'RS period',           type: 'number', section: 'stocks', subGroup: 'Trend', min: 1,   max: 252, step: 1,   unit: 'days', visibleFor: ['relative_strength'],
+    hint: 'Days of return used for benchmark comparison. ↑ Higher → structural outperformance required · ↓ Lower → recent momentum only' },
+  { key: 'rs_pass_threshold',    label: 'RS pass threshold',   type: 'number', section: 'stocks', subGroup: 'Trend', min: -10, max: 20,  step: 0.5, unit: '%',   visibleFor: ['relative_strength'],
+    hint: 'Minimum return vs. benchmark for PASS. ↑ Higher → only clear outperformers qualify (fewer) · ↓ Lower → slight outperformers qualify (more)' },
+  { key: 'rs_caution_threshold', label: 'RS caution threshold',type: 'number', section: 'stocks', subGroup: 'Trend', min: -10, max: 10,  step: 0.5, unit: '%',   visibleFor: ['relative_strength'],
+    hint: 'Return below this triggers CAUTION. ↑ Higher → stricter caution zone · ↓ Lower → slight underperformers still score cleanly' },
+  { key: 'rs_benchmark',         label: 'Benchmark index',     type: 'select', section: 'stocks', subGroup: 'Trend', options: ['NDX', 'SPX'],                    visibleFor: ['relative_strength'],
+    hint: 'Index used as the return baseline. NDX = tech-heavy comparison; SPX = broad market comparison' },
   // STOCKS — Pullback
-  { key: 'rsi_period',               label: 'RSI period',          type: 'display', section: 'stocks', subGroup: 'Pullback' },
-  { key: 'swing_high_lookback_bars', label: 'Swing high lookback', type: 'number',  section: 'stocks', subGroup: 'Pullback', min: 2, max: 200, step: 1 },
-  { key: 'atr_caution_max',          label: 'ATR caution max',     type: 'number',  section: 'stocks', subGroup: 'Pullback', min: 0, max: 10, step: 0.1 },
+  { key: 'rsi_period',               label: 'RSI period',             type: 'display', section: 'stocks', subGroup: 'Pullback',
+    hint: 'Bars used to compute RSI. Set in the Trigger group (display only here).' },
+  { key: 'swing_high_lookback_bars', label: 'Swing high lookback',    type: 'number',  section: 'stocks', subGroup: 'Pullback', min: 2, max: 200, step: 1,
+    hint: 'How many bars back to find the most recent swing high. ↑ Higher → broader context, fewer stocks qualify as pulling back · ↓ Lower → recent highs only (more)' },
+  { key: 'atr_caution_max',          label: 'ATR caution max',        type: 'number',  section: 'stocks', subGroup: 'Pullback', min: 0, max: 10, step: 0.1,
+    hint: 'Max ATR multiples a move can extend before CAUTION. ↑ Higher → extended moves allowed (more results) · ↓ Lower → only tight pullbacks pass (fewer)' },
+  { key: 'pullback_require_reversal',label: 'Require reversal candle',type: 'boolean', section: 'stocks', subGroup: 'Pullback',
+    hint: 'Requires a bullish reversal bar at the pullback low (e.g. hammer). On → fewer, higher-conviction entries · Off → all pullbacks qualify' },
   // STOCKS — Trigger
-  { key: 'macd_fast',           label: 'MACD fast',        type: 'number',  section: 'stocks', subGroup: 'Trigger', min: 2, max: 50,  step: 1 },
-  { key: 'macd_slow',           label: 'MACD slow',        type: 'number',  section: 'stocks', subGroup: 'Trigger', min: 2, max: 100, step: 1 },
-  { key: 'macd_signal',         label: 'MACD signal',      type: 'number',  section: 'stocks', subGroup: 'Trigger', min: 2, max: 50,  step: 1 },
-  { key: 'rsi_floor',           label: 'RSI floor',        type: 'number',  section: 'stocks', subGroup: 'Trigger', min: 0, max: 100, step: 1 },
-  { key: 'volume_lookback_bars', label: 'Volume lookback', type: 'display', section: 'stocks', subGroup: 'Trigger' },
-  { key: 'volume_multiplier',    label: 'Volume multiplier', type: 'display', section: 'stocks', subGroup: 'Trigger' },
+  { key: 'macd_fast',            label: 'MACD fast',          type: 'number',  section: 'stocks', subGroup: 'Trigger', min: 2, max: 50,  step: 1,
+    hint: 'Fast EMA period in MACD. ↑ Higher → fewer, stronger signals · ↓ Lower → more frequent but noisier signals' },
+  { key: 'macd_slow',            label: 'MACD slow',          type: 'number',  section: 'stocks', subGroup: 'Trigger', min: 2, max: 100, step: 1,
+    hint: 'Slow EMA period in MACD. ↑ Higher → more pronounced divergence required (fewer) · ↓ Lower → smaller divergences trigger (more)' },
+  { key: 'macd_signal',         label: 'MACD signal',         type: 'number',  section: 'stocks', subGroup: 'Trigger', min: 2, max: 50,  step: 1,
+    hint: 'Smoothing on the MACD histogram. ↑ Higher → slower, steadier confirmation · ↓ Lower → noisier, faster trigger' },
+  { key: 'rsi_floor',           label: 'RSI floor',           type: 'number',  section: 'stocks', subGroup: 'Trigger', min: 0, max: 100, step: 1,
+    hint: 'Minimum RSI to confirm momentum is recovering at entry. ↑ Higher → only stocks with active buying qualify (fewer) · ↓ Lower → oversold stocks also pass (more)' },
+  { key: 'volume_lookback_bars', label: 'Volume lookback',    type: 'display', section: 'stocks', subGroup: 'Trigger',
+    hint: 'Days used to compute the average volume baseline (display only).' },
+  { key: 'volume_multiplier',    label: 'Volume multiplier',  type: 'display', section: 'stocks', subGroup: 'Trigger',
+    hint: 'Required volume as a multiple of average on the signal day (display only).' },
   // STOCKS — Event
-  { key: 'event_reject_days',    label: 'Event reject days',  type: 'number',  section: 'stocks', subGroup: 'Event', min: 0, max: 90,  step: 1, unit: 'days' },
-  { key: 'event_caution_days',   label: 'Event caution days', type: 'number',  section: 'stocks', subGroup: 'Event', min: 0, max: 120, step: 1, unit: 'days' },
-  { key: 'earnings_buffer_days', label: 'Earnings buffer',    type: 'display', section: 'stocks', subGroup: 'Event', redundant: true },
-  { key: 'fomc_buffer_days',     label: 'FOMC buffer',        type: 'display', section: 'stocks', subGroup: 'Event', redundant: true },
-  { key: 'div_buffer_days',      label: 'Div buffer',         type: 'display', section: 'stocks', subGroup: 'Event', redundant: true },
+  { key: 'event_reject_days',  label: 'Event reject days',  type: 'number', section: 'stocks', subGroup: 'Event', min: 0, max: 90,  step: 1, unit: 'days',
+    hint: 'Stocks with a catalyst within this window are hard-rejected. ↑ Higher → wider safety zone (fewer) · ↓ Lower → closer-to-event entries allowed (more)' },
+  { key: 'event_caution_days', label: 'Event caution days', type: 'number', section: 'stocks', subGroup: 'Event', min: 0, max: 120, step: 1, unit: 'days',
+    hint: 'Stocks within this wider window get a CAUTION flag instead of reject. ↑ Higher → larger amber zone · ↓ Lower → smaller amber zone' },
+  { key: 'earnings_buffer_days', label: 'Earnings buffer', type: 'display', section: 'stocks', subGroup: 'Event', redundant: true },
+  { key: 'fomc_buffer_days',     label: 'FOMC buffer',     type: 'display', section: 'stocks', subGroup: 'Event', redundant: true },
+  { key: 'div_buffer_days',      label: 'Div buffer',      type: 'display', section: 'stocks', subGroup: 'Event', redundant: true },
   // STOCKS — Volatility
-  { key: 'iv_rank_pass_max', label: 'IV rank pass max',  type: 'number',  section: 'stocks', subGroup: 'Volatility', min: 0, max: 100, step: 1 },
-  { key: 'iv_rank_lookback', label: 'IV rank lookback',  type: 'display', section: 'stocks', subGroup: 'Volatility' },
-  { key: 'hv_lookback',      label: 'HV period',         type: 'display', section: 'stocks', subGroup: 'Volatility' },
+  { key: 'iv_rank_pass_max', label: 'IV rank pass max', type: 'number',  section: 'stocks', subGroup: 'Volatility', min: 0, max: 100, step: 1,
+    hint: 'Max IV rank (0–100) for a PASS. N/A on Intraday. ↑ Higher → elevated-IV stocks still qualify (more) · ↓ Lower → only calm-IV stocks pass (fewer)' },
+  { key: 'iv_rank_lookback', label: 'IV rank lookback', type: 'display', section: 'stocks', subGroup: 'Volatility',
+    hint: 'Lookback window used to normalise current IV into a percentile rank (display only).' },
+  { key: 'hv_lookback',      label: 'HV period',        type: 'display', section: 'stocks', subGroup: 'Volatility',
+    hint: 'Days used to calculate historical (realised) volatility (display only).' },
   // STOCKS — Confidence (signal backtest gate)
-  { key: 'confidence_caution_below', label: 'Confidence caution below', type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0,   max: 100, step: 1,   unit: '%' },
-  { key: 'confidence_reject_below',  label: 'Confidence reject below',  type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0,   max: 100, step: 1,   unit: '%' },
-  { key: 'confidence_atr_mult',      label: 'Confidence ATR multiple',  type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0.5, max: 5,   step: 0.1 },
+  { key: 'confidence_caution_below', label: 'Confidence caution below', type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0,   max: 100, step: 1,   unit: '%',
+    hint: 'Signal backtest win rate below this % triggers CAUTION. ↑ Higher → broader caution zone · ↓ Lower → narrower caution zone' },
+  { key: 'confidence_reject_below',  label: 'Confidence reject below',  type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0,   max: 100, step: 1,   unit: '%',
+    hint: 'Signal backtest win rate below this % triggers REJECT. ↑ Higher → stricter gate, better-tested results (fewer) · ↓ Lower → looser gate (more)' },
+  { key: 'confidence_atr_mult',      label: 'Confidence ATR multiple',  type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0.5, max: 5,   step: 0.1,
+    hint: 'R/R ratio used in the mini backtest (target ÷ stop size). ↑ Higher → demands bigger winners (stricter, fewer) · ↓ Lower → accepts smaller winners (more)' },
   // OPTIONS — Contract
-  { key: 'max_delta',              label: 'Max delta',             type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01 },
-  { key: 'max_bid_ask_spread_pct', label: 'Bid-ask spread ceiling', type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,    step: 0.01 },
-  { key: 'min_volume',             label: 'Min option volume',     type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 10000, step: 10 },
-  { key: 'min_open_interest',      label: 'Min open interest',     type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 10000, step: 10 },
-  { key: 'min_delta',              label: 'Min delta (far OTM)',   type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01 },
-  { key: 'min_dte',                label: 'Min DTE',               type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 365, step: 1, unit: 'days' },
-  { key: 'max_dte',                label: 'Max DTE',               type: 'number', section: 'options', subGroup: 'Contract', min: 1, max: 730, step: 1, unit: 'days' },
+  { key: 'max_delta',              label: 'Max delta',              type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01,
+    hint: 'Highest delta (0–1) allowed — controls how far in-the-money contracts can be. ↑ Higher → near-the-money contracts allowed (more) · ↓ Lower → OTM-only (fewer)' },
+  { key: 'max_bid_ask_spread_pct', label: 'Bid-ask spread ceiling', type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01,
+    hint: 'Max spread as a fraction of mid price. ↑ Higher → illiquid contracts included (more, but costly) · ↓ Lower → tight spread required (fewer, cheaper to trade)' },
+  { key: 'min_volume',             label: 'Min option volume',      type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 10000, step: 10,
+    hint: 'Minimum daily contracts traded. ↑ Higher → better liquidity required (fewer) · ↓ Lower → thin markets allowed (more)' },
+  { key: 'min_open_interest',      label: 'Min open interest',      type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 10000, step: 10,
+    hint: 'Minimum outstanding contracts. ↑ Higher → requires an established market (fewer) · ↓ Lower → new or low-traffic strikes included (more)' },
+  { key: 'min_delta',              label: 'Min delta (far OTM)',    type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01,
+    hint: 'Rejects contracts too far out of the money. ↑ Higher → keeps contracts closer to the money · ↓ Lower → very cheap deep-OTM contracts included' },
+  { key: 'min_dte',                label: 'Min DTE',                type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 365,   step: 1,   unit: 'days',
+    hint: 'Earliest expiry allowed. ↑ Higher → avoids short-dated options, longer expirations only · ↓ Lower → near-expiry contracts included' },
+  { key: 'max_dte',                label: 'Max DTE',                type: 'number', section: 'options', subGroup: 'Contract', min: 1, max: 730,   step: 1,   unit: 'days',
+    hint: 'Latest expiry allowed. ↑ Higher → LEAPS-style long-dated contracts included · ↓ Lower → only contracts within the near-term horizon' },
 ];
+
+const SUBGROUP_DESCRIPTIONS: Record<string, string> = {
+  'Score Weights': 'Proportional contribution of each signal family to the composite stock score (weights sum to 100). Rebalance to emphasise what matters most for your approach.',
+  'Trend': 'Measures whether the stock is in a sustained trend. Three algorithms: Additive (price position + slope + ADX combined), Crossover (MA cross signal), Relative Strength (return vs. benchmark index).',
+  'Pullback': 'Checks that the stock has pulled back from its recent swing high in a healthy way — momentum cooling off without breaking the trend structure.',
+  'Trigger': 'Short-term momentum signals confirming that buying pressure is returning now, not just that the stock trended up in the past.',
+  'Event': 'Filters out stocks approaching scheduled catalysts (earnings, FOMC, dividends) that could cause unpredictable gap risk during your hold.',
+  'Volatility': 'Checks implied volatility conditions. High IV rank means options premiums are expensive and large moves are already priced in.',
+  'Confidence': 'A mini backtest gate — runs a quick simulation over recent history and rejects setups where the signal would have failed too often.',
+  'Contract': 'Filters which options contracts are surfaced per qualifying stock, by liquidity, moneyness, and time to expiry.',
+};
+
+const SECTION_DESCRIPTIONS: Record<string, string> = {
+  'stocks': 'Stock-level scoring and filtering. Each stock is evaluated against five signal families and eliminated if its composite score falls below the threshold.',
+  'options': 'Options contract filtering. Applied after a stock qualifies — determines which expiries and strikes are shown for that stock.',
+};
 
 type ParamDefaults = Record<string, number | boolean | string | null>;
 
@@ -230,7 +297,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
     weight_trend: 35, weight_pullback: 20, weight_trigger: 30, weight_event: 5,  weight_vol: 10,
     ma_type: 'EMA', fast_ema: 20, slow_ema: 50, adx_period: 7, ema_required: false, rsi_period: 14,
-    swing_high_lookback_bars: 20, atr_caution_max: 2.5,
+    swing_high_lookback_bars: 20, atr_caution_max: 2.5, pullback_require_reversal: false,
     macd_fast: 5, macd_slow: 13, macd_signal: 3, rsi_floor: 44,
     volume_lookback_bars: 20, volume_multiplier: 1.2,
     event_reject_days: 1, event_caution_days: 3,
@@ -248,7 +315,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
     weight_trend: 30, weight_pullback: 20, weight_trigger: 25, weight_event: 15, weight_vol: 10,
     ma_type: 'EMA', fast_ema: 50, slow_ema: 200, adx_period: 14, ema_required: true, rsi_period: 14,
-    swing_high_lookback_bars: 40, atr_caution_max: 2.5,
+    swing_high_lookback_bars: 40, atr_caution_max: 2.5, pullback_require_reversal: false,
     macd_fast: 8, macd_slow: 21, macd_signal: 5, rsi_floor: 44,
     volume_lookback_bars: 20, volume_multiplier: 1.2,
     event_reject_days: 7, event_caution_days: 21,
@@ -266,7 +333,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
     weight_trend: 30, weight_pullback: 20, weight_trigger: 20, weight_event: 20, weight_vol: 10,
     ma_type: 'EMA', fast_ema: 50, slow_ema: 200, adx_period: 14, ema_required: true, rsi_period: 14,
-    swing_high_lookback_bars: 15, atr_caution_max: 2.5,
+    swing_high_lookback_bars: 15, atr_caution_max: 2.5, pullback_require_reversal: false,
     macd_fast: 12, macd_slow: 26, macd_signal: 9, rsi_floor: 48,
     volume_lookback_bars: 20, volume_multiplier: 1.2,
     event_reject_days: 30, event_caution_days: 60,
@@ -284,7 +351,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
     weight_trend: 30, weight_pullback: 20, weight_trigger: 25, weight_event: 15, weight_vol: 10,
     ma_type: 'EMA', fast_ema: 50, slow_ema: 200, adx_period: 14, ema_required: true, rsi_period: 14,
-    swing_high_lookback_bars: 40, atr_caution_max: 2.5,
+    swing_high_lookback_bars: 40, atr_caution_max: 2.5, pullback_require_reversal: false,
     macd_fast: 8, macd_slow: 21, macd_signal: 5, rsi_floor: 44,
     volume_lookback_bars: 20, volume_multiplier: 1.2,
     event_reject_days: 7, event_caution_days: 21,
@@ -334,7 +401,9 @@ function ParamRow({
   if (def.redundant) {
     return (
       <div className={formStyles.paramsRow} data-param-key={def.key}>
-        <Text size={12} tone="dim">{def.label}</Text>
+        <div className={formStyles.paramLabelCell}>
+          <Text size={12} tone="dim">{def.label}</Text>
+        </div>
         <div className={formStyles.paramsValue}>
           <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
         </div>
@@ -349,7 +418,9 @@ function ParamRow({
   if (def.type === 'display') {
     return (
       <div className={formStyles.paramsRow} data-param-key={def.key}>
-        <Text size={12} tone="dim">{def.label}</Text>
+        <div className={formStyles.paramLabelCell} title={def.hint}>
+          <Text size={12} tone="dim">{def.label}</Text>
+        </div>
         <div className={formStyles.paramsValue}>
           <Data size={11}>{isNa ? 'N/A' : formatDefault(defaultVal)}</Data>
         </div>
@@ -364,7 +435,9 @@ function ParamRow({
   if (isNa) {
     return (
       <div className={formStyles.paramsRow} data-param-key={def.key}>
-        <Text size={12} tone="dim">{def.label}</Text>
+        <div className={formStyles.paramLabelCell} title={def.hint}>
+          <Text size={12} tone="dim">{def.label}</Text>
+        </div>
         <div className={formStyles.paramsValue}>
           <Data size={11} tone="dim">N/A</Data>
         </div>
@@ -380,7 +453,9 @@ function ParamRow({
     const isOn = typeof defaultVal === 'boolean' ? defaultVal : false;
     return (
       <div className={formStyles.paramsRow} data-param-key={def.key}>
-        <Text size={12} tone="dim">{def.label}</Text>
+        <div className={formStyles.paramLabelCell}>
+          <Text size={12} tone="dim">{def.label}</Text>
+        </div>
         <div className={formStyles.paramsValue}>
           <Data size={11} tone="dim">{isOn ? 'On' : 'Off'}</Data>
         </div>
@@ -396,7 +471,9 @@ function ParamRow({
     const current = (currentOverride as string | undefined) ?? (defaultVal as string);
     return (
       <div className={formStyles.paramsRow} data-param-key={def.key}>
-        <Text size={12}>{def.label}</Text>
+        <div className={formStyles.paramLabelCell} title={def.hint}>
+          <Text size={12}>{def.label}</Text>
+        </div>
         <div className={formStyles.paramsValue}>
           <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
         </div>
@@ -433,7 +510,9 @@ function ParamRow({
       : (defaultVal as boolean);
     return (
       <div className={formStyles.paramsRow} data-param-key={def.key}>
-        <Text size={12}>{def.label}</Text>
+        <div className={formStyles.paramLabelCell} title={def.hint}>
+          <Text size={12}>{def.label}</Text>
+        </div>
         <div className={formStyles.paramsValue}>
           <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
         </div>
@@ -461,7 +540,9 @@ function ParamRow({
 
   return (
     <div className={formStyles.paramsRow} data-param-key={def.key}>
-      <Text size={12}>{def.label}</Text>
+      <div className={formStyles.paramLabelCell} title={def.hint}>
+        <Text size={12}>{def.label}</Text>
+      </div>
       <div className={formStyles.paramsValue}>
         <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
       </div>
@@ -501,12 +582,14 @@ function SubGroupBlock({
   open,
   onToggle,
   overrideCount,
+  description,
   children,
 }: {
   label: string;
   open: boolean;
   onToggle: () => void;
   overrideCount: number;
+  description?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -518,7 +601,16 @@ function SubGroupBlock({
         )}
         <span className={`${formStyles.chevron} ${open ? formStyles.chevronOpen : ''}`} style={{ marginLeft: 'auto' }} aria-hidden>▾</span>
       </button>
-      {open && <div className={formStyles.subGroupBody}>{children}</div>}
+      {open && (
+        <div className={formStyles.subGroupBody}>
+          {description && (
+            <div className={formStyles.subGroupDesc}>
+              <Text size={10} tone="dim">{description}</Text>
+            </div>
+          )}
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -530,12 +622,14 @@ function SectionBlock({
   open,
   onToggle,
   overrideCount,
+  description,
   children,
 }: {
   label: string;
   open: boolean;
   onToggle: () => void;
   overrideCount: number;
+  description?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -547,7 +641,16 @@ function SectionBlock({
         )}
         <span className={`${formStyles.chevron} ${open ? formStyles.chevronOpen : ''}`} style={{ marginLeft: 'auto' }} aria-hidden>▾</span>
       </button>
-      {open && <div className={formStyles.sectionBody}>{children}</div>}
+      {open && (
+        <div className={formStyles.sectionBody}>
+          {description && (
+            <div className={formStyles.sectionDesc}>
+              <Text size={10} tone="dim">{description}</Text>
+            </div>
+          )}
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -770,6 +873,7 @@ export default function Step2Page() {
               open={stocksOpen}
               onToggle={() => setStocksOpen((v) => !v)}
               overrideCount={countActiveOverrides(stocksDefs, scanOverrides, defaults)}
+              description={SECTION_DESCRIPTIONS['stocks']}
             >
               {stockSubGroups.map((sg) => {
                 const sgDefs = stocksDefs.filter((d) => d.subGroup === sg);
@@ -783,6 +887,7 @@ export default function Step2Page() {
                     open={sgOpen}
                     onToggle={() => toggleSubGroup(sg)}
                     overrideCount={countActiveOverrides(visibleDefs, scanOverrides, defaults)}
+                    description={SUBGROUP_DESCRIPTIONS[sg]}
                   >
                     {visibleDefs.map((def) => (
                       <ParamRow
@@ -803,6 +908,7 @@ export default function Step2Page() {
               open={optionsOpen}
               onToggle={() => setOptionsOpen((v) => !v)}
               overrideCount={countActiveOverrides(optionsDefs, scanOverrides, defaults)}
+              description={SECTION_DESCRIPTIONS['options']}
             >
               {optionSubGroups.map((sg) => {
                 const sgDefs = optionsDefs.filter((d) => d.subGroup === sg);
@@ -814,6 +920,7 @@ export default function Step2Page() {
                     open={sgOpen}
                     onToggle={() => toggleSubGroup(sg)}
                     overrideCount={countActiveOverrides(sgDefs, scanOverrides, defaults)}
+                    description={SUBGROUP_DESCRIPTIONS[sg]}
                   >
                     {sgDefs.map((def) => (
                       <ParamRow
@@ -870,7 +977,10 @@ export default function Step2Page() {
             )}
           </div>
         </div>
-        <ScanLogSection entries={rejectedLog} horizonKey={horizonKey} />
+          {scanResult?.pipeline && (
+            <ScanFunnel mode="options" pipeline={scanResult.pipeline} />
+          )}
+          <ScanLogSection entries={rejectedLog} horizonKey={horizonKey} />
       </div>
 
       <RunScanButton />
