@@ -1,6 +1,7 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, OptionContract, NewsItem } from '@/types/domain';
 import type { StockScanResult } from '@/types/stockDomain';
+import type { OptionsPipeline } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import type { AlertRule, AlertHistory } from '@/types/alerts';
 
@@ -84,7 +85,7 @@ export const api = {
     },
     overrides?: Record<string, number | boolean | string>,
   ) =>
-    post<{ scan_id: string; timestamp: string; candidates: TradeCardData[]; rejected: { symbol: string; reason: string }[] }>(
+    post<{ scan_id: string; timestamp: string; candidates: TradeCardData[]; rejected: { symbol: string; reason: string }[]; pipeline?: OptionsPipeline }>(
       '/api/scan',
       { universe, direction, horizon, overrides: overrides ?? {}, ...filters },
     ),
@@ -96,6 +97,7 @@ export const api = {
     pullback_ema_period?: number;
     pullback_trend_ema?: number;
     pullback_ma_type?: 'EMA' | 'SMA';
+    pullback_require_reversal?: boolean;
     ma_crossover_fast?: number;
     ma_crossover_slow?: number;
     ma_crossover_lookback?: number;
@@ -245,4 +247,8 @@ export async function saveIngestionSchedule(s: Pick<IngestionSchedule, 'enabled'
 
 export async function triggerIngestionNow(symbols: string[], years = 6): Promise<{ status: string; total: number }> {
   return post<{ status: string; total: number }>('/api/data/ingest', { symbols, years });
+}
+
+export async function getLastDataRefresh(): Promise<{ last_refresh: string | null }> {
+  return get<{ last_refresh: string | null }>('/api/data/ingest/last-refresh');
 }

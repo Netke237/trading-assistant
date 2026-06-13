@@ -19,7 +19,18 @@ export interface PositionCardData {
   next_event_days?: number | null;
   next_event_label?: string | null;
 }
+export interface StockPipeline {
+  scanned:         number;
+  failed_history:  number;
+  failed_score:    number;
+  failed_signal:   number;
+  failed_backtest: number;
+  other_rejected:  number;
+  candidates:      number;
+}
+
 export interface StockScanResult {
   scan_id: string; timestamp: string;
   candidates: PositionCardData[]; rejected: Array<{symbol: string; reason: string}>;
+  pipeline?: StockPipeline;
 }

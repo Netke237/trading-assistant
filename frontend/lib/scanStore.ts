@@ -21,11 +21,22 @@ export interface RejectedEntry {
   breakdown?: Record<string, number>;
 }
 
+export interface OptionsPipeline {
+  scanned:           number;
+  failed_data:       number;
+  failed_pre_screen: number;
+  no_chain:          number;
+  failed_score:      number;
+  failed_contracts:  number;
+  candidates:        number;
+}
+
 export interface ScanResult {
   scan_id: string;
   timestamp: string;
   candidates: TradeCardData[];
   rejected: RejectedEntry[];
+  pipeline?: OptionsPipeline;
 }
 
 interface ScanStoreState {
