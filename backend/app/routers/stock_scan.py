@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
+import functools
+import hashlib
 import logging
+import os
+import time
 from collections.abc import Callable
 from datetime import datetime, timezone, date, timedelta
 from typing import Any
@@ -12,9 +17,9 @@ from fastapi import APIRouter, HTTPException
 from app.services.audit import new_rec_id
 from app.schemas.stock_scan import (
     StockScanRequest, StockScanResult, PositionCardOut,
-    StrategySignalOut, BacktestOut,
+    StrategySignalOut, BacktestOut, StockPipeline,
 )
-from app.data.market import fetch_company_name_async, fetch_quotes
+from app.data.market import fetch_company_name_async, fetch_price_async, fetch_quotes
 from app.services.historical_store import get_bars as get_historical_bars
 from app.scoring.stock_scorer import score_stock
 from app.services.strategy_engine import (
@@ -36,7 +41,7 @@ _SIGNAL_FNS = {
 }
 
 _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
-    "pullback_ema":       lambda r: {"tolerance": r.pullback_tolerance_pct, "ema_period": r.pullback_ema_period, "trend_ema": r.pullback_trend_ema, "ma_type": r.pullback_ma_type},
+    "pullback_ema":       lambda r: {"tolerance": r.pullback_tolerance_pct, "ema_period": r.pullback_ema_period, "trend_ema": r.pullback_trend_ema, "ma_type": r.pullback_ma_type, "require_reversal": r.pullback_require_reversal},
     "breakout_base":      lambda r: {"volume_mult": r.breakout_volume_mult},
     "ma_crossover":       lambda r: {"fast": r.ma_crossover_fast, "slow": r.ma_crossover_slow, "lookback": r.ma_crossover_lookback},
     "mean_reversion_rsi": lambda r: {"rsi_period": r.rsi_period, "rsi_oversold": r.rsi_oversold, "trend_sma": r.rsi_trend_sma},
@@ -44,6 +49,26 @@ _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
 
 _HISTORY_YEARS = 5
 _SCAN_SEM = asyncio.Semaphore(5)
+
+_BACKTEST_TTL = 24 * 3600  # daily — bar history doesn't change within a trading day
+_BACKTEST_CACHE: dict[str, tuple] = {}  # key → (BacktestResult, expires_at)
+_BACKTEST_POOL = concurrent.futures.ProcessPoolExecutor(
+    max_workers=max(1, (os.cpu_count() or 2) // 2)
+)
+
+
+def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict]) -> str:
+    bars_hash = hashlib.md5(
+        str([(b["time"], b["close"]) for b in bars[-20:]]).encode()
+    ).hexdigest()[:8]
+    return f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}"
+
+
+def _get_backtest_cached(key: str):
+    entry = _BACKTEST_CACHE.get(key)
+    if entry and time.time() < entry[1]:
+        return entry[0]
+    return None
 
 
 def _position_size(account: float, risk_pct: float | None, risk_fixed: float | None,
@@ -65,18 +90,6 @@ async def _process_stock(
 ) -> PositionCardOut | dict:
     async with _SCAN_SEM:
         try:
-            quote = price_map.get(symbol)
-            price = (float(quote.get("last") or 0) or None) if quote else None
-            if not price:
-                return {"symbol": symbol, "reason": "no price data"}
-
-            async with httpx.AsyncClient(timeout=10) as client:
-                company = await fetch_company_name_async(client, symbol)
-            if req.min_price is not None and price < req.min_price:
-                return {"symbol": symbol, "reason": f"price ${price:.2f} < min"}
-            if req.max_price is not None and price > req.max_price:
-                return {"symbol": symbol, "reason": f"price ${price:.2f} > max"}
-
             end = date.today()
             start = end - timedelta(days=_HISTORY_YEARS * 365)
             # DB-first: reads from ohlcv_daily table; fetches delta from Tiingo if stale.
@@ -84,6 +97,26 @@ async def _process_stock(
             bars = await get_historical_bars(symbol, start, end)
             if not bars or len(bars) < 60:
                 return {"symbol": symbol, "reason": "insufficient history"}
+
+            # Price fallback chain mirrors the options scan: Tradier batch quote →
+            # last stored close (history table) → yfinance. Keeps the stock track
+            # usable when Tradier is unavailable.
+            quote = price_map.get(symbol)
+            price = (float(quote.get("last") or 0) or None) if quote else None
+            if not price:
+                price = float(bars[-1]["close"]) or None
+
+            async with httpx.AsyncClient(timeout=10) as client:
+                if not price:
+                    price = await fetch_price_async(client, symbol)
+                if not price:
+                    return {"symbol": symbol, "reason": "no price data"}
+                company = await fetch_company_name_async(client, symbol)
+
+            if req.min_price is not None and price < req.min_price:
+                return {"symbol": symbol, "reason": f"price ${price:.2f} < min"}
+            if req.max_price is not None and price > req.max_price:
+                return {"symbol": symbol, "reason": f"price ${price:.2f} > max"}
 
             card = score_stock(
                 symbol=symbol,
@@ -103,11 +136,18 @@ async def _process_stock(
             if signal is None:
                 return {"symbol": symbol, "reason": f"no {req.strategy} setup"}
 
-            bt_result = await asyncio.to_thread(
-                run_strategy_backtest, bars,
-                strategy=req.strategy, direction=req.direction,
-                min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
-            )
+            _bt_key = _backtest_key(symbol, req.strategy, req.direction, bars)
+            bt_result = _get_backtest_cached(_bt_key)
+            if bt_result is None:
+                bt_result = await asyncio.get_running_loop().run_in_executor(
+                    _BACKTEST_POOL,
+                    functools.partial(
+                        run_strategy_backtest, bars,
+                        strategy=req.strategy, direction=req.direction,
+                        min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
+                    ),
+                )
+                _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
             if not bt_result.passes_gate:
                 return {"symbol": symbol, "reason": f"backtest gate: {bt_result.summary_text}"}
 
@@ -222,7 +262,48 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
         else:
             rejected.append(r)
 
+    _hist_kw = ("insufficient history", "no price data")
+    _pipeline = StockPipeline(
+        scanned=len(symbols),
+        failed_history=sum(
+            1 for r in rejected
+            if isinstance(r, dict) and (
+                any(k in r.get("reason", "") for k in _hist_kw)
+                or r.get("reason", "").startswith("price $")
+            )
+        ),
+        failed_score=sum(
+            1 for r in rejected
+            if isinstance(r, dict) and r.get("reason", "").startswith("REJECT score=")
+        ),
+        failed_signal=sum(
+            1 for r in rejected
+            if isinstance(r, dict)
+            and r.get("reason", "").startswith("no ")
+            and "setup" in r.get("reason", "")
+        ),
+        failed_backtest=sum(
+            1 for r in rejected
+            if isinstance(r, dict) and r.get("reason", "").startswith("backtest gate:")
+        ),
+        other_rejected=sum(
+            1 for r in rejected
+            if isinstance(r, dict)
+            and not any(k in r.get("reason", "") for k in _hist_kw)
+            and not r.get("reason", "").startswith("price $")
+            and not r.get("reason", "").startswith("REJECT score=")
+            and not (r.get("reason", "").startswith("no ") and "setup" in r.get("reason", ""))
+            and not r.get("reason", "").startswith("backtest gate:")
+            and not r.get("reason", "").startswith("unknown strategy")
+        ),
+        candidates=len(candidates),
+    )
+    logger.info(
+        "STOCK SCAN pipeline: scanned=%d hist_fail=%d score_fail=%d signal_fail=%d bt_fail=%d other=%d candidates=%d",
+        _pipeline.scanned, _pipeline.failed_history, _pipeline.failed_score,
+        _pipeline.failed_signal, _pipeline.failed_backtest, _pipeline.other_rejected, _pipeline.candidates,
+    )
     return StockScanResult(
         scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(),
-        candidates=candidates, rejected=rejected,
+        candidates=candidates, rejected=rejected, pipeline=_pipeline,
     )
