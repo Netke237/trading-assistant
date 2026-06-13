@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
 
@@ -98,6 +99,10 @@ export default function Step6BacktestPage() {
           {rejected.length} rejected before backtest
         </Text>
       </div>
+
+      {result.pipeline && (
+        <ScanFunnel mode="stock" pipeline={result.pipeline} />
+      )}
 
       <div className={styles.tableHeader}>
         <Text size={11} tone="dim">SYMBOL</Text>
