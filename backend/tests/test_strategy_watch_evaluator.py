@@ -125,3 +125,36 @@ async def test_disabled_watch_skipped():
         events = await evaluate_all()
     assert events == []
     gb.assert_not_called()
+
+
+from unittest.mock import patch as _patch
+
+from app.services.strategy_watch_evaluator import evaluate_and_notify, _format_event
+
+
+def test_format_event_builds_subject_and_bodies():
+    ev = WatchEvent(
+        watch_id="wch_1", symbol="AAPL", strategy_key="pullback_ema",
+        event_type="entry", direction="Bullish", entry=100.0, stop=95.0,
+        target=110.0, rr_ratio=2.0, close=100.0,
+        reason="AAPL: pullback_ema buy setup — entry 100.0, stop 95.0, target 110.0 (R:R 2.0)",
+    )
+    subject, plain, html = _format_event(ev)
+    assert "AAPL" in subject and "Buy setup" in subject
+    assert "100.0" in plain
+    assert "<" in html  # html body has markup
+
+
+@pytest.mark.asyncio
+async def test_evaluate_and_notify_dispatches_per_event():
+    ev = WatchEvent(
+        watch_id="wch_1", symbol="AAPL", strategy_key="pullback_ema",
+        event_type="entry", direction="Bullish", entry=100.0, stop=95.0,
+        target=110.0, rr_ratio=2.0, close=100.0, reason="x",
+    )
+    with _patch("app.services.strategy_watch_evaluator.evaluate_all",
+                new_callable=AsyncMock, return_value=[ev]), \
+         _patch("app.services.strategy_watch_evaluator.notify_enabled_channels") as notify:
+        result = await evaluate_and_notify()
+    assert result == [ev]
+    notify.assert_called_once()

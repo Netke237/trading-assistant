@@ -18,6 +18,7 @@ from app.services.strategy_engine import (
     ma_crossover_signal, mean_reversion_rsi_signal,
 )
 from app.services.strategy_watch_store import strategy_watch_store
+from app.services.notifications.dispatch import notify_enabled_channels
 
 logger = logging.getLogger(__name__)
 
@@ -139,4 +140,44 @@ async def evaluate_all() -> list[WatchEvent]:
             strategy_watch_store.update_state(w["id"], state)
             events.append(event)
 
+    return events
+
+
+_SUBJECT_PREFIX = {
+    "entry":       "Buy setup",
+    "exit_stop":   "Stop hit",
+    "exit_target": "Target hit",
+    "reversal":    "Reversal",
+}
+
+
+def _format_event(ev: WatchEvent) -> tuple[str, str, str]:
+    """Return (subject, plain_body, html_body) for a watch event."""
+    label = _SUBJECT_PREFIX.get(ev.event_type, ev.event_type)
+    strat = ev.strategy_key.replace("_", " ").title()
+    subject = f"{label}: {ev.symbol} — {strat}"
+    lines = [ev.reason, "", f"Strategy: {strat}", f"Last close: {ev.close}"]
+    if ev.entry is not None:
+        lines.append(f"Entry {ev.entry} · Stop {ev.stop} · Target {ev.target}")
+    if ev.rr_ratio is not None:
+        lines.append(f"Reward:Risk {ev.rr_ratio}")
+    plain = "\n".join(lines)
+    html = (f"<h3>{subject}</h3><p>{ev.reason}</p>"
+            f"<ul><li>Strategy: {strat}</li><li>Last close: {ev.close}</li>"
+            + (f"<li>Entry {ev.entry} · Stop {ev.stop} · Target {ev.target}</li>"
+               if ev.entry is not None else "")
+            + (f"<li>Reward:Risk {ev.rr_ratio}</li>" if ev.rr_ratio is not None else "")
+            + "</ul>")
+    return subject, plain, html
+
+
+async def evaluate_and_notify() -> list[WatchEvent]:
+    """Evaluate all watches and dispatch a notification per fired event."""
+    events = await evaluate_all()
+    for ev in events:
+        subject, plain, html = _format_event(ev)
+        try:
+            notify_enabled_channels(subject, plain, html)
+        except Exception:
+            logger.error("strategy-watch: notify failed for %s", ev.symbol, exc_info=True)
     return events
