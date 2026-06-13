@@ -75,7 +75,7 @@ export function ScanFunnel({ mode, pipeline }: Props) {
       <Stage label="Data / Filters"  count={afterData}      rejected={p.failed_data}       rejectedLabel="filtered"  total={p.scanned} />
       <Stage label="Pre-screen"      count={afterPreScreen} rejected={p.failed_pre_screen} rejectedLabel="score low" total={p.scanned} />
       <Stage label="Option chain"    count={afterChain}     rejected={p.no_chain}          rejectedLabel="no chain"  total={p.scanned} />
-      <Stage label="Score + contracts" count={afterChain}   rejected={p.failed_score + p.failed_contracts} rejectedLabel="rejected" total={p.scanned} />
+      <Stage label="Score + contracts" count={afterChain - p.failed_score - p.failed_contracts} rejected={p.failed_score + p.failed_contracts} rejectedLabel="rejected" total={p.scanned} />
       <div className={styles.divider} />
       <div className={styles.finalStage}>
         <Text size={12} tone="pass" weight={500}>Candidates</Text>
