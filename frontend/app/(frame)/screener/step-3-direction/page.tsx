@@ -584,6 +584,7 @@ function SubGroupBlock({
   onToggle,
   overrideCount,
   description,
+  paramHints,
   children,
 }: {
   label: string;
@@ -591,8 +592,10 @@ function SubGroupBlock({
   onToggle: () => void;
   overrideCount: number;
   description?: string;
+  paramHints?: Array<{ label: string; hint?: string }>;
   children: React.ReactNode;
 }) {
+  const hasPanel = !!(description || paramHints?.some((p) => p.hint));
   return (
     <div className={formStyles.subGroup}>
       <button type="button" className={formStyles.subGroupHeader} onClick={onToggle} aria-expanded={open}>
@@ -604,12 +607,24 @@ function SubGroupBlock({
       </button>
       {open && (
         <div className={formStyles.subGroupBody}>
-          {description && (
-            <div className={formStyles.subGroupDesc}>
-              <Text size={10} tone="dim">{description}</Text>
+          <div className={formStyles.subGroupParamCol}>
+            {children}
+          </div>
+          {hasPanel && (
+            <div className={formStyles.subGroupDescBox}>
+              {description && <Text size={11} tone="dim">{description}</Text>}
+              {paramHints && paramHints.some((p) => p.hint) && (
+                <div className={formStyles.subGroupHintList}>
+                  {paramHints.filter((p) => p.hint).map((p) => (
+                    <div key={p.label} className={formStyles.subGroupHintRow}>
+                      <Text size={10} weight={500} tone="secondary">{p.label}</Text>
+                      <Text size={10} tone="dim">{p.hint}</Text>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-          {children}
         </div>
       )}
     </div>
@@ -889,6 +904,7 @@ export default function Step2Page() {
                     onToggle={() => toggleSubGroup(sg)}
                     overrideCount={countActiveOverrides(visibleDefs, scanOverrides, defaults)}
                     description={SUBGROUP_DESCRIPTIONS[sg]}
+                    paramHints={visibleDefs.filter((d) => !d.redundant && !d.deprecated).map((d) => ({ label: d.label, hint: d.hint }))}
                   >
                     {visibleDefs.map((def) => (
                       <ParamRow
@@ -922,6 +938,7 @@ export default function Step2Page() {
                     onToggle={() => toggleSubGroup(sg)}
                     overrideCount={countActiveOverrides(sgDefs, scanOverrides, defaults)}
                     description={SUBGROUP_DESCRIPTIONS[sg]}
+                    paramHints={sgDefs.filter((d) => !d.redundant && !d.deprecated).map((d) => ({ label: d.label, hint: d.hint }))}
                   >
                     {sgDefs.map((def) => (
                       <ParamRow

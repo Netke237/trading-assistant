@@ -70,6 +70,23 @@ async def get_schedule() -> dict:
     return {**cfg, "next_run": ingestion_scheduler.next_run_time()}
 
 
+@router.get("/ingest/last-refresh")
+async def last_refresh() -> dict:
+    """Return the UTC timestamp of the most recently written bar in ohlcv_daily.
+
+    This is accurate regardless of what triggered the fill — nightly scheduler,
+    manual prefetch from the Universe step, or on-demand get_bars() during a scan.
+    Returns {"last_refresh": null} when the table is empty.
+    """
+    from sqlalchemy import func, select
+    from app.models.ohlcv_daily import OhlcvDailyModel
+    from app.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(func.max(OhlcvDailyModel.fetched_at)))
+        ts = result.scalar_one_or_none()
+    return {"last_refresh": ts.isoformat() if ts else None}
+
+
 @router.post("/ingest/schedule")
 async def update_schedule(body: ScheduleUpdate) -> dict:
     """Save schedule config and reconfigure the APScheduler job immediately."""

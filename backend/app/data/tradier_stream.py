@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from typing import Optional
 
 import httpx
@@ -11,8 +10,7 @@ import httpx
 logger = logging.getLogger(__name__)
 logging.getLogger("asyncio").setLevel(logging.ERROR)
 
-TRADIER_BASE_URL = os.getenv("TRADIER_BASE_URL", "https://api.tradier.com")
-TRADIER_TOKEN = os.getenv("TRADIER_API_TOKEN", "")
+from app.data.market import get_tradier_creds
 
 
 class TradierStreamClient:
@@ -67,9 +65,10 @@ class TradierStreamClient:
     async def _create_session(self) -> Optional[str]:
         try:
             async with httpx.AsyncClient() as client:
+                _tok, _base = get_tradier_creds()
                 resp = await client.post(
-                    f"{TRADIER_BASE_URL}/v1/markets/events/session",
-                    headers={"Authorization": f"Bearer {TRADIER_TOKEN}", "Accept": "application/json"},
+                    f"{_base}/v1/markets/events/session",
+                    headers={"Authorization": f"Bearer {_tok}", "Accept": "application/json"},
                     timeout=10,
                 )
                 resp.raise_for_status()
@@ -96,7 +95,7 @@ class TradierStreamClient:
                     async with client.stream(
                         "POST", url,
                         json={"symbols": symbols, "filter": ["trade"], "linebreak": True},
-                        headers={"Authorization": f"Bearer {TRADIER_TOKEN}", "Accept": "application/json"},
+                        headers={"Authorization": f"Bearer {get_tradier_creds()[0]}", "Accept": "application/json"},
                         timeout=None,
                     ) as resp:
                         backoff = 1

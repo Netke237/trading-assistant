@@ -4,9 +4,12 @@ market.py uses Tradier for live data. All tests that exercise the pipeline
 mock async fetch functions so they run network-free and deterministically.
 """
 
+import asyncio
 import re
 from contextlib import ExitStack
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
+
+import pytest
 
 # ── Shape & contract ──────────────────────────────────────────────────────────
 
@@ -153,3 +156,127 @@ def test_scan_multiple_symbols_all_accounted_for(client):
         {c["symbol"] for c in data["candidates"]} |
         {rej["symbol"] for rej in data["rejected"]})
     assert processed == set(universe)
+
+
+# ── O-4: Raise scan concurrency 3 → 5 ────────────────────────────────────────
+
+def test_scan_concurrency_is_five():
+    """O-4: _SCAN_CONCURRENCY must be 5 — O-3 batch price fetch reduces per-symbol calls to 3."""
+    from app.routers.scan import _SCAN_CONCURRENCY
+    assert _SCAN_CONCURRENCY == 5, f"Expected 5, got {_SCAN_CONCURRENCY}"
+
+
+# ── O-3: Batch price pre-fetch ────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_process_symbol_skips_per_symbol_price_when_in_price_map():
+    """When price_map contains the symbol's price, fetch_price_async must NOT be called."""
+    from app.routers.scan import _process_symbol
+
+    sem = asyncio.Semaphore(10)
+    mock_client = MagicMock()
+    price_map = {"AAPL": {"last": 185.0, "prevclose": 183.0}}
+
+    mock_card = MagicMock()
+    mock_card.status = "REJECT"
+    mock_card.score = 25
+    mock_card.rules = []
+
+    with (
+        patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
+        patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)) as mock_price_async,
+        patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
+        patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
+        patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
+        patch("app.routers.scan.score_stock", return_value=mock_card),
+    ):
+        await _process_symbol(
+            "AAPL", "Bullish", "Swing", mock_client, sem, "test-scan-id",
+            price_map=price_map,
+        )
+
+    mock_price_async.assert_not_called()
+
+
+# ── O-6: Remove Heston ────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_process_symbol_does_not_call_calibrate_heston():
+    """Heston calibration must NOT be invoked in the scan pipeline (O-6 — always use BS)."""
+    from app.routers.scan import _process_symbol
+    from app.scoring.contract_validator import ContractScoreCard, ContractScoreBreakdown
+    from app.scoring.stock_scorer import StockScoreCard
+    from app.scoring.entry_quality import EntryAssessment
+    from app.scoring.reward_risk import RrResult
+
+    sem = asyncio.Semaphore(10)
+    mock_client = MagicMock()
+
+    pass_card = StockScoreCard(
+        symbol="AAPL", direction="Bullish", horizon="Swing",
+        score=75, status="PASS", rules=[],
+    )
+    contract_score = ContractScoreCard(
+        contract_id="AAPL|190|2026-06-20|C",
+        symbol="AAPL", strike=190.0, expiry="2026-06-20",
+        is_call=True, score=70, status="PASS",
+        breakdown=ContractScoreBreakdown(60, 60, 60, 60, 60, 60),
+    )
+    entry_result = EntryAssessment(
+        limit_price=2.50, max_fill=2.53, order_type="Limit", quality_status="PASS",
+    )
+    rr_result = RrResult(rr_ratio=2.5, model_used="Delta approximation", estimated_exit_premium=4.5)
+
+    with (
+        patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
+        patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)),
+        patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
+        patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
+        patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
+        patch("app.routers.scan.score_stock", return_value=pass_card),
+        patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=_MOCK_CHAIN)),
+        patch("app.routers.scan.validate_contract", return_value=contract_score),
+        patch("app.routers.scan.assess_entry", return_value=entry_result),
+        patch("app.routers.scan.estimate_rr", return_value=rr_result),
+        patch("app.routers.scan.estimate_targets", return_value=[]),
+        patch("app.routers.scan.log_event"),
+        patch("app.routers.scan.calibrate_heston", create=True) as mock_heston,
+    ):
+        await _process_symbol(
+            "AAPL", "Bullish", "Swing", mock_client, sem, "test-scan-id",
+        )
+
+    mock_heston.assert_not_called()
+
+
+# ── O-2: Candle pre-warm endpoint ─────────────────────────────────────────────
+
+_FAKE_CANDLE_ROW = [
+    {"time": "2026-01-02", "open": 100.0, "high": 105.0,
+     "low": 95.0, "close": 102.0, "volume": 1000}
+]
+
+
+@pytest.mark.asyncio
+async def test_prewarm_candles_async_calls_fetch_for_each_symbol():
+    """O-2: prewarm_candles_async must call fetch_candles_async once per symbol."""
+    from app.data.market import prewarm_candles_async
+
+    with patch("app.data.market.fetch_candles_async", AsyncMock(return_value=_FAKE_CANDLE_ROW)) as mock_fetch:
+        count = await prewarm_candles_async(["AAPL", "MSFT", "NVDA"])
+
+    assert mock_fetch.call_count == 3
+    symbols_called = {c[0][1] for c in mock_fetch.call_args_list}  # [0] = positional; [1] = symbol
+    assert symbols_called == {"AAPL", "MSFT", "NVDA"}
+    assert count == 3
+
+
+def test_prewarm_endpoint_returns_prewarmed_count(client):
+    """O-2: POST /api/scan/prewarm-candles must return {"prewarmed": N}."""
+    with patch("app.data.market.fetch_candles_async", AsyncMock(return_value=_FAKE_CANDLE_ROW)):
+        r = client.post("/api/scan/prewarm-candles", json={"symbols": ["AAPL", "MSFT"]})
+
+    assert r.status_code == 200
+    data = r.json()
+    assert "prewarmed" in data
+    assert data["prewarmed"] == 2

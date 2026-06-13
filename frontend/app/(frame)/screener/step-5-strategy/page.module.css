@@ -1,8 +1,11 @@
 .main { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-5); }
 .header { display: flex; flex-direction: column; gap: var(--space-2); }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid { display: flex; flex-direction: column; gap: var(--space-2); }
 .card {
-  text-align: left; padding: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: left; padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
   background: var(--bg-surface); cursor: pointer; transition: border-color .15s;
 }
@@ -10,14 +13,21 @@
 .card:disabled { opacity: .5; cursor: wait; }
 .cardActive { border-color: var(--pass); background: color-mix(in srgb, var(--pass) 6%, var(--bg-surface)); }
 .cardActive:hover:not(:disabled) { border-color: var(--pass); }
-.cardHeader { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--space-3); }
-.cardBody { display: flex; flex-direction: column; gap: 4px; }
+.cardHeader { display: flex; flex-direction: column; gap: 2px; min-width: 220px; flex-shrink: 0; }
+.cardBody { display: flex; gap: var(--space-4); flex: 1; align-items: center; flex-wrap: wrap; }
 
 .prefetchRow {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   margin-top: 16px;
+}
+
+.prefetchLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .prefetchBtn {
@@ -104,6 +114,20 @@
 .resetBtn:hover {
   border-color: var(--border-default);
   color: var(--text-primary);
+}
+
+.paramSection {
+  grid-column: 1 / -1;
+  padding: var(--space-2) 0 var(--space-1);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.paramSection:first-child {
+  border-top: none;
+  padding-top: 0;
 }
 
 .maToggle { display: flex; gap: 4px; }

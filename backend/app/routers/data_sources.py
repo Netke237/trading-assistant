@@ -36,10 +36,10 @@ class DataSourceStatus(BaseModel):
 # ── Probe helpers ───────────────────────────────────────────────────────────
 
 def _probe_tradier() -> tuple[str, str | None]:
-    token = os.environ.get("TRADIER_API_TOKEN", "").strip()
+    from app.data.market import get_tradier_creds
+    token, base = get_tradier_creds()
     if not token:
-        return "unconfigured", "TRADIER_API_TOKEN not set in .env"
-    base = os.environ.get("TRADIER_BASE_URL", "https://api.tradier.com")
+        return "unconfigured", "No Tradier token — add one in Settings → Brokers or set TRADIER_API_TOKEN in .env"
     try:
         resp = httpx.get(
             f"{base}/v1/markets/clock",

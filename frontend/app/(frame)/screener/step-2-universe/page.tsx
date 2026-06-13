@@ -11,7 +11,7 @@ import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
-import { api } from '@/lib/api';
+import { api, getLastDataRefresh } from '@/lib/api';
 import { useScanStore } from '@/lib/scanStore';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
@@ -89,14 +89,25 @@ export default function Step1Page() {
 
   const isWatchlistPick = pick === 'Watchlist';
 
-  const [histYears,  setHistYears]  = useState(5);
-  const [loadError,  setLoadError]  = useState<string | null>(null);
+  const [histYears,      setHistYears]      = useState(5);
+  const [loadError,      setLoadError]      = useState<string | null>(null);
+  const [lastRefreshTs,  setLastRefreshTs]  = useState<string | null>(null);
   const [histStatus, setHistStatus] = useState<{
     status: 'idle' | 'running' | 'completed' | 'error';
     total: number; done: number; failed: number;
     current_symbol: string | null; elapsed_secs: number;
   }>({ status: 'idle', total: 0, done: 0, failed: 0, current_symbol: null, elapsed_secs: 0 });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Sync with backend on mount so a running prefetch is reflected immediately.
+  useEffect(() => {
+    api.getHistoryPrefetchStatus()
+      .then(setHistStatus)
+      .catch(() => { /* backend may not be running yet */ });
+    getLastDataRefresh()
+      .then((r) => setLastRefreshTs(r.last_refresh))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (histStatus.status === 'running' && !pollRef.current) {
@@ -107,6 +118,8 @@ export default function Step1Page() {
           if (s.status !== 'running' && pollRef.current) {
             clearInterval(pollRef.current);
             pollRef.current = null;
+            // Refresh the last-refresh timestamp now that the job finished.
+            getLastDataRefresh().then((r) => setLastRefreshTs(r.last_refresh)).catch(() => {});
           }
         } catch { /* silent — backend may be restarting */ }
       }, 2000);
@@ -121,13 +134,31 @@ export default function Step1Page() {
     if (!universe.length) return;
     try {
       await api.startHistoryPrefetch({ universe, years: histYears });
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('→ 409')) {
+        // Already running on the backend — sync state and let polling take over.
+        try {
+          const s = await api.getHistoryPrefetchStatus();
+          setHistStatus(s);
+          setLoadError(null);
+        } catch {
+          setLoadError('Prefetch is already running — could not fetch status.');
+        }
+        return;
+      }
+      const msg = e instanceof TypeError
+        ? 'Cannot reach the backend — make sure the server is running.'
+        : e instanceof Error ? e.message : 'Failed to start history load';
+      setLoadError(msg);
+      console.error('History prefetch failed to start:', e);
+      return;
+    }
+    try {
       const s = await api.getHistoryPrefetchStatus();
       setHistStatus(s);
       setLoadError(null);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to start history load';
-      setLoadError(msg);
-      console.error('History prefetch failed to start:', e);
+    } catch {
+      /* prefetch started OK — status check failure is non-critical */
     }
   }, [pick, symbols, histYears]);
 
@@ -503,6 +534,14 @@ export default function Step1Page() {
             </div>
           </div>
         )}
+
+        <div className={formStyles.lastRefreshRow}>
+          <Text size={11} tone="dim">
+            {lastRefreshTs
+              ? `Last data refresh: ${new Date(lastRefreshTs).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
+              : 'No data loaded yet — click “Load history” above.'}
+          </Text>
+        </div>
       </div>
     </div>
   );

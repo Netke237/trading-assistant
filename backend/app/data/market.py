@@ -19,6 +19,30 @@ TRADIER_TOKEN = os.getenv("TRADIER_API_TOKEN", "")
 
 logger = logging.getLogger(__name__)
 
+
+def get_tradier_creds() -> tuple[str, str]:
+    """Return (token, base_url) for the best available Tradier credential.
+
+    Priority: credential store live → credential store paper → env-var fallback.
+    Credentials saved via the Settings UI always take precedence over .env values.
+    """
+    try:
+        from app.services.credential_store import credential_store
+        live = credential_store.get("tradier_live") or {}
+        if live.get("token", "").strip():
+            return live["token"].strip(), "https://api.tradier.com"
+        paper = credential_store.get("tradier_paper") or {}
+        if paper.get("token", "").strip():
+            return paper["token"].strip(), "https://sandbox.tradier.com"
+    except Exception:
+        pass
+    return TRADIER_TOKEN, TRADIER_BASE_URL
+
+
+def _tradier_base() -> str:
+    return get_tradier_creds()[1]
+
+
 # ── In-process caches ─────────────────────────────────────────────────────────
 # Candles: daily bars don't change within a trading session — date-keyed cache.
 _candles_cache: dict[str, tuple[list[dict], str]] = {}
@@ -41,8 +65,9 @@ _YF_SYMBOL_MAP: dict[str, str] = {
 
 
 def _headers() -> dict:
+    token, _ = get_tradier_creds()
     return {
-        "Authorization": f"Bearer {TRADIER_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Accept": "application/json",
     }
 
@@ -98,7 +123,7 @@ def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
         calendar_days = max(400, int(bars * 1.75))
         start = end - timedelta(days=calendar_days)
         resp = httpx.get(
-            f"{TRADIER_BASE_URL}/v1/markets/history",
+            f"{_tradier_base()}/v1/markets/history",
             headers=_headers(),
             params={
                 "symbol": symbol,
@@ -278,12 +303,12 @@ def fetch_intraday_candles(
 
     # ── Tradier (only for supported intervals) ───────────────────────────────
     tradier_rows: list[dict] = []
-    if TRADIER_TOKEN and interval in _TRADIER_INTRADAY_INTERVALS:
+    if get_tradier_creds()[0] and interval in _TRADIER_INTRADAY_INTERVALS:
         try:
             end = date.today()
             start = end - timedelta(days=min(days, 55))
             resp = httpx.get(
-                f"{TRADIER_BASE_URL}/v1/markets/timesales",
+                f"{_tradier_base()}/v1/markets/timesales",
                 headers=_headers(),
                 params={
                     "symbol":         symbol,
@@ -371,7 +396,7 @@ def fetch_intraday_candles(
 def fetch_price(symbol: str) -> Optional[float]:
     try:
         resp = httpx.get(
-            f"{TRADIER_BASE_URL}/v1/markets/quotes",
+            f"{_tradier_base()}/v1/markets/quotes",
             headers=_headers(),
             params={"symbols": symbol},
             timeout=10,
@@ -408,7 +433,7 @@ def fetch_option_chain(
 ) -> list[dict]:
     try:
         exp_resp = httpx.get(
-            f"{TRADIER_BASE_URL}/v1/markets/options/expirations",
+            f"{_tradier_base()}/v1/markets/options/expirations",
             headers=_headers(),
             params={"symbol": symbol, "includeAllRoots": "true"},
             timeout=10,
@@ -435,7 +460,7 @@ def fetch_option_chain(
                 return []
 
         chain_resp = httpx.get(
-            f"{TRADIER_BASE_URL}/v1/markets/options/chains",
+            f"{_tradier_base()}/v1/markets/options/chains",
             headers=_headers(),
             params={
                 "symbol": symbol,
@@ -467,10 +492,16 @@ def fetch_option_chain(
 
             bid = float(c.get("bid") or 0)
             ask = float(c.get("ask") or 0)
-            if ask <= 0:
+            last = float(c.get("last") or 0)
+            # Outside market hours Tradier returns bid=0, ask=0 — fall back to last price.
+            if ask > 0:
+                mid = round((bid + ask) / 2, 2)
+                spread = round(ask - bid, 2)
+            elif last > 0:
+                mid = round(last, 2)
+                spread = 0.0
+            else:
                 continue
-            mid = round((bid + ask) / 2, 2)
-            spread = round(ask - bid, 2)
             volume = int(c.get("volume") or 0)
             oi = int(c.get("open_interest") or 0)
             strike = float(c.get("strike") or 0)
@@ -528,7 +559,7 @@ def fetch_option_chain(
 def fetch_quotes(symbols: list[str]) -> dict[str, dict]:
     try:
         resp = httpx.get(
-            f"{TRADIER_BASE_URL}/v1/markets/quotes",
+            f"{_tradier_base()}/v1/markets/quotes",
             headers=_headers(),
             params={"symbols": ",".join(symbols)},
             timeout=10,
@@ -552,7 +583,7 @@ def fetch_quotes(symbols: list[str]) -> dict[str, dict]:
 def fetch_earnings_date(symbol: str) -> Optional[date]:
     try:
         resp = httpx.get(
-            f"{TRADIER_BASE_URL}/beta/markets/fundamentals/calendars",
+            f"{_tradier_base()}/beta/markets/fundamentals/calendars",
             headers=_headers(),
             params={"symbols": symbol},
             timeout=10,
@@ -580,7 +611,7 @@ def fetch_earnings_date(symbol: str) -> Optional[date]:
 def fetch_dividend_date(symbol: str) -> Optional[date]:
     try:
         resp = httpx.get(
-            f"{TRADIER_BASE_URL}/beta/markets/fundamentals/calendars",
+            f"{_tradier_base()}/beta/markets/fundamentals/calendars",
             headers=_headers(),
             params={"symbols": symbol},
             timeout=10,
@@ -608,7 +639,7 @@ def fetch_dividend_date(symbol: str) -> Optional[date]:
 def fetch_company_name(symbol: str) -> Optional[str]:
     try:
         resp = httpx.get(
-            f"{TRADIER_BASE_URL}/beta/markets/fundamentals/company",
+            f"{_tradier_base()}/beta/markets/fundamentals/company",
             headers=_headers(),
             params={"symbols": symbol},
             timeout=10,
@@ -679,10 +710,10 @@ def fetch_news(symbols: list[str], limit: int = 20) -> list[dict]:
     Tries Tradier first (when TRADIER_API_TOKEN is set), then falls back to yfinance.
     Each item: {id, symbol, headline, source, timestamp, sentiment}
     """
-    if TRADIER_TOKEN:
+    if get_tradier_creds()[0]:
         try:
             resp = httpx.get(
-                f"{TRADIER_BASE_URL}/v1/markets/news",
+                f"{_tradier_base()}/v1/markets/news",
                 headers=_headers(),
                 params={"symbols": ",".join(symbols), "limit": limit},
                 timeout=10,
@@ -907,19 +938,21 @@ async def fetch_candles_async(
     client: httpx.AsyncClient, symbol: str, bars: int = 252
 ) -> list[dict]:
     """Async variant — uses the provided AsyncClient for connection reuse.
-    Results are cached for the current calendar day (daily bars don't change intraday)."""
+    Results are cached for the current calendar day (daily bars don't change intraday).
+    Falls back to yfinance when Tradier is unavailable."""
     cached = _candles_cache.get(symbol)
     if cached is not None:
         data, cached_date = cached
         if cached_date == date.today().isoformat():
             return data
 
+    rows: list[dict] = []
     try:
         end = date.today()
         calendar_days = max(400, int(bars * 1.75))
         start = end - timedelta(days=calendar_days)
         resp = await client.get(
-            f"{TRADIER_BASE_URL}/v1/markets/history",
+            f"{_tradier_base()}/v1/markets/history",
             headers=_headers(),
             params={
                 "symbol": symbol,
@@ -930,26 +963,30 @@ async def fetch_candles_async(
         )
         resp.raise_for_status()
         history = resp.json().get("history")
-        if not history:
-            return []
-        day_list = history.get("day", [])
-        if isinstance(day_list, dict):
-            day_list = [day_list]
-        rows = []
-        for d in day_list[-bars:]:
-            rows.append({
-                "time": d["date"],
-                "open": round(float(d["open"]), 2),
-                "high": round(float(d["high"]), 2),
-                "low": round(float(d["low"]), 2),
-                "close": round(float(d["close"]), 2),
-                "volume": int(d["volume"]),
-            })
-        if rows:
-            _candles_cache[symbol] = (rows, date.today().isoformat())
-        return rows
+        if history:
+            day_list = history.get("day", [])
+            if isinstance(day_list, dict):
+                day_list = [day_list]
+            for d in day_list[-bars:]:
+                rows.append({
+                    "time": d["date"],
+                    "open": round(float(d["open"]), 2),
+                    "high": round(float(d["high"]), 2),
+                    "low": round(float(d["low"]), 2),
+                    "close": round(float(d["close"]), 2),
+                    "volume": int(d["volume"]),
+                })
     except Exception:
-        return []
+        pass
+
+    if not rows:
+        rows = await asyncio.to_thread(_fetch_daily_yf, symbol)
+        if rows:
+            logger.info("fetch_candles_async: yfinance fallback for %s (%d bars)", symbol, len(rows))
+
+    if rows:
+        _candles_cache[symbol] = (rows, date.today().isoformat())
+    return rows
 
 
 # Lazy semaphore for candle pre-warm — wider than scan concurrency since candles are the
@@ -984,10 +1021,10 @@ async def prewarm_candles_async(symbols: list[str]) -> int:
 async def fetch_price_async(
     client: httpx.AsyncClient, symbol: str
 ) -> Optional[float]:
-    """Async variant."""
+    """Async variant. Falls back to yfinance when Tradier is unavailable."""
     try:
         resp = await client.get(
-            f"{TRADIER_BASE_URL}/v1/markets/quotes",
+            f"{_tradier_base()}/v1/markets/quotes",
             headers=_headers(),
             params={"symbols": symbol},
         )
@@ -996,7 +1033,23 @@ async def fetch_price_async(
         if isinstance(quote, list):
             quote = quote[0]
         last = quote.get("last") or quote.get("close")
-        return round(float(last), 2) if last else None
+        if last:
+            return round(float(last), 2)
+    except Exception:
+        pass
+
+    # yfinance fallback — serve from daily cache if warm, otherwise use fast_info.
+    cached = _candles_cache.get(symbol)
+    if cached is not None:
+        data, cached_date = cached
+        if cached_date == date.today().isoformat() and data:
+            return data[-1]["close"]
+    try:
+        import yfinance as yf
+        yf_symbol = _YF_SYMBOL_MAP.get(symbol, symbol)
+        fi = await asyncio.to_thread(lambda: yf.Ticker(yf_symbol).fast_info)
+        price = fi.last_price or fi.previous_close
+        return round(float(price), 2) if price else None
     except Exception:
         return None
 
@@ -1010,7 +1063,7 @@ async def fetch_option_chain_async(
     """Async variant."""
     try:
         exp_resp = await client.get(
-            f"{TRADIER_BASE_URL}/v1/markets/options/expirations",
+            f"{_tradier_base()}/v1/markets/options/expirations",
             headers=_headers(),
             params={"symbol": symbol, "includeAllRoots": "true"},
         )
@@ -1036,7 +1089,7 @@ async def fetch_option_chain_async(
                 return []
 
         chain_resp = await client.get(
-            f"{TRADIER_BASE_URL}/v1/markets/options/chains",
+            f"{_tradier_base()}/v1/markets/options/chains",
             headers=_headers(),
             params={
                 "symbol": symbol,
@@ -1067,10 +1120,16 @@ async def fetch_option_chain_async(
 
             bid = float(c.get("bid") or 0)
             ask = float(c.get("ask") or 0)
-            if ask <= 0:
+            last = float(c.get("last") or 0)
+            # Outside market hours Tradier returns bid=0, ask=0 — fall back to last price.
+            if ask > 0:
+                mid = round((bid + ask) / 2, 2)
+                spread = round(ask - bid, 2)
+            elif last > 0:
+                mid = round(last, 2)
+                spread = 0.0
+            else:
                 continue
-            mid = round((bid + ask) / 2, 2)
-            spread = round(ask - bid, 2)
             volume = int(c.get("volume") or 0)
             oi = int(c.get("open_interest") or 0)
             strike = float(c.get("strike") or 0)
@@ -1198,7 +1257,7 @@ async def fetch_company_name_async(
 
     try:
         resp = await client.get(
-            f"{TRADIER_BASE_URL}/beta/markets/fundamentals/company",
+            f"{_tradier_base()}/beta/markets/fundamentals/company",
             headers=_headers(),
             params={"symbols": symbol},
         )
@@ -1227,7 +1286,7 @@ async def fetch_fundamentals_calendar(
     """
     try:
         resp = await client.get(
-            f"{TRADIER_BASE_URL}/beta/markets/fundamentals/calendars",
+            f"{_tradier_base()}/beta/markets/fundamentals/calendars",
             headers=_headers(),
             params={"symbols": symbol},
         )

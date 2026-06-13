@@ -2,6 +2,7 @@
 Tests for WS-B: market.py data fixes.
 
 Covers:
+  - fetch_candles_async date-based cache TTL (O-1)
   - Interval mapping dict (_YF_INTERVAL_MAP)
   - daily/weekly yfinance interval translation
   - IBKR source wired for 1h/4h/daily/weekly
@@ -343,3 +344,118 @@ def test_iv_enrichment_skipped_when_ibkr_returns_none():
     assert result[0]["ivPercentile"] == 0, (
         f"Expected ivPercentile=0 (fallback), got {result[0]['ivPercentile']}"
     )
+
+
+# ── O-1: Date-based candle cache TTL ─────────────────────────────────────────
+
+
+def _tradier_history_response() -> dict:
+    return {
+        "history": {
+            "day": [{"date": "2025-06-09", "open": 100.0, "high": 101.0,
+                     "low": 99.0, "close": 100.5, "volume": 1000}]
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_fetch_candles_async_cache_stores_date_string():
+    """After a successful fetch, the cache entry key must be an ISO date string."""
+    import app.data.market as mkt
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.json.return_value = _tradier_history_response()
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    saved = dict(mkt._candles_cache)
+    mkt._candles_cache.clear()
+    try:
+        await mkt.fetch_candles_async(mock_client, "AAPL")
+        _, cache_key = mkt._candles_cache["AAPL"]
+    finally:
+        mkt._candles_cache.clear()
+        mkt._candles_cache.update(saved)
+
+    assert isinstance(cache_key, str), f"Expected str cache key, got {type(cache_key)}"
+    assert cache_key == date.today().isoformat()
+
+
+@pytest.mark.asyncio
+async def test_fetch_candles_async_yesterday_entry_triggers_new_fetch():
+    """A cache entry stamped with yesterday's date must NOT be served — fresh HTTP call required."""
+    import app.data.market as mkt
+
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    stale_bars = [{"time": yesterday, "open": 50.0, "high": 51.0,
+                   "low": 49.0, "close": 50.5, "volume": 500}]
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.json.return_value = _tradier_history_response()
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    saved = dict(mkt._candles_cache)
+    mkt._candles_cache.clear()
+    mkt._candles_cache["AAPL"] = (stale_bars, yesterday)
+    try:
+        await mkt.fetch_candles_async(mock_client, "AAPL")
+    finally:
+        mkt._candles_cache.clear()
+        mkt._candles_cache.update(saved)
+
+    mock_client.get.assert_called_once()
+
+
+# ── O-7: Rate-limit yfinance IV chain fallback ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_fetch_option_chain_async_yf_iv_fallback_acquires_semaphore():
+    """When >50% of chain contracts have zero IV, the yfinance fallback must
+    acquire _get_yf_sem() — preventing request storms during batch scans."""
+    import app.data.market as mkt
+    from datetime import timedelta
+
+    future_exp = (date.today() + timedelta(days=30)).isoformat()
+
+    mock_client = AsyncMock()
+    exp_resp = MagicMock()
+    exp_resp.raise_for_status.return_value = None
+    exp_resp.json.return_value = {"expirations": {"date": [future_exp]}}
+
+    chain_resp = MagicMock()
+    chain_resp.raise_for_status.return_value = None
+    chain_resp.json.return_value = {
+        "options": {
+            "option": [{
+                "option_type": "call",
+                "strike": 185,
+                "bid": 2.40,
+                "ask": 2.60,
+                "volume": 500,
+                "open_interest": 1000,
+                "implied_volatility": 0.0,  # zero IV — triggers yfinance fallback
+                "greeks": {"delta": 0.45, "theta": -0.05},
+            }]
+        }
+    }
+    mock_client.get.side_effect = [exp_resp, chain_resp]
+
+    # Mock the semaphore getter so we can track if it was called
+    mock_sem = MagicMock()
+    mock_sem.__aenter__ = AsyncMock(return_value=mock_sem)
+    mock_sem.__aexit__ = AsyncMock(return_value=None)
+
+    with (
+        patch("app.data.market._get_yf_sem", return_value=mock_sem) as mock_sem_getter,
+        patch("app.data.market._yf_iv_for_chain", return_value={}),
+        patch("app.data.ibkr.fetch_iv_metrics_ibkr", return_value=None),
+    ):
+        await mkt.fetch_option_chain_async(mock_client, "AAPL", option_type="C")
+
+    mock_sem_getter.assert_called()

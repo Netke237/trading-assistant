@@ -92,11 +92,10 @@ export default function Step1RegimePage() {
     api.getCandles('SPY').then(setSpxCandles).catch(() => setOffline(true));
     api.getCandles('QQQ').then(setNdxCandles).catch(() => setOffline(true));
 
-    const symbols = useScanStore.getState().scanResult?.candidates.map((c) => c.symbol) ?? [];
-    if (symbols.length > 0) {
-      setNewsLoading(true);
-      api.getNews(symbols).then(setNews).catch(() => setNewsError(true)).finally(() => setNewsLoading(false));
-    }
+    const candidates = useScanStore.getState().scanResult?.candidates.map((c) => c.symbol) ?? [];
+    const symbols = candidates.length > 0 ? candidates : ['SPY', 'QQQ', 'VIX', 'DIA'];
+    setNewsLoading(true);
+    api.getNews(symbols).then(setNews).catch(() => setNewsError(true)).finally(() => setNewsLoading(false));
   }, [setRegime, setCombinedRegime, markov]);
 
   const spx = lastClose(spxCandles);

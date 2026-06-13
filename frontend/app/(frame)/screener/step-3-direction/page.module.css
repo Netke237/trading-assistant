@@ -281,9 +281,10 @@
   min-height: 30px;
 }
 
-.paramsRow > :first-child {
+.paramLabelCell {
   min-width: 160px;
   flex-shrink: 0;
+  cursor: help;
 }
 
 .paramsValue {
@@ -410,9 +411,42 @@
 .subGroupBody {
   padding: var(--space-2);
   display: flex;
+  flex-direction: row;
+  gap: var(--space-3);
+  background: var(--bg-surface);
+  align-items: flex-start;
+}
+
+.subGroupParamCol {
+  display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.subGroupDescBox {
+  flex: 1;
+  min-width: 200px;
+  padding: var(--space-3);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+
+.subGroupHintList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.subGroupHintRow {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 /* ── Override badge ──────────────────────────────────────────────────────────── */
@@ -424,6 +458,21 @@
   padding: 1px 6px;
   border-radius: var(--radius-sm);
   white-space: nowrap;
+}
+
+/* ── Sub-group and section descriptions ──────────────────────────────────────── */
+
+.subGroupDesc {
+  padding: var(--space-1) 0 var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-1);
+  line-height: 1.4;
+}
+
+.sectionDesc {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  line-height: 1.4;
 }
 
 /* ── Redundant / deprecated note ─────────────────────────────────────────────── */

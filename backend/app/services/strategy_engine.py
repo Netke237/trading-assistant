@@ -94,10 +94,11 @@ def pullback_ema_signal(
     trend_ema: int = 100,
     atr_stop_mult: float = 1.5,
     rr_target_mult: float = 2.0,
-    tolerance: float = 0.04,
+    tolerance: float = 0.08,
     ma_type: str = "EMA",
+    require_reversal: bool = False,
 ) -> StrategySignal | None:
-    """Bullish: uptrend + pullback to ema_period-MA + reversal candle. ma_type='EMA'|'SMA'."""
+    """Bullish: uptrend + pullback to ema_period-MA. Reversal candle optional (require_reversal)."""
     if len(bars) < trend_ema + 10:
         return None
     closes = [b["close"] for b in bars]
@@ -119,9 +120,9 @@ def pullback_ema_signal(
     # Pullback: price within `tolerance` of ema_period-MA from above
     if not (0 <= (current - fast_val) / fast_val <= tolerance):
         return None
-    # Reversal candle: close > open (bullish bar)
+    # Optional reversal candle gate: close > open (bullish bar)
     last = bars[-1]
-    if last["close"] <= last["open"]:
+    if require_reversal and last["close"] <= last["open"]:
         return None
     atr    = _atr(bars)
     stop   = _swing_low(bars, lookback=10) - atr * 0.2

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export interface ScanParams {
-  pullbackTolerancePct: number;   // fraction: 0.04 = 4%
+  pullbackTolerancePct: number;   // fraction: 0.08 = 8%
   pullbackEmaPeriod:    number;   // EMA to pull back to (e.g. 50)
   pullbackTrendEma:     number;   // trend-confirmation EMA (e.g. 100)
   pullbackMaType:       'EMA' | 'SMA';
@@ -19,7 +19,7 @@ export interface ScanParams {
 }
 
 const DEFAULTS: ScanParams = {
-  pullbackTolerancePct: 0.04,
+  pullbackTolerancePct: 0.08,
   pullbackEmaPeriod:    50,
   pullbackTrendEma:     100,
   pullbackMaType:       'EMA' as const,
@@ -30,7 +30,7 @@ const DEFAULTS: ScanParams = {
   rsiPeriod:            14,
   rsiOversold:          30,
   rsiTrendSma:          200,
-  btMinTrades:          10,
+  btMinTrades:          5,
   btMinWinRate:         0.45,
   eventFilter:          'include' as const,
 };
@@ -49,11 +49,12 @@ export const useScanParamsStore = create<ScanParamsStore>()(
     }),
     {
       name: 'bamendjou:scan-params',
-      version: 5,
+      version: 6,
       migrate: (state: unknown, v: number) => {
         if (v < 2) return { ...DEFAULTS, ...(state as Partial<ScanParams>) };
         if (v < 4) return { ...DEFAULTS, ...(state as Partial<ScanParams>), pullbackMaType: 'EMA' as const };
         if (v < 5) return { ...DEFAULTS, ...(state as Partial<ScanParams>), eventFilter: 'include' as const };
+        if (v < 6) return { ...DEFAULTS, ...(state as Partial<ScanParams>), pullbackTolerancePct: 0.08, btMinTrades: 5 };
         return state as ScanParams;
       },
     },

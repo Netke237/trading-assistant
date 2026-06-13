@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useShallow } from 'zustand/shallow';
-import { api } from '@/lib/api';
+import { api, getLastDataRefresh } from '@/lib/api';
 import styles from './page.module.css';
 
 const STRATEGIES = [
@@ -67,6 +67,8 @@ export default function Step5StrategyPage() {
     btMinWinRate:         s.btMinWinRate,
     eventFilter:          s.eventFilter,
   })));
+  const scanOverrides = useScanStore((s) => s.scanOverrides);
+  const requireReversal = (scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
   const [params, setParams] = useState(() => ({ ...savedParams }));
 
   function resetParams() { setParams({ ...savedParams }); }
@@ -80,7 +82,7 @@ export default function Step5StrategyPage() {
   };
 
   const entryLabel: Record<string, string> = {
-    pullback_ema:       `Dip to ${params.pullbackEmaPeriod}-${params.pullbackMaType} + reversal candle in uptrend`,
+    pullback_ema:       `Dip to ${params.pullbackEmaPeriod}-${params.pullbackMaType} in uptrend${requireReversal ? ' + reversal candle' : ''}`,
     ma_crossover:       `${params.maCrossoverFast}-SMA crosses above ${params.maCrossoverSlow}-SMA`,
     mean_reversion_rsi: `RSI < ${params.rsiOversold} while above ${params.rsiTrendSma}-SMA`,
     breakout_base:      `Break above N-day high after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
@@ -88,10 +90,17 @@ export default function Step5StrategyPage() {
 
   const [loadingStrategy, setLoadingStrategy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastRefreshTs, setLastRefreshTs] = useState<string | null>(null);
   const [prefetchStatus, setPrefetchStatus] = useState<
     'idle' | 'running' | 'completed' | 'error' | null
   >(null);
   const [prefetchProgress, setPrefetchProgress] = useState<{ done: number; total: number } | null>(null);
+
+  useEffect(() => {
+    getLastDataRefresh()
+      .then((r) => setLastRefreshTs(r.last_refresh))
+      .catch(() => {});
+  }, []);
 
   async function runScan(stratKey: string) {
     setActiveStrategy(stratKey);
@@ -106,10 +115,11 @@ export default function Step5StrategyPage() {
         direction: context?.direction ?? 'Bullish',
         horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
         strategy: stratKey,
-        pullback_tolerance_pct: params.pullbackTolerancePct,
-        pullback_ema_period:    params.pullbackEmaPeriod,
-        pullback_trend_ema:     params.pullbackTrendEma,
-        pullback_ma_type:       params.pullbackMaType,
+        pullback_tolerance_pct:    params.pullbackTolerancePct,
+        pullback_ema_period:       params.pullbackEmaPeriod,
+        pullback_trend_ema:        params.pullbackTrendEma,
+        pullback_ma_type:          params.pullbackMaType,
+        pullback_require_reversal: requireReversal,
         ma_crossover_fast:      params.maCrossoverFast,
         ma_crossover_slow:      params.maCrossoverSlow,
         ma_crossover_lookback:  params.maCrossoverLookback,
@@ -176,8 +186,16 @@ export default function Step5StrategyPage() {
         </summary>
 
         <div className={styles.paramsGrid}>
+
+          {/* ── Pullback to EMA ── */}
+          <div className={styles.paramSection}>
+            <Text size={11} weight={500} tone="secondary">Pullback to EMA</Text>
+            <Text size={10} tone="dim">Controls the &quot;Pullback to EMA&quot; strategy — how far a stock can be below the moving average and still qualify, and how the uptrend is confirmed.</Text>
+          </div>
+
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">Pullback tolerance</Text>
+            <Text size={10} tone="dim">Max % below the EMA to still count as a pullback. ↑ Higher → deeper pullbacks qualify (more results) · ↓ Lower → only tight pullbacks pass (fewer)</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -193,6 +211,7 @@ export default function Step5StrategyPage() {
 
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">Pullback EMA period</Text>
+            <Text size={10} tone="dim">The EMA the stock must pull back to. ↑ Higher → slower EMA used (e.g. 50), longer trend needed (fewer) · ↓ Lower → faster EMA, more setups (more)</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -207,6 +226,7 @@ export default function Step5StrategyPage() {
 
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">Pullback MA type</Text>
+            <Text size={10} tone="dim">Type of moving average. EMA reacts faster to recent price; SMA is smoother and less reactive.</Text>
             <div className={styles.maToggle}>
               {(['EMA', 'SMA'] as const).map((t) => (
                 <button
@@ -223,6 +243,7 @@ export default function Step5StrategyPage() {
 
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">Trend EMA period</Text>
+            <Text size={10} tone="dim">Longer EMA that defines whether the stock is in an uptrend at all. ↑ Higher → more established trend required (fewer) · ↓ Lower → shorter uptrends qualify (more)</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -235,8 +256,15 @@ export default function Step5StrategyPage() {
             </div>
           </label>
 
+          {/* ── MA Crossover ── */}
+          <div className={styles.paramSection}>
+            <Text size={11} weight={500} tone="secondary">MA Crossover</Text>
+            <Text size={10} tone="dim">Controls the &quot;MA Crossover&quot; strategy — defines the two moving averages and how recently the crossover must have occurred.</Text>
+          </div>
+
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">MA crossover fast</Text>
+            <Text size={10} tone="dim">Short MA period. ↑ Higher → fewer, more deliberate crossover signals · ↓ Lower → more frequent but noisier crossovers</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -251,6 +279,7 @@ export default function Step5StrategyPage() {
 
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">MA crossover slow</Text>
+            <Text size={10} tone="dim">Long MA period. ↑ Higher → crossover requires a bigger trend reversal (fewer) · ↓ Lower → shorter moves trigger a signal (more)</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -265,6 +294,7 @@ export default function Step5StrategyPage() {
 
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">MA crossover lookback</Text>
+            <Text size={10} tone="dim">How many bars back a crossover can still be counted as fresh. ↑ Higher → older crossovers qualify (more results) · ↓ Lower → only very recent crossovers (fewer)</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -278,8 +308,15 @@ export default function Step5StrategyPage() {
             </div>
           </label>
 
+          {/* ── Mean Reversion RSI ── */}
+          <div className={styles.paramSection}>
+            <Text size={11} weight={500} tone="secondary">Mean Reversion RSI</Text>
+            <Text size={10} tone="dim">Controls the &quot;Mean Reversion RSI&quot; strategy — defines how oversold a stock must be and what uptrend baseline it must still sit above.</Text>
+          </div>
+
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">RSI period</Text>
+            <Text size={10} tone="dim">Bars used to calculate RSI. ↑ Higher → smoother, slower RSI reading · ↓ Lower → more sensitive, triggers faster</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -294,6 +331,7 @@ export default function Step5StrategyPage() {
 
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">RSI oversold level</Text>
+            <Text size={10} tone="dim">RSI must be below this to qualify as oversold. ↑ Higher → easier to trigger (less oversold needed), more results · ↓ Lower → deep oversold required, fewer results</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -308,6 +346,7 @@ export default function Step5StrategyPage() {
 
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">RSI trend SMA</Text>
+            <Text size={10} tone="dim">SMA the stock must be trading above to confirm it&apos;s still in an uptrend. ↑ Higher → only stocks in longer established uptrends qualify (fewer) · ↓ Lower → shorter uptrends allowed (more)</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -320,8 +359,15 @@ export default function Step5StrategyPage() {
             </div>
           </label>
 
+          {/* ── Breakout ── */}
+          <div className={styles.paramSection}>
+            <Text size={11} weight={500} tone="secondary">Breakout from Tight Base</Text>
+            <Text size={10} tone="dim">Controls the &quot;Breakout&quot; strategy — how much volume surge is required to confirm a genuine breakout above the base high.</Text>
+          </div>
+
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">Breakout vol multiplier</Text>
+            <Text size={10} tone="dim">Required volume as a multiple of average on the breakout day. ↑ Higher → only high-conviction volume spikes pass (fewer, stronger signals) · ↓ Lower → lower volume breakouts qualify (more)</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -335,8 +381,15 @@ export default function Step5StrategyPage() {
             </div>
           </label>
 
+          {/* ── Backtest quality gate ── */}
+          <div className={styles.paramSection}>
+            <Text size={11} weight={500} tone="secondary">Backtest quality gate</Text>
+            <Text size={10} tone="dim">Minimum historical performance a stock&apos;s setup must have shown before it qualifies. Applied to all strategies — stocks that fail are excluded from results.</Text>
+          </div>
+
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">Min backtest trades</Text>
+            <Text size={10} tone="dim">Minimum number of historical signals required for the backtest to be statistically meaningful. ↑ Higher → more data required (fewer qualify) · ↓ Lower → sparse history accepted (more)</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -352,6 +405,7 @@ export default function Step5StrategyPage() {
 
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">Min win rate</Text>
+            <Text size={10} tone="dim">Minimum % of historical trades that were winners. ↑ Higher → only well-performing past setups qualify (fewer, more accurate) · ↓ Lower → looser past performance accepted (more)</Text>
             <div className={styles.paramInput}>
               <input
                 type="number"
@@ -365,8 +419,15 @@ export default function Step5StrategyPage() {
             </div>
           </label>
 
+          {/* ── Event exposure ── */}
+          <div className={styles.paramSection}>
+            <Text size={11} weight={500} tone="secondary">Event exposure</Text>
+            <Text size={10} tone="dim">Controls whether stocks with upcoming catalysts (earnings, FOMC, dividends) are included, excluded, or exclusively targeted.</Text>
+          </div>
+
           <label className={styles.paramLabel}>
             <Text size={11} tone="dim">Event exposure</Text>
+            <Text size={10} tone="dim">Include = all stocks regardless of events · Avoid = exclude stocks with near-term catalysts (safer, fewer) · Events only = only stocks with upcoming events</Text>
             <div className={styles.maToggle}>
               {(['include', 'avoid', 'only_pre_event'] as const).map((v) => (
                 <button
@@ -416,16 +477,23 @@ export default function Step5StrategyPage() {
       </div>
 
       <div className={styles.prefetchRow}>
-        <Text size={12} tone="secondary">
-          Historical data:{' '}
-          {prefetchStatus === 'running' && prefetchProgress
-            ? `warming up ${prefetchProgress.done}/${prefetchProgress.total}`
-            : prefetchStatus === 'completed'
-            ? 'ready'
-            : prefetchStatus === 'error'
-            ? 'error — retry below'
-            : 'not pre-warmed'}
-        </Text>
+        <div className={styles.prefetchLeft}>
+          <Text size={12} tone="secondary">
+            Historical data:{' '}
+            {prefetchStatus === 'running' && prefetchProgress
+              ? `warming up ${prefetchProgress.done}/${prefetchProgress.total}`
+              : prefetchStatus === 'completed'
+              ? 'ready'
+              : prefetchStatus === 'error'
+              ? 'error — retry below'
+              : 'not pre-warmed'}
+          </Text>
+          {lastRefreshTs && (
+            <Text size={11} tone="dim">
+              Last refresh: {new Date(lastRefreshTs).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+            </Text>
+          )}
+        </div>
         {prefetchStatus !== 'running' && (
           <button
             className={styles.prefetchBtn}
