@@ -108,6 +108,7 @@ export const api = {
     account_size?: number; risk_pct?: number;
     risk_fixed_usd?: number; bt_min_trades?: number; bt_min_win_rate?: number;
     min_price?: number; max_price?: number;
+    shortlist_max_candidates?: number;
   }) => post<StockScanResult>('/api/stock-scan', req),
 
   postStockOrder: (req: {

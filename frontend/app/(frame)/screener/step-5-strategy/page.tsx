@@ -66,6 +66,7 @@ export default function Step5StrategyPage() {
     btMinTrades:          s.btMinTrades,
     btMinWinRate:         s.btMinWinRate,
     eventFilter:          s.eventFilter,
+    stockShortlistMax:    s.stockShortlistMax,
   })));
   const scanOverrides = useScanStore((s) => s.scanOverrides);
   const requireReversal = (scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
@@ -131,6 +132,7 @@ export default function Step5StrategyPage() {
         bt_min_win_rate:        params.btMinWinRate,
         account_size: 50_000,
         risk_pct: 0.01,
+        shortlist_max_candidates: params.stockShortlistMax,
       });
       setStockScanResult(result);
       router.push('/screener/step-6-backtest');
@@ -416,6 +418,27 @@ export default function Step5StrategyPage() {
                 }
               />
               <Text size={11} tone="dim">%</Text>
+            </div>
+          </label>
+
+          {/* ── Shortlist cap ── */}
+          <div className={styles.paramSection}>
+            <Text size={11} weight={500} tone="secondary">Shortlist</Text>
+            <Text size={10} tone="dim">Maximum number of stock candidates returned after all gates. Same cap applies to all strategies.</Text>
+          </div>
+
+          <label className={styles.paramLabel}>
+            <Text size={11} tone="dim">Max candidates</Text>
+            <Text size={10} tone="dim">↑ Higher → more stocks pass to Position Card · ↓ Lower → only top-ranked setups shown</Text>
+            <div className={styles.paramInput}>
+              <input
+                type="number"
+                value={params.stockShortlistMax}
+                min={1} max={50} step={1}
+                onChange={(e) =>
+                  setParams((p) => ({ ...p, stockShortlistMax: Math.max(1, Number(e.target.value)) }))
+                }
+              />
             </div>
           </label>
 
