@@ -130,6 +130,32 @@
   padding-top: 0;
 }
 
+.regimeBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  width: fit-content;
+}
+.regimeBadgePass {
+  background: color-mix(in srgb, var(--pass) 14%, var(--bg-surface));
+  color: var(--pass);
+  border: 1px solid color-mix(in srgb, var(--pass) 28%, transparent);
+}
+.regimeBadgeCaution {
+  background: color-mix(in srgb, var(--caution) 14%, var(--bg-surface));
+  color: var(--caution);
+  border: 1px solid color-mix(in srgb, var(--caution) 28%, transparent);
+}
+.regimeBadgeReject {
+  background: color-mix(in srgb, var(--reject) 14%, var(--bg-surface));
+  color: var(--reject);
+  border: 1px solid color-mix(in srgb, var(--reject) 28%, transparent);
+}
+
 .maToggle { display: flex; gap: 4px; }
 .maToggleBtn {
   padding: 3px 10px;

@@ -44,6 +44,22 @@ const STRATEGIES = [
   },
 ] as const;
 
+type RegimeFit = 'PASS' | 'CAUTION' | 'REJECT';
+
+// Maps each strategy to how well it fits each market regime.
+const REGIME_FIT: Record<string, Partial<Record<string, RegimeFit>>> = {
+  pullback_ema:       { PASS: 'PASS',    CAUTION: 'CAUTION', REJECT: 'REJECT'  },
+  breakout_base:      { PASS: 'PASS',    CAUTION: 'REJECT',  REJECT: 'REJECT'  },
+  ma_crossover:       { PASS: 'CAUTION', CAUTION: 'CAUTION', REJECT: 'REJECT'  },
+  mean_reversion_rsi: { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
+};
+
+const REGIME_BADGE: Record<RegimeFit, { label: string; cls: string }> = {
+  PASS:    { label: 'Recommended', cls: 'regimeBadgePass'    },
+  CAUTION: { label: 'Neutral',     cls: 'regimeBadgeCaution' },
+  REJECT:  { label: 'Avoid',       cls: 'regimeBadgeReject'  },
+};
+
 export default function Step5StrategyPage() {
   const router = useRouter();
   const context = useScanStore((s) => s.context);
@@ -51,6 +67,7 @@ export default function Step5StrategyPage() {
   const activeStrategy = useScanStore((s) => s.activeStrategy);
   const setActiveStrategy = useScanStore((s) => s.setActiveStrategy);
   const setStockScanResult = useScanStore((s) => s.setStockScanResult);
+  const combinedRegime = useScanStore((s) => s.combinedRegime);
   const savedParams = useScanParamsStore(useShallow((s) => ({
     pullbackTolerancePct: s.pullbackTolerancePct,
     pullbackEmaPeriod:    s.pullbackEmaPeriod,
@@ -486,6 +503,16 @@ export default function Step5StrategyPage() {
             <div className={styles.cardHeader}>
               <Text size={14} weight={600}>{strategyLabel[s.key] ?? s.label}</Text>
               <Text size={11} tone="secondary">{s.when}</Text>
+              {(() => {
+                const fit = REGIME_FIT[s.key]?.[combinedRegime] as RegimeFit | undefined;
+                if (!fit) return null;
+                const badge = REGIME_BADGE[fit];
+                return (
+                  <span className={`${styles.regimeBadge} ${styles[badge.cls]}`}>
+                    {badge.label}
+                  </span>
+                );
+              })()}
             </div>
             <div className={styles.cardBody}>
               <Text size={11} tone="dim">Entry: {entryLabel[s.key] ?? s.entry}</Text>
