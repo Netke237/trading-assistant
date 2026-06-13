@@ -1,0 +1,51 @@
+.funnel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 0 8px;
+}
+
+.header {
+  margin-bottom: 6px;
+}
+
+.stage {
+  display: grid;
+  grid-template-columns: 110px 40px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.bar {
+  height: 3px;
+  background: var(--border-subtle);
+  border-radius: 2px;
+  overflow: hidden;
+  grid-column: 1 / -1;
+}
+
+.barFill {
+  height: 100%;
+  background: var(--pass);
+  border-radius: 2px;
+}
+
+.rejected {
+  color: var(--reject);
+  font-size: 11px;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 6px 0 4px;
+}
+
+.finalStage {
+  display: grid;
+  grid-template-columns: 110px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
