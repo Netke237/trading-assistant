@@ -294,7 +294,6 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
             and not r.get("reason", "").startswith("REJECT score=")
             and not (r.get("reason", "").startswith("no ") and "setup" in r.get("reason", ""))
             and not r.get("reason", "").startswith("backtest gate:")
-            and not r.get("reason", "").startswith("unknown strategy")
         ),
         candidates=len(candidates),
     )
