@@ -90,11 +90,22 @@ async def lifespan(app: FastAPI):
             )
     except Exception as _exc:
         logger.warning("startup catch-up failed: %s", _exc)
+    # ── Strategy-watch scheduler ──────────────────────────────────────────
+    try:
+        from app.services.strategy_watch_scheduler import strategy_watch_scheduler
+        await strategy_watch_scheduler.start()
+    except Exception as _exc:
+        logger.warning("strategy_watch_scheduler startup failed: %s", _exc)
     yield
     # ── Shutdown ─────────────────────────────────────────────────────────
     try:
         from app.services import ingestion_scheduler as _isched
         _isched.shutdown()
+    except Exception:
+        pass
+    try:
+        from app.services.strategy_watch_scheduler import strategy_watch_scheduler
+        await strategy_watch_scheduler.stop()
     except Exception:
         pass
     if _scheduler._running:
