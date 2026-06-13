@@ -90,6 +90,16 @@ export const DEFAULT_TRADIER_PAPER: TradierPaperConfig = {
   accountId: '',
 };
 
+export interface TradierLiveConfig {
+  token:     string;
+  accountId: string;
+}
+
+export const DEFAULT_TRADIER_LIVE: TradierLiveConfig = {
+  token:     '',
+  accountId: '',
+};
+
 export const DEFAULT_IBKR_LIVE: IbkrLiveConfig = {
   enabled: false,
   note:    'Live IBKR trading is prepared but not yet activated.',
@@ -118,6 +128,7 @@ interface SettingsState {
   confidenceGate:              ConfidenceGate;
   ibkrPaper:                   IbkrPaperConfig;
   tradierPaper:                TradierPaperConfig;
+  tradierLive:                 TradierLiveConfig;
   ibkrLive:                    IbkrLiveConfig;
   alpacaPaper:                 AlpacaPaperConfig;
   alpacaLive:                  AlpacaLiveConfig;
@@ -133,6 +144,7 @@ interface SettingsState {
   setConfidenceGate:           (g: ConfidenceGate) => void;
   setIbkrPaper:                (c: IbkrPaperConfig)    => void;
   setTradierPaper:             (c: TradierPaperConfig) => void;
+  setTradierLive:              (c: TradierLiveConfig)  => void;
   setAlpacaPaper:              (c: AlpacaPaperConfig)  => void;
   resetToDefaults:              () => void;
 }
@@ -165,6 +177,9 @@ export function migrateSettings(
     next.alpacaPaper = { ...DEFAULT_ALPACA_PAPER };
     next.alpacaLive  = { ...DEFAULT_ALPACA_LIVE };
   }
+  if (version < 15) {
+    next.tradierLive = { ...DEFAULT_TRADIER_LIVE };
+  }
   return next as unknown as SettingsState;
 }
 
@@ -183,6 +198,7 @@ export const useSettingsStore = create<SettingsState>()(
       confidenceGate:       { ...DEFAULT_CONFIDENCE_GATE },
       ibkrPaper:            { ...DEFAULT_IBKR_PAPER },
       tradierPaper:         { ...DEFAULT_TRADIER_PAPER },
+      tradierLive:          { ...DEFAULT_TRADIER_LIVE },
       ibkrLive:             { ...DEFAULT_IBKR_LIVE },
       alpacaPaper:          { ...DEFAULT_ALPACA_PAPER },
       alpacaLive:           { ...DEFAULT_ALPACA_LIVE },
@@ -198,6 +214,7 @@ export const useSettingsStore = create<SettingsState>()(
       setConfidenceGate:       (g) => set({ confidenceGate: g }),
       setIbkrPaper:    (c) => set({ ibkrPaper: c }),
       setTradierPaper: (c) => set({ tradierPaper: c }),
+      setTradierLive:  (c) => set({ tradierLive: c }),
       setAlpacaPaper:  (c) => set({ alpacaPaper: c }),
       resetToDefaults: () => set({
         broker:                  { ...DEFAULT_BROKER },
@@ -212,6 +229,7 @@ export const useSettingsStore = create<SettingsState>()(
         confidenceGate:       { ...DEFAULT_CONFIDENCE_GATE },
         ibkrPaper:   { ...DEFAULT_IBKR_PAPER },
         tradierPaper: { ...DEFAULT_TRADIER_PAPER },
+        tradierLive:  { ...DEFAULT_TRADIER_LIVE },
         alpacaPaper:  { ...DEFAULT_ALPACA_PAPER },
       }),
     }),
@@ -222,7 +240,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 14,
+      version: 15,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
@@ -236,6 +254,7 @@ export const useSettingsStore = create<SettingsState>()(
         confidenceGate:         state.confidenceGate,
         ibkrPaper:    state.ibkrPaper,
         tradierPaper: state.tradierPaper,
+        tradierLive:  state.tradierLive,
         alpacaPaper:  state.alpacaPaper,
       }),
       migrate: (persistedState, version) => migrateSettings(persistedState, version),

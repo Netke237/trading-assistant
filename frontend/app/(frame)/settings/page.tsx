@@ -840,6 +840,7 @@ function BrokersForm() {
   const {
     ibkrPaper, setIbkrPaper,
     tradierPaper, setTradierPaper,
+    tradierLive, setTradierLive,
     alpacaPaper, setAlpacaPaper,
     ibkrLive, alpacaLive,
   } = useSettingsStore();
@@ -848,6 +849,8 @@ function BrokersForm() {
   const [ibkrAcct,     setIbkrAcct]     = useState(ibkrPaper.accountId);
   const [tradierTok,   setTradierTok]   = useState(tradierPaper.token);
   const [tradierAcct,  setTradierAcct]  = useState(tradierPaper.accountId);
+  const [tradierLiveTok,  setTradierLiveTok]  = useState(tradierLive.token);
+  const [tradierLiveAcct, setTradierLiveAcct] = useState(tradierLive.accountId);
   const [alpacaKeyId,  setAlpacaKeyId]  = useState(alpacaPaper.keyId);
   const [alpacaSecret, setAlpacaSecret] = useState(alpacaPaper.secretKey);
   const [saving, setSaving] = useState<string | null>(null);
@@ -857,6 +860,8 @@ function BrokersForm() {
   useEffect(() => { setIbkrAcct(ibkrPaper.accountId); },      [ibkrPaper.accountId]);
   useEffect(() => { setTradierTok(tradierPaper.token); },      [tradierPaper.token]);
   useEffect(() => { setTradierAcct(tradierPaper.accountId); }, [tradierPaper.accountId]);
+  useEffect(() => { setTradierLiveTok(tradierLive.token); },      [tradierLive.token]);
+  useEffect(() => { setTradierLiveAcct(tradierLive.accountId); }, [tradierLive.accountId]);
   useEffect(() => { setAlpacaKeyId(alpacaPaper.keyId); },      [alpacaPaper.keyId]);
   useEffect(() => { setAlpacaSecret(alpacaPaper.secretKey); }, [alpacaPaper.secretKey]);
 
@@ -871,6 +876,13 @@ function BrokersForm() {
     setSaving('tradier');
     setTradierPaper({ token: tradierTok, accountId: tradierAcct });
     await api.postCredentials('tradier_paper', { token: tradierTok, account_id: tradierAcct });
+    setSaving(null);
+  }
+
+  async function saveTradierLive() {
+    setSaving('tradierLive');
+    setTradierLive({ token: tradierLiveTok, accountId: tradierLiveAcct });
+    await api.postCredentials('tradier_live', { token: tradierLiveTok, account_id: tradierLiveAcct });
     setSaving(null);
   }
 
@@ -910,6 +922,39 @@ function BrokersForm() {
             disabled={saving === 'ibkr'}
           >
             {saving === 'ibkr' ? 'Saving…' : 'Save IBKR Paper'}
+          </button>
+        </div>
+      </div>
+
+      <SectionIntro
+        title="Tradier Live"
+        blurb="Live Tradier token — used for real-time quotes, option chains, and market data. Takes priority over the paper sandbox token. Get your token at developer.tradier.com."
+      />
+      <Row label="Live token" hint="Your Tradier live API token" defaultValue="—">
+        <input
+          className={styles.input}
+          type="password"
+          placeholder="leave blank to keep saved value"
+          value={tradierLiveTok}
+          onChange={(e) => setTradierLiveTok(e.target.value)}
+        />
+      </Row>
+      <Row label="Account ID" hint="Your Tradier live account ID (e.g. VA-XXXXXXXX)" defaultValue="—">
+        <input
+          className={styles.input}
+          value={tradierLiveAcct}
+          onChange={(e) => setTradierLiveAcct(e.target.value)}
+        />
+      </Row>
+      <div className={styles.row}>
+        <div className={styles.rowLabel} />
+        <div className={styles.rowControl}>
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={saveTradierLive}
+            disabled={saving === 'tradierLive'}
+          >
+            {saving === 'tradierLive' ? 'Saving…' : 'Save Tradier Live'}
           </button>
         </div>
       </div>
