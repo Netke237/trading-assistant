@@ -21,6 +21,7 @@ const ITEMS: NavItemDef[] = [
   { label: 'Calendar',  match: '/calendar',  href: '/calendar',  Icon: CalendarIcon  },
   { label: 'Chart',     match: '/chart',     href: '/chart',     Icon: ChartIcon     },
   { label: 'Alerts',    match: '/alerts',    href: '/alerts',    Icon: AlertsIcon    },
+  { label: 'Strategy Watch', match: '/strategy-watch', href: '/strategy-watch', Icon: StrategyWatchIcon },
   { label: 'Settings',  match: '/settings',  href: '/settings',  Icon: SettingsIcon  },
 ];
 
@@ -127,6 +128,13 @@ function AlertsIcon() {
     <svg {...svgProps()}>
       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+function StrategyWatchIcon() {
+  return (
+    <svg {...svgProps()}>
+      <path d="M2 12h4l3 8 4-16 3 8h6" />
     </svg>
   );
 }
