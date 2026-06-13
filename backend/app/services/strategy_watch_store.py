@@ -7,6 +7,7 @@ a `watches` list and a `schedule` config.
 """
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import uuid
@@ -14,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 # Canonical strategy keys — must match app/routers/stock_scan.py:_SIGNAL_FNS.
 VALID_STRATEGIES = {"pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi"}
@@ -48,7 +51,8 @@ class StrategyWatchStore:
     def load(self) -> None:
         try:
             raw = yaml.safe_load(self._path.read_text()) or {}
-        except (yaml.YAMLError, OSError):
+        except (yaml.YAMLError, OSError) as exc:
+            logger.warning("strategy_watch_store: failed to load %s — %s", self._path, exc)
             return
         with self._lock:
             self._watches = list(raw.get("watches") or [])
