@@ -12,10 +12,11 @@ class StockScanRequest(BaseModel):
     direction:   Literal["Bullish", "Bearish"]
     horizon:     Literal["Intraday", "Swing", "Position"]
     strategy:    Strategy
-    pullback_tolerance_pct: float = Field(0.04, gt=0, le=1.0)  # 0 < tolerance ≤ 100%
-    pullback_ema_period:    int   = Field(50,   gt=0)           # EMA to pull back to
-    pullback_trend_ema:     int   = Field(100,  gt=0)           # trend-confirmation EMA
-    pullback_ma_type:       Literal["EMA", "SMA"] = "EMA"
+    pullback_tolerance_pct:     float = Field(0.08, gt=0, le=1.0)  # 0 < tolerance ≤ 100%
+    pullback_ema_period:        int   = Field(50,   gt=0)           # EMA to pull back to
+    pullback_trend_ema:         int   = Field(100,  gt=0)           # trend-confirmation EMA
+    pullback_ma_type:           Literal["EMA", "SMA"] = "EMA"
+    pullback_require_reversal:  bool  = False                        # require green candle on signal bar
     ma_crossover_fast:      int   = Field(20,   gt=0)           # fast MA period
     ma_crossover_slow:      int   = Field(50,   gt=0)           # slow MA period
     ma_crossover_lookback:  int   = Field(10,   gt=0)           # lookback ≥ 1
@@ -30,7 +31,7 @@ class StockScanRequest(BaseModel):
     account_size:       float = 50_000.0
     risk_pct:           Optional[float] = 0.01
     risk_fixed_usd:     Optional[float] = None
-    bt_min_trades:      int   = 10
+    bt_min_trades:      int   = 5
     bt_min_win_rate:    float = 0.45
 
 
@@ -83,3 +84,14 @@ class StockScanResult(BaseModel):
     timestamp:  str
     candidates: list[PositionCardOut]
     rejected:   list[dict]
+    pipeline:   Optional[StockPipeline] = None
+
+
+class StockPipeline(BaseModel):
+    scanned:         int   # total symbols attempted
+    failed_history:  int   # "insufficient history" / "no price data" / "price $..."
+    failed_score:    int   # "REJECT score=..."
+    failed_signal:   int   # "no {strategy} setup"
+    failed_backtest: int   # "backtest gate: ..."
+    other_rejected:  int   # exceptions / unclassified
+    candidates:      int
