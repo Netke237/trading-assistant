@@ -79,14 +79,6 @@ class PositionCardOut(BaseModel):
     next_event_label: str | None = None   # "earnings" | "dividend"
 
 
-class StockScanResult(BaseModel):
-    scan_id:    str
-    timestamp:  str
-    candidates: list[PositionCardOut]
-    rejected:   list[dict]
-    pipeline:   Optional[StockPipeline] = None
-
-
 class StockPipeline(BaseModel):
     scanned:         int   # total symbols attempted
     failed_history:  int   # "insufficient history" / "no price data" / "price $..."
@@ -95,3 +87,11 @@ class StockPipeline(BaseModel):
     failed_backtest: int   # "backtest gate: ..."
     other_rejected:  int   # exceptions / unclassified
     candidates:      int
+
+
+class StockScanResult(BaseModel):
+    scan_id:    str
+    timestamp:  str
+    candidates: list[PositionCardOut]
+    rejected:   list[dict]
+    pipeline:   Optional[StockPipeline] = None
