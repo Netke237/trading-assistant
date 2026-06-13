@@ -7,7 +7,7 @@ from dataclasses import asdict, is_dataclass
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services.strategy_watch_store import strategy_watch_store
+from app.services.strategy_watch_store import strategy_watch_store, VALID_STRATEGIES
 from app.services.strategy_watch_scheduler import strategy_watch_scheduler
 
 router = APIRouter(prefix="/api/strategy-watch", tags=["strategy-watch"])
@@ -51,8 +51,7 @@ async def add_watch(body: AddWatch) -> dict:
 
 @router.post("/bulk", status_code=201)
 async def bulk_add(body: BulkAdd) -> dict:
-    if body.strategy_key not in __import__("app.services.strategy_watch_store",
-                                           fromlist=["VALID_STRATEGIES"]).VALID_STRATEGIES:
+    if body.strategy_key not in VALID_STRATEGIES:
         raise HTTPException(status_code=400, detail=f"unknown strategy: {body.strategy_key}")
     added = strategy_watch_store.add_watches_bulk(body.symbols, body.strategy_key)
     return {"added": len(added), "watches": added}

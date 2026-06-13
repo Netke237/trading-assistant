@@ -81,3 +81,31 @@ async def test_evaluate_returns_events(app):
             resp = await ac.post("/api/strategy-watch/evaluate")
     assert resp.status_code == 200
     assert resp.json()["fired"] == 1
+
+
+@pytest.mark.asyncio
+async def test_patch_enabled(app):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        add = await ac.post("/api/strategy-watch/",
+                            json={"symbol": "TSLA", "strategy_key": "ma_crossover"})
+        wid = add.json()["id"]
+        patch_resp = await ac.patch(f"/api/strategy-watch/{wid}", json={"enabled": False})
+        assert patch_resp.status_code == 200
+        assert patch_resp.json()["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_status(app):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        resp = await ac.get("/api/strategy-watch/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "running" in data and "mode" in data
+
+
+@pytest.mark.asyncio
+async def test_bulk_unknown_strategy_returns_400(app):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        resp = await ac.post("/api/strategy-watch/bulk",
+                            json={"symbols": ["AAPL"], "strategy_key": "nonexistent"})
+    assert resp.status_code == 400
