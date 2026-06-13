@@ -387,6 +387,16 @@ class RejectedCandidate(BaseModel):
     breakdown: dict[str, int] | None = None
 
 
+class OptionsPipeline(BaseModel):
+    scanned:           int   # total symbols attempted
+    failed_data:       int   # "no market data" + price/cap filters
+    failed_pre_screen: int   # Pass 1 score gate (reason starts with "Pre-screen:")
+    no_chain:          int   # "no option chain"
+    failed_score:      int   # Pass 2 score gate (reason starts with "Score gate:")
+    failed_contracts:  int   # "all contracts rejected"
+    candidates:        int   # made it through everything
+
+
 class ScanResult(BaseModel):
     scan_id: str
     timestamp: str
@@ -397,6 +407,7 @@ class ScanResult(BaseModel):
     deltas: list[ScanDelta] = []
     shortlist_truncated: bool = False
     original_count: int = 0
+    pipeline: Optional[OptionsPipeline] = None
 
 
 # ── Portfolio persistence ─────────────────────────────────────────────────────
