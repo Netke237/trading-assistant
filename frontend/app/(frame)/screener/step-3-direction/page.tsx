@@ -100,9 +100,10 @@ function StockRejectGroup({ reason, entries, horizonKey }: { reason: string; ent
 
 // ── ScanLog section ───────────────────────────────────────────────────────────
 
+const GROUPED_PREFIXES = ['Pre-screen:', 'Score gate:'];
+
 function ScanLogSection({ entries, horizonKey }: { entries: RejectedEntry[]; horizonKey: string }) {
   if (entries.length === 0) return null;
-  const GROUPED_PREFIXES = ['Pre-screen:', 'Score gate:'];
   const stockRejects = entries.filter((e) => GROUPED_PREFIXES.some((p) => e.reason.startsWith(p)));
   const otherRejects = entries.filter((e) => !GROUPED_PREFIXES.some((p) => e.reason.startsWith(p)));
   const byReason = new Map<string, RejectedEntry[]>();
