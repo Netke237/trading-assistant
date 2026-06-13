@@ -262,6 +262,10 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
         else:
             rejected.append(r)
 
+    original_count = len(candidates)
+    shortlist_truncated = original_count > req.shortlist_max_candidates
+    candidates = candidates[: req.shortlist_max_candidates]
+
     _hist_kw = ("insufficient history", "no price data")
     _pipeline = StockPipeline(
         scanned=len(symbols),
@@ -305,4 +309,5 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
     return StockScanResult(
         scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(),
         candidates=candidates, rejected=rejected, pipeline=_pipeline,
+        original_count=original_count, shortlist_truncated=shortlist_truncated,
     )

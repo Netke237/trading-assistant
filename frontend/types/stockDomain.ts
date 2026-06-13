@@ -33,4 +33,6 @@ export interface StockScanResult {
   scan_id: string; timestamp: string;
   candidates: PositionCardData[]; rejected: Array<{symbol: string; reason: string}>;
   pipeline?: StockPipeline;
+  original_count?: number;
+  shortlist_truncated?: boolean;
 }

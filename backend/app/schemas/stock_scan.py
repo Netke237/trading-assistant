@@ -33,6 +33,7 @@ class StockScanRequest(BaseModel):
     risk_fixed_usd:     Optional[float] = None
     bt_min_trades:      int   = 5
     bt_min_win_rate:    float = 0.45
+    shortlist_max_candidates: int = Field(10, gt=0)
 
 
 class StrategySignalOut(BaseModel):
@@ -90,8 +91,10 @@ class StockPipeline(BaseModel):
 
 
 class StockScanResult(BaseModel):
-    scan_id:    str
-    timestamp:  str
-    candidates: list[PositionCardOut]
-    rejected:   list[dict]
-    pipeline:   Optional[StockPipeline] = None
+    scan_id:              str
+    timestamp:            str
+    candidates:           list[PositionCardOut]
+    rejected:             list[dict]
+    pipeline:             Optional[StockPipeline] = None
+    original_count:       int = 0
+    shortlist_truncated:  bool = False
