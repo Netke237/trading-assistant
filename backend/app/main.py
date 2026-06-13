@@ -38,6 +38,7 @@ from app.routers.auto_trade    import router as auto_trade_router
 from app.routers.historical_data import router as historical_data_router
 from app.routers.chart_drawings  import router as chart_drawings_router
 from app.routers.ingestion       import router as ingestion_router
+from app.routers.strategy_watch  import router as strategy_watch_router
 
 
 _notification_worker_task: asyncio.Task | None = None
@@ -155,6 +156,7 @@ def create_app() -> FastAPI:
     app.include_router(historical_data_router)
     app.include_router(chart_drawings_router)
     app.include_router(ingestion_router)
+    app.include_router(strategy_watch_router)
 
     return app
 
