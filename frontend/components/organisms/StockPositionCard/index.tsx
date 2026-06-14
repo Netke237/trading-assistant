@@ -193,9 +193,7 @@ export function StockPositionCard({
   const rrT2 = rrAt(overlay.t2);
   const rrT3 = rrAt(overlay.t3);
 
-  const winTone = card.backtest.win_rate >= 0.5
-    ? ('pass' as const)
-    : ('caution' as const);
+  const winTone = card.backtest.win_rate >= 0.5 ? 'pass' : 'caution';
 
   return (
     <div className={styles.wrap}>

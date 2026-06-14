@@ -29,7 +29,7 @@
   padding: 4px 0;
 }
 
-.targetLabel { }
+/* display:contents lets target value cells participate directly in the 5-col grid */
 .targetValues { display: contents; }
 
 .actionRow { display: flex; flex-wrap: wrap; gap: 8px; }
