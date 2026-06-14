@@ -39,7 +39,7 @@ type ExecMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_pape
 function defaultOverlay(card: PositionCardData): StockEditOverlay {
   const entry = card.strategy.entry_price;
   const stop  = card.strategy.stop_price;
-  const risk  = Math.max(0.01, entry - stop);
+  const risk  = entry - stop;
   const t1    = card.strategy.target_price;
   const t2    = Math.round((entry + 2 * risk) * 100) / 100;
   const t3    = Math.round((entry + 3 * risk) * 100) / 100;
@@ -132,10 +132,10 @@ export function StockPositionCard({
   }, []);
 
   // Derived values
-  const riskPerShare = Math.max(0.01, overlay.entry - overlay.stop);
+  const riskPerShare = overlay.entry - overlay.stop;
   const riskDollars  = overlay.shares * riskPerShare;
   const sizeDollars  = overlay.shares * overlay.entry;
-  const rrAt = (t: number) => (t - overlay.entry) / riskPerShare;
+  const rrAt = (t: number) => riskPerShare > 0 ? (t - overlay.entry) / riskPerShare : 0;
 
   // Store selectors
   const stockBasket  = useScanStore((s) => s.stockBasket);
@@ -301,14 +301,14 @@ export function StockPositionCard({
           href={`/chart?symbol=${encodeURIComponent(card.symbol)}`}
           className={styles.actionBtn}
         >
-          View Chart
+          <Text size={12}>View Chart</Text>
         </Link>
         <button
           type="button"
           className={styles.actionBtn}
           onClick={() => (pinned ? removeBasket(card.symbol) : addToBasket(card))}
         >
-          {pinned ? 'Unpin from Basket' : 'Pin to Basket'}
+          <Text size={12}>{pinned ? 'Unpin from Basket' : 'Pin to Basket'}</Text>
         </button>
         <button
           type="button"
@@ -316,7 +316,7 @@ export function StockPositionCard({
           onClick={onAddToPortfolio}
           disabled={added}
         >
-          {added ? 'Added to Portfolio' : 'Add to Portfolio'}
+          <Text size={12}>{added ? 'Added to Portfolio' : 'Add to Portfolio'}</Text>
         </button>
       </div>
 
@@ -350,7 +350,7 @@ export function StockPositionCard({
             onClick={() => submit('LMT')}
             disabled={placingType !== null}
           >
-            {placingType === 'LMT' ? 'Placing…' : `Limit @ $${overlay.entry.toFixed(2)}`}
+            <Text size={12}>{placingType === 'LMT' ? 'Placing…' : `Limit @ $${overlay.entry.toFixed(2)}`}</Text>
           </button>
           <button
             type="button"
@@ -358,7 +358,7 @@ export function StockPositionCard({
             onClick={() => submit('MKT')}
             disabled={placingType !== null}
           >
-            {placingType === 'MKT' ? 'Placing…' : 'Market Order'}
+            <Text size={12}>{placingType === 'MKT' ? 'Placing…' : 'Market Order'}</Text>
           </button>
         </div>
       )}

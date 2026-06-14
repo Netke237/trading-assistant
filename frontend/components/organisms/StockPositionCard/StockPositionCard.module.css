@@ -7,7 +7,7 @@
 .editInput {
   width: 100%;
   font-family: inherit;
-  font-size: 13px;
+  font-size: inherit;
   border: 1px solid var(--accent);
   border-radius: 4px;
   padding: 2px 4px;
@@ -40,11 +40,10 @@
   border-radius: 6px;
   background: var(--bg-surface);
   cursor: pointer;
-  font-size: 12px;
-  color: var(--text-primary);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
+  color: inherit;
 }
 .actionBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
