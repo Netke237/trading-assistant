@@ -1,13 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Title, Text } from '@/components/primitives';
+import { Title, Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useShallow } from 'zustand/shallow';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { runStockScan } from '@/lib/stockScan';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { computeStockDeltas } from '@/lib/stockDelta';
+import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
 
 const STRATEGIES = [
@@ -40,6 +43,7 @@ export default function Step4StocksPage() {
   const activeStrategy = useScanStore((s) => s.activeStrategy);
   const combinedRegime = useScanStore((s) => s.combinedRegime);
   const result         = useScanStore((s) => s.stockScanResult);
+  const previous       = useScanStore((s) => s.previousStockScanResult);
   const scanState      = useScanStore((s) => s.scanState);
 
   const savedParams = useScanParamsStore(useShallow((s) => ({
@@ -57,6 +61,8 @@ export default function Step4StocksPage() {
   const [params, setParams] = useState<StrategyParams>(() => ({ ...savedParams }));
   const [selected, setSelected] = useState<string | null>(activeStrategy);
   const [error, setError] = useState<string | null>(null);
+  const [openSymbol, setOpenSymbol] = useState<string | null>(null);
+  const deltas = result ? computeStockDeltas(result, previous) : new Map();
 
   const scanning = scanState === 'SCANNING';
 
@@ -146,7 +152,64 @@ export default function Step4StocksPage() {
         </details>
       )}
 
-      {/* Results table — added in Task 8 */}
+      {result && (
+        <div className={styles.results}>
+          <div className={styles.tableHeader}>
+            <Text size={11} tone="dim">SYMBOL</Text>
+            <Text size={11} tone="dim">SCORE</Text>
+            <Text size={11} tone="dim">Δ</Text>
+            <Text size={11} tone="dim">WIN %</Text>
+            <Text size={11} tone="dim">TRADES</Text>
+            <Text size={11} tone="dim">RETURN</Text>
+            <Text size={11} tone="dim">MAX DD</Text>
+            <Text size={11} tone="dim">GATE</Text>
+          </div>
+
+          <div className={styles.tableBody}>
+            {result.candidates.filter((c) => c.backtest.passes_gate).map((c) => {
+              const d = deltas.get(c.symbol);
+              const bt = c.backtest;
+              const open = openSymbol === c.symbol;
+              return (
+                <div key={c.symbol}>
+                  <button
+                    type="button"
+                    className={`${styles.row} ${open ? styles.rowOpen : ''}`}
+                    onClick={() => setOpenSymbol(open ? null : c.symbol)}
+                  >
+                    <Data size={12} weight={500}>{c.symbol}</Data>
+                    <Data size={12}>{c.stock_score}</Data>
+                    <Text size={11} tone={!d ? 'dim' : d.scoreDelta > 0 ? 'pass' : d.scoreDelta < 0 ? 'reject' : 'secondary'}>
+                      {!d ? '—' : `${d.scoreDelta > 0 ? '+' : ''}${d.scoreDelta}${d.rankDelta !== 0 ? ` (${d.rankDelta > 0 ? '↑' : '↓'}${Math.abs(d.rankDelta)})` : ''}`}
+                    </Text>
+                    <Data size={12} tone={bt.win_rate >= 0.5 ? 'pass' : bt.win_rate >= 0.45 ? 'caution' : 'reject'}>
+                      {(bt.win_rate * 100).toFixed(0)}%
+                    </Data>
+                    <Data size={12}>{bt.n_trades}</Data>
+                    <Data size={12} tone={bt.total_return_pct >= 0 ? 'pass' : 'reject'}>{bt.total_return_pct.toFixed(1)}%</Data>
+                    <Data size={12} tone="reject">{Math.abs(bt.max_drawdown_pct).toFixed(1)}%</Data>
+                    <StatusBadge status={bt.passes_gate ? 'PASS' : 'REJECT'} />
+                  </button>
+                  {open && <PositionCardAccordion card={c} />}
+                </div>
+              );
+            })}
+          </div>
+
+          {result.rejected.length > 0 && (
+            <details className={styles.rejectedSection}>
+              <summary><Text size={12} tone="dim">{result.rejected.length} rejected</Text></summary>
+              {result.rejected.map((r) => (
+                <Text key={r.symbol} size={11} tone="dim">{r.symbol}: {r.reason}</Text>
+              ))}
+            </details>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+function PositionCardAccordion({ card }: { card: PositionCardData }) {
+  return <div className={styles.accordion}><Text size={12} tone="dim">{card.symbol} details…</Text></div>;
 }
