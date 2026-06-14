@@ -22,6 +22,16 @@
   background: var(--accent); color: var(--accent-fg); cursor: pointer; font-size: 13px;
 }
 .runBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sendBtn {
+  padding: 8px 20px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.sendBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .logPanel { border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 12px; }
 .logPanel summary { cursor: pointer; }

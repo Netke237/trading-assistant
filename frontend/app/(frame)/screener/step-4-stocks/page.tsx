@@ -1,19 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useShallow } from 'zustand/shallow';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { runStockScan } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
-import type { PositionCardData } from '@/types/stockDomain';
-import Link from 'next/link';
-import { usePortfolioStore } from '@/lib/portfolioStore';
-import { useSettingsStore } from '@/lib/settingsStore';
+import { StockPositionCard } from '@/components/organisms/StockPositionCard';
+import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import styles from './page.module.css';
@@ -63,10 +62,15 @@ export default function Step4StocksPage() {
   const scanOverrides   = useScanStore((s) => s.scanOverrides);
   const requireReversal = (scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
 
+  const stockBasket = useScanStore((s) => s.stockBasket);
+  const addPosition = usePortfolioStore((s) => s.addPosition);
+
   const [params, setParams] = useState<StrategyParams>(() => ({ ...savedParams }));
   const [selected, setSelected] = useState<string | null>(activeStrategy);
   const [error, setError] = useState<string | null>(null);
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
+  const [afterScanArmedSymbols, setAfterScanArmedSymbols] = useState<Set<string>>(new Set());
+  const [showSendDialog, setShowSendDialog] = useState(false);
   const deltas: Map<string, StockDelta> = result ? computeStockDeltas(result, previous) : new Map();
 
   const scanning = scanState === 'SCANNING';
@@ -84,11 +88,41 @@ export default function Step4StocksPage() {
     breakout_base:      `Break above N-day high after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
   };
 
+  function onAfterScanToggle(symbol: string, armed: boolean) {
+    setAfterScanArmedSymbols((prev) => {
+      const next = new Set(prev);
+      if (armed) next.add(symbol); else next.delete(symbol);
+      return next;
+    });
+  }
+
   async function onRun() {
     if (!selected) return;
     setError(null);
     const res = await runStockScan(selected, params);
-    if (!res) setError('Scan failed — is the backend running on port 8000?');
+    if (!res) {
+      setError('Scan failed — is the backend running on port 8000?');
+      return;
+    }
+    // Auto-execute symbols armed for after_scan
+    for (const c of res.candidates) {
+      if (afterScanArmedSymbols.has(c.symbol)) {
+        try {
+          await api.postStockOrder({
+            broker: 'recommendation',
+            symbol: c.symbol,
+            action: c.direction === 'Bullish' ? 'BUY' : 'SELL',
+            quantity: c.shares,
+            order_type: 'LMT',
+            limit_price: c.strategy.entry_price,
+            tif: 'DAY',
+          });
+          addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, c.shares));
+        } catch {
+          // silent — user can retry via dialog
+        }
+      }
+    }
   }
 
   return (
@@ -146,6 +180,15 @@ export default function Step4StocksPage() {
         >
           {scanning ? 'Running backtest scan…' : 'Run Stock Scan'}
         </button>
+        {stockBasket.length > 0 && (
+          <button
+            type="button"
+            className={styles.sendBtn}
+            onClick={() => setShowSendDialog(true)}
+          >
+            Send basket ({stockBasket.length})
+          </button>
+        )}
       </div>
 
       {error && <Text size={12} tone="reject">{error}</Text>}
@@ -195,7 +238,14 @@ export default function Step4StocksPage() {
                     <Data size={12} tone="reject">{Math.abs(bt.max_drawdown_pct).toFixed(1)}%</Data>
                     <StatusBadge status={bt.passes_gate ? 'PASS' : 'REJECT'} />
                   </button>
-                  {open && <PositionCardAccordion card={c} />}
+                  {open && (
+                    <StockPositionCard
+                      card={c}
+                      strategyKey={selected ?? ''}
+                      afterScanArmed={afterScanArmedSymbols.has(c.symbol)}
+                      onAfterScanToggle={onAfterScanToggle}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -211,120 +261,16 @@ export default function Step4StocksPage() {
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-type ExecutionMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper';
-
-function PositionCardAccordion({ card }: { card: PositionCardData }) {
-  const stockBasket   = useScanStore((s) => s.stockBasket);
-  const addToBasket   = useScanStore((s) => s.addToStockBasket);
-  const removeBasket  = useScanStore((s) => s.removeFromStockBasket);
-  const addPosition   = usePortfolioStore((s) => s.addPosition);
-  const ibkrPaper     = useSettingsStore((s) => s.ibkrPaper);
-  const tradierPaper  = useSettingsStore((s) => s.tradierPaper);
-
-  const [execMode, setExecMode] = useState<ExecutionMode>('recommendation');
-  const [placingType, setPlacingType] = useState<'LMT' | 'MKT' | null>(null);
-  const [orderId, setOrderId] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [added, setAdded] = useState(false);
-  const [alpacaConfigured, setAlpacaConfigured] = useState(false);
-
-  const pinned = stockBasket.some((c) => c.symbol === card.symbol);
-  const ibkrConfigured    = !!ibkrPaper.accountId && !!ibkrPaper.baseUrl;
-  const tradierConfigured = !!tradierPaper.token && !!tradierPaper.accountId;
-
-  useEffect(() => {
-    api.getBrokerStatus()
-      .then((s) => setAlpacaConfigured(s.alpaca_paper?.configured ?? false))
-      .catch(() => {});
-  }, []);
-
-  async function submit(orderType: 'LMT' | 'MKT') {
-    if (execMode === 'recommendation') return;
-    setPlacingType(orderType);
-    setErr(null);
-    try {
-      const res = await api.postStockOrder({
-        broker: execMode,
-        symbol: card.symbol,
-        action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
-        quantity: card.shares,
-        order_type: orderType,
-        limit_price: orderType === 'LMT' ? card.strategy.entry_price : null,
-        tif: 'DAY',
-      });
-      setOrderId(res.order_id);
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setPlacingType(null);
-    }
-  }
-
-  function onAddToPortfolio() {
-    addPosition(buildPaperStockPosition(card.symbol, card.price, card.shares));
-    setAdded(true);
-  }
-
-  return (
-    <div className={styles.accordion}>
-      <div className={styles.grid4}>
-        <div><Text size={10} tone="dim">ENTRY</Text><Data size={16} weight={500}>${card.strategy.entry_price}</Data></div>
-        <div><Text size={10} tone="dim">STOP</Text><Data size={16} weight={500} tone="reject">${card.strategy.stop_price}</Data></div>
-        <div><Text size={10} tone="dim">TARGET</Text><Data size={16} weight={500} tone="pass">${card.strategy.target_price}</Data></div>
-        <div><Text size={10} tone="dim">R:R</Text><Data size={16} weight={500}>{card.strategy.rr_ratio.toFixed(1)}</Data></div>
-      </div>
-      <div className={styles.grid4}>
-        <div><Text size={10} tone="dim">SHARES</Text><Data size={16} weight={500}>{card.shares}</Data></div>
-        <div><Text size={10} tone="dim">RISK $</Text><Data size={16} weight={500}>{card.dollar_risk.toFixed(0)}</Data></div>
-        <div><Text size={10} tone="dim">SIZE $</Text><Data size={16} weight={500}>{card.dollar_size.toFixed(0)}</Data></div>
-        <div><Text size={10} tone="dim">WIN %</Text><Data size={16} weight={500} tone={card.backtest.win_rate >= 0.5 ? 'pass' : 'caution'}>{(card.backtest.win_rate * 100).toFixed(0)}%</Data></div>
-      </div>
-
-      <div className={styles.actionRow}>
-        <Link href={`/chart?symbol=${encodeURIComponent(card.symbol)}`} className={styles.actionBtn}>View Chart</Link>
-        <button type="button" className={styles.actionBtn}
-          onClick={() => (pinned ? removeBasket(card.symbol) : addToBasket(card))}>
-          {pinned ? 'Unpin from Basket' : 'Pin to Basket'}
-        </button>
-        <button type="button" className={styles.actionBtn} onClick={onAddToPortfolio} disabled={added}>
-          {added ? 'Added to Portfolio' : 'Add to Portfolio'}
-        </button>
-      </div>
-
-      <div className={styles.modeRow}>
-        {([
-          ['recommendation', 'Recommendation', true],
-          ['ibkr_paper', 'IBKR Paper', ibkrConfigured],
-          ['tradier_paper', 'Tradier Paper', tradierConfigured],
-          ['alpaca_paper', 'Alpaca Paper', alpacaConfigured],
-        ] as Array<[ExecutionMode, string, boolean]>).map(([mode, label, ok]) => (
-          <button key={mode} type="button"
-            className={`${styles.modeBtn} ${execMode === mode ? styles.modeBtnActive : ''}`}
-            disabled={!ok}
-            title={!ok ? 'Not configured — Settings → Brokers' : undefined}
-            onClick={() => setExecMode(mode)}>
-            <Text size={12} weight={500}>{label}</Text>
-          </button>
-        ))}
-      </div>
-
-      {execMode !== 'recommendation' && (
-        <div className={styles.actionRow}>
-          <button type="button" className={styles.actionBtn} onClick={() => submit('LMT')} disabled={placingType !== null}>
-            {placingType === 'LMT' ? 'Placing…' : `Limit @ $${card.strategy.entry_price}`}
-          </button>
-          <button type="button" className={styles.actionBtn} onClick={() => submit('MKT')} disabled={placingType !== null}>
-            {placingType === 'MKT' ? 'Placing…' : 'Market Order'}
-          </button>
-        </div>
+      {showSendDialog && (
+        <StockSendDialog
+          cards={stockBasket}
+          onClose={() => setShowSendDialog(false)}
+          onSubmit={(_orders: StockDraftOrder[]) => {
+            setShowSendDialog(false);
+          }}
+        />
       )}
-
-      {orderId && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
-      {err && <Text size={12} tone="reject">{err}</Text>}
     </div>
   );
 }
+
