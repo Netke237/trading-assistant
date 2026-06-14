@@ -5,7 +5,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Status } from './status';
 import type { Direction, OptionContract, TradeCardData } from '@/types/domain';
-import type { StockScanResult } from '@/types/stockDomain';
+import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
@@ -76,6 +76,10 @@ interface ScanStoreState {
   /** Previous stock scan result for delta calculation (rankDelta / scoreDelta). */
   previousStockScanResult:  StockScanResult | null;
   setStockScanResult:  (r: StockScanResult | null) => void;
+  stockBasket:           PositionCardData[];
+  addToStockBasket:      (card: PositionCardData) => void;
+  removeFromStockBasket: (symbol: string) => void;
+  clearStockBasket:      () => void;
   activeStrategy:      string | null;
   setActiveStrategy:   (s: string | null) => void;
 }
@@ -116,12 +120,20 @@ export const useScanStore = create<ScanStoreState>()(
       screenerMode:             'options',
       stockScanResult:          null,
       previousStockScanResult:  null,
+      stockBasket:           [],
       activeStrategy:           null,
       setScreenerMode:     (m) => set({ screenerMode: m }),
       setStockScanResult:  (r) => set((state) => ({
         stockScanResult: r,
         previousStockScanResult: r !== null ? state.stockScanResult : state.previousStockScanResult,
       })),
+      addToStockBasket:      (card) => set((s) => ({
+        stockBasket: [...s.stockBasket.filter((c) => c.symbol !== card.symbol), card],
+      })),
+      removeFromStockBasket: (symbol) => set((s) => ({
+        stockBasket: s.stockBasket.filter((c) => c.symbol !== symbol),
+      })),
+      clearStockBasket:      () => set({ stockBasket: [] }),
       setActiveStrategy:   (s) => set({ activeStrategy: s }),
     }),
     {
@@ -154,6 +166,7 @@ export const useScanStore = create<ScanStoreState>()(
         activeStrategy:           state.activeStrategy,
         stockScanResult:          state.stockScanResult,
         previousStockScanResult:  state.previousStockScanResult,
+        stockBasket:     state.stockBasket,
       }),
       merge: (persisted, current) => {
         const p = persisted as Partial<ScanStoreState>;

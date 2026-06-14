@@ -197,4 +197,26 @@ describe('scanStore', () => {
     expect(result.current.stockScanResult).toBeNull();
     expect(result.current.previousStockScanResult).toEqual(first);
   });
+
+  it('adds, dedupes by symbol, removes and clears the stock basket', () => {
+    const { result } = renderHook(() => useScanStore());
+    act(() => { useScanStore.setState({ stockBasket: [] }); });
+
+    const aapl = { symbol: 'AAPL' } as any;
+    const aapl2 = { symbol: 'AAPL' } as any;  // same symbol, newer card
+    const msft = { symbol: 'MSFT' } as any;
+
+    act(() => { result.current.addToStockBasket(aapl); });
+    act(() => { result.current.addToStockBasket(msft); });
+    expect(result.current.stockBasket.map((c) => c.symbol)).toEqual(['AAPL', 'MSFT']);
+
+    act(() => { result.current.addToStockBasket(aapl2); });   // replaces AAPL, no dupe
+    expect(result.current.stockBasket.filter((c) => c.symbol === 'AAPL')).toHaveLength(1);
+
+    act(() => { result.current.removeFromStockBasket('AAPL'); });
+    expect(result.current.stockBasket.map((c) => c.symbol)).toEqual(['MSFT']);
+
+    act(() => { result.current.clearStockBasket(); });
+    expect(result.current.stockBasket).toEqual([]);
+  });
 });
