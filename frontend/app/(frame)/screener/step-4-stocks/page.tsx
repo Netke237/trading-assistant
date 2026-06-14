@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
@@ -11,6 +11,11 @@ import { runStockScan } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
 import type { PositionCardData } from '@/types/stockDomain';
+import Link from 'next/link';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useSettingsStore } from '@/lib/settingsStore';
+import { buildPaperStockPosition } from '@/lib/paperTrade';
+import { api } from '@/lib/api';
 import styles from './page.module.css';
 
 const STRATEGIES = [
@@ -210,6 +215,115 @@ export default function Step4StocksPage() {
   );
 }
 
+type ExecutionMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper';
+
 function PositionCardAccordion({ card }: { card: PositionCardData }) {
-  return <div className={styles.accordion}><Text size={12} tone="dim">{card.symbol} details…</Text></div>;
+  const stockBasket   = useScanStore((s) => s.stockBasket);
+  const addToBasket   = useScanStore((s) => s.addToStockBasket);
+  const removeBasket  = useScanStore((s) => s.removeFromStockBasket);
+  const addPosition   = usePortfolioStore((s) => s.addPosition);
+  const settings      = useSettingsStore();
+
+  const [execMode, setExecMode] = useState<ExecutionMode>('recommendation');
+  const [placingType, setPlacingType] = useState<'LMT' | 'MKT' | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [added, setAdded] = useState(false);
+  const [alpacaConfigured, setAlpacaConfigured] = useState(false);
+
+  const pinned = stockBasket.some((c) => c.symbol === card.symbol);
+  const ibkrConfigured    = !!settings.ibkrPaper.accountId && !!settings.ibkrPaper.baseUrl;
+  const tradierConfigured = !!settings.tradierPaper.token && !!settings.tradierPaper.accountId;
+
+  useEffect(() => {
+    api.getBrokerStatus()
+      .then((s) => setAlpacaConfigured(s.alpaca_paper?.configured ?? false))
+      .catch(() => {});
+  }, []);
+
+  async function submit(orderType: 'LMT' | 'MKT') {
+    if (execMode === 'recommendation') return;
+    setPlacingType(orderType);
+    setErr(null);
+    try {
+      const res = await api.postStockOrder({
+        broker: execMode,
+        symbol: card.symbol,
+        action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        quantity: card.shares,
+        order_type: orderType,
+        limit_price: orderType === 'LMT' ? card.strategy.entry_price : null,
+        tif: 'DAY',
+      });
+      setOrderId(res.order_id);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setPlacingType(null);
+    }
+  }
+
+  function onAddToPortfolio() {
+    addPosition(buildPaperStockPosition(card.symbol, card.price, card.shares));
+    setAdded(true);
+  }
+
+  return (
+    <div className={styles.accordion}>
+      <div className={styles.grid4}>
+        <div><Text size={10} tone="dim">ENTRY</Text><Data size={16} weight={500}>${card.strategy.entry_price}</Data></div>
+        <div><Text size={10} tone="dim">STOP</Text><Data size={16} weight={500} tone="reject">${card.strategy.stop_price}</Data></div>
+        <div><Text size={10} tone="dim">TARGET</Text><Data size={16} weight={500} tone="pass">${card.strategy.target_price}</Data></div>
+        <div><Text size={10} tone="dim">R:R</Text><Data size={16} weight={500}>{card.strategy.rr_ratio.toFixed(1)}</Data></div>
+      </div>
+      <div className={styles.grid4}>
+        <div><Text size={10} tone="dim">SHARES</Text><Data size={16} weight={500}>{card.shares}</Data></div>
+        <div><Text size={10} tone="dim">RISK $</Text><Data size={16} weight={500}>{card.dollar_risk.toFixed(0)}</Data></div>
+        <div><Text size={10} tone="dim">SIZE $</Text><Data size={16} weight={500}>{card.dollar_size.toFixed(0)}</Data></div>
+        <div><Text size={10} tone="dim">WIN %</Text><Data size={16} weight={500} tone={card.backtest.win_rate >= 0.5 ? 'pass' : 'caution'}>{(card.backtest.win_rate * 100).toFixed(0)}%</Data></div>
+      </div>
+
+      <div className={styles.actionRow}>
+        <Link href={`/chart?symbol=${encodeURIComponent(card.symbol)}`} className={styles.actionBtn}>View Chart</Link>
+        <button type="button" className={styles.actionBtn}
+          onClick={() => (pinned ? removeBasket(card.symbol) : addToBasket(card))}>
+          {pinned ? 'Unpin from Basket' : 'Pin to Basket'}
+        </button>
+        <button type="button" className={styles.actionBtn} onClick={onAddToPortfolio} disabled={added}>
+          {added ? 'Added to Portfolio' : 'Add to Portfolio'}
+        </button>
+      </div>
+
+      <div className={styles.modeRow}>
+        {([
+          ['recommendation', 'Recommendation', true],
+          ['ibkr_paper', 'IBKR Paper', ibkrConfigured],
+          ['tradier_paper', 'Tradier Paper', tradierConfigured],
+          ['alpaca_paper', 'Alpaca Paper', alpacaConfigured],
+        ] as Array<[ExecutionMode, string, boolean]>).map(([mode, label, ok]) => (
+          <button key={mode} type="button"
+            className={`${styles.modeBtn} ${execMode === mode ? styles.modeBtnActive : ''}`}
+            disabled={!ok}
+            title={!ok ? 'Not configured — Settings → Brokers' : undefined}
+            onClick={() => setExecMode(mode)}>
+            <Text size={12} weight={500}>{label}</Text>
+          </button>
+        ))}
+      </div>
+
+      {execMode !== 'recommendation' && (
+        <div className={styles.actionRow}>
+          <button type="button" className={styles.actionBtn} onClick={() => submit('LMT')} disabled={placingType !== null}>
+            {placingType === 'LMT' ? 'Placing…' : `Limit @ $${card.strategy.entry_price}`}
+          </button>
+          <button type="button" className={styles.actionBtn} onClick={() => submit('MKT')} disabled={placingType !== null}>
+            {placingType === 'MKT' ? 'Placing…' : 'Market Order'}
+          </button>
+        </div>
+      )}
+
+      {orderId && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
+      {err && <Text size={12} tone="reject">{err}</Text>}
+    </div>
+  );
 }

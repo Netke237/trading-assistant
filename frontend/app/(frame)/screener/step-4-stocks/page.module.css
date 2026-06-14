@@ -40,3 +40,16 @@
 .rejectedSection { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
 .rejectedSection summary { cursor: pointer; }
 .tableBody { display: flex; flex-direction: column; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.grid4 > div { display: flex; flex-direction: column; gap: 2px; }
+.actionRow { display: flex; flex-wrap: wrap; gap: 8px; }
+.actionBtn {
+  padding: 6px 12px; border: 1px solid var(--border-subtle); border-radius: 6px;
+  background: var(--bg-surface); cursor: pointer; font-size: 12px; color: var(--text-primary);
+  text-decoration: none; display: inline-flex; align-items: center;
+}
+.actionBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.modeRow { display: flex; flex-wrap: wrap; gap: 8px; }
+.modeBtn { padding: 6px 12px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface); cursor: pointer; }
+.modeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.modeBtnActive { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
