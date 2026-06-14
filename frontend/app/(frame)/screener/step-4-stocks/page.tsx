@@ -24,10 +24,15 @@ const REGIME_FIT: Record<string, Partial<Record<string, RegimeFit>>> = {
   ma_crossover:       { PASS: 'CAUTION', CAUTION: 'CAUTION', REJECT: 'REJECT'  },
   mean_reversion_rsi: { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
 };
-const REGIME_BADGE: Record<RegimeFit, { label: string; cls: string }> = {
-  PASS:    { label: 'Recommended', cls: 'regimeBadgePass'    },
-  CAUTION: { label: 'Neutral',     cls: 'regimeBadgeCaution' },
-  REJECT:  { label: 'Avoid',       cls: 'regimeBadgeReject'  },
+const REGIME_BADGE: Record<RegimeFit, { label: string }> = {
+  PASS:    { label: 'Recommended' },
+  CAUTION: { label: 'Neutral'     },
+  REJECT:  { label: 'Avoid'       },
+};
+const BADGE_CLASS: Record<RegimeFit, string> = {
+  PASS:    styles.regimeBadgePass,
+  CAUTION: styles.regimeBadgeCaution,
+  REJECT:  styles.regimeBadgeReject,
 };
 
 export default function Step4StocksPage() {
@@ -90,7 +95,7 @@ export default function Step4StocksPage() {
 
       <div className={styles.grid}>
         {STRATEGIES.map((s) => {
-          const fit = REGIME_FIT[s.key]?.[combinedRegime] as RegimeFit | undefined;
+          const fit = REGIME_FIT[s.key]?.[combinedRegime];
           const badge = fit ? REGIME_BADGE[fit] : null;
           return (
             <button
@@ -100,9 +105,9 @@ export default function Step4StocksPage() {
               onClick={() => setSelected(s.key)}
             >
               <div className={styles.cardHeader}>
-                <Text size={14} weight={600}>{strategyLabel[s.key] ?? s.label}</Text>
+                <Text size={14} weight={500}>{strategyLabel[s.key] ?? s.label}</Text>
                 <Text size={11} tone="secondary">{s.when}</Text>
-                {badge && <span className={`${styles.regimeBadge} ${(styles as Record<string, string>)[badge.cls]}`}>{badge.label}</span>}
+                {badge && fit && <span className={`${styles.regimeBadge} ${BADGE_CLASS[fit]}`}>{badge.label}</span>}
               </div>
               <div className={styles.cardBody}>
                 <Text size={11} tone="dim">Entry: {entryLabel[s.key] ?? s.entry}</Text>
@@ -135,7 +140,7 @@ export default function Step4StocksPage() {
       {error && <Text size={12} tone="reject">{error}</Text>}
 
       {result?.pipeline && (
-        <details className={styles.logPanel} open={false}>
+        <details className={styles.logPanel}>
           <summary><Text size={12} tone="secondary">Pipeline log</Text></summary>
           <ScanFunnel mode="stock" pipeline={result.pipeline} />
         </details>
