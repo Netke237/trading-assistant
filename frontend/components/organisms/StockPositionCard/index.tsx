@@ -1,0 +1,374 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import { Text, Data } from '@/components/primitives';
+import { useScanStore } from '@/lib/scanStore';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useSettingsStore } from '@/lib/settingsStore';
+import { buildPaperStockPosition } from '@/lib/paperTrade';
+import { api } from '@/lib/api';
+import type { PositionCardData } from '@/types/stockDomain';
+import styles from './StockPositionCard.module.css';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface StockEditOverlay {
+  entry: number;
+  stop: number;
+  shares: number;
+  t1: number;
+  t2: number;
+  t3: number;
+  sharesT1: number;
+  sharesT2: number;
+  sharesT3: number;
+}
+
+interface StockPositionCardProps {
+  card: PositionCardData;
+  strategyKey: string;
+  afterScanArmed?: boolean;
+  onAfterScanToggle?: (symbol: string, armed: boolean) => void;
+}
+
+type ExecMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function defaultOverlay(card: PositionCardData): StockEditOverlay {
+  const entry = card.strategy.entry_price;
+  const stop  = card.strategy.stop_price;
+  const risk  = Math.max(0.01, entry - stop);
+  const t1    = card.strategy.target_price;
+  const t2    = Math.round((entry + 2 * risk) * 100) / 100;
+  const t3    = Math.round((entry + 3 * risk) * 100) / 100;
+  const s     = card.shares;
+  const s1    = Math.floor(s / 3);
+  const s2    = Math.floor(s / 3);
+  return { entry, stop, shares: s, t1, t2, t3, sharesT1: s1, sharesT2: s2, sharesT3: s - s1 - s2 };
+}
+
+// ─── EditableField ────────────────────────────────────────────────────────────
+
+function EditableField({
+  label,
+  value,
+  onChange,
+  tone,
+  decimals = 2,
+  integer = false,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  tone?: 'pass' | 'caution' | 'reject';
+  decimals?: number;
+  integer?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft]     = useState('');
+
+  const startEdit = () => { setDraft(String(value)); setEditing(true); };
+  const save = () => {
+    const p = parseFloat(draft);
+    if (!isNaN(p) && p > 0) onChange(integer ? Math.round(p) : Math.round(p * 100) / 100);
+    setEditing(false);
+  };
+
+  return (
+    <div className={styles.editCell}>
+      <Text size={10} tone="dim">{label}</Text>
+      {editing ? (
+        <input
+          type="number"
+          className={styles.editInput}
+          value={draft}
+          min={0.01}
+          step={integer ? 1 : 0.01}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') save();
+            if (e.key === 'Escape') setEditing(false);
+          }}
+          autoFocus
+        />
+      ) : (
+        <span
+          className={styles.editValue}
+          onClick={startEdit}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') startEdit(); }}
+        >
+          <Data size={14} weight={500} tone={tone}>
+            {integer ? String(value) : value.toFixed(decimals)}
+          </Data>
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── StockPositionCard ────────────────────────────────────────────────────────
+
+export function StockPositionCard({
+  card,
+  strategyKey: _strategyKey,
+  afterScanArmed: _afterScanArmed,
+  onAfterScanToggle: _onAfterScanToggle,
+}: StockPositionCardProps) {
+  const [overlay, setOverlay] = useState<StockEditOverlay>(() => defaultOverlay(card));
+
+  // Reset overlay when the selected symbol changes
+  useEffect(() => {
+    setOverlay(defaultOverlay(card));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card.symbol]);
+
+  const patch = useCallback((partial: Partial<StockEditOverlay>) => {
+    setOverlay((prev) => ({ ...prev, ...partial }));
+  }, []);
+
+  // Derived values
+  const riskPerShare = Math.max(0.01, overlay.entry - overlay.stop);
+  const riskDollars  = overlay.shares * riskPerShare;
+  const sizeDollars  = overlay.shares * overlay.entry;
+  const rrAt = (t: number) => (t - overlay.entry) / riskPerShare;
+
+  // Store selectors
+  const stockBasket  = useScanStore((s) => s.stockBasket);
+  const addToBasket  = useScanStore((s) => s.addToStockBasket);
+  const removeBasket = useScanStore((s) => s.removeFromStockBasket);
+  const addPosition  = usePortfolioStore((s) => s.addPosition);
+  const ibkrPaper    = useSettingsStore((s) => s.ibkrPaper);
+  const tradierPaper = useSettingsStore((s) => s.tradierPaper);
+
+  const [execMode, setExecMode]         = useState<ExecMode>('recommendation');
+  const [placingType, setPlacingType]   = useState<'LMT' | 'MKT' | null>(null);
+  const [orderId, setOrderId]           = useState<string | null>(null);
+  const [err, setErr]                   = useState<string | null>(null);
+  const [added, setAdded]               = useState(false);
+  const [alpacaConfigured, setAlpacaConfigured] = useState(false);
+
+  const pinned            = stockBasket.some((c) => c.symbol === card.symbol);
+  const ibkrConfigured    = !!ibkrPaper.accountId && !!ibkrPaper.baseUrl;
+  const tradierConfigured = !!tradierPaper.token && !!tradierPaper.accountId;
+
+  useEffect(() => {
+    api.getBrokerStatus()
+      .then((s) => setAlpacaConfigured(s.alpaca_paper?.configured ?? false))
+      .catch(() => {});
+  }, []);
+
+  async function submit(orderType: 'LMT' | 'MKT') {
+    if (execMode === 'recommendation') return;
+    setPlacingType(orderType);
+    setErr(null);
+    try {
+      const res = await api.postStockOrder({
+        broker: execMode,
+        symbol: card.symbol,
+        action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        quantity: overlay.shares,
+        order_type: orderType,
+        limit_price: orderType === 'LMT' ? overlay.entry : null,
+        tif: 'DAY',
+      });
+      setOrderId(res.order_id);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setPlacingType(null);
+    }
+  }
+
+  function onAddToPortfolio() {
+    addPosition(buildPaperStockPosition(card.symbol, overlay.entry, overlay.shares));
+    setAdded(true);
+  }
+
+  const rrT1 = rrAt(overlay.t1);
+  const rrT2 = rrAt(overlay.t2);
+  const rrT3 = rrAt(overlay.t3);
+
+  const winTone = card.backtest.win_rate >= 0.5
+    ? ('pass' as const)
+    : ('caution' as const);
+
+  return (
+    <div className={styles.wrap}>
+
+      {/* Section 1 — Sizing grid, Row 1 */}
+      <div className={styles.grid4}>
+        <EditableField label="ENTRY"    value={overlay.entry} onChange={(v) => patch({ entry: v })} />
+        <EditableField label="STOP"     value={overlay.stop}  onChange={(v) => patch({ stop: v })}  tone="reject" />
+        <EditableField label="T1 TARGET" value={overlay.t1}  onChange={(v) => patch({ t1: v })}    tone="pass" />
+        <div className={styles.editCell}>
+          <Text size={10} tone="dim">R:R AT T1</Text>
+          <Data size={14} weight={500}>{rrT1.toFixed(1)}×</Data>
+        </div>
+      </div>
+
+      {/* Section 1 — Sizing grid, Row 2 */}
+      <div className={styles.grid4}>
+        <EditableField
+          label="SHARES"
+          value={overlay.shares}
+          onChange={(v) => patch({ shares: Math.max(1, Math.round(v)) })}
+          integer
+        />
+        <div className={styles.editCell}>
+          <Text size={10} tone="dim">RISK $</Text>
+          <Data size={14} weight={500} tone="reject">{riskDollars.toFixed(0)}</Data>
+        </div>
+        <div className={styles.editCell}>
+          <Text size={10} tone="dim">SIZE $</Text>
+          <Data size={14} weight={500}>{sizeDollars.toFixed(0)}</Data>
+        </div>
+        <div className={styles.editCell}>
+          <Text size={10} tone="dim">WIN %</Text>
+          <Data size={14} weight={500} tone={winTone}>
+            {(card.backtest.win_rate * 100).toFixed(0)}%
+          </Data>
+        </div>
+      </div>
+
+      {/* Section 2 — Sell-to-Close plan (T1 / T2 / T3) */}
+      <div className={styles.targetsSection}>
+        <div className={styles.targetsHeading}>
+          <Text size={11} tone="dim">SELL-TO-CLOSE PLAN</Text>
+        </div>
+
+        {([
+          {
+            id: 'T1',
+            price: overlay.t1,
+            onPrice: (v: number) => patch({ t1: v }),
+            shares: overlay.sharesT1,
+            onShares: (v: number) => patch({ sharesT1: v }),
+            rr: rrT1,
+          },
+          {
+            id: 'T2',
+            price: overlay.t2,
+            onPrice: (v: number) => patch({ t2: v }),
+            shares: overlay.sharesT2,
+            onShares: (v: number) => patch({ sharesT2: v }),
+            rr: rrT2,
+          },
+          {
+            id: 'T3',
+            price: overlay.t3,
+            onPrice: (v: number) => patch({ t3: v }),
+            shares: overlay.sharesT3,
+            onShares: (v: number) => patch({ sharesT3: v }),
+            rr: rrT3,
+          },
+        ] as const).map(({ id, price, onPrice, shares: sh, onShares, rr }) => {
+          const retPct = overlay.entry > 0
+            ? ((price - overlay.entry) / overlay.entry * 100).toFixed(1)
+            : '0.0';
+          return (
+            <div key={id} className={styles.targetRow}>
+              <div className={styles.targetLabel}>
+                <Text size={12} weight={500}>{id}</Text>
+              </div>
+              <div className={styles.targetValues}>
+                <EditableField label="" value={price} onChange={onPrice} />
+                <Data size={12} tone={rr >= 1.5 ? 'pass' : rr >= 1 ? 'caution' : 'reject'}>
+                  {rr.toFixed(1)}×
+                </Data>
+                <Data size={12} tone={parseFloat(retPct) > 0 ? 'pass' : 'reject'}>
+                  {retPct}%
+                </Data>
+                <EditableField
+                  label=""
+                  value={sh}
+                  onChange={(v) => onShares(Math.max(0, Math.round(v)))}
+                  integer
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Section 3 — Action buttons */}
+      <div className={styles.actionRow}>
+        <Link
+          href={`/chart?symbol=${encodeURIComponent(card.symbol)}`}
+          className={styles.actionBtn}
+        >
+          View Chart
+        </Link>
+        <button
+          type="button"
+          className={styles.actionBtn}
+          onClick={() => (pinned ? removeBasket(card.symbol) : addToBasket(card))}
+        >
+          {pinned ? 'Unpin from Basket' : 'Pin to Basket'}
+        </button>
+        <button
+          type="button"
+          className={styles.actionBtn}
+          onClick={onAddToPortfolio}
+          disabled={added}
+        >
+          {added ? 'Added to Portfolio' : 'Add to Portfolio'}
+        </button>
+      </div>
+
+      {/* Section 4 — Broker mode selector */}
+      <div className={styles.modeRow}>
+        {([
+          ['recommendation', 'Recommendation', true],
+          ['ibkr_paper',    'IBKR Paper',      ibkrConfigured],
+          ['tradier_paper', 'Tradier Paper',   tradierConfigured],
+          ['alpaca_paper',  'Alpaca Paper',    alpacaConfigured],
+        ] as Array<[ExecMode, string, boolean]>).map(([mode, label, ok]) => (
+          <button
+            key={mode}
+            type="button"
+            className={`${styles.modeBtn} ${execMode === mode ? styles.modeBtnActive : ''}`}
+            disabled={!ok}
+            title={!ok ? 'Not configured — Settings → Brokers' : undefined}
+            onClick={() => setExecMode(mode)}
+          >
+            <Text size={12} weight={500}>{label}</Text>
+          </button>
+        ))}
+      </div>
+
+      {/* Section 5 — Order buttons */}
+      {execMode !== 'recommendation' && (
+        <div className={styles.actionRow}>
+          <button
+            type="button"
+            className={styles.actionBtn}
+            onClick={() => submit('LMT')}
+            disabled={placingType !== null}
+          >
+            {placingType === 'LMT' ? 'Placing…' : `Limit @ $${overlay.entry.toFixed(2)}`}
+          </button>
+          <button
+            type="button"
+            className={styles.actionBtn}
+            onClick={() => submit('MKT')}
+            disabled={placingType !== null}
+          >
+            {placingType === 'MKT' ? 'Placing…' : 'Market Order'}
+          </button>
+        </div>
+      )}
+
+      {/* Section 6 — Order result / error */}
+      {orderId && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
+      {err      && <Text size={12} tone="reject">{err}</Text>}
+
+      {/* StockAutoTradeArm — wired in Task 4 */}
+
+    </div>
+  );
+}

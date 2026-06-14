@@ -1,0 +1,64 @@
+.wrap { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
+
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+.editCell { display: flex; flex-direction: column; gap: 2px; }
+
+.editInput {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 4px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.editValue { cursor: pointer; }
+.editValue:hover { text-decoration: underline; text-decoration-style: dotted; }
+
+.targetsSection { display: flex; flex-direction: column; gap: 4px; }
+.targetsHeading { padding-bottom: 4px; border-bottom: 1px solid var(--border-subtle); }
+
+.targetRow {
+  display: grid;
+  grid-template-columns: 40px 1fr 1fr 1fr 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.targetLabel { }
+.targetValues { display: contents; }
+
+.actionRow { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.actionBtn {
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.actionBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.modeRow { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.modeBtn {
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  cursor: pointer;
+}
+.modeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.modeBtnActive {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
+}
