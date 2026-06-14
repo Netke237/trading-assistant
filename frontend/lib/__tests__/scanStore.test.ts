@@ -170,4 +170,31 @@ describe('scanStore', () => {
     });
     expect(result.current.scanResult).toBeNull();
   });
+
+  it('shifts old stockScanResult into previousStockScanResult on new result', () => {
+    const { result } = renderHook(() => useScanStore());
+    const first  = { scan_id: 'S-1', timestamp: 't1', rejected: [], candidates: [] };
+    const second = { scan_id: 'S-2', timestamp: 't2', rejected: [], candidates: [] };
+
+    act(() => { result.current.setStockScanResult(first as any); });
+    expect(result.current.stockScanResult).toEqual(first);
+    expect(result.current.previousStockScanResult).toBeNull();
+
+    act(() => { result.current.setStockScanResult(second as any); });
+    expect(result.current.stockScanResult).toEqual(second);
+    expect(result.current.previousStockScanResult).toEqual(first);
+  });
+
+  it('preserves previousStockScanResult when clearing stockScanResult', () => {
+    const { result } = renderHook(() => useScanStore());
+    const first  = { scan_id: 'S-1', timestamp: 't1', rejected: [], candidates: [] };
+    const second = { scan_id: 'S-2', timestamp: 't2', rejected: [], candidates: [] };
+
+    act(() => { result.current.setStockScanResult(first as any); });
+    act(() => { result.current.setStockScanResult(second as any); });
+    act(() => { result.current.setStockScanResult(null); });
+
+    expect(result.current.stockScanResult).toBeNull();
+    expect(result.current.previousStockScanResult).toEqual(first);
+  });
 });

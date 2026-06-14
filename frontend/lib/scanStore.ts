@@ -72,7 +72,9 @@ interface ScanStoreState {
   setContractsBySymbol: (map: Record<string, OptionContract[]>) => void;
   screenerMode:        'options' | 'stocks';
   setScreenerMode:     (m: 'options' | 'stocks') => void;
-  stockScanResult:     StockScanResult | null;
+  stockScanResult:          StockScanResult | null;
+  /** Previous stock scan result for delta calculation (rankDelta / scoreDelta). */
+  previousStockScanResult:  StockScanResult | null;
   setStockScanResult:  (r: StockScanResult | null) => void;
   activeStrategy:      string | null;
   setActiveStrategy:   (s: string | null) => void;
@@ -111,11 +113,15 @@ export const useScanStore = create<ScanStoreState>()(
       setPickedContract:    (symbol, contractId) => set(s => ({ pickedContracts: { ...s.pickedContracts, [symbol]: contractId } })),
       clearPickedContracts: () => set({ pickedContracts: {} }),
       setContractsBySymbol: (map) => set({ contractsBySymbol: map }),
-      screenerMode:        'options',
-      stockScanResult:     null,
-      activeStrategy:      null,
+      screenerMode:             'options',
+      stockScanResult:          null,
+      previousStockScanResult:  null,
+      activeStrategy:           null,
       setScreenerMode:     (m) => set({ screenerMode: m }),
-      setStockScanResult:  (r) => set({ stockScanResult: r }),
+      setStockScanResult:  (r) => set((state) => ({
+        stockScanResult: r,
+        previousStockScanResult: r !== null ? state.stockScanResult : state.previousStockScanResult,
+      })),
       setActiveStrategy:   (s) => set({ activeStrategy: s }),
     }),
     {
@@ -125,12 +131,13 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 4,
+      version: 5,
       migrate: (persistedState, version) => {
         const prev = (persistedState ?? {}) as any;
         if (version < 2) return { ...prev, pickedContracts: {} };
         if (version < 3) return { ...prev, scanDurationMs: null };
         if (version < 4) return { ...prev, screenerMode: 'options', stockScanResult: null, activeStrategy: null };
+        if (version < 5) return { ...prev, previousStockScanResult: null, stockBasket: [] };
         return prev;
       },
       partialize: (state) => ({
@@ -143,9 +150,10 @@ export const useScanStore = create<ScanStoreState>()(
         // Persist terminal states so the COMPLETED/FAILED pill survives a restart.
         // SCANNING / IDLE are never persisted — they'd be stale after reload.
         scanState:       state.scanState,
-        screenerMode:    state.screenerMode,
-        activeStrategy:  state.activeStrategy,
-        stockScanResult: state.stockScanResult,
+        screenerMode:             state.screenerMode,
+        activeStrategy:           state.activeStrategy,
+        stockScanResult:          state.stockScanResult,
+        previousStockScanResult:  state.previousStockScanResult,
       }),
       merge: (persisted, current) => {
         const p = persisted as Partial<ScanStoreState>;
