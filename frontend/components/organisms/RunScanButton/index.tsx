@@ -19,6 +19,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useAlertStore } from '@/lib/alertStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
+import { runStockScan } from '@/lib/stockScan';
 import styles from './index.module.css';
 
 function nowLocalISO(): string {
@@ -42,10 +43,12 @@ function parseSymbols(raw: string): string[] {
 }
 
 export function RunScanButton() {
-  const scanState    = useScanStore((s) => s.scanState);
-  const setScanState = useScanStore((s) => s.setScanState);
-  const setScanResult = useScanStore((s) => s.setScanResult);
-  const context      = useScanStore((s) => s.context);
+  const scanState      = useScanStore((s) => s.scanState);
+  const setScanState   = useScanStore((s) => s.setScanState);
+  const setScanResult  = useScanStore((s) => s.setScanResult);
+  const context        = useScanStore((s) => s.context);
+  const screenerMode   = useScanStore((s) => s.screenerMode);
+  const activeStrategy = useScanStore((s) => s.activeStrategy);
   const pick         = useUniverseStore((s) => s.pick);
   const customRaw    = useUniverseStore((s) => s.customRaw);
   const minPriceRaw  = useUniverseStore((s) => s.minPriceRaw);
@@ -62,6 +65,12 @@ export function RunScanButton() {
 
   const onClick = useCallback(() => {
     if (scanning) return;
+
+    if (screenerMode === 'stocks') {
+      if (!activeStrategy) return;
+      void runStockScan(activeStrategy);
+      return;
+    }
 
     const universe =
       pick === 'Custom'
@@ -162,7 +171,7 @@ export function RunScanButton() {
           alertType: 'SCAN_FAILED',
         });
       });
-  }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit]);
+  }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit, screenerMode, activeStrategy]);
 
   return (
     <>
@@ -199,13 +208,13 @@ export function RunScanButton() {
         onClick={onClick}
         disabled={scanning || customEmpty}
         title={customEmpty ? 'Enter at least one valid symbol' : undefined}
-        aria-label={scanning ? 'Scan in progress' : 'Run scan'}
+        aria-label={scanning ? 'Scan in progress' : screenerMode === 'stocks' ? 'Run stock scan' : 'Run scan'}
         aria-live="polite"
       >
         <span className={`${styles.icon} ${scanning ? styles.spin : ''}`} aria-hidden>
           {scanning ? <SpinnerIcon /> : <PlayIcon />}
         </span>
-        <span>{scanning ? 'Scanning…' : 'Run Scan'}</span>
+        <span>{scanning ? 'Scanning…' : screenerMode === 'stocks' ? 'Run Stock Scan' : 'Run Scan'}</span>
       </button>
     </>
   );

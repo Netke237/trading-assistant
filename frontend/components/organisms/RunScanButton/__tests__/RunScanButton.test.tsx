@@ -10,6 +10,8 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
+jest.mock('@/lib/stockScan', () => ({ runStockScan: jest.fn().mockResolvedValue(null) }));
+
 const mockPostScan = api.postScan as jest.MockedFunction<typeof api.postScan>;
 
 function resetStores() {
@@ -19,7 +21,9 @@ function resetStores() {
     context: null,
     scanResult: null,
     conflictedSymbols: [],
-  });
+    screenerMode: 'options',
+    activeStrategy: null,
+  } as any);
   usePortfolioStore.setState({ positions: [] });
 }
 
@@ -71,6 +75,16 @@ describe('RunScanButton — conflict suppression wiring', () => {
     expect(conflicted).toContain('AAPL');
     expect(conflicted).not.toContain('MSFT');
     expect(conflicted).toHaveLength(1);
+  });
+
+  it('runs a stock scan when screenerMode is stocks and a strategy is active', async () => {
+    const { runStockScan } = require('@/lib/stockScan');
+    useScanStore.setState({ screenerMode: 'stocks', activeStrategy: 'pullback_ema' } as any);
+
+    render(<RunScanButton />);
+    fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
+
+    expect(runStockScan).toHaveBeenCalledWith('pullback_ema');
   });
 
   it('clears conflictedSymbols when no overlap exists', async () => {
