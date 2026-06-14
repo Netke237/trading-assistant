@@ -222,7 +222,8 @@ function PositionCardAccordion({ card }: { card: PositionCardData }) {
   const addToBasket   = useScanStore((s) => s.addToStockBasket);
   const removeBasket  = useScanStore((s) => s.removeFromStockBasket);
   const addPosition   = usePortfolioStore((s) => s.addPosition);
-  const settings      = useSettingsStore();
+  const ibkrPaper     = useSettingsStore((s) => s.ibkrPaper);
+  const tradierPaper  = useSettingsStore((s) => s.tradierPaper);
 
   const [execMode, setExecMode] = useState<ExecutionMode>('recommendation');
   const [placingType, setPlacingType] = useState<'LMT' | 'MKT' | null>(null);
@@ -232,8 +233,8 @@ function PositionCardAccordion({ card }: { card: PositionCardData }) {
   const [alpacaConfigured, setAlpacaConfigured] = useState(false);
 
   const pinned = stockBasket.some((c) => c.symbol === card.symbol);
-  const ibkrConfigured    = !!settings.ibkrPaper.accountId && !!settings.ibkrPaper.baseUrl;
-  const tradierConfigured = !!settings.tradierPaper.token && !!settings.tradierPaper.accountId;
+  const ibkrConfigured    = !!ibkrPaper.accountId && !!ibkrPaper.baseUrl;
+  const tradierConfigured = !!tradierPaper.token && !!tradierPaper.accountId;
 
   useEffect(() => {
     api.getBrokerStatus()
