@@ -55,6 +55,7 @@ export function StockAutoTradeArm({
             type="button"
             className={`${styles.modeBtn} ${mode === m ? styles.modeBtnActive : ''}`}
             onClick={() => {
+              if (m === mode) return;
               const prev = mode;
               setMode(m);
               if (m === 'after_scan') onAfterScanToggle(symbol, true);
@@ -86,7 +87,7 @@ export function StockAutoTradeArm({
                 className={styles.btn}
                 onClick={() => setWatchId(null)}
               >
-                <Text size={12}>Remove watch</Text>
+                <Text size={12}>Disarm</Text>
               </button>
             </>
           )}
