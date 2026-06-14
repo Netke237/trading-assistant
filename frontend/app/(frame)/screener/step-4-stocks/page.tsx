@@ -9,7 +9,7 @@ import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { runStockScan } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
-import { computeStockDeltas } from '@/lib/stockDelta';
+import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
 import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
 
@@ -62,7 +62,7 @@ export default function Step4StocksPage() {
   const [selected, setSelected] = useState<string | null>(activeStrategy);
   const [error, setError] = useState<string | null>(null);
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
-  const deltas = result ? computeStockDeltas(result, previous) : new Map();
+  const deltas: Map<string, StockDelta> = result ? computeStockDeltas(result, previous) : new Map();
 
   const scanning = scanState === 'SCANNING';
 
@@ -179,9 +179,9 @@ export default function Step4StocksPage() {
                   >
                     <Data size={12} weight={500}>{c.symbol}</Data>
                     <Data size={12}>{c.stock_score}</Data>
-                    <Text size={11} tone={!d ? 'dim' : d.scoreDelta > 0 ? 'pass' : d.scoreDelta < 0 ? 'reject' : 'secondary'}>
+                    <Data size={11} tone={!d ? 'dim' : d.scoreDelta > 0 ? 'pass' : d.scoreDelta < 0 ? 'reject' : 'secondary'}>
                       {!d ? '—' : `${d.scoreDelta > 0 ? '+' : ''}${d.scoreDelta}${d.rankDelta !== 0 ? ` (${d.rankDelta > 0 ? '↑' : '↓'}${Math.abs(d.rankDelta)})` : ''}`}
-                    </Text>
+                    </Data>
                     <Data size={12} tone={bt.win_rate >= 0.5 ? 'pass' : bt.win_rate >= 0.45 ? 'caution' : 'reject'}>
                       {(bt.win_rate * 100).toFixed(0)}%
                     </Data>
