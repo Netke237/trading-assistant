@@ -194,7 +194,6 @@ export default function Step5StrategyPage() {
       <StrategyParamsPanel
         params={params}
         setParams={setParams}
-        requireReversal={requireReversal}
         onReset={resetParams}
       />
 

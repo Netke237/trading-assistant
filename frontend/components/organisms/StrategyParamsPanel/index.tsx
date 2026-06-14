@@ -24,11 +24,10 @@ export interface StrategyParams {
 interface Props {
   params: StrategyParams;
   setParams: React.Dispatch<React.SetStateAction<StrategyParams>>;
-  requireReversal: boolean;
   onReset: () => void;
 }
 
-export function StrategyParamsPanel({ params, setParams, requireReversal, onReset }: Props) {
+export function StrategyParamsPanel({ params, setParams, onReset }: Props) {
   return (
     <details className={styles.paramsPanel}>
       <summary className={styles.paramsSummary}>
