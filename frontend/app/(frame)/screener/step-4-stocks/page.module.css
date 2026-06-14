@@ -16,7 +16,7 @@
 .regimeBadgeCaution { background: color-mix(in srgb, var(--caution) 18%, var(--bg-surface)); color: var(--caution); }
 .regimeBadgeReject  { background: color-mix(in srgb, var(--reject) 18%, var(--bg-surface));  color: var(--reject); }
 
-.runRow { display: flex; }
+.runRow { display: flex; gap: 12px; align-items: center; }
 .runBtn {
   padding: 8px 16px; border: 1px solid var(--accent); border-radius: 6px;
   background: var(--accent); color: var(--accent-fg); cursor: pointer; font-size: 13px;
