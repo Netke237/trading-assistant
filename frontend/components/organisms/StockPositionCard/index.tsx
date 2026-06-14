@@ -9,6 +9,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
+import { StockAutoTradeArm } from '@/components/organisms/StockAutoTradeArm';
 import styles from './StockPositionCard.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -115,9 +116,9 @@ function EditableField({
 
 export function StockPositionCard({
   card,
-  strategyKey: _strategyKey,
-  afterScanArmed: _afterScanArmed,
-  onAfterScanToggle: _onAfterScanToggle,
+  strategyKey,
+  afterScanArmed,
+  onAfterScanToggle,
 }: StockPositionCardProps) {
   const [overlay, setOverlay] = useState<StockEditOverlay>(() => defaultOverlay(card));
 
@@ -365,7 +366,13 @@ export function StockPositionCard({
       {orderId && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
       {err      && <Text size={12} tone="reject">{err}</Text>}
 
-      {/* StockAutoTradeArm — wired in Task 4 */}
+      {/* Section 7 — Auto-trade arm */}
+      <StockAutoTradeArm
+        symbol={card.symbol}
+        strategyKey={strategyKey}
+        afterScanArmed={afterScanArmed ?? false}
+        onAfterScanToggle={onAfterScanToggle ?? (() => {})}
+      />
 
     </div>
   );
