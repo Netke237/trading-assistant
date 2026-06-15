@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import itertools
+import statistics
 from dataclasses import dataclass
 from datetime import date
 
@@ -144,3 +145,61 @@ def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]]
         if pooled > best_sharpe:
             best_sharpe, best = pooled, combo
     return best or {}
+
+
+def consensus(fold_winners: list[dict]) -> dict:
+    """Aggregate winning parameters across folds via median (numeric) or mode (categorical).
+
+    For numeric values (int, float, not bool), computes the median and preserves type.
+    For non-numeric values (strings, bools), computes the mode.
+
+    Args:
+        fold_winners: List of parameter dicts, one per fold.
+
+    Returns:
+        Dict of consensus parameters.
+    """
+    if not fold_winners:
+        return {}
+    keys = fold_winners[0].keys()
+    out = {}
+    for k in keys:
+        vals = [w[k] for w in fold_winners if k in w]
+        if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vals):
+            med = statistics.median(vals)
+            out[k] = type(vals[0])(med) if all(isinstance(v, int) for v in vals) else med
+        else:
+            out[k] = statistics.mode(vals)
+    return out
+
+
+def consistency(fold_test_returns: list[float]) -> float:
+    """Calculate fraction of folds with positive out-of-sample returns.
+
+    Args:
+        fold_test_returns: List of test period returns (as decimals, e.g., 0.05 = 5%).
+
+    Returns:
+        Ratio of positive returns to total folds (0.0 to 1.0).
+    """
+    if not fold_test_returns:
+        return 0.0
+    return sum(1 for r in fold_test_returns if r > 0) / len(fold_test_returns)
+
+
+def degradation_pct(*, in_sample: float, walk_forward: float) -> float:
+    """Calculate curve-fit degradation as 1 - (walk_forward / in_sample).
+
+    High degradation (near 1.0) suggests the strategy was over-fit to training data.
+    Low degradation (near 0.0) suggests the edge is robust and translates to OOS.
+
+    Args:
+        in_sample: Training (in-sample) return percentage.
+        walk_forward: Test (out-of-sample) return percentage.
+
+    Returns:
+        Degradation factor (0.0 to 1.0+).
+    """
+    if in_sample == 0:
+        return 0.0
+    return 1.0 - (walk_forward / in_sample)

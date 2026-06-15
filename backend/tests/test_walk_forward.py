@@ -38,3 +38,25 @@ def test_apply_costs_reduces_return():
     net = apply_costs(gross_return_pct=1.0, fee_pct=0.001, slippage_pct=0.001)
     assert net < 1.0
     assert abs(net - (1.0 - 0.4)) < 0.05
+
+
+def test_consensus_median_and_mode():
+    """Test consensus aggregation across folds: numeric median, categorical mode."""
+    from app.services.walk_forward import consensus
+
+    winners = [
+        {"ema_period": 20, "ma_type": "EMA"},
+        {"ema_period": 50, "ma_type": "EMA"},
+        {"ema_period": 50, "ma_type": "SMA"},
+    ]
+    c = consensus(winners)
+    assert c["ema_period"] == 50          # median of [20,50,50]
+    assert c["ma_type"] == "EMA"          # mode
+
+
+def test_consistency_and_degradation():
+    """Test fold consistency (ratio of positive returns) and curve-fit degradation."""
+    from app.services.walk_forward import consistency, degradation_pct
+
+    assert consistency([0.05, -0.02, 0.03, 0.01]) == 0.75    # 3 of 4 folds positive
+    assert round(degradation_pct(in_sample=40.0, walk_forward=10.0), 2) == 0.75
