@@ -319,3 +319,51 @@ export async function triggerIngestionNow(symbols: string[], years = 6): Promise
 export async function getLastDataRefresh(): Promise<{ last_refresh: string | null }> {
   return get<{ last_refresh: string | null }>('/api/data/ingest/last-refresh');
 }
+
+/* ---------- Walk-Forward Optimization ---------- */
+
+export interface WfoVerdict {
+  in_sample_return: number;
+  walk_forward_return: number;
+  degradation_pct: number;
+}
+
+export interface WfoOosMetrics {
+  sharpe: number;
+  expectancy: number;
+  win_rate: number;
+  total_return: number;
+  max_drawdown: number;
+  n_trades: number;
+}
+
+export interface WfoProposal {
+  strategy: string;
+  proposed: Record<string, number | string>;
+  consistency: number;
+  eligible: boolean;
+  oos_metrics: WfoOosMetrics;
+  fold_winners: Record<string, number | string>[];
+  verdict: WfoVerdict;
+  recommendation: string;
+}
+
+export interface TuningJob {
+  status: 'running' | 'completed' | 'failed';
+  done: number;
+  total: number;
+  proposals: Record<string, WfoProposal>;
+  error?: string;
+}
+
+export async function startTuningJob(): Promise<{ job_id: string }> {
+  return post('/api/strategy-tuning/run', {});
+}
+
+export async function getTuningJob(jobId: string): Promise<TuningJob> {
+  return get(`/api/strategy-tuning/jobs/${jobId}`);
+}
+
+export async function adoptStrategyParams(strategy: string, params: Record<string, number | string>): Promise<{ ok: boolean; active: Record<string, number | string> }> {
+  return post('/api/strategy-tuning/adopt', { strategy, params });
+}
