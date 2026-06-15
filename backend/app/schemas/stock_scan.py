@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
+from app.schemas import SentimentData
 
 
 Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi"]
@@ -34,6 +35,7 @@ class StockScanRequest(BaseModel):
     bt_min_trades:      int   = 5
     bt_min_win_rate:    float = 0.45
     shortlist_max_candidates: int = Field(10, gt=0)
+    regime_filter: bool = False
 
 
 class StrategySignalOut(BaseModel):
@@ -78,6 +80,7 @@ class PositionCardOut(BaseModel):
     sector_rs_pct: float | None = None   # stock ROC minus SPY ROC; positive = outperforming
     next_event_days: int | None = None    # days to nearest earnings or dividend (>=0)
     next_event_label: str | None = None   # "earnings" | "dividend"
+    sentiment: Optional[SentimentData] = None
 
 
 class StockPipeline(BaseModel):
@@ -86,6 +89,7 @@ class StockPipeline(BaseModel):
     failed_score:    int   # "REJECT score=..."
     failed_signal:   int   # "no {strategy} setup"
     failed_backtest: int   # "backtest gate: ..."
+    failed_regime:   int = 0  # filtered out by regime headwind
     other_rejected:  int   # exceptions / unclassified
     candidates:      int
 

@@ -9,9 +9,11 @@ import os
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone, date, timedelta
+from pathlib import Path as _Path
 from typing import Any
 
 import httpx
+import yaml as _yaml
 from fastapi import APIRouter, HTTPException
 
 from app.services.audit import new_rec_id
@@ -19,7 +21,8 @@ from app.schemas.stock_scan import (
     StockScanRequest, StockScanResult, PositionCardOut,
     StrategySignalOut, BacktestOut, StockPipeline,
 )
-from app.data.market import fetch_company_name_async, fetch_price_async, fetch_quotes
+from app.schemas import SentimentData
+from app.data.market import fetch_company_name_async, fetch_price_async, fetch_quotes, fetch_intraday_candles
 from app.services.historical_store import get_bars as get_historical_bars
 from app.scoring.stock_scorer import score_stock
 from app.services.strategy_engine import (
@@ -29,6 +32,26 @@ from app.services.strategy_engine import (
 from app.services.strategy_backtest import run_strategy_backtest
 from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, set_cached
 from app.scoring.signal_confidence import compute_confidence, interpret
+
+
+_SCORING_CFG = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
+
+
+def _load_full_scoring_cfg() -> dict:
+    return _yaml.safe_load(_SCORING_CFG.read_text())
+
+
+def _load_regime_cfg(horizon: str) -> dict:
+    return _load_full_scoring_cfg()["regime"][horizon.lower()]
+
+
+def _conviction_mult(conviction_pct: int, sizing: dict) -> float:
+    if not sizing.get("enabled", False):
+        return 1.0
+    full = sizing["full_conviction_pct"]
+    lo = sizing["min_mult"]
+    frac = max(0.0, min(conviction_pct / full, 1.0)) if full else 0.0
+    return lo + (1.0 - lo) * frac
 
 router = APIRouter(prefix="/api", tags=["stock-scan"])
 logger = logging.getLogger(__name__)
@@ -118,15 +141,67 @@ async def _process_stock(
             if req.max_price is not None and price > req.max_price:
                 return {"symbol": symbol, "reason": f"price ${price:.2f} > max"}
 
+            # --- regime sentiment ---
+            full_cfg = _load_full_scoring_cfg()
+            rcfg = _load_regime_cfg(req.horizon)
+            regime_signal = None
+            if rcfg["timeframe"] == "15min":
+                try:
+                    regime_bars = await asyncio.to_thread(
+                        fetch_intraday_candles, symbol, "15min", 55
+                    )
+                except Exception:
+                    regime_bars = []
+            else:
+                regime_bars = bars   # daily bars already fetched
+
+            if regime_bars and len(regime_bars) >= rcfg.get("min_obs", 10):
+                from app.services.regime_omm import compute_omm
+                from app.services.regime_hmm_daily import compute_directional_hmm, alignment
+                omm = compute_omm(
+                    [b["close"] for b in regime_bars],
+                    direction=req.direction,
+                    lookback=rcfg["lookback"],
+                    window=rcfg["window"],
+                    min_obs=rcfg["min_obs"],
+                )
+                if omm:
+                    dh = None
+                    try:
+                        dh = compute_directional_hmm(regime_bars)
+                    except Exception:
+                        pass
+                    regime_signal = {
+                        "horizon": req.horizon,
+                        "timeframe": rcfg["timeframe"],
+                        "state": omm.state,
+                        "p_stay": omm.p_stay,
+                        "stability": omm.stability,
+                        "regime_age_days": omm.regime_age_days,
+                        "avg_regime_duration": omm.avg_regime_duration,
+                        "conviction_pct": omm.conviction_pct,
+                        "conviction_label": omm.conviction_label,
+                        "interpretation": omm.interpretation,
+                        "hmm_state": dh.state if dh else None,
+                        "alignment": alignment(omm.state, dh.state if dh else None),
+                        "insufficient_data": False,
+                    }
+
             card = score_stock(
                 symbol=symbol,
                 direction=req.direction,
                 horizon=req.horizon,
                 bars=bars[-120:],
                 scoring_mode="stock",
+                regime_signal=regime_signal,
+                regime_gate=full_cfg["regime_gate"] if regime_signal else None,
             )
             if card.status == "REJECT":
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}
+
+            if getattr(req, 'regime_filter', False) and regime_signal and \
+               regime_signal["conviction_pct"] <= full_cfg["regime_gate"]["headwind_caution_pct"]:
+                return {"symbol": symbol, "reason": "regime headwind"}
 
             signal_fn = _SIGNAL_FNS.get(req.strategy)
             if not signal_fn:
@@ -162,8 +237,12 @@ async def _process_stock(
             conf_val = _cached["confidence"]
             conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
 
+            sizing_cfg = full_cfg.get("regime_sizing", {"enabled": False})
+            mult = _conviction_mult(regime_signal["conviction_pct"], sizing_cfg) if regime_signal else 1.0
+            sized_risk_pct = (req.risk_pct * mult) if req.risk_pct is not None else None
+            sized_risk_fixed = (req.risk_fixed_usd * mult) if req.risk_fixed_usd is not None else None
             shares, dollar_risk = _position_size(
-                req.account_size, req.risk_pct, req.risk_fixed_usd,
+                req.account_size, sized_risk_pct, sized_risk_fixed,
                 signal.entry_price, signal.stop_price,
             )
 
@@ -213,6 +292,7 @@ async def _process_stock(
                 confidence=conf_val, confidence_text=conf_txt,
                 sector_rs_pct=sector_rs_pct,
                 next_event_days=next_event_days, next_event_label=next_event_label,
+                sentiment=SentimentData(**regime_signal) if regime_signal else None,
             )
         except Exception as exc:
             logger.exception("Error processing %s", symbol)
@@ -290,6 +370,10 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
             1 for r in rejected
             if isinstance(r, dict) and r.get("reason", "").startswith("backtest gate:")
         ),
+        failed_regime=sum(
+            1 for r in rejected
+            if isinstance(r, dict) and r.get("reason") == "regime headwind"
+        ),
         other_rejected=sum(
             1 for r in rejected
             if isinstance(r, dict)
@@ -298,13 +382,14 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
             and not r.get("reason", "").startswith("REJECT score=")
             and not (r.get("reason", "").startswith("no ") and "setup" in r.get("reason", ""))
             and not r.get("reason", "").startswith("backtest gate:")
+            and r.get("reason") != "regime headwind"
         ),
         candidates=len(candidates),
     )
     logger.info(
-        "STOCK SCAN pipeline: scanned=%d hist_fail=%d score_fail=%d signal_fail=%d bt_fail=%d other=%d candidates=%d",
+        "STOCK SCAN pipeline: scanned=%d hist_fail=%d score_fail=%d signal_fail=%d bt_fail=%d regime_fail=%d other=%d candidates=%d",
         _pipeline.scanned, _pipeline.failed_history, _pipeline.failed_score,
-        _pipeline.failed_signal, _pipeline.failed_backtest, _pipeline.other_rejected, _pipeline.candidates,
+        _pipeline.failed_signal, _pipeline.failed_backtest, _pipeline.failed_regime, _pipeline.other_rejected, _pipeline.candidates,
     )
     return StockScanResult(
         scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(),
