@@ -131,6 +131,7 @@ def conviction(signal: float, direction: str) -> float:
 
 
 def conviction_label(conviction_pct: int) -> str:
+    # Negative thresholds use strict > so -15 and -40 map to the worse band, symmetric with >= on the positive side.
     if conviction_pct >= 40:  return "Strong tailwind"
     if conviction_pct >= 15:  return "Mild tailwind"
     if conviction_pct > -15:  return "Neutral"
