@@ -92,6 +92,8 @@ def build_transition_matrix_stride(labels: list[str], lookback: int, window: int
     Overlapping daily labels share lookback-1 days and fake persistence on the
     diagonal. Sampling every `lookback` bars removes that autocorrelation.
     """
+    if lookback < 1:
+        raise ValueError(f"lookback must be >= 1, got {lookback}")
     n = len(STATES)
     counts = np.zeros((n, n), dtype=float)
     recent = labels[-window:] if len(labels) > window else labels

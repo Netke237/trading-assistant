@@ -4,6 +4,7 @@ import numpy as np
 from app.services.regime_omm import (
     label_daily_states,
     build_transition_matrix,
+    build_transition_matrix_stride,
     compute_omm,
     STATES,
     STATE_IDX,
@@ -146,8 +147,6 @@ class TestComputeOmm:
             assert result.regime_age_days >= 1
 
 
-from app.services.regime_omm import build_transition_matrix, build_transition_matrix_stride
-
 def test_stride_matrix_does_not_overcount_persistence():
     # 60 labels: 30 Bull then 30 Bear (indices: Bull=0, Bear=1, Choppy=2 per STATE_IDX)
     labels = ['Bull'] * 30 + ['Bear'] * 30
@@ -155,8 +154,13 @@ def test_stride_matrix_does_not_overcount_persistence():
     stride = build_transition_matrix_stride(labels, lookback=20)
     # Overlapping daily counting fakes near-1.0 persistence on the diagonal.
     assert overlapping[0, 0] > 0.9
-    # Stride sampling (step=20) sees only ~3 windows -> far less inflated persistence.
+    # Step-20 sampling yields 3 samples (2 transitions) vs 59 overlapping pairs.
     assert stride[0, 0] < overlapping[0, 0]
     # Rows still sum to 1.
     for r in range(3):
         assert abs(stride[r].sum() - 1.0) < 1e-9
+
+
+def test_stride_rejects_zero_lookback():
+    with pytest.raises(ValueError):
+        build_transition_matrix_stride(['Bull'], 0)
