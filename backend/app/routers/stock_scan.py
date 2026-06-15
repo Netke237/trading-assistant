@@ -32,11 +32,14 @@ from app.services.strategy_engine import (
 from app.services.strategy_backtest import run_strategy_backtest
 from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, set_cached
 from app.scoring.signal_confidence import compute_confidence, interpret
+from app.services.regime_omm import compute_omm
+from app.services.regime_hmm_daily import compute_directional_hmm, alignment
 
 
 _SCORING_CFG = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
 
 
+@functools.lru_cache(maxsize=1)
 def _load_full_scoring_cfg() -> dict:
     return _yaml.safe_load(_SCORING_CFG.read_text())
 
@@ -150,14 +153,13 @@ async def _process_stock(
                     regime_bars = await asyncio.to_thread(
                         fetch_intraday_candles, symbol, "15min", 55
                     )
-                except Exception:
+                except Exception as exc:
+                    logger.warning("fetch_intraday_candles failed for %s: %s", symbol, exc)
                     regime_bars = []
             else:
                 regime_bars = bars   # daily bars already fetched
 
             if regime_bars and len(regime_bars) >= rcfg.get("min_obs", 10):
-                from app.services.regime_omm import compute_omm
-                from app.services.regime_hmm_daily import compute_directional_hmm, alignment
                 omm = compute_omm(
                     [b["close"] for b in regime_bars],
                     direction=req.direction,
@@ -169,8 +171,8 @@ async def _process_stock(
                     dh = None
                     try:
                         dh = compute_directional_hmm(regime_bars)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("HMM unavailable for %s: %s", symbol, exc)
                     regime_signal = {
                         "horizon": req.horizon,
                         "timeframe": rcfg["timeframe"],
@@ -199,7 +201,7 @@ async def _process_stock(
             if card.status == "REJECT":
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}
 
-            if getattr(req, 'regime_filter', False) and regime_signal and \
+            if req.regime_filter and regime_signal and \
                regime_signal["conviction_pct"] <= full_cfg["regime_gate"]["headwind_caution_pct"]:
                 return {"symbol": symbol, "reason": "regime headwind"}
 
