@@ -69,3 +69,20 @@ def test_engine_prefers_planted_edge_over_noise():
     assert len(param_combos(space)) == 4
     # Real recovery is validated end-to-end in Task 7 via the orchestrator on fixtures.
     assert consensus([{"ema_period": 50, "trend_ema": 200}]) == {"ema_period": 50, "trend_ema": 200}
+
+
+def test_optimizer_builds_proposal_shape():
+    from app.services.strategy_param_optimizer import build_proposal
+    prop = build_proposal(
+        strategy="pullback_ema",
+        fold_winners=[{"ema_period": 50, "trend_ema": 200}],
+        fold_test_returns=[0.05, 0.02, -0.01],
+        in_sample_return=30.0, walk_forward_return=12.0,
+        oos_metrics={"sharpe": 0.8, "expectancy": 0.3, "win_rate": 0.55,
+                     "total_return": 12.0, "max_drawdown": -8.0, "n_trades": 40},
+        min_trades=20,
+    )
+    assert prop["proposed"]["ema_period"] == 50
+    assert prop["consistency"] == round(2/3, 4)
+    assert prop["eligible"] is True
+    assert "verdict" in prop and prop["verdict"]["degradation_pct"] is not None
