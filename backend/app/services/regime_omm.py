@@ -29,6 +29,9 @@ class OmmResult:
     avg_regime_duration: float
     transition_row: list[float]
     state_order: list[str]
+    conviction_pct: int = 0
+    conviction_label: str = "Neutral"
+    interpretation: str = ""
 
 
 def label_daily_states(
@@ -162,14 +165,19 @@ def stationary_distribution(P: np.ndarray) -> np.ndarray:
 def compute_omm(
     closes: list[float],
     *,
+    direction: str = "Bullish",
     lookback: int = RETURN_LOOKBACK,
+    window: int = WINDOW,
+    min_obs: int = MIN_OBS,
     threshold: float = BULL_THRESH,
     smoothing: float = 0.0,
 ) -> OmmResult | None:
     """
-    Build rolling OMM from daily close prices.
-    Returns None if the current state has fewer than MIN_OBS observations
-    in the training window (matrix not reliable enough to publish).
+    Build rolling OMM from close prices using the stride transition matrix.
+
+    Returns None if the series is too short or the current state has fewer
+    than min_obs observations in the training window.
+    Includes conviction fields aligned to the given trade direction.
     """
     if len(closes) < lookback + 2:
         return None
@@ -179,22 +187,22 @@ def compute_omm(
     current_idx = STATE_IDX[current]
 
     # Check observation count for current state within window
-    window_labels = labels[-WINDOW:] if len(labels) > WINDOW else labels
-    obs_count = window_labels.count(current)
-    if obs_count < MIN_OBS:
+    window_labels = labels[-window:] if len(labels) > window else labels
+    if window_labels.count(current) < min_obs:
         return None
 
-    matrix = build_transition_matrix(labels)
+    matrix = build_transition_matrix_stride(labels, lookback=lookback, window=window)
     p_stay = float(matrix[current_idx, current_idx])
     transition_row = [float(matrix[current_idx, i]) for i in range(len(STATES))]
 
     denom = 1.0 - p_stay
-    avg_duration = (1.0 / denom) if denom > 1e-9 else float('inf')
-    avg_duration = min(avg_duration, 9999.0)
+    avg_duration = min((1.0 / denom) if denom > 1e-9 else float('inf'), 9999.0)
 
     stability = 'Fragile' if (1.0 - p_stay) > 0.25 else 'Stable'
     age = _regime_age(labels, current)
 
+    sig = signal_from_row(transition_row)
+    conv_pct = int(round(conviction(sig, direction) * 100))
     return OmmResult(
         state=current,
         p_stay=round(p_stay, 4),
@@ -203,4 +211,7 @@ def compute_omm(
         avg_regime_duration=round(avg_duration, 1),
         transition_row=[round(v, 4) for v in transition_row],
         state_order=list(STATES),
+        conviction_pct=conv_pct,
+        conviction_label=conviction_label(conv_pct),
+        interpretation=conviction_interpretation(conv_pct, stability, current),
     )

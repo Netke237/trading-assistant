@@ -208,3 +208,13 @@ def test_n_step_and_stationary():
     pi = stationary_distribution(P)
     assert abs(pi.sum() - 1.0) < 1e-6
     assert np.allclose(pi @ P, pi, atol=1e-6)   # stationary: piP = pi
+
+
+def test_compute_omm_returns_conviction_and_stride_matrix():
+    closes = [100 * (1.004 ** i) for i in range(300)]
+    res = compute_omm(closes, direction="Bullish", lookback=20, window=500, min_obs=10)
+    assert res is not None
+    assert res.state in ("Bull", "Bear", "Choppy")
+    assert -100 <= res.conviction_pct <= 100
+    assert res.conviction_label
+    assert res.interpretation
