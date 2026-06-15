@@ -1312,6 +1312,7 @@ function StrategyTuningForm() {
         if (j.status !== 'running') setPolling(false);
       } catch {
         setPolling(false);
+        setError('Lost connection to job — try refreshing.');
       }
     }, 2000);
     return () => clearInterval(interval);
@@ -1326,7 +1327,7 @@ function StrategyTuningForm() {
     }
   };
 
-  const proposals = job?.proposals ? Object.entries(job.proposals) : [];
+  const proposals: [string, WfoProposal][] = job?.proposals ? Object.entries(job.proposals) : [];
 
   return (
     <div>
