@@ -1,0 +1,20 @@
+schedule:
+  enabled: true
+  mode: eod
+  eod_time: '16:15'
+  poll_hours: 4
+watches:
+- id: wch_88e166325061
+  symbol: AAPL
+  strategy_key: pullback_ema
+  params_override: {}
+  enabled: true
+  created_at: '2026-06-13T20:48:29.893224+00:00'
+  last_state:
+    phase: armed
+    direction: Bullish
+    entry_price: 291.08
+    stop_price: 285.87
+    target_price: 313.74
+    last_event: entry
+    last_event_at: '2026-06-13T20:48:35.640812+00:00'
