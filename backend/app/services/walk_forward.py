@@ -167,7 +167,7 @@ def consensus(fold_winners: list[dict]) -> dict:
         vals = [w[k] for w in fold_winners if k in w]
         if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vals):
             med = statistics.median(vals)
-            out[k] = type(vals[0])(med) if all(isinstance(v, int) for v in vals) else med
+            out[k] = int(round(med)) if all(isinstance(v, int) for v in vals) else med
         else:
             out[k] = statistics.mode(vals)
     return out
