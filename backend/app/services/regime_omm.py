@@ -86,6 +86,27 @@ def build_transition_matrix(labels: list[str], window: int = WINDOW) -> np.ndarr
     return matrix
 
 
+def build_transition_matrix_stride(labels: list[str], lookback: int, window: int = WINDOW) -> np.ndarray:
+    """Count transitions between NON-overlapping windows (stride = lookback).
+
+    Overlapping daily labels share lookback-1 days and fake persistence on the
+    diagonal. Sampling every `lookback` bars removes that autocorrelation.
+    """
+    n = len(STATES)
+    counts = np.zeros((n, n), dtype=float)
+    recent = labels[-window:] if len(labels) > window else labels
+    sampled = recent[::lookback]
+    for i in range(len(sampled) - 1):
+        f, t = STATE_IDX.get(sampled[i], -1), STATE_IDX.get(sampled[i + 1], -1)
+        if f >= 0 and t >= 0:
+            counts[f, t] += 1
+    matrix = np.zeros((n, n), dtype=float)
+    for row in range(n):
+        total = counts[row].sum()
+        matrix[row] = counts[row] / total if total > 0 else 1.0 / n
+    return matrix
+
+
 def _regime_age(labels: list[str], current: str) -> int:
     """Count consecutive trailing bars in `current` state."""
     age = 0
