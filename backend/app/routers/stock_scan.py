@@ -27,6 +27,7 @@ from app.services.strategy_engine import (
     ma_crossover_signal, mean_reversion_rsi_signal,
 )
 from app.services.strategy_backtest import run_strategy_backtest
+from app.services.strategy_param_store import get_active
 from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, set_cached
 from app.scoring.signal_confidence import compute_confidence, interpret
 
@@ -46,6 +47,13 @@ _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
     "ma_crossover":       lambda r: {"fast": r.ma_crossover_fast, "slow": r.ma_crossover_slow, "lookback": r.ma_crossover_lookback},
     "mean_reversion_rsi": lambda r: {"rsi_period": r.rsi_period, "rsi_oversold": r.rsi_oversold, "trend_sma": r.rsi_trend_sma},
 }
+
+def _merge_strategy_params(strategy: str, request_kwargs: dict) -> dict:
+    """Adopted defaults from the store, overridden by any per-request kwargs."""
+    merged = get_active(strategy)
+    merged.update({k: v for k, v in request_kwargs.items() if v is not None})
+    return merged
+
 
 _HISTORY_YEARS = 5
 _SCAN_SEM = asyncio.Semaphore(5)
@@ -131,7 +139,9 @@ async def _process_stock(
             signal_fn = _SIGNAL_FNS.get(req.strategy)
             if not signal_fn:
                 return {"symbol": symbol, "reason": f"unknown strategy {req.strategy}"}
-            signal_kwargs = _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req)
+            signal_kwargs = _merge_strategy_params(
+                req.strategy, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req)
+            )
             signal = signal_fn(bars[-120:], **signal_kwargs)
             if signal is None:
                 return {"symbol": symbol, "reason": f"no {req.strategy} setup"}

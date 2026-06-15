@@ -114,3 +114,13 @@ def test_adopt_handles_missing_file_gracefully(tmp_path, monkeypatch):
     # File should now exist with the new data
     assert (tmp_path / "strategy_params.yaml").exists()
     assert store.get_active("new_strategy")["param"] == 30
+
+
+def test_signal_kwargs_merge_request_over_store(monkeypatch):
+    from app.services import strategy_param_store as store
+    monkeypatch.setattr(store, "get_active", lambda s: {"ema_period": 50, "trend_ema": 100})
+    # request override should win over the adopted default
+    from app.routers.stock_scan import _merge_strategy_params
+    merged = _merge_strategy_params("pullback_ema", {"ema_period": 20})
+    assert merged["ema_period"] == 20      # request wins
+    assert merged["trend_ema"] == 100      # store default fills the rest
