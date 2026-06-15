@@ -856,7 +856,7 @@ def _worse(a: Status, b: Status) -> Status:
 
 def _regime_cap(conviction_pct: int, stability: str, gate: dict) -> Status:
     """Return the status cap imposed by the regime gate (demote-only, never adds points)."""
-    if not gate.get("enabled", True):
+    if not gate.get("enabled", False):
         return "PASS"
     if conviction_pct <= gate["headwind_reject_pct"] and (
         not gate.get("require_stable_for_reject", True) or stability == "Stable"
