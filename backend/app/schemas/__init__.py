@@ -68,6 +68,7 @@ class ScoreBreakdown(BaseModel):
     triggerDetail:  TriggerDetail  | None = None
     eventDetail:    EventDetail    | None = None
     volDetail:      VolDetail      | None = None
+    sentiment:      Optional[SentimentData] = None
 
 
 class ContractScoreBreakdown(BaseModel):
@@ -150,6 +151,26 @@ class OmmData(BaseModel):
     avg_regime_duration: float       # 1 / (1 − p_stay), in days
     transition_row: list[float]      # [P(Bull), P(Bear), P(Choppy)] for current state
     state_order: list[str]           # ['Bull', 'Bear', 'Choppy'] — index key
+    conviction_pct: Optional[int] = None
+    conviction_label: Optional[str] = None
+
+
+class SentimentData(BaseModel):
+    """Per-symbol per-scan conviction payload from Markov regime signal."""
+    model_config = ConfigDict(populate_by_name=True)
+    horizon: str
+    timeframe: str
+    state: str
+    p_stay: float
+    stability: str
+    regime_age_days: int
+    avg_regime_duration: float
+    conviction_pct: int
+    conviction_label: str
+    interpretation: str
+    hmm_state: Optional[str] = None
+    alignment: Literal['Aligned', 'Diverging', 'Unavailable'] = 'Unavailable'
+    insufficient_data: bool = False
 
 
 class IntraHmmTransition(BaseModel):
@@ -180,6 +201,10 @@ class MarketRegime(BaseModel):
     intraday_omm: Optional[OmmData] = None         # Intraday OMM fallback when HMM unavailable
     vix_pct_30d: Optional[float] = None            # VIX percentile vs last 30 trading days
     vix_pct_252d: Optional[float] = None           # VIX percentile vs last 252 trading days
+    conviction_pct: Optional[int] = None
+    conviction_label: Optional[str] = None
+    hmm_state: Optional[str] = None
+    alignment: Optional[str] = None
 
 
 # ── Sectors ──────────────────────────────────────────────────────────────────
@@ -361,6 +386,7 @@ class TradeCardData(BaseModel):
     alternativesCount: int = 0
     confidence:        Optional[int] = None
     confidenceText:    Optional[str] = None
+    sentiment:         Optional[SentimentData] = None
 
 
 # ── Scan ─────────────────────────────────────────────────────────────────────

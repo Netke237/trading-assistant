@@ -71,3 +71,18 @@ def test_regime_gate_bypassed_when_disabled():
     # Gate disabled → status unchanged, score unchanged, but "regime" rule still appended with PASS
     assert card.score == base.score
     assert card.status == base.status
+
+
+# ---------------------------------------------------------------------------
+# A8: SentimentData schema + conviction/alignment fields
+# ---------------------------------------------------------------------------
+
+def test_sentiment_schema_constructs():
+    from app.schemas import SentimentData, ScoreBreakdown, MarketRegime
+    s = SentimentData(horizon="Swing", timeframe="daily", state="Bull", p_stay=0.7,
+                      stability="Stable", regime_age_days=5, avg_regime_duration=8.0,
+                      conviction_pct=40, conviction_label="Strong tailwind",
+                      interpretation="x", alignment="Aligned")
+    assert s.conviction_pct == 40
+    sb = ScoreBreakdown(trend=1, pullback=1, trigger=1, event=1, volatility=1, sentiment=s)
+    assert sb.sentiment.state == "Bull"
