@@ -42,6 +42,7 @@ def compute_directional_hmm(bars: list[dict], *, min_obs: int = MIN_OBS,
     order = np.argsort(means)                       # lowest..highest mean return
     label_by_state = {int(order[0]): "Bear", int(order[1]): "Sideways", int(order[2]): "Bull"}
 
+    # Decode on last 30 bars only (local Viterbi window); model is already fitted on the full series.
     current_idx = int(model.predict(returns[-30:])[-1])
     p_stay = float(model.transmat_[current_idx, current_idx])
     row = [float(model.transmat_[current_idx, j]) for j in range(3)]
@@ -53,5 +54,8 @@ def compute_directional_hmm(bars: list[dict], *, min_obs: int = MIN_OBS,
 def alignment(omm_state: str | None, hmm_state: str | None) -> str:
     if not omm_state or not hmm_state:
         return "Unavailable"
-    norm = lambda s: "Sideways" if s in ("Choppy", "Sideways") else s
-    return "Aligned" if norm(omm_state) == norm(hmm_state) else "Diverging"
+
+    def _norm(s: str) -> str:
+        return "Sideways" if s in ("Choppy", "Sideways") else s
+
+    return "Aligned" if _norm(omm_state) == _norm(hmm_state) else "Diverging"
