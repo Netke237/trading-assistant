@@ -218,3 +218,9 @@ def test_compute_omm_returns_conviction_and_stride_matrix():
     assert -100 <= res.conviction_pct <= 100
     assert res.conviction_label
     assert res.interpretation
+
+
+def test_compute_omm_rejects_invalid_direction():
+    closes = [100 * (1.002 ** i) for i in range(300)]
+    with pytest.raises(ValueError, match="direction"):
+        compute_omm(closes, direction="neutral")

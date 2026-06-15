@@ -179,6 +179,9 @@ def compute_omm(
     than min_obs observations in the training window.
     Includes conviction fields aligned to the given trade direction.
     """
+    if direction not in ("Bullish", "Bearish"):
+        raise ValueError(f"direction must be 'Bullish' or 'Bearish', got {direction!r}")
+
     if len(closes) < lookback + 2:
         return None
 
