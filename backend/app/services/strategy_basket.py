@@ -15,9 +15,19 @@ def build_basket(rows: list[dict], *, per_sector: int) -> list[str]:
 
     Returns:
         Sorted list of selected symbols (deterministic order)
+
+    Raises:
+        ValueError: If per_sector < 1
     """
+    if per_sector < 1:
+        raise ValueError(f"per_sector must be >= 1, got {per_sector}")
+
+    # Deduplicate by symbol; if duplicates exist, keep first occurrence
+    seen: set[str] = set()
+    deduped = [r for r in rows if r["symbol"] not in seen and not seen.add(r["symbol"])]
+
     by_sector: dict[str, list[dict]] = defaultdict(list)
-    for r in rows:
+    for r in deduped:
         by_sector[r.get("sector") or "Unknown"].append(r)
 
     chosen: list[str] = []
@@ -45,7 +55,7 @@ def propose_basket(per_sector: int) -> list[str]:
     csv_path = Path(__file__).parent.parent / "data" / "sp500.csv"
 
     rows = []
-    with open(csv_path, "r") as f:
+    with open(csv_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             rows.append(
