@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +18,7 @@ def _load() -> dict:
     """Load strategy_params.yaml or return empty structure if missing."""
     if not CFG.exists():
         return {"strategies": {}}
-    content = CFG.read_text()
+    content = CFG.read_text(encoding="utf-8")
     return yaml.safe_load(content) or {"strategies": {}}
 
 
@@ -59,18 +60,22 @@ def adopt(strategy: str, params: dict) -> None:
     """Archive current active params and write the proposed set as the new active.
 
     Creates a backup of the YAML before overwriting.
+    Uses atomic write (tmp-then-replace) to prevent corruption on crash.
     """
     data = _load()
 
-    # Archive the current config before modification
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup_path = CFG.with_suffix(f".bak.{timestamp}.yaml")
-    shutil.copy(CFG, backup_path)
+    # Archive the current config before modification (if it exists)
+    if CFG.exists():
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup_path = CFG.with_suffix(f".bak.{timestamp}.yaml")
+        shutil.copy(CFG, backup_path)
 
     # Update the active parameters for this strategy
     data.setdefault("strategies", {}).setdefault(strategy, {})["active"] = (
         copy.deepcopy(params)
     )
 
-    # Write back to YAML
-    CFG.write_text(yaml.safe_dump(data, sort_keys=False))
+    # Write back to YAML using atomic write (tmp-then-replace)
+    tmp = CFG.with_suffix(".yaml.tmp")
+    tmp.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    os.replace(tmp, CFG)

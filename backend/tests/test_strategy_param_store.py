@@ -69,3 +69,48 @@ def test_get_costs():
     c = get_costs()
     assert c["fee_pct"] == 0.001
     assert c["slippage_pct"] == 0.001
+
+
+def test_adopt_round_trips(tmp_path, monkeypatch):
+    """Test adopt archives and updates active parameters correctly."""
+    import app.services.strategy_param_store as store
+
+    monkeypatch.setattr(store, "CFG", tmp_path / "strategy_params.yaml")
+    (tmp_path / "strategy_params.yaml").write_text(
+        "strategies:\n  pullback_ema:\n    active:\n      ema_period: 50\n",
+        encoding="utf-8"
+    )
+    store.adopt("pullback_ema", {"ema_period": 20})
+    assert store.get_active("pullback_ema")["ema_period"] == 20
+
+
+def test_adopt_creates_backup_when_file_exists(tmp_path, monkeypatch):
+    """Test adopt creates a backup of the existing config file."""
+    import app.services.strategy_param_store as store
+
+    monkeypatch.setattr(store, "CFG", tmp_path / "strategy_params.yaml")
+    (tmp_path / "strategy_params.yaml").write_text(
+        "strategies:\n  test_strategy:\n    active:\n      param: 10\n",
+        encoding="utf-8"
+    )
+    store.adopt("test_strategy", {"param": 20})
+
+    # Check that at least one backup was created
+    backups = list(tmp_path.glob("strategy_params.bak.*.yaml"))
+    assert len(backups) > 0
+
+
+def test_adopt_handles_missing_file_gracefully(tmp_path, monkeypatch):
+    """Test adopt does not crash when YAML file does not exist yet."""
+    import app.services.strategy_param_store as store
+
+    monkeypatch.setattr(store, "CFG", tmp_path / "strategy_params.yaml")
+    # File doesn't exist
+    assert not (tmp_path / "strategy_params.yaml").exists()
+
+    # Should not raise FileNotFoundError
+    store.adopt("new_strategy", {"param": 30})
+
+    # File should now exist with the new data
+    assert (tmp_path / "strategy_params.yaml").exists()
+    assert store.get_active("new_strategy")["param"] == 30
