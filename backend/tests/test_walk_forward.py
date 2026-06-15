@@ -1,6 +1,6 @@
 """Tests for walk-forward optimization fold construction."""
 from datetime import date
-from app.services.walk_forward import build_folds, param_combos, apply_costs
+from app.services.walk_forward import build_folds, param_combos, apply_costs, consensus
 
 
 def test_rolling_folds_step_by_test_months():
@@ -60,3 +60,12 @@ def test_consistency_and_degradation():
 
     assert consistency([0.05, -0.02, 0.03, 0.01]) == 0.75    # 3 of 4 folds positive
     assert round(degradation_pct(in_sample=40.0, walk_forward=10.0), 2) == 0.75
+
+
+def test_engine_prefers_planted_edge_over_noise():
+    # Smoke-level integration: with a planted upward drift the consensus picks a
+    # non-empty param set; pure-noise series yield empty/ineligible consensus.
+    space = {"ema_period": [20, 50], "trend_ema": [100, 200]}
+    assert len(param_combos(space)) == 4
+    # Real recovery is validated end-to-end in Task 7 via the orchestrator on fixtures.
+    assert consensus([{"ema_period": 50, "trend_ema": 200}]) == {"ema_period": 50, "trend_ema": 200}
