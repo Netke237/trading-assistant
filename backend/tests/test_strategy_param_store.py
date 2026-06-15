@@ -118,7 +118,7 @@ def test_adopt_handles_missing_file_gracefully(tmp_path, monkeypatch):
 
 def test_signal_kwargs_merge_request_over_store(monkeypatch):
     from app.services import strategy_param_store as store
-    monkeypatch.setattr(store, "get_active", lambda s: {"ema_period": 50, "trend_ema": 100})
+    monkeypatch.setattr("app.routers.stock_scan.get_active", lambda s: {"ema_period": 50, "trend_ema": 100})
     # request override should win over the adopted default
     from app.routers.stock_scan import _merge_strategy_params
     merged = _merge_strategy_params("pullback_ema", {"ema_period": 20})
