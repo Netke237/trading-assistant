@@ -6,6 +6,10 @@ from app.services.regime_omm import (
     build_transition_matrix,
     build_transition_matrix_stride,
     compute_omm,
+    signal_from_row,
+    conviction,
+    conviction_label,
+    conviction_interpretation,
     STATES,
     STATE_IDX,
     BULL_THRESH,
@@ -164,3 +168,20 @@ def test_stride_matrix_does_not_overcount_persistence():
 def test_stride_rejects_zero_lookback():
     with pytest.raises(ValueError):
         build_transition_matrix_stride(['Bull'], 0)
+
+
+def test_conviction_is_direction_aware():
+    # transition_row order is STATES = ['Bull','Bear','Choppy'] -> [0.7, 0.1, 0.2]
+    row = [0.7, 0.1, 0.2]
+    s = signal_from_row(row)                 # P(Bull) - P(Bear) = 0.6
+    assert abs(s - 0.6) < 1e-9
+    assert conviction(s, "Bullish") == 0.6   # tailwind for a long
+    assert conviction(s, "Bearish") == -0.6  # headwind for a short
+
+
+def test_conviction_label_bands():
+    assert conviction_label(50) == "Strong tailwind"
+    assert conviction_label(25) == "Mild tailwind"
+    assert conviction_label(0)  == "Neutral"
+    assert conviction_label(-25) == "Mild headwind"
+    assert conviction_label(-50) == "Strong headwind"

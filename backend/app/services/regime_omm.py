@@ -120,6 +120,31 @@ def _regime_age(labels: list[str], current: str) -> int:
     return age
 
 
+def signal_from_row(transition_row: list[float]) -> float:
+    """P(Bull) - P(Bear) for the current-state row. transition_row is ordered by STATES."""
+    return float(transition_row[STATE_IDX['Bull']] - transition_row[STATE_IDX['Bear']])
+
+
+def conviction(signal: float, direction: str) -> float:
+    """Direction-aware: positive => the regime agrees with the trade direction."""
+    return float(signal if direction == "Bullish" else -signal)
+
+
+def conviction_label(conviction_pct: int) -> str:
+    if conviction_pct >= 40:  return "Strong tailwind"
+    if conviction_pct >= 15:  return "Mild tailwind"
+    if conviction_pct > -15:  return "Neutral"
+    if conviction_pct > -40:  return "Mild headwind"
+    return "Strong headwind"
+
+
+def conviction_interpretation(conviction_pct: int, stability: str, state: str) -> str:
+    label = conviction_label(conviction_pct)
+    sign = "favours" if conviction_pct >= 15 else ("opposes" if conviction_pct <= -15 else "is neutral on")
+    return (f"{label} ({conviction_pct:+d}%). The regime {sign} this trade. "
+            f"Current state '{state}' is {stability.lower()}.")
+
+
 def compute_omm(
     closes: list[float],
     *,
