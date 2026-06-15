@@ -22,6 +22,26 @@ OptionRight = Literal['C', 'P']
 TrendDir = Literal['up', 'flat', 'down']
 RrModel = Literal['Heston repriced', 'Delta approximation']
 
+# ── Sentiment / regime ──────────────────────────────────────────────────────
+
+class SentimentData(BaseModel):
+    """Per-symbol per-scan conviction payload from Markov regime signal."""
+    model_config = ConfigDict(populate_by_name=True)
+    horizon: str
+    timeframe: str
+    state: str
+    p_stay: float
+    stability: str
+    regime_age_days: int
+    avg_regime_duration: float
+    conviction_pct: int
+    conviction_label: str
+    interpretation: str
+    hmm_state: Optional[str] = None
+    alignment: Literal['Aligned', 'Diverging', 'Unavailable'] = 'Unavailable'
+    insufficient_data: bool = False
+
+
 # ── Score breakdowns ─────────────────────────────────────────────────────────
 
 class TriggerDetail(BaseModel):
@@ -155,24 +175,6 @@ class OmmData(BaseModel):
     conviction_label: Optional[str] = None
 
 
-class SentimentData(BaseModel):
-    """Per-symbol per-scan conviction payload from Markov regime signal."""
-    model_config = ConfigDict(populate_by_name=True)
-    horizon: str
-    timeframe: str
-    state: str
-    p_stay: float
-    stability: str
-    regime_age_days: int
-    avg_regime_duration: float
-    conviction_pct: int
-    conviction_label: str
-    interpretation: str
-    hmm_state: Optional[str] = None
-    alignment: Literal['Aligned', 'Diverging', 'Unavailable'] = 'Unavailable'
-    insufficient_data: bool = False
-
-
 class IntraHmmTransition(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     to: str
@@ -204,7 +206,7 @@ class MarketRegime(BaseModel):
     conviction_pct: Optional[int] = None
     conviction_label: Optional[str] = None
     hmm_state: Optional[str] = None
-    alignment: Optional[str] = None
+    alignment: Optional[Literal['Aligned', 'Diverging', 'Unavailable']] = None
 
 
 # ── Sectors ──────────────────────────────────────────────────────────────────
