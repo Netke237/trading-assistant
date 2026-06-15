@@ -854,6 +854,19 @@ def _worse(a: Status, b: Status) -> Status:
     return a if _STATUS_RANK[a] <= _STATUS_RANK[b] else b
 
 
+def _regime_cap(conviction_pct: int, stability: str, gate: dict) -> Status:
+    """Return the status cap imposed by the regime gate (demote-only, never adds points)."""
+    if not gate.get("enabled", True):
+        return "PASS"
+    if conviction_pct <= gate["headwind_reject_pct"] and (
+        not gate.get("require_stable_for_reject", True) or stability == "Stable"
+    ):
+        return "REJECT"
+    if conviction_pct <= gate["headwind_caution_pct"]:
+        return "CAUTION"
+    return "PASS"
+
+
 def score_stock(
     symbol: str,
     direction: Direction,
@@ -868,6 +881,8 @@ def score_stock(
     confidence_gate: dict | None = None,
     confidence_sample_size: int = 0,
     scoring_mode: Literal["stock", "options"] = "options",
+    regime_signal: dict | None = None,
+    regime_gate: dict | None = None,
 ) -> StockScoreCard:
     """
     Score a stock for the given direction and horizon.
@@ -983,6 +998,17 @@ def score_stock(
                     confidence, sample_size=confidence_sample_size, symbol=symbol
                 ),
             },
+        ))
+
+    # Regime gate: demote-only. Appends a regime RuleResult with score=0 and caps status.
+    if regime_signal is not None and regime_gate is not None:
+        cap = _regime_cap(regime_signal["conviction_pct"], regime_signal["stability"], regime_gate)
+        final_status = _worse(final_status, cap)
+        rules.append(RuleResult(
+            name="regime",
+            status=cap,
+            score=0,
+            detail={**regime_signal},
         ))
 
     return StockScoreCard(
