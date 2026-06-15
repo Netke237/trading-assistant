@@ -1,5 +1,4 @@
 """Tests for walk-forward optimization fold construction."""
-import itertools
 from datetime import date
 from app.services.walk_forward import build_folds, param_combos, apply_costs
 
