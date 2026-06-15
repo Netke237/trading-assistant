@@ -150,6 +150,8 @@ async def run_optimization(
         fold_winners = []
         fold_test_returns = []
         in_sample_sharpes = []
+        total_n_trades = 0
+        all_sharpes: list[float] = []
 
         for fold in folds:
             winner = train_fold(strategy, "bullish", basket_bars, fold, search_space, costs)
@@ -165,9 +167,10 @@ async def run_optimization(
                             res.total_return_pct if hasattr(res, "total_return_pct") else 0.0
                         )
                         in_sample_sharpes.append(res.sharpe if hasattr(res, "sharpe") else 0.0)
+                        total_n_trades += getattr(res, "n_trades", 0)
+                        all_sharpes.append(getattr(res, "sharpe", 0.0))
                     except Exception as exc:
                         logger.debug("Backtest failed for %s: %s", sym, exc)
-                        pass
             fold_test_returns.append(
                 sum(test_returns) / len(test_returns) if test_returns else 0.0
             )
@@ -182,14 +185,15 @@ async def run_optimization(
             if fold_test_returns
             else 0.0
         )
+        avg_sharpe = sum(all_sharpes) / len(all_sharpes) if all_sharpes else 0.0
 
         oos_metrics = {
-            "sharpe": 0.0,
+            "sharpe": round(avg_sharpe, 4),
             "expectancy": 0.0,
             "win_rate": 0.0,
             "total_return": walk_forward_return,
             "max_drawdown": 0.0,
-            "n_trades": sum(1 for r in fold_test_returns if r != 0.0),
+            "n_trades": total_n_trades,
         }
 
         proposal = build_proposal(
