@@ -98,7 +98,11 @@ def run_strategy_backtest(
                 if sig is not None:
                     sl = sig.stop_price
                     tp = sig.target_price
-                    self.buy(sl=sl, tp=tp)
+                    entry = sig.entry_price
+                    # Guard: skip orders where stop is on the wrong side of entry
+                    # (can happen on gap bars in historical data)
+                    if sl < entry < tp:
+                        self.buy(limit=entry, sl=sl, tp=tp)
 
     try:
         bt = Backtest(df, _Strategy, cash=100_000, commission=0.0, exclusive_orders=True)

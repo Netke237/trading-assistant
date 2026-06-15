@@ -14,7 +14,7 @@ export interface ScanParams {
   rsiOversold:          number;   // RSI oversold threshold (e.g. 30)
   rsiTrendSma:          number;   // trend-confirmation SMA (e.g. 200)
   btMinTrades:          number;   // count
-  btMinWinRate:         number;   // fraction: 0.45 = 45%
+  btMinWinRate:         number;   // fraction: 0.30 = 30%
   eventFilter: 'include' | 'avoid' | 'only_pre_event';
   stockShortlistMax:    number;   // max stock candidates returned
 }
@@ -32,7 +32,7 @@ const DEFAULTS: ScanParams = {
   rsiOversold:          30,
   rsiTrendSma:          200,
   btMinTrades:          5,
-  btMinWinRate:         0.45,
+  btMinWinRate:         0.30,
   eventFilter:          'include' as const,
   stockShortlistMax:    10,
 };
@@ -51,13 +51,14 @@ export const useScanParamsStore = create<ScanParamsStore>()(
     }),
     {
       name: 'bamendjou:scan-params',
-      version: 7,
+      version: 8,
       migrate: (state: unknown, v: number) => {
         if (v < 2) return { ...DEFAULTS, ...(state as Partial<ScanParams>) };
         if (v < 4) return { ...DEFAULTS, ...(state as Partial<ScanParams>), pullbackMaType: 'EMA' as const };
         if (v < 5) return { ...DEFAULTS, ...(state as Partial<ScanParams>), eventFilter: 'include' as const };
         if (v < 6) return { ...DEFAULTS, ...(state as Partial<ScanParams>), pullbackTolerancePct: 0.08, btMinTrades: 5 };
         if (v < 7) return { ...DEFAULTS, ...(state as Partial<ScanParams>), stockShortlistMax: 10 };
+        if (v < 8) return { ...DEFAULTS, ...(state as Partial<ScanParams>), btMinWinRate: 0.30 };
         return state as ScanParams;
       },
     },
