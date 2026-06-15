@@ -10,6 +10,8 @@ from app.services.regime_omm import (
     conviction,
     conviction_label,
     conviction_interpretation,
+    n_step_forecast,
+    stationary_distribution,
     STATES,
     STATE_IDX,
     BULL_THRESH,
@@ -197,3 +199,12 @@ def test_conviction_interpretation_smoke():
     s = conviction_interpretation(0, "Fragile", "Choppy")
     assert "Neutral" in s
     assert "is neutral on" in s
+
+
+def test_n_step_and_stationary():
+    P = np.array([[0.8, 0.1, 0.1], [0.2, 0.7, 0.1], [0.3, 0.3, 0.4]])
+    p2 = n_step_forecast(P, 2)
+    assert np.allclose(p2, P @ P)
+    pi = stationary_distribution(P)
+    assert abs(pi.sum() - 1.0) < 1e-6
+    assert np.allclose(pi @ P, pi, atol=1e-6)   # stationary: piP = pi

@@ -146,6 +146,19 @@ def conviction_interpretation(conviction_pct: int, stability: str, state: str) -
             f"Current state '{state}' is {stability.lower()}.")
 
 
+def n_step_forecast(P: np.ndarray, n: int) -> np.ndarray:
+    """Chapman-Kolmogorov: P^n is the n-step transition matrix."""
+    return np.linalg.matrix_power(P, n)
+
+
+def stationary_distribution(P: np.ndarray) -> np.ndarray:
+    """Left eigenvector of P with eigenvalue 1, normalised to sum to 1."""
+    eigvals, eigvecs = np.linalg.eig(P.T)
+    idx = int(np.argmin(np.abs(eigvals - 1.0)))
+    vec = np.abs(np.real(eigvecs[:, idx]))
+    return vec / vec.sum()
+
+
 def compute_omm(
     closes: list[float],
     *,
