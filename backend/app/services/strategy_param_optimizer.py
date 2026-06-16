@@ -125,7 +125,7 @@ def _optimize_strategy_sync(
         test_returns: list[float] = []
         for sym, bars in basket_bars.items():
             test_bars = _slice_bars(bars, fold.test_start, fold.test_end)
-            if len(test_bars) >= 20:
+            if len(test_bars) >= 100:  # matches IS guard and backtest engine's internal minimum
                 try:
                     res = run_strategy_backtest(
                         test_bars, strategy=strategy, direction=direction, params=winner
@@ -157,13 +157,15 @@ def _optimize_strategy_sync(
         logger.warning("No valid fold winners for %s — all folds empty, skipping", strategy)
         return None
 
+    # apply_costs returns net_return in the same percent units as total_return_pct.
+    # No ×100 here — the values are already percent (e.g., 5.0 = 5%).
     in_sample_return = (
-        sum(in_sample_fold_returns) / len(in_sample_fold_returns) * 100
+        sum(in_sample_fold_returns) / len(in_sample_fold_returns)
         if in_sample_fold_returns
         else 0.0
     )
     walk_forward_return = (
-        sum(fold_test_returns) / len(fold_test_returns) * 100
+        sum(fold_test_returns) / len(fold_test_returns)
         if fold_test_returns
         else 0.0
     )

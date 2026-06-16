@@ -357,6 +357,8 @@ function ScanForm() {
 
 function Toggle({ defaultOn, onChange }: { defaultOn?: boolean; onChange?: (on: boolean) => void }) {
   const [on, setOn] = useState(defaultOn ?? false);
+  // Sync with external state changes (e.g., Reset button updates the store).
+  useEffect(() => { setOn(defaultOn ?? false); }, [defaultOn]);
   return (
     <button
       type="button"

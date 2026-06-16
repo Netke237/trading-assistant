@@ -11,6 +11,7 @@ def test_run_then_poll_then_concurrency_guard(monkeypatch):
 
     monkeypatch.setattr(opt_mod, "run_optimization", _never_finishes)
 
+    import app.routers.strategy_tuning as rt
     c = TestClient(app)
     r = c.post("/api/strategy-tuning/run", json={})
     assert r.status_code == 200
@@ -23,6 +24,14 @@ def test_run_then_poll_then_concurrency_guard(monkeypatch):
     # While first job is still running, second must be rejected with 409
     r2 = c.post("/api/strategy-tuning/run", json={})
     assert r2.status_code == 409
+
+    # Teardown: cancel the immortal task and reset module state so subsequent
+    # tests don't inherit a stuck "running" job and get unexpected 409 responses.
+    if rt._ACTIVE_TASK and not rt._ACTIVE_TASK.done():
+        rt._ACTIVE_TASK.cancel()
+    rt._ACTIVE_TASK = None
+    rt._ACTIVE = None
+    rt._JOBS.clear()
 
 
 def test_unknown_job_returns_404():

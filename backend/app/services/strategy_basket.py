@@ -45,9 +45,9 @@ def build_basket(rows: list[dict], *, per_sector: int) -> list[str]:
 def propose_basket(per_sector: int) -> list[str]:
     """Build a stratified basket from sp500.csv.
 
-    Selects symbols alphabetically within each sector. All symbols receive
-    liquidity=1.0, so selection within each sector is purely alphabetical.
-    Returns [] if sp500.csv is missing or unreadable — does not raise.
+    Reads the 'liquidity' column from sp500.csv when present (falls back to 1.0
+    so selection is alphabetical when the column is absent). Returns [] if
+    sp500.csv is missing or unreadable — does not raise.
 
     Args:
         per_sector: Number of symbols to select per sector
@@ -62,12 +62,17 @@ def propose_basket(per_sector: int) -> list[str]:
             if "symbol" not in (reader.fieldnames or []):
                 logger.error("sp500.csv is missing a 'symbol' column")
                 return []
+            has_liquidity = "liquidity" in (reader.fieldnames or [])
             for row in reader:
+                try:
+                    liq = float(row["liquidity"]) if has_liquidity else 1.0
+                except (ValueError, KeyError):
+                    liq = 1.0
                 rows.append(
                     {
                         "symbol": row["symbol"],
                         "sector": row.get("sector", "Unknown"),
-                        "liquidity": 1.0,
+                        "liquidity": liq,
                     }
                 )
     except FileNotFoundError:
