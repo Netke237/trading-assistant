@@ -1,4 +1,5 @@
 import type { Status } from '@/lib/status';
+import type { SentimentData } from '@/types/domain';
 
 export interface StrategySignalData {
   strategy: string; entry_price: number; stop_price: number;
@@ -18,6 +19,7 @@ export interface PositionCardData {
   sector_rs_pct?: number | null;
   next_event_days?: number | null;
   next_event_label?: string | null;
+  sentiment?: SentimentData | null;
 }
 export interface StockPipeline {
   scanned:         number;
@@ -25,6 +27,7 @@ export interface StockPipeline {
   failed_score:    number;
   failed_signal:   number;
   failed_backtest: number;
+  failed_regime?:  number;
   other_rejected:  number;
   candidates:      number;
 }
