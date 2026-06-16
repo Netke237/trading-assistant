@@ -42,8 +42,10 @@ from app.schemas import (
     ScanDelta, ContinuousScanConfig, ScanState, OptionsPipeline,
     AlternativeContract,
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
-    SentimentData,
+    SentimentData, FundamentalsOut,
 )
+from app.services.fundamentals_store import get_fundamentals, prefetch_universe as _prefetch_fundamentals
+from app.scoring.fundamentals_scorer import score_fundamentals, FundamentalHealth
 from app.services.regime_omm import compute_omm as _compute_omm
 from app.services.regime_hmm_daily import compute_directional_hmm as _compute_dhmm, alignment as _hmm_alignment
 from typing import Literal
@@ -224,6 +226,8 @@ async def _process_symbol(
     atr_mult: float | None = None,
     price_map: dict | None = None,
     bars_map: dict | None = None,
+    fund_map: dict | None = None,
+    fund_gate: dict | None = None,
 ) -> TradeCardData | RejectedCandidate:
     """Process one symbol: fetch data, score stock, validate contracts, build trade card.
 
@@ -336,6 +340,7 @@ async def _process_symbol(
     # iv_rank is unknown until the chain is fetched (pass 2). Score with None to gate
     # on trend/pullback/trigger/event — the components that drive most rejections.
     # ~70-80% of symbols exit here, saving the option chain fetch entirely.
+    _fh: FundamentalHealth | None = (fund_map or {}).get(symbol)
     card_pre: StockScoreCard = score_stock(
         symbol, direction, horizon, candles,
         earnings_date=earnings_date,
@@ -344,6 +349,8 @@ async def _process_symbol(
         overrides=overrides,
         regime_signal=_regime_signal,
         regime_gate=_load_scoring_cfg()["regime_gate"] if _regime_signal else None,
+        fundamentals=_fh,
+        fundamentals_gate=fund_gate,
     )
     if card_pre.status == "REJECT":
         bd = {r.name: r.score for r in card_pre.rules}
@@ -406,6 +413,8 @@ async def _process_symbol(
         confidence_sample_size=_conf_n,
         regime_signal=_regime_signal,
         regime_gate=_load_scoring_cfg()["regime_gate"] if _regime_signal else None,
+        fundamentals=_fh,
+        fundamentals_gate=fund_gate,
     )
     if card.status == "REJECT":
         bd = {r.name: r.score for r in card.rules}
@@ -552,6 +561,17 @@ async def _process_symbol(
         sentiment=SentimentData(**_regime_signal) if _regime_signal else None,
     )
 
+    trade_card.fundamentals = FundamentalsOut(
+        score=_fh.score,
+        quality_label=_fh.quality_label,
+        risk_label=_fh.risk_label,
+        growth_score=_fh.growth_score,
+        quality_score=_fh.quality_score,
+        risk_score=_fh.risk_score,
+        safety_flags=_fh.safety_flags,
+        detail=_fh.detail,
+    ) if _fh else None
+
     alts: list[AlternativeContract] = []
     for alt_card, alt_c in runner_ups:
         alt_strike = float(alt_c.get("strike", price))
@@ -685,6 +705,21 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
     _bars_from_db = len(bars_map)
     _bars_missed = len(symbols) - _bars_from_db
 
+    # Pre-fetch fundamentals for all non-intraday symbols
+    fund_gate = _resolve_fundamentals_gate(req)
+    fund_map: dict[str, FundamentalHealth | None] = {}
+    if str(req.horizon).lower() != "intraday":
+        _staleness = fund_gate.get("staleness_days", 90)
+        _fund_results = await asyncio.gather(
+            *[get_fundamentals(sym, staleness_days=_staleness) for sym in symbols],
+            return_exceptions=True,
+        )
+        for sym, snap in zip(symbols, _fund_results):
+            if isinstance(snap, Exception):
+                fund_map[sym] = None
+            else:
+                fund_map[sym] = score_fundamentals(snap, req.direction, fund_gate) if snap else None
+
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
     _tradier_tok, _tradier_base = get_tradier_creds()
     async with httpx.AsyncClient(
@@ -707,6 +742,8 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 atr_mult=atr_mult,
                 price_map=price_map,
                 bars_map=bars_map,
+                fund_map=fund_map,
+                fund_gate=fund_gate,
             )
             for symbol in symbols
         ]

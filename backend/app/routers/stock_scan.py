@@ -34,6 +34,10 @@ from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, s
 from app.scoring.signal_confidence import compute_confidence, interpret
 from app.services.regime_omm import compute_omm
 from app.services.regime_hmm_daily import compute_directional_hmm, alignment
+from app.services.fundamentals_store import get_fundamentals as _get_fundamentals
+from app.scoring.fundamentals_scorer import score_fundamentals as _score_fundamentals, FundamentalHealth
+from app.schemas import FundamentalsOut
+from app.routers.scan import _resolve_fundamentals_gate
 
 
 _SCORING_CFG = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
@@ -113,6 +117,7 @@ async def _process_stock(
     scan_id: str,
     price_map: dict[str, dict],
     benchmark_closes: list[float],
+    fund_gate: dict | None = None,
 ) -> PositionCardOut | dict:
     async with _SCAN_SEM:
         try:
@@ -189,6 +194,13 @@ async def _process_stock(
                         "insufficient_data": False,
                     }
 
+            # ── Fundamentals (skipped for intraday) ───────────────────────────
+            _fh: FundamentalHealth | None = None
+            if req.horizon.lower() != "intraday" and fund_gate is not None:
+                _staleness = fund_gate.get("staleness_days", 90)
+                _snap = await _get_fundamentals(symbol, staleness_days=_staleness)
+                _fh = _score_fundamentals(_snap, req.direction, fund_gate) if _snap else None
+
             card = score_stock(
                 symbol=symbol,
                 direction=req.direction,
@@ -197,6 +209,8 @@ async def _process_stock(
                 scoring_mode="stock",
                 regime_signal=regime_signal,
                 regime_gate=full_cfg["regime_gate"] if regime_signal else None,
+                fundamentals=_fh,
+                fundamentals_gate=fund_gate,
             )
             if card.status == "REJECT":
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}
@@ -295,6 +309,11 @@ async def _process_stock(
                 sector_rs_pct=sector_rs_pct,
                 next_event_days=next_event_days, next_event_label=next_event_label,
                 sentiment=SentimentData(**regime_signal) if regime_signal else None,
+                fundamentals=FundamentalsOut(
+                    score=_fh.score, quality_label=_fh.quality_label, risk_label=_fh.risk_label,
+                    growth_score=_fh.growth_score, quality_score=_fh.quality_score,
+                    risk_score=_fh.risk_score, safety_flags=_fh.safety_flags, detail=_fh.detail,
+                ) if _fh else None,
             )
         except Exception as exc:
             logger.exception("Error processing %s", symbol)
@@ -332,7 +351,8 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
     except Exception:
         pass   # RS column shows None — non-fatal
 
-    tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes) for s in symbols]
+    fund_gate = _resolve_fundamentals_gate(req)
+    tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate) for s in symbols]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     candidates, rejected = [], []
