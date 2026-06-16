@@ -1,0 +1,43 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+.empty {
+  padding: 8px 10px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 6px;
+}
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+}
+.buckets {
+  display: flex;
+  gap: 12px;
+}
+.bucket {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.flags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.flag {
+  font-size: 11px;
+  color: var(--reject);
+  border: 1px solid var(--reject);
+  border-radius: 3px;
+  padding: 1px 5px;
+}

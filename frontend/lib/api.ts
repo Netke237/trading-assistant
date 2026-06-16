@@ -129,6 +129,10 @@ export const api = {
     filters?: {
       min_price?: number; max_price?: number; min_cap_usd?: number; max_cap_usd?: number;
       confidence_caution_below?: number; confidence_reject_below?: number;
+      fundamentals_enabled?: boolean;
+      fundamentals_caution_below?: number;
+      fundamentals_reject_below?: number;
+      fundamentals_de_reject?: number;
     },
     overrides?: Record<string, number | boolean | string>,
   ) =>
@@ -156,6 +160,10 @@ export const api = {
     risk_fixed_usd?: number; bt_min_trades?: number; bt_min_win_rate?: number;
     min_price?: number; max_price?: number;
     shortlist_max_candidates?: number;
+    fundamentals_enabled?: boolean;
+    fundamentals_caution_below?: number;
+    fundamentals_reject_below?: number;
+    fundamentals_de_reject?: number;
   }) => post<StockScanResult>('/api/stock-scan', req),
 
   postStockOrder: (req: {

@@ -40,6 +40,17 @@ export interface VolDetail {
   reason?:  string;
 }
 
+export interface FundamentalsOut {
+  score: number;
+  quality_label: 'Strong' | 'Neutral' | 'Weak';
+  risk_label: 'Low' | 'Medium' | 'High';
+  growth_score: number;
+  quality_score: number;
+  risk_score: number;
+  safety_flags: string[];
+  detail: Record<string, unknown>;
+}
+
 export interface SentimentData {
   horizon: string;
   timeframe: string;
@@ -193,6 +204,7 @@ export interface TradeCardData {
   confidence?: number | null;
   confidenceText?: string | null;
   sentiment?: SentimentData | null;
+  fundamentals?: FundamentalsOut | null;
 }
 
 // --- Option contracts ---

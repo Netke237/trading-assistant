@@ -210,6 +210,7 @@ export default function Step4StocksPage() {
             <Text size={11} tone="dim">TRADES</Text>
             <Text size={11} tone="dim">RETURN</Text>
             <Text size={11} tone="dim">MAX DD</Text>
+            <Text size={11} tone="dim">HEALTH</Text>
             <Text size={11} tone="dim">GATE</Text>
           </div>
 
@@ -236,6 +237,9 @@ export default function Step4StocksPage() {
                     <Data size={12}>{bt.n_trades}</Data>
                     <Data size={12} tone={bt.total_return_pct >= 0 ? 'pass' : 'reject'}>{bt.total_return_pct.toFixed(1)}%</Data>
                     <Data size={12} tone="reject">{Math.abs(bt.max_drawdown_pct).toFixed(1)}%</Data>
+                    <Data size={12} tone={c.fundamentals ? (c.fundamentals.score >= 65 ? 'pass' : c.fundamentals.score >= 40 ? 'caution' : 'reject') : 'dim'}>
+                      {c.fundamentals?.score ?? '—'}
+                    </Data>
                     <StatusBadge status={bt.passes_gate ? 'PASS' : 'REJECT'} />
                   </button>
                   {open && (

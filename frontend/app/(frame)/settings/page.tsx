@@ -14,7 +14,7 @@
 import { useState, useEffect } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
-import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig } from '@/lib/settingsStore';
+import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig, type FundamentalsGate } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, type IngestionSchedule } from '@/lib/api';
@@ -175,6 +175,7 @@ function ScanForm() {
     maxContractsPerChain, setMaxContractsPerChain,
     maxContractPrice, setMaxContractPrice,
     confidenceGate, setConfidenceGate,
+    fundamentalsGate, setFundamentalsGate,
   } = useSettingsStore();
   const [continuous, setContinuous] = useState(false);
 
@@ -186,6 +187,9 @@ function ScanForm() {
   const [cautionText,    setCautionText]    = useState(String(confidenceGate.cautionBelow));
   const [rejectText,     setRejectText]     = useState(String(confidenceGate.rejectBelow));
   const [atrText,        setAtrText]        = useState(String(confidenceGate.atrMult));
+  const [fCautionText,   setFCautionText]   = useState(String(fundamentalsGate?.cautionBelow ?? 45));
+  const [fRejectText,    setFRejectText]    = useState(String(fundamentalsGate?.rejectBelow ?? 30));
+  const [fDeRejectText,  setFDeRejectText]  = useState(String(fundamentalsGate?.deReject ?? 3.0));
 
   // Sync text buffers when the store resets
   useEffect(() => { setCandidatesText(String(shortlistMaxCandidates)); }, [shortlistMaxCandidates]);
@@ -194,6 +198,9 @@ function ScanForm() {
   useEffect(() => { setCautionText(String(confidenceGate.cautionBelow)); }, [confidenceGate.cautionBelow]);
   useEffect(() => { setRejectText(String(confidenceGate.rejectBelow));   }, [confidenceGate.rejectBelow]);
   useEffect(() => { setAtrText(String(confidenceGate.atrMult));          }, [confidenceGate.atrMult]);
+  useEffect(() => { setFCautionText(String(fundamentalsGate?.cautionBelow ?? 45)); }, [fundamentalsGate?.cautionBelow]);
+  useEffect(() => { setFRejectText(String(fundamentalsGate?.rejectBelow ?? 30));   }, [fundamentalsGate?.rejectBelow]);
+  useEffect(() => { setFDeRejectText(String(fundamentalsGate?.deReject ?? 3.0));   }, [fundamentalsGate?.deReject]);
 
   return (
     <>
@@ -346,6 +353,106 @@ function ScanForm() {
             const clamped = isNaN(val) ? 1.5 : Math.max(0.5, Math.min(5, val));
             setAtrText(String(clamped));
             setConfidenceGate({ ...confidenceGate, atrMult: clamped });
+          }}
+        />
+      </Row>
+
+      <FundamentalsGateSection
+        gate={fundamentalsGate}
+        setGate={setFundamentalsGate}
+        fCautionText={fCautionText}
+        setFCautionText={setFCautionText}
+        fRejectText={fRejectText}
+        setFRejectText={setFRejectText}
+        fDeRejectText={fDeRejectText}
+        setFDeRejectText={setFDeRejectText}
+      />
+    </>
+  );
+}
+
+function FundamentalsGateSection({
+  gate,
+  setGate,
+  fCautionText, setFCautionText,
+  fRejectText,  setFRejectText,
+  fDeRejectText, setFDeRejectText,
+}: {
+  gate: FundamentalsGate;
+  setGate: (g: FundamentalsGate) => void;
+  fCautionText: string;  setFCautionText: (v: string) => void;
+  fRejectText: string;   setFRejectText:  (v: string) => void;
+  fDeRejectText: string; setFDeRejectText: (v: string) => void;
+}) {
+  return (
+    <>
+      <SectionIntro
+        title="Fundamentals gate"
+        blurb="Scores fundamentals (balance sheet health, growth, risk) on a 0–100 scale. The gate can lower a verdict but never raise it — protects against setups with poor financial health."
+      />
+      <Row label="Enable gate" hint="When off, fundamentals are shown but never change the verdict" defaultValue="On">
+        <Toggle
+          defaultOn={gate?.enabled ?? true}
+          onChange={(on) => setGate({ ...gate, enabled: on })}
+        />
+      </Row>
+      <Row
+        label="Caution below (score)"
+        hint="Fundamental health score under this caps the verdict at CAUTION (0–100)"
+        defaultValue="45"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.input}
+          disabled={!gate?.enabled}
+          value={fCautionText}
+          onChange={(e) => setFCautionText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(fCautionText, 10);
+            const clamped = isNaN(val) ? 45 : Math.max(0, Math.min(100, val));
+            setFCautionText(String(clamped));
+            setGate({ ...gate, cautionBelow: clamped });
+          }}
+        />
+      </Row>
+      <Row
+        label="Reject below (score)"
+        hint="Fundamental health score under this caps the verdict at REJECT (0–100)"
+        defaultValue="30"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.input}
+          disabled={!gate?.enabled}
+          value={fRejectText}
+          onChange={(e) => setFRejectText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(fRejectText, 10);
+            const clamped = isNaN(val) ? 30 : Math.max(0, Math.min(100, val));
+            setFRejectText(String(clamped));
+            setGate({ ...gate, rejectBelow: clamped });
+          }}
+        />
+      </Row>
+      <Row
+        label="De-reject threshold"
+        hint="Minimum R:R ratio that can override a fundamental REJECT verdict (0.5–10)"
+        defaultValue="3.0"
+      >
+        <input
+          type="text"
+          inputMode="decimal"
+          className={styles.input}
+          disabled={!gate?.enabled}
+          value={fDeRejectText}
+          onChange={(e) => setFDeRejectText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(fDeRejectText);
+            const clamped = isNaN(val) ? 3.0 : Math.max(0.5, Math.min(10, val));
+            setFDeRejectText(String(clamped));
+            setGate({ ...gate, deReject: clamped });
           }}
         />
       </Row>
