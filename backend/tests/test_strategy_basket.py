@@ -77,6 +77,22 @@ def test_basket_deduplication():
     assert set(basket) == {"A", "B"}
 
 
+def test_propose_basket_missing_file(monkeypatch, tmp_path):
+    """Returns [] when sp500.csv is not found instead of raising."""
+    import app.services.strategy_basket as mod
+    monkeypatch.setattr(mod, "_CSV_PATH", tmp_path / "nonexistent.csv")
+    assert mod.propose_basket(per_sector=3) == []
+
+
+def test_propose_basket_missing_symbol_column(monkeypatch, tmp_path):
+    """Returns [] when the CSV is present but lacks the 'symbol' column."""
+    import app.services.strategy_basket as mod
+    bad_csv = tmp_path / "bad.csv"
+    bad_csv.write_text("ticker,sector\nAAPL,Tech\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "_CSV_PATH", bad_csv)
+    assert mod.propose_basket(per_sector=3) == []
+
+
 def test_propose_basket_returns_sorted_symbols():
     """Verify that propose_basket returns sorted symbols with no duplicates."""
     result = propose_basket(per_sector=1)
