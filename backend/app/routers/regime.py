@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 import numpy as np
 from fastapi import APIRouter, Query
+
+_log = logging.getLogger(__name__)
 
 from app.schemas import MarketRegime, RegimeMetric, OmmData, IntraHmmData, IntraHmmTransition
 from app.data.market import fetch_price, fetch_candles, fetch_intraday_candles
@@ -175,8 +178,8 @@ async def get_regime(
             try:
                 _dh_res = _compute_directional_hmm(spx_candles)
                 _spx_hmm_state = _dh_res.state if _dh_res else None
-            except Exception:
-                pass
+            except Exception as exc:
+                _log.debug("Directional HMM unavailable for SPX: %s", exc)
     except Exception:
         pass
 
