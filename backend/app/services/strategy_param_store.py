@@ -83,7 +83,8 @@ def adopt(strategy: str, params: dict) -> None:
     Uses atomic write (tmp-then-replace) to prevent corruption on crash.
     """
     global _CACHE
-    _CACHE = None  # force reload after write
+    # Read BEFORE touching anything — preserves other strategies and keeps the
+    # cache valid for concurrent readers until the write succeeds.
     data = _load()
 
     # Archive the current config before modification (if it exists)
@@ -102,3 +103,5 @@ def adopt(strategy: str, params: dict) -> None:
     tmp = CFG.with_suffix(".yaml.tmp")
     tmp.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     os.replace(tmp, CFG)
+    # Invalidate cache AFTER the write succeeds — no window of stale reads.
+    _CACHE = None

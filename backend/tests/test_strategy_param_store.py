@@ -143,6 +143,22 @@ def test_get_job_retention_custom(tmp_path, monkeypatch):
     assert store.get_job_retention()["max_completed"] == 50
 
 
+def test_adopt_preserves_other_strategies(tmp_path, monkeypatch):
+    """adopt() must not discard existing strategies when a second strategy is adopted."""
+    import app.services.strategy_param_store as store
+    monkeypatch.setattr(store, "CFG", tmp_path / "strategy_params.yaml")
+    store._CACHE = None
+    (tmp_path / "strategy_params.yaml").write_text(
+        "strategies:\n"
+        "  strategy_a:\n    active:\n      p: 1\n"
+        "  strategy_b:\n    active:\n      p: 2\n",
+        encoding="utf-8",
+    )
+    store.adopt("strategy_a", {"p": 99})
+    assert store.get_active("strategy_b")["p"] == 2   # must survive
+    assert store.get_active("strategy_a")["p"] == 99
+
+
 def test_signal_kwargs_merge_request_over_store(monkeypatch):
     from app.services import strategy_param_store as store
     monkeypatch.setattr("app.routers.stock_scan.get_active", lambda s: {"ema_period": 50, "trend_ema": 100})
