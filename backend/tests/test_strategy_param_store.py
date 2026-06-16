@@ -8,6 +8,7 @@ from app.services.strategy_param_store import (
     get_costs,
     get_direction,
     get_job_retention,
+    get_optimization_config,
     adopt,
 )
 
@@ -141,6 +142,24 @@ def test_get_job_retention_custom(tmp_path, monkeypatch):
         "job_retention:\n  max_completed: 50\n", encoding="utf-8"
     )
     assert store.get_job_retention()["max_completed"] == 50
+
+
+def test_get_optimization_config_defaults():
+    cfg = get_optimization_config()
+    assert cfg["min_trades"] == 20
+    assert cfg["min_consistency"] == 0.5
+
+
+def test_get_optimization_config_custom(tmp_path, monkeypatch):
+    import app.services.strategy_param_store as store
+    monkeypatch.setattr(store, "CFG", tmp_path / "strategy_params.yaml")
+    store._CACHE = None
+    (tmp_path / "strategy_params.yaml").write_text(
+        "optimization:\n  min_trades: 30\n  min_consistency: 0.6\n", encoding="utf-8"
+    )
+    cfg = store.get_optimization_config()
+    assert cfg["min_trades"] == 30
+    assert cfg["min_consistency"] == 0.6
 
 
 def test_adopt_preserves_other_strategies(tmp_path, monkeypatch):

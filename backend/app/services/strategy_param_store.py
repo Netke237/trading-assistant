@@ -71,6 +71,11 @@ def get_direction() -> str:
     return str(_load().get("direction", "bullish"))
 
 
+def get_optimization_config() -> dict:
+    """Get optimization eligibility thresholds (min_trades, min_consistency)."""
+    return dict(_load().get("optimization", {"min_trades": 20, "min_consistency": 0.5}))
+
+
 def get_job_retention() -> dict:
     """Get job retention policy — max_completed: keep only the last N finished jobs."""
     return dict(_load().get("job_retention", {"max_completed": 100}))

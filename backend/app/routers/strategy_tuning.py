@@ -54,6 +54,7 @@ async def run_job(body: dict = Body(default={})) -> dict:
                 from app.services.strategy_basket import propose_basket
                 per_sector = cfg.get("basket", {}).get("per_sector", 5)
                 basket_symbols = propose_basket(per_sector=per_sector)
+            opt_cfg = store.get_optimization_config()
             proposals = await run_optimization(
                 strategies,
                 basket_symbols,
@@ -61,6 +62,8 @@ async def run_job(body: dict = Body(default={})) -> dict:
                 store.get_costs(),
                 progress,
                 direction=store.get_direction(),
+                min_trades=opt_cfg.get("min_trades", 20),
+                min_consistency=opt_cfg.get("min_consistency", 0.5),
             )
             _JOBS[job_id].update(status="completed", proposals=proposals)
             _evict_old_jobs(store.get_job_retention().get("max_completed", 100))
