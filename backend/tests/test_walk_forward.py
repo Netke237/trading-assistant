@@ -71,6 +71,46 @@ def test_engine_prefers_planted_edge_over_noise():
     assert consensus([{"ema_period": 50, "trend_ema": 200}]) == {"ema_period": 50, "trend_ema": 200}
 
 
+def test_optimize_strategy_sync_returns_none_when_basket_empty():
+    """If basket_bars is empty every fold returns {} — result should be None."""
+    from app.services.strategy_param_optimizer import _optimize_strategy_sync
+    from app.services.walk_forward import Fold
+    from datetime import date
+
+    folds = [Fold(date(2020, 1, 1), date(2021, 1, 1), date(2021, 1, 1), date(2021, 4, 1))]
+    result = _optimize_strategy_sync(
+        "pullback_ema", "bullish",
+        {},           # empty basket → train_fold returns {} for every fold
+        folds,
+        {"ema_period": [20, 50]},
+        {"fee_pct": 0.001, "slippage_pct": 0.001},
+        min_trades=20,
+        min_consistency=0.5,
+    )
+    assert result is None
+
+
+def test_build_proposal_is_oos_same_units():
+    """in_sample_return and walk_forward_return must be in the same units (return %)."""
+    from app.services.strategy_param_optimizer import build_proposal
+
+    prop = build_proposal(
+        strategy="pullback_ema",
+        fold_winners=[{"ema_period": 50}],
+        fold_test_returns=[5.0, 3.0],
+        in_sample_return=10.0,   # return % — not Sharpe*100
+        walk_forward_return=4.0,
+        oos_metrics={
+            "sharpe": 0.8, "expectancy": 0.3, "win_rate": 0.55,
+            "total_return": 4.0, "max_drawdown": -3.0, "n_trades": 25,
+        },
+        min_trades=20,
+        min_consistency=0.5,
+    )
+    # degradation = 1 - (4.0 / 10.0) = 0.6
+    assert abs(prop["verdict"]["degradation_pct"] - 0.6) < 0.01
+
+
 def test_optimizer_builds_proposal_shape():
     from app.services.strategy_param_optimizer import build_proposal
     prop = build_proposal(

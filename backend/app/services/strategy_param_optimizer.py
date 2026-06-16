@@ -1,6 +1,7 @@
 """Strategy parameter optimizer orchestrator — runs walk-forward optimization and builds proposals."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date
 from typing import Callable
@@ -22,18 +23,20 @@ def build_proposal(
     walk_forward_return: float,
     oos_metrics: dict,
     min_trades: int,
+    min_consistency: float = 0.5,
 ) -> dict:
     """Build a proposal record from optimization results.
 
     Args:
         strategy: Strategy name.
-        fold_winners: List of winning parameter dicts, one per fold.
-        fold_test_returns: List of test period returns (as decimals).
+        fold_winners: List of winning parameter dicts, one per fold (empty dicts filtered out).
+        fold_test_returns: List of test period returns (as percentages).
         in_sample_return: Training (in-sample) return percentage.
         walk_forward_return: Test (out-of-sample) return percentage.
         oos_metrics: Dict with 'sharpe', 'expectancy', 'win_rate', 'total_return',
                      'max_drawdown', 'n_trades' keys.
         min_trades: Minimum trade count required for eligibility.
+        min_consistency: Minimum fraction of folds with positive OOS returns (0–1).
 
     Returns:
         Dict with keys: strategy, proposed, consistency, eligible, oos_metrics,
@@ -41,7 +44,7 @@ def build_proposal(
     """
     proposed = consensus(fold_winners)
     cons = round(consistency(fold_test_returns), 4)
-    eligible = oos_metrics["n_trades"] >= min_trades and cons >= 0.5
+    eligible = oos_metrics["n_trades"] >= min_trades and cons >= min_consistency
     deg = degradation_pct(in_sample=in_sample_return, walk_forward=walk_forward_return)
 
     if not eligible:
@@ -67,6 +70,126 @@ def build_proposal(
     }
 
 
+def _optimize_strategy_sync(
+    strategy: str,
+    direction: str,
+    basket_bars: dict[str, list[dict]],
+    folds: list,
+    search_space: dict,
+    costs: dict,
+    min_trades: int,
+    min_consistency: float,
+) -> dict | None:
+    """Synchronous per-strategy fold loop; run via asyncio.to_thread to avoid blocking.
+
+    Returns a proposal dict, or None if all folds produced empty winners (no usable data).
+    """
+    from app.services.strategy_backtest import run_strategy_backtest
+
+    fold_winners: list[dict] = []
+    fold_test_returns: list[float] = []
+    in_sample_fold_returns: list[float] = []
+    total_n_trades = 0
+    all_sharpes: list[float] = []
+    all_win_rates: list[float] = []
+    all_expectancies: list[float] = []
+    all_drawdowns: list[float] = []
+
+    for fold in folds:
+        winner = train_fold(strategy, direction, basket_bars, fold, search_space, costs)
+        fold_winners.append(winner)
+
+        # IS: re-run the train window with winner params using return% to match OOS units
+        is_returns: list[float] = []
+        for sym, bars in basket_bars.items():
+            train_bars_fold = _slice_bars(bars, fold.train_start, fold.train_end)
+            if len(train_bars_fold) >= 100:
+                try:
+                    res = run_strategy_backtest(
+                        train_bars_fold, strategy=strategy, direction=direction, params=winner
+                    )
+                    if res.n_trades > 0:
+                        net = apply_costs(
+                            gross_return_pct=res.total_return_pct,
+                            fee_pct=costs.get("fee_pct", 0.001),
+                            slippage_pct=costs.get("slippage_pct", 0.001),
+                        )
+                        is_returns.append(net)
+                except Exception as exc:
+                    logger.debug("IS backtest failed for %s: %s", sym, exc)
+        in_sample_fold_returns.append(
+            sum(is_returns) / len(is_returns) if is_returns else 0.0
+        )
+
+        # OOS: score the test window with winner params, net of costs
+        test_returns: list[float] = []
+        for sym, bars in basket_bars.items():
+            test_bars = _slice_bars(bars, fold.test_start, fold.test_end)
+            if len(test_bars) >= 20:
+                try:
+                    res = run_strategy_backtest(
+                        test_bars, strategy=strategy, direction=direction, params=winner
+                    )
+                    gross = res.total_return_pct if hasattr(res, "total_return_pct") else 0.0
+                    net = apply_costs(
+                        gross_return_pct=gross,
+                        fee_pct=costs.get("fee_pct", 0.001),
+                        slippage_pct=costs.get("slippage_pct", 0.001),
+                    )
+                    test_returns.append(net)
+                    total_n_trades += getattr(res, "n_trades", 0)
+                    all_sharpes.append(getattr(res, "sharpe", 0.0))
+                    if res.n_trades > 0:
+                        all_win_rates.append(res.win_rate)
+                        if getattr(res, "expectancy", None) is not None:
+                            all_expectancies.append(res.expectancy)
+                        if getattr(res, "max_drawdown_pct", None) is not None:
+                            all_drawdowns.append(res.max_drawdown_pct)
+                except Exception as exc:
+                    logger.debug("OOS backtest failed for %s: %s", sym, exc)
+        fold_test_returns.append(
+            sum(test_returns) / len(test_returns) if test_returns else 0.0
+        )
+
+    # Filter folds where the grid search found nothing (train window too short, etc.)
+    valid_winners = [w for w in fold_winners if w]
+    if not valid_winners:
+        logger.warning("No valid fold winners for %s — all folds empty, skipping", strategy)
+        return None
+
+    in_sample_return = (
+        sum(in_sample_fold_returns) / len(in_sample_fold_returns) * 100
+        if in_sample_fold_returns
+        else 0.0
+    )
+    walk_forward_return = (
+        sum(fold_test_returns) / len(fold_test_returns) * 100
+        if fold_test_returns
+        else 0.0
+    )
+    avg_sharpe = sum(all_sharpes) / len(all_sharpes) if all_sharpes else 0.0
+
+    oos_metrics = {
+        "sharpe": round(avg_sharpe, 4),
+        "expectancy": round(sum(all_expectancies) / len(all_expectancies), 4) if all_expectancies else 0.0,
+        "win_rate": round(sum(all_win_rates) / len(all_win_rates), 4) if all_win_rates else 0.0,
+        "total_return": walk_forward_return,
+        "max_drawdown": round(min(all_drawdowns), 4) if all_drawdowns else 0.0,
+        "n_trades": total_n_trades,
+    }
+
+    return build_proposal(
+        strategy=strategy,
+        fold_winners=valid_winners,
+        fold_test_returns=fold_test_returns,
+        in_sample_return=in_sample_return,
+        walk_forward_return=walk_forward_return,
+        oos_metrics=oos_metrics,
+        min_trades=min_trades,
+        min_consistency=min_consistency,
+    )
+
+
 async def run_optimization(
     strategies: list[str],
     basket_symbols: list[str],
@@ -75,6 +198,8 @@ async def run_optimization(
     progress_cb: Callable[[int, int], None],
     *,
     direction: str = "bullish",
+    min_trades: int = 20,
+    min_consistency: float = 0.5,
 ) -> dict:
     """Run walk-forward optimization for all strategies. Returns strategy → proposal dict.
 
@@ -84,14 +209,17 @@ async def run_optimization(
         windows: Dict with 'train_months', 'test_months', 'type' (rolling|anchored).
         costs: Dict with 'fee_pct' and 'slippage_pct' keys.
         progress_cb: Callable(done, total) for progress reporting.
+        direction: Trading direction ('bullish' or 'bearish').
+        min_trades: Minimum OOS trades for a proposal to be eligible.
+        min_consistency: Minimum fraction of positive OOS folds for eligibility.
 
     Returns:
         Dict mapping strategy name to proposal dict.
-        If no bars are available for a strategy, it is skipped.
+        Strategies with no bars or all-empty folds are omitted.
     """
     from app.services.strategy_param_store import get_search_space
     from app.services.historical_store import get_bars
-    from app.services.strategy_backtest import run_strategy_backtest
+    from app.services.walk_forward import precompute_bar_dates
     from dateutil.relativedelta import relativedelta
 
     results: dict = {}
@@ -106,11 +234,9 @@ async def run_optimization(
             progress_cb(done, total_work)
             continue
 
-        # Load bars for basket symbols
         basket_bars: dict[str, list[dict]] = {}
         for sym in basket_symbols:
             try:
-                # Default to last 3 years if we can determine dates
                 end_date = date.today()
                 start_date = end_date - relativedelta(years=3)
                 bars = await get_bars(sym, start_date, end_date)
@@ -118,7 +244,6 @@ async def run_optimization(
                     basket_bars[sym] = bars
             except Exception as exc:
                 logger.debug("Failed to load bars for %s: %s", sym, exc)
-                pass  # symbol not available in DB
 
         if not basket_bars:
             logger.warning("No bars available for strategy %s basket, skipping", strategy)
@@ -126,7 +251,6 @@ async def run_optimization(
             progress_cb(done, total_work)
             continue
 
-        # Determine date range from available data
         all_dates = [b["time"] for bars in basket_bars.values() for b in bars]
         if not all_dates:
             done += 1
@@ -150,97 +274,18 @@ async def run_optimization(
             progress_cb(done, total_work)
             continue
 
-        fold_winners: list[dict] = []
-        fold_test_returns: list[float] = []
-        in_sample_sharpes: list[float] = []
-        total_n_trades = 0
-        all_sharpes: list[float] = []
-        all_win_rates: list[float] = []
-        all_expectancies: list[float] = []
-        all_drawdowns: list[float] = []
+        # Pre-compute date parsing once per symbol before the fold/combo loop
+        for bars in basket_bars.values():
+            precompute_bar_dates(bars)
 
-        for fold in folds:
-            winner = train_fold(strategy, direction, basket_bars, fold, search_space, costs)
-            fold_winners.append(winner)
-
-            # IS: re-run the train window with winner params to get a honest IS Sharpe
-            is_sharpes: list[float] = []
-            for sym, bars in basket_bars.items():
-                train_bars_fold = _slice_bars(bars, fold.train_start, fold.train_end)
-                if len(train_bars_fold) >= 100:
-                    try:
-                        res = run_strategy_backtest(
-                            train_bars_fold, strategy=strategy, direction=direction, params=winner
-                        )
-                        if res.n_trades > 0:
-                            is_sharpes.append(res.sharpe)
-                    except Exception as exc:
-                        logger.debug("IS backtest failed for %s: %s", sym, exc)
-            in_sample_sharpes.append(
-                sum(is_sharpes) / len(is_sharpes) if is_sharpes else 0.0
-            )
-
-            # OOS: score the test window with winner params, net of transaction costs
-            test_returns: list[float] = []
-            for sym, bars in basket_bars.items():
-                test_bars = _slice_bars(bars, fold.test_start, fold.test_end)
-                if len(test_bars) >= 20:
-                    try:
-                        res = run_strategy_backtest(
-                            test_bars, strategy=strategy, direction=direction, params=winner
-                        )
-                        gross = res.total_return_pct if hasattr(res, "total_return_pct") else 0.0
-                        net = apply_costs(
-                            gross_return_pct=gross,
-                            fee_pct=costs.get("fee_pct", 0.001),
-                            slippage_pct=costs.get("slippage_pct", 0.001),
-                        )
-                        test_returns.append(net)
-                        total_n_trades += getattr(res, "n_trades", 0)
-                        all_sharpes.append(getattr(res, "sharpe", 0.0))
-                        if res.n_trades > 0:
-                            all_win_rates.append(res.win_rate)
-                            if getattr(res, "expectancy", None) is not None:
-                                all_expectancies.append(res.expectancy)
-                            if getattr(res, "max_drawdown_pct", None) is not None:
-                                all_drawdowns.append(res.max_drawdown_pct)
-                    except Exception as exc:
-                        logger.debug("OOS backtest failed for %s: %s", sym, exc)
-            fold_test_returns.append(
-                sum(test_returns) / len(test_returns) if test_returns else 0.0
-            )
-
-        in_sample_return = (
-            sum(in_sample_sharpes) / len(in_sample_sharpes) * 100
-            if in_sample_sharpes
-            else 0.0
+        proposal = await asyncio.to_thread(
+            _optimize_strategy_sync,
+            strategy, direction, basket_bars, folds, search_space, costs,
+            min_trades, min_consistency,
         )
-        walk_forward_return = (
-            sum(fold_test_returns) / len(fold_test_returns) * 100
-            if fold_test_returns
-            else 0.0
-        )
-        avg_sharpe = sum(all_sharpes) / len(all_sharpes) if all_sharpes else 0.0
+        if proposal is not None:
+            results[strategy] = proposal
 
-        oos_metrics = {
-            "sharpe": round(avg_sharpe, 4),
-            "expectancy": round(sum(all_expectancies) / len(all_expectancies), 4) if all_expectancies else 0.0,
-            "win_rate": round(sum(all_win_rates) / len(all_win_rates), 4) if all_win_rates else 0.0,
-            "total_return": walk_forward_return,
-            "max_drawdown": round(min(all_drawdowns), 4) if all_drawdowns else 0.0,
-            "n_trades": total_n_trades,
-        }
-
-        proposal = build_proposal(
-            strategy=strategy,
-            fold_winners=fold_winners,
-            fold_test_returns=fold_test_returns,
-            in_sample_return=in_sample_return,
-            walk_forward_return=walk_forward_return,
-            oos_metrics=oos_metrics,
-            min_trades=20,
-        )
-        results[strategy] = proposal
         done += 1
         progress_cb(done, total_work)
 
