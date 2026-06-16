@@ -59,3 +59,9 @@ def test_weak_fundamentals_scores_low():
     ), "Bullish")
     assert h.score < 40
     assert h.quality_label == "Weak"
+
+
+def test_invert_metrics_score_correctly():
+    low_debt = score_fundamentals(_snap(debt_to_equity=0.2, share_growth_yoy=0.0, current_ratio=2.0), "Bullish")
+    high_debt = score_fundamentals(_snap(debt_to_equity=2.5, share_growth_yoy=0.05, current_ratio=2.0), "Bullish")
+    assert low_debt.risk_score > high_debt.risk_score
