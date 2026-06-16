@@ -6,7 +6,8 @@ from datetime import date
 from typing import Callable
 
 from app.services.walk_forward import (
-    consensus, consistency, degradation_pct, build_folds, train_fold, _slice_bars
+    apply_costs, consensus, consistency, degradation_pct,
+    build_folds, train_fold, _slice_bars,
 )
 
 logger = logging.getLogger(__name__)
@@ -147,30 +148,62 @@ async def run_optimization(
             progress_cb(done, total_work)
             continue
 
-        fold_winners = []
-        fold_test_returns = []
-        in_sample_sharpes = []
+        fold_winners: list[dict] = []
+        fold_test_returns: list[float] = []
+        in_sample_sharpes: list[float] = []
         total_n_trades = 0
         all_sharpes: list[float] = []
+        all_win_rates: list[float] = []
+        all_expectancies: list[float] = []
+        all_drawdowns: list[float] = []
 
         for fold in folds:
             winner = train_fold(strategy, "bullish", basket_bars, fold, search_space, costs)
             fold_winners.append(winner)
-            # Score test window with winning params
-            test_returns = []
+
+            # IS: re-run the train window with winner params to get a honest IS Sharpe
+            is_sharpes: list[float] = []
+            for sym, bars in basket_bars.items():
+                train_bars_fold = _slice_bars(bars, fold.train_start, fold.train_end)
+                if len(train_bars_fold) >= 100:
+                    try:
+                        res = run_strategy_backtest(
+                            train_bars_fold, strategy=strategy, direction="bullish", params=winner
+                        )
+                        if res.n_trades > 0:
+                            is_sharpes.append(res.sharpe)
+                    except Exception as exc:
+                        logger.debug("IS backtest failed for %s: %s", sym, exc)
+            in_sample_sharpes.append(
+                sum(is_sharpes) / len(is_sharpes) if is_sharpes else 0.0
+            )
+
+            # OOS: score the test window with winner params, net of transaction costs
+            test_returns: list[float] = []
             for sym, bars in basket_bars.items():
                 test_bars = _slice_bars(bars, fold.test_start, fold.test_end)
                 if len(test_bars) >= 20:
                     try:
-                        res = run_strategy_backtest(test_bars, strategy=strategy, direction="bullish")
-                        test_returns.append(
-                            res.total_return_pct if hasattr(res, "total_return_pct") else 0.0
+                        res = run_strategy_backtest(
+                            test_bars, strategy=strategy, direction="bullish", params=winner
                         )
-                        in_sample_sharpes.append(res.sharpe if hasattr(res, "sharpe") else 0.0)
+                        gross = res.total_return_pct if hasattr(res, "total_return_pct") else 0.0
+                        net = apply_costs(
+                            gross_return_pct=gross,
+                            fee_pct=costs.get("fee_pct", 0.001),
+                            slippage_pct=costs.get("slippage_pct", 0.001),
+                        )
+                        test_returns.append(net)
                         total_n_trades += getattr(res, "n_trades", 0)
                         all_sharpes.append(getattr(res, "sharpe", 0.0))
+                        if res.n_trades > 0:
+                            all_win_rates.append(res.win_rate)
+                            if getattr(res, "expectancy", None) is not None:
+                                all_expectancies.append(res.expectancy)
+                            if getattr(res, "max_drawdown_pct", None) is not None:
+                                all_drawdowns.append(res.max_drawdown_pct)
                     except Exception as exc:
-                        logger.debug("Backtest failed for %s: %s", sym, exc)
+                        logger.debug("OOS backtest failed for %s: %s", sym, exc)
             fold_test_returns.append(
                 sum(test_returns) / len(test_returns) if test_returns else 0.0
             )
@@ -189,10 +222,10 @@ async def run_optimization(
 
         oos_metrics = {
             "sharpe": round(avg_sharpe, 4),
-            "expectancy": 0.0,
-            "win_rate": 0.0,
+            "expectancy": round(sum(all_expectancies) / len(all_expectancies), 4) if all_expectancies else 0.0,
+            "win_rate": round(sum(all_win_rates) / len(all_win_rates), 4) if all_win_rates else 0.0,
             "total_return": walk_forward_return,
-            "max_drawdown": 0.0,
+            "max_drawdown": round(min(all_drawdowns), 4) if all_drawdowns else 0.0,
             "n_trades": total_n_trades,
         }
 

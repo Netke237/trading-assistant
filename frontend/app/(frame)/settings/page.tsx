@@ -1284,12 +1284,15 @@ function StrategyScanForm() {
 
 /* ---------- Strategy Tuning ---------- */
 
+const MAX_POLL_COUNT = 150; // 5 minutes at 2s intervals
+
 function StrategyTuningForm() {
   const [jobId, setJobId] = React.useState<string | null>(null);
   const [job, setJob] = React.useState<TuningJob | null>(null);
   const [polling, setPolling] = React.useState(false);
   const [adoptedStrategies, setAdoptedStrategies] = React.useState<Set<string>>(new Set());
   const [error, setError] = React.useState<string | null>(null);
+  const pollCountRef = React.useRef(0);
 
   const handleRun = async () => {
     setError(null);
@@ -1305,7 +1308,15 @@ function StrategyTuningForm() {
 
   React.useEffect(() => {
     if (!polling || !jobId) return;
+    pollCountRef.current = 0;
     const interval = setInterval(async () => {
+      pollCountRef.current += 1;
+      if (pollCountRef.current >= MAX_POLL_COUNT) {
+        clearInterval(interval);
+        setPolling(false);
+        setError('Optimization timed out after 5 minutes — try refreshing.');
+        return;
+      }
       try {
         const j = await getTuningJob(jobId);
         setJob(j);

@@ -138,7 +138,7 @@ def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]]
             train_bars = _slice_bars(bars, fold.train_start, fold.train_end)
             if len(train_bars) < 100:
                 continue
-            res = run_strategy_backtest(train_bars, strategy=strategy, direction=direction)
+            res = run_strategy_backtest(train_bars, strategy=strategy, direction=direction, params=combo)
             if res.n_trades > 0:
                 sharpes.append(res.sharpe)
         pooled = sum(sharpes) / len(sharpes) if sharpes else float("-inf")

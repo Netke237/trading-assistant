@@ -41,6 +41,10 @@ async def run_job(body: dict = Body(default={})) -> dict:
             cfg = store._load()
             strategies = list(cfg.get("strategies", {}).keys())
             basket_symbols = cfg.get("basket", {}).get("symbols", [])
+            if not basket_symbols:
+                from app.services.strategy_basket import propose_basket
+                per_sector = cfg.get("basket", {}).get("per_sector", 5)
+                basket_symbols = propose_basket(per_sector=per_sector)
             proposals = await run_optimization(
                 strategies,
                 basket_symbols,
@@ -68,5 +72,7 @@ async def job_status(job_id: str) -> dict:
 
 @router.post("/adopt")
 async def adopt(body: AdoptRequest) -> dict:
+    if not body.params:
+        raise HTTPException(status_code=422, detail="params must not be empty — aborting to avoid wiping active config")
     store.adopt(body.strategy, body.params)
     return {"ok": True, "active": store.get_active(body.strategy)}

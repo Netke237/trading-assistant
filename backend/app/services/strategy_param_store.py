@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import os
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -13,13 +14,22 @@ import yaml
 
 CFG = Path(__file__).parent.parent.parent / "config" / "strategy_params.yaml"
 
+_CACHE: tuple[Path, dict, float] | None = None  # (cached_path, data, expires_at)
+_CACHE_TTL = 60.0  # seconds; invalidated immediately on adopt()
+
 
 def _load() -> dict:
-    """Load strategy_params.yaml or return empty structure if missing."""
+    """Load strategy_params.yaml or return cached structure if fresh."""
+    global _CACHE
+    now = time.monotonic()
+    if _CACHE is not None and _CACHE[0] == CFG and now < _CACHE[2]:
+        return _CACHE[1]
     if not CFG.exists():
-        return {"strategies": {}}
-    content = CFG.read_text(encoding="utf-8")
-    return yaml.safe_load(content) or {"strategies": {}}
+        data: dict = {"strategies": {}}
+    else:
+        data = yaml.safe_load(CFG.read_text(encoding="utf-8")) or {"strategies": {}}
+    _CACHE = (CFG, data, now + _CACHE_TTL)
+    return data
 
 
 def get_active(strategy: str) -> dict:
@@ -62,11 +72,14 @@ def adopt(strategy: str, params: dict) -> None:
     Creates a backup of the YAML before overwriting.
     Uses atomic write (tmp-then-replace) to prevent corruption on crash.
     """
+    global _CACHE
+    _CACHE = None  # force reload after write
     data = _load()
 
     # Archive the current config before modification (if it exists)
     if CFG.exists():
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        # Microsecond precision prevents collision when adopt() is called twice rapidly
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         backup_path = CFG.with_suffix(f".bak.{timestamp}.yaml")
         shutil.copy(CFG, backup_path)
 
