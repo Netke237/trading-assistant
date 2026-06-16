@@ -38,9 +38,11 @@ _prefetch_status: dict[str, Any] = {
 def _row_to_snapshot(row: FundamentalsModel):
     """Convert a FundamentalsModel DB row back to a FundamentalsSnapshot.
 
-    Derived metrics that require prior-year values (growth rates) are set to None
-    because prior-year raw values are not stored in the DB.  Margins, ratios, and
-    FCF are recomputed from the stored raw fields.
+    Growth rates (revenue_growth_yoy, eps_growth_yoy, share_growth_yoy) are read
+    directly from the DB columns where they were persisted at EDGAR fetch time.
+    Margins, ratios, and FCF are recomputed from the stored raw fields because they
+    are not stored as columns (they are always derivable from raw values).
+    Prior-year raw values are not stored in the DB and remain None on cache hits.
     """
     from app.data.edgar import FundamentalsSnapshot, _safe_div
 
@@ -192,8 +194,10 @@ def prefetch_universe(symbols: list[str], staleness_days: int = 90) -> None:
     """Prefetch fundamentals for all symbols (blocking; call from a background thread).
 
     Runs all fetches in a single event loop with a semaphore to cap concurrent
-    EDGAR requests at 4, with 150 ms between each release — keeping the rate safely
-    under EDGAR's 10 req/s limit while being ~4x faster than a serial loop.
+    EDGAR requests at 4.  A 150 ms sleep runs outside the semaphore after each task
+    completes — this does not hold the slot, so DB cache-hit tasks release
+    immediately and the next waiter can proceed.  EDGAR calls are still rate-limited
+    because each coroutine sleeps before re-competing for the semaphore.
 
     Updates _prefetch_status in-place so callers can poll get_prefetch_status().
     """
@@ -220,7 +224,10 @@ def prefetch_universe(symbols: list[str], staleness_days: int = 90) -> None:
                 except Exception as exc:
                     logger.warning("fundamentals_store prefetch: %s failed — %s", symbol, exc)
                     _prefetch_status["failed"] += 1
-                await asyncio.sleep(0.15)  # rate-limit EDGAR within each semaphore slot
+            # Sleep AFTER releasing the semaphore so DB cache-hit tasks do not hold
+            # a slot while idle.  This still rate-limits EDGAR when a fetch occurred
+            # because the next acquire on this coroutine is delayed by 150 ms.
+            await asyncio.sleep(0.15)
 
         await asyncio.gather(*[_fetch_one(s) for s in symbols])
 

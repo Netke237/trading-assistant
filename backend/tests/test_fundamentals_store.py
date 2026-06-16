@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -170,7 +170,7 @@ async def test_get_fundamentals_stale_row_calls_edgar(session_factory):
 
 
 @pytest.mark.asyncio
-async def test_get_fundamentals_upserts_on_miss(session_factory, db_engine):
+async def test_get_fundamentals_upserts_on_miss(session_factory):
     """Cache miss should upsert fresh data and return the snapshot."""
     import app.services.fundamentals_store as store
     from app.data.edgar import FundamentalsSnapshot

@@ -20,7 +20,6 @@ from app.models.scan_session import ScanSession
 import json as _json
 
 _RR_CONFIG_PATH = _Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
-_SCORING_CFG_PATH = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
 
 # NOTE: lru_cache caches this at first call. Restart the backend to pick up
 # changes to risk_rules.yaml (premium_stop_pct, target %, etc.).
@@ -31,10 +30,7 @@ def _rr_cfg() -> dict:
         return _yaml.safe_load(f)["reward_risk"]
 
 
-@_lru_cache(maxsize=1)
-def _load_scoring_cfg() -> dict:
-    import yaml as _yaml
-    return _yaml.safe_load(_SCORING_CFG_PATH.read_text())
+from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
 
 from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import date
@@ -56,39 +57,54 @@ class FundamentalsSnapshot:
 
 
 # ---------------------------------------------------------------------------
-# CIK lookup  (TTL-based cache — refreshes weekly, retries on failure)
+# CIK lookup  (TTL-based cache — refreshes weekly, backoff on failure)
 # ---------------------------------------------------------------------------
 
 _CIK_MAP: dict[str, str] | None = None
 _CIK_MAP_LOADED_AT: float = 0.0
+_CIK_MAP_FAILED_AT: float = 0.0
+_CIK_LOCK = threading.Lock()
 _CIK_REFRESH_SECONDS: float = 7 * 24 * 3600  # one week
+_CIK_FAIL_BACKOFF_SECONDS: float = 60.0       # wait 60 s before retrying after failure
 
 
 def _load_cik_map() -> dict[str, str]:
     """Return {TICKER: zero-padded-CIK-10-chars}.
 
-    Cached in-process with a weekly TTL.  On transient failure the stale map is
-    returned if available; if no map has ever loaded an empty dict is returned
-    and the next call will retry (no permanent caching of failure).
+    Thread-safe: a threading.Lock guards the read-check-write sequence so
+    concurrent callers cannot each see a stale map and each dispatch a fetch
+    (TOCTOU race on the two separate globals).
+
+    TTL: refreshes weekly on success.  On failure, honours a 60-second backoff
+    before retrying — prevents a thundering-herd against a downed SEC endpoint
+    when prefetch_universe calls ticker_to_cik() for hundreds of symbols in
+    quick succession.  Stale map is returned if available; empty dict otherwise.
     """
-    global _CIK_MAP, _CIK_MAP_LOADED_AT
-    now = time.monotonic()
-    if _CIK_MAP is not None and (now - _CIK_MAP_LOADED_AT) < _CIK_REFRESH_SECONDS:
-        return _CIK_MAP
-    try:
-        url = "https://www.sec.gov/files/company_tickers.json"
-        resp = requests.get(url, headers=_SEC_HEADERS, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        _CIK_MAP = {
-            row["ticker"].upper(): str(row["cik_str"]).zfill(10)
-            for row in data.values()
-        }
-        _CIK_MAP_LOADED_AT = now  # timestamp only updated on success
-        return _CIK_MAP
-    except Exception as exc:
-        _log.warning("CIK map fetch failed: %s", exc)
-        return _CIK_MAP if _CIK_MAP is not None else {}
+    global _CIK_MAP, _CIK_MAP_LOADED_AT, _CIK_MAP_FAILED_AT
+
+    with _CIK_LOCK:
+        now = time.monotonic()
+        # Return cached map if still within TTL
+        if _CIK_MAP is not None and (now - _CIK_MAP_LOADED_AT) < _CIK_REFRESH_SECONDS:
+            return _CIK_MAP
+        # Honour failure backoff — do not hammer a downed endpoint
+        if (now - _CIK_MAP_FAILED_AT) < _CIK_FAIL_BACKOFF_SECONDS:
+            return _CIK_MAP if _CIK_MAP is not None else {}
+        try:
+            url = "https://www.sec.gov/files/company_tickers.json"
+            resp = requests.get(url, headers=_SEC_HEADERS, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            _CIK_MAP = {
+                row["ticker"].upper(): str(row["cik_str"]).zfill(10)
+                for row in data.values()
+            }
+            _CIK_MAP_LOADED_AT = now  # timestamp only updated on success
+            return _CIK_MAP
+        except Exception as exc:
+            _log.warning("CIK map fetch failed: %s", exc)
+            _CIK_MAP_FAILED_AT = now  # arm backoff
+            return _CIK_MAP if _CIK_MAP is not None else {}
 
 
 def ticker_to_cik(symbol: str) -> str | None:
@@ -156,50 +172,7 @@ def _extract_concept(facts: dict, field: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# CompanyFacts fetch
-# ---------------------------------------------------------------------------
-
-def fetch_company_facts(cik: str) -> dict | None:
-    """Fetch CompanyFacts JSON from EDGAR. Returns raw dict or None on error."""
-    url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
-    try:
-        resp = requests.get(url, headers=_SEC_HEADERS, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as exc:
-        _log.warning("CompanyFacts fetch failed for CIK %s: %s", cik, exc)
-        return None
-
-
-# ---------------------------------------------------------------------------
-# Total-debt aggregator  (sums current + non-current components when present)
-# ---------------------------------------------------------------------------
-
-def _compute_total_debt(facts: dict) -> Decimal | None:
-    """Return total long-term debt from EDGAR facts.
-
-    Sums LongTermDebtNoncurrent + LongTermDebtCurrent when both (or either)
-    are available, so companies that split debt across both line items are not
-    under-reported.  Falls back to the aggregate LongTermDebt concept.
-    """
-    gaap = facts.get("us-gaap", {})
-
-    def _latest_usd(concept: str) -> Decimal | None:
-        vals = gaap.get(concept, {}).get("units", {}).get("USD", [])
-        rows = _pick_annual_values(vals) if vals else []
-        return _to_decimal(rows[0].get("val")) if rows else None
-
-    noncurrent = _latest_usd("LongTermDebtNoncurrent")
-    current_lt = _latest_usd("LongTermDebtCurrent")
-
-    if noncurrent is not None or current_lt is not None:
-        return (noncurrent or Decimal(0)) + (current_lt or Decimal(0))
-
-    return _latest_usd("LongTermDebt")
-
-
-# ---------------------------------------------------------------------------
-# Arithmetic helpers
+# Arithmetic helpers  (defined before _compute_total_debt which calls _to_decimal)
 # ---------------------------------------------------------------------------
 
 def _to_decimal(val: float | int | None) -> Decimal | None:
@@ -227,6 +200,68 @@ def _yoy_growth(current: Decimal | None, previous: Decimal | None) -> float | No
         return float((current - previous) / abs(previous))
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# CompanyFacts fetch
+# ---------------------------------------------------------------------------
+
+def fetch_company_facts(cik: str) -> dict | None:
+    """Fetch CompanyFacts JSON from EDGAR. Returns raw dict or None on error."""
+    url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+    try:
+        resp = requests.get(url, headers=_SEC_HEADERS, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        _log.warning("CompanyFacts fetch failed for CIK %s: %s", cik, exc)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Total-debt aggregator  (sums current + non-current components when present)
+# ---------------------------------------------------------------------------
+
+def _compute_total_debt(facts: dict) -> Decimal | None:
+    """Return total long-term debt from EDGAR facts.
+
+    Sums LongTermDebtNoncurrent + LongTermDebtCurrent when both are available
+    AND both are from the same fiscal period (within 90 days of each other).
+    If the two components are from mismatched fiscal periods — e.g. a company
+    recently started splitting the line item — only the more recent value is
+    used to avoid cross-period arithmetic.  Falls back to the aggregate
+    LongTermDebt concept when neither component is found.
+    """
+    gaap = facts.get("us-gaap", {})
+
+    def _latest_usd_with_end(concept: str) -> tuple[Decimal | None, date | None]:
+        vals = gaap.get(concept, {}).get("units", {}).get("USD", [])
+        rows = _pick_annual_values(vals) if vals else []
+        if not rows:
+            return None, None
+        end_str = rows[0].get("end")
+        end_date = date.fromisoformat(end_str) if end_str else None
+        return _to_decimal(rows[0].get("val")), end_date
+
+    noncurrent, nc_end = _latest_usd_with_end("LongTermDebtNoncurrent")
+    current_lt, cl_end = _latest_usd_with_end("LongTermDebtCurrent")
+
+    if noncurrent is not None or current_lt is not None:
+        if noncurrent is not None and current_lt is not None:
+            # Only sum when both are from the same fiscal year
+            if nc_end and cl_end and abs((nc_end - cl_end).days) <= 90:
+                return noncurrent + current_lt
+            # Mismatched periods — use the more recent value only
+            if nc_end and cl_end:
+                return noncurrent if nc_end >= cl_end else current_lt
+            # One date is missing — sum what we have
+            return noncurrent + current_lt
+        return noncurrent if noncurrent is not None else current_lt
+
+    # Aggregate fallback
+    vals = gaap.get("LongTermDebt", {}).get("units", {}).get("USD", [])
+    rows = _pick_annual_values(vals) if vals else []
+    return _to_decimal(rows[0].get("val")) if rows else None
 
 
 # ---------------------------------------------------------------------------

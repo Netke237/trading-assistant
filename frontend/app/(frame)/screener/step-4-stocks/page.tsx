@@ -214,7 +214,7 @@ export default function Step4StocksPage() {
             <button
               type="button"
               className={styles.sortableHeader}
-              onClick={() => setHealthSort((s) => s === 'desc' ? 'asc' : 'desc')}
+              onClick={() => setHealthSort((s) => s === null ? 'desc' : s === 'desc' ? 'asc' : null)}
               title="Sort by fundamental health score"
             >
               <Text size={11} tone="dim">HEALTH</Text>

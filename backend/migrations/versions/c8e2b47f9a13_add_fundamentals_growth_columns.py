@@ -17,9 +17,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column('fundamentals', sa.Column('revenue_growth_yoy', sa.Float(), nullable=True))
-    op.add_column('fundamentals', sa.Column('eps_growth_yoy',     sa.Float(), nullable=True))
-    op.add_column('fundamentals', sa.Column('share_growth_yoy',   sa.Float(), nullable=True))
+    op.add_column('fundamentals', sa.Column('revenue_growth_yoy', sa.Float(precision=17), nullable=True))
+    op.add_column('fundamentals', sa.Column('eps_growth_yoy',     sa.Float(precision=17), nullable=True))
+    op.add_column('fundamentals', sa.Column('share_growth_yoy',   sa.Float(precision=17), nullable=True))
 
 
 def downgrade() -> None:

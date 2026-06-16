@@ -16,6 +16,7 @@ import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig, type FundamentalsGate } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
+import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, type IngestionSchedule } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
@@ -177,6 +178,8 @@ function ScanForm() {
     confidenceGate, setConfidenceGate,
     fundamentalsGate, setFundamentalsGate,
   } = useSettingsStore();
+  const horizon = useScanStore((s) => s.context?.horizon);
+  const isIntraday = horizon?.toLowerCase().includes('intraday') ?? false;
   const [continuous, setContinuous] = useState(false);
 
   // Local text buffers — let the user type freely; validate on blur
@@ -366,6 +369,7 @@ function ScanForm() {
         setFRejectText={setFRejectText}
         fDeRejectText={fDeRejectText}
         setFDeRejectText={setFDeRejectText}
+        isIntraday={isIntraday}
       />
     </>
   );
@@ -377,13 +381,17 @@ function FundamentalsGateSection({
   fCautionText, setFCautionText,
   fRejectText,  setFRejectText,
   fDeRejectText, setFDeRejectText,
+  isIntraday,
 }: {
   gate: FundamentalsGate;
   setGate: (g: FundamentalsGate) => void;
   fCautionText: string;  setFCautionText: (v: string) => void;
   fRejectText: string;   setFRejectText:  (v: string) => void;
   fDeRejectText: string; setFDeRejectText: (v: string) => void;
+  isIntraday: boolean;
 }) {
+  const thresholdDisabled = !gate?.enabled || isIntraday;
+  const intradayHint = isIntraday ? ' — no-op for the active Intraday horizon' : '';
   return (
     <>
       <SectionIntro
@@ -398,14 +406,14 @@ function FundamentalsGateSection({
       </Row>
       <Row
         label="Caution below (score)"
-        hint="Fundamental health score under this caps the verdict at CAUTION (0–100)"
+        hint={`Fundamental health score under this caps the verdict at CAUTION (0–100)${intradayHint}`}
         defaultValue="45"
       >
         <input
           type="text"
           inputMode="numeric"
           className={styles.input}
-          disabled={!gate?.enabled}
+          disabled={thresholdDisabled}
           value={fCautionText}
           onChange={(e) => setFCautionText(e.target.value)}
           onBlur={() => {
@@ -418,14 +426,14 @@ function FundamentalsGateSection({
       </Row>
       <Row
         label="Reject below (score)"
-        hint="Fundamental health score under this caps the verdict at REJECT (0–100)"
+        hint={`Fundamental health score under this caps the verdict at REJECT (0–100)${intradayHint}`}
         defaultValue="30"
       >
         <input
           type="text"
           inputMode="numeric"
           className={styles.input}
-          disabled={!gate?.enabled}
+          disabled={thresholdDisabled}
           value={fRejectText}
           onChange={(e) => setFRejectText(e.target.value)}
           onBlur={() => {
@@ -438,14 +446,14 @@ function FundamentalsGateSection({
       </Row>
       <Row
         label="De-reject threshold"
-        hint="Minimum R:R ratio that can override a fundamental REJECT verdict (0.5–10)"
+        hint={`Minimum R:R ratio that can override a fundamental REJECT verdict (0.5–10)${intradayHint}`}
         defaultValue="3.0"
       >
         <input
           type="text"
           inputMode="decimal"
           className={styles.input}
-          disabled={!gate?.enabled}
+          disabled={thresholdDisabled}
           value={fDeRejectText}
           onChange={(e) => setFDeRejectText(e.target.value)}
           onBlur={() => {
