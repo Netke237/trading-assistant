@@ -88,9 +88,8 @@ def adopt(strategy: str, params: dict) -> None:
     Uses atomic write (tmp-then-replace) to prevent corruption on crash.
     """
     global _CACHE
-    # Read BEFORE touching anything — preserves other strategies and keeps the
-    # cache valid for concurrent readers until the write succeeds.
-    data = _load()
+    # Deep-copy so the in-memory cache is never mutated before the write succeeds.
+    data = copy.deepcopy(_load())
 
     # Archive the current config before modification (if it exists)
     if CFG.exists():

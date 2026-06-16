@@ -188,13 +188,18 @@ def consensus(fold_winners: list[dict]) -> dict:
 
 
 def consistency(fold_test_returns: list[float]) -> float:
-    """Calculate fraction of folds with positive out-of-sample returns.
+    """Calculate fraction of folds with positive out-of-sample mean return.
+
+    Each element is the mean net return across all basket symbols in that fold's
+    test window. A fold counts as positive if its mean return > 0. Folds where
+    the basket is mixed (some symbols up, some down) are resolved by sign of the
+    mean — not by per-symbol positive counts.
 
     Args:
-        fold_test_returns: List of test period returns (as decimals, e.g., 0.05 = 5%).
+        fold_test_returns: List of mean test-period returns per fold (as decimals).
 
     Returns:
-        Ratio of positive returns to total folds (0.0 to 1.0).
+        Ratio of positive-mean folds to total folds (0.0 to 1.0).
     """
     if not fold_test_returns:
         return 0.0

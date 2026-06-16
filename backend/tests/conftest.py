@@ -30,6 +30,65 @@ from app.models.scan_session import ScanSessionBase
 
 # ── Strategy-param cache isolation ────────────────────────────────────────────
 
+_KNOWN_STRATEGY_PARAMS_YAML = """\
+direction: bullish
+windows:
+  type: rolling
+  train_months: 12
+  test_months: 3
+costs:
+  fee_pct: 0.001
+  slippage_pct: 0.001
+optimization:
+  min_trades: 20
+  min_consistency: 0.5
+job_retention:
+  max_completed: 100
+strategies:
+  pullback_ema:
+    active:
+      ema_period: 50
+      trend_ema: 100
+      atr_stop_mult: 1.5
+      rr_target_mult: 2.0
+      tolerance: 0.08
+    search:
+      ema_period: [20, 50]
+      trend_ema: [100, 150, 200]
+      atr_stop_mult: [1.0, 1.5, 2.0]
+      rr_target_mult: [1.5, 2.0, 2.5, 3.0]
+      tolerance: [0.05, 0.08, 0.10]
+  breakout_base:
+    active:
+      base_lookback: 20
+      atr_tight_max: 1.5
+    search:
+      base_lookback: [15, 20, 30]
+  ma_crossover:
+    active:
+      fast: 20
+      slow: 50
+  mean_reversion_rsi:
+    active:
+      rsi_period: 14
+      rsi_oversold: 30
+"""
+
+
+@pytest.fixture
+def strategy_cfg(tmp_path, monkeypatch):
+    """Pin strategy_params.yaml to a known-good fixture so tests don't depend on production config.
+
+    Use this for any test that asserts specific active-param or search-space values —
+    without it, a developer who has run adopt() will see different values in the YAML
+    and the test will fail.
+    """
+    import app.services.strategy_param_store as store
+    cfg_path = tmp_path / "strategy_params.yaml"
+    cfg_path.write_text(_KNOWN_STRATEGY_PARAMS_YAML, encoding="utf-8")
+    monkeypatch.setattr(store, "CFG", cfg_path)
+
+
 @pytest.fixture(autouse=True)
 def _reset_strategy_param_cache():
     """Clear the module-level YAML cache before and after every test.

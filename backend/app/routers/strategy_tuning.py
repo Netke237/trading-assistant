@@ -6,7 +6,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.services import strategy_param_store as store
 
@@ -23,6 +23,17 @@ _LOCK: asyncio.Lock = asyncio.Lock()
 class AdoptRequest(BaseModel):
     strategy: str
     params: dict[str, Any]
+
+    @field_validator("params")
+    @classmethod
+    def params_must_be_scalars(cls, v: dict) -> dict:
+        for key, val in v.items():
+            if not isinstance(val, (bool, int, float, str)):
+                raise ValueError(
+                    f"params[{key!r}] must be a scalar (bool, int, float, str), "
+                    f"got {type(val).__name__}"
+                )
+        return v
 
 
 def _evict_old_jobs(max_completed: int) -> None:

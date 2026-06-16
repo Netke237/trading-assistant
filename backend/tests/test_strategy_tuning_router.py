@@ -39,6 +39,26 @@ def test_adopt_rejects_empty_params(tmp_path, monkeypatch):
     assert r.status_code == 422
 
 
+def test_adopt_rejects_nested_params():
+    """AdoptRequest must reject non-scalar values to prevent YAML injection."""
+    c = TestClient(app)
+    r = c.post(
+        "/api/strategy-tuning/adopt",
+        json={"strategy": "pullback_ema", "params": {"ema_period": {"nested": "dict"}}},
+    )
+    assert r.status_code == 422
+
+
+def test_adopt_rejects_list_params():
+    """AdoptRequest must reject list values to prevent YAML injection."""
+    c = TestClient(app)
+    r = c.post(
+        "/api/strategy-tuning/adopt",
+        json={"strategy": "pullback_ema", "params": {"ema_period": [20, 50]}},
+    )
+    assert r.status_code == 422
+
+
 def test_list_jobs_returns_counts(monkeypatch):
     import app.routers.strategy_tuning as rt
     monkeypatch.setattr(rt, "_JOBS", {

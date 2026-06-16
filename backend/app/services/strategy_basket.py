@@ -45,8 +45,8 @@ def build_basket(rows: list[dict], *, per_sector: int) -> list[str]:
 def propose_basket(per_sector: int) -> list[str]:
     """Build a stratified basket from sp500.csv.
 
-    Selects symbols alphabetically within each sector (all symbols get
-    liquidity=1.0; use real ADV from ohlcv_daily to rank by volume).
+    Selects symbols alphabetically within each sector. All symbols receive
+    liquidity=1.0, so selection within each sector is purely alphabetical.
     Returns [] if sp500.csv is missing or unreadable — does not raise.
 
     Args:

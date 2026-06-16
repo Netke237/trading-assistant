@@ -175,7 +175,8 @@ def _optimize_strategy_sync(
         "win_rate": round(sum(all_win_rates) / len(all_win_rates), 4) if all_win_rates else 0.0,
         "total_return": walk_forward_return,
         "max_drawdown": round(min(all_drawdowns), 4) if all_drawdowns else 0.0,
-        "n_trades": total_n_trades,
+        # Normalize by basket size so min_trades threshold is per-symbol, not grand total.
+        "n_trades": round(total_n_trades / max(len(basket_bars), 1)),
     }
 
     return build_proposal(
@@ -251,14 +252,17 @@ async def run_optimization(
             progress_cb(done, total_work)
             continue
 
-        all_dates = [b["time"] for bars in basket_bars.values() for b in bars]
-        if not all_dates:
+        # Intersection of per-symbol date ranges — ensures every fold window has
+        # data from all basket symbols, not just the earliest/latest symbol.
+        symbol_starts = [min(b["time"] for b in bars) for bars in basket_bars.values()]
+        symbol_ends = [max(b["time"] for b in bars) for bars in basket_bars.values()]
+        if not symbol_starts:
             done += 1
             progress_cb(done, total_work)
             continue
 
-        start_str = min(all_dates)
-        end_str = max(all_dates)
+        start_str = max(symbol_starts)  # latest start across all symbols
+        end_str = min(symbol_ends)      # earliest end across all symbols
         start = date.fromisoformat(str(start_str)[:10])
         end = date.fromisoformat(str(end_str)[:10])
 

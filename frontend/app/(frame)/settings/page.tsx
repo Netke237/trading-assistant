@@ -1289,20 +1289,11 @@ const SESSION_ADOPTED_KEY = 'bamendjou:wfo:adopted';
 const MAX_POLL_COUNT = 450; // 15 minutes at 2s intervals
 
 function StrategyTuningForm() {
-  const [jobId, setJobId] = React.useState<string | null>(() =>
-    typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_JOB_KEY) : null
-  );
+  const [jobId, setJobId] = React.useState<string | null>(null);
   const [job, setJob] = React.useState<TuningJob | null>(null);
   const [polling, setPolling] = React.useState(false);
-  const [adoptedStrategies, setAdoptedStrategies] = React.useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set();
-    try {
-      const raw = sessionStorage.getItem(SESSION_ADOPTED_KEY);
-      return raw ? new Set<string>(JSON.parse(raw) as string[]) : new Set<string>();
-    } catch {
-      return new Set<string>();
-    }
-  });
+  const [adoptedStrategies, setAdoptedStrategies] = React.useState<Set<string>>(new Set());
+
   const [error, setError] = React.useState<string | null>(null);
   const pollCountRef = React.useRef(0);
   const [jobCount, setJobCount] = React.useState<TuningJobCount | null>(null);
@@ -1314,10 +1305,21 @@ function StrategyTuningForm() {
 
   React.useEffect(() => { refreshCount(); }, [refreshCount]);
 
-  // On mount: if sessionStorage had a jobId, fetch current status and resume poll if running.
+  // Hydrate from sessionStorage after mount (avoids SSR/hydration mismatch) and
+  // reconnect to any in-flight job in one effect so the stored jobId is available
+  // synchronously for the getTuningJob call without waiting for a re-render.
   React.useEffect(() => {
-    if (!jobId) return;
-    getTuningJob(jobId)
+    try {
+      const raw = sessionStorage.getItem(SESSION_ADOPTED_KEY);
+      if (raw) setAdoptedStrategies(new Set<string>(JSON.parse(raw) as string[]));
+    } catch {
+      // Corrupt sessionStorage — start fresh.
+    }
+
+    const stored = sessionStorage.getItem(SESSION_JOB_KEY);
+    if (!stored) return;
+    setJobId(stored);
+    getTuningJob(stored)
       .then(j => {
         setJob(j);
         if (j.status === 'running') setPolling(true);

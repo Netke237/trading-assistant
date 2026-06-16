@@ -13,7 +13,7 @@ from app.services.strategy_param_store import (
 )
 
 
-def test_get_active_returns_defaults_and_missing_falls_back():
+def test_get_active_returns_defaults_and_missing_falls_back(strategy_cfg):
     """Test get_active returns strategy params or empty dict for missing strategies."""
     p = get_active("pullback_ema")
     assert p["ema_period"] == 50
@@ -26,7 +26,7 @@ def test_get_active_returns_defaults_and_missing_falls_back():
     assert get_active("does_not_exist") == {}
 
 
-def test_get_active_multiple_strategies():
+def test_get_active_multiple_strategies(strategy_cfg):
     """Test get_active for different strategies."""
     breakout = get_active("breakout_base")
     assert breakout["base_lookback"] == 20
@@ -41,7 +41,7 @@ def test_get_active_multiple_strategies():
     assert rsi["rsi_oversold"] == 30
 
 
-def test_search_space_present():
+def test_search_space_present(strategy_cfg):
     """Test get_search_space returns search hyperparameters."""
     s = get_search_space("pullback_ema")
     assert s["ema_period"] == [20, 50]
@@ -59,7 +59,7 @@ def test_search_space_missing_returns_empty():
     assert get_search_space("does_not_exist") == {}
 
 
-def test_get_windows():
+def test_get_windows(strategy_cfg):
     """Test get_windows returns window configuration."""
     w = get_windows()
     assert w["type"] == "rolling"
@@ -67,7 +67,7 @@ def test_get_windows():
     assert w["test_months"] == 3
 
 
-def test_get_costs():
+def test_get_costs(strategy_cfg):
     """Test get_costs returns cost configuration."""
     c = get_costs()
     assert c["fee_pct"] == 0.001
@@ -119,7 +119,7 @@ def test_adopt_handles_missing_file_gracefully(tmp_path, monkeypatch):
     assert store.get_active("new_strategy")["param"] == 30
 
 
-def test_get_direction_default():
+def test_get_direction_default(strategy_cfg):
     assert get_direction() == "bullish"
 
 
@@ -130,7 +130,7 @@ def test_get_direction_custom(tmp_path, monkeypatch):
     assert store.get_direction() == "bearish"
 
 
-def test_get_job_retention_default():
+def test_get_job_retention_default(strategy_cfg):
     r = get_job_retention()
     assert r["max_completed"] == 100
 
@@ -144,7 +144,7 @@ def test_get_job_retention_custom(tmp_path, monkeypatch):
     assert store.get_job_retention()["max_completed"] == 50
 
 
-def test_get_optimization_config_defaults():
+def test_get_optimization_config_defaults(strategy_cfg):
     cfg = get_optimization_config()
     assert cfg["min_trades"] == 20
     assert cfg["min_consistency"] == 0.5
