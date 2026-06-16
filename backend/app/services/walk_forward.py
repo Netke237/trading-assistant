@@ -219,6 +219,8 @@ def degradation_pct(*, in_sample: float, walk_forward: float) -> float:
     Returns:
         Degradation factor (0.0 to 1.0+).
     """
-    if in_sample == 0:
+    # Undefined when in_sample <= 0: negative IS makes the ratio flip sign,
+    # misclassifying a strategy that improved OOS as severely over-fit.
+    if in_sample <= 0:
         return 0.0
     return 1.0 - (walk_forward / in_sample)

@@ -123,6 +123,27 @@ def test_evict_completed_before_failed(monkeypatch):
     assert len(rt._JOBS) == 2
 
 
+def test_evict_completed_before_failed_inserted_last(monkeypatch):
+    """Eviction must prefer completed over failed even when the failed job is newest.
+
+    The 'oldest completed evicted first' invariant should hold regardless of
+    where the failed job sits in the insertion order.  A pure insertion-order
+    implementation would evict f2 here (it's first), breaking the policy.
+    """
+    import app.routers.strategy_tuning as rt
+    jobs = {
+        "c1": {"status": "completed"},
+        "c2": {"status": "completed"},
+        "f2": {"status": "failed"},    # inserted LAST — should still survive
+    }
+    monkeypatch.setattr(rt, "_JOBS", jobs)
+    rt._evict_old_jobs(max_completed=2)
+    assert "f2" in rt._JOBS        # newest failed job preserved over older completed
+    assert "c1" not in rt._JOBS   # oldest completed evicted
+    assert "c2" in rt._JOBS
+    assert len(rt._JOBS) == 2
+
+
 def test_evict_old_jobs_keeps_last_n(monkeypatch):
     import app.routers.strategy_tuning as rt
     jobs = {f"job{i}": {"status": "completed"} for i in range(5)}

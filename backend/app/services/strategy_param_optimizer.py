@@ -131,17 +131,20 @@ def _optimize_strategy_sync(
                     res = run_strategy_backtest(
                         test_bars, strategy=strategy, direction=direction, params=winner
                     )
-                    gross = res.total_return_pct if hasattr(res, "total_return_pct") else 0.0
-                    net = apply_costs(
-                        gross_return_pct=gross,
-                        fee_pct=costs.get("fee_pct", 0.001),
-                        slippage_pct=costs.get("slippage_pct", 0.001),
-                    )
-                    test_returns.append(net)
-                    total_n_trades += getattr(res, "n_trades", 0)
-                    contributing_symbols.add(sym)
-                    all_sharpes.append(getattr(res, "sharpe", 0.0))
+                    # Only include windows where the strategy actually traded.
+                    # Applying cost drag to a zero-trade window injects a false
+                    # negative return (~−0.4%), unfairly suppressing consistency.
                     if res.n_trades > 0:
+                        gross = res.total_return_pct if hasattr(res, "total_return_pct") else 0.0
+                        net = apply_costs(
+                            gross_return_pct=gross,
+                            fee_pct=costs.get("fee_pct", 0.001),
+                            slippage_pct=costs.get("slippage_pct", 0.001),
+                        )
+                        test_returns.append(net)
+                        total_n_trades += res.n_trades
+                        contributing_symbols.add(sym)
+                        all_sharpes.append(getattr(res, "sharpe", 0.0))
                         all_win_rates.append(res.win_rate)
                         if getattr(res, "expectancy", None) is not None:
                             all_expectancies.append(res.expectancy)
