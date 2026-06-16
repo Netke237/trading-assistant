@@ -1017,7 +1017,6 @@ def score_stock(
     if fundamentals is not None and fundamentals_gate is not None:
         from app.scoring.fundamentals_scorer import FundamentalHealth  # noqa: F401 (type used above)
         gate_enabled = fundamentals_gate.get("enabled", True)
-        _horizon = (regime_signal or {}).get("horizon", "swing") if regime_signal else "swing"
         is_intraday = str(horizon).lower() == "intraday"
 
         if gate_enabled and not is_intraday:
