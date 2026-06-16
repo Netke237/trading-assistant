@@ -6,6 +6,7 @@ import copy
 import os
 import shutil
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -93,9 +94,9 @@ def adopt(strategy: str, params: dict) -> None:
 
     # Archive the current config before modification (if it exists)
     if CFG.exists():
-        # Microsecond precision prevents collision when adopt() is called twice rapidly
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-        backup_path = CFG.with_suffix(f".bak.{timestamp}.yaml")
+        # UUID suffix guarantees uniqueness even for rapid double-adopt calls.
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup_path = CFG.with_suffix(f".bak.{timestamp}-{uuid.uuid4().hex[:8]}.yaml")
         shutil.copy(CFG, backup_path)
 
     # Update the active parameters for this strategy

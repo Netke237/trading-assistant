@@ -54,13 +54,6 @@ def _evict_old_jobs(max_completed: int) -> None:
 @router.post("/run")
 async def run_job(body: dict = Body(default={})) -> dict:
     global _ACTIVE, _ACTIVE_TASK
-    async with _LOCK:
-        if _ACTIVE and _JOBS.get(_ACTIVE, {}).get("status") == "running":
-            raise HTTPException(status_code=409, detail="An optimization run is already active.")
-        job_id = uuid.uuid4().hex
-        _JOBS[job_id] = {"status": "running", "done": 0, "total": 0, "proposals": {}}
-        _ACTIVE = job_id
-
     async def _work() -> None:
         try:
             from app.services.strategy_param_optimizer import run_optimization
@@ -92,7 +85,15 @@ async def run_job(body: dict = Body(default={})) -> dict:
             _JOBS[job_id].update(status="failed", error=str(exc))
             _evict_old_jobs(store.get_job_retention().get("max_completed", 100))
 
-    _ACTIVE_TASK = asyncio.create_task(_work())
+    async with _LOCK:
+        if _ACTIVE and _JOBS.get(_ACTIVE, {}).get("status") == "running":
+            raise HTTPException(status_code=409, detail="An optimization run is already active.")
+        job_id = uuid.uuid4().hex
+        _JOBS[job_id] = {"status": "running", "done": 0, "total": 0, "proposals": {}}
+        _ACTIVE = job_id
+        # create_task inside the lock so _ACTIVE_TASK is never None between _ACTIVE being set
+        # and the task being created — prevents the shutdown handler from missing an in-flight job.
+        _ACTIVE_TASK = asyncio.create_task(_work())
     _JOBS[job_id]["task"] = None  # placeholder; actual Task not JSON-serialisable
     return {"job_id": job_id}
 

@@ -25,8 +25,9 @@ def test_run_then_poll_then_concurrency_guard(monkeypatch):
     r2 = c.post("/api/strategy-tuning/run", json={})
     assert r2.status_code == 409
 
-    # Teardown: cancel the immortal task and reset module state so subsequent
-    # tests don't inherit a stuck "running" job and get unexpected 409 responses.
+    # Teardown: reset module state so subsequent tests don't see a stuck running job.
+    # We request cancellation but cannot await in a sync test; the task will consume
+    # CancelledError when the event loop next runs (inside TestClient or at teardown).
     if rt._ACTIVE_TASK and not rt._ACTIVE_TASK.done():
         rt._ACTIVE_TASK.cancel()
     rt._ACTIVE_TASK = None

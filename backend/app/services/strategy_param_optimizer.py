@@ -90,6 +90,7 @@ def _optimize_strategy_sync(
     fold_test_returns: list[float] = []
     in_sample_fold_returns: list[float] = []
     total_n_trades = 0
+    contributing_symbols: set[str] = set()
     all_sharpes: list[float] = []
     all_win_rates: list[float] = []
     all_expectancies: list[float] = []
@@ -138,6 +139,7 @@ def _optimize_strategy_sync(
                     )
                     test_returns.append(net)
                     total_n_trades += getattr(res, "n_trades", 0)
+                    contributing_symbols.add(sym)
                     all_sharpes.append(getattr(res, "sharpe", 0.0))
                     if res.n_trades > 0:
                         all_win_rates.append(res.win_rate)
@@ -151,8 +153,11 @@ def _optimize_strategy_sync(
             sum(test_returns) / len(test_returns) if test_returns else 0.0
         )
 
-    # Filter folds where the grid search found nothing (train window too short, etc.)
-    valid_winners = [w for w in fold_winners if w]
+    # Filter folds where grid search found nothing; also filter fold_test_returns
+    # in parallel so structural zeros from bad folds don't suppress consistency.
+    valid_pairs = [(w, r) for w, r in zip(fold_winners, fold_test_returns) if w]
+    valid_winners = [p[0] for p in valid_pairs]
+    valid_fold_test_returns = [p[1] for p in valid_pairs]
     if not valid_winners:
         logger.warning("No valid fold winners for %s — all folds empty, skipping", strategy)
         return None
@@ -165,8 +170,8 @@ def _optimize_strategy_sync(
         else 0.0
     )
     walk_forward_return = (
-        sum(fold_test_returns) / len(fold_test_returns)
-        if fold_test_returns
+        sum(valid_fold_test_returns) / len(valid_fold_test_returns)
+        if valid_fold_test_returns
         else 0.0
     )
     avg_sharpe = sum(all_sharpes) / len(all_sharpes) if all_sharpes else 0.0
@@ -177,14 +182,15 @@ def _optimize_strategy_sync(
         "win_rate": round(sum(all_win_rates) / len(all_win_rates), 4) if all_win_rates else 0.0,
         "total_return": walk_forward_return,
         "max_drawdown": round(min(all_drawdowns), 4) if all_drawdowns else 0.0,
-        # Normalize by basket size so min_trades threshold is per-symbol, not grand total.
-        "n_trades": round(total_n_trades / max(len(basket_bars), 1)),
+        # Divide by symbols that actually contributed (not total basket) so min_trades
+        # threshold is not diluted by symbols skipped by the 100-bar OOS guard.
+        "n_trades": round(total_n_trades / max(len(contributing_symbols), 1)),
     }
 
     return build_proposal(
         strategy=strategy,
         fold_winners=valid_winners,
-        fold_test_returns=fold_test_returns,
+        fold_test_returns=valid_fold_test_returns,
         in_sample_return=in_sample_return,
         walk_forward_return=walk_forward_return,
         oos_metrics=oos_metrics,
@@ -254,19 +260,22 @@ async def run_optimization(
             progress_cb(done, total_work)
             continue
 
-        # Intersection of per-symbol date ranges — ensures every fold window has
-        # data from all basket symbols, not just the earliest/latest symbol.
-        symbol_starts = [min(b["time"] for b in bars) for bars in basket_bars.values()]
-        symbol_ends = [max(b["time"] for b in bars) for bars in basket_bars.values()]
+        # Pre-compute _date fields first — used for the intersection range below
+        # and for the fold/combo loop inside _optimize_strategy_sync.
+        for bars in basket_bars.values():
+            precompute_bar_dates(bars)
+
+        # Intersection of per-symbol date ranges via pre-computed _date (date objects)
+        # so the comparison is type-safe regardless of what format get_bars returns.
+        symbol_starts = [min(b["_date"] for b in bars) for bars in basket_bars.values()]
+        symbol_ends = [max(b["_date"] for b in bars) for bars in basket_bars.values()]
         if not symbol_starts:
             done += 1
             progress_cb(done, total_work)
             continue
 
-        start_str = max(symbol_starts)  # latest start across all symbols
-        end_str = min(symbol_ends)      # earliest end across all symbols
-        start = date.fromisoformat(str(start_str)[:10])
-        end = date.fromisoformat(str(end_str)[:10])
+        start = max(symbol_starts)  # latest start — intersection
+        end = min(symbol_ends)      # earliest end — intersection
 
         folds = build_folds(
             start, end,
@@ -279,10 +288,6 @@ async def run_optimization(
             done += 1
             progress_cb(done, total_work)
             continue
-
-        # Pre-compute date parsing once per symbol before the fold/combo loop
-        for bars in basket_bars.values():
-            precompute_bar_dates(bars)
 
         proposal = await asyncio.to_thread(
             _optimize_strategy_sync,
