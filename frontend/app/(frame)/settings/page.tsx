@@ -388,7 +388,7 @@ function FundamentalsGateSection({
     <>
       <SectionIntro
         title="Fundamentals gate"
-        blurb="Scores fundamentals (balance sheet health, growth, risk) on a 0–100 scale. The gate can lower a verdict but never raise it — protects against setups with poor financial health."
+        blurb="Scores fundamentals (balance sheet health, growth, risk) on a 0–100 scale. Applies to Swing and Position horizons only — no-op for Intraday scans. The gate can lower a verdict but never raise it."
       />
       <Row label="Enable gate" hint="When off, fundamentals are shown but never change the verdict" defaultValue="On">
         <Toggle

@@ -85,10 +85,10 @@ def _row_to_snapshot(row: FundamentalsModel):
         fcf               = fcf,
         debt_to_equity    = _safe_div(total_debt, eq),
         current_ratio     = _safe_div(ca, cl),
-        # Growth rates require prior-year values not stored in DB
-        revenue_growth_yoy  = None,
-        eps_growth_yoy      = None,
-        share_growth_yoy    = None,
+        # Growth rates stored in DB and read back here
+        revenue_growth_yoy  = float(row.revenue_growth_yoy) if row.revenue_growth_yoy is not None else None,
+        eps_growth_yoy      = float(row.eps_growth_yoy)     if row.eps_growth_yoy     is not None else None,
+        share_growth_yoy    = float(row.share_growth_yoy)   if row.share_growth_yoy   is not None else None,
         # Prior-year raw — not stored in DB
         prev_revenue        = None,
         prev_eps_diluted    = None,
@@ -116,9 +116,12 @@ def _snapshot_to_model(snap) -> FundamentalsModel:
         stockholders_eq   = snap.stockholders_eq,
         current_assets    = snap.current_assets,
         current_liab      = snap.current_liab,
-        shares_diluted    = snap.shares_diluted,
-        source            = "edgar",
-        fetched_at        = datetime.now(timezone.utc),
+        shares_diluted      = snap.shares_diluted,
+        revenue_growth_yoy  = snap.revenue_growth_yoy,
+        eps_growth_yoy      = snap.eps_growth_yoy,
+        share_growth_yoy    = snap.share_growth_yoy,
+        source              = "sec_edgar",
+        fetched_at          = datetime.now(timezone.utc),
     )
 
 
@@ -188,9 +191,9 @@ async def get_fundamentals(symbol: str, staleness_days: int = 90):
 def prefetch_universe(symbols: list[str], staleness_days: int = 90) -> None:
     """Prefetch fundamentals for all symbols (blocking; call from a background thread).
 
-    For each symbol: if DB has a fresh row, skip; otherwise call get_fundamentals()
-    which fetches from EDGAR and upserts.  A 150 ms sleep between fetches keeps the
-    rate under 10 req/s (EDGAR allows ~10 req/s).
+    Runs all fetches in a single event loop with a semaphore to cap concurrent
+    EDGAR requests at 4, with 150 ms between each release — keeping the rate safely
+    under EDGAR's 10 req/s limit while being ~4x faster than a serial loop.
 
     Updates _prefetch_status in-place so callers can poll get_prefetch_status().
     """
@@ -203,23 +206,28 @@ def prefetch_universe(symbols: list[str], staleness_days: int = 90) -> None:
         "in_progress": True,
     })
 
-    for symbol in symbols:
-        try:
-            # Run the async get_fundamentals in a fresh event loop for this thread.
-            # asyncio.run() is safe here because we are NOT in the FastAPI event loop
-            # thread — prefetch_universe is always called via threading.Thread or similar.
-            snap = asyncio.run(get_fundamentals(symbol, staleness_days))
-            if snap is not None:
-                _prefetch_status["done"] += 1
-            else:
-                _prefetch_status["failed"] += 1
-        except Exception as exc:
-            logger.warning(
-                "fundamentals_store prefetch: %s failed — %s", symbol, exc
-            )
-            _prefetch_status["failed"] += 1
+    async def _run_all() -> None:
+        sem = asyncio.Semaphore(4)
 
-        time.sleep(0.15)  # ~6.7 req/s — safely under EDGAR's 10 req/s limit
+        async def _fetch_one(symbol: str) -> None:
+            async with sem:
+                try:
+                    snap = await get_fundamentals(symbol, staleness_days)
+                    if snap is not None:
+                        _prefetch_status["done"] += 1
+                    else:
+                        _prefetch_status["failed"] += 1
+                except Exception as exc:
+                    logger.warning("fundamentals_store prefetch: %s failed — %s", symbol, exc)
+                    _prefetch_status["failed"] += 1
+                await asyncio.sleep(0.15)  # rate-limit EDGAR within each semaphore slot
+
+        await asyncio.gather(*[_fetch_one(s) for s in symbols])
+
+    try:
+        asyncio.run(_run_all())
+    except Exception as exc:
+        logger.error("fundamentals_store prefetch: run failed — %s", exc)
 
     _prefetch_status["in_progress"] = False
     logger.info(

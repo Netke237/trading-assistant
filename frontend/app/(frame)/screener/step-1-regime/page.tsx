@@ -69,6 +69,7 @@ function pct(p: number): string {
 export default function Step1RegimePage() {
   const setRegime = useScanStore((s) => s.setRegime);
   const setCombinedRegime = useScanStore((s) => s.setCombinedRegime);
+  const context = useScanStore((s) => s.context);
   const markov = useSettingsStore((s) => s.markov);
 
   const [regime, setRegimeData]     = useState<MarketRegime | null>(null);
@@ -113,7 +114,7 @@ export default function Step1RegimePage() {
   const vix252    = regime?.vix_pct_252d  ?? null;
 
   const pageSentiment = regime && regime.omm ? {
-    horizon: 'Swing',
+    horizon: context?.horizon ?? 'Swing',
     timeframe: 'daily',
     state: regime.omm.state,
     p_stay: regime.omm.p_stay,

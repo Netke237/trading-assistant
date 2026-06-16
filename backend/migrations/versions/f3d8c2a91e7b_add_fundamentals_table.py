@@ -1,8 +1,8 @@
 """add fundamentals table
 
-Revision ID: a2b3c4d5e6f7
+Revision ID: f3d8c2a91e7b
 Revises: 583a54670150
-Create Date: 2026-06-16 00:00:00.000000
+Create Date: 2026-06-12 14:23:07.842591
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'a2b3c4d5e6f7'
+revision = 'f3d8c2a91e7b'
 down_revision = '583a54670150'
 branch_labels = None
 depends_on = None

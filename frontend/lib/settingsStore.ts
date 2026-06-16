@@ -59,7 +59,7 @@ export interface FundamentalsGate {
   enabled:      boolean;
   cautionBelow: number;   // health score < this -> cap at CAUTION
   rejectBelow:  number;   // health score < this -> cap at REJECT
-  deReject:     number;   // de-rejection threshold (override if score above this)
+  deReject:     number;   // D/E ratio above which a safety reject fires
 }
 
 export const DEFAULT_FUNDAMENTALS_GATE: FundamentalsGate = {

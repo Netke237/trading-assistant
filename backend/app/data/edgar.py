@@ -1,8 +1,8 @@
 """SEC EDGAR client — CIK lookup, CompanyFacts fetch, concept mapping, snapshot builder."""
 from __future__ import annotations
 
-import functools
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -56,24 +56,39 @@ class FundamentalsSnapshot:
 
 
 # ---------------------------------------------------------------------------
-# CIK lookup
+# CIK lookup  (TTL-based cache — refreshes weekly, retries on failure)
 # ---------------------------------------------------------------------------
 
-@functools.lru_cache(maxsize=1)
+_CIK_MAP: dict[str, str] | None = None
+_CIK_MAP_LOADED_AT: float = 0.0
+_CIK_REFRESH_SECONDS: float = 7 * 24 * 3600  # one week
+
+
 def _load_cik_map() -> dict[str, str]:
-    """Return {TICKER: zero-padded-CIK-10-chars}. Cached in-process."""
+    """Return {TICKER: zero-padded-CIK-10-chars}.
+
+    Cached in-process with a weekly TTL.  On transient failure the stale map is
+    returned if available; if no map has ever loaded an empty dict is returned
+    and the next call will retry (no permanent caching of failure).
+    """
+    global _CIK_MAP, _CIK_MAP_LOADED_AT
+    now = time.monotonic()
+    if _CIK_MAP is not None and (now - _CIK_MAP_LOADED_AT) < _CIK_REFRESH_SECONDS:
+        return _CIK_MAP
     try:
         url = "https://www.sec.gov/files/company_tickers.json"
         resp = requests.get(url, headers=_SEC_HEADERS, timeout=30)
         resp.raise_for_status()
         data = resp.json()
-        return {
+        _CIK_MAP = {
             row["ticker"].upper(): str(row["cik_str"]).zfill(10)
             for row in data.values()
         }
+        _CIK_MAP_LOADED_AT = now  # timestamp only updated on success
+        return _CIK_MAP
     except Exception as exc:
         _log.warning("CIK map fetch failed: %s", exc)
-        return {}
+        return _CIK_MAP if _CIK_MAP is not None else {}
 
 
 def ticker_to_cik(symbol: str) -> str | None:
@@ -104,7 +119,8 @@ _CONCEPT_MAP: dict[str, list[str]] = {
         "WeightedAverageNumberOfDilutedSharesOutstanding",
         "CommonStockSharesOutstanding",
     ],
-    "total_debt": ["LongTermDebtNoncurrent", "LongTermDebt"],
+    # total_debt intentionally omitted — handled by _compute_total_debt() which sums
+    # LongTermDebtNoncurrent + LongTermDebtCurrent before falling back to LongTermDebt.
 }
 
 
@@ -153,6 +169,33 @@ def fetch_company_facts(cik: str) -> dict | None:
     except Exception as exc:
         _log.warning("CompanyFacts fetch failed for CIK %s: %s", cik, exc)
         return None
+
+
+# ---------------------------------------------------------------------------
+# Total-debt aggregator  (sums current + non-current components when present)
+# ---------------------------------------------------------------------------
+
+def _compute_total_debt(facts: dict) -> Decimal | None:
+    """Return total long-term debt from EDGAR facts.
+
+    Sums LongTermDebtNoncurrent + LongTermDebtCurrent when both (or either)
+    are available, so companies that split debt across both line items are not
+    under-reported.  Falls back to the aggregate LongTermDebt concept.
+    """
+    gaap = facts.get("us-gaap", {})
+
+    def _latest_usd(concept: str) -> Decimal | None:
+        vals = gaap.get(concept, {}).get("units", {}).get("USD", [])
+        rows = _pick_annual_values(vals) if vals else []
+        return _to_decimal(rows[0].get("val")) if rows else None
+
+    noncurrent = _latest_usd("LongTermDebtNoncurrent")
+    current_lt = _latest_usd("LongTermDebtCurrent")
+
+    if noncurrent is not None or current_lt is not None:
+        return (noncurrent or Decimal(0)) + (current_lt or Decimal(0))
+
+    return _latest_usd("LongTermDebt")
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +282,7 @@ def _build_snapshot(symbol: str, cik: str, facts: dict) -> FundamentalsSnapshot 
     op_income, _, _, _ = get_latest("operating_income")
     ocf, _, _, _ = get_latest("op_cash_flow")
     capex, _, _, _ = get_latest("capex")
-    total_debt, _, _, _ = get_latest("total_debt")
+    total_debt = _compute_total_debt(facts)
     eq, _, _, _ = get_latest("stockholders_eq")
     ca, _, _, _ = get_latest("current_assets")
     cl, _, _, _ = get_latest("current_liab")

@@ -37,7 +37,7 @@ from app.services.regime_hmm_daily import compute_directional_hmm, alignment
 from app.services.fundamentals_store import get_fundamentals as _get_fundamentals
 from app.scoring.fundamentals_scorer import score_fundamentals as _score_fundamentals, FundamentalHealth
 from app.schemas import FundamentalsOut
-from app.routers.scan import _resolve_fundamentals_gate
+from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
 
 
 _SCORING_CFG = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"

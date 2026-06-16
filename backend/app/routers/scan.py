@@ -45,6 +45,7 @@ from app.schemas import (
     SentimentData, FundamentalsOut,
 )
 from app.services.fundamentals_store import get_fundamentals, prefetch_universe as _prefetch_fundamentals
+from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
 from app.scoring.fundamentals_scorer import score_fundamentals, FundamentalHealth
 from app.services.regime_omm import compute_omm as _compute_omm
 from app.services.regime_hmm_daily import compute_directional_hmm as _compute_dhmm, alignment as _hmm_alignment
@@ -128,21 +129,6 @@ def _resolve_gate(req: ScanRequest) -> dict:
         gate["rejectBelow"] = rb
     return gate
 
-
-def _resolve_fundamentals_gate(req) -> dict:
-    """Merge YAML fundamentals_gate defaults with per-request overrides."""
-    import copy
-    cfg = _load_scoring_cfg()
-    g = copy.deepcopy(cfg.get("fundamentals_gate", {}))
-    if req.fundamentals_enabled is not None:
-        g["enabled"] = req.fundamentals_enabled
-    if req.fundamentals_caution_below is not None:
-        g["cautionBelow"] = req.fundamentals_caution_below
-    if req.fundamentals_reject_below is not None:
-        g["rejectBelow"] = req.fundamentals_reject_below
-    if req.fundamentals_de_reject is not None:
-        g.setdefault("safety", {})["debt_to_equity_reject"] = req.fundamentals_de_reject
-    return g
 
 
 def _compute_deltas(current: ScanResult, previous: ScanResult | None) -> list[ScanDelta]:

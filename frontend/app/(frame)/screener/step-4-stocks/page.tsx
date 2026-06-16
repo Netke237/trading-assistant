@@ -71,6 +71,7 @@ export default function Step4StocksPage() {
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
   const [afterScanArmedSymbols, setAfterScanArmedSymbols] = useState<Set<string>>(new Set());
   const [showSendDialog, setShowSendDialog] = useState(false);
+  const [healthSort, setHealthSort] = useState<'asc' | 'desc' | null>(null);
   const deltas: Map<string, StockDelta> = result ? computeStockDeltas(result, previous) : new Map();
 
   const scanning = scanState === 'SCANNING';
@@ -210,12 +211,25 @@ export default function Step4StocksPage() {
             <Text size={11} tone="dim">TRADES</Text>
             <Text size={11} tone="dim">RETURN</Text>
             <Text size={11} tone="dim">MAX DD</Text>
-            <Text size={11} tone="dim">HEALTH</Text>
+            <button
+              type="button"
+              className={styles.sortableHeader}
+              onClick={() => setHealthSort((s) => s === 'desc' ? 'asc' : 'desc')}
+              title="Sort by fundamental health score"
+            >
+              <Text size={11} tone="dim">HEALTH</Text>
+              <Text size={10} tone="dim">{healthSort === 'desc' ? '↓' : healthSort === 'asc' ? '↑' : '↕'}</Text>
+            </button>
             <Text size={11} tone="dim">GATE</Text>
           </div>
 
           <div className={styles.tableBody}>
-            {result.candidates.filter((c) => c.backtest.passes_gate).map((c) => {
+            {[...result.candidates.filter((c) => c.backtest.passes_gate)].sort((a, b) => {
+              if (healthSort === null) return 0;
+              const aScore = a.fundamentals?.score ?? -1;
+              const bScore = b.fundamentals?.score ?? -1;
+              return healthSort === 'desc' ? bScore - aScore : aScore - bScore;
+            }).map((c) => {
               const d = deltas.get(c.symbol);
               const bt = c.backtest;
               const open = openSymbol === c.symbol;

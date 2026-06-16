@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Column, Date, DateTime, Numeric, String
+from sqlalchemy import Column, Date, DateTime, Float, Numeric, String
 
 from app.database import Base
 
@@ -41,6 +41,11 @@ class FundamentalsModel(Base):
 
     # Share data
     shares_diluted = Column(Numeric, nullable=True)
+
+    # Computed growth rates (stored so cache hits return accurate growth data)
+    revenue_growth_yoy = Column(Float, nullable=True)
+    eps_growth_yoy     = Column(Float, nullable=True)
+    share_growth_yoy   = Column(Float, nullable=True)
 
     # Provenance
     source = Column(String(20), nullable=True)
