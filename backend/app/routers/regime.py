@@ -7,6 +7,7 @@ from app.schemas import MarketRegime, RegimeMetric, OmmData, IntraHmmData, Intra
 from app.data.market import fetch_price, fetch_candles, fetch_intraday_candles
 from app.services.regime_omm import compute_omm
 from app.services.regime_hmm import compute_intraday_hmm
+from app.services.regime_hmm_daily import compute_directional_hmm as _compute_directional_hmm, alignment as _regime_alignment
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -146,11 +147,18 @@ async def get_regime(
 
     # ── 3. OMM (always computed — useful for all horizons) ────────────────────
     omm_out: OmmData | None = None
+    _spx_hmm_state: str | None = None
     try:
         spx_candles = fetch_candles('SPX', bars=600)
         if spx_candles:
             closes = [c['close'] for c in spx_candles]
-            result = compute_omm(closes, lookback=lookback, threshold=threshold, smoothing=smoothing)
+            result = compute_omm(
+                closes,
+                direction="Bullish",
+                lookback=lookback,
+                threshold=threshold,
+                smoothing=smoothing,
+            )
             if result:
                 omm_out = OmmData(
                     state=result.state,
@@ -160,7 +168,15 @@ async def get_regime(
                     avg_regime_duration=result.avg_regime_duration,
                     transition_row=result.transition_row,
                     state_order=result.state_order,
+                    conviction_pct=result.conviction_pct,
+                    conviction_label=result.conviction_label,
                 )
+            # Directional HMM on same SPX series
+            try:
+                _dh_res = _compute_directional_hmm(spx_candles)
+                _spx_hmm_state = _dh_res.state if _dh_res else None
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -221,4 +237,8 @@ async def get_regime(
         intraday_omm=intraday_omm_out,
         vix_pct_30d=vix_pct_30d,
         vix_pct_252d=vix_pct_252d,
+        conviction_pct=omm_out.conviction_pct if omm_out else None,
+        conviction_label=omm_out.conviction_label if omm_out else None,
+        hmm_state=_spx_hmm_state,
+        alignment=_regime_alignment(omm_out.state if omm_out else None, _spx_hmm_state),
     )

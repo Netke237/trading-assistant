@@ -20,6 +20,7 @@ from app.models.scan_session import ScanSession
 import json as _json
 
 _RR_CONFIG_PATH = _Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
+_SCORING_CFG_PATH = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
 
 # NOTE: lru_cache caches this at first call. Restart the backend to pick up
 # changes to risk_rules.yaml (premium_stop_pct, target %, etc.).
@@ -29,13 +30,22 @@ def _rr_cfg() -> dict:
     with open(_RR_CONFIG_PATH) as f:
         return _yaml.safe_load(f)["reward_risk"]
 
+
+@_lru_cache(maxsize=1)
+def _load_scoring_cfg() -> dict:
+    import yaml as _yaml
+    return _yaml.safe_load(_SCORING_CFG_PATH.read_text())
+
 from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
     ScanDelta, ContinuousScanConfig, ScanState, OptionsPipeline,
     AlternativeContract,
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
+    SentimentData,
 )
+from app.services.regime_omm import compute_omm as _compute_omm
+from app.services.regime_hmm_daily import compute_directional_hmm as _compute_dhmm, alignment as _hmm_alignment
 from typing import Literal
 from app.data.market import (
     fetch_candles_async, fetch_price_async, fetch_option_chain_async,
@@ -269,6 +279,43 @@ async def _process_symbol(
         if dividend_date is None:
             dividend_date = yf_div
 
+    # ── Regime sentiment ──────────────────────────────────────────────────────
+    _regime_signal = None
+    try:
+        _scfg = _load_scoring_cfg()
+        _rcfg = _scfg["regime"][horizon.lower()]
+        if candles and len(candles) >= _rcfg.get("min_obs", 10):
+            _omm = _compute_omm(
+                [b["close"] for b in candles],
+                direction=direction,
+                lookback=_rcfg["lookback"],
+                window=_rcfg["window"],
+                min_obs=_rcfg["min_obs"],
+            )
+            if _omm:
+                _dh = None
+                try:
+                    _dh = await asyncio.to_thread(_compute_dhmm, candles)
+                except Exception as exc:
+                    _log.debug("HMM unavailable for %s: %s", symbol, exc)
+                _regime_signal = {
+                    "horizon": horizon,
+                    "timeframe": _rcfg["timeframe"],
+                    "state": _omm.state,
+                    "p_stay": _omm.p_stay,
+                    "stability": _omm.stability,
+                    "regime_age_days": _omm.regime_age_days,
+                    "avg_regime_duration": _omm.avg_regime_duration,
+                    "conviction_pct": _omm.conviction_pct,
+                    "conviction_label": _omm.conviction_label,
+                    "interpretation": _omm.interpretation,
+                    "hmm_state": _dh.state if _dh else None,
+                    "alignment": _hmm_alignment(_omm.state, _dh.state if _dh else None),
+                    "insufficient_data": False,
+                }
+    except Exception as exc:
+        _log.warning("Regime signal failed for %s: %s", symbol, exc)
+
     # ── Pre-screen: score without IV rank ─────────────────────────────────────
     # iv_rank is unknown until the chain is fetched (pass 2). Score with None to gate
     # on trend/pullback/trigger/event — the components that drive most rejections.
@@ -279,6 +326,8 @@ async def _process_symbol(
         dividend_date=dividend_date,
         iv_rank=None,
         overrides=overrides,
+        regime_signal=_regime_signal,
+        regime_gate=_load_scoring_cfg()["regime_gate"] if _regime_signal else None,
     )
     if card_pre.status == "REJECT":
         bd = {r.name: r.score for r in card_pre.rules}
@@ -339,6 +388,8 @@ async def _process_symbol(
         confidence=_conf,
         confidence_gate=gate,
         confidence_sample_size=_conf_n,
+        regime_signal=_regime_signal,
+        regime_gate=_load_scoring_cfg()["regime_gate"] if _regime_signal else None,
     )
     if card.status == "REJECT":
         bd = {r.name: r.score for r in card.rules}
@@ -482,6 +533,7 @@ async def _process_symbol(
         finalStatus=_final_status(card.status, contract_card.status, entry.quality_status),
         confidence=(_conf_rule.detail.get("confidence") if (_conf_rule := next((r for r in card.rules if r.name == "confidence"), None)) else None),
         confidenceText=(_conf_rule.detail.get("interpretation") if _conf_rule else None),
+        sentiment=SentimentData(**_regime_signal) if _regime_signal else None,
     )
 
     alts: list[AlternativeContract] = []
