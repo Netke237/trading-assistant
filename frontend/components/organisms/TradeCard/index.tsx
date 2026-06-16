@@ -5,6 +5,7 @@ import { Text, Data } from '@/components/primitives';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import { AlternativeContractRow } from '@/components/molecules/AlternativeContractRow';
+import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
@@ -250,6 +251,8 @@ export function TradeCard({
           confidenceScore={data.confidence ?? null}
           confidenceText={data.confidenceText ?? null}
         />
+
+        <MarketSentiment s={data.sentiment} />
 
         {/* 3. Contract Scorecard */}
         <ScoreCardPanel
