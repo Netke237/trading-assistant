@@ -6,6 +6,8 @@ from app.services.strategy_param_store import (
     get_search_space,
     get_windows,
     get_costs,
+    get_direction,
+    get_job_retention,
     adopt,
 )
 
@@ -114,6 +116,31 @@ def test_adopt_handles_missing_file_gracefully(tmp_path, monkeypatch):
     # File should now exist with the new data
     assert (tmp_path / "strategy_params.yaml").exists()
     assert store.get_active("new_strategy")["param"] == 30
+
+
+def test_get_direction_default():
+    assert get_direction() == "bullish"
+
+
+def test_get_direction_custom(tmp_path, monkeypatch):
+    import app.services.strategy_param_store as store
+    monkeypatch.setattr(store, "CFG", tmp_path / "strategy_params.yaml")
+    (tmp_path / "strategy_params.yaml").write_text("direction: bearish\n", encoding="utf-8")
+    assert store.get_direction() == "bearish"
+
+
+def test_get_job_retention_default():
+    r = get_job_retention()
+    assert r["max_completed"] == 100
+
+
+def test_get_job_retention_custom(tmp_path, monkeypatch):
+    import app.services.strategy_param_store as store
+    monkeypatch.setattr(store, "CFG", tmp_path / "strategy_params.yaml")
+    (tmp_path / "strategy_params.yaml").write_text(
+        "job_retention:\n  max_completed: 50\n", encoding="utf-8"
+    )
+    assert store.get_job_retention()["max_completed"] == 50
 
 
 def test_signal_kwargs_merge_request_over_store(monkeypatch):

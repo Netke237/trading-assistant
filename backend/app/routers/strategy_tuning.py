@@ -22,6 +22,15 @@ class AdoptRequest(BaseModel):
     params: dict[str, Any]
 
 
+def _evict_old_jobs(max_completed: int) -> None:
+    """Drop the oldest finished (completed|failed) jobs beyond max_completed."""
+    finished = [jid for jid, j in _JOBS.items() if j.get("status") in ("completed", "failed")]
+    excess = len(finished) - max_completed
+    if excess > 0:
+        for jid in finished[:excess]:
+            del _JOBS[jid]
+
+
 @router.post("/run")
 async def run_job(body: dict = Body(default={})) -> dict:
     global _ACTIVE, _ACTIVE_TASK
@@ -51,10 +60,13 @@ async def run_job(body: dict = Body(default={})) -> dict:
                 store.get_windows(),
                 store.get_costs(),
                 progress,
+                direction=store.get_direction(),
             )
             _JOBS[job_id].update(status="completed", proposals=proposals)
+            _evict_old_jobs(store.get_job_retention().get("max_completed", 100))
         except Exception as exc:  # noqa: BLE001
             _JOBS[job_id].update(status="failed", error=str(exc))
+            _evict_old_jobs(store.get_job_retention().get("max_completed", 100))
 
     _ACTIVE_TASK = asyncio.create_task(_work())
     _JOBS[job_id]["task"] = None  # placeholder; actual Task not JSON-serialisable

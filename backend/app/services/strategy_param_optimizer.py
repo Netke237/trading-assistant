@@ -73,6 +73,8 @@ async def run_optimization(
     windows: dict,
     costs: dict,
     progress_cb: Callable[[int, int], None],
+    *,
+    direction: str = "bullish",
 ) -> dict:
     """Run walk-forward optimization for all strategies. Returns strategy → proposal dict.
 
@@ -158,7 +160,7 @@ async def run_optimization(
         all_drawdowns: list[float] = []
 
         for fold in folds:
-            winner = train_fold(strategy, "bullish", basket_bars, fold, search_space, costs)
+            winner = train_fold(strategy, direction, basket_bars, fold, search_space, costs)
             fold_winners.append(winner)
 
             # IS: re-run the train window with winner params to get a honest IS Sharpe
@@ -168,7 +170,7 @@ async def run_optimization(
                 if len(train_bars_fold) >= 100:
                     try:
                         res = run_strategy_backtest(
-                            train_bars_fold, strategy=strategy, direction="bullish", params=winner
+                            train_bars_fold, strategy=strategy, direction=direction, params=winner
                         )
                         if res.n_trades > 0:
                             is_sharpes.append(res.sharpe)
@@ -185,7 +187,7 @@ async def run_optimization(
                 if len(test_bars) >= 20:
                     try:
                         res = run_strategy_backtest(
-                            test_bars, strategy=strategy, direction="bullish", params=winner
+                            test_bars, strategy=strategy, direction=direction, params=winner
                         )
                         gross = res.total_return_pct if hasattr(res, "total_return_pct") else 0.0
                         net = apply_costs(

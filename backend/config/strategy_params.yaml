@@ -7,6 +7,13 @@ costs:
   fee_pct: 0.001
   slippage_pct: 0.001
 
+# bullish | bearish — controls which direction the backtest uses during WFO
+direction: bullish
+
+# Auto-evict finished jobs; keep the most recent max_completed (completed + failed)
+job_retention:
+  max_completed: 100
+
 basket:
   per_sector: 5
   symbols: []

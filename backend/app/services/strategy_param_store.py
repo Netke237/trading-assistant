@@ -66,6 +66,16 @@ def get_costs() -> dict:
     )
 
 
+def get_direction() -> str:
+    """Get optimization direction (bullish|bearish)."""
+    return str(_load().get("direction", "bullish"))
+
+
+def get_job_retention() -> dict:
+    """Get job retention policy — max_completed: keep only the last N finished jobs."""
+    return dict(_load().get("job_retention", {"max_completed": 100}))
+
+
 def adopt(strategy: str, params: dict) -> None:
     """Archive current active params and write the proposed set as the new active.
 

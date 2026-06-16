@@ -73,6 +73,32 @@ def test_clear_jobs_removes_completed_and_failed(monkeypatch):
     assert rt._ACTIVE == "ccc"        # _ACTIVE unchanged because running job survived
 
 
+def test_evict_old_jobs_keeps_last_n(monkeypatch):
+    import app.routers.strategy_tuning as rt
+    jobs = {f"job{i}": {"status": "completed"} for i in range(5)}
+    monkeypatch.setattr(rt, "_JOBS", jobs)
+    rt._evict_old_jobs(max_completed=3)
+    assert len(rt._JOBS) == 3
+    # The last 3 (job2, job3, job4) are kept; oldest (job0, job1) are dropped
+    assert "job0" not in rt._JOBS
+    assert "job1" not in rt._JOBS
+    assert "job2" in rt._JOBS
+    assert "job3" in rt._JOBS
+    assert "job4" in rt._JOBS
+
+
+def test_evict_preserves_running_jobs(monkeypatch):
+    import app.routers.strategy_tuning as rt
+    jobs = {
+        "running1": {"status": "running"},
+        **{f"done{i}": {"status": "completed"} for i in range(4)},
+    }
+    monkeypatch.setattr(rt, "_JOBS", jobs)
+    rt._evict_old_jobs(max_completed=2)
+    assert "running1" in rt._JOBS  # never evicted
+    assert len(rt._JOBS) == 3  # 1 running + 2 kept completed
+
+
 def test_adopt_writes_active(tmp_path, monkeypatch):
     from app.services import strategy_param_store as store
     monkeypatch.setattr(store, "CFG", tmp_path / "strategy_params.yaml")
