@@ -38,9 +38,9 @@ export function FundamentalHealthCard({ f }: { f: FundamentalsOut | null | undef
           <Data size={13} tone={healthTone(f.risk_score)}>{f.risk_score}</Data>
         </div>
       </div>
-      {f.safety_flags.length > 0 && (
+      {(f.safety_flags ?? []).length > 0 && (
         <div className={styles.flags}>
-          {f.safety_flags.map(flag => (
+          {(f.safety_flags ?? []).map(flag => (
             <span key={flag} className={styles.flag}>{flag.replace(/_/g, ' ')}</span>
           ))}
         </div>
