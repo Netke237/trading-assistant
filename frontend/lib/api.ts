@@ -356,12 +356,24 @@ export interface TuningJob {
   error?: string;
 }
 
+export interface TuningJobCount { count: number; completed: number; failed: number; running: number; }
+
 export async function startTuningJob(): Promise<{ job_id: string }> {
   return post('/api/strategy-tuning/run', {});
 }
 
 export async function getTuningJob(jobId: string): Promise<TuningJob> {
   return get(`/api/strategy-tuning/jobs/${jobId}`);
+}
+
+export async function getTuningJobCount(): Promise<TuningJobCount> {
+  return get('/api/strategy-tuning/jobs');
+}
+
+export async function clearTuningJobs(): Promise<{ cleared: number }> {
+  const res = await fetch(`${BASE_URL}/api/strategy-tuning/jobs`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`API /api/strategy-tuning/jobs → ${res.status}`);
+  return res.json() as Promise<{ cleared: number }>;
 }
 
 export async function adoptStrategyParams(strategy: string, params: Record<string, number | string>): Promise<{ ok: boolean; active: Record<string, number | string> }> {

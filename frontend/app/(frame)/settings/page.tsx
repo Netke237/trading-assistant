@@ -17,7 +17,7 @@ import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
-import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, startTuningJob, getTuningJob, adoptStrategyParams, type IngestionSchedule, type TuningJob, type WfoProposal } from '@/lib/api';
+import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type TuningJob, type TuningJobCount, type WfoProposal } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -1293,6 +1293,14 @@ function StrategyTuningForm() {
   const [adoptedStrategies, setAdoptedStrategies] = React.useState<Set<string>>(new Set());
   const [error, setError] = React.useState<string | null>(null);
   const pollCountRef = React.useRef(0);
+  const [jobCount, setJobCount] = React.useState<TuningJobCount | null>(null);
+  const [clearing, setClearing] = React.useState(false);
+
+  const refreshCount = React.useCallback(() => {
+    getTuningJobCount().then(setJobCount).catch(() => {});
+  }, []);
+
+  React.useEffect(() => { refreshCount(); }, [refreshCount]);
 
   const handleRun = async () => {
     setError(null);
@@ -1303,6 +1311,23 @@ function StrategyTuningForm() {
       setPolling(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to start tuning job');
+    }
+  };
+
+  const handleClearHistory = async () => {
+    setClearing(true);
+    try {
+      await clearTuningJobs();
+      // If the job we're showing is now gone (completed/failed), clear the display
+      if (job && job.status !== 'running') {
+        setJob(null);
+        setJobId(null);
+      }
+      refreshCount();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to clear history');
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -1320,7 +1345,7 @@ function StrategyTuningForm() {
       try {
         const j = await getTuningJob(jobId);
         setJob(j);
-        if (j.status !== 'running') setPolling(false);
+        if (j.status !== 'running') { setPolling(false); refreshCount(); }
       } catch {
         setPolling(false);
         setError('Lost connection to job — try refreshing.');
@@ -1346,6 +1371,25 @@ function StrategyTuningForm() {
         title="Strategy Tuning"
         blurb="Run a walk-forward optimization to find robust parameter sets for each strategy. Review in-sample vs out-of-sample results, then adopt the proposed parameters."
       />
+
+      <Row
+        label="Optimization history"
+        hint="Completed and failed runs stay in memory until cleared or until the backend restarts."
+      >
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginRight: 12 }}>
+          {jobCount
+            ? `${jobCount.completed} completed · ${jobCount.failed} failed · ${jobCount.running} running`
+            : '—'}
+        </span>
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={handleClearHistory}
+          disabled={clearing || (jobCount !== null && jobCount.completed === 0 && jobCount.failed === 0)}
+        >
+          {clearing ? 'Clearing…' : 'Clear history'}
+        </button>
+      </Row>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
         <button

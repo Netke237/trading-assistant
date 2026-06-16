@@ -39,6 +39,40 @@ def test_adopt_rejects_empty_params(tmp_path, monkeypatch):
     assert r.status_code == 422
 
 
+def test_list_jobs_returns_counts(monkeypatch):
+    import app.routers.strategy_tuning as rt
+    monkeypatch.setattr(rt, "_JOBS", {
+        "aaa": {"status": "completed", "done": 1, "total": 1, "proposals": {}},
+        "bbb": {"status": "failed", "done": 0, "total": 1, "error": "oops"},
+    })
+    c = TestClient(app)
+    r = c.get("/api/strategy-tuning/jobs")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["count"] == 2
+    assert data["completed"] == 1
+    assert data["failed"] == 1
+    assert data["running"] == 0
+
+
+def test_clear_jobs_removes_completed_and_failed(monkeypatch):
+    import app.routers.strategy_tuning as rt
+    monkeypatch.setattr(rt, "_JOBS", {
+        "aaa": {"status": "completed", "done": 1, "total": 1, "proposals": {}},
+        "bbb": {"status": "failed", "done": 0, "total": 1, "error": "oops"},
+        "ccc": {"status": "running", "done": 0, "total": 1, "proposals": {}},
+    })
+    monkeypatch.setattr(rt, "_ACTIVE", "ccc")
+    c = TestClient(app)
+    r = c.delete("/api/strategy-tuning/jobs")
+    assert r.status_code == 200
+    assert r.json()["cleared"] == 2
+    assert "aaa" not in rt._JOBS
+    assert "bbb" not in rt._JOBS
+    assert "ccc" in rt._JOBS          # running job kept
+    assert rt._ACTIVE == "ccc"        # _ACTIVE unchanged because running job survived
+
+
 def test_adopt_writes_active(tmp_path, monkeypatch):
     from app.services import strategy_param_store as store
     monkeypatch.setattr(store, "CFG", tmp_path / "strategy_params.yaml")

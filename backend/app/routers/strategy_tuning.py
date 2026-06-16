@@ -61,6 +61,31 @@ async def run_job(body: dict = Body(default={})) -> dict:
     return {"job_id": job_id}
 
 
+@router.get("/jobs")
+async def list_jobs() -> dict:
+    """Return a count summary of all in-memory job records."""
+    statuses = [j.get("status") for j in _JOBS.values()]
+    return {
+        "count": len(_JOBS),
+        "completed": statuses.count("completed"),
+        "failed": statuses.count("failed"),
+        "running": statuses.count("running"),
+    }
+
+
+@router.delete("/jobs")
+async def clear_jobs() -> dict:
+    """Remove all completed and failed job records from memory. Running jobs are kept."""
+    global _ACTIVE
+    to_delete = [jid for jid, j in _JOBS.items() if j.get("status") in ("completed", "failed")]
+    for jid in to_delete:
+        del _JOBS[jid]
+    # Reset _ACTIVE if it pointed to a job that was just cleared
+    if _ACTIVE and _ACTIVE not in _JOBS:
+        _ACTIVE = None
+    return {"cleared": len(to_delete)}
+
+
 @router.get("/jobs/{job_id}")
 async def job_status(job_id: str) -> dict:
     if job_id not in _JOBS:
