@@ -51,6 +51,7 @@ def run_strategy_backtest(
     direction: str,
     min_trades: int = _MIN_TRADES,
     min_win_rate: float = _MIN_WIN_RATE,
+    params: dict | None = None,
 ) -> BacktestResult:
     """Run a full entry+stop+target backtest using backtesting.py."""
     from backtesting import Backtest, Strategy as BtStrategy
@@ -94,7 +95,7 @@ def run_strategy_backtest(
                 for i in range(start, n)
             ]
             if not self.position:
-                sig = fn(slice_bars)
+                sig = fn(slice_bars, **(params or {}))
                 if sig is not None:
                     sl = sig.stop_price
                     tp = sig.target_price

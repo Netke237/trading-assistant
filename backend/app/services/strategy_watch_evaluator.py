@@ -18,6 +18,7 @@ from app.services.strategy_engine import (
     ma_crossover_signal, mean_reversion_rsi_signal,
 )
 from app.services.strategy_watch_store import strategy_watch_store
+from app.services.strategy_param_store import get_active
 from app.services.notifications.dispatch import notify_enabled_channels
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,10 @@ async def evaluate_all() -> list[WatchEvent]:
 
         close = float(bars[-1]["close"])
         try:
-            signal = fn(bars, **(w.get("params_override") or {}))
+            adopted = get_active(key)
+            params_override = w.get("params_override") or {}
+            adopted.update(params_override)  # params_override wins
+            signal = fn(bars, **adopted)
         except Exception as exc:
             logger.warning("strategy-watch: %s signal failed for %s — %s", key, symbol, exc)
             continue

@@ -1,0 +1,112 @@
+"""Strategy parameter store with YAML-based configuration and archive-on-adopt."""
+
+from __future__ import annotations
+
+import copy
+import os
+import shutil
+import time
+import uuid
+from datetime import datetime
+from pathlib import Path
+
+import yaml
+
+
+CFG = Path(__file__).parent.parent.parent / "config" / "strategy_params.yaml"
+
+_CACHE: tuple[Path, dict, float] | None = None  # (cached_path, data, expires_at)
+_CACHE_TTL = 60.0  # seconds; invalidated immediately on adopt()
+
+
+def _load() -> dict:
+    """Load strategy_params.yaml or return cached structure if fresh."""
+    global _CACHE
+    now = time.monotonic()
+    if _CACHE is not None and _CACHE[0] == CFG and now < _CACHE[2]:
+        return _CACHE[1]
+    if not CFG.exists():
+        data: dict = {"strategies": {}}
+    else:
+        data = yaml.safe_load(CFG.read_text(encoding="utf-8")) or {"strategies": {}}
+    _CACHE = (CFG, data, now + _CACHE_TTL)
+    return data
+
+
+def get_active(strategy: str) -> dict:
+    """Get active (production) parameters for a strategy.
+
+    Returns a copy of the active params dict, or empty dict if strategy not found.
+    The caller should provide signal-function defaults if the strategy is unknown.
+    """
+    return dict(_load().get("strategies", {}).get(strategy, {}).get("active", {}))
+
+
+def get_search_space(strategy: str) -> dict:
+    """Get search space (hyperparameter grid) for a strategy.
+
+    Returns a copy of the search params dict, or empty dict if strategy not found.
+    """
+    return dict(_load().get("strategies", {}).get(strategy, {}).get("search", {}))
+
+
+def get_windows() -> dict:
+    """Get rolling window configuration."""
+    return dict(
+        _load().get(
+            "windows",
+            {"type": "rolling", "train_months": 12, "test_months": 3},
+        )
+    )
+
+
+def get_costs() -> dict:
+    """Get transaction cost configuration."""
+    return dict(
+        _load().get("costs", {"fee_pct": 0.001, "slippage_pct": 0.001})
+    )
+
+
+def get_direction() -> str:
+    """Get optimization direction (bullish|bearish)."""
+    return str(_load().get("direction", "bullish"))
+
+
+def get_optimization_config() -> dict:
+    """Get optimization eligibility thresholds (min_trades, min_consistency)."""
+    return dict(_load().get("optimization", {"min_trades": 20, "min_consistency": 0.5}))
+
+
+def get_job_retention() -> dict:
+    """Get job retention policy — max_completed: keep only the last N finished jobs."""
+    return dict(_load().get("job_retention", {"max_completed": 100}))
+
+
+def adopt(strategy: str, params: dict) -> None:
+    """Archive current active params and write the proposed set as the new active.
+
+    Creates a backup of the YAML before overwriting.
+    Uses atomic write (tmp-then-replace) to prevent corruption on crash.
+    """
+    global _CACHE
+    # Deep-copy so the in-memory cache is never mutated before the write succeeds.
+    data = copy.deepcopy(_load())
+
+    # Archive the current config before modification (if it exists)
+    if CFG.exists():
+        # UUID suffix guarantees uniqueness even for rapid double-adopt calls.
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup_path = CFG.with_suffix(f".bak.{timestamp}-{uuid.uuid4().hex[:8]}.yaml")
+        shutil.copy(CFG, backup_path)
+
+    # Update the active parameters for this strategy
+    data.setdefault("strategies", {}).setdefault(strategy, {})["active"] = (
+        copy.deepcopy(params)
+    )
+
+    # Write back to YAML using atomic write (tmp-then-replace)
+    tmp = CFG.with_suffix(".yaml.tmp")
+    tmp.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    os.replace(tmp, CFG)
+    # Invalidate cache AFTER the write succeeds — no window of stale reads.
+    _CACHE = None

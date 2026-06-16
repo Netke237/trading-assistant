@@ -11,18 +11,18 @@
  * value is and can tell at a glance if they've drifted.
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig, type FundamentalsGate } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
-import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, type IngestionSchedule } from '@/lib/api';
+import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type TuningJob, type TuningJobCount, type WfoProposal } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
-type Section = 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy' | 'data';
+type Section = 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy' | 'data' | 'tuning';
 
 const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'theme',   label: 'Appearance', desc: 'Theme + density' },
@@ -33,6 +33,7 @@ const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'regime',  label: 'Regime',     desc: 'Daily OMM parameters' },
   { key: 'notifications', label: 'Notifications', desc: 'Gmail + Telegram alert delivery' },
   { key: 'data',    label: 'Data',       desc: 'Nightly OHLCV ingestion schedule' },
+  { key: 'tuning',  label: 'Strategy Tuning', desc: 'Walk-forward parameter optimization' },
 ];
 
 export default function SettingsPage() {
@@ -70,6 +71,7 @@ export default function SettingsPage() {
           {active === 'notifications' && <NotificationForm />}
           {active === 'strategy' && <StrategyScanForm />}
           {active === 'data'    && <DataForm />}
+          {active === 'tuning'  && <StrategyTuningForm />}
         </div>
       </div>
 
@@ -470,6 +472,8 @@ function FundamentalsGateSection({
 
 function Toggle({ defaultOn, onChange }: { defaultOn?: boolean; onChange?: (on: boolean) => void }) {
   const [on, setOn] = useState(defaultOn ?? false);
+  // Sync with external state changes (e.g., Reset button updates the store).
+  useEffect(() => { setOn(defaultOn ?? false); }, [defaultOn]);
   return (
     <button
       type="button"
@@ -1391,6 +1395,360 @@ function StrategyScanForm() {
           Reset to defaults
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ---------- Strategy Tuning ---------- */
+
+const SESSION_JOB_KEY = 'bamendjou:wfo:jobId';
+const SESSION_ADOPTED_KEY = 'bamendjou:wfo:adopted';
+const MAX_POLL_COUNT = 450; // 15 minutes at 2s intervals
+
+function StrategyTuningForm() {
+  const [jobId, setJobId] = React.useState<string | null>(null);
+  const [job, setJob] = React.useState<TuningJob | null>(null);
+  const [polling, setPolling] = React.useState(false);
+  const [adoptedStrategies, setAdoptedStrategies] = React.useState<Set<string>>(new Set());
+
+  const [error, setError] = React.useState<string | null>(null);
+  const pollCountRef = React.useRef(0);
+  const [jobCount, setJobCount] = React.useState<TuningJobCount | null>(null);
+  const [clearing, setClearing] = React.useState(false);
+
+  const refreshCount = React.useCallback(() => {
+    getTuningJobCount().then(setJobCount).catch(() => {});
+  }, []);
+
+  React.useEffect(() => { refreshCount(); }, [refreshCount]);
+
+  // Hydrate from sessionStorage after mount (avoids SSR/hydration mismatch) and
+  // reconnect to any in-flight job in one effect so the stored jobId is available
+  // synchronously for the getTuningJob call without waiting for a re-render.
+  React.useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SESSION_ADOPTED_KEY);
+      if (raw) setAdoptedStrategies(new Set<string>(JSON.parse(raw) as string[]));
+    } catch {
+      // Corrupt sessionStorage — start fresh.
+    }
+
+    const stored = sessionStorage.getItem(SESSION_JOB_KEY);
+    if (!stored) return;
+    setJobId(stored);
+    getTuningJob(stored)
+      .then(j => {
+        setJob(j);
+        if (j.status === 'running') setPolling(true);
+      })
+      .catch(() => {
+        // Backend was restarted — job is gone, clear the stale id.
+        sessionStorage.removeItem(SESSION_JOB_KEY);
+        setJobId(null);
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRun = async () => {
+    setError(null);
+    try {
+      const { job_id } = await startTuningJob();
+      sessionStorage.setItem(SESSION_JOB_KEY, job_id);
+      setJobId(job_id);
+      setJob(null);
+      setPolling(true);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to start tuning job');
+    }
+  };
+
+  const handleClearHistory = async () => {
+    setClearing(true);
+    try {
+      await clearTuningJobs();
+      if (job && job.status !== 'running') {
+        setJob(null);
+        setJobId(null);
+        sessionStorage.removeItem(SESSION_JOB_KEY);
+      }
+      refreshCount();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to clear history');
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (!polling || !jobId) return;
+    pollCountRef.current = 0;
+    const interval = setInterval(async () => {
+      pollCountRef.current += 1;
+      if (pollCountRef.current >= MAX_POLL_COUNT) {
+        clearInterval(interval);
+        setPolling(false);
+        setError('Optimization timed out after 15 minutes — job may still be running. Try refreshing to reconnect.');
+        return;
+      }
+      try {
+        const j = await getTuningJob(jobId);
+        setJob(j);
+        if (j.status !== 'running') { setPolling(false); refreshCount(); }
+      } catch {
+        setPolling(false);
+        setError('Lost connection to job — try refreshing.');
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [polling, jobId]);
+
+  const handleAdopt = async (strategy: string, params: Record<string, number | string>) => {
+    try {
+      await adoptStrategyParams(strategy, params);
+      setAdoptedStrategies(prev => {
+        const next = new Set(prev).add(strategy);
+        sessionStorage.setItem(SESSION_ADOPTED_KEY, JSON.stringify([...next]));
+        return next;
+      });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to adopt params');
+    }
+  };
+
+  const proposals: [string, WfoProposal][] = job?.proposals ? Object.entries(job.proposals) : [];
+
+  return (
+    <div>
+      <SectionIntro
+        title="Strategy Tuning"
+        blurb="Run a walk-forward optimization to find robust parameter sets for each strategy. Review in-sample vs out-of-sample results, then adopt the proposed parameters."
+      />
+
+      <Row
+        label="Optimization history"
+        hint="Completed and failed runs stay in memory until cleared or until the backend restarts."
+      >
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginRight: 12 }}>
+          {jobCount
+            ? `${jobCount.completed} completed · ${jobCount.failed} failed · ${jobCount.running} running`
+            : '—'}
+        </span>
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={handleClearHistory}
+          disabled={clearing || (jobCount !== null && jobCount.completed === 0 && jobCount.failed === 0)}
+        >
+          {clearing ? 'Clearing…' : 'Clear history'}
+        </button>
+      </Row>
+
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+        <button
+          onClick={handleRun}
+          disabled={polling}
+          style={{
+            padding: '8px 20px',
+            background: 'var(--accent)',
+            color: 'var(--bg-base)',
+            border: 'none',
+            borderRadius: 6,
+            cursor: polling ? 'not-allowed' : 'pointer',
+            opacity: polling ? 0.6 : 1,
+            fontSize: 13,
+            fontWeight: 500,
+          }}
+        >
+          {polling ? 'Running…' : 'Run Optimization'}
+        </button>
+        {job && job.status === 'running' && job.total > 0 && (
+          <span style={{ color: 'var(--text-secondary)', fontSize: 13, alignSelf: 'center' }}>
+            {job.done} / {job.total} strategies
+          </span>
+        )}
+        {job && job.status === 'completed' && (
+          <span style={{ color: 'var(--pass)', fontSize: 13, alignSelf: 'center' }}>
+            Done — {proposals.length} proposals ready
+          </span>
+        )}
+        {job && job.status === 'failed' && (
+          <span style={{ color: 'var(--reject)', fontSize: 13, alignSelf: 'center' }}>
+            Failed: {job.error}
+          </span>
+        )}
+      </div>
+
+      {error && (
+        <div style={{ color: 'var(--reject)', fontSize: 13, marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
+
+      {proposals.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {proposals.map(([strategy, prop]) => (
+            <ProposalCard
+              key={strategy}
+              strategy={strategy}
+              proposal={prop}
+              adopted={adoptedStrategies.has(strategy)}
+              onAdopt={() => handleAdopt(strategy, prop.proposed)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ProposalCardProps {
+  strategy: string;
+  proposal: WfoProposal;
+  adopted: boolean;
+  onAdopt: () => void;
+}
+
+function ProposalCard({ strategy, proposal, adopted, onAdopt }: ProposalCardProps) {
+  const [expanded, setExpanded] = React.useState(false);
+  const deg = proposal.verdict.degradation_pct;
+  const degColor = deg > 0.6 ? 'var(--reject)' : deg > 0.3 ? 'var(--caution)' : 'var(--pass)';
+
+  return (
+    <div style={{
+      border: '1px solid var(--border-subtle)',
+      borderRadius: 8,
+      padding: 16,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 4 }}>
+            {strategy}
+          </div>
+          <div style={{
+            fontSize: 12,
+            color: proposal.eligible ? 'var(--pass)' : 'var(--reject)',
+          }}>
+            {proposal.eligible ? 'Eligible' : 'Not eligible'} · Consistency: {(proposal.consistency * 100).toFixed(0)}% positive folds
+          </div>
+        </div>
+        <button
+          onClick={onAdopt}
+          disabled={adopted || !proposal.eligible}
+          style={{
+            padding: '6px 14px',
+            background: adopted ? 'transparent' : 'var(--accent)',
+            color: adopted ? 'var(--text-secondary)' : 'var(--bg-base)',
+            border: adopted ? '1px solid var(--border-subtle)' : 'none',
+            borderRadius: 6,
+            cursor: adopted || !proposal.eligible ? 'not-allowed' : 'pointer',
+            opacity: !proposal.eligible && !adopted ? 0.5 : 1,
+            fontSize: 12,
+            fontWeight: 500,
+          }}
+        >
+          {adopted ? 'Adopted' : 'Adopt'}
+        </button>
+      </div>
+
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, fontStyle: 'italic' }}>
+        {proposal.recommendation}
+      </div>
+
+      {/* Verdict row */}
+      <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>In-sample return</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+            {proposal.verdict.in_sample_return.toFixed(1)}%
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>Walk-forward return</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+            {proposal.verdict.walk_forward_return.toFixed(1)}%
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>Curve-fit degradation</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: degColor, fontFamily: 'var(--font-mono)' }}>
+            {(proposal.verdict.degradation_pct * 100).toFixed(0)}%
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>OOS Sharpe</div>
+          <div style={{ fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-mono)', color: proposal.oos_metrics.sharpe > 0.5 ? 'var(--pass)' : 'var(--text-secondary)' }}>
+            {proposal.oos_metrics.sharpe.toFixed(2)}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>OOS trades</div>
+          <div style={{ fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+            {proposal.oos_metrics.n_trades}
+          </div>
+        </div>
+      </div>
+
+      {/* Proposed params */}
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6 }}>Proposed parameters</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {Object.entries(proposal.proposed).map(([k, v]) => (
+            <div key={k} style={{
+              background: 'color-mix(in srgb, var(--accent) 8%, var(--bg-surface))',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 4,
+              padding: '3px 8px',
+              fontSize: 12,
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-primary)',
+            }}>
+              {k}: {String(v)}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Fold winners accordion */}
+      {proposal.fold_winners.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <button
+            onClick={() => setExpanded(e => !e)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-secondary)',
+              fontSize: 12,
+              padding: 0,
+            }}
+          >
+            {expanded ? '▾' : '▸'} {proposal.fold_winners.length} fold winners
+          </button>
+          {expanded && (
+            <div style={{ marginTop: 8, overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-dim)', fontWeight: 400, borderBottom: '1px solid var(--border-subtle)' }}>Fold</th>
+                    {Object.keys(proposal.fold_winners[0] || {}).map(k => (
+                      <th key={k} style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-dim)', fontWeight: 400, borderBottom: '1px solid var(--border-subtle)' }}>{k}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {proposal.fold_winners.map((w, i) => (
+                    <tr key={i}>
+                      <td style={{ padding: '4px 8px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{i + 1}</td>
+                      {Object.values(w).map((v, j) => (
+                        <td key={j} style={{ padding: '4px 8px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{String(v)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ load_dotenv()  # Load root .env into os.environ before market.py reads TRADIER_A
 from contextlib import asynccontextmanager
 import asyncio
 import logging
+import os
 
 from fastapi import FastAPI
 
@@ -39,6 +40,7 @@ from app.routers.historical_data import router as historical_data_router
 from app.routers.chart_drawings  import router as chart_drawings_router
 from app.routers.ingestion       import router as ingestion_router
 from app.routers.strategy_watch  import router as strategy_watch_router
+from app.routers.strategy_tuning import router as strategy_tuning_router
 
 
 _notification_worker_task: asyncio.Task | None = None
@@ -49,6 +51,14 @@ _portfolio_monitor_task: asyncio.Task | None = None
 async def lifespan(app: FastAPI):
     global _notification_worker_task, _portfolio_monitor_task
     # ── Startup ──────────────────────────────────────────────────────────
+    _web_concurrency = int(os.getenv("WEB_CONCURRENCY", "1"))
+    if _web_concurrency > 1:
+        logger.error(
+            "WEB_CONCURRENCY=%d detected — strategy-tuning concurrency guard uses an "
+            "in-process asyncio.Lock invisible across workers. "
+            "Run with --workers 1 or migrate to a shared lock backend.",
+            _web_concurrency,
+        )
     from app.routers.scan import restore_from_db, _scheduler, _scheduled_scan
     status = await restore_from_db()
     if status == "running":
@@ -131,6 +141,17 @@ async def lifespan(app: FastAPI):
                 await task
             except asyncio.CancelledError:
                 pass
+    # Cancel any in-flight WFO optimization task so it doesn't outlive the server.
+    try:
+        from app.routers import strategy_tuning as _st
+        if _st._ACTIVE_TASK and not _st._ACTIVE_TASK.done():
+            _st._ACTIVE_TASK.cancel()
+            try:
+                await _st._ACTIVE_TASK
+            except asyncio.CancelledError:
+                pass
+    except Exception:
+        pass
 
 
 def create_app() -> FastAPI:
@@ -182,6 +203,7 @@ def create_app() -> FastAPI:
     app.include_router(chart_drawings_router)
     app.include_router(ingestion_router)
     app.include_router(strategy_watch_router)
+    app.include_router(strategy_tuning_router)
 
     return app
 
