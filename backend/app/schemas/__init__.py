@@ -42,6 +42,19 @@ class SentimentData(BaseModel):
     insufficient_data: bool = False
 
 
+# ── Fundamentals ─────────────────────────────────────────────────────────────
+
+class FundamentalsOut(BaseModel):
+    score: int
+    quality_label: str
+    risk_label: str
+    growth_score: int
+    quality_score: int
+    risk_score: int
+    safety_flags: list[str] = []
+    detail: dict = {}
+
+
 # ── Score breakdowns ─────────────────────────────────────────────────────────
 
 class TriggerDetail(BaseModel):
@@ -389,6 +402,7 @@ class TradeCardData(BaseModel):
     confidence:        Optional[int] = None
     confidenceText:    Optional[str] = None
     sentiment:         Optional[SentimentData] = None
+    fundamentals:      Optional[FundamentalsOut] = None
 
 
 # ── Scan ─────────────────────────────────────────────────────────────────────
@@ -407,6 +421,11 @@ class ScanRequest(BaseModel):
     confidence_caution_below: Optional[int] = None
     confidence_reject_below:  Optional[int] = None
     confidence_atr_mult:      Optional[float] = None
+    # Per-scan fundamentals-gate overrides
+    fundamentals_enabled:        Optional[bool]  = None
+    fundamentals_caution_below:  Optional[float] = None
+    fundamentals_reject_below:   Optional[float] = None
+    fundamentals_de_reject:      Optional[float] = None
 
 
 class RejectedCandidate(BaseModel):

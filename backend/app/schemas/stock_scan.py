@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
-from app.schemas import SentimentData
+from app.schemas import SentimentData, FundamentalsOut
 
 
 Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi"]
@@ -36,6 +36,11 @@ class StockScanRequest(BaseModel):
     bt_min_win_rate:    float = 0.45
     shortlist_max_candidates: int = Field(10, gt=0)
     regime_filter: bool = False
+    # Per-scan fundamentals-gate overrides
+    fundamentals_enabled:        Optional[bool]  = None
+    fundamentals_caution_below:  Optional[float] = None
+    fundamentals_reject_below:   Optional[float] = None
+    fundamentals_de_reject:      Optional[float] = None
 
 
 class StrategySignalOut(BaseModel):
@@ -81,6 +86,7 @@ class PositionCardOut(BaseModel):
     next_event_days: int | None = None    # days to nearest earnings or dividend (>=0)
     next_event_label: str | None = None   # "earnings" | "dividend"
     sentiment: Optional[SentimentData] = None
+    fundamentals: Optional[FundamentalsOut] = None
 
 
 class StockPipeline(BaseModel):

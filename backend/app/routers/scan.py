@@ -127,6 +127,21 @@ def _resolve_gate(req: ScanRequest) -> dict:
     return gate
 
 
+def _resolve_fundamentals_gate(req) -> dict:
+    """Merge YAML fundamentals_gate defaults with per-request overrides."""
+    cfg = _load_scoring_cfg()
+    g = dict(cfg.get("fundamentals_gate", {}))
+    if req.fundamentals_enabled is not None:
+        g["enabled"] = req.fundamentals_enabled
+    if req.fundamentals_caution_below is not None:
+        g["cautionBelow"] = req.fundamentals_caution_below
+    if req.fundamentals_reject_below is not None:
+        g["rejectBelow"] = req.fundamentals_reject_below
+    if req.fundamentals_de_reject is not None:
+        g.setdefault("safety", {})["debt_to_equity_reject"] = req.fundamentals_de_reject
+    return g
+
+
 def _compute_deltas(current: ScanResult, previous: ScanResult | None) -> list[ScanDelta]:
     """Compare current candidates with previous run and compute rank/score deltas."""
     if previous is None or not previous.candidates:
