@@ -1284,13 +1284,25 @@ function StrategyScanForm() {
 
 /* ---------- Strategy Tuning ---------- */
 
-const MAX_POLL_COUNT = 150; // 5 minutes at 2s intervals
+const SESSION_JOB_KEY = 'bamendjou:wfo:jobId';
+const SESSION_ADOPTED_KEY = 'bamendjou:wfo:adopted';
+const MAX_POLL_COUNT = 450; // 15 minutes at 2s intervals
 
 function StrategyTuningForm() {
-  const [jobId, setJobId] = React.useState<string | null>(null);
+  const [jobId, setJobId] = React.useState<string | null>(() =>
+    typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_JOB_KEY) : null
+  );
   const [job, setJob] = React.useState<TuningJob | null>(null);
   const [polling, setPolling] = React.useState(false);
-  const [adoptedStrategies, setAdoptedStrategies] = React.useState<Set<string>>(new Set());
+  const [adoptedStrategies, setAdoptedStrategies] = React.useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const raw = sessionStorage.getItem(SESSION_ADOPTED_KEY);
+      return raw ? new Set<string>(JSON.parse(raw) as string[]) : new Set<string>();
+    } catch {
+      return new Set<string>();
+    }
+  });
   const [error, setError] = React.useState<string | null>(null);
   const pollCountRef = React.useRef(0);
   const [jobCount, setJobCount] = React.useState<TuningJobCount | null>(null);
@@ -1302,10 +1314,26 @@ function StrategyTuningForm() {
 
   React.useEffect(() => { refreshCount(); }, [refreshCount]);
 
+  // On mount: if sessionStorage had a jobId, fetch current status and resume poll if running.
+  React.useEffect(() => {
+    if (!jobId) return;
+    getTuningJob(jobId)
+      .then(j => {
+        setJob(j);
+        if (j.status === 'running') setPolling(true);
+      })
+      .catch(() => {
+        // Backend was restarted — job is gone, clear the stale id.
+        sessionStorage.removeItem(SESSION_JOB_KEY);
+        setJobId(null);
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleRun = async () => {
     setError(null);
     try {
       const { job_id } = await startTuningJob();
+      sessionStorage.setItem(SESSION_JOB_KEY, job_id);
       setJobId(job_id);
       setJob(null);
       setPolling(true);
@@ -1318,10 +1346,10 @@ function StrategyTuningForm() {
     setClearing(true);
     try {
       await clearTuningJobs();
-      // If the job we're showing is now gone (completed/failed), clear the display
       if (job && job.status !== 'running') {
         setJob(null);
         setJobId(null);
+        sessionStorage.removeItem(SESSION_JOB_KEY);
       }
       refreshCount();
     } catch (e: unknown) {
@@ -1339,7 +1367,7 @@ function StrategyTuningForm() {
       if (pollCountRef.current >= MAX_POLL_COUNT) {
         clearInterval(interval);
         setPolling(false);
-        setError('Optimization timed out after 5 minutes — try refreshing.');
+        setError('Optimization timed out after 15 minutes — job may still be running. Try refreshing to reconnect.');
         return;
       }
       try {
@@ -1357,7 +1385,11 @@ function StrategyTuningForm() {
   const handleAdopt = async (strategy: string, params: Record<string, number | string>) => {
     try {
       await adoptStrategyParams(strategy, params);
-      setAdoptedStrategies(prev => new Set(prev).add(strategy));
+      setAdoptedStrategies(prev => {
+        const next = new Set(prev).add(strategy);
+        sessionStorage.setItem(SESSION_ADOPTED_KEY, JSON.stringify([...next]));
+        return next;
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to adopt params');
     }

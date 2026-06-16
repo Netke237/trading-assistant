@@ -28,6 +28,22 @@ from sqlalchemy.ext.asyncio import (
 from app.database import get_db
 from app.models.scan_session import ScanSessionBase
 
+# ── Strategy-param cache isolation ────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _reset_strategy_param_cache():
+    """Clear the module-level YAML cache before and after every test.
+
+    Without this, a test that calls _load() or adopt() warms the cache, and the
+    next test (which may monkeypatch CFG to a different path) still reads stale
+    data from the previous test's cache entry.
+    """
+    from app.services import strategy_param_store as sps
+    sps._CACHE = None
+    yield
+    sps._CACHE = None
+
+
 # ── Test DB ───────────────────────────────────────────────────────────────────
 
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"

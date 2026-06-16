@@ -73,6 +73,26 @@ def test_clear_jobs_removes_completed_and_failed(monkeypatch):
     assert rt._ACTIVE == "ccc"        # _ACTIVE unchanged because running job survived
 
 
+def test_evict_completed_before_failed(monkeypatch):
+    """Eviction must prefer completed before failed regardless of insertion order.
+
+    f1 is inserted FIRST (it's 'oldest') but should survive because failed
+    evidence is more valuable to preserve than completed runs.
+    """
+    import app.routers.strategy_tuning as rt
+    jobs = {
+        "f1": {"status": "failed"},    # inserted first — but should be last evicted
+        "c1": {"status": "completed"},
+        "c2": {"status": "completed"},
+    }
+    monkeypatch.setattr(rt, "_JOBS", jobs)
+    rt._evict_old_jobs(max_completed=2)
+    assert "f1" in rt._JOBS        # failure evidence preserved
+    assert "c1" not in rt._JOBS   # oldest completed evicted
+    assert "c2" in rt._JOBS
+    assert len(rt._JOBS) == 2
+
+
 def test_evict_old_jobs_keeps_last_n(monkeypatch):
     import app.routers.strategy_tuning as rt
     jobs = {f"job{i}": {"status": "completed"} for i in range(5)}

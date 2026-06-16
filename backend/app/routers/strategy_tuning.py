@@ -15,6 +15,9 @@ router = APIRouter(prefix="/api/strategy-tuning", tags=["strategy-tuning"])
 _JOBS: dict[str, dict] = {}
 _ACTIVE: str | None = None
 _ACTIVE_TASK: asyncio.Task | None = None
+# Single-worker design: only one optimization run at a time.
+# The lock makes the 409 check + job creation atomic within an asyncio event loop.
+_LOCK: asyncio.Lock = asyncio.Lock()
 
 
 class AdoptRequest(BaseModel):
@@ -23,22 +26,29 @@ class AdoptRequest(BaseModel):
 
 
 def _evict_old_jobs(max_completed: int) -> None:
-    """Drop the oldest finished (completed|failed) jobs beyond max_completed."""
-    finished = [jid for jid, j in _JOBS.items() if j.get("status") in ("completed", "failed")]
-    excess = len(finished) - max_completed
+    """Drop oldest finished jobs beyond max_completed; evict completed before failed.
+
+    Failure evidence is preserved longer so the user can diagnose issues after
+    the session fills up with completed runs.
+    """
+    completed = [jid for jid, j in _JOBS.items() if j.get("status") == "completed"]
+    failed = [jid for jid, j in _JOBS.items() if j.get("status") == "failed"]
+    candidates = completed + failed  # completed are eviction candidates first
+    excess = len(candidates) - max_completed
     if excess > 0:
-        for jid in finished[:excess]:
+        for jid in candidates[:excess]:
             del _JOBS[jid]
 
 
 @router.post("/run")
 async def run_job(body: dict = Body(default={})) -> dict:
     global _ACTIVE, _ACTIVE_TASK
-    if _ACTIVE and _JOBS.get(_ACTIVE, {}).get("status") == "running":
-        raise HTTPException(status_code=409, detail="An optimization run is already active.")
-    job_id = uuid.uuid4().hex
-    _JOBS[job_id] = {"status": "running", "done": 0, "total": 0, "proposals": {}}
-    _ACTIVE = job_id
+    async with _LOCK:
+        if _ACTIVE and _JOBS.get(_ACTIVE, {}).get("status") == "running":
+            raise HTTPException(status_code=409, detail="An optimization run is already active.")
+        job_id = uuid.uuid4().hex
+        _JOBS[job_id] = {"status": "running", "done": 0, "total": 0, "proposals": {}}
+        _ACTIVE = job_id
 
     async def _work() -> None:
         try:
