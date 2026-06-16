@@ -54,7 +54,7 @@ def build_folds(
     Examples:
         Rolling (test_months = 3, train_months = 12):
         - Fold 0: train [2018-01-01, 2019-01-01), test [2019-01-01, 2019-04-01)
-        - Fold 1: train [2019-04-01, 2020-04-01), test [2020-04-01, 2020-07-01)
+        - Fold 1: train [2018-04-01, 2019-04-01), test [2019-04-01, 2019-07-01)
         - ...
 
         Anchored (train_months = 12, test_months = 3):
@@ -111,9 +111,23 @@ def apply_costs(*, gross_return_pct: float, fee_pct: float, slippage_pct: float)
     return gross_return_pct - drag_pct
 
 
+def precompute_bar_dates(bars: list[dict]) -> None:
+    """Parse and cache each bar's 'time' field as '_date' for O(1) reuse in _slice_bars.
+
+    Call once per symbol before the fold/combo loop to avoid repeated
+    string→date conversions inside the triple-nested iteration.
+    """
+    for b in bars:
+        if "_date" not in b:
+            b["_date"] = date.fromisoformat(str(b["time"])[:10])
+
+
 def _slice_bars(bars: list[dict], start: date, end: date) -> list[dict]:
-    """Slice a list of bars to a date range (inclusive start, exclusive end)."""
-    return [b for b in bars if start <= date.fromisoformat(str(b["time"])[:10]) < end]
+    """Slice a list of bars to [start, end). Uses pre-computed '_date' key if present."""
+    return [
+        b for b in bars
+        if start <= (b.get("_date") or date.fromisoformat(str(b["time"])[:10])) < end
+    ]
 
 
 def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]],

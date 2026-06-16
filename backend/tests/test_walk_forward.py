@@ -1,6 +1,6 @@
 """Tests for walk-forward optimization fold construction."""
 from datetime import date
-from app.services.walk_forward import build_folds, param_combos, apply_costs, consensus
+from app.services.walk_forward import build_folds, param_combos, apply_costs, consensus, precompute_bar_dates
 
 
 def test_rolling_folds_step_by_test_months():
@@ -69,6 +69,34 @@ def test_engine_prefers_planted_edge_over_noise():
     assert len(param_combos(space)) == 4
     # Real recovery is validated end-to-end in Task 7 via the orchestrator on fixtures.
     assert consensus([{"ema_period": 50, "trend_ema": 200}]) == {"ema_period": 50, "trend_ema": 200}
+
+
+def test_rolling_fold1_train_start_slides_by_test_months():
+    """Rolling fold 1 train_start should advance by test_months (3), not train_months (12)."""
+    from datetime import date
+    folds = build_folds(
+        date(2018, 1, 1), date(2021, 6, 1),
+        train_months=12, test_months=3, anchored=False,
+    )
+    assert len(folds) >= 2
+    assert folds[0].train_start == date(2018, 1, 1)
+    assert folds[1].train_start == date(2018, 4, 1)  # +3 months not +12
+
+
+def test_slice_bars_uses_precomputed_date():
+    from app.services.walk_forward import _slice_bars, precompute_bar_dates
+    from datetime import date
+
+    bars = [
+        {"time": "2020-01-15", "close": 100},
+        {"time": "2020-03-01", "close": 110},
+        {"time": "2020-06-01", "close": 120},
+    ]
+    precompute_bar_dates(bars)
+    assert all("_date" in b for b in bars)
+    sliced = _slice_bars(bars, date(2020, 2, 1), date(2020, 5, 1))
+    assert len(sliced) == 1
+    assert sliced[0]["close"] == 110
 
 
 def test_optimize_strategy_sync_returns_none_when_basket_empty():
