@@ -1,0 +1,95 @@
+{
+  "entityName": "Apple Inc.",
+  "facts": {
+    "us-gaap": {
+      "RevenueFromContractWithCustomerExcludingAssessedTax": {
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 383285000000, "form": "10-K", "fp": "FY"},
+            {"end": "2022-09-24", "filed": "2022-10-28", "val": 394328000000, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      },
+      "NetIncomeLoss": {
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 96995000000, "form": "10-K", "fp": "FY"},
+            {"end": "2022-09-24", "filed": "2022-10-28", "val": 99803000000, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      },
+      "EarningsPerShareDiluted": {
+        "units": {
+          "USD/shares": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 6.13, "form": "10-K", "fp": "FY"},
+            {"end": "2022-09-24", "filed": "2022-10-28", "val": 6.11, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      },
+      "GrossProfit": {
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 169148000000, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      },
+      "OperatingIncomeLoss": {
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 114301000000, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      },
+      "NetCashProvidedByUsedInOperatingActivities": {
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 110543000000, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      },
+      "PaymentsToAcquirePropertyPlantAndEquipment": {
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 10959000000, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      },
+      "StockholdersEquity": {
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 62146000000, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      },
+      "AssetsCurrent": {
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 143566000000, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      },
+      "LiabilitiesCurrent": {
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 145308000000, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      },
+      "LongTermDebtNoncurrent": {
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 95281000000, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      },
+      "WeightedAverageNumberOfDilutedSharesOutstanding": {
+        "units": {
+          "shares": [
+            {"end": "2023-09-30", "filed": "2023-11-03", "val": 15812547000, "form": "10-K", "fp": "FY"},
+            {"end": "2022-09-24", "filed": "2022-10-28", "val": 16325819000, "form": "10-K", "fp": "FY"}
+          ]
+        }
+      }
+    }
+  }
+}

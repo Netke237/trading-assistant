@@ -854,6 +854,19 @@ def _worse(a: Status, b: Status) -> Status:
     return a if _STATUS_RANK[a] <= _STATUS_RANK[b] else b
 
 
+def _regime_cap(conviction_pct: int, stability: str, gate: dict) -> Status:
+    """Return the status cap imposed by the regime gate (demote-only, never adds points)."""
+    if not gate.get("enabled", False):
+        return "PASS"
+    if conviction_pct <= gate["headwind_reject_pct"] and (
+        not gate.get("require_stable_for_reject", True) or stability == "Stable"
+    ):
+        return "REJECT"
+    if conviction_pct <= gate["headwind_caution_pct"]:
+        return "CAUTION"
+    return "PASS"
+
+
 def score_stock(
     symbol: str,
     direction: Direction,
@@ -868,6 +881,10 @@ def score_stock(
     confidence_gate: dict | None = None,
     confidence_sample_size: int = 0,
     scoring_mode: Literal["stock", "options"] = "options",
+    regime_signal: dict | None = None,
+    regime_gate: dict | None = None,
+    fundamentals: "FundamentalHealth | None" = None,
+    fundamentals_gate: "dict | None" = None,
 ) -> StockScoreCard:
     """
     Score a stock for the given direction and horizon.
@@ -984,6 +1001,53 @@ def score_stock(
                 ),
             },
         ))
+
+    # Regime gate: demote-only. Appends a regime RuleResult with score=0 and caps status.
+    if regime_signal is not None and regime_gate is not None:
+        cap = _regime_cap(regime_signal["conviction_pct"], regime_signal["stability"], regime_gate)
+        final_status = _worse(final_status, cap)
+        rules.append(RuleResult(
+            name="regime",
+            status=cap,
+            score=0,
+            detail={**regime_signal},
+        ))
+
+    # Fundamentals gate (demote-only, Swing/Position only)
+    if fundamentals is not None and fundamentals_gate is not None:
+        from app.scoring.fundamentals_scorer import FundamentalHealth  # noqa: F401 (type used above)
+        gate_enabled = fundamentals_gate.get("enabled", True)
+        is_intraday = str(horizon).lower() == "intraday"
+
+        if gate_enabled and not is_intraday:
+            health_score = fundamentals.score
+            caution_below = fundamentals_gate.get("cautionBelow", 45)
+            reject_below = fundamentals_gate.get("rejectBelow", 30)
+
+            # Safety reject (both Bullish and Bearish)
+            if fundamentals.safety_flags:
+                final_status = _worse(final_status, "REJECT")
+                fund_status: Status = "REJECT"
+            # Soft demote (Bullish only)
+            elif direction in ("Bullish", "bullish"):
+                if health_score < reject_below:
+                    final_status = _worse(final_status, "REJECT")
+                    fund_status = "REJECT"
+                elif health_score < caution_below:
+                    final_status = _worse(final_status, "CAUTION")
+                    fund_status = "CAUTION"
+                else:
+                    fund_status = "PASS"
+            else:
+                # Bearish: display only, no soft demote
+                fund_status = "PASS"
+
+            rules.append(RuleResult(
+                name="fundamentals",
+                status=fund_status,
+                score=health_score,
+                detail=fundamentals.detail,
+            ))
 
     return StockScoreCard(
         symbol=symbol,

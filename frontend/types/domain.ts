@@ -40,6 +40,33 @@ export interface VolDetail {
   reason?:  string;
 }
 
+export interface FundamentalsOut {
+  score: number;
+  quality_label: 'Strong' | 'Neutral' | 'Weak';
+  risk_label: 'Low' | 'Medium' | 'High';
+  growth_score: number;
+  quality_score: number;
+  risk_score: number;
+  safety_flags: string[];
+  detail: Record<string, unknown>;
+}
+
+export interface SentimentData {
+  horizon: string;
+  timeframe: string;
+  state: string;
+  p_stay: number;
+  stability: string;
+  regime_age_days: number;
+  avg_regime_duration: number;
+  conviction_pct: number;
+  conviction_label: string;
+  interpretation: string;
+  hmm_state?: string | null;
+  alignment: 'Aligned' | 'Diverging' | 'Unavailable';
+  insufficient_data?: boolean;
+}
+
 export interface ScoreBreakdown {
   trend:       number;
   pullback:    number;
@@ -51,6 +78,7 @@ export interface ScoreBreakdown {
   triggerDetail?:  TriggerDetail;
   eventDetail?:    EventDetail;
   volDetail?:      VolDetail;
+  sentiment?: SentimentData | null;
 }
 
 export interface ContractScoreBreakdown {
@@ -175,6 +203,8 @@ export interface TradeCardData {
   /** Signal confidence 0–100 (null when history is too thin to judge). */
   confidence?: number | null;
   confidenceText?: string | null;
+  sentiment?: SentimentData | null;
+  fundamentals?: FundamentalsOut | null;
 }
 
 // --- Option contracts ---
@@ -248,6 +278,8 @@ export interface OmmData {
   avg_regime_duration:  number;   // days
   transition_row:       number[]; // [P(Bull), P(Bear), P(Choppy)]
   state_order:          string[]; // ['Bull', 'Bear', 'Choppy']
+  conviction_pct?: number | null;
+  conviction_label?: string | null;
 }
 
 export interface IntraHmmTransition {
@@ -273,6 +305,10 @@ export interface MarketRegime {
   vix_pct_252d?:        number | null;
   /** Legacy client-side field — kept for backward compat, not populated by backend. */
   hmm?: { state: HmmState; confidence: number };
+  conviction_pct?: number | null;
+  conviction_label?: string | null;
+  hmm_state?: string | null;
+  alignment?: 'Aligned' | 'Diverging' | 'Unavailable' | null;
 }
 
 // --- Sector heatmap ---

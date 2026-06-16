@@ -245,3 +245,38 @@ entry_quality:
   spread_tolerance_pct: 0.10
   max_slippage_pct: 0.03
   min_premium: 0.10
+
+regime:
+  intraday: { timeframe: 15min, lookback: 26, window: 1000, min_obs: 60 }
+  swing:    { timeframe: daily, lookback: 20, window: 500,  min_obs: 100 }
+  position: { timeframe: daily, lookback: 50, window: 750,  min_obs: 100 }
+  enhanced_states: false
+
+regime_gate:
+  enabled: true
+  headwind_caution_pct: -15
+  headwind_reject_pct:  -40
+  require_stable_for_reject: true
+
+regime_sizing:
+  enabled: false
+  min_mult: 0.5
+  full_conviction_pct: 40
+
+fundamentals_gate:
+  enabled: true
+  cautionBelow: 45
+  rejectBelow: 30
+  safety:
+    reject_on_negative_equity: true
+    debt_to_equity_reject: 3.0
+  staleness_days: 90
+  weights: { growth: 0.35, quality: 0.35, risk: 0.30 }
+  thresholds:
+    revenue_growth_yoy:  { strong: 0.15, weak: 0.0 }
+    eps_growth_yoy:      { strong: 0.15, weak: 0.0 }
+    gross_margin:        { strong: 0.40, weak: 0.20 }
+    operating_margin:    { strong: 0.15, weak: 0.0 }
+    debt_to_equity:      { strong: 0.5,  weak: 2.0 }
+    current_ratio:       { strong: 2.0,  weak: 1.0 }
+    share_growth_yoy:    { strong: 0.0,  weak: 0.03 }

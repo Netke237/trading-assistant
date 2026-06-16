@@ -10,6 +10,8 @@ import { buildPaperStockPosition } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
 import { StockAutoTradeArm } from '@/components/organisms/StockAutoTradeArm';
+import { MarketSentiment } from '@/components/molecules/MarketSentiment';
+import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import styles from './StockPositionCard.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -293,6 +295,10 @@ export function StockPositionCard({
           );
         })}
       </div>
+
+      <MarketSentiment s={card.sentiment} />
+
+      <FundamentalHealthCard f={card.fundamentals} />
 
       {/* Section 3 — Action buttons */}
       <div className={styles.actionRow}>

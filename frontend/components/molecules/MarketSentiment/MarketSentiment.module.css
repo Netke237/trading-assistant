@@ -1,0 +1,36 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+.empty {
+  padding: 10px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 6px;
+}
+
+.head,
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.aligned {
+  color: var(--pass);
+  font-size: 11px;
+}
+
+.diverging {
+  color: var(--caution);
+  font-size: 11px;
+}
+
+.unavail {
+  color: var(--text-dim);
+  font-size: 11px;
+}

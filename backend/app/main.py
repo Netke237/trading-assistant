@@ -90,6 +90,20 @@ async def lifespan(app: FastAPI):
             )
     except Exception as _exc:
         logger.warning("startup catch-up failed: %s", _exc)
+    # ── Fundamentals prefetch (background thread) ─────────────────────────
+    try:
+        import threading as _threading
+        from app.services.fundamentals_store import prefetch_universe as _prefetch_fundamentals
+        from app.data.universe_presets import expand_universe as _expand_universe
+        _fund_universe = list(dict.fromkeys(
+            _expand_universe(["SP500"]) + _expand_universe(["NDX100"]) + _expand_universe(["DOW30"])
+        ))
+        _threading.Thread(
+            target=_prefetch_fundamentals, args=(_fund_universe,), daemon=True, name="fundamentals-prefetch"
+        ).start()
+        logger.info("startup: fundamentals prefetch started for %d symbols", len(_fund_universe))
+    except Exception as _exc:
+        logger.warning("fundamentals prefetch startup failed: %s", _exc)
     # ── Strategy-watch scheduler ──────────────────────────────────────────
     try:
         from app.services.strategy_watch_scheduler import strategy_watch_scheduler

@@ -23,6 +23,7 @@ import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { NewsCard } from '@/components/molecules/NewsCard';
+import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { api } from '@/lib/api';
 import type { MarketRegime, SectorTile, NewsItem } from '@/types/domain';
 import type { Candle } from '@/types/chart';
@@ -68,6 +69,7 @@ function pct(p: number): string {
 export default function Step1RegimePage() {
   const setRegime = useScanStore((s) => s.setRegime);
   const setCombinedRegime = useScanStore((s) => s.setCombinedRegime);
+  const context = useScanStore((s) => s.context);
   const markov = useSettingsStore((s) => s.markov);
 
   const [regime, setRegimeData]     = useState<MarketRegime | null>(null);
@@ -110,6 +112,22 @@ export default function Step1RegimePage() {
   const intraOmm  = regime?.intraday_omm  ?? null;
   const vix30     = regime?.vix_pct_30d   ?? null;
   const vix252    = regime?.vix_pct_252d  ?? null;
+
+  const pageSentiment = regime && regime.omm ? {
+    horizon: context?.horizon ?? 'Swing',
+    timeframe: 'daily',
+    state: regime.omm.state,
+    p_stay: regime.omm.p_stay,
+    stability: regime.omm.stability,
+    regime_age_days: regime.omm.regime_age_days,
+    avg_regime_duration: regime.omm.avg_regime_duration,
+    conviction_pct: regime.conviction_pct ?? 0,
+    conviction_label: regime.conviction_label ?? 'Neutral',
+    interpretation: `Market conviction: ${regime.conviction_label ?? 'Neutral'}`,
+    hmm_state: regime.hmm_state ?? null,
+    alignment: (regime.alignment ?? 'Unavailable') as 'Aligned' | 'Diverging' | 'Unavailable',
+    insufficient_data: false,
+  } : null;
 
   return (
     <div className={styles.main}>
@@ -322,6 +340,8 @@ export default function Step1RegimePage() {
           </div>
         </>
       )}
+
+      <MarketSentiment s={pageSentiment} />
 
       {/* 6. Sector heatmap */}
       <div className={pageStyles.sectionHeader}>

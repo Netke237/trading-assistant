@@ -57,6 +57,7 @@ export function RunScanButton() {
   const maxCapRaw    = useUniverseStore((s) => s.maxCapRaw);
   const capUnit      = useUniverseStore((s) => s.capUnit);
   const shortlistMaxCandidates = useSettingsStore((s) => s.shortlistMaxCandidates);
+  const fundamentalsGate = useSettingsStore((s) => s.fundamentalsGate);
   const scanning    = scanState === 'SCANNING';
   const customEmpty = pick === 'Custom' && parseSymbols(customRaw).length === 0;
 
@@ -107,7 +108,7 @@ export function RunScanButton() {
       return;
     }
 
-    const filters: Record<string, number> = {};
+    const filters: Record<string, number | boolean> = {};
     const minPrice = Number(minPriceRaw);
     const maxPrice = Number(maxPriceRaw);
     const minCap = Number(minCapRaw);
@@ -143,6 +144,13 @@ export function RunScanButton() {
       filters.confidence_caution_below = 0;
       filters.confidence_reject_below  = 0;
     }
+
+    // Fundamentals gate
+    const fGate = fundamentalsGate ?? { enabled: true, cautionBelow: 45, rejectBelow: 30, deReject: 3.0 };
+    filters.fundamentals_enabled       = fGate.enabled;
+    filters.fundamentals_caution_below = fGate.cautionBelow;
+    filters.fundamentals_reject_below  = fGate.rejectBelow;
+    filters.fundamentals_de_reject     = fGate.deReject;
 
     const t0 = Date.now();
     const startISO = nowLocalISO();        // capture start time before the async call

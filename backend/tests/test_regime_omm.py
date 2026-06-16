@@ -4,7 +4,14 @@ import numpy as np
 from app.services.regime_omm import (
     label_daily_states,
     build_transition_matrix,
+    build_transition_matrix_stride,
     compute_omm,
+    signal_from_row,
+    conviction,
+    conviction_label,
+    conviction_interpretation,
+    n_step_forecast,
+    stationary_distribution,
     STATES,
     STATE_IDX,
     BULL_THRESH,
@@ -144,3 +151,76 @@ class TestComputeOmm:
         result = compute_omm(closes)
         if result:
             assert result.regime_age_days >= 1
+
+
+def test_stride_matrix_does_not_overcount_persistence():
+    # 60 labels: 30 Bull then 30 Bear (indices: Bull=0, Bear=1, Choppy=2 per STATE_IDX)
+    labels = ['Bull'] * 30 + ['Bear'] * 30
+    overlapping = build_transition_matrix(labels)
+    stride = build_transition_matrix_stride(labels, lookback=20)
+    # Overlapping daily counting fakes near-1.0 persistence on the diagonal.
+    assert overlapping[0, 0] > 0.9
+    # Step-20 sampling yields 3 samples (2 transitions) vs 59 overlapping pairs.
+    assert stride[0, 0] < overlapping[0, 0]
+    # Rows still sum to 1.
+    for r in range(3):
+        assert abs(stride[r].sum() - 1.0) < 1e-9
+
+
+def test_stride_rejects_zero_lookback():
+    with pytest.raises(ValueError):
+        build_transition_matrix_stride(['Bull'], 0)
+
+
+def test_conviction_is_direction_aware():
+    # transition_row order is STATES = ['Bull','Bear','Choppy'] -> [0.7, 0.1, 0.2]
+    row = [0.7, 0.1, 0.2]
+    s = signal_from_row(row)                 # P(Bull) - P(Bear) = 0.6
+    assert abs(s - 0.6) < 1e-9
+    assert conviction(s, "Bullish") == 0.6   # tailwind for a long
+    assert conviction(s, "Bearish") == -0.6  # headwind for a short
+
+
+def test_conviction_label_bands():
+    assert conviction_label(50) == "Strong tailwind"
+    assert conviction_label(25) == "Mild tailwind"
+    assert conviction_label(0)  == "Neutral"
+    assert conviction_label(-25) == "Mild headwind"
+    assert conviction_label(-50) == "Strong headwind"
+
+
+def test_conviction_interpretation_smoke():
+    s = conviction_interpretation(25, "Stable", "Bull")
+    assert "Mild tailwind" in s
+    assert "+25%" in s
+    assert "favours" in s
+    assert "stable" in s
+
+    s = conviction_interpretation(0, "Fragile", "Choppy")
+    assert "Neutral" in s
+    assert "is neutral on" in s
+
+
+def test_n_step_and_stationary():
+    P = np.array([[0.8, 0.1, 0.1], [0.2, 0.7, 0.1], [0.3, 0.3, 0.4]])
+    p2 = n_step_forecast(P, 2)
+    assert np.allclose(p2, P @ P)
+    pi = stationary_distribution(P)
+    assert abs(pi.sum() - 1.0) < 1e-6
+    assert np.allclose(pi @ P, pi, atol=1e-6)   # stationary: piP = pi
+
+
+def test_compute_omm_returns_conviction_and_stride_matrix():
+    closes = [100 * (1.004 ** i) for i in range(300)]
+    res = compute_omm(closes, direction="Bullish", lookback=20, window=500, min_obs=10)
+    assert res is not None
+    assert res.state in ("Bull", "Bear", "Choppy")
+    assert -100 <= res.conviction_pct <= 100
+    assert res.conviction_label
+    assert res.interpretation
+
+
+def test_compute_omm_rejects_invalid_direction():
+    closes = [100 * (1.002 ** i) for i in range(300)]
+    with pytest.raises(ValueError, match="direction"):
+        compute_omm(closes, direction="neutral")

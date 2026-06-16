@@ -55,6 +55,20 @@ export const DEFAULT_CONFIDENCE_GATE: ConfidenceGate = {
   atrMult: 1.5,
 };
 
+export interface FundamentalsGate {
+  enabled:      boolean;
+  cautionBelow: number;   // health score < this -> cap at CAUTION
+  rejectBelow:  number;   // health score < this -> cap at REJECT
+  deReject:     number;   // D/E ratio above which a safety reject fires
+}
+
+export const DEFAULT_FUNDAMENTALS_GATE: FundamentalsGate = {
+  enabled: true,
+  cautionBelow: 45,
+  rejectBelow: 30,
+  deReject: 3.0,
+};
+
 export interface IbkrPaperConfig {
   baseUrl:   string;
   accountId: string;
@@ -126,6 +140,7 @@ interface SettingsState {
   maxContractPrice:            number;
   premiumStopPct:              number;   // fraction of premium lost at stop (0.60 = 60%)
   confidenceGate:              ConfidenceGate;
+  fundamentalsGate:            FundamentalsGate;
   ibkrPaper:                   IbkrPaperConfig;
   tradierPaper:                TradierPaperConfig;
   tradierLive:                 TradierLiveConfig;
@@ -142,6 +157,7 @@ interface SettingsState {
   setMaxContractPrice:         (n: number) => void;
   setPremiumStopPct:           (n: number) => void;
   setConfidenceGate:           (g: ConfidenceGate) => void;
+  setFundamentalsGate:         (g: FundamentalsGate) => void;
   setIbkrPaper:                (c: IbkrPaperConfig)    => void;
   setTradierPaper:             (c: TradierPaperConfig) => void;
   setTradierLive:              (c: TradierLiveConfig)  => void;
@@ -180,6 +196,9 @@ export function migrateSettings(
   if (version < 15) {
     next.tradierLive = { ...DEFAULT_TRADIER_LIVE };
   }
+  if (version < 16) {
+    next.fundamentalsGate = { ...DEFAULT_FUNDAMENTALS_GATE };
+  }
   return next as unknown as SettingsState;
 }
 
@@ -196,6 +215,7 @@ export const useSettingsStore = create<SettingsState>()(
       maxContractPrice:     50,
       premiumStopPct:       0.60,
       confidenceGate:       { ...DEFAULT_CONFIDENCE_GATE },
+      fundamentalsGate:     { ...DEFAULT_FUNDAMENTALS_GATE },
       ibkrPaper:            { ...DEFAULT_IBKR_PAPER },
       tradierPaper:         { ...DEFAULT_TRADIER_PAPER },
       tradierLive:          { ...DEFAULT_TRADIER_LIVE },
@@ -212,6 +232,7 @@ export const useSettingsStore = create<SettingsState>()(
       setMaxContractPrice:     (n) => set({ maxContractPrice: n }),
       setPremiumStopPct:       (n) => set({ premiumStopPct: n }),
       setConfidenceGate:       (g) => set({ confidenceGate: g }),
+      setFundamentalsGate:     (g) => set({ fundamentalsGate: g }),
       setIbkrPaper:    (c) => set({ ibkrPaper: c }),
       setTradierPaper: (c) => set({ tradierPaper: c }),
       setTradierLive:  (c) => set({ tradierLive: c }),
@@ -227,6 +248,7 @@ export const useSettingsStore = create<SettingsState>()(
         maxContractPrice:     50,
         premiumStopPct:       0.60,
         confidenceGate:       { ...DEFAULT_CONFIDENCE_GATE },
+        fundamentalsGate:     { ...DEFAULT_FUNDAMENTALS_GATE },
         ibkrPaper:   { ...DEFAULT_IBKR_PAPER },
         tradierPaper: { ...DEFAULT_TRADIER_PAPER },
         tradierLive:  { ...DEFAULT_TRADIER_LIVE },
@@ -240,7 +262,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 15,
+      version: 16,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
@@ -252,6 +274,7 @@ export const useSettingsStore = create<SettingsState>()(
         maxContractPrice:       state.maxContractPrice,
         premiumStopPct:         state.premiumStopPct,
         confidenceGate:         state.confidenceGate,
+        fundamentalsGate:       state.fundamentalsGate,
         ibkrPaper:    state.ibkrPaper,
         tradierPaper: state.tradierPaper,
         tradierLive:  state.tradierLive,

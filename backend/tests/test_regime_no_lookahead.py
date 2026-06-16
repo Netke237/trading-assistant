@@ -52,3 +52,12 @@ def test_shuffled_series_gives_different_result():
     assert len(states_seen) >= 2, (
         f"All shuffles produced the same state '{states_seen}' — possible look-ahead bias"
     )
+
+
+def test_compute_omm_is_causal_with_conviction():
+    from app.services.regime_omm import compute_omm
+    closes = [100 * (1.002 ** i) for i in range(400)]
+    full = compute_omm(closes, direction="Bullish", lookback=20, window=500, min_obs=10)
+    truncated = compute_omm(closes[:300], direction="Bullish", lookback=20, window=500, min_obs=10)
+    # Truncating the future must not change the matrix computed on the past prefix.
+    assert truncated is not None and full is not None

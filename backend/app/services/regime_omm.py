@@ -29,6 +29,9 @@ class OmmResult:
     avg_regime_duration: float
     transition_row: list[float]
     state_order: list[str]
+    conviction_pct: int = 0
+    conviction_label: str = "Neutral"
+    interpretation: str = ""
 
 
 def label_daily_states(
@@ -86,6 +89,29 @@ def build_transition_matrix(labels: list[str], window: int = WINDOW) -> np.ndarr
     return matrix
 
 
+def build_transition_matrix_stride(labels: list[str], lookback: int, window: int = WINDOW) -> np.ndarray:
+    """Count transitions between NON-overlapping windows (stride = lookback).
+
+    Overlapping daily labels share lookback-1 days and fake persistence on the
+    diagonal. Sampling every `lookback` bars removes that autocorrelation.
+    """
+    if lookback < 1:
+        raise ValueError(f"lookback must be >= 1, got {lookback}")
+    n = len(STATES)
+    counts = np.zeros((n, n), dtype=float)
+    recent = labels[-window:] if len(labels) > window else labels
+    sampled = recent[::lookback]
+    for i in range(len(sampled) - 1):
+        f, t = STATE_IDX.get(sampled[i], -1), STATE_IDX.get(sampled[i + 1], -1)
+        if f >= 0 and t >= 0:
+            counts[f, t] += 1
+    matrix = np.zeros((n, n), dtype=float)
+    for row in range(n):
+        total = counts[row].sum()
+        matrix[row] = counts[row] / total if total > 0 else 1.0 / n
+    return matrix
+
+
 def _regime_age(labels: list[str], current: str) -> int:
     """Count consecutive trailing bars in `current` state."""
     age = 0
@@ -97,18 +123,65 @@ def _regime_age(labels: list[str], current: str) -> int:
     return age
 
 
+def signal_from_row(transition_row: list[float]) -> float:
+    """P(Bull) - P(Bear) for the current-state row. transition_row is ordered by STATES."""
+    return float(transition_row[STATE_IDX['Bull']] - transition_row[STATE_IDX['Bear']])
+
+
+def conviction(signal: float, direction: str) -> float:
+    """Direction-aware: positive => the regime agrees with the trade direction."""
+    return float(signal if direction == "Bullish" else -signal)
+
+
+def conviction_label(conviction_pct: int) -> str:
+    # Negative thresholds use strict > so -15 and -40 map to the worse band, symmetric with >= on the positive side.
+    if conviction_pct >= 40:  return "Strong tailwind"
+    if conviction_pct >= 15:  return "Mild tailwind"
+    if conviction_pct > -15:  return "Neutral"
+    if conviction_pct > -40:  return "Mild headwind"
+    return "Strong headwind"
+
+
+def conviction_interpretation(conviction_pct: int, stability: str, state: str) -> str:
+    label = conviction_label(conviction_pct)
+    sign = "favours" if conviction_pct >= 15 else ("opposes" if conviction_pct <= -15 else "is neutral on")
+    return (f"{label} ({conviction_pct:+d}%). The regime {sign} this trade. "
+            f"Current state '{state}' is {stability.lower()}.")
+
+
+def n_step_forecast(P: np.ndarray, n: int) -> np.ndarray:
+    """Chapman-Kolmogorov: P^n is the n-step transition matrix."""
+    return np.linalg.matrix_power(P, n)
+
+
+def stationary_distribution(P: np.ndarray) -> np.ndarray:
+    """Left eigenvector of P with eigenvalue 1, normalised to sum to 1."""
+    eigvals, eigvecs = np.linalg.eig(P.T)
+    idx = int(np.argmin(np.abs(eigvals - 1.0)))
+    vec = np.abs(np.real(eigvecs[:, idx]))
+    return vec / vec.sum()
+
+
 def compute_omm(
     closes: list[float],
     *,
+    direction: str = "Bullish",
     lookback: int = RETURN_LOOKBACK,
+    window: int = WINDOW,
+    min_obs: int = MIN_OBS,
     threshold: float = BULL_THRESH,
     smoothing: float = 0.0,
 ) -> OmmResult | None:
     """
-    Build rolling OMM from daily close prices.
-    Returns None if the current state has fewer than MIN_OBS observations
-    in the training window (matrix not reliable enough to publish).
+    Build rolling OMM from close prices using the stride transition matrix.
+
+    Returns None if the series is too short or the current state has fewer
+    than min_obs observations in the training window.
+    Includes conviction fields aligned to the given trade direction.
     """
+    if direction not in ("Bullish", "Bearish"):
+        raise ValueError(f"direction must be 'Bullish' or 'Bearish', got {direction!r}")
+
     if len(closes) < lookback + 2:
         return None
 
@@ -117,22 +190,22 @@ def compute_omm(
     current_idx = STATE_IDX[current]
 
     # Check observation count for current state within window
-    window_labels = labels[-WINDOW:] if len(labels) > WINDOW else labels
-    obs_count = window_labels.count(current)
-    if obs_count < MIN_OBS:
+    window_labels = labels[-window:] if len(labels) > window else labels
+    if window_labels.count(current) < min_obs:
         return None
 
-    matrix = build_transition_matrix(labels)
+    matrix = build_transition_matrix_stride(labels, lookback=lookback, window=window)
     p_stay = float(matrix[current_idx, current_idx])
     transition_row = [float(matrix[current_idx, i]) for i in range(len(STATES))]
 
     denom = 1.0 - p_stay
-    avg_duration = (1.0 / denom) if denom > 1e-9 else float('inf')
-    avg_duration = min(avg_duration, 9999.0)
+    avg_duration = min((1.0 / denom) if denom > 1e-9 else float('inf'), 9999.0)
 
     stability = 'Fragile' if (1.0 - p_stay) > 0.25 else 'Stable'
     age = _regime_age(labels, current)
 
+    sig = signal_from_row(transition_row)
+    conv_pct = int(round(conviction(sig, direction) * 100))
     return OmmResult(
         state=current,
         p_stay=round(p_stay, 4),
@@ -141,4 +214,7 @@ def compute_omm(
         avg_regime_duration=round(avg_duration, 1),
         transition_row=[round(v, 4) for v in transition_row],
         state_order=list(STATES),
+        conviction_pct=conv_pct,
+        conviction_label=conviction_label(conv_pct),
+        interpretation=conviction_interpretation(conv_pct, stability, current),
     )
