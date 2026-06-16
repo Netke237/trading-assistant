@@ -156,11 +156,16 @@ def _optimize_strategy_sync(
             sum(test_returns) / len(test_returns) if test_returns else 0.0
         )
 
-    # Filter folds where grid search found nothing; also filter fold_test_returns
-    # in parallel so structural zeros from bad folds don't suppress consistency.
-    valid_pairs = [(w, r) for w, r in zip(fold_winners, fold_test_returns) if w]
-    valid_winners = [p[0] for p in valid_pairs]
-    valid_fold_test_returns = [p[1] for p in valid_pairs]
+    # Filter all three parallel lists together so bad folds (empty winner) are
+    # excluded from IS return, OOS return, and consistency alike.
+    valid_triples = [
+        (w, r, isr)
+        for w, r, isr in zip(fold_winners, fold_test_returns, in_sample_fold_returns)
+        if w
+    ]
+    valid_winners           = [t[0] for t in valid_triples]
+    valid_fold_test_returns = [t[1] for t in valid_triples]
+    valid_is_fold_returns   = [t[2] for t in valid_triples]
     if not valid_winners:
         logger.warning("No valid fold winners for %s — all folds empty, skipping", strategy)
         return None
@@ -168,8 +173,8 @@ def _optimize_strategy_sync(
     # apply_costs returns net_return in the same percent units as total_return_pct.
     # No ×100 here — the values are already percent (e.g., 5.0 = 5%).
     in_sample_return = (
-        sum(in_sample_fold_returns) / len(in_sample_fold_returns)
-        if in_sample_fold_returns
+        sum(valid_is_fold_returns) / len(valid_is_fold_returns)
+        if valid_is_fold_returns
         else 0.0
     )
     walk_forward_return = (
