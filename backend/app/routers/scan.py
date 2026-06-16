@@ -129,8 +129,9 @@ def _resolve_gate(req: ScanRequest) -> dict:
 
 def _resolve_fundamentals_gate(req) -> dict:
     """Merge YAML fundamentals_gate defaults with per-request overrides."""
+    import copy
     cfg = _load_scoring_cfg()
-    g = dict(cfg.get("fundamentals_gate", {}))
+    g = copy.deepcopy(cfg.get("fundamentals_gate", {}))
     if req.fundamentals_enabled is not None:
         g["enabled"] = req.fundamentals_enabled
     if req.fundamentals_caution_below is not None:

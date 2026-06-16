@@ -51,8 +51,8 @@ class FundamentalsOut(BaseModel):
     growth_score: int
     quality_score: int
     risk_score: int
-    safety_flags: list[str] = []
-    detail: dict = {}
+    safety_flags: list[str] = Field(default_factory=list)
+    detail: dict = Field(default_factory=dict)
 
 
 # ── Score breakdowns ─────────────────────────────────────────────────────────
