@@ -231,8 +231,13 @@ def ma_crossover_signal(
     fast: int = 20,
     slow: int = 50,
     lookback: int = 10,
+    direction: Literal["Bullish", "Bearish"] = "Bullish",
 ) -> StrategySignal | None:
-    """Bullish: 20-SMA crosses above 50-SMA within the last `lookback` bars."""
+    """Golden cross (Bullish) or death cross (Bearish) within the last `lookback` bars.
+
+    Bullish: 20-SMA crosses above 50-SMA (golden cross).
+    Bearish: 20-SMA crosses below 50-SMA (death cross mirror).
+    """
     if len(bars) < slow + 5:
         return None
     closes = [b["close"] for b in bars]
@@ -240,16 +245,23 @@ def ma_crossover_signal(
     slow_ma = _sma(closes, slow)
     if len(fast_ma) < lookback + 1 or len(slow_ma) < lookback + 1:
         return None
-    # Recent cross: fast crossed above slow within last `lookback` bars
     for i in range(-lookback, 0):
-        if fast_ma[i - 1] <= slow_ma[i - 1] and fast_ma[i] > slow_ma[i]:
+        if direction == "Bullish":
+            crossed = fast_ma[i - 1] <= slow_ma[i - 1] and fast_ma[i] > slow_ma[i]
+        else:  # Bearish — death cross
+            crossed = fast_ma[i - 1] >= slow_ma[i - 1] and fast_ma[i] < slow_ma[i]
+        if crossed:
             current = closes[-1]
             atr = _atr(bars)
-            stop  = slow_ma[-1] - atr * 0.5
-            target = current + atr * 3.0
+            if direction == "Bullish":
+                stop   = slow_ma[-1] - atr * 0.5
+                target = current + atr * 3.0
+            else:
+                stop   = slow_ma[-1] + atr * 0.5
+                target = current - atr * 3.0
             return StrategySignal(
                 strategy="ma_crossover",
-                direction="Bullish",
+                direction=direction,
                 entry_price=round(current, 2),
                 stop_price=round(stop, 2),
                 target_price=round(target, 2),

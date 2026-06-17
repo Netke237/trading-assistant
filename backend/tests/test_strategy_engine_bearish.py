@@ -62,3 +62,28 @@ def test_breakout_base_bearish_breakdown():
     sig = breakout_base_signal(_breakdown_bars(), direction="Bearish")
     assert sig is not None and sig.direction == "Bearish"
     assert sig.stop_price > sig.entry_price > sig.target_price
+
+
+# ── ma_crossover_signal bearish (C3) ─────────────────────────────────────────
+
+from app.services.strategy_engine import ma_crossover_signal
+
+
+def _death_cross_bars():
+    bars = []
+    price = 150.0
+    for i in range(60):
+        price += 0.8
+        bars.append({"open": price, "high": price + 0.5, "low": price - 0.5,
+                     "close": price, "volume": 1_000_000, "time": i})
+    for i in range(60, 88):   # 28 down bars — death cross lands at lookback boundary (-10)
+        price -= 1.5
+        bars.append({"open": price, "high": price + 0.5, "low": price - 0.5,
+                     "close": price, "volume": 1_000_000, "time": i})
+    return bars
+
+
+def test_ma_crossover_bearish_death_cross():
+    sig = ma_crossover_signal(_death_cross_bars(), direction="Bearish")
+    assert sig is not None and sig.direction == "Bearish"
+    assert sig.stop_price > sig.entry_price > sig.target_price
