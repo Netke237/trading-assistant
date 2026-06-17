@@ -227,7 +227,7 @@ export default function Step7Page() {
         broker:        selectedBroker,
         symbol:        card.symbol,
         option_symbol: toOptionSymbol(card),   // pipe format → OCC converter
-        action:        card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        action:        'BUY',   // long single-leg option (call or put) is always buy-to-open
         quantity:      1,
         order_type:    'LMT',
         limit_price:   card.entry.limit,
@@ -251,7 +251,7 @@ export default function Step7Page() {
         broker:        selectedBroker,
         symbol:        card.symbol,
         option_symbol: toOptionSymbol(card),   // pipe format → OCC converter
-        action:        card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        action:        'BUY',   // long single-leg option (call or put) is always buy-to-open
         quantity:      1,
         order_type:    'MKT',
         limit_price:   null,
