@@ -27,6 +27,7 @@ import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { api } from '@/lib/api';
 import type { MarketRegime, SectorTile, NewsItem } from '@/types/domain';
 import type { Candle } from '@/types/chart';
+import { alignmentVerdict, descriptorFromState } from '@/lib/regimeAlignment';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
 
@@ -87,7 +88,9 @@ export default function Step1RegimePage() {
     api.getRegime('intraday', { lookback: markov.lookback, threshold: markov.threshold, smoothing: markov.smoothing }).then((r) => {
       setRegimeData(r);
       setRegime(r.overall);
-      setCombinedRegime(r.overall);
+      const direction = useScanStore.getState().context?.direction ?? 'Bullish';
+      const descriptor = descriptorFromState(r.omm?.state ?? '');
+      setCombinedRegime(alignmentVerdict(direction, descriptor));
     }).catch(() => setOffline(true));
 
     api.getSectors().then(setSectors).catch(() => setOffline(true));
