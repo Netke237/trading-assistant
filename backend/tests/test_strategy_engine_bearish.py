@@ -87,3 +87,29 @@ def test_ma_crossover_bearish_death_cross():
     sig = ma_crossover_signal(_death_cross_bars(), direction="Bearish")
     assert sig is not None and sig.direction == "Bearish"
     assert sig.stop_price > sig.entry_price > sig.target_price
+
+
+# ── mean_reversion_rsi_signal bearish (C4) ───────────────────────────────────
+
+from app.services.strategy_engine import mean_reversion_rsi_signal
+
+def _overbought_downtrend_bars():
+    bars = []
+    price = 300.0
+    for i in range(230):                  # long downtrend (price below 200-SMA)
+        price -= 0.5
+        bars.append({"open": price, "high": price + 0.4, "low": price - 0.4,
+                     "close": price, "volume": 1_000_000, "time": i})
+    # sharp 6-bar rally to push RSI > 70 and make it tick down on the last bar
+    for j in range(6):
+        price += 3.0
+        bars.append({"open": price - 2.9, "high": price + 0.3, "low": price - 3.0,
+                     "close": price, "volume": 1_000_000, "time": 230 + j})
+    bars[-1]["close"] = bars[-1]["open"] - 0.5   # last bar ticks down (RSI falling)
+    return bars
+
+def test_mean_reversion_rsi_bearish_overbought():
+    sig = mean_reversion_rsi_signal(_overbought_downtrend_bars(),
+                                    direction="Bearish", rsi_overbought=70.0)
+    assert sig is not None and sig.direction == "Bearish"
+    assert sig.stop_price > sig.entry_price > sig.target_price

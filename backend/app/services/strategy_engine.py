@@ -278,28 +278,41 @@ def mean_reversion_rsi_signal(
     *,
     rsi_period: int = 14,
     rsi_oversold: float = 30.0,
+    rsi_overbought: float = 70.0,
     trend_sma: int = 200,
+    direction: Literal["Bullish", "Bearish"] = "Bullish",
 ) -> StrategySignal | None:
-    """Bullish: RSI < 30 while price is above 200-SMA (oversold in uptrend)."""
+    """RSI mean-reversion signal in the direction of the trend.
+
+    Bullish: RSI < rsi_oversold while price is above 200-SMA (oversold in uptrend).
+    Bearish: RSI > rsi_overbought while price is below 200-SMA (overbought in downtrend).
+    """
     if len(bars) < trend_sma + rsi_period + 5:
         return None
     closes = [b["close"] for b in bars]
     trend = _sma(closes, trend_sma)
-    if not trend or closes[-1] <= trend[-1]:
+    if not trend:
         return None
     rsi = _rsi(closes, rsi_period)
-    if not rsi or rsi[-1] >= rsi_oversold:
-        return None
-    # Confirm RSI is recovering (rising from the last bar)
-    if len(rsi) < 2 or rsi[-1] <= rsi[-2]:
+    if not rsi or len(rsi) < 2:
         return None
     current = closes[-1]
     atr = _atr(bars)
-    stop  = _swing_low(bars, lookback=10) - atr * 0.2
-    target = current + atr * 2.5
+    if direction == "Bullish":
+        if closes[-1] <= trend[-1]:        return None   # must be above trend (uptrend context)
+        if rsi[-1] >= rsi_oversold:        return None   # must be oversold
+        if rsi[-1] <= rsi[-2]:             return None   # RSI must be recovering (ticking up)
+        stop   = _swing_low(bars, lookback=10) - atr * 0.2
+        target = current + atr * 2.5
+    else:  # Bearish — overbought in downtrend
+        if closes[-1] >= trend[-1]:        return None   # must be below trend (downtrend context)
+        if rsi[-1] <= rsi_overbought:      return None   # must be overbought
+        if rsi[-1] >= rsi[-2]:             return None   # RSI must be rolling over (ticking down)
+        stop   = _swing_high(bars, lookback=10) + atr * 0.2
+        target = current - atr * 2.5
     return StrategySignal(
         strategy="mean_reversion_rsi",
-        direction="Bullish",
+        direction=direction,
         entry_price=round(current, 2),
         stop_price=round(stop, 2),
         target_price=round(target, 2),
