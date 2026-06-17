@@ -233,7 +233,7 @@ async def _process_stock(
             signal_kwargs = _merge_strategy_params(
                 req.strategy, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req)
             )
-            signal = signal_fn(bars[-120:], **signal_kwargs)
+            signal = signal_fn(bars[-120:], direction=req.direction, **signal_kwargs)
             if signal is None:
                 return {"symbol": symbol, "reason": f"no {req.strategy} setup"}
 
