@@ -140,7 +140,7 @@ def test_format_event_builds_subject_and_bodies():
         reason="AAPL: pullback_ema buy setup — entry 100.0, stop 95.0, target 110.0 (R:R 2.0)",
     )
     subject, plain, html = _format_event(ev)
-    assert "AAPL" in subject and "Buy setup" in subject
+    assert "AAPL" in subject and "Long setup" in subject
     assert "100.0" in plain
     assert "<" in html  # html body has markup
 

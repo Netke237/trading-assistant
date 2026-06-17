@@ -76,11 +76,12 @@ async def evaluate_all() -> list[WatchEvent]:
             continue
 
         close = float(bars[-1]["close"])
+        wdir = w.get("direction", "Bullish")
         try:
             adopted = get_active(key)
             params_override = w.get("params_override") or {}
             adopted.update(params_override)  # params_override wins
-            signal = fn(bars, **adopted)
+            signal = fn(bars, direction=wdir, **adopted)
         except Exception as exc:
             logger.warning("strategy-watch: %s signal failed for %s — %s", key, symbol, exc)
             continue
@@ -97,7 +98,9 @@ async def evaluate_all() -> list[WatchEvent]:
                     entry=signal.entry_price, stop=signal.stop_price,
                     target=signal.target_price, rr_ratio=round(signal.rr_ratio, 2),
                     close=close,
-                    reason=(f"{symbol}: {key} buy setup — entry {signal.entry_price}, "
+                    reason=(f"{symbol}: {key} "
+                            f"{'short' if signal.direction == 'Bearish' else 'long'} setup — "
+                            f"entry {signal.entry_price}, "
                             f"stop {signal.stop_price}, target {signal.target_price} "
                             f"(R:R {round(signal.rr_ratio, 2)})"),
                 )
@@ -106,9 +109,16 @@ async def evaluate_all() -> list[WatchEvent]:
                          "target_price": signal.target_price, "last_event": "entry",
                          "last_event_at": _now_iso()}
         elif phase == "armed":
+            sdir = state.get("direction", "Bullish")
             stop_price = state.get("stop_price")
             target_price = state.get("target_price")
-            if stop_price is not None and close <= stop_price:
+            stop_hit = (
+                (close <= stop_price) if sdir == "Bullish" else (close >= stop_price)
+            ) if stop_price is not None else False
+            target_hit = (
+                (close >= target_price) if sdir == "Bullish" else (close <= target_price)
+            ) if target_price is not None else False
+            if stop_hit:
                 event = WatchEvent(
                     watch_id=w["id"], symbol=symbol, strategy_key=key,
                     event_type="exit_stop", direction=state.get("direction"),
@@ -117,7 +127,7 @@ async def evaluate_all() -> list[WatchEvent]:
                     reason=f"{symbol}: {key} stop hit at {close} (stop {stop_price})",
                 )
                 state = {"phase": "idle", "last_event": "exit_stop", "last_event_at": _now_iso()}
-            elif target_price is not None and close >= target_price:
+            elif target_hit:
                 event = WatchEvent(
                     watch_id=w["id"], symbol=symbol, strategy_key=key,
                     event_type="exit_target", direction=state.get("direction"),
@@ -157,7 +167,10 @@ _SUBJECT_PREFIX = {
 
 def _format_event(ev: WatchEvent) -> tuple[str, str, str]:
     """Return (subject, plain_body, html_body) for a watch event."""
-    label = _SUBJECT_PREFIX.get(ev.event_type, ev.event_type)
+    if ev.event_type == "entry":
+        label = f"{'Short' if ev.direction == 'Bearish' else 'Long'} setup"
+    else:
+        label = _SUBJECT_PREFIX.get(ev.event_type, ev.event_type)
     strat = ev.strategy_key.replace("_", " ").title()
     subject = f"{label}: {ev.symbol} — {strat}"
     lines = [ev.reason, "", f"Strategy: {strat}", f"Last close: {ev.close}"]

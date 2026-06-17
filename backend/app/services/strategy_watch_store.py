@@ -75,7 +75,8 @@ class StrategyWatchStore:
             return [dict(w) for w in self._watches]
 
     def add_watch(self, symbol: str, strategy_key: str,
-                  params_override: dict | None = None) -> dict:
+                  params_override: dict | None = None,
+                  direction: str = "Bullish") -> dict:
         symbol = symbol.strip().upper()
         if strategy_key not in VALID_STRATEGIES:
             raise ValueError(f"unknown strategy: {strategy_key}")
@@ -87,6 +88,7 @@ class StrategyWatchStore:
                 "id": f"wch_{uuid.uuid4().hex[:12]}",
                 "symbol": symbol,
                 "strategy_key": strategy_key,
+                "direction": direction,
                 "params_override": dict(params_override or {}),
                 "enabled": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -96,11 +98,12 @@ class StrategyWatchStore:
         self.save()
         return dict(entry)
 
-    def add_watches_bulk(self, symbols: list[str], strategy_key: str) -> list[dict]:
+    def add_watches_bulk(self, symbols: list[str], strategy_key: str,
+                         direction: str = "Bullish") -> list[dict]:
         added: list[dict] = []
         for sym in symbols:
             try:
-                added.append(self.add_watch(sym, strategy_key))
+                added.append(self.add_watch(sym, strategy_key, direction=direction))
             except ValueError:
                 continue  # skip duplicates / blanks
         return added
