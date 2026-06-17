@@ -18,7 +18,7 @@ import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig,
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
-import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type TuningJob, type TuningJobCount, type WfoProposal } from '@/lib/api';
+import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, getEdgarSchedule, saveEdgarSchedule, triggerEdgarPrefetch, getSp500Schedule, saveSp500Schedule, triggerSp500Update, getTuningSchedule, saveTuningSchedule, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type TuningJob, type TuningJobCount, type WfoProposal } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -1285,7 +1285,137 @@ function DataForm() {
           {triggerResult && <Text size={12} tone="secondary">{triggerResult}</Text>}
         </div>
       </div>
+
+      <EdgarScheduleSection />
+      <Sp500ScheduleSection />
     </>
+  );
+}
+
+/* ---------- Reusable schedule section ---------- */
+
+function ScheduleSection({
+  title,
+  blurb,
+  manualBlurb,
+  defaultTime,
+  loadSchedule,
+  saveSchedule,
+  onTrigger,
+  triggerLabel = 'Run now',
+}: {
+  title: string;
+  blurb: string;
+  manualBlurb: string;
+  defaultTime: string;
+  loadSchedule: () => Promise<IngestionSchedule>;
+  saveSchedule: (s: Pick<IngestionSchedule, 'enabled' | 'time'>) => Promise<IngestionSchedule>;
+  onTrigger: () => Promise<unknown>;
+  triggerLabel?: string;
+}) {
+  const [enabled, setEnabled] = useState(false);
+  const [time, setTime] = useState(defaultTime);
+  const [nextRun, setNextRun] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState('');
+  const [triggering, setTriggering] = useState(false);
+  const [triggerResult, setTriggerResult] = useState('');
+
+  useEffect(() => {
+    loadSchedule()
+      .then((s) => { setEnabled(s.enabled); setTime(s.time); setNextRun(s.next_run); })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function formatNextRun(iso: string | null) {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        weekday: 'short', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch { return iso; }
+  }
+
+  async function handleSave() {
+    setSaving(true); setSaveResult('');
+    try {
+      const r = await saveSchedule({ enabled, time });
+      setNextRun(r.next_run);
+      setSaveResult('Saved');
+    } catch { setSaveResult('Save failed'); }
+    finally { setSaving(false); setTimeout(() => setSaveResult(''), 2500); }
+  }
+
+  async function handleTrigger() {
+    setTriggering(true); setTriggerResult('');
+    try { await onTrigger(); setTriggerResult('Started'); }
+    catch { setTriggerResult('Failed — check logs'); }
+    finally { setTriggering(false); setTimeout(() => setTriggerResult(''), 4000); }
+  }
+
+  return (
+    <>
+      <SectionIntro title={title} blurb={blurb} />
+      <Row label="Enable schedule" hint="Runs at the configured time every day" defaultValue="Off">
+        <Toggle defaultOn={enabled} onChange={(on) => setEnabled(on)} />
+      </Row>
+      <Row label="Run time (HH:MM)" hint="24-hour local server time" defaultValue={defaultTime}>
+        <input type="time" className={styles.input} disabled={!enabled} value={time} onChange={(e) => setTime(e.target.value)} />
+      </Row>
+      <Row label="Next scheduled run" hint="Calculated after saving">
+        <Text size={13} tone="secondary">{formatNextRun(nextRun)}</Text>
+      </Row>
+      <div className={styles.row}>
+        <div className={styles.rowLabel} />
+        <div className={styles.rowControl} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save schedule'}
+          </button>
+          {saveResult && <Text size={12} tone="secondary">{saveResult}</Text>}
+        </div>
+      </div>
+      <SectionIntro title="Manual trigger" blurb={manualBlurb} />
+      <div className={styles.row}>
+        <div className={styles.rowLabel} />
+        <div className={styles.rowControl} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button type="button" className={styles.btn} onClick={handleTrigger} disabled={triggering}>
+            {triggering ? 'Starting…' : triggerLabel}
+          </button>
+          {triggerResult && <Text size={12} tone="secondary">{triggerResult}</Text>}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function EdgarScheduleSection() {
+  return (
+    <ScheduleSection
+      title="EDGAR fundamentals"
+      blurb="Refreshes SEC fundamental data (revenue, margins, EPS, debt) for the full SP500 + NDX100 + DOW30 universe. Runs after OHLCV so the DB is warm before market open."
+      manualBlurb="Fetch fundamentals immediately in the background. Takes several minutes for the full universe — check logs for progress."
+      defaultTime="04:00"
+      loadSchedule={getEdgarSchedule}
+      saveSchedule={saveEdgarSchedule}
+      onTrigger={triggerEdgarPrefetch}
+      triggerLabel="Run now"
+    />
+  );
+}
+
+function Sp500ScheduleSection() {
+  return (
+    <ScheduleSection
+      title="S&P 500 list update"
+      blurb="Re-fetches 20-day average dollar volume for every symbol in sp500.csv and updates the liquidity column. Run after market close so the day's data is included."
+      manualBlurb="Run the S&P 500 liquidity update immediately. Downloads ~500 symbols from Yahoo Finance — takes 1–3 minutes."
+      defaultTime="16:30"
+      loadSchedule={getSp500Schedule}
+      saveSchedule={saveSp500Schedule}
+      onTrigger={triggerSp500Update}
+      triggerLabel="Run now"
+    />
   );
 }
 
@@ -1518,6 +1648,17 @@ function StrategyTuningForm() {
 
   return (
     <div>
+      <ScheduleSection
+        title="Automatic tuning schedule"
+        blurb="Run walk-forward optimization automatically at a fixed time each day. The job is skipped if a run is already active."
+        manualBlurb="Trigger a walk-forward optimization run immediately. The job runs in the background — results appear below when complete."
+        defaultTime="02:00"
+        loadSchedule={getTuningSchedule}
+        saveSchedule={saveTuningSchedule}
+        onTrigger={async () => { await startTuningJob(); }}
+        triggerLabel="Run now"
+      />
+
       <SectionIntro
         title="Strategy Tuning"
         blurb="Run a walk-forward optimization to find robust parameter sets for each strategy. Review in-sample vs out-of-sample results, then adopt the proposed parameters."

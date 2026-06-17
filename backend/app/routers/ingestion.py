@@ -98,3 +98,93 @@ async def update_schedule(body: ScheduleUpdate) -> dict:
     ingestion_schedule_store.set(body.enabled, body.time)
     ingestion_scheduler.configure(body.enabled, body.time)
     return {"ok": True, "enabled": body.enabled, "time": body.time, "next_run": ingestion_scheduler.next_run_time()}
+
+
+# ── EDGAR fundamentals schedule ───────────────────────────────────────────────
+
+@router.get("/edgar/schedule")
+async def get_edgar_schedule() -> dict:
+    from app.services.edgar_schedule_store import edgar_schedule_store
+    from app.services import edgar_scheduler
+    cfg = edgar_schedule_store.get()
+    return {**cfg, "next_run": edgar_scheduler.next_run_time()}
+
+
+@router.post("/edgar/schedule")
+async def update_edgar_schedule(body: ScheduleUpdate) -> dict:
+    if not _TIME_RE.match(body.time):
+        raise HTTPException(status_code=422, detail="time must be HH:MM, e.g. '04:00'")
+    hour, minute = int(body.time[:2]), int(body.time[3:])
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise HTTPException(status_code=422, detail="time out of range")
+    from app.services.edgar_schedule_store import edgar_schedule_store
+    from app.services import edgar_scheduler
+    edgar_schedule_store.set(body.enabled, body.time)
+    edgar_scheduler.configure(body.enabled, body.time)
+    return {"ok": True, "enabled": body.enabled, "time": body.time, "next_run": edgar_scheduler.next_run_time()}
+
+
+@router.post("/edgar/prefetch", status_code=202)
+async def trigger_edgar_prefetch() -> dict:
+    """Trigger an immediate EDGAR fundamentals prefetch in the background."""
+    import threading
+    from app.services.fundamentals_store import get_prefetch_status, prefetch_universe
+    if get_prefetch_status()["in_progress"]:
+        raise HTTPException(status_code=409, detail="Prefetch already running")
+    try:
+        from app.data.universe_presets import expand_universe
+        symbols = list(dict.fromkeys(
+            expand_universe(["SP500"]) + expand_universe(["NDX100"]) + expand_universe(["DOW30"])
+        ))
+    except Exception:
+        symbols = ["SPY", "QQQ", "AAPL", "MSFT"]
+    threading.Thread(target=prefetch_universe, args=(symbols,), daemon=True, name="edgar-prefetch-manual").start()
+    return {"status": "started", "total": len(symbols)}
+
+
+@router.get("/edgar/status")
+async def edgar_prefetch_status() -> dict:
+    from app.services.fundamentals_store import get_prefetch_status
+    return get_prefetch_status()
+
+
+# ── S&P 500 liquidity update schedule ────────────────────────────────────────
+
+@router.get("/sp500/schedule")
+async def get_sp500_schedule() -> dict:
+    from app.services.sp500_schedule_store import sp500_schedule_store
+    from app.services import sp500_scheduler
+    cfg = sp500_schedule_store.get()
+    return {**cfg, "next_run": sp500_scheduler.next_run_time()}
+
+
+@router.post("/sp500/schedule")
+async def update_sp500_schedule(body: ScheduleUpdate) -> dict:
+    if not _TIME_RE.match(body.time):
+        raise HTTPException(status_code=422, detail="time must be HH:MM, e.g. '16:30'")
+    hour, minute = int(body.time[:2]), int(body.time[3:])
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise HTTPException(status_code=422, detail="time out of range")
+    from app.services.sp500_schedule_store import sp500_schedule_store
+    from app.services import sp500_scheduler
+    sp500_schedule_store.set(body.enabled, body.time)
+    sp500_scheduler.configure(body.enabled, body.time)
+    return {"ok": True, "enabled": body.enabled, "time": body.time, "next_run": sp500_scheduler.next_run_time()}
+
+
+@router.post("/sp500/update", status_code=202)
+async def trigger_sp500_update() -> dict:
+    """Trigger an immediate S&P 500 liquidity update in the background."""
+    from app.services.sp500_update_service import start_update_task, get_update_state
+    if get_update_state()["in_progress"]:
+        raise HTTPException(status_code=409, detail="Update already running")
+    started = start_update_task()
+    if not started:
+        raise HTTPException(status_code=409, detail="Update already running")
+    return {"status": "started"}
+
+
+@router.get("/sp500/status")
+async def sp500_update_status() -> dict:
+    from app.services.sp500_update_service import get_update_state
+    return get_update_state()

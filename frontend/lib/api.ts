@@ -328,6 +328,52 @@ export async function getLastDataRefresh(): Promise<{ last_refresh: string | nul
   return get<{ last_refresh: string | null }>('/api/data/ingest/last-refresh');
 }
 
+/* ---------- EDGAR schedule ---------- */
+
+export async function getEdgarSchedule(): Promise<IngestionSchedule> {
+  return get<IngestionSchedule>('/api/data/edgar/schedule');
+}
+
+export async function saveEdgarSchedule(s: Pick<IngestionSchedule, 'enabled' | 'time'>): Promise<IngestionSchedule> {
+  return post<IngestionSchedule>('/api/data/edgar/schedule', s);
+}
+
+export async function triggerEdgarPrefetch(): Promise<{ status: string; total: number }> {
+  return post<{ status: string; total: number }>('/api/data/edgar/prefetch', {});
+}
+
+export async function getEdgarStatus(): Promise<{ total: number; done: number; failed: number; in_progress: boolean }> {
+  return get('/api/data/edgar/status');
+}
+
+/* ---------- S&P 500 schedule ---------- */
+
+export async function getSp500Schedule(): Promise<IngestionSchedule> {
+  return get<IngestionSchedule>('/api/data/sp500/schedule');
+}
+
+export async function saveSp500Schedule(s: Pick<IngestionSchedule, 'enabled' | 'time'>): Promise<IngestionSchedule> {
+  return post<IngestionSchedule>('/api/data/sp500/schedule', s);
+}
+
+export async function triggerSp500Update(): Promise<{ status: string }> {
+  return post<{ status: string }>('/api/data/sp500/update', {});
+}
+
+export async function getSp500Status(): Promise<{ status: string; last_updated: string | null; symbols_updated: number; in_progress: boolean }> {
+  return get('/api/data/sp500/status');
+}
+
+/* ---------- Tuning schedule ---------- */
+
+export async function getTuningSchedule(): Promise<IngestionSchedule> {
+  return get<IngestionSchedule>('/api/strategy-tuning/schedule');
+}
+
+export async function saveTuningSchedule(s: Pick<IngestionSchedule, 'enabled' | 'time'>): Promise<IngestionSchedule> {
+  return post<IngestionSchedule>('/api/strategy-tuning/schedule', s);
+}
+
 /* ---------- Walk-Forward Optimization ---------- */
 
 export interface WfoVerdict {

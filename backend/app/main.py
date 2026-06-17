@@ -114,6 +114,33 @@ async def lifespan(app: FastAPI):
         logger.info("startup: fundamentals prefetch started for %d symbols", len(_fund_universe))
     except Exception as _exc:
         logger.warning("fundamentals prefetch startup failed: %s", _exc)
+    # ── EDGAR fundamentals scheduler ─────────────────────────────────────────
+    try:
+        from app.services.edgar_schedule_store import edgar_schedule_store as _edgar_store
+        from app.services import edgar_scheduler as _edgar_sched
+        _edgar_cfg = _edgar_store.get()
+        _edgar_sched.configure(_edgar_cfg["enabled"], _edgar_cfg["time"])
+        _edgar_sched.start()
+    except Exception as _exc:
+        logger.warning("edgar_scheduler startup failed: %s", _exc)
+    # ── S&P 500 liquidity scheduler ───────────────────────────────────────────
+    try:
+        from app.services.sp500_schedule_store import sp500_schedule_store as _sp500_store
+        from app.services import sp500_scheduler as _sp500_sched
+        _sp500_cfg = _sp500_store.get()
+        _sp500_sched.configure(_sp500_cfg["enabled"], _sp500_cfg["time"])
+        _sp500_sched.start()
+    except Exception as _exc:
+        logger.warning("sp500_scheduler startup failed: %s", _exc)
+    # ── Strategy tuning scheduler ─────────────────────────────────────────────
+    try:
+        from app.services.tuning_schedule_store import tuning_schedule_store as _tuning_store
+        from app.services import tuning_scheduler as _tuning_sched
+        _tuning_cfg = _tuning_store.get()
+        _tuning_sched.configure(_tuning_cfg["enabled"], _tuning_cfg["time"])
+        _tuning_sched.start()
+    except Exception as _exc:
+        logger.warning("tuning_scheduler startup failed: %s", _exc)
     # ── Strategy-watch scheduler ──────────────────────────────────────────
     try:
         from app.services.strategy_watch_scheduler import strategy_watch_scheduler
@@ -125,6 +152,21 @@ async def lifespan(app: FastAPI):
     try:
         from app.services import ingestion_scheduler as _isched
         _isched.shutdown()
+    except Exception:
+        pass
+    try:
+        from app.services import edgar_scheduler as _edgar_sched
+        _edgar_sched.shutdown()
+    except Exception:
+        pass
+    try:
+        from app.services import sp500_scheduler as _sp500_sched
+        _sp500_sched.shutdown()
+    except Exception:
+        pass
+    try:
+        from app.services import tuning_scheduler as _tuning_sched
+        _tuning_sched.shutdown()
     except Exception:
         pass
     try:
