@@ -67,7 +67,8 @@ export default function Step6Page() {
   useEffect(() => {
     if (candidates.length === 0) return;
     setOffline(false);
-    Promise.all(candidates.map((c) => api.getContracts(c.symbol, 'C', {
+    const right = (context?.direction ?? 'Bullish') === 'Bullish' ? 'C' : 'P';
+    Promise.all(candidates.map((c) => api.getContracts(c.symbol, right, {
       stock_score: stockScoreBySymbol[c.symbol] ?? 70,
       direction:   context?.direction ?? 'Bullish',
       horizon:     context?.horizon ?? 'swing',
