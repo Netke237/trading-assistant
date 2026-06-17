@@ -39,3 +39,26 @@ def test_pullback_ema_bearish_returns_short_shaped_signal():
 def test_pullback_ema_bullish_unchanged_default():
     import inspect
     assert inspect.signature(pullback_ema_signal).parameters["direction"].default == "Bullish"
+
+
+# ── breakout_base_signal bearish (C2) ────────────────────────────────────────
+
+from app.services.strategy_engine import breakout_base_signal
+
+
+def _breakdown_bars():
+    bars = []
+    price = 100.0
+    for i in range(30):                   # tight base around 100
+        bars.append({"open": price, "high": price + 0.4, "low": price - 0.4,
+                     "close": price, "volume": 1_000_000, "time": i})
+    # breakdown bar: closes below base low on high volume
+    bars.append({"open": 99.6, "high": 99.7, "low": 96.0, "close": 96.5,
+                 "volume": 3_000_000, "time": 30})
+    return bars
+
+
+def test_breakout_base_bearish_breakdown():
+    sig = breakout_base_signal(_breakdown_bars(), direction="Bearish")
+    assert sig is not None and sig.direction == "Bearish"
+    assert sig.stop_price > sig.entry_price > sig.target_price

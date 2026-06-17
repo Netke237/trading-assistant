@@ -174,8 +174,13 @@ def breakout_base_signal(
     atr_tight_max: float = 1.5,
     volume_mult: float = 1.1,
     rr_target_mult: float = 2.0,
+    direction: Literal["Bullish", "Bearish"] = "Bullish",
 ) -> StrategySignal | None:
-    """Bullish: break above N-day high after a narrow (ATR-tight) base with volume expansion."""
+    """Break above/below a narrow (ATR-tight) base with volume expansion.
+
+    Bullish: close above base high.
+    Bearish: close below base low (breakdown mirror).
+    """
     if len(bars) < base_lookback + 5:
         return None
     closes = [b["close"] for b in bars]
@@ -192,23 +197,29 @@ def breakout_base_signal(
     if atr > 0 and (base_high - base_low) > atr_tight_max * atr:
         return None
     current = closes[-1]
-    # Breakout: today closes above the base high
-    if current <= base_high:
-        return None
-    # Volume: today > 1.3× 20-day avg
     avg_vol = sum(vols[-21:-1]) / 20 if len(vols) >= 21 else vols[-1]
     if vols[-1] < avg_vol * volume_mult:
         return None
-    stop  = base_low - atr * 0.2
-    target = current + (current - stop) * rr_target_mult
+    if direction == "Bullish":
+        if current <= base_high:
+            return None
+        stop   = base_low - atr * 0.2
+        target = current + (current - stop) * rr_target_mult
+        detail = {"base_high": round(base_high, 2), "base_range_pct": round(base_range_pct * 100, 1)}
+    else:  # Bearish breakdown below base low
+        if current >= base_low:
+            return None
+        stop   = base_high + atr * 0.2
+        target = current - (stop - current) * rr_target_mult
+        detail = {"base_low": round(base_low, 2), "base_range_pct": round(base_range_pct * 100, 1)}
     return StrategySignal(
         strategy="breakout_base",
-        direction="Bullish",
+        direction=direction,
         entry_price=round(current, 2),
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
-        detail={"base_high": round(base_high, 2), "base_range_pct": round(base_range_pct * 100, 1)},
+        detail=detail,
     )
 
 
