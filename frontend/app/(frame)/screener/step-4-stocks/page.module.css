@@ -39,7 +39,7 @@
 .results { display: flex; flex-direction: column; gap: 4px; }
 .tableHeader, .row {
   display: grid;
-  grid-template-columns: 1fr 0.7fr 1.1fr 0.7fr 0.7fr 0.8fr 0.8fr 0.8fr 0.7fr;
+  grid-template-columns: 20px 1fr 0.7fr 1.1fr 0.7fr 0.7fr 0.8fr 0.8fr 0.8fr 0.7fr;
   align-items: center; gap: 8px; padding: 6px 10px;
 }
 .sortableHeader {
@@ -66,5 +66,11 @@
 .actionBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 .modeRow { display: flex; flex-wrap: wrap; gap: 8px; }
 .modeBtn { padding: 6px 12px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface); cursor: pointer; }
+
+.symbolCell { display: flex; align-items: center; gap: 5px; }
+.inPortfolioDot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--pass); flex-shrink: 0;
+}
 .modeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 .modeBtnActive { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }

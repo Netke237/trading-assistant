@@ -33,6 +33,19 @@ def test_adapter_builds_option_params():
     params = adapter._build_params(order)
     assert params["class"] == "option"
     assert params["option_symbol"] == "NVDA260620C00130000"
+    # Tradier rejects plain "buy"/"sell" on option-class orders — entries open a position.
+    assert params["side"] == "buy_to_open"
+
+
+def test_option_sell_uses_sell_to_open():
+    adapter = _adapter()
+    order = BrokerOrder(
+        symbol="NVDA", action="SELL", quantity=1,
+        order_type="LMT", limit_price=3.50, tif="DAY",
+        option_symbol="NVDA260620C00130000",
+    )
+    params = adapter._build_params(order)
+    assert params["side"] == "sell_to_open"
 
 
 @respx.mock

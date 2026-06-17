@@ -1,13 +1,28 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
+import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.portfolio import PortfolioPositionModel
 from app.schemas import AlertItem
+
+_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
+
+
+@lru_cache(maxsize=1)
+def _load_risk_config() -> dict:
+    with open(_CONFIG_PATH) as f:
+        return yaml.safe_load(f)
+
+
+def _premium_stop_pct() -> float:
+    return float(_load_risk_config().get("reward_risk", {}).get("premium_stop_pct", 0.60))
 
 
 def parse_expiry_from_contract(contract: str) -> Optional[date]:
@@ -40,13 +55,15 @@ async def generate_alerts(
         opt_price = (current_option_prices or {}).get(pos.contract) if current_option_prices else None
         targets = pos.targets or []
 
-        # TP_HIT
+        # TP_HIT — direction-aware: bullish targets are above current price, bearish below
+        is_bearish = pos.contract.split("|")[3] == "P" if len(pos.contract.split("|")) >= 4 else False
         if targets and price is not None:
             first_target = targets[0]
             target_stock_price = (
                 first_target.get("stock_price") or first_target.get("stockPrice") or 0
             )
-            if price >= target_stock_price:
+            hit = (price <= target_stock_price) if is_bearish else (price >= target_stock_price)
+            if hit:
                 counter += 1
                 alerts.append(AlertItem(
                     id=f"a{counter}",
@@ -72,7 +89,7 @@ async def generate_alerts(
             ))
 
         # PREMIUM_STOP
-        if opt_price is not None and pos.entry_price > 0 and opt_price <= pos.entry_price * 0.60:
+        if opt_price is not None and pos.entry_price > 0 and opt_price <= pos.entry_price * _premium_stop_pct():
             counter += 1
             alerts.append(AlertItem(
                 id=f"a{counter}",
@@ -84,11 +101,11 @@ async def generate_alerts(
                 alertType="PREMIUM_STOP",
             ))
 
-        # TIME_STOP — parse expiry from contract, check days_to_expiry <= 3
+        # TIME_STOP — parse expiry from contract, check 0 <= days_to_expiry <= 3
         expiry = parse_expiry_from_contract(pos.contract)
         if expiry is not None:
             days_to_expiry = (expiry - date.today()).days
-            if days_to_expiry <= 3:
+            if 0 <= days_to_expiry <= 3:
                 counter += 1
                 alerts.append(AlertItem(
                     id=f"a{counter}",

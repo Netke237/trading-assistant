@@ -193,7 +193,7 @@ export default function Step4Page() {
   const WEIGHTS = HORIZON_WEIGHTS[horizonKey];
 
   const contributions = COMPONENTS.map((c) => {
-    const raw    = selected.breakdown[c.key];
+    const raw    = selected.breakdown[c.key] ?? 0;
     const weight = WEIGHTS[c.key] ?? 0;
     const points = (raw * weight) / 100;
     return { ...c, raw, weight, points, signal: signalFor(raw) };

@@ -201,7 +201,7 @@ export default function Step6Page() {
                               <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>${c.price.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>{c.ivRank}</Data>
-                              <Data size={12} className={tbl.right}>{c.ivPercentile || '—'}</Data>
+                              <Data size={12} className={tbl.right}>{c.ivPercentile != null ? c.ivPercentile : '—'}</Data>
                               <Data size={12} className={tbl.right}>{c.theta.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>${c.spread.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>{c.volume.toLocaleString()}</Data>
@@ -244,7 +244,7 @@ export default function Step6Page() {
                               <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>${c.price.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>{c.ivRank}</Data>
-                              <Data size={12} className={tbl.right}>{c.ivPercentile || '—'}</Data>
+                              <Data size={12} className={tbl.right}>{c.ivPercentile != null ? c.ivPercentile : '—'}</Data>
                               <Data size={12} className={tbl.right}>{c.theta.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>${c.spread.toFixed(2)}</Data>
                               <Data size={12} className={tbl.right}>{c.volume.toLocaleString()}</Data>

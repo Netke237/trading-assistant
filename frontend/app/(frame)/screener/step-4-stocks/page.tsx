@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
@@ -10,12 +10,27 @@ import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { runStockScan } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { WatchStar } from '@/components/atoms/WatchStar';
 import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
-import { api } from '@/lib/api';
 import styles from './page.module.css';
+
+function _startOfDay(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+function _labelWithDate(iso: string): string {
+  const scan = new Date(iso);
+  const now  = new Date();
+  const diffDays = Math.round((_startOfDay(now) - _startOfDay(scan)) / 86_400_000);
+  const timeStr = scan.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const mon = scan.toLocaleString(undefined, { month: 'short' });
+  const day = scan.getDate();
+  if (diffDays === 1) return `Yesterday · ${timeStr}`;
+  const sameYear = scan.getFullYear() === now.getFullYear();
+  return sameYear ? `${mon} ${day} · ${timeStr}` : `${mon} ${day} ${scan.getFullYear()} · ${timeStr}`;
+}
 
 const STRATEGIES = [
   { key: 'pullback_ema',       label: 'Pullback to 20-EMA',        when: 'Steady uptrends',     entry: 'Dip to 20-EMA + reversal candle in uptrend',              stop: 'Below recent swing low', exit: 'Prior high / trailing stop under higher lows' },
@@ -62,8 +77,14 @@ export default function Step4StocksPage() {
   const scanOverrides   = useScanStore((s) => s.scanOverrides);
   const requireReversal = (scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
 
-  const stockBasket = useScanStore((s) => s.stockBasket);
+  const stockBasket  = useScanStore((s) => s.stockBasket);
+  const stockScanAt  = useScanStore((s) => s.stockScanAt);
   const addPosition = usePortfolioStore((s) => s.addPosition);
+  const portfolioPositions = usePortfolioStore((s) => s.positions);
+  const portfolioSymbols = new Set(portfolioPositions.map((p) => p.symbol));
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const [params, setParams] = useState<StrategyParams>(() => ({ ...savedParams }));
   const [selected, setSelected] = useState<string | null>(activeStrategy);
@@ -105,23 +126,10 @@ export default function Step4StocksPage() {
       setError('Scan failed — is the backend running on port 8000?');
       return;
     }
-    // Auto-execute symbols armed for after_scan
+    // Auto-execute symbols armed for after_scan — add as paper positions locally
     for (const c of res.candidates) {
       if (afterScanArmedSymbols.has(c.symbol)) {
-        try {
-          await api.postStockOrder({
-            broker: 'recommendation',
-            symbol: c.symbol,
-            action: c.direction === 'Bullish' ? 'BUY' : 'SELL',
-            quantity: c.shares,
-            order_type: 'LMT',
-            limit_price: c.strategy.entry_price,
-            tif: 'DAY',
-          });
-          addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, c.shares));
-        } catch {
-          // silent — user can retry via dialog
-        }
+        addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, c.shares));
       }
     }
   }
@@ -181,6 +189,9 @@ export default function Step4StocksPage() {
         >
           {scanning ? 'Running backtest scan…' : 'Run Stock Scan'}
         </button>
+        {stockScanAt && mounted && (
+          <Text size={11} tone="dim">Last stock scan: {_labelWithDate(stockScanAt)}</Text>
+        )}
         {stockBasket.length > 0 && (
           <button
             type="button"
@@ -204,6 +215,7 @@ export default function Step4StocksPage() {
       {result && (
         <div className={styles.results}>
           <div className={styles.tableHeader}>
+            <span aria-hidden />
             <Text size={11} tone="dim">SYMBOL</Text>
             <Text size={11} tone="dim">SCORE</Text>
             <Text size={11} tone="dim">Δ</Text>
@@ -224,7 +236,7 @@ export default function Step4StocksPage() {
           </div>
 
           <div className={styles.tableBody}>
-            {[...result.candidates.filter((c) => c.backtest.passes_gate)].sort((a, b) => {
+            {[...result.candidates.filter((c) => c.backtest.passes_gate || c.backtest.win_rate >= 0.40)].sort((a, b) => {
               if (healthSort === null) return 0;
               const aScore = a.fundamentals?.score ?? -1;
               const bScore = b.fundamentals?.score ?? -1;
@@ -233,6 +245,7 @@ export default function Step4StocksPage() {
               const d = deltas.get(c.symbol);
               const bt = c.backtest;
               const open = openSymbol === c.symbol;
+              const gateStatus = bt.passes_gate ? 'PASS' : 'CAUTION';
               return (
                 <div key={c.symbol}>
                   <button
@@ -240,12 +253,20 @@ export default function Step4StocksPage() {
                     className={`${styles.row} ${open ? styles.rowOpen : ''}`}
                     onClick={() => setOpenSymbol(open ? null : c.symbol)}
                   >
-                    <Data size={12} weight={500}>{c.symbol}</Data>
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <WatchStar symbol={c.symbol} size="sm" />
+                    </span>
+                    <span className={styles.symbolCell}>
+                      <Data size={12} weight={500}>{c.symbol}</Data>
+                      {portfolioSymbols.has(c.symbol) && (
+                        <span className={styles.inPortfolioDot} title="Already in portfolio" />
+                      )}
+                    </span>
                     <Data size={12}>{c.stock_score}</Data>
                     <Data size={11} tone={!d ? 'dim' : d.scoreDelta > 0 ? 'pass' : d.scoreDelta < 0 ? 'reject' : 'secondary'}>
                       {!d ? '—' : `${d.scoreDelta > 0 ? '+' : ''}${d.scoreDelta}${d.rankDelta !== 0 ? ` (${d.rankDelta > 0 ? '↑' : '↓'}${Math.abs(d.rankDelta)})` : ''}`}
                     </Data>
-                    <Data size={12} tone={bt.win_rate >= 0.5 ? 'pass' : bt.win_rate >= 0.45 ? 'caution' : 'reject'}>
+                    <Data size={12} tone={bt.win_rate >= 0.5 ? 'pass' : bt.win_rate >= 0.40 ? 'caution' : 'reject'}>
                       {(bt.win_rate * 100).toFixed(0)}%
                     </Data>
                     <Data size={12}>{bt.n_trades}</Data>
@@ -254,7 +275,7 @@ export default function Step4StocksPage() {
                     <Data size={12} tone={c.fundamentals ? (c.fundamentals.score >= 65 ? 'pass' : c.fundamentals.score >= 40 ? 'caution' : 'reject') : 'dim'}>
                       {c.fundamentals?.score ?? '—'}
                     </Data>
-                    <StatusBadge status={bt.passes_gate ? 'PASS' : 'REJECT'} />
+                    <StatusBadge status={gateStatus} />
                   </button>
                   {open && (
                     <StockPositionCard

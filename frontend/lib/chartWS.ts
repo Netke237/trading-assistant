@@ -14,10 +14,9 @@ export type WSMessage =
 
 export type MessageHandler = (msg: WSMessage) => void;
 
-const BASE_URL =
-  typeof window !== 'undefined'
-    ? `ws://${window.location.hostname}:8000`
-    : 'ws://localhost:8000';
+const _apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const _wsBase = _apiUrl.replace(/^http/, 'ws');
+const BASE_URL = typeof window !== 'undefined' ? _wsBase : 'ws://localhost:8000';
 
 export class ChartWSClient {
   private ws: WebSocket | null = null;
@@ -38,7 +37,7 @@ export class ChartWSClient {
   connect(): void {
     if (this.destroyed || this.dataError) return;
     this.stateHandler?.('connecting');
-    const url = `${this.baseUrl}/chart/stream/${encodeURIComponent(this.symbol)}?interval=${this.interval}`;
+    const url = `${this.baseUrl}/chart/stream/${encodeURIComponent(this.symbol)}?interval=${encodeURIComponent(this.interval)}`;
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {

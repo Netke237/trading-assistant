@@ -46,3 +46,15 @@
 .dataSourceStatus {
   margin-left: auto;
 }
+
+.dataSourceGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dataSourceDivider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 2px 0;
+}

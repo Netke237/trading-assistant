@@ -53,6 +53,26 @@ def _probe_tradier() -> tuple[str, str | None]:
         return "down", str(exc)
 
 
+def _probe_tradier_paper() -> tuple[str, str | None]:
+    from app.services.credential_store import credential_store
+    creds = credential_store.get("tradier_paper") or {}
+    token = creds.get("token") or os.environ.get("TRADIER_PAPER_TOKEN", "").strip()
+    account_id = creds.get("account_id") or os.environ.get("TRADIER_PAPER_ACCOUNT_ID", "").strip()
+    if not token or not account_id:
+        return "unconfigured", "Add Tradier paper token + account ID in Settings → Brokers"
+    try:
+        resp = httpx.get(
+            "https://sandbox.tradier.com/v1/markets/clock",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            timeout=_PROBE_TIMEOUT,
+        )
+        if resp.status_code == 200:
+            return "connected", None
+        return "down", f"Tradier sandbox returned HTTP {resp.status_code}"
+    except Exception as exc:
+        return "down", str(exc)
+
+
 def _probe_alpaca(slot: str) -> tuple[str, str | None]:
     creds = credential_store.get(slot)
     if not creds or not creds.get("key_id") or not creds.get("secret_key"):
@@ -135,13 +155,14 @@ def get_data_sources() -> list[DataSourceStatus]:
         return _probe_alpaca("alpaca_live") if live.get("key_id") else _probe_alpaca("alpaca_paper")
 
     sources = [
-        ("alpaca",       "Alpaca (data)",    ["daily OHLCV", "5y history"],           _alpaca_primary,              "alpaca"),
-        ("tradier",      "Tradier (live)",   ["quotes", "option chains", "calendar"],  _probe_tradier,               "tradier"),
-        ("alpaca_paper", "Alpaca (paper)",   ["paper stock orders"],                   lambda: _probe_alpaca("alpaca_paper"), None),
-        ("ibkr",         "IBKR (live)",      ["IV rank", "intraday bars"],             lambda: _probe_ibkr_gateway(5000), "ibkr"),
-        ("ibkr_paper",   "IBKR (paper)",     ["paper orders"],                         lambda: _probe_ibkr_gateway(7499), None),
-        ("tiingo",       "Tiingo",           ["daily OHLCV fallback"],                 _probe_tiingo,                "tiingo"),
-        ("yfinance",     "yfinance",         ["last-resort fallback"],                 _probe_yfinance,              "yfinance"),
+        ("alpaca",         "Alpaca (data)",    ["daily OHLCV", "5y history"],           _alpaca_primary,                       "alpaca"),
+        ("alpaca_paper",   "Alpaca (paper)",   ["paper stock orders"],                   lambda: _probe_alpaca("alpaca_paper"),  None),
+        ("ibkr",           "IBKR (live)",      ["IV rank", "intraday bars"],             lambda: _probe_ibkr_gateway(5000),     "ibkr"),
+        ("ibkr_paper",     "IBKR (paper)",     ["paper orders"],                         lambda: _probe_ibkr_gateway(7499),     None),
+        ("tradier",        "Tradier (live)",   ["quotes", "option chains", "calendar"],  _probe_tradier,                        "tradier"),
+        ("tradier_paper",  "Tradier (paper)",  ["paper stock/option orders"],            _probe_tradier_paper,                  None),
+        ("tiingo",         "Tiingo",           ["daily OHLCV fallback"],                 _probe_tiingo,                         "tiingo"),
+        ("yfinance",       "yfinance",         ["last-resort fallback"],                 _probe_yfinance,                       "yfinance"),
     ]
     now = time.monotonic()
     results: list[DataSourceStatus] = []

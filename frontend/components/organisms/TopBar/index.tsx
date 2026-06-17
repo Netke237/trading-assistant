@@ -76,6 +76,7 @@ export function TopBar() {
   const scanAt       = useScanStore((s) => s.scanAt);
   const scanDuration = useScanStore((s) => s.scanDurationMs);
   const context      = useScanStore((s) => s.context);
+  const stockScanAt  = useScanStore((s) => s.stockScanAt);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -89,13 +90,18 @@ export function TopBar() {
       <div className={styles.scanContext}>
         {context && (
           <Text size={12} tone="secondary">
-            Last scan: {context.universe} · {context.direction} · {context.horizon}
+            Last option scan: {context.universe} · {context.direction} · {context.horizon}
             {scanAt && mounted && (
               <> · started {labelWithDate(scanAt)}</>
             )}
             {scanDuration != null && scanDuration >= 500 && (
               <> · {formatDuration(scanDuration)}</>
             )}
+          </Text>
+        )}
+        {stockScanAt && mounted && (
+          <Text size={12} tone="secondary">
+            Last stock scan: {labelWithDate(stockScanAt)}
           </Text>
         )}
       </div>

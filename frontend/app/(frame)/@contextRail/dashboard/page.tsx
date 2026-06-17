@@ -36,11 +36,13 @@ export default function DashboardContextRail() {
   const [events, setEvents]   = useState<UpcomingEvent[]>([]);
 
   useEffect(() => {
-    api.getAlerts().then(setAlerts).catch(() => {});
+    api.getAlerts()
+      .then((data) => setAlerts([...data].sort((a, b) => b.timestamp > a.timestamp ? 1 : -1)))
+      .catch(() => {});
     api.getEvents().then(setEvents).catch(() => {});
   }, []);
 
-  const deployed = positions.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
+  const deployed = positions.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
   const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
 
   const contextStr = context

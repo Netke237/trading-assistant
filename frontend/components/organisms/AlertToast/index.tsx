@@ -9,7 +9,7 @@ export default function AlertToast() {
   const dismissToast = useChartAlertStore((s) => s.dismissToast);
 
   return (
-    <div className={styles.container} aria-live="polite">
+    <div className={styles.container} aria-live="polite" aria-label="Notifications">
       {toasts.map((t) => (
         <ToastItem
           key={t.id}
@@ -45,7 +45,7 @@ function ToastItem({
         <Text size={12} tone="primary">{message}</Text>
         <Text size={10} tone="dim">{new Date(timestamp).toLocaleTimeString()}</Text>
       </div>
-      <button className={styles.toastClose} onClick={() => onDismiss(id)} aria-label="Dismiss">&times;</button>
+      <button type="button" className={styles.toastClose} onClick={() => onDismiss(id)} aria-label="Dismiss notification">&times;</button>
     </div>
   );
 }

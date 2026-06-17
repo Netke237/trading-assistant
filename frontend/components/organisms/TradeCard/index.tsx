@@ -177,12 +177,14 @@ export function TradeCard({
   }));
 
   const prevSymbolRef = useRef(data.symbol);
+  const prevContractRef = useRef(data.contract);
   useEffect(() => {
-    if (data.symbol !== prevSymbolRef.current) {
+    if (data.symbol !== prevSymbolRef.current || data.contract !== prevContractRef.current) {
       setOverlay({ ...defaultOverlay(data), contracts: initialContracts });
       prevSymbolRef.current = data.symbol;
+      prevContractRef.current = data.contract;
     }
-  }, [data.symbol, initialContracts]);
+  }, [data.symbol, data.contract, initialContracts]);
 
   useEffect(() => {
     setOverlay((prev) => ({ ...prev, contracts: initialContracts }));
@@ -243,7 +245,12 @@ export function TradeCard({
       </div>
 
       <div className={styles.grid}>
-        {/* 2. Stock Scorecard */}
+        {/* 2. Market Sentiment — full-width top bar */}
+        <div className={styles.fullWidth}>
+          <MarketSentiment s={data.sentiment} />
+        </div>
+
+        {/* 3. Stock Scorecard | Contract — side by side */}
         <ScoreCardPanel
           title="Stock Scorecard"
           bars={stockBars}
@@ -253,11 +260,6 @@ export function TradeCard({
           confidenceText={data.confidenceText ?? null}
         />
 
-        <MarketSentiment s={data.sentiment} />
-
-        <FundamentalHealthCard f={data.fundamentals} />
-
-        {/* 3. Contract Scorecard */}
         <ScoreCardPanel
           title={`Contract — ${data.contract}`}
           bars={contractBars}
@@ -265,7 +267,12 @@ export function TradeCard({
           confidence={data.contractConfidence}
         />
 
-        {/* 3b. Contract Details */}
+        {/* 4. Fundamental Health — full-width bar below scorecards */}
+        <div className={styles.fullWidth}>
+          <FundamentalHealthCard f={data.fundamentals} />
+        </div>
+
+        {/* 5. Contract Details */}
         {data.contractDetails && (
           <section className={styles.detailsCard}>
             <Text size={14} weight={600}>Contract Details</Text>
@@ -297,7 +304,7 @@ export function TradeCard({
             {altOpen && (
               <div className={styles.altList}>
                 {data.alternatives.map((alt, i) => (
-                  <AlternativeContractRow key={alt.strike + alt.expiry} alt={alt} rank={i + 1} />
+                  <AlternativeContractRow key={`${alt.strike}|${alt.expiry}|${alt.right ?? ''}`} alt={alt} rank={i + 1} />
                 ))}
               </div>
             )}
@@ -456,7 +463,19 @@ export function TradeCard({
         >
           <Text size={13} weight={500}>{chartOpen ? 'Hide chart' : 'View chart'}</Text>
         </button>
-        <button type="button" className={styles.btn}>
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={() => {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${data.symbol}-trade-card.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
           <Text size={13} weight={500}>Export JSON</Text>
         </button>
       </div>

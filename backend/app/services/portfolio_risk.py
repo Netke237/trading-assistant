@@ -81,17 +81,20 @@ def check_position_risk(
             portfolio_exposure_pct=_current_exposure(portfolio, portfolio_value),
         )
 
-    capital_at_risk = entry_premium * proposed_contracts * 100
+    is_stock = contract_id.endswith("|STOCK")
+    multiplier = 1 if is_stock else 100
+    capital_at_risk = entry_premium * proposed_contracts * multiplier
     single_exposure_pct = capital_at_risk / portfolio_value
     max_single = rules["max_single_trade_exposure_pct"]
 
     if single_exposure_pct > max_single:
         max_allowed_premium = portfolio_value * max_single
-        adjusted = int(max_allowed_premium / (entry_premium * 100))
+        adjusted = int(max_allowed_premium / (entry_premium * multiplier))
         if adjusted >= 1:
             adjusted_size = adjusted
-            capital_at_risk = entry_premium * adjusted_size * 100
+            capital_at_risk = entry_premium * adjusted_size * multiplier
             single_exposure_pct = capital_at_risk / portfolio_value
+            reasons.append("size_reduced_to_fit_exposure_limit")
         else:
             reasons.append("single_trade_exposure_too_high")
 

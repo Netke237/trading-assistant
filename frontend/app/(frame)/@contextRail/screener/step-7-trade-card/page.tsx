@@ -27,10 +27,12 @@ function buildChecklist(
 ): Gate[] {
   const gates: Gate[] = [];
 
-  // Regime
-  const regimeStatus =
-    regime === 'PASS' ? 'PASS' : regime === 'CAUTION' ? 'CAUTION' : 'REJECT';
-  gates.push({ label: 'Regime PASS', status: regimeStatus });
+  // Regime — PENDING/NO_DATA means scan not run yet, show CAUTION not REJECT
+  if (regime !== 'PENDING' && regime !== 'NO_DATA') {
+    const regimeStatus: 'PASS' | 'CAUTION' | 'REJECT' =
+      regime === 'PASS' ? 'PASS' : regime === 'CAUTION' ? 'CAUTION' : 'REJECT';
+    gates.push({ label: 'Regime PASS', status: regimeStatus });
+  }
 
   // IV rank acceptable (≤50 PASS, 51–70 CAUTION, >70 REJECT)
   const ivRank = candidate.contractDetails?.ivRank;
@@ -75,7 +77,7 @@ function buildChecklist(
 
 export default function TradeCardContextRail() {
   const selectedSymbol      = useScanStore((s) => s.selectedSymbol);
-  const regime              = useScanStore((s) => s.regime);
+  const regime              = useScanStore((s) => s.combinedRegime);
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
   const candidates          = scanResultCandidates ?? [];
 

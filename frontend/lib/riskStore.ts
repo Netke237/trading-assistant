@@ -102,7 +102,7 @@ export const useRiskStore = create<RiskState>()(
         let totalNotional = 0;
         const symbolNotional: Record<string, number> = {};
         for (const p of positions) {
-          const notional = p.currentPrice * 100 * (p.contracts ?? 1);
+          const notional = p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1);
           totalNotional += notional;
           symbolNotional[p.symbol] = (symbolNotional[p.symbol] ?? 0) + notional;
         }
@@ -127,16 +127,16 @@ export const useRiskStore = create<RiskState>()(
               : 'PASS'
         );
         statuses.push(
-          concurrentPositions > limits.maxConcurrentPositions
+          concurrentPositions >= limits.maxConcurrentPositions
             ? 'REJECT'
-            : concurrentPositions > limits.maxConcurrentPositions * 0.8
+            : concurrentPositions >= Math.floor(limits.maxConcurrentPositions * 0.8)
               ? 'CAUTION'
               : 'PASS'
         );
         statuses.push(
-          dailyRecommendations > limits.maxDailyRecommendations
+          dailyRecommendations >= limits.maxDailyRecommendations
             ? 'REJECT'
-            : dailyRecommendations > limits.maxDailyRecommendations * 0.8
+            : dailyRecommendations >= Math.floor(limits.maxDailyRecommendations * 0.8)
               ? 'CAUTION'
               : 'PASS'
         );
@@ -165,10 +165,12 @@ export const useRiskStore = create<RiskState>()(
     }),
     {
       name: 'bamendjou-risk-v1',
+      skipHydration: true,
       partialize: (state) => ({
         limits: state.limits,
         dailyRecommendations: state.dailyRecommendations,
         lastResetDate: state.lastResetDate,
+        symbols: state.symbols,
       }),
     }
   )

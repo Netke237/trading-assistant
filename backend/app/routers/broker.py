@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.data.ibkr_paper import BrokerOrder
 from app.services.broker_router import build_router_from_credentials
+from app.services.audit import log_event, new_rec_id
 
 router = APIRouter(prefix="/broker", tags=["broker"])
 
@@ -16,7 +17,7 @@ class StockOrderRequest(BaseModel):
     broker: BrokerKey
     symbol: str
     action: Literal["BUY", "SELL"]
-    quantity: int
+    quantity: int = Field(..., ge=1)
     order_type: Literal["MKT", "LMT"] = "LMT"
     limit_price: Optional[float] = None
     tif: Literal["DAY", "GTC"] = "DAY"
@@ -27,7 +28,7 @@ class OptionOrderRequest(BaseModel):
     symbol: str
     option_symbol: str
     action: Literal["BUY", "SELL"]
-    quantity: int
+    quantity: int = Field(..., ge=1)
     order_type: Literal["MKT", "LMT"] = "LMT"
     limit_price: Optional[float] = None
     tif: Literal["DAY", "GTC"] = "DAY"
@@ -37,7 +38,20 @@ class OptionOrderRequest(BaseModel):
 @router.post("/stock-order")
 async def place_stock_order(req: StockOrderRequest) -> dict:
     """Place a paper stock order on the specified broker."""
-    router_ = build_router_from_credentials()
+    rec_id = new_rec_id()
+    log_event("broker_order_attempt", rec_id, {
+        "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+        "action": req.action, "quantity": req.quantity,
+        "order_type": req.order_type, "limit_price": req.limit_price, "tif": req.tif,
+    })
+    try:
+        router_ = build_router_from_credentials()
+    except Exception as exc:
+        log_event("broker_order_failed", rec_id, {
+            "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+            "http_status": 503, "error": f"credentials: {exc}",
+        })
+        raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
     order = BrokerOrder(
         symbol=req.symbol,
         action=req.action,
@@ -50,16 +64,42 @@ async def place_stock_order(req: StockOrderRequest) -> dict:
     try:
         result = router_.execute(req.broker, order)
     except ValueError as exc:
+        log_event("broker_order_failed", rec_id, {
+            "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+            "http_status": 400, "error": str(exc),
+        })
         raise HTTPException(status_code=400, detail=str(exc))
     except RuntimeError as exc:
+        log_event("broker_order_failed", rec_id, {
+            "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+            "http_status": 502, "error": str(exc),
+        })
         raise HTTPException(status_code=502, detail=str(exc))
+    log_event("broker_order_filled", rec_id, {
+        "kind": "stock", "broker": result.broker, "symbol": req.symbol,
+        "order_id": result.order_id, "status": result.status,
+    })
     return {"order_id": result.order_id, "status": result.status, "broker": result.broker}
 
 
 @router.post("/option-order")
 async def place_option_order(req: OptionOrderRequest) -> dict:
     """Place a paper options order on the specified broker."""
-    router_ = build_router_from_credentials()
+    rec_id = new_rec_id()
+    log_event("broker_order_attempt", rec_id, {
+        "kind": "option", "broker": req.broker, "symbol": req.symbol,
+        "option_symbol": req.option_symbol, "action": req.action,
+        "quantity": req.quantity, "order_type": req.order_type,
+        "limit_price": req.limit_price, "tif": req.tif,
+    })
+    try:
+        router_ = build_router_from_credentials()
+    except Exception as exc:
+        log_event("broker_order_failed", rec_id, {
+            "kind": "option", "broker": req.broker, "symbol": req.symbol,
+            "http_status": 503, "error": f"credentials: {exc}",
+        })
+        raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
     order = BrokerOrder(
         symbol=req.symbol,
         action=req.action,
@@ -74,9 +114,21 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
     try:
         result = router_.execute(req.broker, order)
     except ValueError as exc:
+        log_event("broker_order_failed", rec_id, {
+            "kind": "option", "broker": req.broker, "symbol": req.symbol,
+            "http_status": 400, "error": str(exc),
+        })
         raise HTTPException(status_code=400, detail=str(exc))
     except RuntimeError as exc:
+        log_event("broker_order_failed", rec_id, {
+            "kind": "option", "broker": req.broker, "symbol": req.symbol,
+            "http_status": 502, "error": str(exc),
+        })
         raise HTTPException(status_code=502, detail=str(exc))
+    log_event("broker_order_filled", rec_id, {
+        "kind": "option", "broker": result.broker, "symbol": req.symbol,
+        "order_id": result.order_id, "status": result.status,
+    })
     return {"order_id": result.order_id, "status": result.status, "broker": result.broker}
 
 

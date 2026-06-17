@@ -16,6 +16,12 @@ OrderType = Literal["MKT", "LMT"]
 ActionType = Literal["BUY", "SELL"]
 TIF = Literal["DAY", "GTC"]
 
+# Tradier option orders require open/close side semantics; plain "buy"/"sell" is
+# only valid for equity orders. The screener always opens a new position, so
+# BUY→buy_to_open and SELL→sell_to_open. (Closing variants — buy_to_close /
+# sell_to_close — are not used until an exit flow exists.)
+_OPTION_SIDE = {"BUY": "buy_to_open", "SELL": "sell_to_open"}
+
 
 @dataclass
 class BrokerOrder:
@@ -61,7 +67,7 @@ class TradierPaperAdapter:
         params: dict = {
             "class":    "option" if is_option else "equity",
             "symbol":   order.symbol,
-            "side":     order.action.lower(),
+            "side":     _OPTION_SIDE[order.action] if is_option else order.action.lower(),
             "quantity": str(order.quantity),
             "type":     "market" if order.order_type == "MKT" else "limit",
             "duration": order.tif.lower(),
@@ -83,7 +89,7 @@ class TradierPaperAdapter:
             raise RuntimeError(f"Tradier paper order failed: connection error — {exc}") from exc
         if resp.status_code >= 400:
             raise RuntimeError(
-                f"Tradier paper order failed: HTTP {resp.status_code} — {resp.text[:200]}"
+                f"Tradier paper order failed: HTTP {resp.status_code} — {resp.text[:500]}"
             )
         data = resp.json().get("order", {})
         return OrderResult(

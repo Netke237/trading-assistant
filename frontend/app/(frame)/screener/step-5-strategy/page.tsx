@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { useRiskStore } from '@/lib/riskStore';
 import { useShallow } from 'zustand/shallow';
 import { api, getLastDataRefresh } from '@/lib/api';
 import styles from './page.module.css';
@@ -106,6 +107,7 @@ export default function Step5StrategyPage() {
     breakout_base:      `Break above N-day high after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
   };
 
+  const portfolioValue = useRiskStore((s) => s.limits.portfolioValue);
   const [loadingStrategy, setLoadingStrategy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshTs, setLastRefreshTs] = useState<string | null>(null);
@@ -113,6 +115,13 @@ export default function Step5StrategyPage() {
     'idle' | 'running' | 'completed' | 'error' | null
   >(null);
   const [prefetchProgress, setPrefetchProgress] = useState<{ done: number; total: number } | null>(null);
+  const prefetchPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (prefetchPollRef.current) clearInterval(prefetchPollRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     getLastDataRefresh()
@@ -145,7 +154,7 @@ export default function Step5StrategyPage() {
         rsi_trend_sma:          params.rsiTrendSma,
         bt_min_trades:          params.btMinTrades,
         bt_min_win_rate:        params.btMinWinRate,
-        account_size: 50_000,
+        account_size: portfolioValue,
         risk_pct: 0.01,
         shortlist_max_candidates: params.stockShortlistMax,
       });
@@ -163,16 +172,16 @@ export default function Step5StrategyPage() {
       const universe = context?.universe ? [context.universe] : ['SP500'];
       await api.startHistoryPrefetch({ universe });
       setPrefetchStatus('running');
-      const poll = setInterval(async () => {
+      prefetchPollRef.current = setInterval(async () => {
         try {
           const s = await api.getHistoryPrefetchStatus();
           setPrefetchProgress({ done: s.done, total: s.total });
           if (s.status === 'completed' || s.status === 'error') {
             setPrefetchStatus(s.status);
-            clearInterval(poll);
+            if (prefetchPollRef.current) { clearInterval(prefetchPollRef.current); prefetchPollRef.current = null; }
           }
         } catch {
-          clearInterval(poll);
+          if (prefetchPollRef.current) { clearInterval(prefetchPollRef.current); prefetchPollRef.current = null; }
         }
       }, 5_000);
     } catch {

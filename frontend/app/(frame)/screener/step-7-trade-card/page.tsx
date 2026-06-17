@@ -15,6 +15,7 @@ import { TradeCard } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useRiskStore } from '@/lib/riskStore';
 import { contractId as buildContractId } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
 import { logAudit } from '@/lib/audit';
@@ -59,7 +60,7 @@ function positionFromOrder(order: DraftOrder): PortfolioPosition {
     contract:      c.contract,
     direction:     c.direction,
     entryDate:     todayISO(),
-    expiry:        cd?.expiry ?? '2026-05-15',
+    expiry:        cd?.expiry ?? new Date(Date.now() + dte * 86_400_000).toISOString().slice(0, 10),
     dteRemaining:  dte,
     dteTotal:      dte,
     entryPrice:    mid,
@@ -132,6 +133,7 @@ export default function Step7Page() {
   useEffect(() => { setPaperOrderId(null); setOrderError(null); }, [active]);
 
   const addPosition = usePortfolioStore((s) => s.addPosition);
+  const incrementDaily = useRiskStore((s) => s.incrementDaily);
 
   const cardIndex = useMemo(
     () => Object.fromEntries(cards.map((c) => [c.symbol, c])),
@@ -280,6 +282,7 @@ export default function Step7Page() {
       // (a single POST), so there is no second POST to conflict (409) with.
       const recId = recIdMap[o.card.symbol] ?? generateRecId();
       addPosition({ ...positionFromOrder(o), recId });
+      incrementDaily();
 
       if (o.autoSend) auto++;
       else manual++;

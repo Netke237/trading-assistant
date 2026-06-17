@@ -697,13 +697,14 @@ function parseCustomDays(h: string | undefined): [number, number] {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function Step2Page() {
-  const context       = useScanStore((s) => s.context);
-  const setContext    = useScanStore((s) => s.setContext);
-  const rejectedLog   = useScanStore((s) => s.rejectedLog);
-  const regime        = useScanStore((s) => s.regime);
-  const scanOverrides = useScanStore((s) => s.scanOverrides);
-  const scanResult    = useScanStore((s) => s.scanResult);
+export default function Step3Page() {
+  const context        = useScanStore((s) => s.context);
+  const setContext     = useScanStore((s) => s.setContext);
+  const rejectedLog    = useScanStore((s) => s.rejectedLog);
+  const regime         = useScanStore((s) => s.regime);
+  const scanOverrides  = useScanStore((s) => s.scanOverrides);
+  const scanResult     = useScanStore((s) => s.scanResult);
+  const screenerMode   = useScanStore((s) => s.screenerMode);
 
   const [dir,     setDir]     = useState<Direction>(() => context?.direction ?? 'Bullish');
   const [hz,      setHz]      = useState<HorizonKey>(() => parseHorizonKey(context?.horizon));
@@ -966,6 +967,7 @@ export default function Step2Page() {
         )}
       </div>
 
+      {screenerMode !== 'stocks' && (
       <div className={formStyles.logSection}>
         <div className={formStyles.logHeader}>
           <Text size={11} tone="dim" weight={500}>SCAN LOG</Text>
@@ -1000,6 +1002,7 @@ export default function Step2Page() {
           )}
           <ScanLogSection entries={rejectedLog} horizonKey={horizonKey} />
       </div>
+      )}
 
       <RunScanButton />
     </div>

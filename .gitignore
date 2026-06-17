@@ -59,6 +59,7 @@ Thumbs.db
 .playwright-mcp/
 backend/audit.log
 backend/config/settings.yaml
+backend/config/local_credentials.yaml
 
 # SQLite WAL/SHM sidecars
 *.db-shm

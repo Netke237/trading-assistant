@@ -235,7 +235,9 @@ export function contractId(symbol: string, strike: number, expiry: string, right
 
 /** Short UI label, e.g. "AAPL 190C 05/15". */
 export function contractLabel(c: Pick<OptionContract, 'symbol' | 'strike' | 'right' | 'expiry'>): string {
-  const [, mm, dd] = c.expiry.split('-');
+  const parts = (c.expiry ?? '').split('-');
+  const mm = parts[1] ?? '--';
+  const dd = parts[2] ?? '--';
   return `${c.symbol} ${c.strike}${c.right} ${mm}/${dd}`;
 }
 
@@ -356,12 +358,6 @@ export type AlertType =
   | 'REGIME_CHANGE'
   | 'SCAN_COMPLETE'
   | 'SCAN_FAILED';
-
-export interface AlertRule {
-  type: AlertType;
-  label: string;
-  threshold?: number;  // e.g. DTE threshold for time-stop
-}
 
 export interface ToastItem {
   id: string;

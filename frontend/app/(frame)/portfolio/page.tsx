@@ -73,7 +73,7 @@ export default function PortfolioPage() {
     fetchHistory();
   }, [syncFromBackend, fetchHistory, fetchPerformance]);
 
-  const deployed = positions.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
+  const deployed = positions.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
   const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
   const openPnLPct = deployed > 0 ? (openPnL / deployed) * 100 : 0;
   const winners = positions.filter((p) => p.pnlDollar > 0).length;
@@ -405,7 +405,8 @@ function EditDrawer({
           hint="Manual override — will refresh from broker in live mode."
           value={position.currentPrice}
           onChange={(n) => {
-            const pnlDollar = (n - position.entryPrice) * 100 * (position.contracts ?? 1);
+            const mult = position.contract.endsWith('|STOCK') ? 1 : 100;
+            const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
             const pnlPct    = ((n - position.entryPrice) / position.entryPrice) * 100;
             onChange({ currentPrice: n, pnlDollar, pnlPct });
           }}

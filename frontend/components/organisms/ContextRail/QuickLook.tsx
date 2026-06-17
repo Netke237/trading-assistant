@@ -51,7 +51,7 @@ export function RailQuickLook() {
   );
 
   const deployed = portfolio.reduce(
-    (s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1),
+    (s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1),
     0,
   );
   const openPnL = portfolio.reduce((s, p) => s + p.pnlDollar, 0);
@@ -95,27 +95,7 @@ export function RailQuickLook() {
 
       {dataSources !== null && dataSources.length > 0 && (
         <RailSection title="Data Sources">
-          <div className={styles.dataSourceStack}>
-            {dataSources.map((src) => (
-              <div
-                key={src.id}
-                className={styles.dataSourceRow}
-                title={src.detail ?? src.provides.join(', ')}
-              >
-                <span
-                  className={styles.statusDot}
-                  data-status={src.status}
-                  aria-label={src.status}
-                />
-                <Text size={12} tone="secondary">{src.label}</Text>
-                <span className={styles.dataSourceStatus}>
-                  <Text size={11} tone="dim">
-                    {src.status}
-                  </Text>
-                </span>
-              </div>
-            ))}
-          </div>
+          <DataSourceGroups sources={dataSources} styles={styles} />
         </RailSection>
       )}
     </>
@@ -124,4 +104,57 @@ export function RailQuickLook() {
 
 function Row({ children }: { children: React.ReactNode }) {
   return <div className={styles.row}>{children}</div>;
+}
+
+const BROKER_FAMILIES = [
+  { prefix: 'alpaca',  ids: ['alpaca', 'alpaca_paper'] },
+  { prefix: 'ibkr',   ids: ['ibkr', 'ibkr_paper'] },
+  { prefix: 'tradier', ids: ['tradier', 'tradier_paper'] },
+];
+const DATA_SOURCE_IDS = ['tiingo', 'yfinance'];
+
+function DsRow({ src, styles: s }: { src: DataSourceInfo; styles: Record<string, string> }) {
+  return (
+    <div className={s.dataSourceRow} title={src.detail ?? src.provides.join(', ')}>
+      <span className={s.statusDot} data-status={src.status} aria-label={src.status} />
+      <Text size={12} tone="secondary">{src.label}</Text>
+      <span className={s.dataSourceStatus}>
+        <Text size={11} tone="dim">{src.status}</Text>
+      </span>
+    </div>
+  );
+}
+
+function DataSourceGroups({ sources, styles: s }: { sources: DataSourceInfo[]; styles: Record<string, string> }) {
+  const byId = new Map(sources.map((src) => [src.id, src]));
+
+  const brokerGroups = BROKER_FAMILIES.map(({ ids }) =>
+    ids.map((id) => byId.get(id)).filter(Boolean) as DataSourceInfo[]
+  ).filter((g) => g.length > 0);
+
+  const dataRows = DATA_SOURCE_IDS.map((id) => byId.get(id)).filter(Boolean) as DataSourceInfo[];
+
+  const allGrouped = new Set([
+    ...BROKER_FAMILIES.flatMap((f) => f.ids),
+    ...DATA_SOURCE_IDS,
+  ]);
+  const other = sources.filter((src) => !allGrouped.has(src.id));
+
+  return (
+    <div className={s.dataSourceStack}>
+      {brokerGroups.map((group, i) => (
+        <div key={group[0]!.id} className={s.dataSourceGroup}>
+          {i > 0 && <hr className={s.dataSourceDivider} />}
+          {group.map((src) => <DsRow key={src.id} src={src} styles={s} />)}
+        </div>
+      ))}
+      {dataRows.length > 0 && (
+        <>
+          <hr className={s.dataSourceDivider} />
+          {dataRows.map((src) => <DsRow key={src.id} src={src} styles={s} />)}
+        </>
+      )}
+      {other.map((src) => <DsRow key={src.id} src={src} styles={s} />)}
+    </div>
+  );
 }

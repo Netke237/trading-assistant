@@ -16,7 +16,7 @@
   gap: 8px;
   padding: 10px 14px;
   background: var(--bg-surface);
-  border: 1px solid var(--pass);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   min-width: 240px;
   max-width: 360px;

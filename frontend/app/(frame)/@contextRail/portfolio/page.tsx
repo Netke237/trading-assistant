@@ -12,11 +12,15 @@ import styles from './page.module.css';
 
 export default function PortfolioContextRail() {
   const positions = usePortfolioStore((s) => s.positions);
-  const deployed = positions.reduce((s, p) => s + p.currentPrice * 100 * (p.contracts ?? 1), 0);
+  const deployed = positions.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
   const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
-  const delta = positions.reduce((s, p) => s + (p.direction === 'Bullish' ? 0.45 : -0.42), 0).toFixed(2);
-  const theta = (-(positions.length * 3.8)).toFixed(1);
-  const vega  = (positions.length * 5.4).toFixed(1);
+  const hasGreeks = positions.some((p) => p.delta != null || p.theta != null);
+  const aggDelta = hasGreeks
+    ? positions.reduce((s, p) => s + (p.delta ?? 0) * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0).toFixed(2)
+    : null;
+  const aggTheta = hasGreeks
+    ? positions.reduce((s, p) => s + (p.theta ?? 0) * (p.contracts ?? 1), 0).toFixed(1)
+    : null;
 
   return (
     <>
@@ -35,9 +39,8 @@ export default function PortfolioContextRail() {
 
       <RailSection title="Aggregate Greeks">
         <div className={styles.statStack}>
-          <Row><Text size={12} tone="secondary">Δ Delta</Text><Data size={12}>{delta}</Data></Row>
-          <Row><Text size={12} tone="secondary">Θ Theta / day</Text><Data size={12} tone="reject">{theta}</Data></Row>
-          <Row><Text size={12} tone="secondary">ν Vega</Text><Data size={12}>{vega}</Data></Row>
+          <Row><Text size={12} tone="secondary">Δ Delta</Text><Data size={12}>{aggDelta ?? '—'}</Data></Row>
+          <Row><Text size={12} tone="secondary">Θ Theta / day</Text><Data size={12} tone={aggTheta != null ? (parseFloat(aggTheta) < 0 ? 'reject' : 'pass') : undefined}>{aggTheta ?? '—'}</Data></Row>
         </div>
       </RailSection>
 

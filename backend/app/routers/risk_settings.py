@@ -7,6 +7,9 @@ import yaml
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from app.services import portfolio_risk, alert_generator
+from app.routers import scan as scan_router
+
 router = APIRouter(prefix='/settings', tags=['settings'])
 
 _RISK_PATH = Path(__file__).parent.parent.parent / 'config' / 'risk_rules.yaml'
@@ -48,4 +51,8 @@ async def save_risk_settings(body: RiskConfig) -> dict:
         cfg['reward_risk'] = {}
     cfg['reward_risk']['premium_stop_pct'] = body.premiumStopPct
     _save_risk(cfg)
+    # Clear in-memory caches so the new value takes effect without a restart
+    portfolio_risk._load_config.cache_clear()
+    alert_generator._load_risk_config.cache_clear()
+    scan_router._rr_cfg.cache_clear()
     return {'premiumStopPct': body.premiumStopPct}

@@ -84,7 +84,7 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     entryPrice:    p.entryPrice,
     qty:           p.contracts ?? 1,
     entryDate:     p.entryDate ?? new Date().toISOString().slice(0, 10),
-    stop:          p.stop ?? null,
+    stop:          p.stop > 0 ? p.stop : null,
     targets:       p.targets ?? [],
     dteTotal:      p.dteTotal ?? null,
     portfolioValue,
@@ -245,6 +245,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     }),
     {
       name: 'bamendjou-portfolio-v1',
+      skipHydration: true,
       partialize: (state) => ({ positions: state.positions }),
       merge: (persistedState, currentState) => {
         const ps = persistedState as Partial<PortfolioStoreState> | undefined;

@@ -75,6 +75,8 @@ interface ScanStoreState {
   stockScanResult:          StockScanResult | null;
   /** Previous stock scan result for delta calculation (rankDelta / scoreDelta). */
   previousStockScanResult:  StockScanResult | null;
+  /** ISO-ish local timestamp of the last completed stock scan. */
+  stockScanAt:         string | null;
   setStockScanResult:  (r: StockScanResult | null) => void;
   stockBasket:           PositionCardData[];
   addToStockBasket:      (card: PositionCardData) => void;
@@ -120,12 +122,14 @@ export const useScanStore = create<ScanStoreState>()(
       screenerMode:             'options',
       stockScanResult:          null,
       previousStockScanResult:  null,
+      stockScanAt:              null,
       stockBasket:           [],
       activeStrategy:           null,
       setScreenerMode:     (m) => set({ screenerMode: m }),
       setStockScanResult:  (r) => set((state) => ({
         stockScanResult: r,
         previousStockScanResult: r !== null ? state.stockScanResult : state.previousStockScanResult,
+        stockScanAt: r !== null ? new Date().toISOString().slice(0, 19) : state.stockScanAt,
       })),
       addToStockBasket:      (card) => set((s) => ({
         stockBasket: [...s.stockBasket.filter((c) => c.symbol !== card.symbol), card],
@@ -143,14 +147,17 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 5,
+      version: 6,
       migrate: (persistedState, version) => {
-        const prev = (persistedState ?? {}) as any;
-        if (version < 2) return { ...prev, pickedContracts: {} };
-        if (version < 3) return { ...prev, scanDurationMs: null };
-        if (version < 4) return { ...prev, screenerMode: 'options', stockScanResult: null, activeStrategy: null };
-        if (version < 5) return { ...prev, previousStockScanResult: null, stockBasket: [] };
-        return prev;
+        // Branches must accumulate — no early returns — so a store at any old
+        // version receives ALL intermediate field additions in one migration pass.
+        let s = { ...((persistedState ?? {}) as Record<string, unknown>) };
+        if (version < 2) s = { ...s, pickedContracts: {} };
+        if (version < 3) s = { ...s, scanDurationMs: null };
+        if (version < 4) s = { ...s, screenerMode: 'options', stockScanResult: null, activeStrategy: null };
+        if (version < 5) s = { ...s, previousStockScanResult: null, stockBasket: [] };
+        if (version < 6) s = { ...s, stockScanAt: null };
+        return s;
       },
       partialize: (state) => ({
         scanResult:      state.scanResult,
@@ -166,6 +173,7 @@ export const useScanStore = create<ScanStoreState>()(
         activeStrategy:           state.activeStrategy,
         stockScanResult:          state.stockScanResult,
         previousStockScanResult:  state.previousStockScanResult,
+        stockScanAt:              state.stockScanAt,
         stockBasket:     state.stockBasket,
       }),
       merge: (persisted, current) => {

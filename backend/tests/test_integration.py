@@ -3,6 +3,7 @@ Integration tests: real candles (Tiingo-sourced, pinned) + full scorer pipeline.
 Network-free — fixtures are committed JSON files.
 """
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -54,12 +55,14 @@ def test_score_stock_bearish_returns_valid_card():
 # ── validate_contract ─────────────────────────────────────────────────────────
 
 def _sample_contract(stock_score: int = 70) -> dict:
+    expiry = (date.today() + timedelta(days=59)).isoformat()
     return {
-        "id": "AAPL|185|2026-06-30|C",
+        "id": f"AAPL|185|{expiry}|C",
         "symbol": "AAPL",
         "strike": 185,
-        "expiry": "2026-06-30",
+        "expiry": expiry,
         "right": "C",
+        "is_call": True,
         "dte": 59,
         "dteTotal": 59,
         "price": 5.20,
@@ -67,7 +70,7 @@ def _sample_contract(stock_score: int = 70) -> dict:
         "ask": 5.30,
         "delta": 0.52,
         "theta": -0.04,
-        "ivRank": 42,
+        "iv_rank": 42,
         "ivPercentile": 0,
         "spread": 0.20,
         "volume": 1500,

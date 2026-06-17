@@ -259,10 +259,12 @@ export const useAlertStore = create<AlertStoreState>()(
     }),
     {
       name: 'bamendjou-alerts-v2',
+      skipHydration: true,
       partialize: (state) => ({
         toasts: state.toasts,
         config: state.config,
         suppressedAlerts: state.suppressedAlerts,
+        firedAlerts: state.firedAlerts,
       }),
       merge: (persistedState, currentState) => {
         const ps = persistedState as Partial<AlertStoreState> | undefined;
@@ -271,6 +273,7 @@ export const useAlertStore = create<AlertStoreState>()(
           toasts: ps?.toasts ?? [],
           config: { ...DEFAULT_CONFIG, ...(ps?.config ?? {}) },
           suppressedAlerts: ps?.suppressedAlerts ?? {},
+          firedAlerts: ps?.firedAlerts ?? {},
         };
         // purge old alerts, then collapse any pre-existing duplicate pile-up
         const cutoff = Date.now() - merged.config.keepAlertsDays * 86_400_000;

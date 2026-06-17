@@ -10,6 +10,11 @@ import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
 import { useThemeStore } from '@/lib/theme';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
+import { useDrawingStore } from '@/lib/drawingStore';
+import { useRiskStore } from '@/lib/riskStore';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useAlertStore } from '@/lib/alertStore';
+import { useScanParamsStore } from '@/lib/scanParamsStore';
 
 export function StoreHydration() {
   useEffect(() => {
@@ -22,6 +27,11 @@ export function StoreHydration() {
     useWatchedContractsStore.persist.rehydrate();
     useThemeStore.persist.rehydrate();
     useAutoTradeStore.persist.rehydrate();
+    useDrawingStore.persist.rehydrate();
+    useRiskStore.persist.rehydrate();
+    usePortfolioStore.persist.rehydrate();
+    useAlertStore.persist.rehydrate();
+    useScanParamsStore.persist.rehydrate();
   }, []);
 
   return null;

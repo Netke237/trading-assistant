@@ -34,6 +34,10 @@
   grid-column: 1 / -1;
 }
 
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
 .targetsCard {
   grid-column: 1 / -1;
 }

@@ -216,3 +216,13 @@ so existing bullish behavior is preserved.
 - Spread pricing depends on an options chain with bid/ask per leg; confirm the
   data layer (`frontend/lib/api.ts` / backend contracts router) returns
   per-strike quotes needed to compute net debit/credit.
+- **OPEN POINT — bearish option order side mapping.** Step 7 maps direction →
+  action as `Bullish → BUY`, `Bearish → SELL`
+  (`frontend/app/(frame)/screener/step-7-trade-card/page.tsx:228`). The Tradier
+  adapter now turns `SELL` into `sell_to_open`
+  (`backend/app/data/tradier_paper.py`), i.e. **writing/shorting** the option. If
+  the bearish strategy is meant to **buy puts** (long put, debit), this is wrong:
+  a bearish entry should send `BUY` on a put contract, not `SELL`. Decide whether
+  bearish = long puts (fix the frontend mapping to `BUY`) or = short calls/credit
+  (current mapping is correct). Bullish buys are unaffected — they already work
+  after the side fix. Surfaced 2026-06-15 while fixing the Tradier 502.
