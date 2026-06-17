@@ -160,11 +160,11 @@ Expected: FAIL — `alignmentVerdict` not found.
 - [ ] **Step 3: Implement the helper**
 
 ```ts
-import type { Direction } from '@/types/domain';
+import type { Direction, HmmState } from '@/types/domain';   // HmmState = 'Bull'|'Bear'|'Choppy' (domain.ts:273)
 import type { Status } from '@/lib/status';   // Status lives in lib/status, NOT re-exported from domain.ts
 
-/** Regime descriptor as produced by the OMM/HMM layer. */
-export type RegimeDescriptor = 'Bull' | 'Bear' | 'Choppy';
+/** Regime descriptor as produced by the OMM/HMM layer. Reuse HmmState to avoid drift. */
+export type RegimeDescriptor = HmmState;
 
 /**
  * Alignment of the trader's chosen direction with the market regime descriptor.
@@ -912,7 +912,7 @@ In `strategy_watch_store.py`, extend `add_watch` and the record:
             }
 ```
 
-Thread `direction` through `add_watches_bulk(symbols, strategy_key, direction="Bullish")` and the watch-create router/schema (add an optional `direction: str = "Bullish"` field). Existing rows without the key fall back via `.get("direction", "Bullish")`.
+Thread `direction` through `add_watches_bulk(symbols, strategy_key, direction="Bullish")` AND both watch endpoints in `backend/app/routers/strategy_watch.py`: the create endpoint (schema `AddWatch`, ~line 16) and the bulk endpoint (schema `BulkAdd`, ~line 22, handler ~line 56) — each gets an optional `direction: str = "Bullish"` field passed to the store. Existing rows without the key fall back via `.get("direction", "Bullish")`.
 
 - [ ] **Step 3b: Evaluator passes direction to both `get_active` and the signal fn**
 
@@ -947,6 +947,33 @@ In `_format_event` (line 158–162), make the entry subject direction-aware usin
 
 Update the module docstring (line 7–8) to drop "Bullish-only".
 
+- [ ] **Step 3d: Make the armed-phase EXIT transitions direction-aware (critical)**
+
+The armed-phase exits at lines 111/120 are hardcoded bullish (`close <= stop_price` for stop, `close >= target_price` for target). For a bearish watch, stop > entry > target, so a bullish stop check fires spuriously on the first evaluation after arming. Mirror the comparisons by the armed `state["direction"]`:
+
+```python
+        elif phase == "armed":
+            sdir = state.get("direction", "Bullish")
+            stop_price = state.get("stop_price")
+            target_price = state.get("target_price")
+            stop_hit = (
+                (close <= stop_price) if sdir == "Bullish" else (close >= stop_price)
+            ) if stop_price is not None else False
+            target_hit = (
+                (close >= target_price) if sdir == "Bullish" else (close <= target_price)
+            ) if target_price is not None else False
+            if stop_hit:
+                # ...existing exit_stop event + state reset...
+            elif target_hit:
+                # ...existing exit_target event + state reset...
+            elif signal is not None and signal.direction != state.get("direction"):
+                # ...existing reversal branch (unchanged)...
+```
+
+Keep the existing event payloads/state resets inside each branch; only the trigger conditions change. `state["direction"]` is already stored at arm time (line 104).
+
+Add a watch test fixture: arm a bearish watch (entry 100, stop 105, target 90), feed `close=104` → assert NO exit_stop (104 < 105 is not a bearish stop), then `close=106` → exit_stop, and from a fresh arm `close=89` → exit_target.
+
 - [ ] **Step 4: Run to verify pass + no bullish regression**
 
 Run: `cd backend && pytest tests/test_strategy_watch_bearish.py -v && pytest tests/ -k watch -v`
@@ -957,6 +984,25 @@ Expected: new PASS; existing watch tests PASS (default `direction="Bullish"` pre
 ```bash
 git add backend/app/services/strategy_watch_store.py backend/app/services/strategy_watch_evaluator.py backend/app/routers/ backend/tests/test_strategy_watch_bearish.py
 git commit -m "feat(alerts): direction-aware strategy watches — record, signal, text (B9)"
+```
+
+### Task C9: Step-4 strategy descriptions are direction-aware (spec Part 4)
+
+**Files:**
+- Modify: `frontend/app/(frame)/screener/step-4-stocks/page.tsx` (the `STRATEGIES` description array)
+
+- [ ] **Step 1: Show direction-appropriate copy**
+
+The `STRATEGIES` array describes each setup in bullish terms ("Steady uptrends", "Dip to 20-EMA … in uptrend", "Below recent swing low"). Make the displayed `when`/`entry`/`stop`/`exit` text switch on the chosen direction (`scanStore.context.direction`). Provide a bearish string for each strategy mirroring the bullish one (e.g. pullback_ema bearish: "Steady downtrends" / "Bounce to 20-EMA in downtrend" / "Above recent swing high" / "Prior low / trailing stop under lower highs"). Purely presentational — no scan-logic change.
+
+- [ ] **Step 2: Typecheck + commit**
+
+Run: `cd frontend && npm run typecheck`
+Expected: clean.
+
+```bash
+git add "frontend/app/(frame)/screener/step-4-stocks/page.tsx"
+git commit -m "feat(stock-scan): direction-aware strategy descriptions (Part 4)"
 ```
 
 ---
@@ -1459,16 +1505,41 @@ Also extend `AlternativeContract` (`types/domain.ts:246`) with the same optional
   breakeven?:      number;
 ```
 
-- [ ] **Step 2: Typecheck**
+- [ ] **Step 2: Mirror the fields on the BACKEND Pydantic models (critical)**
 
-Run: `cd frontend && npm run typecheck`
-Expected: clean.
+FastAPI serializes the scan response through Pydantic models, so fields absent there are silently dropped before reaching the frontend. In `backend/app/schemas/__init__.py`, add a leg sub-model and the optional spread fields to `TradeCardData` (~line 378) and `AlternativeContract` (~line 359):
 
-- [ ] **Step 3: Commit**
+```python
+class OptionLeg(BaseModel):
+    right: Literal["C", "P"]
+    strike: float
+    expiry: str
+    action: Literal["BUY", "SELL"]
+    qty: int
+    bid: float
+    ask: float
+
+# add to both TradeCardData and AlternativeContract:
+    spread_type: Optional[Literal["single", "bear_put", "bear_call"]] = None
+    legs: Optional[list[OptionLeg]] = None
+    net_debit_credit: Optional[float] = None
+    max_profit: Optional[float] = None
+    max_loss: Optional[float] = None
+    breakeven: Optional[float] = None
+```
+
+Note the snake_case↔camelCase boundary: if the schema uses a `populate_by_name`/alias generator, follow the existing field-naming convention in that file; otherwise map snake_case → the frontend camelCase fields in `api.ts` where the response is adapted.
+
+- [ ] **Step 3: Typecheck + backend import check**
+
+Run: `cd frontend && npm run typecheck && cd ../backend && python -c "import app.schemas"`
+Expected: clean; no import error.
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/types/domain.ts
-git commit -m "feat(options): spread types on TradeCardData (B12)"
+git add frontend/types/domain.ts backend/app/schemas/__init__.py
+git commit -m "feat(options): spread types on TradeCardData — frontend + backend schema (B12)"
 ```
 
 ### Task F4: Backend attaches spreads to scan candidates
@@ -1499,21 +1570,26 @@ Expected: FAIL.
 
 For bearish candidates in Pass 2, decide the primary via `choose_primary(iv_rank, threshold)` FIRST, then fetch the chain(s) needed (`fetch_option_chain_async(client, symbol, option_type="P")` and/or `"C"`) via `asyncio.gather`. Build the primary spread (`build_bear_put`/`build_bear_call`) with `spread_width`/`short_leg_delta` from the request; attach its `legs`/economics to the trade card. Build the other spread as an `AlternativeContract` (now carries spread fields, Task F3) with a `reason`. Reject credit spreads below `min_credit` and debit spreads whose debit exceeds `max_debit_pct%` of width.
 
-- [ ] **Step 5: Run + commit**
+- [ ] **Step 5: Run + commit (include the `api.ts` arg added in Step 1)**
 
-Run: `cd backend && pytest tests/ -k scan -v`
-Expected: PASS.
+Run: `cd backend && pytest tests/ -k scan -v && cd ../frontend && npm run typecheck`
+Expected: PASS; clean.
 
 ```bash
-git add backend/app/routers/scan.py backend/app/schemas/ backend/tests/
-git commit -m "feat(options): attach bear spreads to bearish candidates (B12)"
+git add backend/app/routers/scan.py backend/app/schemas/__init__.py backend/tests/ frontend/lib/api.ts
+git commit -m "feat(options): attach bear spreads to bearish candidates + postScan spreads arg (B12)"
 ```
 
-### Task F5: Two-leg panel in TradeCard
+### Task F5: Spread display — Step 6 columns + Step 7 two-leg panel
 
 **Files:**
-- Modify: `frontend/components/organisms/TradeCard/index.tsx`
+- Modify: `frontend/app/(frame)/screener/step-6-contracts/page.tsx` (spread columns)
+- Modify: `frontend/components/organisms/TradeCard/index.tsx` (two-leg panel)
 - Modify: `frontend/app/(frame)/screener/step-7-trade-card/page.tsx` (order submission for spreads)
+
+- [ ] **Step 0: Step 6 — spread columns (spec Part 3)**
+
+When a candidate carries a spread structure, render the extra columns in the Step 6 table: spread-type badge (BPS/BCS), net debit/credit, max gain, max loss, breakeven. Single-leg rows keep the existing columns (render the spread columns empty/`—` when `spreadType` is absent). Follow the existing sortable-table conventions in this file.
 
 - [ ] **Step 1: Render legs when `card.spreadType && card.spreadType !== 'single'`**
 
@@ -1640,3 +1716,8 @@ git commit -m "feat(settings): editable Spreads section wired to scan (Part 7)"
   - MINOR: `/adopt` endpoint echo now returns `get_active(strategy, direction)`.
   - MINOR: F4→G2 channel made explicit — `api.postScan` gains a `spreads?` arg mapping to top-level `ScanRequest` fields.
   - Verified: E1 migration is back-compat — `adopt` migrates flat→`{bullish:…}`, one-arg `get_active` reads the bullish branch, existing one-arg optimizer tests stay green.
+- **Round-3 adversarial audit (BMAD) findings — all resolved (R1+R2 re-confirmed CLEARED against source):**
+  - MAJOR: backend Pydantic `TradeCardData`/`AlternativeContract` now also gain spread fields + `OptionLeg` sub-model (F3 Step 2) — without this, FastAPI drops spread fields at serialization and the UI never receives them.
+  - MAJOR: C8 Step 3d makes the armed-phase EXIT transitions direction-aware (lines 111/120 were hardcoded bullish → bearish watches mis-fired exit_stop immediately).
+  - MINOR: Step-6 spread columns covered (F5 Step 0); Step-4 direction-aware descriptions covered (new Task C9); bulk-watch direction threaded through `AddWatch`/`BulkAdd` endpoints (C8 Step 3a); F4 commit now includes `api.ts` + frontend typecheck; `RegimeDescriptor` reuses `HmmState`.
+- **Line-number note for the implementer:** cited line ranges (e.g. C1 "112–136") are anchors, not exact bounds — each code block is content-complete (full new body + return). Replace through the END of the function's existing return, not the literal cited line. Re-grep the target before editing; the repo drifts.
