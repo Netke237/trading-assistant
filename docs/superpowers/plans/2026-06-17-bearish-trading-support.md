@@ -1507,7 +1507,7 @@ Also extend `AlternativeContract` (`types/domain.ts:246`) with the same optional
 
 - [ ] **Step 2: Mirror the fields on the BACKEND Pydantic models (critical)**
 
-FastAPI serializes the scan response through Pydantic models, so fields absent there are silently dropped before reaching the frontend. In `backend/app/schemas/__init__.py`, add a leg sub-model and the optional spread fields to `TradeCardData` (~line 378) and `AlternativeContract` (~line 359):
+FastAPI serializes the scan response through Pydantic models, so fields absent there are silently dropped before reaching the frontend. **Critical naming rule:** these two models use **camelCase** field names with `model_config = ConfigDict(populate_by_name=True)` and **no alias generator** (verified: `ivRank`, `stockScore`, `rrRatio`, `contractConfidence`), so Pydantic serializes by the literal Python field name. The new fields MUST be camelCase to match the existing model and the frontend `domain.ts` types — do not use snake_case here. In `backend/app/schemas/__init__.py`, add a leg sub-model and the optional spread fields to `TradeCardData` (~line 378) and `AlternativeContract` (~line 359):
 
 ```python
 class OptionLeg(BaseModel):
@@ -1519,16 +1519,16 @@ class OptionLeg(BaseModel):
     bid: float
     ask: float
 
-# add to both TradeCardData and AlternativeContract:
-    spread_type: Optional[Literal["single", "bear_put", "bear_call"]] = None
-    legs: Optional[list[OptionLeg]] = None
-    net_debit_credit: Optional[float] = None
-    max_profit: Optional[float] = None
-    max_loss: Optional[float] = None
-    breakeven: Optional[float] = None
+# add to BOTH TradeCardData and AlternativeContract (camelCase to match siblings):
+    spreadType:     Optional[Literal["single", "bear_put", "bear_call"]] = None
+    legs:           Optional[list[OptionLeg]] = None
+    netDebitCredit: Optional[float] = None
+    maxProfit:      Optional[float] = None
+    maxLoss:        Optional[float] = None
+    breakeven:      Optional[float] = None
 ```
 
-Note the snake_case↔camelCase boundary: if the schema uses a `populate_by_name`/alias generator, follow the existing field-naming convention in that file; otherwise map snake_case → the frontend camelCase fields in `api.ts` where the response is adapted.
+(`ScanRequest` in F4, by contrast, is entirely snake_case — follow each model's own convention. `spread_builder.py` returns a snake_case dataclass, so F4's attach step must map dataclass `spread_type`/`net_debit_credit`/… → these camelCase Pydantic fields, not pass the dataclass through.)
 
 - [ ] **Step 3: Typecheck + backend import check**
 
@@ -1568,7 +1568,7 @@ Expected: FAIL.
 
 - [ ] **Step 4: Implement**
 
-For bearish candidates in Pass 2, decide the primary via `choose_primary(iv_rank, threshold)` FIRST, then fetch the chain(s) needed (`fetch_option_chain_async(client, symbol, option_type="P")` and/or `"C"`) via `asyncio.gather`. Build the primary spread (`build_bear_put`/`build_bear_call`) with `spread_width`/`short_leg_delta` from the request; attach its `legs`/economics to the trade card. Build the other spread as an `AlternativeContract` (now carries spread fields, Task F3) with a `reason`. Reject credit spreads below `min_credit` and debit spreads whose debit exceeds `max_debit_pct%` of width.
+For bearish candidates in Pass 2, decide the primary via `choose_primary(iv_rank, threshold)` FIRST, then fetch the chain(s) needed (`fetch_option_chain_async(client, symbol, option_type="P")` and/or `"C"`) via `asyncio.gather`. Build the primary spread (`build_bear_put`/`build_bear_call`) with `spread_width`/`short_leg_delta` from the request. The builder returns a **snake_case dataclass** (`Spread`/`SpreadLeg` from F1) — map it to the **camelCase** Pydantic fields when populating the response (`spreadType=sp.spread_type`, `netDebitCredit=sp.net_debit_credit`, `maxProfit=sp.max_profit`, `maxLoss=sp.max_loss`, `breakeven=sp.breakeven`, `legs=[OptionLeg(right=l.right, strike=l.strike, expiry=l.expiry, action=l.action, qty=l.qty, bid=l.bid, ask=l.ask) for l in sp.legs]`). Attach to the trade card; build the other spread as an `AlternativeContract` (now carries spread fields, Task F3) with a `reason`. Reject credit spreads below `min_credit` and debit spreads whose debit exceeds `max_debit_pct%` of width.
 
 - [ ] **Step 5: Run + commit (include the `api.ts` arg added in Step 1)**
 
@@ -1721,3 +1721,4 @@ git commit -m "feat(settings): editable Spreads section wired to scan (Part 7)"
   - MAJOR: C8 Step 3d makes the armed-phase EXIT transitions direction-aware (lines 111/120 were hardcoded bullish → bearish watches mis-fired exit_stop immediately).
   - MINOR: Step-6 spread columns covered (F5 Step 0); Step-4 direction-aware descriptions covered (new Task C9); bulk-watch direction threaded through `AddWatch`/`BulkAdd` endpoints (C8 Step 3a); F4 commit now includes `api.ts` + frontend typecheck; `RegimeDescriptor` reuses `HmmState`.
 - **Line-number note for the implementer:** cited line ranges (e.g. C1 "112–136") are anchors, not exact bounds — each code block is content-complete (full new body + return). Replace through the END of the function's existing return, not the literal cited line. Re-grep the target before editing; the repo drifts.
+- **Round-4 adversarial audit (BMAD) — resolved (all R3 fixes CLEARED against source):** MAJOR — backend spread fields must be **camelCase** (`spreadType`/`netDebitCredit`/…) because `TradeCardData`/`AlternativeContract` use camelCase + `populate_by_name=True` with no alias generator; F3 Step 2 corrected and F4 now maps the snake_case `Spread` dataclass → camelCase Pydantic fields explicitly. Verdict after this edit: zero blockers, zero majors; Parts 1–7 fully mapped; phases independently shippable.
