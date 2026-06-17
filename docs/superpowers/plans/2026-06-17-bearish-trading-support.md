@@ -76,16 +76,25 @@ git add "frontend/app/(frame)/screener/step-6-contracts/page.tsx"
 git commit -m "fix(screener): fetch put chain for bearish scans (B2)"
 ```
 
-### Task A2: Order action derives from structure, not direction
+### Task A2: Order action derives from structure, not direction (ALL options paths)
 
 **Files:**
 - Modify: `frontend/app/(frame)/screener/step-7-trade-card/page.tsx:230,254`
+- Modify: `frontend/components/organisms/AutoTradeArm/index.tsx:39`
 
-**Rationale:** A long single-leg option (call or put) is always BUY-to-open. The bearish thesis is expressed by the *put*, not by selling.
+**Rationale:** A long single-leg option (call or put) is always BUY-to-open. The bearish thesis is expressed by the *put*, not by selling. **Both** the manual trade-card path AND the auto-trade arm path are options orders that hit `tradier_paper.py` (`SELL → sell_to_open` = naked short). Both must be fixed, or arming a bearish auto-trade writes a naked short put.
 
-- [ ] **Step 1: Replace both action expressions**
+- [ ] **Step 1: Enumerate every options BUY/SELL ternary**
 
-At line 230 (limit order) and line 254 (market order), change:
+Run: `cd frontend && rg "=== 'Bullish' \? 'BUY' : 'SELL'" -n`
+Expected matches and their classification:
+- `step-7-trade-card/page.tsx:230,254` — **options** (fix here)
+- `components/organisms/AutoTradeArm/index.tsx:39` — **options** (`api.armAutoTrade({ option_symbol, action })`) (fix here)
+- `components/organisms/StockPositionCard/index.tsx`, `StockSendDialog/index.tsx`, and `@contextRail/.../step-7-position-card/page.tsx` — **stock** paths. For a stock, bearish genuinely = short = SELL, so these are CORRECT. **Do not change them.**
+
+- [ ] **Step 2: Replace the options action expressions**
+
+At `step-7-trade-card/page.tsx:230` (limit) and `:254` (market), and at `AutoTradeArm/index.tsx:39`, change:
 
 ```tsx
         action:        card.direction === 'Bullish' ? 'BUY' : 'SELL',
@@ -97,11 +106,6 @@ to:
         action:        'BUY',   // long single-leg option (call or put) is always buy-to-open
 ```
 
-- [ ] **Step 2: Check sibling order paths**
-
-Run: `cd frontend && rg "=== 'Bullish' \? 'BUY' : 'SELL'" -n`
-Expected: also present in `AutoTradeArm/index.tsx`, `StockPositionCard/index.tsx`, `StockSendDialog/index.tsx`. Leave the **stock** ones (Phase C handles them); the options trade-card ones are the only ones changed here. Confirm only `step-7-trade-card` no longer matches.
-
 - [ ] **Step 3: Typecheck**
 
 Run: `cd frontend && npm run typecheck`
@@ -110,8 +114,8 @@ Expected: clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add "frontend/app/(frame)/screener/step-7-trade-card/page.tsx"
-git commit -m "fix(screener): long option always buys to open (B1 footgun)"
+git add "frontend/app/(frame)/screener/step-7-trade-card/page.tsx" frontend/components/organisms/AutoTradeArm/index.tsx
+git commit -m "fix(screener): long option always buys to open — manual + auto-trade (B1 footgun)"
 ```
 
 ---
@@ -156,7 +160,8 @@ Expected: FAIL — `alignmentVerdict` not found.
 - [ ] **Step 3: Implement the helper**
 
 ```ts
-import type { Direction, Status } from '@/types/domain';
+import type { Direction } from '@/types/domain';
+import type { Status } from '@/lib/status';   // Status lives in lib/status, NOT re-exported from domain.ts
 
 /** Regime descriptor as produced by the OMM/HMM layer. */
 export type RegimeDescriptor = 'Bull' | 'Bear' | 'Choppy';
@@ -234,30 +239,49 @@ git commit -m "feat(regime): combinedRegime = alignment at Step 1 (B8)"
 ### Task B3: Step 3 recomputes alignment when direction changes
 
 **Files:**
-- Modify: `frontend/app/(frame)/screener/step-3-direction/page.tsx:722`
+- Modify: `frontend/app/(frame)/screener/step-3-direction/page.tsx:720–724,738`
 
-**Context:** Line 722 already does `useScanStore.getState().setRegime(r.overall)` after re-reading regime. Add the alignment recompute using the newly chosen direction. The direction handler is `handleDirChange(d)` (around line 811 region per screen).
+**Context (verified against source):** The mount effect at lines 720–724 fetches regime and calls `setRegime(r.overall)` but **does not keep the descriptor** in component state, so it is not in scope at direction-change time. The direction handler is `handleDirChange(d: Direction)` at **line 738** (it calls `setDir(d)` then `syncToStore(...)`). We must (a) capture the descriptor into a ref when regime is fetched, then (b) recompute `combinedRegime` inside `handleDirChange`.
 
-- [ ] **Step 1: After direction changes, set combinedRegime**
+- [ ] **Step 1: Capture the descriptor in a ref on fetch**
 
-In `handleDirChange` (or wherever `setDirection` is called), append:
+Add a ref and store the descriptor in the existing mount effect:
 
 ```tsx
-import { alignmentVerdict, descriptorFromState } from '@/lib/regimeAlignment';
-// inside handleDirChange(d: Direction):
-    const r = useScanStore.getState();   // or the local regime data already fetched
-    const descriptor = descriptorFromState(/* omm state from fetched regime */ '');
-    useScanStore.getState().setCombinedRegime(alignmentVerdict(d, descriptor));
+import { useRef } from 'react';
+import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
+// near other refs in the component:
+  const descriptorRef = useRef<RegimeDescriptor>('Choppy');
+// in the effect (lines 720–724):
+  useEffect(() => {
+    api.getRegime().then((r) => {
+      useScanStore.getState().setRegime(r.overall);
+      descriptorRef.current = descriptorFromState(r.omm?.state ?? '');
+      // seed alignment for the direction already chosen (default Bullish)
+      const dir = useScanStore.getState().context?.direction ?? 'Bullish';
+      useScanStore.getState().setCombinedRegime(alignmentVerdict(dir, descriptorRef.current));
+    }).catch(() => {});
+  }, []);
 ```
 
-Use the same regime/omm source the page already holds (it fetches regime at line ~722). The key requirement: after this handler, `combinedRegime === alignmentVerdict(chosenDirection, descriptor)`.
+- [ ] **Step 2: Recompute alignment inside `handleDirChange` (line 738)**
 
-- [ ] **Step 2: Typecheck**
+```tsx
+  const handleDirChange = (d: Direction) => {
+    setDir(d);
+    useScanStore.getState().setCombinedRegime(alignmentVerdict(d, descriptorRef.current));
+    // ...existing body (syncToStore etc.) unchanged
+  };
+```
+
+Requirement after this handler: `combinedRegime === alignmentVerdict(chosenDirection, descriptorRef.current)`. If `MarketRegime.omm` is not the field name, use the same `omm.state` path Step 1 reads (confirmed at `types/domain.ts` `OmmData.state` / `MarketRegime.omm`).
+
+- [ ] **Step 3: Typecheck**
 
 Run: `cd frontend && npm run typecheck`
 Expected: clean.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add "frontend/app/(frame)/screener/step-3-direction/page.tsx"
@@ -269,17 +293,19 @@ git commit -m "feat(regime): recompute alignment on direction change (B8)"
 **Files:**
 - Modify: `frontend/components/organisms/RunScanButton/index.tsx:106,186–210`
 
-- [ ] **Step 1: Drop the bullish-only condition**
+- [ ] **Step 1: Read `combinedRegime` (not raw `regime`) and drop the bullish-only condition**
 
-Change line 106 from:
+**Verified:** line 105 reads `useScanStore.getState().regime` — the raw market-health value, NOT the alignment value. The whole Phase B reframe lands in `combinedRegime`, so this gate must read `combinedRegime` or the alignment never reaches the gate. Change lines 105–106 from:
 
 ```tsx
+    const currentRegime = useScanStore.getState().regime;
     if (currentRegime === 'REJECT' && direction === 'Bullish' && !regimeConfirmedRef.current) {
 ```
 
 to:
 
 ```tsx
+    const currentRegime = useScanStore.getState().combinedRegime;
     if (currentRegime === 'REJECT' && !regimeConfirmedRef.current) {
 ```
 
@@ -454,12 +480,13 @@ Add `direction: Literal["Bullish", "Bearish"] = "Bullish"`. Replace the breakout
         if current <= base_high:   return None
         stop   = base_low - atr * 0.2
         target = current + (current - stop) * rr_target_mult
-        ref    = base_high
+        # keep the existing bullish detail key unchanged (no regression for consumers)
+        detail = {"base_high": round(base_high, 2), "base_range_pct": round(base_range_pct * 100, 1)}
     else:  # Bearish breakdown below base low
         if current >= base_low:    return None
         stop   = base_high + atr * 0.2
         target = current - (stop - current) * rr_target_mult
-        ref    = base_low
+        detail = {"base_low": round(base_low, 2), "base_range_pct": round(base_range_pct * 100, 1)}
     return StrategySignal(
         strategy="breakout_base",
         direction=direction,
@@ -467,7 +494,7 @@ Add `direction: Literal["Bullish", "Bearish"] = "Bullish"`. Replace the breakout
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
-        detail={"base_ref": round(ref, 2), "base_range_pct": round(base_range_pct * 100, 1)},
+        detail=detail,
     )
 ```
 
@@ -648,37 +675,48 @@ git add backend/app/services/strategy_engine.py backend/tests/test_strategy_engi
 git commit -m "feat(strategy): mean_reversion_rsi overbought mirror + rsi_overbought (B3)"
 ```
 
-### Task C5: Backtest is direction-aware (TDD)
+### Task C5: Backtest is direction-aware (TDD via extracted decision helper)
 
 **Files:**
-- Modify: `backend/app/services/strategy_backtest.py:97–106`
+- Modify: `backend/app/services/strategy_backtest.py:97–106` (+ new module-level `_entry_side` helper near the top)
 - Test: `backend/tests/test_strategy_backtest_bearish.py` (new)
 
-- [ ] **Step 1: Write the failing test**
+**Why a helper:** asserting `n_trades >= 1` on a synthetic fixture is unreliable — `backtesting.py` only fills a `self.sell(limit=entry)` when price trades **up to** `entry`, which a death-cross fixture may never do. The *entry-side decision* is the actual logic to test; extract it into a pure function and unit-test it deterministically. `run_strategy_backtest` has **no default** for `direction` (it is keyword-only, `direction: str`), so all call sites already pass it — no regression risk to the bullish path.
+
+- [ ] **Step 1: Write the failing test (pure decision function)**
 
 ```python
-from app.services.strategy_backtest import run_strategy_backtest
-from tests.test_strategy_engine_bearish import _death_cross_bars
+from app.services.strategy_backtest import _entry_side
 
-def test_bearish_backtest_executes_short_trades():
-    # extend the death-cross fixture into enough repeated cycles for >0 trades
-    bars = []
-    base = _death_cross_bars()
-    for cycle in range(6):
-        for b in base:
-            nb = dict(b); nb["time"] = len(bars); bars.append(nb)
-    res = run_strategy_backtest(bars, strategy="ma_crossover",
-                                direction="Bearish", min_trades=1, min_win_rate=0.0)
-    assert res.direction == "Bearish"
-    assert res.n_trades >= 1            # the sell() path fired
+def test_entry_side_bullish_admits_stop_below_target_above():
+    assert _entry_side("Bullish", entry=100, sl=95, tp=110) == "buy"
+    assert _entry_side("Bullish", entry=100, sl=105, tp=110) is None  # stop wrong side
+
+def test_entry_side_bearish_admits_stop_above_target_below():
+    assert _entry_side("Bearish", entry=100, sl=105, tp=90) == "sell"
+    assert _entry_side("Bearish", entry=100, sl=95, tp=90) is None    # stop wrong side
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `cd backend && pytest tests/test_strategy_backtest_bearish.py -v`
-Expected: FAIL — `n_trades == 0` (guard `sl < entry < tp` rejects shorts and `self.buy()` never matches a short).
+Expected: FAIL — `_entry_side` does not exist.
 
-- [ ] **Step 3: Implement direction-aware guard + side, and pass direction to the signal fn**
+- [ ] **Step 3: Add the helper and use it in the backtest**
+
+Add near the top of `strategy_backtest.py` (module level):
+
+```python
+def _entry_side(direction: str, *, entry: float, sl: float, tp: float) -> str | None:
+    """Decide the order side, or None if the stop/target are on the wrong side of entry.
+
+    Bullish: stop below entry, target above  → 'buy'
+    Bearish: stop above entry, target below  → 'sell'
+    """
+    if direction == "Bullish":
+        return "buy" if sl < entry < tp else None
+    return "sell" if tp < entry < sl else None
+```
 
 Replace lines 97–106 with:
 
@@ -686,31 +724,42 @@ Replace lines 97–106 with:
             if not self.position:
                 sig = fn(slice_bars, direction=direction, **(params or {}))
                 if sig is not None:
-                    sl = sig.stop_price
-                    tp = sig.target_price
-                    entry = sig.entry_price
-                    if direction == "Bullish":
-                        # stop below entry, target above
-                        if sl < entry < tp:
-                            self.buy(limit=entry, sl=sl, tp=tp)
-                    else:
-                        # Bearish: stop above entry, target below
-                        if tp < entry < sl:
-                            self.sell(limit=entry, sl=sl, tp=tp)
+                    side = _entry_side(direction, entry=sig.entry_price,
+                                       sl=sig.stop_price, tp=sig.target_price)
+                    if side == "buy":
+                        self.buy(limit=sig.entry_price, sl=sig.stop_price, tp=sig.target_price)
+                    elif side == "sell":
+                        self.sell(limit=sig.entry_price, sl=sig.stop_price, tp=sig.target_price)
 ```
 
-Note `fn` now must accept `direction` — guaranteed by Tasks C1–C4. `direction` is already a parameter of `run_strategy_backtest` (used in the result and cache key).
+`fn` now must accept `direction` — guaranteed by Tasks C1–C4.
 
-- [ ] **Step 4: Run to verify pass + no bullish regression**
+- [ ] **Step 4: Add an integration smoke test (no trade-count assertion)**
+
+```python
+from app.services.strategy_backtest import run_strategy_backtest
+from tests.test_strategy_engine_bearish import _death_cross_bars
+
+def test_bearish_backtest_runs_and_tags_direction():
+    bars = []
+    for _ in range(6):
+        for b in _death_cross_bars():
+            nb = dict(b); nb["time"] = len(bars); bars.append(nb)
+    res = run_strategy_backtest(bars, strategy="ma_crossover",
+                                direction="Bearish", min_trades=0, min_win_rate=0.0)
+    assert res.direction == "Bearish"   # propagates; does not crash on the sell path
+```
+
+- [ ] **Step 5: Run to verify pass + no bullish regression**
 
 Run: `cd backend && pytest tests/test_strategy_backtest_bearish.py -v && pytest tests/ -k backtest -v`
-Expected: PASS; existing bullish backtests unaffected (default `direction="Bullish"` path unchanged).
+Expected: PASS; existing bullish backtests unaffected.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add backend/app/services/strategy_backtest.py backend/tests/test_strategy_backtest_bearish.py
-git commit -m "feat(backtest): direction-aware guard + sell path for shorts (B4)"
+git commit -m "feat(backtest): direction-aware entry-side helper + sell path (B4)"
 ```
 
 ### Task C6: Stock-scan router passes direction to the signal fn
@@ -811,43 +860,103 @@ git add frontend/components/organisms/StockPositionCard/
 git commit -m "fix(stock-card): direction-correct risk, R:R and target tone (B6)"
 ```
 
-### Task C8: Strategy-watch alerts are direction-aware
+### Task C8: Strategy-watch alerts are direction-aware (record + evaluator + text)
 
 **Files:**
-- Modify: `backend/app/services/strategy_watch_evaluator.py:100,151` (and the docstring at line 7)
-- Test: extend the watch-evaluator test if one exists; otherwise add `backend/tests/test_strategy_watch_bearish.py`
+- Modify: `backend/app/services/strategy_watch_store.py:77–106` (add `direction` to record + `add_watch`/`add_watches_bulk`)
+- Modify: `backend/app/routers/` strategy-watch create endpoint + its request schema (add optional `direction`)
+- Modify: `backend/app/services/strategy_watch_evaluator.py:80,83,100,150–162` (pass direction to `get_active` AND `fn`; direction-aware text), docstring line 7
+- Test: `backend/tests/test_strategy_watch_bearish.py` (new)
+
+**Verified facts (no assumptions):** in the evaluator loop `w` is a **dict** (`w["id"]`, `w.get("params_override")`, `w["last_state"]`); it has **no `direction`** today. The signal is generated by `fn(bars, **adopted)` at line 83 **without** direction, so watches detect only bullish setups even after C1–C4. The alert subject comes from the `_SUBJECT_PREFIX` dict (line 150–155) consumed in `_format_event` (line 158) — line 151 is a dict literal, not an interpolated string, so the verb fix belongs in `_format_event`, not on line 151.
 
 - [ ] **Step 1: Write the failing test**
 
-Assert that for a `Bearish` watch with a short entry signal, the emitted reason text contains "short" (not "buy"). Use the evaluator's existing entrypoint.
+```python
+import backend.app.services.strategy_watch_evaluator as ev_mod  # adjust to real import path
+
+def test_bearish_watch_emits_short_setup(monkeypatch):
+    # a watch carrying direction="Bearish" whose strategy fires a short entry
+    # should produce an entry event with direction "Bearish" and "short" in the reason.
+    # Use the evaluator's public entrypoint with a stubbed bar source + a watch dict
+    # that includes "direction": "Bearish". Assert event.direction == "Bearish"
+    # and "short" in event.reason.lower() and "buy" not in event.reason.lower().
+    ...
+```
+
+Wire it through the evaluator's real public function and watch-store fixture (see existing evaluator tests for the harness).
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `cd backend && pytest tests/test_strategy_watch_bearish.py -v`
-Expected: FAIL — text says "buy setup".
+Expected: FAIL — direction not stored/passed; reason says "buy setup".
 
-- [ ] **Step 3: Implement direction-aware text**
+- [ ] **Step 3a: Store direction on the watch record**
 
-Replace the hardcoded "buy setup"/"Buy setup" strings (lines 100, 151) with a direction-derived verb:
+In `strategy_watch_store.py`, extend `add_watch` and the record:
 
 ```python
-            verb = "short" if signal.direction == "Bearish" else "long"
-            reason=(f"{symbol}: {key} {verb} setup — entry {signal.entry_price}, "
-                    f"stop {signal.stop_price}, target {signal.target_price}")
+    def add_watch(self, symbol: str, strategy_key: str,
+                  params_override: dict | None = None,
+                  direction: str = "Bullish") -> dict:
+        ...
+            entry = {
+                "id": f"wch_{uuid.uuid4().hex[:12]}",
+                "symbol": symbol,
+                "strategy_key": strategy_key,
+                "direction": direction,            # NEW
+                "params_override": dict(params_override or {}),
+                "enabled": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "last_state": _fresh_state(),
+            }
 ```
 
-Update the module docstring (line 7–8) to remove "Bullish-only" now that the four strategies emit both directions.
+Thread `direction` through `add_watches_bulk(symbols, strategy_key, direction="Bullish")` and the watch-create router/schema (add an optional `direction: str = "Bullish"` field). Existing rows without the key fall back via `.get("direction", "Bullish")`.
 
-- [ ] **Step 4: Run to verify pass**
+- [ ] **Step 3b: Evaluator passes direction to both `get_active` and the signal fn**
 
-Run: `cd backend && pytest tests/test_strategy_watch_bearish.py -v`
-Expected: PASS.
+At evaluator lines 80–83:
+
+```python
+            wdir = w.get("direction", "Bullish")
+            adopted = get_active(key, wdir)
+            params_override = w.get("params_override") or {}
+            adopted.update(params_override)
+            signal = fn(bars, direction=wdir, **adopted)
+```
+
+- [ ] **Step 3c: Direction-aware alert text**
+
+Line 100 `reason=` — derive the verb from `signal.direction`:
+
+```python
+                    reason=(f"{symbol}: {key} {'short' if signal.direction == 'Bearish' else 'long'} setup — "
+                            f"entry {signal.entry_price}, stop {signal.stop_price}, "
+                            f"target {signal.target_price} (R:R {round(signal.rr_ratio, 2)})"),
+```
+
+In `_format_event` (line 158–162), make the entry subject direction-aware using `ev.direction`:
+
+```python
+    if ev.event_type == "entry":
+        label = f"{'Short' if ev.direction == 'Bearish' else 'Long'} setup"
+    else:
+        label = _SUBJECT_PREFIX.get(ev.event_type, ev.event_type)
+```
+
+Update the module docstring (line 7–8) to drop "Bullish-only".
+
+- [ ] **Step 4: Run to verify pass + no bullish regression**
+
+Run: `cd backend && pytest tests/test_strategy_watch_bearish.py -v && pytest tests/ -k watch -v`
+Expected: new PASS; existing watch tests PASS (default `direction="Bullish"` preserves behavior).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/app/services/strategy_watch_evaluator.py backend/tests/test_strategy_watch_bearish.py
-git commit -m "feat(alerts): direction-aware strategy-watch text (B9)"
+git add backend/app/services/strategy_watch_store.py backend/app/services/strategy_watch_evaluator.py backend/app/routers/ backend/tests/test_strategy_watch_bearish.py
+git commit -m "feat(alerts): direction-aware strategy watches — record, signal, text (B9)"
 ```
 
 ---
@@ -887,25 +996,47 @@ git commit -m "feat(fundamentals): add bearish mirror gate thresholds (B10)"
 
 - [ ] **Step 1: Write the failing test**
 
+The real `score_stock` signature (verified, `stock_scorer.py:870`) is
+`score_stock(symbol, direction, horizon, bars, ..., fundamentals=None, fundamentals_gate=None)`.
+The gate block only runs when **both** `fundamentals` and `fundamentals_gate` are
+non-None **and** horizon is not Intraday. `fundamentals` must be a
+`FundamentalHealth` dataclass (`fundamentals_scorer.py:14`) with required fields
+`score, quality_label, risk_label, growth_score, quality_score, risk_score`.
+No fixtures exist — construct them inline.
+
 ```python
-from app.scoring.stock_scorer import score_stock   # adjust import to the real gate entrypoint
+from app.scoring.stock_scorer import score_stock
+from app.scoring.fundamentals_scorer import FundamentalHealth
 
-# Pseudocode shape — use the existing fundamentals test harness in the repo.
-# Strong fundamentals + Bearish should demote; weak + Bearish should PASS.
-def test_bearish_rejects_strong_fundamentals(strong_fundamentals_snapshot, swing_bars):
+_GATE = {"enabled": True, "cautionBelow": 45, "rejectBelow": 30,
+         "cautionAbove": 70, "rejectAbove": 80}
+
+def _flat_bars(n=260, price=100.0):
+    return [{"open": price, "high": price + 1, "low": price - 1,
+             "close": price, "volume": 1_000_000, "time": i} for i in range(n)]
+
+def _health(score: int) -> FundamentalHealth:
+    return FundamentalHealth(score=score, quality_label="x", risk_label="x",
+                             growth_score=score, quality_score=score, risk_score=score,
+                             safety_flags=[], detail={})
+
+def _fund_rule(card):
+    return next(r for r in card.rules if r.name == "fundamentals")
+
+def test_bearish_demotes_strong_fundamentals():
     card = score_stock("AAPL", direction="Bearish", horizon="Swing",
-                       bars=swing_bars, fundamentals=strong_fundamentals_snapshot)
-    fund = next(r for r in card.rules if r.name == "fundamentals")
-    assert fund.status in ("CAUTION", "REJECT")
+                       bars=_flat_bars(), fundamentals=_health(90),
+                       fundamentals_gate=_GATE)
+    assert _fund_rule(card).status in ("CAUTION", "REJECT")
 
-def test_bearish_passes_weak_fundamentals(weak_fundamentals_snapshot, swing_bars):
+def test_bearish_passes_weak_fundamentals():
     card = score_stock("XYZ", direction="Bearish", horizon="Swing",
-                       bars=swing_bars, fundamentals=weak_fundamentals_snapshot)
-    fund = next(r for r in card.rules if r.name == "fundamentals")
-    assert fund.status == "PASS"
+                       bars=_flat_bars(), fundamentals=_health(20),
+                       fundamentals_gate=_GATE)
+    assert _fund_rule(card).status == "PASS"
 ```
 
-Match the real `score_stock` signature and the repo's fundamentals fixtures (see existing fundamentals tests).
+If `horizon`/`direction` are typed `Literal`s, the string values `"Swing"`/`"Bearish"` match. If `_flat_bars()` is rejected by an upstream rule before the gate appends its result, increase the count or add gentle trend — the only requirement is that a `"fundamentals"` rule is appended (the gate runs regardless of other rule outcomes).
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -1055,7 +1186,11 @@ git commit -m "feat(tuning): direction-keyed active params with legacy migration
 - [ ] **Step 1: Find all callers**
 
 Run: `cd backend && rg "get_active\(|\.adopt\(|adopt\(" -n app/`
-Expected: `stock_scan.py:_merge_strategy_params`, `strategy_param_optimizer.py` / `strategy_tuning.py` adopt sites.
+Expected callers to update:
+- `stock_scan.py:_merge_strategy_params` (reads active) — this task.
+- `strategy_watch_evaluator.py:80` — `get_active(key)` → already handled in **Task C8 Step 3b** (passes `wdir`); do not duplicate here.
+- `strategy_tuning.py` `/adopt` endpoint — the only `adopt()` caller (verified: `tuning_scheduler.py` does NOT call adopt, so no scheduler-clobber risk). Updated in Step 3 below.
+- The one-arg default `direction="Bullish"` keeps the 8+ existing optimizer tests green (they read `active.bullish` / legacy-flat).
 
 - [ ] **Step 2: Thread direction through `_merge_strategy_params`**
 
@@ -1084,9 +1219,12 @@ Add `rsi_overbought` to the `mean_reversion_rsi` kwargs lambda (line 78) so a be
 
 (Add `rsi_overbought: float = 70.0` to `StockScanRequest` in `backend/app/schemas/stock_scan.py`.)
 
-- [ ] **Step 3: Update adopt sites to pass the tuned direction**
+- [ ] **Step 3: Update the adopt endpoint to pass + echo direction**
 
-In the optimizer/tuning adopt call, pass `direction=store.get_direction().capitalize()` (or the run's direction).
+- Add an explicit `direction: str = "Bullish"` field to `AdoptRequest` (`strategy_tuning.py:23–25`). (Do **not** silently couple to the global `get_direction()` YAML key — make it explicit in the request.)
+- Pass it into `store.adopt(body.strategy, body.params, direction=body.direction)`.
+- Fix the endpoint's echo return (line ~178) from `store.get_active(body.strategy)` to `store.get_active(body.strategy, body.direction)` so the response reflects the adopted direction, not always bullish.
+- (The watch-evaluator caller is handled in Task C8 Step 3b — not here.)
 
 - [ ] **Step 4: Run full backend suite**
 
@@ -1309,6 +1447,18 @@ Extend `TradeCardData` (after line 188) with optional fields so existing single-
   breakeven?:        number;
 ```
 
+Also extend `AlternativeContract` (`types/domain.ts:246`) with the same optional spread fields, so the non-primary spread can be carried as an alternative (today it only models single-leg contracts):
+
+```ts
+  // add to AlternativeContract:
+  spreadType?:     SpreadType;
+  legs?:           OptionLeg[];
+  netDebitCredit?: number;
+  maxProfit?:      number;
+  maxLoss?:        number;
+  breakeven?:      number;
+```
+
 - [ ] **Step 2: Typecheck**
 
 Run: `cd frontend && npm run typecheck`
@@ -1324,29 +1474,38 @@ git commit -m "feat(options): spread types on TradeCardData (B12)"
 ### Task F4: Backend attaches spreads to scan candidates
 
 **Files:**
-- Modify: `backend/app/routers/scan.py` (where contract details + alternatives are built, ~lines 505–594)
+- Modify: `backend/app/routers/scan.py` (Pass-2 contract build, ~lines 342–344 fetch + 505–594 attach)
+- Modify: `backend/app/schemas/` scan request — add spread params here (NOT in Phase G), with defaults
 - Test: extend the scan router test for a bearish request asserting a `bear_put`/`bear_call` structure appears with correct legs.
 
-- [ ] **Step 1: Write the failing test**
+**Verified facts:** the chain fetcher is `fetch_option_chain_async(client, symbol, option_type=...)` (async, takes the httpx `client`) at `scan.py:50,344` — not a sync `fetch_option_chain`. Pass 2 fetches one chain per **survivor** (a small shortlist, not the whole universe), so fetching a second chain doubles only the shortlist's fetches; do it with `asyncio.gather` to keep it parallel.
 
-Add a bearish scan test asserting the response includes spread metadata (primary chosen by IV rank, the other present as an alternative).
+- [ ] **Step 1: Add spread params to the scan request schema (with defaults)**
 
-- [ ] **Step 2: Run to verify it fails**
+In the real request model `ScanRequest` (`backend/app/schemas/__init__.py:410`), add nested-or-flat fields with defaults: `spread_width: float = 5`, `short_leg_delta: float = 0.30`, `iv_rank_threshold: float = 50`, `min_credit: float = 0.50`, `max_debit_pct: float = 40`. These ship with defaults so F4 is self-contained.
+
+**Channel note (resolves the F4→G2 seam):** the frontend currently calls `api.postScan(universe, direction, horizon, filters, overrides)` (`RunScanButton:159`); these spread fields are top-level on `ScanRequest`, not inside `filters`/`overrides`. Add an explicit optional 6th argument `spreads?: { spread_width; short_leg_delta; iv_rank_threshold; min_credit; max_debit_pct }` to `api.postScan` that maps to the top-level `ScanRequest` fields. F4 leaves it `undefined` (defaults apply); G2 Step 2 populates it from the settings slice. State this contract here so G2 has a defined channel.
+
+- [ ] **Step 2: Write the failing test**
+
+Add a bearish scan test asserting the response's primary structure matches `choose_primary(iv_rank, threshold)` and that the non-primary spread is present in `alternatives` with `spreadType`/`legs` populated.
+
+- [ ] **Step 3: Run to verify it fails**
 
 Run: `cd backend && pytest tests/ -k "scan and spread" -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 4: Implement**
 
-For bearish candidates, fetch both put and call chains (`fetch_option_chain(symbol, option_type=...)`), call `build_bear_put` / `build_bear_call` with Settings-derived `width`/`short_delta`, pick primary via `choose_primary(iv_rank, threshold)`, attach the primary's legs/economics to the trade card and the other spread as an `AlternativeContract` entry with a `reason`. Read width/short_delta/threshold from the request (Phase G wires Settings → request; default to 5 / 0.30 / 50 until then).
+For bearish candidates in Pass 2, decide the primary via `choose_primary(iv_rank, threshold)` FIRST, then fetch the chain(s) needed (`fetch_option_chain_async(client, symbol, option_type="P")` and/or `"C"`) via `asyncio.gather`. Build the primary spread (`build_bear_put`/`build_bear_call`) with `spread_width`/`short_leg_delta` from the request; attach its `legs`/economics to the trade card. Build the other spread as an `AlternativeContract` (now carries spread fields, Task F3) with a `reason`. Reject credit spreads below `min_credit` and debit spreads whose debit exceeds `max_debit_pct%` of width.
 
-- [ ] **Step 4: Run + commit**
+- [ ] **Step 5: Run + commit**
 
 Run: `cd backend && pytest tests/ -k scan -v`
 Expected: PASS.
 
 ```bash
-git add backend/app/routers/scan.py backend/tests/
+git add backend/app/routers/scan.py backend/app/schemas/ backend/tests/
 git commit -m "feat(options): attach bear spreads to bearish candidates (B12)"
 ```
 
@@ -1435,7 +1594,7 @@ Render the five fields as editable inputs, following the existing per-horizon ta
 
 - [ ] **Step 2: Wire Settings → scan request**
 
-Where the scan request is assembled (the Run Scan path), include `spread_width`, `short_leg_delta`, `iv_rank_threshold`, `min_credit`, `max_debit_pct` from the `spreads` slice so Task F4 uses configured values. Add the matching fields to `StockScanRequest`/scan request schema with the same defaults (5 / 0.30 / 50 / 0.50 / 40).
+The `ScanRequest` schema fields and the `api.postScan` `spreads?` argument already exist (Task F4 Step 1). Here, at the Run Scan call site (`RunScanButton`), pass `spreads: { spread_width, short_leg_delta, iv_rank_threshold, min_credit, max_debit_pct }` read from the `settingsStore` `spreads` slice, so the screener uses configured values instead of the F4 defaults.
 
 - [ ] **Step 3: Typecheck + tests**
 
@@ -1464,4 +1623,20 @@ git commit -m "feat(settings): editable Spreads section wired to scan (Part 7)"
 
 - **Spec coverage:** Part 1→Phase B; Part 2→Phase A; Part 3→Phase F; Part 4→Phase C; Part 5→Phase D; Part 6→Phase E; Part 7→Phase G. All parts mapped.
 - **Type consistency:** `SpreadType`, `OptionLeg`, `Spread`/`SpreadLeg`, `alignmentVerdict`, `get_active(strategy, direction)`, `_merge_strategy_params(strategy, direction, kwargs)` used consistently across tasks.
-- **Known soft spots for the BMAD audit to pressure-test:** (1) exact `omm.state` field name on `MarketRegime` in B2/B3; (2) `score_stock` real signature + fundamentals fixtures in D2; (3) backtest fixture trade-count realism in C5; (4) whether `scan.py` builds option contracts in a place where both chains are cheaply available in F4.
+- **Round-1 adversarial audit (BMAD) findings — all resolved:**
+  - BLOCKER: A2 now also fixes `AutoTradeArm/index.tsx:39` (options path → was leaving naked-short footgun).
+  - BLOCKER: B4 now reads `combinedRegime` (not raw `regime:105`), so the alignment reframe reaches the gate.
+  - MAJOR: D2 test now passes `fundamentals_gate` + `horizon="Swing"` and constructs `FundamentalHealth` inline (no nonexistent fixtures).
+  - MAJOR: B3 corrected to `handleDirChange:738` + descriptor captured in a ref (regime not previously kept in state).
+  - MAJOR: F4 uses real async `fetch_option_chain_async(client, symbol, option_type=...)`, bounds the N×2 fetch to the survivor shortlist via `asyncio.gather`, defines request-schema spread fields in F4, and `AlternativeContract` gains spread fields (F3) so it can carry the non-primary spread.
+  - MAJOR: C5 reworked around a pure `_entry_side` helper (deterministic test) instead of an unprovable `n_trades>=1` assertion; corrected the false "default Bullish" claim (`direction` is keyword-only, no default).
+  - MAJOR: C2 keeps the bullish `base_high` detail key (no silent regression); bearish uses `base_low`.
+  - MINOR: E2 updates `strategy_watch_evaluator.py:80` caller and adds explicit `direction` to `AdoptRequest`.
+- **B2/B3 interdependence:** B2 seeds `combinedRegime` on Step 1 mount; B3 seeds on fetch AND recomputes in `handleDirChange`, so a direction change on Step 3 (where direction is actually chosen) always refreshes alignment despite B2's mount-only deps.
+- **Round-2 adversarial audit (BMAD) findings — all resolved (round-1 fixes re-confirmed correct against source):**
+  - BLOCKER: strategy-watch records had no `direction` and the evaluator called the signal fn with no direction (watches stayed bullish). C8 now adds `direction` to the watch record + `add_watch`/bulk + create endpoint, and the evaluator passes `wdir` to BOTH `get_active` and `fn`.
+  - MAJOR: `Status` is imported from `@/lib/status` (not re-exported by `domain.ts`); Phase B helper import corrected so typecheck passes.
+  - MINOR: C8 alert subject fix moved to `_format_event` (line 151 is a dict literal, not interpolated).
+  - MINOR: `/adopt` endpoint echo now returns `get_active(strategy, direction)`.
+  - MINOR: F4→G2 channel made explicit — `api.postScan` gains a `spreads?` arg mapping to top-level `ScanRequest` fields.
+  - Verified: E1 migration is back-compat — `adopt` migrates flat→`{bullish:…}`, one-arg `get_active` reads the bullish branch, existing one-arg optimizer tests stay green.
