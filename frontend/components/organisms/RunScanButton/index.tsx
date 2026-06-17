@@ -102,8 +102,8 @@ export function RunScanButton() {
       horizon = maxDays <= 4 ? 'Intraday' : maxDays <= 20 ? 'Swing' : 'Position';
     }
 
-    const currentRegime = useScanStore.getState().regime;
-    if (currentRegime === 'REJECT' && direction === 'Bullish' && !regimeConfirmedRef.current) {
+    const currentRegime = useScanStore.getState().combinedRegime;
+    if (currentRegime === 'REJECT' && !regimeConfirmedRef.current) {
       setShowRegimeConfirm(true);
       return;
     }
@@ -188,7 +188,7 @@ export function RunScanButton() {
           <div className={styles.regimeDialog}>
             <p id="regime-run-title" className={styles.regimeDialogTitle}>Market regime is REJECT</p>
             <p className={styles.regimeDialogBody}>
-              Running a Bullish scan in a REJECT regime carries elevated risk.
+              Running a {context?.direction ?? 'Bullish'} scan while the regime opposes it (REJECT) carries elevated risk.
               Proceed anyway?
             </p>
             <div className={styles.regimeDialogActions}>
