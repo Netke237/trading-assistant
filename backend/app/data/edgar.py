@@ -160,7 +160,7 @@ def _pick_annual_values(units: list[dict]) -> list[dict]:
 
 def _extract_concept(facts: dict, field: str) -> list[dict]:
     """Try each concept name in _CONCEPT_MAP[field]; return annual values list."""
-    gaap = facts.get("us-gaap", {})
+    gaap = facts.get("facts", {}).get("us-gaap", {})
     for concept in _CONCEPT_MAP.get(field, []):
         entry = gaap.get(concept, {})
         units = entry.get("units", {})
@@ -232,7 +232,7 @@ def _compute_total_debt(facts: dict) -> Decimal | None:
     used to avoid cross-period arithmetic.  Falls back to the aggregate
     LongTermDebt concept when neither component is found.
     """
-    gaap = facts.get("us-gaap", {})
+    gaap = facts.get("facts", {}).get("us-gaap", {})
 
     def _latest_usd_with_end(concept: str) -> tuple[Decimal | None, date | None]:
         vals = gaap.get(concept, {}).get("units", {}).get("USD", [])

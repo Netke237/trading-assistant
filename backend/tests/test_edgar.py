@@ -25,14 +25,14 @@ def test_pick_annual_values_returns_sorted_newest_first():
 
 
 def test_extract_concept_revenue_falls_back():
-    # Fixture only has the primary concept; ensure it is found
-    facts = _load_fixture()["facts"]
+    # Fixture is the full EDGAR API response; _extract_concept unwraps facts["facts"]["us-gaap"]
+    facts = _load_fixture()
     rows = _extract_concept(facts, "revenue")
     assert rows and rows[0]["val"] == 383285000000
 
 
 def test_build_snapshot_derived_metrics():
-    facts = _load_fixture()["facts"]
+    facts = _load_fixture()
     snap = _build_snapshot("AAPL", "0000320193", facts)
     assert snap is not None
     assert snap.symbol == "AAPL"
@@ -53,7 +53,7 @@ def test_build_snapshot_derived_metrics():
 
 def test_build_snapshot_missing_symbol_returns_none():
     # Empty facts -> None
-    snap = _build_snapshot("FAKE", "0000000001", {"us-gaap": {}})
+    snap = _build_snapshot("FAKE", "0000000001", {"facts": {"us-gaap": {}}})
     assert snap is None
 
 
