@@ -186,7 +186,7 @@ export function RunScanButton() {
           alertType: 'SCAN_FAILED',
         });
       });
-  }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit, screenerMode, activeStrategy]);
+  }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit, screenerMode, activeStrategy, shortlistMaxCandidates, fundamentalsGate]);
 
   return (
     <>

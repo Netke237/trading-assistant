@@ -182,8 +182,8 @@ def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
     window = _dedup_seconds(delivery)
 
     with _fired_lock:
-        # purge expired entries
-        expired = [k for k, ts in _fired.items() if now - ts > window]
+        # purge expired entries (>= so a zero-second window expires immediately)
+        expired = [k for k, ts in _fired.items() if now - ts >= window]
         for k in expired:
             _fired.pop(k, None)
 
