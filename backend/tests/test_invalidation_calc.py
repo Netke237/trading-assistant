@@ -29,7 +29,9 @@ def test_high_delta_option_gives_smaller_stock_move():
 
 
 def test_delta_floor_prevents_division_by_zero():
-    """delta=0 is floored to 0.05, producing a finite result."""
+    """delta=0 is floored to 0.05, producing a finite result.
+    move = (2.0 * 0.60) / 0.05 = 24.0; invalidation = 100 - 24.0 = 76.0"""
     inv = _invalidation_from_delta(price=100, premium=2.0, stop_pct=0.60, delta=0.0, is_call=True)
+    assert round(inv, 2) == 76.0
     assert inv > 0
     assert inv < 100

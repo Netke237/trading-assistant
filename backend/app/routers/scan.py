@@ -446,6 +446,7 @@ async def _process_symbol(
     strike = float(contract.get("strike", price))
     expiry_years = contract.get("dte", 30) / 365.0
     premium = float(contract.get("price", 0.10))
+    premium = max(premium, 0.01)
     # Back-calculate the stock price at which the option would lose premium_stop_pct
     # of its premium (using delta approximation). This keeps the Exit Plan's
     # "Invalidation" field consistent with the R/R calculation's risk basis.
