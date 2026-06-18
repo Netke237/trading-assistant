@@ -88,6 +88,9 @@ interface ScanStoreState {
   clearStockBasket:      () => void;
   activeStrategy:      string | null;
   setActiveStrategy:   (s: string | null) => void;
+  /** Session-only — not persisted; cleared on page load. */
+  regimeDirection:    'BULL' | 'BEAR' | 'MIXED' | null;
+  setRegimeDirection: (d: 'BULL' | 'BEAR' | 'MIXED' | null) => void;
 }
 
 export const useScanStore = create<ScanStoreState>()(
@@ -122,6 +125,8 @@ export const useScanStore = create<ScanStoreState>()(
       }),
       setRegime:       (r) => set({ regime: r }),
       setCombinedRegime: (r) => set({ combinedRegime: r }),
+      regimeDirection:    null,
+      setRegimeDirection: (d) => set({ regimeDirection: d }),
       setScanResult:   (r) => set((state) => ({
         scanResult: r,
         previousRun: r !== null ? state.scanResult : state.previousRun,

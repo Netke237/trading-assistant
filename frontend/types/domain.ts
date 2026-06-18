@@ -335,6 +335,7 @@ export interface MarketRegime {
   conviction_label?: string | null;
   hmm_state?: string | null;
   alignment?: 'Aligned' | 'Diverging' | 'Unavailable' | null;
+  regime_direction?: 'BULL' | 'BEAR' | 'MIXED' | null;
 }
 
 // --- Sector heatmap ---
