@@ -33,13 +33,23 @@ def _load() -> dict:
     return data
 
 
-def get_active(strategy: str) -> dict:
-    """Get active (production) parameters for a strategy.
+def get_active(strategy: str, direction: str = "Bullish") -> dict:
+    """Active params for a strategy + direction.
 
-    Returns a copy of the active params dict, or empty dict if strategy not found.
+    Supports both nested ``active: {bullish: {...}, bearish: {...}}``
+    and legacy flat ``active: {...}`` (treated as the bullish set).
+
+    Returns a copy of the matched params dict, or empty dict if not found.
     The caller should provide signal-function defaults if the strategy is unknown.
     """
-    return dict(_load().get("strategies", {}).get(strategy, {}).get("active", {}))
+    active = _load().get("strategies", {}).get(strategy, {}).get("active", {})
+    key = direction.lower()
+    if key in ("bullish", "bearish") and (
+        "bullish" in active or "bearish" in active
+    ):
+        return dict(active.get(key, {}))
+    # legacy flat active = bullish only
+    return dict(active) if key == "bullish" else {}
 
 
 def get_search_space(strategy: str) -> dict:
@@ -82,8 +92,11 @@ def get_job_retention() -> dict:
     return dict(_load().get("job_retention", {"max_completed": 100}))
 
 
-def adopt(strategy: str, params: dict) -> None:
-    """Archive current active params and write the proposed set as the new active.
+def adopt(strategy: str, params: dict, direction: str = "Bullish") -> None:
+    """Archive then write ``active[direction]`` = params (atomic, backup-first).
+
+    Migrates a legacy flat ``active: {...}`` to nested ``{bullish: {...}}``
+    on the first direction-keyed write so the file stays forward-compatible.
 
     Creates a backup of the YAML before overwriting.
     Uses atomic write (tmp-then-replace) to prevent corruption on crash.
@@ -99,10 +112,14 @@ def adopt(strategy: str, params: dict) -> None:
         backup_path = CFG.with_suffix(f".bak.{timestamp}-{uuid.uuid4().hex[:8]}.yaml")
         shutil.copy(CFG, backup_path)
 
-    # Update the active parameters for this strategy
-    data.setdefault("strategies", {}).setdefault(strategy, {})["active"] = (
-        copy.deepcopy(params)
-    )
+    # Update the active parameters for this strategy + direction
+    strat = data.setdefault("strategies", {}).setdefault(strategy, {})
+    active = strat.get("active", {})
+    # Migrate legacy flat active → nested bullish on first nested write
+    if active and not ({"bullish", "bearish"} & set(active.keys())):
+        active = {"bullish": active}
+    active[direction.lower()] = copy.deepcopy(params)
+    strat["active"] = active
 
     # Write back to YAML using atomic write (tmp-then-replace)
     tmp = CFG.with_suffix(".yaml.tmp")

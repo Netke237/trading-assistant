@@ -26,11 +26,19 @@ basket:
 strategies:
   pullback_ema:
     active:
-      ema_period: 50
-      trend_ema: 100
-      atr_stop_mult: 1.5
-      rr_target_mult: 2.0
-      tolerance: 0.08
+      bullish:
+        ema_period: 50
+        trend_ema: 100
+        atr_stop_mult: 1.5
+        rr_target_mult: 2.0
+        tolerance: 0.08
+      bearish:
+        ema_period: 35
+        trend_ema: 100
+        atr_stop_mult: 1.5
+        rr_target_mult: 2.0
+        tolerance: 0.08
+        rsi_overbought: 70.0
     search:
       ema_period: [20, 50]
       trend_ema: [100, 150, 200]
@@ -40,10 +48,16 @@ strategies:
 
   breakout_base:
     active:
-      base_lookback: 20
-      atr_tight_max: 1.5
-      volume_mult: 1.1
-      rr_target_mult: 2.0
+      bullish:
+        base_lookback: 20
+        atr_tight_max: 1.5
+        volume_mult: 1.1
+        rr_target_mult: 2.0
+      bearish:
+        base_lookback: 20
+        atr_tight_max: 1.5
+        volume_mult: 1.1
+        rr_target_mult: 2.0
     search:
       base_lookback: [15, 20, 30]
       atr_tight_max: [1.0, 1.5, 2.0]
@@ -52,9 +66,14 @@ strategies:
 
   ma_crossover:
     active:
-      fast: 20
-      slow: 50
-      lookback: 10
+      bullish:
+        fast: 20
+        slow: 50
+        lookback: 10
+      bearish:
+        fast: 20
+        slow: 50
+        lookback: 10
     search:
       fast: [10, 20]
       slow: [50, 100]
@@ -62,9 +81,14 @@ strategies:
 
   mean_reversion_rsi:
     active:
-      rsi_period: 14
-      rsi_oversold: 30
-      trend_sma: 200
+      bullish:
+        rsi_period: 14
+        rsi_oversold: 30
+        trend_sma: 200
+      bearish:
+        rsi_period: 14
+        rsi_oversold: 30
+        trend_sma: 200
     search:
       rsi_period: [7, 14]
       rsi_oversold: [25, 30, 35]
