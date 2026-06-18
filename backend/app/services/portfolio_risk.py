@@ -129,3 +129,23 @@ def _current_exposure(portfolio: list[PortfolioPosition], portfolio_value: float
     if portfolio_value <= 0:
         return 0.0
     return round(_current_exposure_abs(portfolio) / portfolio_value * 100, 2)
+
+
+def orm_positions_to_risk(orm_positions) -> list[PortfolioPosition]:
+    """Convert ORM portfolio rows to PortfolioPosition dataclasses for risk checks."""
+    result = []
+    for p in orm_positions:
+        is_stock = str(getattr(p, "contract", "")).endswith("|STOCK")
+        multiplier = 1 if is_stock else 100
+        entry = float(getattr(p, "entry_price", 0) or 0)
+        qty = int(getattr(p, "qty", 1) or 1)
+        car = entry * qty * multiplier
+        result.append(PortfolioPosition(
+            symbol=str(getattr(p, "symbol", "")),
+            contract_id=str(getattr(p, "contract", "")),
+            contracts=qty,
+            entry_premium=entry,
+            current_price=entry,
+            capital_at_risk=car,
+        ))
+    return result

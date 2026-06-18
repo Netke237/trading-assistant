@@ -10,14 +10,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ArmedStrategy:
-    broker:        str
-    symbol:        str
-    option_symbol: str
-    action:        Literal["BUY", "SELL"]
-    quantity:      int
-    order_type:    Literal["MKT", "LMT"]
-    limit_price:   Optional[float]
-    conid:         Optional[int]
+    broker:          str
+    symbol:          str
+    option_symbol:   str
+    action:          Literal["BUY", "SELL"]
+    quantity:        int
+    order_type:      Literal["MKT", "LMT"]
+    limit_price:     Optional[float]
+    conid:           Optional[int]
+    entry_premium:   float = 0.0
+    portfolio_value: float = 50_000.0
 
 
 @dataclass
@@ -72,20 +74,26 @@ class AutoTradeService:
                 history=list(self._state.history),
             )
 
-    def fire(self):
-        """Execute the armed strategy. Disarms on the fire attempt (fail-closed).
+    def fire(self, portfolio_snapshot: list | None = None, portfolio_value: float | None = None):
+        """Execute the armed strategy.
 
-        The armed flag is cleared inside the same lock that reads the strategy, so a
-        manual /fire and the post-scan trigger cannot race into a double order. If the
-        order fails the system stays disarmed — re-arm to retry.
+        Disarms on the fire attempt (fail-closed). If portfolio_snapshot is
+        provided, runs an exposure cap check before executing — raises if the
+        caps would be breached. Pass portfolio_snapshot=None to skip the check
+        (backward-compat path for tests and callers without DB access).
         """
         with self._lock:
             if not self._state.armed or self._state.strategy is None:
                 raise RuntimeError("AutoTrader not armed — cannot fire")
             strategy = self._state.strategy
-            # Clear armed state atomically so a concurrent fire sees unarmed immediately.
             self._state.armed = False
             self._state.strategy = None
+
+        # Exposure cap check — runs after disarm so a double-fire is impossible.
+        if portfolio_snapshot is not None and strategy.entry_premium > 0:
+            pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
+            self._check_exposure(strategy, portfolio_snapshot, pv)
+
         result = execute_option_order(strategy)
         with self._lock:
             self._state.history.append({
@@ -98,13 +106,34 @@ class AutoTradeService:
         logger.info("AutoTrader fired: order %s status %s", result.order_id, result.status)
         return result
 
-    def maybe_fire_on_scan(self) -> None:
+    @staticmethod
+    def _check_exposure(strategy: ArmedStrategy, portfolio_snapshot: list, portfolio_value: float) -> None:
+        """Raise RuntimeError if the armed order would breach exposure caps."""
+        from app.services.portfolio_risk import check_position_risk
+        result = check_position_risk(
+            symbol=strategy.symbol,
+            contract_id=strategy.option_symbol,
+            proposed_contracts=strategy.quantity,
+            entry_premium=strategy.entry_premium,
+            current_price=strategy.entry_premium,
+            portfolio=portfolio_snapshot,
+            portfolio_value=portfolio_value,
+        )
+        if not result.approved:
+            logger.warning("AutoTrader fire blocked by exposure cap: %s", result.reasons)
+            raise RuntimeError(f"Exposure cap breach: {result.reasons}")
+
+    def maybe_fire_on_scan(
+        self,
+        portfolio_snapshot: list | None = None,
+        portfolio_value: float | None = None,
+    ) -> None:
         """Trigger #2: called after each scan completes. Fires if armed."""
         with self._lock:
             should_fire = self._state.armed
         if should_fire:
             try:
-                self.fire()
+                self.fire(portfolio_snapshot=portfolio_snapshot, portfolio_value=portfolio_value)
                 logger.info("AutoTrader: fired on scan completion trigger")
             except Exception as exc:
                 logger.error("AutoTrader scan-trigger fire failed: %s", exc)

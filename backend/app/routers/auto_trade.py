@@ -1,23 +1,28 @@
 from __future__ import annotations
 
 from typing import Literal, Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
+from app.database import get_db
 from app.services.auto_trader import auto_trader, ArmedStrategy
 
 router = APIRouter(prefix="/auto-trade", tags=["auto-trade"])
 
 
 class ArmRequest(BaseModel):
-    broker:        Literal["ibkr_paper", "tradier_paper"]
-    symbol:        str
-    option_symbol: str
-    action:        Literal["BUY", "SELL"]
-    quantity:      int
-    order_type:    Literal["MKT", "LMT"] = "LMT"
-    limit_price:   Optional[float] = None
-    conid:         Optional[int] = None
+    broker:          Literal["ibkr_paper", "tradier_paper"]
+    symbol:          str
+    option_symbol:   str
+    action:          Literal["BUY", "SELL"]
+    quantity:        int
+    order_type:      Literal["MKT", "LMT"] = "LMT"
+    limit_price:     Optional[float] = None
+    conid:           Optional[int] = None
+    entry_premium:   float = 0.0
+    portfolio_value: float = 50_000.0
 
 
 @router.post("/arm")
@@ -35,13 +40,21 @@ async def disarm() -> dict:
 
 
 @router.post("/fire")
-async def fire_now() -> dict:
-    """Trigger #1: manually fire the armed strategy immediately."""
+async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
+    """Trigger #1: manually fire the armed strategy with a live exposure check."""
+    from app.models.portfolio import PortfolioPositionModel
+    from app.services.portfolio_risk import orm_positions_to_risk
+    state = auto_trader.get_state()
+    portfolio_value = state.strategy.portfolio_value if state.strategy else 50_000.0
+    result_q = await db.execute(select(PortfolioPositionModel))
+    orm_positions = result_q.scalars().all()
+    portfolio_snapshot = orm_positions_to_risk(orm_positions)
     try:
-        result = auto_trader.fire()
+        result = auto_trader.fire(
+            portfolio_snapshot=portfolio_snapshot,
+            portfolio_value=portfolio_value,
+        )
     except (ValueError, RuntimeError) as exc:
-        # ValueError: unknown/blocked broker key from the router.
-        # RuntimeError: not armed, or a broker adapter failure.
         raise HTTPException(status_code=400, detail=str(exc))
     return {"order_id": result.order_id, "status": result.status, "broker": result.broker}
 

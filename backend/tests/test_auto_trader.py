@@ -66,3 +66,96 @@ def test_fire_when_unarmed_raises():
     svc = AutoTradeService()
     with pytest.raises(RuntimeError, match="not armed"):
         svc.fire()
+
+
+def test_armed_strategy_has_entry_premium_and_portfolio_value():
+    s = ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol="AAPL260620C00185000",
+        action="BUY", quantity=1, order_type="LMT",
+        limit_price=2.50, conid=None,
+        entry_premium=2.50, portfolio_value=50_000.0,
+    )
+    assert s.entry_premium == 2.50
+    assert s.portfolio_value == 50_000.0
+
+
+def test_fire_blocked_when_exposure_cap_breached(mocker):
+    """fire() raises RuntimeError when single-trade exposure would exceed the cap.
+    portfolio_value=50_000, max_single=5% → max capital_at_risk = $2,500
+    entry_premium=30.0 × 1 contract × 100 multiplier = $3,000 → exceeds cap"""
+    from app.data.ibkr_paper import OrderResult
+    svc = AutoTradeService()
+    mocker.patch(
+        "app.services.auto_trader.execute_option_order",
+        return_value=OrderResult(order_id="x", status="PreSubmitted", broker="ibkr_paper"),
+    )
+    armed = ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol="AAPL260620C00185000",
+        action="BUY", quantity=1, order_type="LMT",
+        limit_price=30.0, conid=None,
+        entry_premium=30.0, portfolio_value=50_000.0,
+    )
+    svc.arm(armed)
+    with pytest.raises(RuntimeError, match="Exposure cap"):
+        svc.fire(portfolio_snapshot=[])
+
+
+def test_fire_passes_when_within_cap(mocker):
+    """fire() executes when trade is within exposure limit."""
+    from app.data.ibkr_paper import OrderResult
+    svc = AutoTradeService()
+    mock_execute = mocker.patch(
+        "app.services.auto_trader.execute_option_order",
+        return_value=OrderResult(order_id="ok", status="PreSubmitted", broker="ibkr_paper"),
+    )
+    armed = ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol="AAPL260620C00185000",
+        action="BUY", quantity=1, order_type="LMT",
+        limit_price=2.50, conid=None,
+        entry_premium=2.50, portfolio_value=50_000.0,
+    )
+    svc.arm(armed)
+    result = svc.fire(portfolio_snapshot=[])
+    assert result.order_id == "ok"
+    mock_execute.assert_called_once()
+
+
+def test_fire_no_snapshot_skips_check(mocker):
+    """fire() with no portfolio_snapshot still executes (backward compat)."""
+    from app.data.ibkr_paper import OrderResult
+    svc = AutoTradeService()
+    mocker.patch(
+        "app.services.auto_trader.execute_option_order",
+        return_value=OrderResult(order_id="y", status="PreSubmitted", broker="ibkr_paper"),
+    )
+    armed = ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol="AAPL260620C00185000",
+        action="BUY", quantity=1, order_type="LMT",
+        limit_price=30.0, conid=None,
+    )
+    svc.arm(armed)
+    result = svc.fire()   # no portfolio_snapshot → check skipped
+    assert result.order_id == "y"
+
+
+def test_orm_positions_to_risk_converts_correctly():
+    from app.services.portfolio_risk import orm_positions_to_risk
+
+    class FakeORM:
+        symbol = "AAPL"
+        contract = "AAPL|185|2026-06-20|C"
+        entry_price = 2.50
+        qty = 2
+
+    positions = orm_positions_to_risk([FakeORM()])
+    assert len(positions) == 1
+    p = positions[0]
+    assert p.symbol == "AAPL"
+    assert p.contract_id == "AAPL|185|2026-06-20|C"
+    assert p.contracts == 2
+    assert p.entry_premium == 2.50
+    assert p.capital_at_risk == 2.50 * 2 * 100

@@ -1009,7 +1009,18 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
     # Run off the event loop — the broker call inside is synchronous network I/O.
     if result.candidates:
         from app.services.auto_trader import auto_trader as _auto_trader
-        await asyncio.to_thread(_auto_trader.maybe_fire_on_scan)
+        from app.models.portfolio import PortfolioPositionModel
+        from app.services.portfolio_risk import orm_positions_to_risk
+        _state = _auto_trader.get_state()
+        _pv = _state.strategy.portfolio_value if _state.strategy else 50_000.0
+        _qr = await db.execute(select(PortfolioPositionModel))
+        _orm_pos = _qr.scalars().all()
+        _portfolio_snapshot = orm_positions_to_risk(_orm_pos)
+        await asyncio.to_thread(
+            _auto_trader.maybe_fire_on_scan,
+            _portfolio_snapshot,
+            _pv,
+        )
     await _upsert_session(db, req=_last_request, result=result, status="complete")
     return result
 
