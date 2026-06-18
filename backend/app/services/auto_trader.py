@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import functools
 import logging
 import threading
+import yaml
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal, Optional
+
+_RISK_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
 logger = logging.getLogger(__name__)
 
@@ -169,13 +174,11 @@ class AutoTradeService:
             logger.error("AutoTrader scan-trigger fire failed: %s", exc)
 
     @staticmethod
+    @functools.lru_cache(maxsize=1)
     def _max_arm_age_minutes() -> int:
-        """Load max_arm_age_minutes from risk_rules.yaml."""
-        import yaml
-        from pathlib import Path
-        config_path = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
+        """Load max_arm_age_minutes from risk_rules.yaml (cached; restart to reload)."""
         try:
-            with open(config_path) as f:
+            with open(_RISK_CONFIG_PATH) as f:
                 cfg = yaml.safe_load(f)
             return int(cfg.get("auto_trade", {}).get("max_arm_age_minutes", 30))
         except Exception:
