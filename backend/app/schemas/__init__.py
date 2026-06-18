@@ -448,6 +448,12 @@ class ScanRequest(BaseModel):
     fundamentals_caution_below:  Optional[float] = None
     fundamentals_reject_below:   Optional[float] = None
     fundamentals_de_reject:      Optional[float] = None
+    # Bearish spread construction params (used by Pass 2 for bearish candidates)
+    spread_width:        float = 5.0
+    short_leg_delta:     float = 0.30
+    iv_rank_threshold:   float = 50.0
+    min_credit:          float = 0.50
+    max_debit_pct:       float = 40.0
 
 
 class RejectedCandidate(BaseModel):

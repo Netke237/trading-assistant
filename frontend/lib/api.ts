@@ -135,10 +135,17 @@ export const api = {
       fundamentals_de_reject?: number;
     },
     overrides?: Record<string, number | boolean | string>,
+    spreads?: {
+      spread_width?: number;
+      short_leg_delta?: number;
+      iv_rank_threshold?: number;
+      min_credit?: number;
+      max_debit_pct?: number;
+    },
   ) =>
     post<{ scan_id: string; timestamp: string; candidates: TradeCardData[]; rejected: { symbol: string; reason: string }[]; pipeline?: OptionsPipeline }>(
       '/api/scan',
-      { universe, direction, horizon, overrides: overrides ?? {}, ...filters },
+      { universe, direction, horizon, overrides: overrides ?? {}, ...filters, ...spreads },
     ),
 
   postStockScan: (req: {

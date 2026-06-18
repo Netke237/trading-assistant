@@ -65,6 +65,7 @@ from app.scoring.entry_quality import assess_entry
 from app.scoring.reward_risk import estimate_rr, estimate_targets
 from app.services.audit import new_rec_id, log_event
 from app.services.scan_scheduler import ScanScheduler
+from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
 from pydantic import BaseModel
 
 router = APIRouter(prefix='/api', tags=['scan'])
@@ -210,6 +211,11 @@ async def _process_symbol(
     bars_map: dict | None = None,
     fund_map: dict | None = None,
     fund_gate: dict | None = None,
+    spread_width: float = 5.0,
+    short_leg_delta: float = 0.30,
+    iv_rank_threshold: float = 50.0,
+    min_credit: float = 0.50,
+    max_debit_pct: float = 40.0,
 ) -> TradeCardData | RejectedCandidate:
     """Process one symbol: fetch data, score stock, validate contracts, build trade card.
 
@@ -554,6 +560,100 @@ async def _process_symbol(
         detail=_fh.detail,
     ) if _fh else None
 
+    # ── Bearish spread attachment (Pass 2 survivors only) ────────────────────────
+    _primary_sp = None
+    _alt_sp = None
+    if direction == "Bearish":
+        _primary_type = choose_primary(iv_rank=iv_rank or 0.0, threshold=iv_rank_threshold)
+        try:
+            async with sem:
+                _puts_chain, _calls_chain = await asyncio.gather(
+                    fetch_option_chain_async(client, symbol, option_type="P"),
+                    fetch_option_chain_async(client, symbol, option_type="C"),
+                )
+        except Exception as _chain_exc:
+            _log.debug("Spread: chain fetch failed for %s: %s", symbol, _chain_exc)
+            _puts_chain, _calls_chain = [], []
+
+        # Determine expiry from primary contract for spread legs
+        _spread_expiry = contract.get("expiry", "TBD")
+
+        if _primary_type == "bear_put" and len(_puts_chain) >= 2:
+            try:
+                _sp = build_bear_put(
+                    _puts_chain,
+                    expiry=_spread_expiry,
+                    width=spread_width,
+                    short_delta=short_leg_delta,
+                )
+                # Filter: reject if debit > max_debit_pct of width
+                if _sp.net_debit_credit <= (spread_width * max_debit_pct / 100):
+                    _primary_sp = _sp
+            except Exception as _exc:
+                _log.debug("Spread: build_bear_put failed for %s: %s", symbol, _exc)
+
+            if len(_calls_chain) >= 2:
+                try:
+                    _alt_sp = build_bear_call(
+                        _calls_chain,
+                        expiry=_spread_expiry,
+                        width=spread_width,
+                        short_delta=short_leg_delta,
+                    )
+                    # Filter: reject if credit < min_credit
+                    if -_alt_sp.net_debit_credit < min_credit:
+                        _alt_sp = None
+                except Exception as _exc:
+                    _log.debug("Spread: build_bear_call (alt) failed for %s: %s", symbol, _exc)
+
+        elif _primary_type == "bear_call" and len(_calls_chain) >= 2:
+            try:
+                _sp = build_bear_call(
+                    _calls_chain,
+                    expiry=_spread_expiry,
+                    width=spread_width,
+                    short_delta=short_leg_delta,
+                )
+                # Filter: reject if credit < min_credit
+                if -_sp.net_debit_credit >= min_credit:
+                    _primary_sp = _sp
+            except Exception as _exc:
+                _log.debug("Spread: build_bear_call failed for %s: %s", symbol, _exc)
+
+            if len(_puts_chain) >= 2:
+                try:
+                    _alt_sp = build_bear_put(
+                        _puts_chain,
+                        expiry=_spread_expiry,
+                        width=spread_width,
+                        short_delta=short_leg_delta,
+                    )
+                    # Filter: reject if debit > max_debit_pct of width
+                    if _alt_sp.net_debit_credit > (spread_width * max_debit_pct / 100):
+                        _alt_sp = None
+                except Exception as _exc:
+                    _log.debug("Spread: build_bear_put (alt) failed for %s: %s", symbol, _exc)
+
+        if _primary_sp is not None:
+            from app.schemas import OptionLeg as _OptionLeg
+            trade_card.spreadType = _primary_sp.spread_type
+            trade_card.netDebitCredit = _primary_sp.net_debit_credit
+            trade_card.maxProfit = _primary_sp.max_profit
+            trade_card.maxLoss = _primary_sp.max_loss
+            trade_card.breakeven = _primary_sp.breakeven
+            trade_card.legs = [
+                _OptionLeg(
+                    right=leg.right,
+                    strike=leg.strike,
+                    expiry=leg.expiry,
+                    action=leg.action,
+                    qty=leg.qty,
+                    bid=leg.bid,
+                    ask=leg.ask,
+                )
+                for leg in _primary_sp.legs
+            ]
+
     alts: list[AlternativeContract] = []
     for alt_card, alt_c in runner_ups:
         alt_strike = float(alt_c.get("strike", price))
@@ -593,6 +693,55 @@ async def _process_symbol(
             rrModel=alt_rr.model_used,
             reason=_alt_reason(alt_c, contract, is_call=(direction == "Bullish")),
         ))
+    # Append the alternative spread type (bear_call ↔ bear_put) if built
+    if direction == "Bearish" and _alt_sp is not None:
+        from app.schemas import OptionLeg as _OptionLeg
+        _spread_reason = (
+            "bear call spread — collects credit; better when IV rank is high"
+            if _alt_sp.spread_type == "bear_call"
+            else "bear put spread — debit spread; better when IV rank is low"
+        )
+        alts.append(AlternativeContract(
+            symbol=symbol,
+            strike=int(float(_alt_sp.legs[0].strike)),
+            expiry=_alt_sp.legs[0].expiry,
+            right=_alt_sp.legs[0].right,
+            dte=int(contract.get("dte", 30)),
+            mid=round(abs(_alt_sp.net_debit_credit), 2),
+            delta=round(float(contract.get("delta", 0.30)), 3),
+            theta=round(float(contract.get("theta", -0.05)), 3),
+            ivRank=int(contract.get("ivRank", 50)),
+            score=contract_card.score,
+            contractConfidence=contract_card.status,
+            contractBreakdown=ContractScoreBreakdown(
+                dteFit=contract_card.breakdown.dte_score,
+                delta=contract_card.breakdown.delta_score,
+                ivAttractiveness=contract_card.breakdown.iv_rank_score,
+                liquidity=contract_card.breakdown.liquidity_score,
+                spread=contract_card.breakdown.spread_score,
+            ),
+            rrRatio=rr.rr_ratio,
+            rrModel=rr.model_used,
+            reason=_spread_reason,
+            spreadType=_alt_sp.spread_type,
+            legs=[
+                _OptionLeg(
+                    right=leg.right,
+                    strike=leg.strike,
+                    expiry=leg.expiry,
+                    action=leg.action,
+                    qty=leg.qty,
+                    bid=leg.bid,
+                    ask=leg.ask,
+                )
+                for leg in _alt_sp.legs
+            ],
+            netDebitCredit=_alt_sp.net_debit_credit,
+            maxProfit=_alt_sp.max_profit,
+            maxLoss=_alt_sp.max_loss,
+            breakeven=_alt_sp.breakeven,
+        ))
+
     trade_card.alternatives = alts
     trade_card.alternativesCount = len(alts)
 
@@ -726,6 +875,11 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 bars_map=bars_map,
                 fund_map=fund_map,
                 fund_gate=fund_gate,
+                spread_width=req.spread_width,
+                short_leg_delta=req.short_leg_delta,
+                iv_rank_threshold=req.iv_rank_threshold,
+                min_credit=req.min_credit,
+                max_debit_pct=req.max_debit_pct,
             )
             for symbol in symbols
         ]
