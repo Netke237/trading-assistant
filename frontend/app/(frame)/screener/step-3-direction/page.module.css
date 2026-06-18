@@ -514,3 +514,13 @@
   color: var(--text-primary);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
+
+/* ---------- Regime direction mismatch advisory ---------- */
+
+.mismatchWarn {
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in srgb, var(--caution) 10%, var(--bg-surface));
+  border: 1px solid var(--caution);
+  border-left: 3px solid var(--caution);
+  border-radius: var(--radius-md);
+}

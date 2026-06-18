@@ -706,6 +706,7 @@ export default function Step3Page() {
   const scanOverrides  = useScanStore((s) => s.scanOverrides);
   const scanResult     = useScanStore((s) => s.scanResult);
   const screenerMode   = useScanStore((s) => s.screenerMode);
+  const regimeDirection = useScanStore((s) => s.regimeDirection);
 
   const [dir,     setDir]     = useState<Direction>(() => context?.direction ?? 'Bullish');
   const [hz,      setHz]      = useState<HorizonKey>(() => parseHorizonKey(context?.horizon));
@@ -811,6 +812,22 @@ export default function Step3Page() {
           </div>
         )}
       </div>
+
+      {/* Regime mismatch advisory — only shown for BULL/BEAR (not MIXED or null) */}
+      {regimeDirection === 'BULL' && dir === 'Bearish' && (
+        <div className={formStyles.mismatchWarn} role="alert">
+          <Text size={12} tone="caution">
+            The macro regime currently favours Bullish trades — your Bearish direction runs against the tide.
+          </Text>
+        </div>
+      )}
+      {regimeDirection === 'BEAR' && dir === 'Bullish' && (
+        <div className={formStyles.mismatchWarn} role="alert">
+          <Text size={12} tone="caution">
+            The macro regime currently favours Bearish trades — your Bullish direction runs against the tide.
+          </Text>
+        </div>
+      )}
 
       <div className={formStyles.group}>
         <Text size={12} weight={600}>Directional bias</Text>
