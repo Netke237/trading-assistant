@@ -443,10 +443,15 @@ async def _process_symbol(
     _rr = _rr_cfg()
     _bull = direction == "Bullish"
     target_price = price * (1 + _rr["bullish_target_pct"]) if _bull else price * (1 - _rr["bearish_target_pct"])
-    invalidation_price = price * (1 - _rr["bullish_invalidation_pct"]) if _bull else price * (1 + _rr["bearish_invalidation_pct"])
     strike = float(contract.get("strike", price))
     expiry_years = contract.get("dte", 30) / 365.0
     premium = float(contract.get("price", 0.10))
+    # Back-calculate the stock price at which the option would lose premium_stop_pct
+    # of its premium (using delta approximation). This keeps the Exit Plan's
+    # "Invalidation" field consistent with the R/R calculation's risk basis.
+    _delta_est = max(abs(float(contract.get("delta", 0.45))), 0.05)
+    _stock_stop_move = (premium * _rr["premium_stop_pct"]) / _delta_est
+    invalidation_price = price - _stock_stop_move if _bull else price + _stock_stop_move
 
     rr = estimate_rr(
         stock_price=price,
@@ -916,6 +921,50 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         _pipeline.no_chain, _pipeline.failed_score, _pipeline.failed_contracts, _pipeline.candidates,
     )
 
+    # ── Direction conviction filter ───────────────────────────────────────────
+    # Removes candidates that show no actual directional structure — prevents
+    # "least bad" stocks in an opposing trend from polluting the results.
+    # Intraday is exempt: intraday reversals are common regardless of daily trend.
+    _DIRECTION_TREND_GATE: dict[tuple[str, str], dict] = {
+        ("Bearish", "Swing"):    {"max_trend": 50},
+        ("Bearish", "Position"): {"max_trend": 40},
+        ("Bullish", "Swing"):    {"min_trend": 30},
+        ("Bullish", "Position"): {"min_trend": 40},
+    }
+    _dir_gate = _DIRECTION_TREND_GATE.get((req.direction, req.horizon))
+    direction_filtered_count = 0
+    if _dir_gate and candidates:
+        _kept: list[TradeCardData] = []
+        for _c in candidates:
+            _t = _c.stockBreakdown.trend if _c.stockBreakdown else 50
+            _max = _dir_gate.get("max_trend")
+            _min = _dir_gate.get("min_trend")
+            if (_max is not None and _t > _max) or (_min is not None and _t < _min):
+                direction_filtered_count += 1
+                rejected.append(RejectedCandidate(
+                    symbol=_c.symbol,
+                    reason=f"direction_conviction: trend {_t} {'>' if _max else '<'} "
+                           f"{_max if _max is not None else _min} for {req.direction} {req.horizon}",
+                ))
+            else:
+                _kept.append(_c)
+        candidates = _kept
+
+    # Compose direction banner: shown when candidates all score CAUTION, or when
+    # direction filter removed everything.
+    _direction_banner: str | None = None
+    _side = "short-side" if req.direction == "Bearish" else "long-side"
+    if not candidates and direction_filtered_count > 0:
+        _direction_banner = (
+            f"No confirmed {req.direction.lower()} setups in this universe. "
+            f"All candidates were removed — market structure does not support {_side} entries."
+        )
+    elif candidates and all(c.status == "CAUTION" for c in candidates):
+        _direction_banner = (
+            f"No strong {req.direction.lower()} setups detected. "
+            "All candidates are CAUTION-grade — consider reducing size or waiting for a clearer signal."
+        )
+
     # ── Shortlist cap ─────────────────────────────────────────────────────────
     _default_max = int(_settings.get("scan", {}).get("shortlist_max_candidates", 10))
     try:
@@ -952,6 +1001,7 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         shortlist_truncated=shortlist_truncated,
         original_count=original_count,
         pipeline=_pipeline,
+        direction_banner=_direction_banner,
     )
     _last_result = result
     # Trigger #2: fire armed auto-trade if this scan produced any candidates.
