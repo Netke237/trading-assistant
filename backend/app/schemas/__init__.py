@@ -220,6 +220,7 @@ class MarketRegime(BaseModel):
     conviction_label: Optional[str] = None
     hmm_state: Optional[str] = None
     alignment: Optional[Literal['Aligned', 'Diverging', 'Unavailable']] = None
+    regime_direction: Optional[Literal['BULL', 'BEAR', 'MIXED']] = None
 
 
 # ── Sectors ──────────────────────────────────────────────────────────────────
@@ -483,6 +484,7 @@ class ScanResult(BaseModel):
     shortlist_truncated: bool = False
     original_count: int = 0
     pipeline: Optional[OptionsPipeline] = None
+    direction_banner: Optional[str] = None
 
 
 # ── Portfolio persistence ─────────────────────────────────────────────────────

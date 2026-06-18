@@ -65,6 +65,32 @@ def _vix_percentile(history: list[float], current: float) -> float:
     return round(100.0 * below / len(history), 1)
 
 
+def _derive_regime_direction(
+    omm_state: str | None,
+    spx_status: str | None,
+    ndx_status: str | None,
+) -> str:
+    """Return 'BULL', 'BEAR', or 'MIXED' from OMM state (primary) or EMA metrics (fallback).
+
+    OMM states: 'Bull', 'Bear', 'Choppy' (Choppy → MIXED).
+    EMA fallback: both indices above 200 EMA → BULL; both below → BEAR; otherwise MIXED.
+    The early-return path (no market data) returns MarketRegime with regime_direction=None
+    via Pydantic default — intentional; the frontend renders no pill.
+    """
+    if omm_state == 'Bull':
+        return 'BULL'
+    if omm_state == 'Bear':
+        return 'BEAR'
+    if omm_state is not None:          # Choppy or any other OMM state
+        return 'MIXED'
+    # Fallback: both indices must agree; a single CAUTION yields MIXED
+    if spx_status == 'PASS' and ndx_status == 'PASS':
+        return 'BULL'
+    if spx_status == 'REJECT' and ndx_status == 'REJECT':
+        return 'BEAR'
+    return 'MIXED'
+
+
 def compute_overall_regime() -> str:
     """Return the current market overall status (PASS/CAUTION/REJECT/PENDING) without a full MarketRegime object."""
     try:
@@ -230,6 +256,12 @@ async def get_regime(
         except Exception:
             pass
 
+    _regime_dir = _derive_regime_direction(
+        omm_out.state if omm_out else None,
+        spx.status if spx else None,
+        ndx.status if ndx else None,
+    )
+
     return MarketRegime(
         overall=overall,
         headline=headline,
@@ -244,4 +276,5 @@ async def get_regime(
         conviction_label=omm_out.conviction_label if omm_out else None,
         hmm_state=_spx_hmm_state,
         alignment=_regime_alignment(omm_out.state if omm_out else None, _spx_hmm_state),
+        regime_direction=_regime_dir,
     )
