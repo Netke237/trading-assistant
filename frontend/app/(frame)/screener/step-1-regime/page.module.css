@@ -18,6 +18,37 @@
   gap: var(--space-3);
 }
 
+/* ---------- Regime direction pill ---------- */
+
+.directionPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.directionPill_BULL {
+  background: color-mix(in srgb, var(--pass) 15%, var(--bg-surface));
+  color: var(--pass);
+  border: 1px solid var(--pass);
+}
+
+.directionPill_BEAR {
+  background: color-mix(in srgb, var(--reject) 15%, var(--bg-surface));
+  color: var(--reject);
+  border: 1px solid var(--reject);
+}
+
+.directionPill_MIXED {
+  background: var(--bg-surface-2);
+  color: var(--text-dim);
+  border: 1px solid var(--border-subtle);
+}
+
 /* ---------- Explainer ---------- */
 
 .explainer {

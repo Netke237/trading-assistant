@@ -70,6 +70,7 @@ function pct(p: number): string {
 export default function Step1RegimePage() {
   const setRegime = useScanStore((s) => s.setRegime);
   const setCombinedRegime = useScanStore((s) => s.setCombinedRegime);
+  const setRegimeDirection = useScanStore((s) => s.setRegimeDirection);
   const context = useScanStore((s) => s.context);
   const markov = useSettingsStore((s) => s.markov);
 
@@ -88,6 +89,7 @@ export default function Step1RegimePage() {
     api.getRegime('intraday', { lookback: markov.lookback, threshold: markov.threshold, smoothing: markov.smoothing }).then((r) => {
       setRegimeData(r);
       setRegime(r.overall);
+      setRegimeDirection(r.regime_direction ?? null);
       const direction = useScanStore.getState().context?.direction ?? 'Bullish';
       const descriptor = descriptorFromState(r.omm?.state ?? '');
       setCombinedRegime(alignmentVerdict(direction, descriptor));
@@ -101,7 +103,7 @@ export default function Step1RegimePage() {
     const symbols = candidates.length > 0 ? candidates : ['SPY', 'QQQ', 'VIX', 'DIA'];
     setNewsLoading(true);
     api.getNews(symbols).then(setNews).catch(() => setNewsError(true)).finally(() => setNewsLoading(false));
-  }, [setRegime, setCombinedRegime, markov]);
+  }, [setRegime, setRegimeDirection, setCombinedRegime, markov]);
 
   const spx = lastClose(spxCandles);
   const ndx = lastClose(ndxCandles);
@@ -150,6 +152,21 @@ export default function Step1RegimePage() {
       <section className={`${pageStyles.banner} ${pageStyles[`banner_${combinedStatus}`]}`}>
         <div className={pageStyles.bannerLeft}>
           <StatusBadge status={combinedStatus} label={`REGIME ${combinedStatus}`} />
+          {regime?.regime_direction && (
+            <span
+              role="img"
+              aria-label={
+                regime.regime_direction === 'BULL' ? 'Regime direction: Bullish'
+                : regime.regime_direction === 'BEAR' ? 'Regime direction: Bearish'
+                : 'Regime direction: Mixed'
+              }
+              className={`${pageStyles.directionPill} ${pageStyles[`directionPill_${regime.regime_direction}`]}`}
+            >
+              {regime.regime_direction === 'BULL' ? '▲ Bullish'
+               : regime.regime_direction === 'BEAR' ? '▼ Bearish'
+               : '≈ Mixed'}
+            </span>
+          )}
           <Text size={14} weight={500}>{regime?.headline ?? ''}</Text>
         </div>
       </section>
