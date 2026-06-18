@@ -136,6 +136,7 @@ def test_fire_no_snapshot_skips_check(mocker):
         option_symbol="AAPL260620C00185000",
         action="BUY", quantity=1, order_type="LMT",
         limit_price=30.0, conid=None,
+        entry_premium=30.0, portfolio_value=50_000.0,   # would fail cap if snapshot provided
     )
     svc.arm(armed)
     result = svc.fire()   # no portfolio_snapshot → check skipped
