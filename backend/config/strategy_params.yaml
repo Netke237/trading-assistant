@@ -38,7 +38,6 @@ strategies:
         atr_stop_mult: 1.5
         rr_target_mult: 2.0
         tolerance: 0.08
-        rsi_overbought: 70.0
     search:
       ema_period: [20, 50]
       trend_ema: [100, 150, 200]
