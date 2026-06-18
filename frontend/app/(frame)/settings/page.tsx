@@ -373,6 +373,7 @@ function ScanForm() {
         setFDeRejectText={setFDeRejectText}
         isIntraday={isIntraday}
       />
+      <SpreadsSection />
     </>
   );
 }
@@ -465,6 +466,136 @@ function FundamentalsGateSection({
             setGate({ ...gate, deReject: clamped });
           }}
         />
+      </Row>
+    </>
+  );
+}
+
+/* ---------- Spreads ---------- */
+
+function SpreadsSection() {
+  const spreads    = useSettingsStore((s) => s.spreads);
+  const setSpreads = useSettingsStore((s) => s.setSpreads);
+
+  // Local text buffers — let the user type freely; validate on blur
+  const [deltaText,    setDeltaText]    = useState(String(spreads.shortLegDelta));
+  const [widthText,    setWidthText]    = useState(String(spreads.widthPoints));
+  const [ivRankText,   setIvRankText]   = useState(String(spreads.ivRankThreshold));
+  const [creditText,   setCreditText]   = useState(String(spreads.minCredit));
+  const [debitText,    setDebitText]    = useState(String(spreads.maxDebitPctOfWidth));
+
+  // Sync text buffers when the store resets
+  useEffect(() => { setDeltaText(String(spreads.shortLegDelta));      }, [spreads.shortLegDelta]);
+  useEffect(() => { setWidthText(String(spreads.widthPoints));         }, [spreads.widthPoints]);
+  useEffect(() => { setIvRankText(String(spreads.ivRankThreshold));    }, [spreads.ivRankThreshold]);
+  useEffect(() => { setCreditText(String(spreads.minCredit));          }, [spreads.minCredit]);
+  useEffect(() => { setDebitText(String(spreads.maxDebitPctOfWidth));  }, [spreads.maxDebitPctOfWidth]);
+
+  return (
+    <>
+      <SectionIntro
+        title="Spreads"
+        blurb="Parameters used when screening for vertical spreads (credit and debit). These values are passed to the backend on each scan and override the strategy defaults."
+      />
+      <Row
+        label="Short-leg delta"
+        hint="Delta of the short leg — 0 to 1 (e.g. 0.30 = 30Δ)"
+        defaultValue="0.30"
+      >
+        <input
+          type="text"
+          inputMode="decimal"
+          className={styles.numInput}
+          value={deltaText}
+          onChange={(e) => setDeltaText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(deltaText);
+            const clamped = isNaN(val) ? 0.30 : Math.max(0, Math.min(1, val));
+            setDeltaText(String(clamped));
+            setSpreads({ shortLegDelta: clamped });
+          }}
+        />
+        <Text size={12} tone="secondary">0–1</Text>
+      </Row>
+      <Row
+        label="Width (points)"
+        hint="Strike width of the spread in points"
+        defaultValue="5"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.numInput}
+          value={widthText}
+          onChange={(e) => setWidthText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(widthText);
+            const clamped = isNaN(val) ? 5 : Math.max(0.5, Math.min(500, val));
+            setWidthText(String(clamped));
+            setSpreads({ widthPoints: clamped });
+          }}
+        />
+        <Text size={12} tone="secondary">pts</Text>
+      </Row>
+      <Row
+        label="IV rank threshold"
+        hint="Minimum IV rank % required to enter a spread"
+        defaultValue="50"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.numInput}
+          value={ivRankText}
+          onChange={(e) => setIvRankText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(ivRankText);
+            const clamped = isNaN(val) ? 50 : Math.max(0, Math.min(100, val));
+            setIvRankText(String(clamped));
+            setSpreads({ ivRankThreshold: clamped });
+          }}
+        />
+        <Text size={12} tone="secondary">%</Text>
+      </Row>
+      <Row
+        label="Min credit"
+        hint="Minimum credit received per contract (credit spreads)"
+        defaultValue="$0.50"
+      >
+        <input
+          type="text"
+          inputMode="decimal"
+          className={styles.numInput}
+          value={creditText}
+          onChange={(e) => setCreditText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(creditText);
+            const clamped = isNaN(val) ? 0.50 : Math.max(0, Math.min(50, val));
+            setCreditText(String(clamped));
+            setSpreads({ minCredit: clamped });
+          }}
+        />
+        <Text size={12} tone="secondary">$</Text>
+      </Row>
+      <Row
+        label="Max debit (% of width)"
+        hint="Maximum debit paid as a percentage of the spread width (debit spreads)"
+        defaultValue="40"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.numInput}
+          value={debitText}
+          onChange={(e) => setDebitText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(debitText);
+            const clamped = isNaN(val) ? 40 : Math.max(0, Math.min(100, val));
+            setDebitText(String(clamped));
+            setSpreads({ maxDebitPctOfWidth: clamped });
+          }}
+        />
+        <Text size={12} tone="secondary">%</Text>
       </Row>
     </>
   );
@@ -1306,11 +1437,11 @@ function ScheduleSection({
 }: {
   title: string;
   blurb: string;
-  manualBlurb: string;
+  manualBlurb?: string;
   defaultTime: string;
   loadSchedule: () => Promise<IngestionSchedule>;
   saveSchedule: (s: Pick<IngestionSchedule, 'enabled' | 'time'>) => Promise<IngestionSchedule>;
-  onTrigger: () => Promise<unknown>;
+  onTrigger?: () => Promise<unknown>;
   triggerLabel?: string;
 }) {
   const [enabled, setEnabled] = useState(false);
@@ -1349,7 +1480,7 @@ function ScheduleSection({
 
   async function handleTrigger() {
     setTriggering(true); setTriggerResult('');
-    try { await onTrigger(); setTriggerResult('Started'); }
+    try { await onTrigger?.(); setTriggerResult('Started'); }
     catch { setTriggerResult('Failed — check logs'); }
     finally { setTriggering(false); setTimeout(() => setTriggerResult(''), 4000); }
   }
@@ -1375,16 +1506,20 @@ function ScheduleSection({
           {saveResult && <Text size={12} tone="secondary">{saveResult}</Text>}
         </div>
       </div>
-      <SectionIntro title="Manual trigger" blurb={manualBlurb} />
-      <div className={styles.row}>
-        <div className={styles.rowLabel} />
-        <div className={styles.rowControl} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button type="button" className={styles.btn} onClick={handleTrigger} disabled={triggering}>
-            {triggering ? 'Starting…' : triggerLabel}
-          </button>
-          {triggerResult && <Text size={12} tone="secondary">{triggerResult}</Text>}
-        </div>
-      </div>
+      {onTrigger && (
+        <>
+          <SectionIntro title="Manual trigger" blurb={manualBlurb ?? ''} />
+          <div className={styles.row}>
+            <div className={styles.rowLabel} />
+            <div className={styles.rowControl} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <button type="button" className={styles.btn} onClick={handleTrigger} disabled={triggering}>
+                {triggering ? 'Starting…' : triggerLabel}
+              </button>
+              {triggerResult && <Text size={12} tone="secondary">{triggerResult}</Text>}
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }
@@ -1651,12 +1786,9 @@ function StrategyTuningForm() {
       <ScheduleSection
         title="Automatic tuning schedule"
         blurb="Run walk-forward optimization automatically at a fixed time each day. The job is skipped if a run is already active."
-        manualBlurb="Trigger a walk-forward optimization run immediately. The job runs in the background — results appear below when complete."
         defaultTime="02:00"
         loadSchedule={getTuningSchedule}
         saveSchedule={saveTuningSchedule}
-        onTrigger={async () => { await startTuningJob(); }}
-        triggerLabel="Run now"
       />
 
       <SectionIntro

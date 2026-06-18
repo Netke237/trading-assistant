@@ -156,7 +156,14 @@ export function RunScanButton() {
     const startISO = nowLocalISO();        // capture start time before the async call
     setScanState('SCANNING', startISO);   // scanAt = START time (not end)
     useScanStore.getState().setRejectedLog([]);
-    api.postScan(universe, direction, horizon, filters, effectiveOverrides)
+    const spreads = useSettingsStore.getState().spreads;
+    api.postScan(universe, direction, horizon, filters, effectiveOverrides, {
+      spread_width:       spreads.widthPoints,
+      short_leg_delta:    spreads.shortLegDelta,
+      iv_rank_threshold:  spreads.ivRankThreshold,
+      min_credit:         spreads.minCredit,
+      max_debit_pct:      spreads.maxDebitPctOfWidth,
+    })
       .then((result) => {
         setScanResult(result);
         useScanStore.getState().setRejectedLog(result.rejected ?? []);
