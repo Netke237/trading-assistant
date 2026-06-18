@@ -190,6 +190,7 @@ export const api = {
     broker: string; symbol: string; option_symbol: string;
     action: 'BUY' | 'SELL'; quantity: number;
     order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;
+    entry_premium?: number;
   }) => post<{ armed: boolean }>('/auto-trade/arm', req),
 
   disarmAutoTrade: () => del('/auto-trade/arm'),

@@ -201,6 +201,52 @@ def test_maybe_fire_on_scan_disarms_stale_order(mocker):
     assert svc.get_state().armed is False
 
 
+def test_fire_blocked_records_cap_blocked_history(mocker):
+    """Exposure cap breach must be written to history so the event is not lost."""
+    from app.data.ibkr_paper import OrderResult
+    svc = AutoTradeService()
+    mocker.patch(
+        "app.services.auto_trader.execute_option_order",
+        return_value=OrderResult(order_id="x", status="PreSubmitted", broker="ibkr_paper"),
+    )
+    armed = ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol="AAPL260620C00185000",
+        action="BUY", quantity=1, order_type="LMT",
+        limit_price=30.0, conid=None,
+        entry_premium=30.0, portfolio_value=50_000.0,
+    )
+    svc.arm(armed)
+    with pytest.raises(RuntimeError, match="Exposure cap"):
+        svc.fire(portfolio_snapshot=[])
+    history = svc.get_state().history
+    assert len(history) == 1
+    assert history[0]["status"] == "cap_blocked"
+    assert history[0]["order_id"] is None
+
+
+def test_fire_failed_order_records_order_failed_history(mocker):
+    """Broker execute failure must be written to history with status 'order_failed'."""
+    svc = AutoTradeService()
+    mocker.patch(
+        "app.services.auto_trader.execute_option_order",
+        side_effect=RuntimeError("broker timeout"),
+    )
+    armed = ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol="AAPL260620C00185000",
+        action="BUY", quantity=1, order_type="LMT",
+        limit_price=2.50, conid=None,
+    )
+    svc.arm(armed)
+    with pytest.raises(RuntimeError, match="Order failed"):
+        svc.fire()
+    history = svc.get_state().history
+    assert len(history) == 1
+    assert history[0]["status"] == "order_failed"
+    assert history[0]["order_id"] is None
+
+
 def test_maybe_fire_on_scan_fires_fresh_order(mocker):
     """An order armed recently must still fire normally."""
     from app.data.ibkr_paper import OrderResult

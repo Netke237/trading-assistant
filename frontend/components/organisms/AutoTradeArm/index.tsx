@@ -40,6 +40,7 @@ export function AutoTradeArm({ card, broker }: AutoTradeArmProps) {
         quantity:      1,
         order_type:    'LMT',
         limit_price:   card.entry.limit,
+        entry_premium: card.contractDetails?.mid ?? card.entry.limit,
       });
       setArmed(true);
     } catch (e) {

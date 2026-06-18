@@ -99,14 +99,39 @@ class AutoTradeService:
         # Exposure cap check — runs after disarm so a double-fire is impossible.
         if portfolio_snapshot is not None and strategy.entry_premium > 0:
             pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
-            self._check_exposure(strategy, portfolio_snapshot, pv)
+            try:
+                self._check_exposure(strategy, portfolio_snapshot, pv)
+            except RuntimeError:
+                with self._lock:
+                    self._state.history.append({
+                        "order_id": None,
+                        "status":   "cap_blocked",
+                        "broker":   strategy.broker,
+                        "symbol":   strategy.symbol,
+                        "option":   strategy.option_symbol,
+                    })
+                raise
         elif portfolio_snapshot is not None and strategy.entry_premium == 0.0:
             logger.warning(
                 "AutoTrader: exposure check skipped for %s — entry_premium is 0.0 (set it in ArmRequest)",
                 strategy.symbol,
             )
 
-        result = execute_option_order(strategy)
+        try:
+            result = execute_option_order(strategy)
+        except Exception as exc:
+            with self._lock:
+                self._state.history.append({
+                    "order_id": None,
+                    "status":   "order_failed",
+                    "broker":   strategy.broker,
+                    "symbol":   strategy.symbol,
+                    "option":   strategy.option_symbol,
+                    "error":    str(exc),
+                })
+            logger.error("AutoTrader order failed for %s: %s", strategy.symbol, exc)
+            raise RuntimeError(f"Order failed: {exc}") from exc
+
         with self._lock:
             self._state.history.append({
                 "order_id": result.order_id,

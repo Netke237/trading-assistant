@@ -1005,9 +1005,9 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         direction_banner=_direction_banner,
     )
     _last_result = result
-    # Trigger #2: fire armed auto-trade if this scan produced any candidates.
+    # Trigger #2: fire armed auto-trade only when at least one PASS candidate exists.
     # Run off the event loop — the broker call inside is synchronous network I/O.
-    if result.candidates:
+    if any(c.finalStatus == 'PASS' for c in result.candidates):
         from app.services.auto_trader import auto_trader as _auto_trader
         if _auto_trader.get_state().armed:
             from app.models.portfolio import PortfolioPositionModel

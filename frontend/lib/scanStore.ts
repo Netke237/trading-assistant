@@ -37,6 +37,7 @@ export interface ScanResult {
   candidates: TradeCardData[];
   rejected: RejectedEntry[];
   pipeline?: OptionsPipeline;
+  direction_banner?: string;
 }
 
 interface ScanStoreState {
@@ -77,6 +78,9 @@ interface ScanStoreState {
   previousStockScanResult:  StockScanResult | null;
   /** ISO-ish local timestamp of the last completed stock scan. */
   stockScanAt:         string | null;
+  /** ISO-ish local timestamp of the last completed options scan. */
+  optionsScanAt:       string | null;
+  setOptionsScanAt:    (at: string) => void;
   setStockScanResult:  (r: StockScanResult | null) => void;
   stockBasket:           PositionCardData[];
   addToStockBasket:      (card: PositionCardData) => void;
@@ -104,7 +108,18 @@ export const useScanStore = create<ScanStoreState>()(
       pickedContracts:    {},
       contractsBySymbol:  {},
       setScanState:    (s, at, durationMs) => set({ scanState: s, scanAt: at ?? null, scanDurationMs: durationMs ?? null }),
-      setContext:      (c) => set({ context: c }),
+      setContext:      (c) => set((state) => {
+        if (c === null) return { context: null };
+        const prev = state.context;
+        const contextChanged = !prev
+          || prev.universe  !== c.universe
+          || prev.direction !== c.direction
+          || prev.horizon   !== c.horizon;
+        return {
+          context: c,
+          ...(contextChanged ? { previousRun: null, previousStockScanResult: null } : {}),
+        };
+      }),
       setRegime:       (r) => set({ regime: r }),
       setCombinedRegime: (r) => set({ combinedRegime: r }),
       setScanResult:   (r) => set((state) => ({
@@ -123,9 +138,11 @@ export const useScanStore = create<ScanStoreState>()(
       stockScanResult:          null,
       previousStockScanResult:  null,
       stockScanAt:              null,
+      optionsScanAt:            null,
       stockBasket:           [],
       activeStrategy:           null,
       setScreenerMode:     (m) => set({ screenerMode: m }),
+      setOptionsScanAt:    (at) => set({ optionsScanAt: at }),
       setStockScanResult:  (r) => set((state) => ({
         stockScanResult: r,
         previousStockScanResult: r !== null ? state.stockScanResult : state.previousStockScanResult,
@@ -147,7 +164,7 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 6,
+      version: 7,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -157,6 +174,7 @@ export const useScanStore = create<ScanStoreState>()(
         if (version < 4) s = { ...s, screenerMode: 'options', stockScanResult: null, activeStrategy: null };
         if (version < 5) s = { ...s, previousStockScanResult: null, stockBasket: [] };
         if (version < 6) s = { ...s, stockScanAt: null };
+        if (version < 7) s = { ...s, optionsScanAt: null };
         return s;
       },
       partialize: (state) => ({
@@ -174,6 +192,7 @@ export const useScanStore = create<ScanStoreState>()(
         stockScanResult:          state.stockScanResult,
         previousStockScanResult:  state.previousStockScanResult,
         stockScanAt:              state.stockScanAt,
+        optionsScanAt:            state.optionsScanAt,
         stockBasket:     state.stockBasket,
       }),
       merge: (persisted, current) => {

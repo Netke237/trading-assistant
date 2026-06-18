@@ -23,6 +23,14 @@ from app.data.market import fetch_contract_quote_async
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
+import logging as _logging
+_log = _logging.getLogger(__name__)
+
+
+def _contract_multiplier(contract: str) -> int:
+    """Return 1 for stock positions (SYMBOL|STOCK), 100 for option contracts."""
+    return 1 if str(contract).endswith("|STOCK") else 100
+
 
 # ── Broker integration (NOT ACTIVE YET) ───────────────────────────────────────
 # Future feature: when a trade is closed, optionally route the closing order to
@@ -33,8 +41,11 @@ router = APIRouter(prefix='/api', tags=['trading'])
 def _maybe_send_close_to_broker(closed: ClosedPositionModel, send: bool) -> None:
     if not send:
         return
-    # TODO(broker): submit the closing order to the broker API. Inactive for now.
-    return
+    # Broker routing not yet implemented — log a warning so callers aren't misled.
+    _log.warning(
+        "sendToBroker=True for %s but broker close-routing is not yet implemented — order NOT sent",
+        closed.contract,
+    )
 
 
 @router.get('/portfolio', response_model=list[PortfolioPositionSchema])
@@ -76,7 +87,7 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
                     (schema.currentPrice - schema.entryPrice) / schema.entryPrice * 100, 2
                 )
 
-    open_value = sum(s.currentPrice * 100 * s.qty for s in schemas)
+    open_value = sum(s.currentPrice * _contract_multiplier(s.contract) * s.qty for s in schemas)
     open_pnl = sum(s.pnlDollar or 0.0 for s in schemas)
     await _upsert_equity_snapshot(db, open_value, open_pnl)
     return schemas
@@ -107,7 +118,7 @@ async def add_position(
             contracts=p.qty,
             entry_premium=p.entry_price,
             current_price=p.entry_price,
-            capital_at_risk=p.entry_price * p.qty * 100,
+            capital_at_risk=p.entry_price * p.qty * _contract_multiplier(p.contract),
         )
         for p in db_positions
     ]
