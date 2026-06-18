@@ -109,6 +109,18 @@
   user-select: none;
 }
 
+/* Spread leg sub-rows — indented, lighter border */
+.legSubRow {
+  border-bottom: 1px solid var(--border-subtle);
+  opacity: 0.85;
+}
+
+.ibkrNote {
+  grid-column: 5 / 7;
+  text-align: right;
+  font-style: italic;
+}
+
 .footer {
   display: flex;
   justify-content: space-between;
