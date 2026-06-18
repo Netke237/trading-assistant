@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ class ArmedStrategy:
     conid:           Optional[int]
     entry_premium:   float = 0.0
     portfolio_value: float = 50_000.0
+    armed_at:        datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -141,15 +143,43 @@ class AutoTradeService:
         portfolio_snapshot: list | None = None,
         portfolio_value: float | None = None,
     ) -> None:
-        """Trigger #2: called after each scan completes. Fires if armed."""
+        """Trigger #2: called after each scan completes. Fires if armed and fresh."""
         with self._lock:
             should_fire = self._state.armed
-        if should_fire:
-            try:
-                self.fire(portfolio_snapshot=portfolio_snapshot, portfolio_value=portfolio_value)
-                logger.info("AutoTrader: fired on scan completion trigger")
-            except Exception as exc:
-                logger.error("AutoTrader scan-trigger fire failed: %s", exc)
+            strategy = self._state.strategy
+
+        if not should_fire or strategy is None:
+            return
+
+        # Staleness guard — disarm without firing if the order is too old.
+        max_age = self._max_arm_age_minutes()
+        age_minutes = (datetime.now(timezone.utc) - strategy.armed_at).total_seconds() / 60
+        if age_minutes > max_age:
+            self.disarm()
+            logger.warning(
+                "AutoTrader: disarming stale armed order for %s (armed %.0f min ago, limit %d min)",
+                strategy.symbol, age_minutes, max_age,
+            )
+            return
+
+        try:
+            self.fire(portfolio_snapshot=portfolio_snapshot, portfolio_value=portfolio_value)
+            logger.info("AutoTrader: fired on scan completion trigger")
+        except Exception as exc:
+            logger.error("AutoTrader scan-trigger fire failed: %s", exc)
+
+    @staticmethod
+    def _max_arm_age_minutes() -> int:
+        """Load max_arm_age_minutes from risk_rules.yaml."""
+        import yaml
+        from pathlib import Path
+        config_path = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
+        try:
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f)
+            return int(cfg.get("auto_trade", {}).get("max_arm_age_minutes", 30))
+        except Exception:
+            return 30
 
 
 # Module-level singleton
