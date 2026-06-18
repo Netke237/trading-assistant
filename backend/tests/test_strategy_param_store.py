@@ -180,9 +180,9 @@ def test_adopt_preserves_other_strategies(tmp_path, monkeypatch):
 
 def test_signal_kwargs_merge_request_over_store(monkeypatch):
     from app.services import strategy_param_store as store
-    monkeypatch.setattr("app.routers.stock_scan.get_active", lambda s: {"ema_period": 50, "trend_ema": 100})
+    monkeypatch.setattr("app.routers.stock_scan.get_active", lambda s, d="Bullish": {"ema_period": 50, "trend_ema": 100})
     # request override should win over the adopted default
     from app.routers.stock_scan import _merge_strategy_params
-    merged = _merge_strategy_params("pullback_ema", {"ema_period": 20})
+    merged = _merge_strategy_params("pullback_ema", "Bullish", {"ema_period": 20})
     assert merged["ema_period"] == 20      # request wins
     assert merged["trend_ema"] == 100      # store default fills the rest

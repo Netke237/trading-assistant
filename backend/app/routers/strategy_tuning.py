@@ -23,6 +23,7 @@ _LOCK: asyncio.Lock = asyncio.Lock()
 class AdoptRequest(BaseModel):
     strategy: str
     params: dict[str, Any]
+    direction: str = "Bullish"
 
     @field_validator("params")
     @classmethod
@@ -174,5 +175,5 @@ async def update_tuning_schedule(body: TuningScheduleUpdate) -> dict:
 async def adopt(body: AdoptRequest) -> dict:
     if not body.params:
         raise HTTPException(status_code=422, detail="params must not be empty — aborting to avoid wiping active config")
-    store.adopt(body.strategy, body.params)
-    return {"ok": True, "active": store.get_active(body.strategy)}
+    store.adopt(body.strategy, body.params, direction=body.direction)
+    return {"ok": True, "active": store.get_active(body.strategy, body.direction)}

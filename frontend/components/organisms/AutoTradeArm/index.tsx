@@ -36,7 +36,7 @@ export function AutoTradeArm({ card, broker }: AutoTradeArmProps) {
         broker,
         symbol:        card.symbol,
         option_symbol: contractId,
-        action:        card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        action:        'BUY',   // long single-leg option (call or put) is always buy-to-open
         quantity:      1,
         order_type:    'LMT',
         limit_price:   card.entry.limit,

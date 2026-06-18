@@ -265,8 +265,10 @@ regime_sizing:
 
 fundamentals_gate:
   enabled: true
-  cautionBelow: 45
-  rejectBelow: 30
+  cautionBelow: 45   # bullish: demote weak fundamentals
+  rejectBelow: 30    # bullish
+  cautionAbove: 70   # bearish: caution shorting strong companies
+  rejectAbove: 80    # bearish: reject shorting very strong companies
   safety:
     reject_on_negative_equity: true
     debt_to_equity_reject: 3.0

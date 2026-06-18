@@ -290,6 +290,48 @@ export function TradeCard({
           </section>
         )}
 
+        {/* 5b. Spread legs panel — shown only for multi-leg spreads */}
+        {data.spreadType && data.spreadType !== 'single' && data.legs && data.legs.length > 0 && (
+          <section className={`${styles.detailsCard} ${styles.spreadLegsCard}`}>
+            <Text size={14} weight={600}>
+              Spread Legs —{' '}
+              {data.spreadType === 'bear_put' ? 'Bear Put Spread' : 'Bear Call Spread'}
+            </Text>
+            <div className={styles.legsTableHead}>
+              <Text size={10} tone="dim">ACTION</Text>
+              <Text size={10} tone="dim">QTY</Text>
+              <Text size={10} tone="dim">STRIKE</Text>
+              <Text size={10} tone="dim">RIGHT</Text>
+              <Text size={10} tone="dim">EXPIRY</Text>
+            </div>
+            {data.legs.map((leg, i) => (
+              <div key={i} className={styles.legRow}>
+                <Data size={12} weight={500} tone={leg.action === 'BUY' ? 'pass' : 'caution'}>
+                  {leg.action}
+                </Data>
+                <Data size={12}>{leg.qty}</Data>
+                <Data size={12}>${leg.strike}</Data>
+                <Data size={12}>{leg.right === 'C' ? 'Call' : 'Put'}</Data>
+                <Data size={12}>{leg.expiry}</Data>
+              </div>
+            ))}
+            <div className={styles.spreadSummary}>
+              <KV
+                label="Net debit / credit"
+                value={
+                  data.netDebitCredit != null
+                    ? `${data.netDebitCredit >= 0 ? '+' : '−'}$${Math.abs(data.netDebitCredit).toFixed(2)}`
+                    : '—'
+                }
+                mono
+              />
+              <KV label="Max profit" value={data.maxProfit != null ? `$${data.maxProfit.toFixed(2)}` : '—'} mono />
+              <KV label="Max loss"   value={data.maxLoss   != null ? `$${data.maxLoss.toFixed(2)}`   : '—'} mono />
+              <KV label="Breakeven"  value={data.breakeven  != null ? `$${data.breakeven.toFixed(2)}`  : '—'} mono />
+            </div>
+          </section>
+        )}
+
         {data.alternatives && data.alternatives.length > 0 && (
           <div className={styles.altSection}>
             <button

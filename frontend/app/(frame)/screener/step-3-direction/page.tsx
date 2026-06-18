@@ -8,12 +8,13 @@
  * per-subgroup collapse, Score Weights from Settings migrated here.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import type { Direction } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
 import type { RejectedEntry } from '@/lib/scanStore';
 import { api } from '@/lib/api';
+import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import styles from '../screener.module.css';
@@ -717,9 +718,14 @@ export default function Step3Page() {
     'Score Weights': true, Trend: true, Pullback: true, Trigger: true, Event: true, Volatility: true, Contract: true,
   });
 
+  const descriptorRef = useRef<RegimeDescriptor>('Choppy');
+
   useEffect(() => {
     api.getRegime().then((r) => {
       useScanStore.getState().setRegime(r.overall);
+      descriptorRef.current = descriptorFromState(r.omm?.state ?? '');
+      const dir = useScanStore.getState().context?.direction ?? 'Bullish';
+      useScanStore.getState().setCombinedRegime(alignmentVerdict(dir, descriptorRef.current));
     }).catch(() => {});
   }, []);
 
@@ -737,6 +743,7 @@ export default function Step3Page() {
 
   const handleDirChange = (d: Direction) => {
     setDir(d);
+    useScanStore.getState().setCombinedRegime(alignmentVerdict(d, descriptorRef.current));
     syncToStore(d, hz, minDays, maxDays);
   };
   const handleHzChange = (h: HorizonKey) => {

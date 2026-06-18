@@ -24,6 +24,7 @@ class StockScanRequest(BaseModel):
     breakout_volume_mult:   float = Field(1.1,  gt=1.0)         # must exceed 1× (volume expansion)
     rsi_period:             int   = Field(14,   gt=0)           # RSI look-back period
     rsi_oversold:           float = Field(30.0, gt=0, le=100)   # RSI oversold threshold
+    rsi_overbought:         float = Field(70.0, gt=0, le=100)   # RSI overbought threshold (bearish)
     rsi_trend_sma:          int   = Field(200,  gt=0)           # trend-confirmation SMA
     min_price:   Optional[float] = None
     max_price:   Optional[float] = None

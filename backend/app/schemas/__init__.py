@@ -356,6 +356,16 @@ class TradeExit(BaseModel):
     targets: list[TargetLevel] = []  # NEW — 3 graduated target levels
 
 
+class OptionLeg(BaseModel):
+    right:  Literal["C", "P"]
+    strike: float
+    expiry: str
+    action: Literal["BUY", "SELL"]
+    qty:    int
+    bid:    float
+    ask:    float
+
+
 class AlternativeContract(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     symbol:             str
@@ -373,6 +383,12 @@ class AlternativeContract(BaseModel):
     rrRatio:            float
     rrModel:            RrModel
     reason:             str
+    spreadType:         Optional[Literal["single", "bear_put", "bear_call"]] = None
+    legs:               Optional[list[OptionLeg]] = None
+    netDebitCredit:     Optional[float] = None
+    maxProfit:          Optional[float] = None
+    maxLoss:            Optional[float] = None
+    breakeven:          Optional[float] = None
 
 
 class TradeCardData(BaseModel):
@@ -403,6 +419,12 @@ class TradeCardData(BaseModel):
     confidenceText:    Optional[str] = None
     sentiment:         Optional[SentimentData] = None
     fundamentals:      Optional[FundamentalsOut] = None
+    spreadType:        Optional[Literal["single", "bear_put", "bear_call"]] = None
+    legs:              Optional[list[OptionLeg]] = None
+    netDebitCredit:    Optional[float] = None
+    maxProfit:         Optional[float] = None
+    maxLoss:           Optional[float] = None
+    breakeven:         Optional[float] = None
 
 
 # ── Scan ─────────────────────────────────────────────────────────────────────
@@ -426,6 +448,12 @@ class ScanRequest(BaseModel):
     fundamentals_caution_below:  Optional[float] = None
     fundamentals_reject_below:   Optional[float] = None
     fundamentals_de_reject:      Optional[float] = None
+    # Bearish spread construction params (used by Pass 2 for bearish candidates)
+    spread_width:        float = 5.0
+    short_leg_delta:     float = 0.30
+    iv_rank_threshold:   float = 50.0
+    min_credit:          float = 0.50
+    max_debit_pct:       float = 40.0
 
 
 class RejectedCandidate(BaseModel):

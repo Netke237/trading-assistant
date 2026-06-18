@@ -102,8 +102,8 @@ export function RunScanButton() {
       horizon = maxDays <= 4 ? 'Intraday' : maxDays <= 20 ? 'Swing' : 'Position';
     }
 
-    const currentRegime = useScanStore.getState().regime;
-    if (currentRegime === 'REJECT' && direction === 'Bullish' && !regimeConfirmedRef.current) {
+    const currentRegime = useScanStore.getState().combinedRegime;
+    if (currentRegime === 'REJECT' && !regimeConfirmedRef.current) {
       setShowRegimeConfirm(true);
       return;
     }
@@ -156,7 +156,14 @@ export function RunScanButton() {
     const startISO = nowLocalISO();        // capture start time before the async call
     setScanState('SCANNING', startISO);   // scanAt = START time (not end)
     useScanStore.getState().setRejectedLog([]);
-    api.postScan(universe, direction, horizon, filters, effectiveOverrides)
+    const spreads = useSettingsStore.getState().spreads;
+    api.postScan(universe, direction, horizon, filters, effectiveOverrides, {
+      spread_width:       spreads.widthPoints,
+      short_leg_delta:    spreads.shortLegDelta,
+      iv_rank_threshold:  spreads.ivRankThreshold,
+      min_credit:         spreads.minCredit,
+      max_debit_pct:      spreads.maxDebitPctOfWidth,
+    })
       .then((result) => {
         setScanResult(result);
         useScanStore.getState().setRejectedLog(result.rejected ?? []);
@@ -179,7 +186,7 @@ export function RunScanButton() {
           alertType: 'SCAN_FAILED',
         });
       });
-  }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit, screenerMode, activeStrategy]);
+  }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit, screenerMode, activeStrategy, shortlistMaxCandidates, fundamentalsGate]);
 
   return (
     <>
@@ -188,7 +195,7 @@ export function RunScanButton() {
           <div className={styles.regimeDialog}>
             <p id="regime-run-title" className={styles.regimeDialogTitle}>Market regime is REJECT</p>
             <p className={styles.regimeDialogBody}>
-              Running a Bullish scan in a REJECT regime carries elevated risk.
+              Running a {context?.direction ?? 'Bullish'} scan while the regime opposes it (REJECT) carries elevated risk.
               Proceed anyway?
             </p>
             <div className={styles.regimeDialogActions}>

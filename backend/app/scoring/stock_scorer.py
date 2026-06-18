@@ -1038,8 +1038,18 @@ def score_stock(
                     fund_status = "CAUTION"
                 else:
                     fund_status = "PASS"
+            elif direction in ("Bearish", "bearish"):
+                caution_above = fundamentals_gate.get("cautionAbove", 70)
+                reject_above = fundamentals_gate.get("rejectAbove", 80)
+                if health_score > reject_above:
+                    final_status = _worse(final_status, "REJECT")
+                    fund_status = "REJECT"
+                elif health_score > caution_above:
+                    final_status = _worse(final_status, "CAUTION")
+                    fund_status = "CAUTION"
+                else:
+                    fund_status = "PASS"
             else:
-                # Bearish: display only, no soft demote
                 fund_status = "PASS"
 
             rules.append(RuleResult(

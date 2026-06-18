@@ -75,12 +75,12 @@ _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
     "pullback_ema":       lambda r: {"tolerance": r.pullback_tolerance_pct, "ema_period": r.pullback_ema_period, "trend_ema": r.pullback_trend_ema, "ma_type": r.pullback_ma_type, "require_reversal": r.pullback_require_reversal},
     "breakout_base":      lambda r: {"volume_mult": r.breakout_volume_mult},
     "ma_crossover":       lambda r: {"fast": r.ma_crossover_fast, "slow": r.ma_crossover_slow, "lookback": r.ma_crossover_lookback},
-    "mean_reversion_rsi": lambda r: {"rsi_period": r.rsi_period, "rsi_oversold": r.rsi_oversold, "trend_sma": r.rsi_trend_sma},
+    "mean_reversion_rsi": lambda r: {"rsi_period": r.rsi_period, "rsi_oversold": r.rsi_oversold, "rsi_overbought": getattr(r, "rsi_overbought", 70.0), "trend_sma": r.rsi_trend_sma},
 }
 
-def _merge_strategy_params(strategy: str, request_kwargs: dict) -> dict:
-    """Adopted defaults from the store, overridden by any per-request kwargs."""
-    merged = get_active(strategy)
+def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
+    """Adopted defaults for this direction, overridden by per-request kwargs."""
+    merged = get_active(strategy, direction)
     merged.update({k: v for k, v in request_kwargs.items() if v is not None})
     return merged
 
@@ -231,9 +231,10 @@ async def _process_stock(
             if not signal_fn:
                 return {"symbol": symbol, "reason": f"unknown strategy {req.strategy}"}
             signal_kwargs = _merge_strategy_params(
-                req.strategy, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req)
+                req.strategy, req.direction,
+                _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
             )
-            signal = signal_fn(bars[-120:], **signal_kwargs)
+            signal = signal_fn(bars[-120:], direction=req.direction, **signal_kwargs)
             if signal is None:
                 return {"symbol": symbol, "reason": f"no {req.strategy} setup"}
 

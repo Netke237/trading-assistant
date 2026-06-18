@@ -136,3 +136,29 @@
   flex-shrink: 0;
 }
 .chartBtn:hover { opacity: 1; }
+
+/* Spread-specific cells */
+.spreadBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--caution) 10%, var(--bg-surface));
+  white-space: nowrap;
+}
+
+.spreadBadgeInline {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--caution) 10%, var(--bg-surface));
+  white-space: nowrap;
+}
+
+.spreadCell {
+  color: var(--text-secondary);
+}

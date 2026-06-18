@@ -17,11 +17,13 @@ class AddWatch(BaseModel):
     symbol: str
     strategy_key: str
     params_override: dict | None = None
+    direction: str = "Bullish"
 
 
 class BulkAdd(BaseModel):
     symbols: list[str]
     strategy_key: str
+    direction: str = "Bullish"
 
 
 class EnabledPatch(BaseModel):
@@ -43,7 +45,9 @@ async def list_watches() -> list[dict]:
 @router.post("/", status_code=201)
 async def add_watch(body: AddWatch) -> dict:
     try:
-        return strategy_watch_store.add_watch(body.symbol, body.strategy_key, body.params_override)
+        return strategy_watch_store.add_watch(
+            body.symbol, body.strategy_key, body.params_override, body.direction
+        )
     except ValueError as exc:
         msg = str(exc)
         raise HTTPException(status_code=409 if "already watched" in msg else 400, detail=msg)
@@ -53,7 +57,7 @@ async def add_watch(body: AddWatch) -> dict:
 async def bulk_add(body: BulkAdd) -> dict:
     if body.strategy_key not in VALID_STRATEGIES:
         raise HTTPException(status_code=400, detail=f"unknown strategy: {body.strategy_key}")
-    added = strategy_watch_store.add_watches_bulk(body.symbols, body.strategy_key)
+    added = strategy_watch_store.add_watches_bulk(body.symbols, body.strategy_key, body.direction)
     return {"added": len(added), "watches": added}
 
 

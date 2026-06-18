@@ -16,14 +16,19 @@ from app.services.regime_hmm import compute_intraday_hmm, HmmResult, MIN_BARS
 
 
 def _make_synthetic_bars(n: int, seed: int = 42) -> list[dict]:
-    """Generate n plausible 15-min OHLCV bar dicts using a seeded RNG."""
+    """Generate n plausible 15-min OHLCV bar dicts using a seeded RNG.
+
+    Uses sequential Unix timestamps (900s apart) so every bar has a unique
+    key — avoids dict-merge deduplication when n > 28.
+    """
     rng = random.Random(seed)
     base = 450.0
+    base_ts = 1_735_900_200  # 2026-01-03 14:30:00 UTC (market open)
     bars = []
     for i in range(n):
         close = base + rng.gauss(0, 2)
         bars.append({
-            "time": f"2026-01-{i % 28 + 1:02d} 09:30",
+            "time": base_ts + i * 900,
             "open": close - 0.1,
             "high": close + 0.5,
             "low": close - 0.5,

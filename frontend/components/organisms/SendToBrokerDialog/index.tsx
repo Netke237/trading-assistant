@@ -134,9 +134,69 @@ export function SendToBrokerDialog({ cards, onClose, onSubmit }: Props) {
 
         <div className={styles.tableBody}>
           {cards.map((c) => {
-            const r   = rows[c.symbol] ?? { contracts: 1, autoSend: true };
-            const mid = c.contractDetails?.mid ?? 0;
-            const est = mid * 100 * r.contracts;
+            const r      = rows[c.symbol] ?? { contracts: 1, autoSend: true };
+            const isSpread = c.spreadType && c.spreadType !== 'single' && c.legs && c.legs.length > 0;
+            const mid    = c.contractDetails?.mid ?? 0;
+            const est    = mid * 100 * r.contracts;
+
+            if (isSpread) {
+              // Spread: one row per leg, all sharing the same qty/auto-send controls in the first leg row.
+              return (
+                <div key={c.symbol}>
+                  {c.legs!.map((leg, i) => {
+                    const legMid = (leg.bid + leg.ask) / 2;
+                    return (
+                      <div key={i} className={`${styles.row} ${i > 0 ? styles.legSubRow : ''}`}>
+                        {i === 0 ? (
+                          <Data size={13} weight={500}>{c.symbol}</Data>
+                        ) : (
+                          <span />
+                        )}
+                        <Text size={12}>
+                          {leg.action} {leg.qty}× {c.symbol} ${leg.strike}{leg.right} {leg.expiry}
+                        </Text>
+                        <Data size={12} className={styles.right}>
+                          {legMid > 0 ? `$${legMid.toFixed(2)}` : '—'}
+                        </Data>
+                        {i === 0 ? (
+                          <>
+                            <input
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={r.contracts}
+                              className={styles.qtyInput}
+                              onChange={(e) => patch(c.symbol, { contracts: Math.max(1, Number(e.target.value) || 1) })}
+                              aria-label={`Contracts for ${c.symbol}`}
+                            />
+                            <Data size={12} className={styles.right}>${Math.round(est).toLocaleString()}</Data>
+                            <label className={styles.autoCell}>
+                              <input
+                                type="checkbox"
+                                checked={r.autoSend}
+                                onChange={(e) => patch(c.symbol, { autoSend: e.target.checked })}
+                                aria-label={`Auto-send ${c.symbol} to broker`}
+                              />
+                              <Text size={11} tone={r.autoSend ? 'pass' : 'caution'}>
+                                {r.autoSend ? 'Auto' : 'Manual'}
+                              </Text>
+                            </label>
+                          </>
+                        ) : (
+                          <>
+                            <span />
+                            <span />
+                            <Text size={11} tone="dim" className={styles.ibkrNote}>Copy manually — IBKR multi-leg not routed</Text>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
+
+            // Single-leg (original path)
             return (
               <div key={c.symbol} className={styles.row}>
                 <Data size={13} weight={500}>{c.symbol}</Data>

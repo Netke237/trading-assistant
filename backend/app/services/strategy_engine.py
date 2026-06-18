@@ -97,8 +97,14 @@ def pullback_ema_signal(
     tolerance: float = 0.08,
     ma_type: str = "EMA",
     require_reversal: bool = False,
+    direction: Literal["Bullish", "Bearish"] = "Bullish",
 ) -> StrategySignal | None:
-    """Bullish: uptrend + pullback to ema_period-MA. Reversal candle optional (require_reversal)."""
+    """Pullback to ema_period-MA in the direction of the trend.
+
+    Bullish: uptrend + price pulling back toward ema_period-MA from above.
+    Bearish: downtrend + price bouncing up toward ema_period-MA from below (mirror).
+    Reversal candle optional (require_reversal).
+    """
     if len(bars) < trend_ema + 10:
         return None
     closes = [b["close"] for b in bars]
@@ -112,25 +118,42 @@ def pullback_ema_signal(
     current  = closes[-1]
     fast_val = fast_ma[-1]
     slow_val = slow_ma[-1]
-    # Trend: price above ema_period-MA, ema_period-MA above trend_ema-MA (two-MA stack)
-    if current <= fast_val:
-        return None
-    if fast_val <= slow_val:
-        return None
-    # Pullback: price within `tolerance` of ema_period-MA from above
-    if not (0 <= (current - fast_val) / fast_val <= tolerance):
-        return None
-    # Optional reversal candle gate: close > open (bullish bar)
-    last = bars[-1]
-    if require_reversal and last["close"] <= last["open"]:
-        return None
-    atr    = _atr(bars)
-    stop   = _swing_low(bars, lookback=10) - atr * 0.2
-    target = current + atr * rr_target_mult * atr_stop_mult
+    last     = bars[-1]
+    atr      = _atr(bars)
+
+    if direction == "Bullish":
+        # Trend: price above ema_period-MA, ema_period-MA above trend_ema-MA (two-MA stack)
+        if current <= fast_val:
+            return None
+        if fast_val <= slow_val:
+            return None
+        # Pullback: price within `tolerance` of ema_period-MA from above
+        if not (0 <= (current - fast_val) / fast_val <= tolerance):
+            return None
+        # Optional reversal candle gate: close > open (bullish bar)
+        if require_reversal and last["close"] <= last["open"]:
+            return None
+        stop   = _swing_low(bars, lookback=10) - atr * 0.2
+        target = current + atr * rr_target_mult * atr_stop_mult
+    else:  # Bearish — mirror logic
+        # Trend: price below ema_period-MA, ema_period-MA below trend_ema-MA (downtrend stack)
+        if current >= fast_val:
+            return None
+        if fast_val >= slow_val:
+            return None
+        # Bounce: price within `tolerance` of ema_period-MA from below
+        if not (0 <= (fast_val - current) / fast_val <= tolerance):
+            return None
+        # Optional reversal candle gate: close < open (bearish bar)
+        if require_reversal and last["close"] >= last["open"]:
+            return None
+        stop   = _swing_high(bars, lookback=10) + atr * 0.2
+        target = current - atr * rr_target_mult * atr_stop_mult
+
     ma_label = ma_type.upper()
     return StrategySignal(
         strategy="pullback_ema",
-        direction="Bullish",
+        direction=direction,
         entry_price=round(current, 2),
         stop_price=round(stop, 2),
         target_price=round(target, 2),
@@ -151,8 +174,13 @@ def breakout_base_signal(
     atr_tight_max: float = 1.5,
     volume_mult: float = 1.1,
     rr_target_mult: float = 2.0,
+    direction: Literal["Bullish", "Bearish"] = "Bullish",
 ) -> StrategySignal | None:
-    """Bullish: break above N-day high after a narrow (ATR-tight) base with volume expansion."""
+    """Break above/below a narrow (ATR-tight) base with volume expansion.
+
+    Bullish: close above base high.
+    Bearish: close below base low (breakdown mirror).
+    """
     if len(bars) < base_lookback + 5:
         return None
     closes = [b["close"] for b in bars]
@@ -169,23 +197,29 @@ def breakout_base_signal(
     if atr > 0 and (base_high - base_low) > atr_tight_max * atr:
         return None
     current = closes[-1]
-    # Breakout: today closes above the base high
-    if current <= base_high:
-        return None
-    # Volume: today > 1.3× 20-day avg
     avg_vol = sum(vols[-21:-1]) / 20 if len(vols) >= 21 else vols[-1]
     if vols[-1] < avg_vol * volume_mult:
         return None
-    stop  = base_low - atr * 0.2
-    target = current + (current - stop) * rr_target_mult
+    if direction == "Bullish":
+        if current <= base_high:
+            return None
+        stop   = base_low - atr * 0.2
+        target = current + (current - stop) * rr_target_mult
+        detail = {"base_high": round(base_high, 2), "base_range_pct": round(base_range_pct * 100, 1)}
+    else:  # Bearish breakdown below base low
+        if current >= base_low:
+            return None
+        stop   = base_high + atr * 0.2
+        target = current - (stop - current) * rr_target_mult
+        detail = {"base_low": round(base_low, 2), "base_range_pct": round(base_range_pct * 100, 1)}
     return StrategySignal(
         strategy="breakout_base",
-        direction="Bullish",
+        direction=direction,
         entry_price=round(current, 2),
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
-        detail={"base_high": round(base_high, 2), "base_range_pct": round(base_range_pct * 100, 1)},
+        detail=detail,
     )
 
 
@@ -197,8 +231,13 @@ def ma_crossover_signal(
     fast: int = 20,
     slow: int = 50,
     lookback: int = 10,
+    direction: Literal["Bullish", "Bearish"] = "Bullish",
 ) -> StrategySignal | None:
-    """Bullish: 20-SMA crosses above 50-SMA within the last `lookback` bars."""
+    """Golden cross (Bullish) or death cross (Bearish) within the last `lookback` bars.
+
+    Bullish: 20-SMA crosses above 50-SMA (golden cross).
+    Bearish: 20-SMA crosses below 50-SMA (death cross mirror).
+    """
     if len(bars) < slow + 5:
         return None
     closes = [b["close"] for b in bars]
@@ -206,16 +245,23 @@ def ma_crossover_signal(
     slow_ma = _sma(closes, slow)
     if len(fast_ma) < lookback + 1 or len(slow_ma) < lookback + 1:
         return None
-    # Recent cross: fast crossed above slow within last `lookback` bars
     for i in range(-lookback, 0):
-        if fast_ma[i - 1] <= slow_ma[i - 1] and fast_ma[i] > slow_ma[i]:
+        if direction == "Bullish":
+            crossed = fast_ma[i - 1] <= slow_ma[i - 1] and fast_ma[i] > slow_ma[i]
+        else:  # Bearish — death cross
+            crossed = fast_ma[i - 1] >= slow_ma[i - 1] and fast_ma[i] < slow_ma[i]
+        if crossed:
             current = closes[-1]
             atr = _atr(bars)
-            stop  = slow_ma[-1] - atr * 0.5
-            target = current + atr * 3.0
+            if direction == "Bullish":
+                stop   = slow_ma[-1] - atr * 0.5
+                target = current + atr * 3.0
+            else:
+                stop   = slow_ma[-1] + atr * 0.5
+                target = current - atr * 3.0
             return StrategySignal(
                 strategy="ma_crossover",
-                direction="Bullish",
+                direction=direction,
                 entry_price=round(current, 2),
                 stop_price=round(stop, 2),
                 target_price=round(target, 2),
@@ -232,28 +278,41 @@ def mean_reversion_rsi_signal(
     *,
     rsi_period: int = 14,
     rsi_oversold: float = 30.0,
+    rsi_overbought: float = 70.0,
     trend_sma: int = 200,
+    direction: Literal["Bullish", "Bearish"] = "Bullish",
 ) -> StrategySignal | None:
-    """Bullish: RSI < 30 while price is above 200-SMA (oversold in uptrend)."""
+    """RSI mean-reversion signal in the direction of the trend.
+
+    Bullish: RSI < rsi_oversold while price is above 200-SMA (oversold in uptrend).
+    Bearish: RSI > rsi_overbought while price is below 200-SMA (overbought in downtrend).
+    """
     if len(bars) < trend_sma + rsi_period + 5:
         return None
     closes = [b["close"] for b in bars]
     trend = _sma(closes, trend_sma)
-    if not trend or closes[-1] <= trend[-1]:
+    if not trend:
         return None
     rsi = _rsi(closes, rsi_period)
-    if not rsi or rsi[-1] >= rsi_oversold:
-        return None
-    # Confirm RSI is recovering (rising from the last bar)
-    if len(rsi) < 2 or rsi[-1] <= rsi[-2]:
+    if not rsi or len(rsi) < 2:
         return None
     current = closes[-1]
     atr = _atr(bars)
-    stop  = _swing_low(bars, lookback=10) - atr * 0.2
-    target = current + atr * 2.5
+    if direction == "Bullish":
+        if closes[-1] <= trend[-1]:        return None   # must be above trend (uptrend context)
+        if rsi[-1] >= rsi_oversold:        return None   # must be oversold
+        if rsi[-1] <= rsi[-2]:             return None   # RSI must be recovering (ticking up)
+        stop   = _swing_low(bars, lookback=10) - atr * 0.2
+        target = current + atr * 2.5
+    else:  # Bearish — overbought in downtrend
+        if closes[-1] >= trend[-1]:        return None   # must be below trend (downtrend context)
+        if rsi[-1] <= rsi_overbought:      return None   # must be overbought
+        if rsi[-1] >= rsi[-2]:             return None   # RSI must be rolling over (ticking down)
+        stop   = _swing_high(bars, lookback=10) + atr * 0.2
+        target = current - atr * 2.5
     return StrategySignal(
         strategy="mean_reversion_rsi",
-        direction="Bullish",
+        direction=direction,
         entry_price=round(current, 2),
         stop_price=round(stop, 2),
         target_price=round(target, 2),

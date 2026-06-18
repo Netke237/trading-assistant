@@ -10,6 +10,16 @@ logger = logging.getLogger(__name__)
 
 Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi"]
 
+
+def _entry_side(direction: str, *, entry: float, sl: float, tp: float) -> str | None:
+    """Decide order side, or None if stop/target are on the wrong side of entry.
+    Bullish: stop below entry, target above → 'buy'
+    Bearish: stop above entry, target below → 'sell'
+    """
+    if direction == "Bullish":
+        return "buy" if sl < entry < tp else None
+    return "sell" if tp < entry < sl else None
+
 _MIN_TRADES = 10
 _MIN_WIN_RATE = 0.45
 _MIN_EXPECTANCY = 0.0
@@ -95,15 +105,14 @@ def run_strategy_backtest(
                 for i in range(start, n)
             ]
             if not self.position:
-                sig = fn(slice_bars, **(params or {}))
+                sig = fn(slice_bars, direction=direction, **(params or {}))
                 if sig is not None:
-                    sl = sig.stop_price
-                    tp = sig.target_price
-                    entry = sig.entry_price
-                    # Guard: skip orders where stop is on the wrong side of entry
-                    # (can happen on gap bars in historical data)
-                    if sl < entry < tp:
-                        self.buy(limit=entry, sl=sl, tp=tp)
+                    side = _entry_side(direction, entry=sig.entry_price,
+                                       sl=sig.stop_price, tp=sig.target_price)
+                    if side == "buy":
+                        self.buy(limit=sig.entry_price, sl=sig.stop_price, tp=sig.target_price)
+                    elif side == "sell":
+                        self.sell(limit=sig.entry_price, sl=sig.stop_price, tp=sig.target_price)
 
     try:
         bt = Backtest(df, _Strategy, cash=100_000, commission=0.0, exclusive_orders=True)

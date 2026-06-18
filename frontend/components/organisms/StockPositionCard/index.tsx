@@ -42,10 +42,12 @@ type ExecMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_pape
 function defaultOverlay(card: PositionCardData): StockEditOverlay {
   const entry = card.strategy.entry_price;
   const stop  = card.strategy.stop_price;
-  const risk  = entry - stop;
+  const risk  = Math.abs(entry - stop);
+  const dir   = card.direction;
+  const sign  = dir === 'Bullish' ? 1 : -1;
   const t1    = card.strategy.target_price;
-  const t2    = Math.round((entry + 2 * risk) * 100) / 100;
-  const t3    = Math.round((entry + 3 * risk) * 100) / 100;
+  const t2    = Math.round((entry + sign * 2 * risk) * 100) / 100;
+  const t3    = Math.round((entry + sign * 3 * risk) * 100) / 100;
   const s     = card.shares;
   const s1    = Math.floor(s / 3);
   const s2    = Math.floor(s / 3);
@@ -135,10 +137,11 @@ export function StockPositionCard({
   }, []);
 
   // Derived values
-  const riskPerShare = overlay.entry - overlay.stop;
+  const riskPerShare = Math.abs(overlay.entry - overlay.stop);
   const riskDollars  = overlay.shares * riskPerShare;
   const sizeDollars  = overlay.shares * overlay.entry;
-  const rrAt = (t: number) => riskPerShare > 0 ? (t - overlay.entry) / riskPerShare : 0;
+  const rrAt = (t: number) =>
+    riskPerShare > 0 ? Math.abs(t - overlay.entry) / riskPerShare : 0;
 
   // Store selectors
   const stockBasket  = useScanStore((s) => s.stockBasket);
@@ -268,9 +271,12 @@ export function StockPositionCard({
             rr: rrT3,
           },
         ] as const).map(({ id, price, onPrice, shares: sh, onShares, rr }) => {
-          const retPct = overlay.entry > 0
-            ? ((price - overlay.entry) / overlay.entry * 100).toFixed(1)
-            : '0.0';
+          const profitPct = overlay.entry > 0
+            ? (card.direction === 'Bullish'
+                ? (price - overlay.entry) / overlay.entry
+                : (overlay.entry - price) / overlay.entry) * 100
+            : 0;
+          const retPct = profitPct.toFixed(1);
           return (
             <div key={id} className={styles.targetRow}>
               <div className={styles.targetLabel}>
@@ -281,7 +287,7 @@ export function StockPositionCard({
                 <Data size={12} tone={rr >= 1.5 ? 'pass' : rr >= 1 ? 'caution' : 'reject'}>
                   {rr.toFixed(1)}×
                 </Data>
-                <Data size={12} tone={parseFloat(retPct) > 0 ? 'pass' : 'reject'}>
+                <Data size={12} tone={profitPct > 0 ? 'pass' : 'reject'}>
                   {retPct}%
                 </Data>
                 <EditableField

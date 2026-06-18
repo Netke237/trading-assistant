@@ -9,6 +9,18 @@ export type Horizon = 'Intraday' | 'Swing' | 'Position' | 'Custom';
 export type AlertKind = 'Info' | 'Action' | 'Critical';
 export type OrderType = 'Limit' | 'Market' | 'Stop';
 
+export type SpreadType = 'single' | 'bear_put' | 'bear_call';
+
+export interface OptionLeg {
+  right:  'C' | 'P';
+  strike: number;
+  expiry: string;
+  action: 'BUY' | 'SELL';
+  qty:    number;
+  bid:    number;
+  ask:    number;
+}
+
 export interface TriggerDetail {
   candle:         string;
   macd_pass:      boolean;
@@ -205,6 +217,12 @@ export interface TradeCardData {
   confidenceText?: string | null;
   sentiment?: SentimentData | null;
   fundamentals?: FundamentalsOut | null;
+  spreadType?:     SpreadType;
+  legs?:           OptionLeg[];
+  netDebitCredit?: number;
+  maxProfit?:      number;
+  maxLoss?:        number;
+  breakeven?:      number;
 }
 
 // --- Option contracts ---
@@ -259,6 +277,12 @@ export interface AlternativeContract {
   rrRatio:      number;
   rrModel:      'Heston repriced' | 'Delta approximation';
   reason:       string;
+  spreadType?:     SpreadType;
+  legs?:           OptionLeg[];
+  netDebitCredit?: number;
+  maxProfit?:      number;
+  maxLoss?:        number;
+  breakeven?:      number;
 }
 
 // --- Market regime ---
