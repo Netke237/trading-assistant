@@ -452,7 +452,7 @@ async def _process_symbol(
     # "Invalidation" field consistent with the R/R calculation's risk basis.
     _delta_est = max(abs(float(contract.get("delta", 0.45))), 0.05)
     _stock_stop_move = (premium * _rr["premium_stop_pct"]) / _delta_est
-    invalidation_price = price - _stock_stop_move if _bull else price + _stock_stop_move
+    invalidation_price = max(price - _stock_stop_move, 0.01) if _bull else price + _stock_stop_move
 
     rr = estimate_rr(
         stock_price=price,
