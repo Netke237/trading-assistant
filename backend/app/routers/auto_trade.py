@@ -21,7 +21,7 @@ class ArmRequest(BaseModel):
     order_type:      Literal["MKT", "LMT"] = "LMT"
     limit_price:     Optional[float] = None
     conid:           Optional[int] = None
-    entry_premium:   float = 0.0
+    entry_premium:   float = 0.0   # set to actual option mid; exposure check is skipped if 0
     portfolio_value: float = 50_000.0
 
 
@@ -44,15 +44,15 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
     """Trigger #1: manually fire the armed strategy with a live exposure check."""
     from app.models.portfolio import PortfolioPositionModel
     from app.services.portfolio_risk import orm_positions_to_risk
-    state = auto_trader.get_state()
-    portfolio_value = state.strategy.portfolio_value if state.strategy else 50_000.0
+    if not auto_trader.get_state().armed:
+        raise HTTPException(status_code=400, detail="AutoTrader not armed — cannot fire")
     result_q = await db.execute(select(PortfolioPositionModel))
     orm_positions = result_q.scalars().all()
     portfolio_snapshot = orm_positions_to_risk(orm_positions)
     try:
         result = auto_trader.fire(
             portfolio_snapshot=portfolio_snapshot,
-            portfolio_value=portfolio_value,
+            portfolio_value=None,  # fire() reads portfolio_value from strategy under lock
         )
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))

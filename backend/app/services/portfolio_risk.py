@@ -135,10 +135,12 @@ def orm_positions_to_risk(orm_positions) -> list[PortfolioPosition]:
     """Convert ORM portfolio rows to PortfolioPosition dataclasses for risk checks."""
     result = []
     for p in orm_positions:
+        qty = int(getattr(p, "qty", 0) or 0)
+        if qty <= 0:
+            continue
         is_stock = str(getattr(p, "contract", "")).endswith("|STOCK")
         multiplier = 1 if is_stock else 100
         entry = float(getattr(p, "entry_price", 0) or 0)
-        qty = int(getattr(p, "qty", 1) or 1)
         car = entry * qty * multiplier
         result.append(PortfolioPosition(
             symbol=str(getattr(p, "symbol", "")),

@@ -160,3 +160,16 @@ def test_orm_positions_to_risk_converts_correctly():
     assert p.contracts == 2
     assert p.entry_premium == 2.50
     assert p.capital_at_risk == 2.50 * 2 * 100
+
+
+def test_orm_positions_to_risk_skips_zero_qty():
+    from app.services.portfolio_risk import orm_positions_to_risk
+
+    class ZeroQtyORM:
+        symbol = "MSFT"
+        contract = "MSFT|300|2026-06-20|C"
+        entry_price = 5.0
+        qty = 0
+
+    positions = orm_positions_to_risk([ZeroQtyORM()])
+    assert positions == []

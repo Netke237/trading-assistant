@@ -93,6 +93,11 @@ class AutoTradeService:
         if portfolio_snapshot is not None and strategy.entry_premium > 0:
             pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
             self._check_exposure(strategy, portfolio_snapshot, pv)
+        elif portfolio_snapshot is not None and strategy.entry_premium == 0.0:
+            logger.warning(
+                "AutoTrader: exposure check skipped for %s — entry_premium is 0.0 (set it in ArmRequest)",
+                strategy.symbol,
+            )
 
         result = execute_option_order(strategy)
         with self._lock:
@@ -122,6 +127,14 @@ class AutoTradeService:
         if not result.approved:
             logger.warning("AutoTrader fire blocked by exposure cap: %s", result.reasons)
             raise RuntimeError(f"Exposure cap breach: {result.reasons}")
+        if result.adjusted_size is not None:
+            logger.warning(
+                "AutoTrader fire blocked: quantity %d exceeds cap, re-arm with %d contracts",
+                strategy.quantity, result.adjusted_size,
+            )
+            raise RuntimeError(
+                f"Quantity {strategy.quantity} exceeds exposure cap — re-arm with {result.adjusted_size} contracts"
+            )
 
     def maybe_fire_on_scan(
         self,
