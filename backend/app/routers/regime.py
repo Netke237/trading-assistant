@@ -256,12 +256,6 @@ async def get_regime(
         except Exception:
             pass
 
-    _regime_dir = _derive_regime_direction(
-        omm_out.state if omm_out else None,
-        spx.status if spx else None,
-        ndx.status if ndx else None,
-    )
-
     return MarketRegime(
         overall=overall,
         headline=headline,
@@ -276,5 +270,9 @@ async def get_regime(
         conviction_label=omm_out.conviction_label if omm_out else None,
         hmm_state=_spx_hmm_state,
         alignment=_regime_alignment(omm_out.state if omm_out else None, _spx_hmm_state),
-        regime_direction=_regime_dir,
+        regime_direction=_derive_regime_direction(
+            omm_out.state if omm_out else None,
+            spx.status if spx else None,
+            ndx.status if ndx else None,
+        ),
     )
