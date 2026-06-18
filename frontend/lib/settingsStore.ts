@@ -69,6 +69,22 @@ export const DEFAULT_FUNDAMENTALS_GATE: FundamentalsGate = {
   deReject: 3.0,
 };
 
+export interface SpreadsConfig {
+  shortLegDelta:      number;   // delta of the short leg (e.g. 0.30 = 30Δ)
+  widthPoints:        number;   // spread width in strike points
+  ivRankThreshold:    number;   // minimum IV rank % to enter
+  minCredit:          number;   // minimum credit received (credit spreads)
+  maxDebitPctOfWidth: number;   // maximum debit as % of width (debit spreads)
+}
+
+export const DEFAULT_SPREADS: SpreadsConfig = {
+  shortLegDelta:      0.30,
+  widthPoints:        5,
+  ivRankThreshold:    50,
+  minCredit:          0.50,
+  maxDebitPctOfWidth: 40,
+};
+
 export interface IbkrPaperConfig {
   baseUrl:   string;
   accountId: string;
@@ -147,6 +163,7 @@ interface SettingsState {
   ibkrLive:                    IbkrLiveConfig;
   alpacaPaper:                 AlpacaPaperConfig;
   alpacaLive:                  AlpacaLiveConfig;
+  spreads:                     SpreadsConfig;
   setBroker:                    (b: BrokerConfig) => void;
   setAlertDeduplicationHours:   (h: number) => void;
   setIvPassThreshold:           (n: number) => void;
@@ -158,6 +175,7 @@ interface SettingsState {
   setPremiumStopPct:           (n: number) => void;
   setConfidenceGate:           (g: ConfidenceGate) => void;
   setFundamentalsGate:         (g: FundamentalsGate) => void;
+  setSpreads:                  (s: Partial<SpreadsConfig>) => void;
   setIbkrPaper:                (c: IbkrPaperConfig)    => void;
   setTradierPaper:             (c: TradierPaperConfig) => void;
   setTradierLive:              (c: TradierLiveConfig)  => void;
@@ -199,6 +217,9 @@ export function migrateSettings(
   if (version < 16) {
     next.fundamentalsGate = { ...DEFAULT_FUNDAMENTALS_GATE };
   }
+  if (version < 17) {
+    next.spreads = { ...DEFAULT_SPREADS };
+  }
   return next as unknown as SettingsState;
 }
 
@@ -222,6 +243,7 @@ export const useSettingsStore = create<SettingsState>()(
       ibkrLive:             { ...DEFAULT_IBKR_LIVE },
       alpacaPaper:          { ...DEFAULT_ALPACA_PAPER },
       alpacaLive:           { ...DEFAULT_ALPACA_LIVE },
+      spreads:              { ...DEFAULT_SPREADS },
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
       setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
@@ -233,6 +255,7 @@ export const useSettingsStore = create<SettingsState>()(
       setPremiumStopPct:       (n) => set({ premiumStopPct: n }),
       setConfidenceGate:       (g) => set({ confidenceGate: g }),
       setFundamentalsGate:     (g) => set({ fundamentalsGate: g }),
+      setSpreads:              (s) => set((state) => ({ spreads: { ...state.spreads, ...s } })),
       setIbkrPaper:    (c) => set({ ibkrPaper: c }),
       setTradierPaper: (c) => set({ tradierPaper: c }),
       setTradierLive:  (c) => set({ tradierLive: c }),
@@ -253,6 +276,7 @@ export const useSettingsStore = create<SettingsState>()(
         tradierPaper: { ...DEFAULT_TRADIER_PAPER },
         tradierLive:  { ...DEFAULT_TRADIER_LIVE },
         alpacaPaper:  { ...DEFAULT_ALPACA_PAPER },
+        spreads:      { ...DEFAULT_SPREADS },
       }),
     }),
     {
@@ -262,7 +286,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 16,
+      version: 17,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
@@ -279,6 +303,7 @@ export const useSettingsStore = create<SettingsState>()(
         tradierPaper: state.tradierPaper,
         tradierLive:  state.tradierLive,
         alpacaPaper:  state.alpacaPaper,
+        spreads:      state.spreads,
       }),
       migrate: (persistedState, version) => migrateSettings(persistedState, version),
     }
