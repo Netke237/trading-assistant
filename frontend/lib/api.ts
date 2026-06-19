@@ -1,5 +1,5 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
-              MarketRegime, SectorTile, OptionContract, NewsItem } from '@/types/domain';
+              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem } from '@/types/domain';
 import type { StockScanResult } from '@/types/stockDomain';
 import type { OptionsPipeline } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -99,7 +99,8 @@ export const api = {
     const qs = params.toString();
     return get<MarketRegime>(`/api/regime${qs ? `?${qs}` : ''}`);
   },
-  getSectors:    () => get<SectorTile[]>('/api/sectors'),
+  getSectors:       () => get<SectorTile[]>('/api/sectors'),
+  getIndexChanges:  () => get<IndexChangeTile[]>('/api/index-changes'),
   getDataSources: () => get<DataSourceInfo[]>('/api/data-sources'),
   getEvents:     () => get<UpcomingEvent[]>('/api/events'),
   getContracts: (

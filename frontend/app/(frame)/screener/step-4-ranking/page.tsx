@@ -116,6 +116,7 @@ export default function Step4Page() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const candidates = useScanStore((s) => s.scanResult?.candidates);
+  const directionBanner = useScanStore((s) => s.scanResult?.direction_banner);
   const previousRun = useScanStore((s) => s.previousRun);
   const context = useScanStore((s) => s.context);
   const setSelectedSymbol = useScanStore((s) => s.setSelectedSymbol);
@@ -205,6 +206,12 @@ export default function Step4Page() {
         <Text size={11} tone="dim" weight={500}>STEP 4 OF 7</Text>
         <Title as="h1" size={24}>Stock Ranking</Title>
       </div>
+
+      {directionBanner && (
+        <div className={styles.directionBanner}>
+          <Text size={12} tone="caution">{directionBanner}</Text>
+        </div>
+      )}
 
       <div className={styles.split}>
         {/* LEFT — ranked table */}

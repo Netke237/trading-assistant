@@ -129,7 +129,7 @@ def _snapshot_to_model(snap) -> FundamentalsModel:
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
-async def get_fundamentals(symbol: str, staleness_days: int = 90):
+async def get_fundamentals(symbol: str, staleness_days: int = 90, _session_maker=None):
     """Return a FundamentalsSnapshot for `symbol`, using the DB as a cache.
 
     Algorithm:
@@ -137,11 +137,16 @@ async def get_fundamentals(symbol: str, staleness_days: int = 90):
     2. If row exists and fetched_at is within staleness_days → return from DB.
     3. Otherwise fetch fresh data via edgar.get_snapshot(); upsert and return it.
     4. Return None on any error or if EDGAR has no data for this symbol.
+
+    _session_maker: pass a thread-local async_sessionmaker when calling from a
+    background thread to avoid asyncpg "Future attached to different loop" errors.
+    Defaults to the main app's AsyncSessionLocal.
     """
     from app.data.edgar import get_snapshot
 
+    session_maker = _session_maker if _session_maker is not None else AsyncSessionLocal
     try:
-        async with AsyncSessionLocal() as db:
+        async with session_maker() as db:
             # 1. Most recent row in DB
             result = await db.execute(
                 select(FundamentalsModel)
@@ -211,12 +216,21 @@ def prefetch_universe(symbols: list[str], staleness_days: int = 90) -> None:
     })
 
     async def _run_all() -> None:
+        # Create a dedicated engine for this thread's event loop.
+        # asyncio.run() creates a new loop; re-using the main app's asyncpg engine
+        # from a different loop causes "Future attached to different loop" errors.
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession as _AS
+        from app.config import get_settings
+        _engine = create_async_engine(get_settings().DATABASE_URL, future=True)
+        _sfactory = async_sessionmaker(
+            _engine, class_=_AS, expire_on_commit=False, autoflush=False, autocommit=False,
+        )
         sem = asyncio.Semaphore(4)
 
         async def _fetch_one(symbol: str) -> None:
             async with sem:
                 try:
-                    snap = await get_fundamentals(symbol, staleness_days)
+                    snap = await get_fundamentals(symbol, staleness_days, _session_maker=_sfactory)
                     if snap is not None:
                         _prefetch_status["done"] += 1
                     else:
@@ -229,7 +243,10 @@ def prefetch_universe(symbols: list[str], staleness_days: int = 90) -> None:
             # because the next acquire on this coroutine is delayed by 150 ms.
             await asyncio.sleep(0.15)
 
-        await asyncio.gather(*[_fetch_one(s) for s in symbols])
+        try:
+            await asyncio.gather(*[_fetch_one(s) for s in symbols])
+        finally:
+            await _engine.dispose()
 
     try:
         asyncio.run(_run_all())

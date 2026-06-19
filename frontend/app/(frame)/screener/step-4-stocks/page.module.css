@@ -1,5 +1,11 @@
 .main { display: flex; flex-direction: column; gap: 16px; padding: 20px 24px; }
 .header { display: flex; flex-direction: column; gap: 4px; }
+.directionBanner {
+  padding: 10px 14px;
+  border: 1px solid var(--caution);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--caution) 8%, var(--bg-surface));
+}
 
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .card {

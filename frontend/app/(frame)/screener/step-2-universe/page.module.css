@@ -29,10 +29,62 @@
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+.cardPass {
+  border-color: var(--pass);
+  background: color-mix(in srgb, var(--pass) 8%, var(--bg-surface));
+}
+
+.cardPass:hover {
+  border-color: var(--pass);
+  background: color-mix(in srgb, var(--pass) 14%, var(--bg-surface));
+}
+
+.cardCaution {
+  border-color: var(--caution);
+  background: color-mix(in srgb, var(--caution) 8%, var(--bg-surface));
+}
+
+.cardCaution:hover {
+  border-color: var(--caution);
+  background: color-mix(in srgb, var(--caution) 14%, var(--bg-surface));
+}
+
+.cardReject {
+  border-color: var(--reject);
+  background: color-mix(in srgb, var(--reject) 8%, var(--bg-surface));
+}
+
+.cardReject:hover {
+  border-color: var(--reject);
+  background: color-mix(in srgb, var(--reject) 14%, var(--bg-surface));
+}
+
 .cardHeader {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  gap: var(--space-2);
+}
+
+.cardMeta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.sectionLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+.sectorCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-3);
 }
 
 /* ---------- Custom symbols panel ---------- */

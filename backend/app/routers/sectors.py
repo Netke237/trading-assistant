@@ -1,28 +1,81 @@
 import asyncio
+import csv
+import time
 from datetime import date, timedelta
+from pathlib import Path
 
 import httpx
 from fastapi import APIRouter
-from app.schemas import SectorTile
+from app.schemas import IndexChangeTile, SectorTile
 from app.data.market import get_tradier_creds, _fetch_daily_yf
+from app.data.sector_names import NORMALIZE
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
 SECTOR_ETFS = ["XLK", "XLC", "XLY", "XLI", "XLF", "XLP", "XLV", "XLB", "XLRE", "XLU", "XLE"]
 
 _ETF_NAME: dict[str, str] = {
-    "XLK": "Technology",
-    "XLC": "Comm. Services",
-    "XLY": "Consumer Discretionary",
-    "XLI": "Industrials",
-    "XLF": "Financials",
-    "XLP": "Consumer Staples",
-    "XLV": "Health Care",
-    "XLB": "Materials",
+    "XLK":  "Technology",
+    "XLC":  "Comm. Services",
+    "XLY":  "Consumer Discretionary",
+    "XLI":  "Industrials",
+    "XLF":  "Financials",
+    "XLP":  "Consumer Staples",
+    "XLV":  "Health Care",
+    "XLB":  "Materials",
     "XLRE": "Real Estate",
-    "XLU": "Utilities",
-    "XLE": "Energy",
+    "XLU":  "Utilities",
+    "XLE":  "Energy",
 }
+
+INDEX_ETFS = ["SPY", "QQQ"]
+
+_INDEX_NAME: dict[str, str] = {
+    "SPY": "S&P 500",
+    "QQQ": "Nasdaq-100",
+}
+
+_SP500_CSV = Path(__file__).parent.parent / "data" / "sp500.csv"
+
+# ── Sector symbol counts ──────────────────────────────────────────────────────
+# Rebuilt automatically when sp500.csv's mtime changes (e.g. after the
+# liquidity update script runs) — no server restart required.
+
+_counts_cache: dict[str, int] = {}
+_counts_mtime: float = 0.0
+
+
+def _build_sector_counts() -> dict[str, int]:
+    if not _SP500_CSV.exists():
+        return {}
+    counts: dict[str, int] = {}
+    with open(_SP500_CSV, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            raw = row.get("sector", "").strip()
+            s = NORMALIZE.get(raw, raw) if raw else ""
+            if s and s != "Unknown":
+                counts[s] = counts.get(s, 0) + 1
+    return counts
+
+
+def _get_sector_counts() -> dict[str, int]:
+    global _counts_cache, _counts_mtime
+    if not _SP500_CSV.exists():
+        return {}
+    mtime = _SP500_CSV.stat().st_mtime
+    if mtime != _counts_mtime:
+        _counts_cache = _build_sector_counts()
+        _counts_mtime = mtime
+    return _counts_cache
+
+
+# ── Response caches (60 s TTL) ────────────────────────────────────────────────
+
+_CACHE_TTL = 60.0
+
+_sectors_cache: tuple[float, list[SectorTile]] | None = None
+_index_cache: tuple[float, list[IndexChangeTile]] | None = None
+
 
 def _tradier_headers() -> dict:
     tok, _ = get_tradier_creds()
@@ -84,9 +137,45 @@ async def _fetch_etf_change(client: httpx.AsyncClient, etf: str) -> tuple[str, f
 
 @router.get('/sectors', response_model=list[SectorTile])
 async def get_sectors() -> list[SectorTile]:
+    global _sectors_cache
+    now = time.monotonic()
+    if _sectors_cache is not None and now - _sectors_cache[0] < _CACHE_TTL:
+        return _sectors_cache[1]
+
     async with httpx.AsyncClient(headers=_tradier_headers()) as client:
         results = await asyncio.gather(
             *[_fetch_etf_change(client, etf) for etf in SECTOR_ETFS],
+            return_exceptions=True,
+        )
+    counts = _get_sector_counts()
+    tiles = []
+    for item in results:
+        if isinstance(item, Exception):
+            continue
+        etf, pct = item
+        name = _ETF_NAME[etf]
+        tiles.append(SectorTile(
+            key=etf,
+            name=name,
+            changePct=pct,
+            status=_status(pct),
+            symbolCount=counts.get(name, 0),
+        ))
+    _sectors_cache = (now, tiles)
+    return tiles
+
+
+@router.get('/index-changes', response_model=list[IndexChangeTile])
+async def get_index_changes() -> list[IndexChangeTile]:
+    """Return daily changePct/status for SPY and QQQ — used to colour universe buttons."""
+    global _index_cache
+    now = time.monotonic()
+    if _index_cache is not None and now - _index_cache[0] < _CACHE_TTL:
+        return _index_cache[1]
+
+    async with httpx.AsyncClient(headers=_tradier_headers()) as client:
+        results = await asyncio.gather(
+            *[_fetch_etf_change(client, etf) for etf in INDEX_ETFS],
             return_exceptions=True,
         )
     tiles = []
@@ -94,10 +183,11 @@ async def get_sectors() -> list[SectorTile]:
         if isinstance(item, Exception):
             continue
         etf, pct = item
-        tiles.append(SectorTile(
+        tiles.append(IndexChangeTile(
             key=etf,
-            name=_ETF_NAME[etf],
+            name=_INDEX_NAME[etf],
             changePct=pct,
             status=_status(pct),
         ))
+    _index_cache = (now, tiles)
     return tiles

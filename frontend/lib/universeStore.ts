@@ -13,7 +13,18 @@ export type Universe =
   | 'DOW30'
   | 'SPY'
   | 'Watchlist'
-  | 'Custom';
+  | 'Custom'
+  | 'SECTOR:XLK'
+  | 'SECTOR:XLC'
+  | 'SECTOR:XLY'
+  | 'SECTOR:XLI'
+  | 'SECTOR:XLF'
+  | 'SECTOR:XLP'
+  | 'SECTOR:XLV'
+  | 'SECTOR:XLB'
+  | 'SECTOR:XLRE'
+  | 'SECTOR:XLU'
+  | 'SECTOR:XLE';
 
 export type CapUnit = 'M' | 'B';
 

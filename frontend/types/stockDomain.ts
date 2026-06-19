@@ -39,4 +39,5 @@ export interface StockScanResult {
   pipeline?: StockPipeline;
   original_count?: number;
   shortlist_truncated?: boolean;
+  direction_banner?: string;
 }

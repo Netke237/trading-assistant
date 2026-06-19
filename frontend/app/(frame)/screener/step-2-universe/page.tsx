@@ -1,28 +1,28 @@
 'use client';
 
 /*
- * Screener Step 1 — Universe selection. Phase 5 / Round 1.
- * Preset cards for major indices + a Custom option with paste/type input
- * for arbitrary single symbols / ETFs, plus min/max price and min/max
- * market-cap filters that apply to any selected universe.
+ * Screener Step 2 — Universe selection.
+ * Preset cards for major indices + sector-based universes (coloured by
+ * sector ETF daily changePct) + a Custom option, plus price/cap filters.
  */
 
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { useUniverseStore } from '@/lib/universeStore';
+import type { Universe } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { api, getLastDataRefresh } from '@/lib/api';
 import { useScanStore } from '@/lib/scanStore';
+import type { SectorTile, IndexChangeTile } from '@/types/domain';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
 
-type Universe =
-  | 'SP500'
-  | 'NDX100'
-  | 'DOW30'
-  | 'SPY'
-  | 'Watchlist'
-  | 'Custom';
+const SECTOR_ETF_KEYS = [
+  'XLK', 'XLC', 'XLY', 'XLI', 'XLF',
+  'XLP', 'XLV', 'XLB', 'XLRE', 'XLU', 'XLE',
+] as const;
+
+type SectorEtfKey = typeof SECTOR_ETF_KEYS[number];
 
 type CapUnit = 'M' | 'B';
 
@@ -58,7 +58,7 @@ function rangeSummary<T>(
   return `≤ ${fmt(max as T)}`;
 }
 
-export default function Step1Page() {
+export default function Step2Page() {
   const {
     pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit,
     setPick, setCustomRaw, setMinPriceRaw, setMaxPriceRaw, setMinCapRaw, setMaxCapRaw,
@@ -66,6 +66,51 @@ export default function Step1Page() {
   } = useUniverseStore();
 
   const watchlistCount = useWatchlistStore((s) => s.added.length);
+
+  const [sectors, setSectors]           = useState<SectorTile[]>([]);
+  const [indexChanges, setIndexChanges] = useState<IndexChangeTile[]>([]);
+
+  // Keyed lookups built from fetched data
+  const sectorByKey = useMemo<Record<string, SectorTile>>(() => {
+    const m: Record<string, SectorTile> = {};
+    for (const t of sectors) m[t.key] = t;
+    return m;
+  }, [sectors]);
+
+  const indexByKey = useMemo<Record<string, IndexChangeTile>>(() => {
+    const m: Record<string, IndexChangeTile> = {};
+    for (const t of indexChanges) m[t.key] = t;
+    return m;
+  }, [indexChanges]);
+
+  const statusForKey = useCallback((key: Universe): IndexChangeTile['status'] | null => {
+    if (key === 'SP500' || key === 'SPY') return indexByKey['SPY']?.status ?? null;
+    if (key === 'NDX100')                 return indexByKey['QQQ']?.status ?? null;
+    if (key.startsWith('SECTOR:')) {
+      const etfKey = key.slice(7) as SectorEtfKey;
+      return sectorByKey[etfKey]?.status ?? null;
+    }
+    return null;
+  }, [indexByKey, sectorByKey]);
+
+  const changePctForKey = useCallback((key: Universe): number | undefined => {
+    if (key === 'SP500' || key === 'SPY') return indexByKey['SPY']?.changePct;
+    if (key === 'NDX100')                 return indexByKey['QQQ']?.changePct;
+    if (key.startsWith('SECTOR:'))        return sectorByKey[key.slice(7)]?.changePct;
+    return undefined;
+  }, [indexByKey, sectorByKey]);
+
+  const cardClasses = useCallback((key: Universe): string => {
+    const isActive = pick === key;
+    const status   = isActive ? null : statusForKey(key);
+    return [
+      formStyles.card,
+      isActive             ? formStyles.cardActive  : '',
+      status === 'PASS'    ? formStyles.cardPass    : '',
+      status === 'CAUTION' ? formStyles.cardCaution : '',
+      status === 'REJECT'  ? formStyles.cardReject  : '',
+    ].filter(Boolean).join(' ');
+  }, [pick, statusForKey]);
 
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
@@ -88,6 +133,7 @@ export default function Step1Page() {
   const symbols  = useMemo(() => parseSymbols(customRaw), [customRaw]);
 
   const isWatchlistPick = pick === 'Watchlist';
+  const isSectorPick    = pick.startsWith('SECTOR:');
 
   const [histYears,      setHistYears]      = useState(5);
   const [loadError,      setLoadError]      = useState<string | null>(null);
@@ -98,6 +144,12 @@ export default function Step1Page() {
     current_symbol: string | null; elapsed_secs: number;
   }>({ status: 'idle', total: 0, done: 0, failed: 0, current_symbol: null, elapsed_secs: 0 });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Fetch sector heatmap data and index daily changes for button colouring.
+  useEffect(() => {
+    api.getSectors().then(setSectors).catch(() => {});
+    api.getIndexChanges().then(setIndexChanges).catch(() => {});
+  }, []);
 
   // Sync with backend on mount so a running prefetch is reflected immediately.
   useEffect(() => {
@@ -171,6 +223,14 @@ export default function Step1Page() {
     { key: 'Custom',      label: 'Custom list',  count: symbols.length || '—',  desc: 'Paste or type your own tickers (stocks / ETFs).' },
   ];
 
+  const SECTOR_OPTIONS = useMemo(() =>
+    SECTOR_ETF_KEYS.map((etfKey) => {
+      const tile   = sectorByKey[etfKey];
+      const uniKey = `SECTOR:${etfKey}` as Universe;
+      return { key: uniKey, etfKey, label: tile?.name ?? etfKey, tile };
+    }),
+  [sectorByKey]);
+
   const isCustom = pick === 'Custom';
 
   const minPrice = parseNumOrNull(minPriceRaw);
@@ -194,25 +254,80 @@ export default function Step1Page() {
       </div>
 
       <div className={formStyles.cards}>
-        {OPTIONS.map((o) => (
-          <button
-            key={o.key}
-            type="button"
-            onClick={() => setPick(o.key)}
-            className={`${formStyles.card} ${pick === o.key ? formStyles.cardActive : ''}`}
-            aria-pressed={pick === o.key}
-          >
-            <div className={formStyles.cardHeader}>
-              <Text size={14} weight={600}>{o.label}</Text>
+        {OPTIONS.map((o) => {
+          const changePct = pick !== o.key ? changePctForKey(o.key) : undefined;
+          return (
+            <button
+              key={o.key}
+              type="button"
+              onClick={() => setPick(o.key)}
+              className={cardClasses(o.key)}
+              aria-pressed={pick === o.key}
+            >
+              <div className={formStyles.cardHeader}>
+                <Text size={14} weight={600}>{o.label}</Text>
+                <div className={formStyles.cardMeta}>
+                  <Data size={11} tone="secondary">
+                    {typeof o.count === 'number'
+                      ? `${o.count} ${o.count === 1 ? 'symbol' : 'symbols'}`
+                      : o.count}
+                  </Data>
+                  {changePct != null && (
+                    <Data
+                      size={11}
+                      tone={changePct > 0 ? 'pass' : changePct < 0 ? 'reject' : 'secondary'}
+                    >
+                      {changePct > 0 ? '+' : ''}{changePct.toFixed(2)}%
+                    </Data>
+                  )}
+                </div>
+              </div>
+              <Text size={12} tone="secondary">{o.desc}</Text>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sector universes — scan only stocks from one GICS sector of the S&P 500 */}
+      <div className={formStyles.sectionLabel}>
+        <Text size={12} weight={600}>By sector (S&P 500)</Text>
+        <Text size={11} tone="dim">
+          {sectors.length > 0
+            ? 'Coloured by today\'s sector ETF performance'
+            : 'Sector performance loading…'}
+        </Text>
+      </div>
+      <div className={formStyles.sectorCards}>
+        {SECTOR_OPTIONS.map((o) => {
+          const pct     = o.tile?.changePct;
+          const count   = o.tile?.symbolCount ?? 0;
+          return (
+            <button
+              key={o.key}
+              type="button"
+              onClick={() => setPick(o.key)}
+              className={cardClasses(o.key)}
+              aria-pressed={pick === o.key}
+            >
+              <div className={formStyles.cardHeader}>
+                <Text size={13} weight={600}>{o.label}</Text>
+                {pct != null && pick !== o.key && (
+                  <Data
+                    size={11}
+                    tone={pct > 0 ? 'pass' : pct < 0 ? 'reject' : 'secondary'}
+                  >
+                    {pct > 0 ? '+' : ''}{pct.toFixed(2)}%
+                  </Data>
+                )}
+              </div>
               <Data size={11} tone="secondary">
-                {typeof o.count === 'number'
-                  ? `${o.count} ${o.count === 1 ? 'symbol' : 'symbols'}`
-                  : o.count}
+                {sectors.length === 0
+                  ? 'Loading…'
+                  : count > 0 ? `${count} symbols` : '— symbols'}
               </Data>
-            </div>
-            <Text size={12} tone="secondary">{o.desc}</Text>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
       {/* Filters — apply to any universe */}
@@ -494,7 +609,7 @@ export default function Step1Page() {
             type="button"
             className={`${formStyles.loadBtn} ${histStatus.status === 'running' ? formStyles.loadBtnRunning : ''}`}
             onClick={handleLoadHistory}
-            disabled={histStatus.status === 'running' || isWatchlistPick}
+            disabled={histStatus.status === 'running' || isWatchlistPick || isSectorPick}
           >
             {histStatus.status === 'running'
               ? `Loading… ${histStatus.done}/${histStatus.total}`
@@ -504,9 +619,11 @@ export default function Step1Page() {
           </button>
         </div>
 
-        {isWatchlistPick && (
+        {(isWatchlistPick || isSectorPick) && (
           <Text size={11} tone="dim">
-            History pre-load is not available for the Watchlist universe. Select a preset (e.g. SP500) or Custom symbols instead.
+            {isWatchlistPick
+              ? 'History pre-load is not available for the Watchlist universe. Select a preset (e.g. SP500) or Custom symbols instead.'
+              : 'History pre-load is not available for sector universes. Select SP500 to pre-load all sectors at once.'}
           </Text>
         )}
 

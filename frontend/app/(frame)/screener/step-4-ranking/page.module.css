@@ -12,6 +12,13 @@
   gap: var(--space-1);
 }
 
+.directionBanner {
+  padding: 10px 14px;
+  border: 1px solid var(--caution);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--caution) 8%, var(--bg-surface));
+}
+
 .split {
   display: grid;
   grid-template-columns: minmax(320px, 40%) 1fr;

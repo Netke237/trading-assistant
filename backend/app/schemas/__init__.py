@@ -231,6 +231,15 @@ class SectorTile(BaseModel):
     name: str
     changePct: float
     status: Status
+    symbolCount: int = 0
+
+
+class IndexChangeTile(BaseModel):
+    """Daily changePct/status for an index ETF (SPY, QQQ). No symbolCount."""
+    key: str
+    name: str
+    changePct: float
+    status: Status
 
 
 # ── Portfolio ────────────────────────────────────────────────────────────────

@@ -229,6 +229,12 @@ export default function Step4StocksPage() {
         </details>
       )}
 
+      {result?.direction_banner && (
+        <div className={styles.directionBanner}>
+          <Text size={12} tone="caution">{result.direction_banner}</Text>
+        </div>
+      )}
+
       {result && (
         <div className={styles.results}>
           <div className={styles.tableHeader}>

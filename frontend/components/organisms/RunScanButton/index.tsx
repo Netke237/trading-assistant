@@ -172,6 +172,7 @@ export function RunScanButton() {
           .map((c) => c.symbol)
           .filter((s) => portfolioSymbols.has(s));
         useScanStore.getState().setConflictedSymbols(conflicted);
+        if (screenerMode === 'options') useScanStore.getState().setOptionsScanAt(startISO);
         setScanState('COMPLETED', startISO, Date.now() - t0);  // keep same startISO
       })
       .catch(() => {

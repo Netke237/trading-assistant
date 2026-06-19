@@ -90,7 +90,7 @@ horizons:
       setup_window_bars: 8
       momentum_signals_for_pass: 2
       volume_lookback_bars: 20
-      volume_multiplier: 1.20
+      volume_multiplier: 1.50
       volume_bonus_pts: 10
     event:
       reject_days: 7
@@ -189,7 +189,7 @@ horizons:
         ma_type: SMA
         slope_lookback: 20
         adx_period: 14
-        adx_pass: 20
+        adx_pass: 25
         adx_caution: 15
         price_max: 40
         slope_max: 30
@@ -206,7 +206,7 @@ horizons:
       fib_standard_max: 0.500
       fib_golden_min: 0.500
       fib_golden_max: 0.618
-      swing_high_lookback_bars: 15
+      swing_high_lookback_bars: 75
       swing_high_min_bars_ago: 3
       max_days_in_pullback: 60
       theta_caution_days: 45
@@ -220,7 +220,7 @@ horizons:
       macd_signal: 9
       macd_histogram_rising: true
       rsi_period: 14
-      rsi_floor: 48
+      rsi_floor: 37
       rsi_div_window_bars: 20
       stoch_k: 14
       stoch_d: 3
@@ -230,7 +230,7 @@ horizons:
       setup_window_bars: 5
       momentum_signals_for_pass: 2
       volume_lookback_bars: 20
-      volume_multiplier: 1.20
+      volume_multiplier: 1.50
       volume_bonus_pts: 10
     event:
       reject_days: 30

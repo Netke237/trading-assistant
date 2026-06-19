@@ -4,6 +4,12 @@
   gap: var(--space-2);
 }
 
+.scanRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .scanTop {
   display: flex;
   align-items: center;

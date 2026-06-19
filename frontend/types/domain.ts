@@ -341,6 +341,14 @@ export interface MarketRegime {
 // --- Sector heatmap ---
 
 export interface SectorTile {
+  key:         string;
+  name:        string;
+  changePct:   number;
+  status:      Status;
+  symbolCount?: number;
+}
+
+export interface IndexChangeTile {
   key:       string;
   name:      string;
   changePct: number;

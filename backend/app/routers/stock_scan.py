@@ -223,6 +223,18 @@ async def _process_stock(
             if card.status == "REJECT":
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}
 
+            # Direction conviction filter (Swing/Position only)
+            if req.horizon != "Intraday":
+                _trend_score = next((r.score for r in card.rules if r.name == "trend"), 50)
+                if req.direction == "Bearish":
+                    _max_trend = 40 if req.horizon == "Position" else 50
+                    if _trend_score > _max_trend:
+                        return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} > {_max_trend} for Bearish {req.horizon}"}
+                elif req.direction == "Bullish":
+                    _min_trend = 40 if req.horizon == "Position" else 30
+                    if _trend_score < _min_trend:
+                        return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {_min_trend} for Bullish {req.horizon}"}
+
             if req.regime_filter and regime_signal and \
                regime_signal["conviction_pct"] <= full_cfg["regime_gate"]["headwind_caution_pct"]:
                 return {"symbol": symbol, "reason": "regime headwind"}
@@ -379,6 +391,23 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
     shortlist_truncated = original_count > req.shortlist_max_candidates
     candidates = candidates[: req.shortlist_max_candidates]
 
+    _direction_banner: str | None = None
+    _side = "short-side" if req.direction == "Bearish" else "long-side"
+    _dir_filtered = sum(
+        1 for r in rejected
+        if isinstance(r, dict) and r.get("reason", "").startswith("direction_conviction:")
+    )
+    if not candidates and _dir_filtered > 0:
+        _direction_banner = (
+            f"No confirmed {req.direction.lower()} setups in this universe. "
+            f"All candidates were removed — market structure does not support {_side} entries."
+        )
+    elif candidates and all(c.stock_status == "CAUTION" for c in candidates):
+        _direction_banner = (
+            f"No strong {req.direction.lower()} setups detected. "
+            "All candidates are CAUTION-grade — consider reducing size or waiting for a clearer signal."
+        )
+
     _hist_kw = ("insufficient history", "no price data")
     _pipeline = StockPipeline(
         scanned=len(symbols),
@@ -428,4 +457,5 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
         scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(),
         candidates=candidates, rejected=rejected, pipeline=_pipeline,
         original_count=original_count, shortlist_truncated=shortlist_truncated,
+        direction_banner=_direction_banner,
     )

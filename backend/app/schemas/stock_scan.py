@@ -109,3 +109,4 @@ class StockScanResult(BaseModel):
     pipeline:             Optional[StockPipeline] = None
     original_count:       int = 0
     shortlist_truncated:  bool = False
+    direction_banner:     Optional[str] = None

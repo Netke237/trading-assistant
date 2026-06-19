@@ -29,7 +29,7 @@ function shortDate(iso: string): string {
 }
 
 export default function DashboardContextRail() {
-  const { scanState, context, scanAt } = useScanStore();
+  const { scanState, context, scanAt, optionsScanAt, stockScanAt } = useScanStore();
   const combinedRegime = useScanStore((s) => s.combinedRegime);
   const positions = usePortfolioStore((s) => s.positions);
   const [alerts, setAlerts]   = useState<AlertItem[]>([]);
@@ -55,11 +55,23 @@ export default function DashboardContextRail() {
     <>
       <RailSection title="Last Scan">
         <div className={styles.scanStack}>
-          <div className={styles.scanTop}>
-            <StatusBadge status={scanState === 'COMPLETED' ? 'PASS' : scanState === 'FAILED' ? 'REJECT' : 'PENDING'} label={scanState} />
-            <Text size={12} tone="secondary">{formatTime(scanAt)}</Text>
+          <div className={styles.scanRow}>
+            <Text size={11} tone="dim">Option scan</Text>
+            <div className={styles.scanTop}>
+              <StatusBadge status={scanState === 'COMPLETED' ? 'PASS' : scanState === 'FAILED' ? 'REJECT' : 'PENDING'} label={scanState} />
+              <Text size={12} tone="secondary">{formatTime(optionsScanAt ?? scanAt)}</Text>
+            </div>
           </div>
-          <Text size={12} tone="secondary">{contextStr}</Text>
+          <Text size={12} tone="secondary" >{contextStr}</Text>
+          <div className={styles.scanRow}>
+            <Text size={11} tone="dim">Stock scan</Text>
+            <div className={styles.scanTop}>
+              {stockScanAt
+                ? <><StatusBadge status="PASS" label="COMPLETED" /><Text size={12} tone="secondary">{formatTime(stockScanAt)}</Text></>
+                : <Text size={12} tone="dim">—</Text>
+              }
+            </div>
+          </div>
         </div>
       </RailSection>
 
