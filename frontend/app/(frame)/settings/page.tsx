@@ -15,6 +15,7 @@ import React, { useState, useEffect } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig, type FundamentalsGate } from '@/lib/settingsStore';
+import { useIvThresholdsStore, type HorizonIvThresholds } from '@/lib/ivThresholdsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
@@ -374,6 +375,7 @@ function ScanForm() {
         isIntraday={isIntraday}
       />
       <SpreadsSection />
+      <IvThresholdsSection />
     </>
   );
 }
@@ -593,6 +595,84 @@ function SpreadsSection() {
             const clamped = isNaN(val) ? 40 : Math.max(0, Math.min(100, val));
             setDebitText(String(clamped));
             setSpreads({ maxDebitPctOfWidth: clamped });
+          }}
+        />
+        <Text size={12} tone="secondary">%</Text>
+      </Row>
+    </>
+  );
+}
+
+/* ---------- IV rank thresholds ---------- */
+
+function IvThresholdsSection() {
+  const { thresholds, setThresholds } = useIvThresholdsStore();
+
+  const [swingPassText,    setSwingPassText]    = useState(String(thresholds.Swing?.pass_max    ?? 34));
+  const [positionPassText, setPositionPassText] = useState(String(thresholds.Position?.pass_max ?? 44));
+
+  // Sync text buffers when the store resets
+  useEffect(() => { setSwingPassText(String(thresholds.Swing?.pass_max    ?? 34));    }, [thresholds.Swing?.pass_max]);
+  useEffect(() => { setPositionPassText(String(thresholds.Position?.pass_max ?? 44)); }, [thresholds.Position?.pass_max]);
+
+  function handleSaveIvThresholds(
+    swingPass: number,
+    positionPass: number,
+    existing: Record<string, HorizonIvThresholds>,
+  ) {
+    setThresholds({
+      ...existing,
+      Swing:    { ...existing.Swing,    pass_max: swingPass    },
+      Position: { ...existing.Position, pass_max: positionPass },
+    });
+  }
+
+  return (
+    <>
+      <SectionIntro
+        title="IV rank thresholds"
+        blurb="Maximum IV rank that counts as PASS for each horizon. Intraday has no IV gate (disabled). These values are fetched from the backend on load and stored in session only — edit scoring_rules.yaml to persist permanently."
+      />
+      <Row
+        label="Swing — pass max"
+        hint="IV rank at or below this → PASS for Swing scans (1–100)"
+        defaultValue="34"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.numInput}
+          value={swingPassText}
+          onChange={(e) => setSwingPassText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(swingPassText, 10);
+            const clamped = isNaN(val) ? 34 : Math.max(1, Math.min(100, val));
+            setSwingPassText(String(clamped));
+            const posPass = parseInt(positionPassText, 10);
+            const positionPass = isNaN(posPass) ? 44 : Math.max(1, Math.min(100, posPass));
+            handleSaveIvThresholds(clamped, positionPass, thresholds);
+          }}
+        />
+        <Text size={12} tone="secondary">%</Text>
+      </Row>
+      <Row
+        label="Position — pass max"
+        hint="IV rank at or below this → PASS for Position scans (1–100)"
+        defaultValue="44"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.numInput}
+          value={positionPassText}
+          onChange={(e) => setPositionPassText(e.target.value)}
+          onBlur={() => {
+            const val = parseInt(positionPassText, 10);
+            const clamped = isNaN(val) ? 44 : Math.max(1, Math.min(100, val));
+            setPositionPassText(String(clamped));
+            const swingPass = parseInt(swingPassText, 10);
+            const swingPassClamped = isNaN(swingPass) ? 34 : Math.max(1, Math.min(100, swingPass));
+            handleSaveIvThresholds(swingPassClamped, clamped, thresholds);
           }}
         />
         <Text size={12} tone="secondary">%</Text>

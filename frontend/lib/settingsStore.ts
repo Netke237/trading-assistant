@@ -148,8 +148,6 @@ export const DEFAULT_ALPACA_LIVE: AlpacaLiveConfig = {
 interface SettingsState {
   broker:                  BrokerConfig;
   alertDeduplicationHours: number;
-  ivPassThreshold:         number;
-  ivCautionThreshold:      number;
   markov:                  MarkovConfig;
   shortlistMaxCandidates:      number;
   maxContractsPerChain:        number;
@@ -166,8 +164,6 @@ interface SettingsState {
   spreads:                     SpreadsConfig;
   setBroker:                    (b: BrokerConfig) => void;
   setAlertDeduplicationHours:   (h: number) => void;
-  setIvPassThreshold:           (n: number) => void;
-  setIvCautionThreshold:        (n: number) => void;
   setMarkov:                    (cfg: MarkovConfig) => void;
   setShortlistMaxCandidates:   (n: number) => void;
   setMaxContractsPerChain:     (n: number) => void;
@@ -220,6 +216,10 @@ export function migrateSettings(
   if (version < 17) {
     next.spreads = { ...DEFAULT_SPREADS };
   }
+  if (version < 18) {
+    delete (next as Record<string, unknown>).ivPassThreshold;
+    delete (next as Record<string, unknown>).ivCautionThreshold;
+  }
   return next as unknown as SettingsState;
 }
 
@@ -228,8 +228,6 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       broker:                  { ...DEFAULT_BROKER },
       alertDeduplicationHours: 24,
-      ivPassThreshold:         34,
-      ivCautionThreshold:      55,
       markov:                  { ...DEFAULT_MARKOV },
       shortlistMaxCandidates: 10,
       maxContractsPerChain: 10,
@@ -246,8 +244,6 @@ export const useSettingsStore = create<SettingsState>()(
       spreads:              { ...DEFAULT_SPREADS },
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
-      setIvPassThreshold:           (n) => set({ ivPassThreshold: n }),
-      setIvCautionThreshold:        (n) => set({ ivCautionThreshold: n }),
       setMarkov:                    (cfg) => set({ markov: cfg }),
       setShortlistMaxCandidates: (n) => set({ shortlistMaxCandidates: n }),
       setMaxContractsPerChain: (n) => set({ maxContractsPerChain: n }),
@@ -263,8 +259,6 @@ export const useSettingsStore = create<SettingsState>()(
       resetToDefaults: () => set({
         broker:                  { ...DEFAULT_BROKER },
         alertDeduplicationHours: 24,
-        ivPassThreshold:         34,
-        ivCautionThreshold:      55,
         markov:                  { ...DEFAULT_MARKOV },
         shortlistMaxCandidates: 10,
         maxContractsPerChain: 10,
@@ -288,12 +282,10 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 17,
+      version: 18,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
-        ivPassThreshold:         state.ivPassThreshold,
-        ivCautionThreshold:      state.ivCautionThreshold,
         markov:                  state.markov,
         shortlistMaxCandidates: state.shortlistMaxCandidates,
         maxContractsPerChain:   state.maxContractsPerChain,

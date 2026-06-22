@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text, Data } from '@/components/primitives';
 import { useAlertStore, DEFAULT_CONFIG } from '@/lib/alertStore';
-import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
@@ -121,7 +120,6 @@ function conditionsSummary(rule: AlertRule): string {
 
 export default function AlertsPage() {
   const { toasts, config, setConfig, clearAll, clearOldAlerts, acknowledgeAlert, testSound } = useAlertStore();
-  const { ivPassThreshold, ivCautionThreshold, setIvPassThreshold, setIvCautionThreshold } = useSettingsStore();
   const { rules, updateRule, deleteRule, addRule } = useChartAlertStore();
 
   const [tab, setTab] = useState<'alerts' | 'rules'>('alerts');
@@ -338,32 +336,6 @@ export default function AlertsPage() {
                   </button>
                   <Toggle on={config.soundEnabled} onChange={(on) => setConfig({ ...config, soundEnabled: on })} />
                 </div>
-              </SettingsRow>
-              <SettingsRow label="IV Pass Threshold" hint="IV rank above this is considered PASS." defaultValue="34">
-                <input
-                  type="number"
-                  className={styles.input}
-                  min={1}
-                  max={100}
-                  value={ivPassThreshold}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    if (val >= 1 && val <= 100) setIvPassThreshold(val);
-                  }}
-                />
-              </SettingsRow>
-              <SettingsRow label="IV Caution Threshold" hint="IV rank above this (but below Pass) is CAUTION." defaultValue="55">
-                <input
-                  type="number"
-                  className={styles.input}
-                  min={1}
-                  max={100}
-                  value={ivCautionThreshold}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    if (val >= 1 && val <= 100) setIvCautionThreshold(val);
-                  }}
-                />
               </SettingsRow>
 
               <div className={styles.divider} />

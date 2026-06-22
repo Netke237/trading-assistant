@@ -283,6 +283,11 @@ export const api = {
     post<{ fired: number; events: unknown[] }>('/api/strategy-watch/evaluate', {}),
   getStrategyWatchStatus: () =>
     get<{ running: boolean; last_run_at: string | null; mode: string; enabled: boolean }>('/api/strategy-watch/status'),
+
+  getIvThresholds: () =>
+    get<Record<string, { pass_max: number | null; caution_max: number | null }>>(
+      '/api/config/iv-thresholds'
+    ),
 };
 
 /* ---------- Risk settings ---------- */

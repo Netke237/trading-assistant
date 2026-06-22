@@ -14,8 +14,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { EventFlag } from '@/components/atoms/EventFlag';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { useScanStore } from '@/lib/scanStore';
-import { useSettingsStore } from '@/lib/settingsStore';
-import { IV_PASS_MAX, IV_CAUTION_MAX } from '@/lib/ivThresholds';
+import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import { eventProximity } from '@/lib/date';
 import { worstStatus, type Status } from '@/lib/status';
@@ -51,8 +50,7 @@ export default function Step5Page() {
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
   const context              = useScanStore((s) => s.context);
   const candidates           = scanResultCandidates ?? [];
-  const ivPassFallback    = useSettingsStore((s) => s.ivPassThreshold);
-  const ivCautionFallback = useSettingsStore((s) => s.ivCautionThreshold);
+  const ivThresholds = useIvThresholdsStore((s) => s.thresholds);
   const watchlist = useMemo(() => candidates.map(cardToRow), [candidates]);
   const candidateMap = useMemo(
     () => Object.fromEntries(candidates.map((c) => [c.symbol, c])),
@@ -64,13 +62,13 @@ export default function Step5Page() {
     : 'Swing';
   const { caution: evCaution, reject: evReject } = EVENT_WINDOWS[horizonKey];
 
-  // Use per-horizon YAML defaults; fall back to settingsStore when no scan context yet.
-  const ivPassThreshold    = IV_PASS_MAX[horizonKey]    ?? ivPassFallback;
-  const ivCautionThreshold = IV_CAUTION_MAX[horizonKey] ?? ivCautionFallback;
+  const ivPassThreshold    = getIvPassMax(horizonKey, ivThresholds);
+  const ivCautionThreshold = getIvCautionMax(horizonKey, ivThresholds);
 
   function ivStatus(rank: number): Status {
+    if (ivPassThreshold === null)    return 'PASS';   // Intraday: no IV gate
     if (rank <= ivPassThreshold)    return 'PASS';
-    if (rank <= ivCautionThreshold) return 'CAUTION';
+    if (ivCautionThreshold !== null && rank <= ivCautionThreshold) return 'CAUTION';
     return 'REJECT';
   }
 
@@ -80,8 +78,10 @@ export default function Step5Page() {
         <Text size={11} tone="dim" weight={500}>STEP 5 OF 7</Text>
         <Title as="h1" size={24}>Volatility + Events</Title>
         <Text size={13} tone="secondary">
-          IV rank ≤ {ivPassThreshold} → PASS; ≤ {ivCautionThreshold} → CAUTION; above → REJECT.
-          Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
+          {ivPassThreshold !== null
+            ? `IV rank ≤ ${ivPassThreshold} → PASS; ≤ ${ivCautionThreshold ?? '—'} → CAUTION; above → REJECT.`
+            : 'IV gate disabled for this horizon.'}
+          {' '}Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
           Gate = worst of IV and event proximity.
         </Text>
       </div>

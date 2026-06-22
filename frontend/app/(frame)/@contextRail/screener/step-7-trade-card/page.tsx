@@ -12,7 +12,7 @@ import { Text } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import { statusForScore } from '@/lib/status';
-import { IV_PASS_MAX, IV_CAUTION_MAX } from '@/lib/ivThresholds';
+import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
 import type { TradeCardData, WatchlistRow } from '@/types/domain';
 import type { Status } from '@/lib/status';
 import styles from './page.module.css';
@@ -27,6 +27,7 @@ function buildChecklist(
   wlRow: WatchlistRow | undefined,
   regime: Status,
   horizonKey: string,
+  ivThresholds: Record<string, { pass_max: number | null; caution_max: number | null }>,
 ): Gate[] {
   const gates: Gate[] = [];
 
@@ -37,11 +38,11 @@ function buildChecklist(
     gates.push({ label: 'Regime PASS', status: regimeStatus });
   }
 
-  // IV rank acceptable — thresholds mirror scoring_rules.yaml and ivThresholds.ts
+  // IV rank acceptable — thresholds from ivThresholdsStore (fetched from backend)
   const ivRank = candidate.contractDetails?.ivRank;
   if (ivRank !== undefined) {
-    const ivPassMax    = IV_PASS_MAX[horizonKey];
-    const ivCautionMax = IV_CAUTION_MAX[horizonKey];
+    const ivPassMax    = getIvPassMax(horizonKey, ivThresholds);
+    const ivCautionMax = getIvCautionMax(horizonKey, ivThresholds);
     const ivStatus: 'PASS' | 'CAUTION' | 'REJECT' =
       ivPassMax === null    ? 'PASS' :           // Intraday: no IV gate
       ivRank <= ivPassMax   ? 'PASS' :
@@ -88,6 +89,7 @@ export default function TradeCardContextRail() {
   const horizon             = useScanStore((s) => s.context?.horizon);
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
   const candidates          = scanResultCandidates ?? [];
+  const ivThresholds        = useIvThresholdsStore((s) => s.thresholds);
 
   const horizonKey = horizon?.startsWith('Intraday') ? 'Intraday'
     : horizon?.startsWith('Position') ? 'Position'
@@ -113,7 +115,7 @@ export default function TradeCardContextRail() {
       }
     : undefined;
 
-  const gates = candidate ? buildChecklist(candidate, wlRow, regime, horizonKey) : [];
+  const gates = candidate ? buildChecklist(candidate, wlRow, regime, horizonKey, ivThresholds) : [];
 
   return (
     <>
