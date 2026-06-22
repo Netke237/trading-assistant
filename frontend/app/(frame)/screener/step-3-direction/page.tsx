@@ -846,7 +846,7 @@ export default function Step3Page() {
     : 'Swing';
 
   const stocksDefs  = PARAM_DEFS.filter((d) => d.section === 'stocks' || d.section === 'all');
-  const optionsDefs = PARAM_DEFS.filter((d) => d.section === 'options');
+  const optionsDefs = PARAM_DEFS.filter((d) => d.section === 'options' || d.section === 'all');
   const stockSubGroups  = [...new Set(stocksDefs.map((d) => d.subGroup))];
   const optionSubGroups = [...new Set(optionsDefs.map((d) => d.subGroup))];
 

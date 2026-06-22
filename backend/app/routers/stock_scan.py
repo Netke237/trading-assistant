@@ -251,7 +251,7 @@ async def _process_stock(
                         return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {_min_trend} for Bullish {req.horizon}"}
 
             if req.regime_filter and regime_signal and \
-               regime_signal["conviction_pct"] <= full_cfg["regime_gate"]["headwind_caution_pct"]:
+               regime_signal["conviction_pct"] <= _regime_gate.get("headwind_caution_pct", -15):
                 return {"symbol": symbol, "reason": "regime headwind"}
 
             signal_fn = _SIGNAL_FNS.get(req.strategy)
