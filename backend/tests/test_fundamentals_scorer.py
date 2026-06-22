@@ -1,6 +1,7 @@
 """Tests for fundamentals_scorer.py"""
 from decimal import Decimal
 from datetime import date
+from unittest.mock import patch
 
 from app.data.edgar import FundamentalsSnapshot
 from app.scoring.fundamentals_scorer import score_fundamentals, FundamentalHealth
@@ -77,17 +78,27 @@ def test_score_fundamentals_cfg_none_returns_valid_score():
     assert 0 <= result.score <= 100
 
 
-def test_score_fundamentals_cfg_none_uses_yaml_weights():
-    """Weights from YAML (growth:0.35, quality:0.35, risk:0.30) must be applied, not hard-coded."""
-    result_via_none = score_fundamentals(_snap(), direction="Bullish", cfg=None)
-    # Pass explicit cfg matching YAML defaults — scores must match.
-    explicit_cfg = {
-        "weights": {"growth": 0.35, "quality": 0.35, "risk": 0.30},
+def test_score_fundamentals_cfg_none_uses_yaml_loader():
+    """cfg=None must call _load_yaml_cfg, not use a hardcoded fallback.
+    We inject non-default weights and verify the score reflects them."""
+    snap = _snap()
+
+    # Get baseline score with default cfg (all weights ~equal)
+    baseline = score_fundamentals(snap, direction="Bullish", cfg=None)
+
+    # Inject a cfg that puts ALL weight on risk (score will be dominated by risk_score)
+    injected_cfg = {
+        "weights": {"growth": 0.0, "quality": 0.0, "risk": 1.0},
         "safety": {"reject_on_negative_equity": True, "debt_to_equity_reject": 3.0},
-        "thresholds": {},
     }
-    result_via_explicit = score_fundamentals(_snap(), direction="Bullish", cfg=explicit_cfg)
-    assert result_via_none.score == result_via_explicit.score, (
-        f"cfg=None returned {result_via_none.score} but explicit cfg returned "
-        f"{result_via_explicit.score} — YAML weights are not being applied."
+    with patch(
+        "app.scoring.fundamentals_scorer._load_yaml_cfg",
+        return_value={"fundamentals_gate": injected_cfg},
+    ):
+        risk_only = score_fundamentals(snap, direction="Bullish", cfg=None)
+
+    assert risk_only.score != baseline.score, (
+        f"Injected risk-only weights should change the score "
+        f"(baseline={baseline.score}, risk_only={risk_only.score}). "
+        "cfg=None is not reading from _load_yaml_cfg."
     )
