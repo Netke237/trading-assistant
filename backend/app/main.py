@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
             from app.schemas.schedule import ScheduleConfig as _ScheduleConfig
             import yaml as _yaml
             from pathlib import Path as _Path
-            _settings_path = _Path(__file__).parent.parent.parent / "config" / "settings.yaml"
+            _settings_path = _Path(__file__).parent.parent / "config" / "settings.yaml"
             _raw = _yaml.safe_load(_settings_path.read_text()) or {} if _settings_path.exists() else {}
             _sched_cfg = _ScheduleConfig(**_raw.get("scan", {}).get("schedule", {}))
             _scheduler.configure(_sched_cfg)
