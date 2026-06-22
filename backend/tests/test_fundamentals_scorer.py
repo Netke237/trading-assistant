@@ -65,3 +65,29 @@ def test_invert_metrics_score_correctly():
     low_debt = score_fundamentals(_snap(debt_to_equity=0.2, share_growth_yoy=0.0, current_ratio=2.0), "Bullish")
     high_debt = score_fundamentals(_snap(debt_to_equity=2.5, share_growth_yoy=0.05, current_ratio=2.0), "Bullish")
     assert low_debt.risk_score > high_debt.risk_score
+
+
+# ---------------------------------------------------------------------------
+# Regression: cfg=None must load from YAML, not _DEFAULT_CFG
+# ---------------------------------------------------------------------------
+
+def test_score_fundamentals_cfg_none_returns_valid_score():
+    """Passing cfg=None must not raise and must return a score in 0-100."""
+    result = score_fundamentals(_snap(), direction="Bullish", cfg=None)
+    assert 0 <= result.score <= 100
+
+
+def test_score_fundamentals_cfg_none_uses_yaml_weights():
+    """Weights from YAML (growth:0.35, quality:0.35, risk:0.30) must be applied, not hard-coded."""
+    result_via_none = score_fundamentals(_snap(), direction="Bullish", cfg=None)
+    # Pass explicit cfg matching YAML defaults — scores must match.
+    explicit_cfg = {
+        "weights": {"growth": 0.35, "quality": 0.35, "risk": 0.30},
+        "safety": {"reject_on_negative_equity": True, "debt_to_equity_reject": 3.0},
+        "thresholds": {},
+    }
+    result_via_explicit = score_fundamentals(_snap(), direction="Bullish", cfg=explicit_cfg)
+    assert result_via_none.score == result_via_explicit.score, (
+        f"cfg=None returned {result_via_none.score} but explicit cfg returned "
+        f"{result_via_explicit.score} — YAML weights are not being applied."
+    )

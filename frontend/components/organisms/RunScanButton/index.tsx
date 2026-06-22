@@ -146,7 +146,7 @@ export function RunScanButton() {
     }
 
     // Fundamentals gate
-    const fGate = fundamentalsGate ?? { enabled: true, cautionBelow: 45, rejectBelow: 30, deReject: 3.0 };
+    const fGate = fundamentalsGate;
     filters.fundamentals_enabled       = fGate.enabled;
     filters.fundamentals_caution_below = fGate.cautionBelow;
     filters.fundamentals_reject_below  = fGate.rejectBelow;

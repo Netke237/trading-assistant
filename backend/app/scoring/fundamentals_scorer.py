@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from app.data.edgar import FundamentalsSnapshot
+from app.scoring.signal_confidence import _cfg as _load_yaml_cfg
 
 
 # ---------------------------------------------------------------------------
@@ -22,31 +23,6 @@ class FundamentalHealth:
     safety_flags: list[str] = field(default_factory=list)
     detail: dict = field(default_factory=dict)
 
-
-# ---------------------------------------------------------------------------
-# Module-level default config (mirrors fundamentals_gate in scoring_rules.yaml)
-# ---------------------------------------------------------------------------
-
-_DEFAULT_CFG: dict = {
-    "enabled": True,
-    "cautionBelow": 45,
-    "rejectBelow": 30,
-    "safety": {
-        "reject_on_negative_equity": True,
-        "debt_to_equity_reject": 3.0,
-    },
-    "staleness_days": 90,
-    "weights": {"growth": 0.35, "quality": 0.35, "risk": 0.30},
-    "thresholds": {
-        "revenue_growth_yoy": {"strong": 0.15, "weak": 0.0},
-        "eps_growth_yoy":     {"strong": 0.15, "weak": 0.0},
-        "gross_margin":       {"strong": 0.40, "weak": 0.20},
-        "operating_margin":   {"strong": 0.15, "weak": 0.0},
-        "debt_to_equity":     {"strong": 0.5,  "weak": 2.0},
-        "current_ratio":      {"strong": 2.0,  "weak": 1.0},
-        "share_growth_yoy":   {"strong": 0.0,  "weak": 0.03},
-    },
-}
 
 
 # ---------------------------------------------------------------------------
@@ -95,13 +71,16 @@ def score_fundamentals(
         snap:      FundamentalsSnapshot from edgar.get_snapshot()
         direction: "Bullish" or "Bearish" (reserved for future directional logic)
         cfg:       Gate config dict from scoring_rules.yaml[fundamentals_gate].
-                   Defaults to module-level _DEFAULT_CFG if None.
+                   Defaults to scoring_rules.yaml[fundamentals_gate] if None.
 
     Returns:
         FundamentalHealth with score, labels, safety flags, and detail dict.
     """
     if cfg is None:
-        cfg = _DEFAULT_CFG
+        # Load from scoring_rules.yaml[fundamentals_gate] — same cached loader as signal_confidence.
+        # The YAML dict includes extra keys (cautionAbove, rejectAbove) not in the old _DEFAULT_CFG;
+        # these are unused by score_fundamentals but harmless.
+        cfg = _load_yaml_cfg()["fundamentals_gate"]
 
     # ---- Growth bucket -------------------------------------------------------
     rev_s = _metric_score(snap.revenue_growth_yoy, strong=0.15, weak=0.0)
