@@ -85,7 +85,7 @@ horizons:
       macd_signal: 5
       macd_histogram_rising: true
       rsi_period: 14
-      rsi_floor: 44
+      rsi_floor: 38
       rsi_div_window_bars: 15
       stoch_k: 14
       stoch_d: 3
@@ -157,7 +157,7 @@ horizons:
       macd_signal: 3
       macd_histogram_rising: true
       rsi_period: 14
-      rsi_floor: 44
+      rsi_floor: 40
       rsi_div_window_bars: 10
       stoch_k: 14
       stoch_d: 3

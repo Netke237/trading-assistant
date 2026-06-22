@@ -292,3 +292,32 @@ async def test_get_contracts_empty_chain():
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+# ── DTE hard-reject tests (min_dte: 14 → 21) ────────────────────────────────
+
+def test_contract_rejected_at_dte_18():
+    """DTE=18 must be hard-rejected after raising min_dte from 14 to 21."""
+    from datetime import date, timedelta
+    expiry = (date.today() + timedelta(days=18)).isoformat()
+    contract = {
+        "symbol": "AAPL", "strike": 185.0, "expiry": expiry, "is_call": True,
+        "bid": 2.00, "ask": 2.10, "delta": 0.45,
+        "volume": 500, "open_interest": 1500, "iv_rank": 30,
+    }
+    card = validate_contract(contract, stock_score=70)
+    assert card.status == "REJECT"
+    assert "dte_too_short" in card.reject_reasons
+
+
+def test_contract_passes_at_dte_22():
+    """DTE=22 must not be rejected for DTE reasons."""
+    from datetime import date, timedelta
+    expiry = (date.today() + timedelta(days=22)).isoformat()
+    contract = {
+        "symbol": "AAPL", "strike": 185.0, "expiry": expiry, "is_call": True,
+        "bid": 2.00, "ask": 2.10, "delta": 0.45,
+        "volume": 500, "open_interest": 1500, "iv_rank": 30,
+    }
+    card = validate_contract(contract, stock_score=70)
+    assert "dte_too_short" not in card.reject_reasons

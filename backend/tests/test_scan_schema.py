@@ -43,7 +43,7 @@ def test_new_fields_have_correct_defaults():
     req = StockScanRequest(**_base())
     assert req.pullback_tolerance_pct == 0.08
     assert req.ma_crossover_lookback == 10
-    assert req.breakout_volume_mult == 1.1
+    assert req.breakout_volume_mult == 1.5
 
 
 def test_new_fields_accept_custom_values():

@@ -21,7 +21,7 @@ class StockScanRequest(BaseModel):
     ma_crossover_fast:      int   = Field(20,   gt=0)           # fast MA period
     ma_crossover_slow:      int   = Field(50,   gt=0)           # slow MA period
     ma_crossover_lookback:  int   = Field(10,   gt=0)           # lookback ≥ 1
-    breakout_volume_mult:   float = Field(1.1,  gt=1.0)         # must exceed 1× (volume expansion)
+    breakout_volume_mult:   float = Field(1.5,  gt=1.0)         # must exceed 1× (volume expansion)
     rsi_period:             int   = Field(14,   gt=0)           # RSI look-back period
     rsi_oversold:           float = Field(30.0, gt=0, le=100)   # RSI oversold threshold
     rsi_overbought:         float = Field(70.0, gt=0, le=100)   # RSI overbought threshold (bearish)

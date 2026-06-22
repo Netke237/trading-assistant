@@ -172,7 +172,7 @@ def breakout_base_signal(
     *,
     base_lookback: int = 20,
     atr_tight_max: float = 1.5,
-    volume_mult: float = 1.1,
+    volume_mult: float = 1.5,
     rr_target_mult: float = 2.0,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
 ) -> StrategySignal | None:
