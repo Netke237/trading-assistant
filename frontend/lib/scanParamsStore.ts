@@ -32,7 +32,7 @@ const DEFAULTS: ScanParams = {
   rsiOversold:          30,
   rsiTrendSma:          200,
   btMinTrades:          5,
-  btMinWinRate:         0.30,
+  btMinWinRate:         0.45,
   eventFilter:          'include' as const,
   stockShortlistMax:    10,
 };
@@ -52,7 +52,7 @@ export const useScanParamsStore = create<ScanParamsStore>()(
     {
       name: 'bamendjou:scan-params',
       skipHydration: true,
-      version: 8,
+      version: 9,
       migrate: (state: unknown, v: number) => {
         if (v < 2) return { ...DEFAULTS, ...(state as Partial<ScanParams>) };
         if (v < 4) return { ...DEFAULTS, ...(state as Partial<ScanParams>), pullbackMaType: 'EMA' as const };
@@ -60,6 +60,13 @@ export const useScanParamsStore = create<ScanParamsStore>()(
         if (v < 6) return { ...DEFAULTS, ...(state as Partial<ScanParams>), pullbackTolerancePct: 0.08, btMinTrades: 5 };
         if (v < 7) return { ...DEFAULTS, ...(state as Partial<ScanParams>), stockShortlistMax: 10 };
         if (v < 8) return { ...DEFAULTS, ...(state as Partial<ScanParams>), btMinWinRate: 0.30 };
+        if (v < 9) {
+          const migrated = { ...DEFAULTS, ...(state as Partial<ScanParams>) };
+          if ((migrated as Record<string, unknown>).btMinWinRate === 0.30) {
+            (migrated as Record<string, unknown>).btMinWinRate = 0.45;
+          }
+          return migrated;
+        }
         return state as ScanParams;
       },
     },

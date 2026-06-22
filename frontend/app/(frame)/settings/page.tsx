@@ -547,8 +547,8 @@ function FundamentalsGateSection({
         />
       </Row>
       <Row
-        label="De-reject threshold"
-        hint={`Minimum R:R ratio that can override a fundamental REJECT verdict (0.5–10)${intradayHint}`}
+        label="D/E reject threshold"
+        hint={`Maximum debt-to-equity ratio allowed. Companies with D/E above this value are hard-rejected regardless of fundamental health score. ↑ Higher → more leveraged companies qualify (fewer rejections) · ↓ Lower → only low-debt companies pass (more rejections). Default: 3.0`}
         defaultValue="3.0"
       >
         <input
