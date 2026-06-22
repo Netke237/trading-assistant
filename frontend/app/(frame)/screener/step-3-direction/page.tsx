@@ -152,7 +152,7 @@ interface ParamDef {
   key: string;
   label: string;
   type: 'number' | 'boolean' | 'select' | 'display';
-  section: 'stocks' | 'options';
+  section: 'stocks' | 'options' | 'all';
   subGroup: string;
   options?: string[];
   min?: number;
@@ -274,6 +274,32 @@ const PARAM_DEFS: ParamDef[] = [
     hint: 'Earliest expiry allowed. ↑ Higher → avoids short-dated options, longer expirations only · ↓ Lower → near-expiry contracts included' },
   { key: 'max_dte',                label: 'Max DTE',                type: 'number', section: 'options', subGroup: 'Contract', min: 1, max: 730,   step: 1,   unit: 'days',
     hint: 'Latest expiry allowed. ↑ Higher → LEAPS-style long-dated contracts included · ↓ Lower → only contracts within the near-term horizon' },
+  // ALL — Regime Gate
+  { key: 'regime_headwind_caution_pct', label: 'Headwind caution %', type: 'number', section: 'all', subGroup: 'Regime Gate', min: -100, max: 0, step: 5, unit: '%',
+    hint: 'Sector underperformance vs benchmark below this % → CAUTION on candidate. ↑ Higher (closer to 0) → stricter, more candidates caught (fewer pass) · ↓ Lower → only severe laggards affected (more pass). Default: -15%' },
+  { key: 'regime_headwind_reject_pct',  label: 'Headwind reject %',  type: 'number', section: 'all', subGroup: 'Regime Gate', min: -100, max: 0, step: 5, unit: '%',
+    hint: 'Sector underperformance below this % → hard REJECT regardless of score. ↑ Higher (less negative) → stricter, more rejections · ↓ Lower → only catastrophic laggards rejected (more pass). Default: -40%' },
+  // ALL — Fundamentals Bearish
+  { key: 'fundamentals_caution_above', label: 'Fundamentals caution above', type: 'number', section: 'all', subGroup: 'Fundamentals Bearish', min: 0, max: 100, step: 5,
+    hint: 'BEARISH SCANS ONLY. Fundamental health score above this → CAUTION. Flags risk of shorting a financially strong company. ↑ Higher → only very strong companies flagged (fewer cautions) · ↓ Lower → wider caution zone (more cautions). Default: 70' },
+  { key: 'fundamentals_reject_above',  label: 'Fundamentals reject above',  type: 'number', section: 'all', subGroup: 'Fundamentals Bearish', min: 0, max: 100, step: 5,
+    hint: 'BEARISH SCANS ONLY. Fundamental health score above this → hard REJECT. Company is too financially strong to short safely. ↑ Higher → only fortress-balance-sheet companies rejected (fewer) · ↓ Lower → stricter, more rejections. Default: 80' },
+  // OPTIONS — Entry Quality
+  { key: 'entry_spread_tolerance_pct', label: 'Spread tolerance', type: 'number', section: 'options', subGroup: 'Entry Quality', min: 0, max: 0.5, step: 0.01,
+    hint: 'Max bid-ask spread as a fraction of mid price at entry. ↑ Higher → wider spreads allowed (more contracts, worse fills) · ↓ Lower → tight spread required (fewer contracts, better fills). Default: 0.10' },
+  { key: 'entry_max_slippage_pct',     label: 'Max slippage',     type: 'number', section: 'options', subGroup: 'Entry Quality', min: 0, max: 0.1, step: 0.005,
+    hint: 'Expected slippage as a fraction of price. ↑ Higher → accepts poor fills (more, but costlier) · ↓ Lower → only clean-fill entries pass (fewer). Default: 0.03' },
+  { key: 'entry_min_premium',          label: 'Min premium',      type: 'number', section: 'options', subGroup: 'Entry Quality', min: 0, max: 5,   step: 0.05, unit: '$',
+    hint: 'Minimum option premium per contract in $. ↑ Higher → rejects cheap, illiquid options (fewer) · ↓ Lower → penny options included (more, but harder to exit). Default: $0.10' },
+  // ALL — Reward/Risk
+  { key: 'rr_bullish_target_pct',       label: 'Bullish target %',       type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.01, max: 2.0, step: 0.01, unit: '%',
+    hint: 'Profit target as a fraction of entry for bullish trades. ↑ Higher → demands bigger moves (fewer qualify, R/R better) · ↓ Lower → takes smaller wins (more qualify). Default: 10%' },
+  { key: 'rr_bearish_target_pct',       label: 'Bearish target %',       type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.01, max: 2.0, step: 0.01, unit: '%',
+    hint: 'Profit target as a fraction of entry for bearish trades. ↑ Higher → demands bigger downside moves · ↓ Lower → takes smaller drops. Default: 10%' },
+  { key: 'rr_bullish_invalidation_pct', label: 'Bullish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.005, max: 1.0, step: 0.005, unit: '%',
+    hint: 'Stop-loss distance for bullish trades. ↑ Higher → wider stop (more room, worse R/R) · ↓ Lower → tighter stop (better R/R but more stop-outs). Default: 5%' },
+  { key: 'rr_bearish_invalidation_pct', label: 'Bearish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.005, max: 1.0, step: 0.005, unit: '%',
+    hint: 'Stop-loss distance for bearish trades. ↑ Higher → wider stop · ↓ Lower → tighter stop. Default: 5%' },
 ];
 
 const SUBGROUP_DESCRIPTIONS: Record<string, string> = {
@@ -285,6 +311,10 @@ const SUBGROUP_DESCRIPTIONS: Record<string, string> = {
   'Volatility': 'Checks implied volatility conditions. High IV rank means options premiums are expensive and large moves are already priced in.',
   'Confidence': 'A mini backtest gate — runs a quick simulation over recent history and rejects setups where the signal would have failed too often.',
   'Contract': 'Filters which options contracts are surfaced per qualifying stock, by liquidity, moneyness, and time to expiry.',
+  'Regime Gate': "Sector vs. benchmark headwind thresholds. When a stock's sector is lagging the benchmark by more than these percentages, the candidate is cautioned or rejected regardless of its score.",
+  'Fundamentals Bearish': 'Applied only when Direction = Bearish. Protects against shorting companies with strong balance sheets — high fundamental health scores are a caution or reject signal for short trades.',
+  'Entry Quality': 'Options fill-quality filters applied at contract selection. Controls minimum premium, maximum spread, and expected slippage.',
+  'Reward/Risk': 'Target and invalidation (stop) distances used to compute R/R ratios. These drive the reward_risk scorer and position card stop/target prices.',
 };
 
 const SECTION_DESCRIPTIONS: Record<string, string> = {
@@ -312,6 +342,11 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     additive_adx_period: 7, additive_adx_pass: 20, additive_adx_caution: 15,
     additive_price_max: 40, additive_slope_max: 30, additive_adx_max: 30,
     rs_period: 2, rs_pass_threshold: 1.0, rs_caution_threshold: -0.5, rs_benchmark: 'NDX',
+    regime_headwind_caution_pct: -15, regime_headwind_reject_pct: -40,
+    fundamentals_caution_above: 70, fundamentals_reject_above: 80,
+    entry_spread_tolerance_pct: 0.10, entry_max_slippage_pct: 0.03, entry_min_premium: 0.10,
+    rr_bullish_target_pct: 0.10, rr_bearish_target_pct: 0.10,
+    rr_bullish_invalidation_pct: 0.05, rr_bearish_invalidation_pct: 0.05,
   },
   Swing: {
     confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
@@ -330,6 +365,11 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     additive_adx_period: 14, additive_adx_pass: 25, additive_adx_caution: 20,
     additive_price_max: 40, additive_slope_max: 30, additive_adx_max: 30,
     rs_period: 20, rs_pass_threshold: 2.0, rs_caution_threshold: -1.0, rs_benchmark: 'NDX',
+    regime_headwind_caution_pct: -15, regime_headwind_reject_pct: -40,
+    fundamentals_caution_above: 70, fundamentals_reject_above: 80,
+    entry_spread_tolerance_pct: 0.10, entry_max_slippage_pct: 0.03, entry_min_premium: 0.10,
+    rr_bullish_target_pct: 0.10, rr_bearish_target_pct: 0.10,
+    rr_bullish_invalidation_pct: 0.05, rr_bearish_invalidation_pct: 0.05,
   },
   Position: {
     confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
@@ -348,6 +388,11 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     additive_adx_period: 14, additive_adx_pass: 20, additive_adx_caution: 15,
     additive_price_max: 40, additive_slope_max: 30, additive_adx_max: 30,
     rs_period: 50, rs_pass_threshold: 3.0, rs_caution_threshold: -1.5, rs_benchmark: 'SPX',
+    regime_headwind_caution_pct: -15, regime_headwind_reject_pct: -40,
+    fundamentals_caution_above: 70, fundamentals_reject_above: 80,
+    entry_spread_tolerance_pct: 0.10, entry_max_slippage_pct: 0.03, entry_min_premium: 0.10,
+    rr_bullish_target_pct: 0.10, rr_bearish_target_pct: 0.10,
+    rr_bullish_invalidation_pct: 0.05, rr_bearish_invalidation_pct: 0.05,
   },
   Custom: {
     confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
@@ -366,6 +411,11 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     additive_adx_period: 14, additive_adx_pass: 25, additive_adx_caution: 20,
     additive_price_max: 40, additive_slope_max: 30, additive_adx_max: 30,
     rs_period: 20, rs_pass_threshold: 2.0, rs_caution_threshold: -1.0, rs_benchmark: 'NDX',
+    regime_headwind_caution_pct: -15, regime_headwind_reject_pct: -40,
+    fundamentals_caution_above: 70, fundamentals_reject_above: 80,
+    entry_spread_tolerance_pct: 0.10, entry_max_slippage_pct: 0.03, entry_min_premium: 0.10,
+    rr_bullish_target_pct: 0.10, rr_bearish_target_pct: 0.10,
+    rr_bullish_invalidation_pct: 0.05, rr_bearish_invalidation_pct: 0.05,
   },
 };
 
@@ -795,7 +845,7 @@ export default function Step3Page() {
     : context?.horizon?.startsWith('Position') ? 'Position'
     : 'Swing';
 
-  const stocksDefs  = PARAM_DEFS.filter((d) => d.section === 'stocks');
+  const stocksDefs  = PARAM_DEFS.filter((d) => d.section === 'stocks' || d.section === 'all');
   const optionsDefs = PARAM_DEFS.filter((d) => d.section === 'options');
   const stockSubGroups  = [...new Set(stocksDefs.map((d) => d.subGroup))];
   const optionSubGroups = [...new Set(optionsDefs.map((d) => d.subGroup))];

@@ -204,11 +204,24 @@ async def _process_stock(
                     }
 
             # ── Fundamentals (skipped for intraday) ───────────────────────────
+            _fund_gate = dict(fund_gate) if fund_gate else {}
+            if req.fundamentals_caution_above is not None:
+                _fund_gate["cautionAbove"] = req.fundamentals_caution_above
+            if req.fundamentals_reject_above is not None:
+                _fund_gate["rejectAbove"] = req.fundamentals_reject_above
+            fund_gate = _fund_gate if _fund_gate else None
+
             _fh: FundamentalHealth | None = None
             if req.horizon.lower() != "intraday" and fund_gate is not None:
                 _staleness = fund_gate.get("staleness_days", 90)
                 _snap = await _get_fundamentals(symbol, staleness_days=_staleness)
                 _fh = _score_fundamentals(_snap, req.direction, fund_gate) if _snap else None
+
+            _regime_gate = dict(full_cfg.get("regime_gate") or {})
+            if req.regime_headwind_caution_pct is not None:
+                _regime_gate["headwind_caution_pct"] = req.regime_headwind_caution_pct
+            if req.regime_headwind_reject_pct is not None:
+                _regime_gate["headwind_reject_pct"] = req.regime_headwind_reject_pct
 
             card = score_stock(
                 symbol=symbol,
@@ -217,7 +230,7 @@ async def _process_stock(
                 bars=bars[-120:],
                 scoring_mode="stock",
                 regime_signal=regime_signal,
-                regime_gate=full_cfg["regime_gate"] if regime_signal else None,
+                regime_gate=_regime_gate if regime_signal else None,
                 fundamentals=_fh,
                 fundamentals_gate=fund_gate,
                 overrides=req.overrides,

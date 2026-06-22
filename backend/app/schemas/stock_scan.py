@@ -50,6 +50,12 @@ class StockScanRequest(BaseModel):
     confidence_caution_below: Optional[float] = None  # win-rate < this → cap at CAUTION
     confidence_reject_below:  Optional[float] = None  # win-rate < this → cap at REJECT
     confidence_atr_mult:      Optional[float] = None  # ATR multiplier for backtest barriers
+    # Per-scan regime gate overrides — sector headwind thresholds.
+    regime_headwind_caution_pct: Optional[float] = None
+    regime_headwind_reject_pct:  Optional[float] = None
+    # Per-scan fundamentals bearish overrides — applied only on Bearish scans.
+    fundamentals_caution_above:  Optional[float] = None
+    fundamentals_reject_above:   Optional[float] = None
 
 
 class StrategySignalOut(BaseModel):

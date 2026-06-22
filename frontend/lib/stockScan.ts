@@ -52,6 +52,9 @@ export async function runStockScan(
     'swing_high_lookback_bars', 'atr_caution_max',
     'macd_fast', 'macd_slow', 'macd_signal', 'rsi_floor',
     'event_reject_days', 'event_caution_days',
+    // Reward/Risk params — drive reward_risk scorer in stock pipeline
+    'rr_bullish_target_pct', 'rr_bearish_target_pct',
+    'rr_bullish_invalidation_pct', 'rr_bearish_invalidation_pct',
   ]);
 
   const rawOverrides = store.scanOverrides;
@@ -90,6 +93,10 @@ export async function runStockScan(
       confidence_caution_below: confidenceGate.enabled ? confidenceGate.cautionBelow : undefined,
       confidence_reject_below:  confidenceGate.enabled ? confidenceGate.rejectBelow  : undefined,
       confidence_atr_mult:      confidenceGate.enabled ? confidenceGate.atrMult       : undefined,
+      regime_headwind_caution_pct: rawOverrides.regime_headwind_caution_pct as number | undefined,
+      regime_headwind_reject_pct:  rawOverrides.regime_headwind_reject_pct  as number | undefined,
+      fundamentals_caution_above:  rawOverrides.fundamentals_caution_above  as number | undefined,
+      fundamentals_reject_above:   rawOverrides.fundamentals_reject_above   as number | undefined,
     });
     store.setStockScanResult(result);
     store.setScanState('COMPLETED');

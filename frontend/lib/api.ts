@@ -176,6 +176,10 @@ export const api = {
     confidence_caution_below?: number;
     confidence_reject_below?:  number;
     confidence_atr_mult?:      number;
+    regime_headwind_caution_pct?: number;
+    regime_headwind_reject_pct?:  number;
+    fundamentals_caution_above?:  number;
+    fundamentals_reject_above?:   number;
   }) => post<StockScanResult>('/api/stock-scan', req),
 
   postStockOrder: (req: {
