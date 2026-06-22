@@ -14,19 +14,22 @@ confidence_gate:
 confidence_backtest:
   swing:
     n_days: 10
-    atr_mult: 1.5
+    atr_mult_target: 3.0    # strategy targets ~3 ATR (pullback_ema default)
+    atr_mult_stop:   1.5    # strategy risks ~1.5 ATR stop
     atr_period: 14
     history_years: 4
     min_samples: 20
   position:
     n_days: 40
-    atr_mult: 1.5
+    atr_mult_target: 2.5
+    atr_mult_stop:   1.5
     atr_period: 14
     history_years: 5
     min_samples: 20
   intraday:
     n_days: 5
-    atr_mult: 1.5
+    atr_mult_target: 2.0
+    atr_mult_stop:   1.5
     atr_period: 14
     history_years: 2
     min_samples: 20
