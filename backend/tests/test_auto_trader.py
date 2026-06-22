@@ -460,3 +460,29 @@ def test_vol_sizing_skipped_when_conviction_is_none(mocker):
     ))
     svc.fire()
     assert captured.get("quantity") == 3
+
+
+def test_vol_sizing_sell_halved_in_strongly_bullish_market(mocker):
+    """SELL at conviction=80 (strongly bullish) → bearish_conv=20 < full_conviction=40 → min_mult=0.5."""
+    from app.data.ibkr_paper import OrderResult
+    captured = {}
+    def mock_execute(s):
+        captured["quantity"] = s.quantity
+        return OrderResult("s4", "ok", "ibkr_paper")
+
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=80)
+
+    svc = AutoTradeService()
+    svc.arm(ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol="AAPL260620P00185000",
+        action="SELL", quantity=4, order_type="LMT",
+        limit_price=2.50, conid=None,
+        entry_premium=2.50, portfolio_value=100_000.0,
+    ))
+    svc.fire()
+    assert captured.get("quantity") == 2, (
+        "SELL in strongly bullish market (conviction=80) must halve from 4 to 2"
+    )

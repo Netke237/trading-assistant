@@ -89,7 +89,13 @@ def evaluate_fire(
     return "flat"
 
 
-def aggregate(outcomes: list[str], *, min_samples: int) -> ConfidenceResult:
+def aggregate(
+    outcomes: list[str],
+    *,
+    min_samples: int,
+    atr_mult_target: float = 1.0,
+    atr_mult_stop: float = 1.0,
+) -> ConfidenceResult:
     wins = sum(1 for o in outcomes if o == "win")
     losses = sum(1 for o in outcomes if o == "loss")
     flats = sum(1 for o in outcomes if o == "flat")
@@ -99,9 +105,9 @@ def aggregate(outcomes: list[str], *, min_samples: int) -> ConfidenceResult:
     hit_rate = wins / decisive
     if decisive < min_samples:
         return ConfidenceResult(None, round(hit_rate, 4), decisive, flats)
-    # Win and loss are both atr_mult*ATR by construction -> payoff_ratio = 1.0.
+    # payoff_ratio = favorable_distance / adverse_distance = atr_mult_target / atr_mult_stop
     # confidence = 100 * hit_rate * min(1, payoff_ratio)  (formula per spec; tunable)
-    payoff_ratio = 1.0
+    payoff_ratio = (atr_mult_target / atr_mult_stop) if atr_mult_stop > 0 else 1.0
     confidence = round(100 * hit_rate * min(1.0, payoff_ratio))
     confidence = max(0, min(100, confidence))
     return ConfidenceResult(confidence, round(hit_rate, 4), decisive, flats)
@@ -190,4 +196,5 @@ def compute_confidence(
             evaluate_fire(window, forward, direction=direction, atr=atr,
                           atr_mult_target=_atr_mult_target, atr_mult_stop=_atr_mult_stop)
         )
-    return aggregate(outcomes, min_samples=min_samples)
+    return aggregate(outcomes, min_samples=min_samples,
+                     atr_mult_target=_atr_mult_target, atr_mult_stop=_atr_mult_stop)

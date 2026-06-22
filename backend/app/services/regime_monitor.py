@@ -19,17 +19,17 @@ logger = logging.getLogger(__name__)
 _RISK_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
 # ── Module-level conviction cache (read by auto_trader._apply_vol_sizing) ─────
-_last_conviction: int | None = None
+_last_conviction: float | None = None
 
 
-def get_last_conviction() -> int | None:
+def get_last_conviction() -> float | None:
     """Return cached OMM conviction_pct (bullish frame). None = not yet computed."""
     return _last_conviction
 
 
-def set_last_conviction(pct: int) -> None:
+def set_last_conviction(pct: float) -> None:
     global _last_conviction
-    _last_conviction = pct
+    _last_conviction = float(pct)
 
 
 # ── Internal helpers (thin wrappers so tests can mock them easily) ─────────────
@@ -121,9 +121,14 @@ async def run_regime_monitor() -> None:
     while True:
         await _tick()
         try:
-            with open(_RISK_CONFIG_PATH) as f:
-                cfg = yaml.safe_load(f)
-            interval = int(cfg.get("auto_trade", {}).get("regime_monitor_interval_minutes", 15))
+            loop = asyncio.get_running_loop()
+
+            def _read_interval() -> int:
+                with open(_RISK_CONFIG_PATH) as f:
+                    cfg = yaml.safe_load(f)
+                return int(cfg.get("auto_trade", {}).get("regime_monitor_interval_minutes", 15))
+
+            interval = await loop.run_in_executor(None, _read_interval)
         except Exception:
             interval = 15
         await asyncio.sleep(interval * 60)

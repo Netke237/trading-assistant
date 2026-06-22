@@ -41,21 +41,24 @@ def _market_is_open(symbol: str) -> bool:
 
     Calls fetch_price — conservative: if no price returns (None, 0, or exception),
     treat as closed and block the fire.
-    Runs inside threading.Lock so must complete quickly.
-    fetch_price has no built-in timeout; wrap in a thread with a 3-second deadline
-    to prevent holding the lock across a slow network call.
+    Must NOT be called while holding threading.Lock (3-second network deadline).
+    fetch_price has no built-in timeout; wrap in a thread and use shutdown(wait=False)
+    after timeout so we never block the caller beyond the deadline.
     """
     import concurrent.futures
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
         from app.data.market import fetch_price
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            future = ex.submit(fetch_price, symbol)
-            try:
-                price = future.result(timeout=3.0)
-            except concurrent.futures.TimeoutError:
-                return False
+        future = ex.submit(fetch_price, symbol)
+        try:
+            price = future.result(timeout=3.0)
+        except concurrent.futures.TimeoutError:
+            ex.shutdown(wait=False)
+            return False
+        ex.shutdown(wait=False)
         return price is not None and float(price) > 0
     except Exception:
+        ex.shutdown(wait=False)
         return False
 
 
@@ -68,7 +71,9 @@ def _load_scoring_config() -> dict:
     try:
         with open(_SCORING_CONFIG_PATH) as f:
             return yaml.safe_load(f).get("regime_sizing", {})
-    except Exception:
+    except Exception as exc:
+        logger.warning("_load_scoring_config: failed to load %s — vol sizing disabled: %s",
+                       _SCORING_CONFIG_PATH, exc)
         return {}
 
 
@@ -90,8 +95,9 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
     min_mult        = float(cfg.get("min_mult", 0.5))
     full_conviction = float(cfg.get("full_conviction_pct", 40))
 
-    # Direction-aware: BUY uses conviction as-is, SELL negates (bearish regime = tailwind)
-    directional_conv = conviction if strategy.action == "BUY" else -conviction
+    # Direction-aware: BUY scales with bullish conviction; SELL scales with bearish conviction
+    # (bearish conviction = 100 - bullish conviction, capped to full_conviction scale)
+    directional_conv = conviction if strategy.action == "BUY" else (100 - conviction)
     mult = max(min_mult, min(1.0, directional_conv / full_conviction))
     adjusted_qty = max(1, round(strategy.quantity * mult))
 
@@ -99,7 +105,7 @@ def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
         return strategy
 
     logger.info(
-        "vol_sizing: %s qty %d → %d (conviction=%d, mult=%.2f)",
+        "vol_sizing: %s qty %d → %d (conviction=%.1f, mult=%.2f)",
         strategy.symbol, strategy.quantity, adjusted_qty, directional_conv, mult,
     )
     return _dc_replace(strategy, quantity=adjusted_qty)
@@ -161,12 +167,20 @@ class AutoTradeService:
         with self._lock:
             if not self._state.armed or self._state.strategy is None:
                 raise RuntimeError("AutoTrader not armed — cannot fire")
-            # Halt check before disarm: if market is closed, preserve armed state
-            if not _market_is_open(self._state.strategy.symbol):
-                raise RuntimeError(
-                    f"Market closed or {self._state.strategy.symbol} halted "
-                    f"— armed state preserved for retry"
-                )
+            _symbol = self._state.strategy.symbol
+
+        # Halt check outside lock — network call must not hold the lock.
+        # Armed state is preserved: we haven't disarmed yet.
+        if not _market_is_open(_symbol):
+            raise RuntimeError(
+                f"Market closed or {_symbol} halted "
+                f"— armed state preserved for retry"
+            )
+
+        with self._lock:
+            # Re-check: another thread may have disarmed while we checked market.
+            if not self._state.armed or self._state.strategy is None:
+                raise RuntimeError("AutoTrader not armed — cannot fire")
             strategy = self._state.strategy
             self._state.armed = False
             self._state.strategy = None
@@ -198,15 +212,10 @@ class AutoTradeService:
             )
 
         # Daily loss circuit breaker — runs after cap check, before order submission.
+        # Armed state is already cleared above; circuit breaker blocks permanently (no retry).
         with self._lock:
             _history_snapshot = list(self._state.history)
-        try:
-            self._check_daily_loss(strategy, _history_snapshot, pv)
-        except RuntimeError:
-            with self._lock:
-                self._state.armed = False
-                self._state.strategy = None
-            raise
+        self._check_daily_loss(strategy, _history_snapshot, pv)
 
         try:
             result = execute_option_order(strategy)
@@ -313,7 +322,9 @@ class AutoTradeService:
             with open(_RISK_CONFIG_PATH) as f:
                 cfg = yaml.safe_load(f)
             return cfg.get("auto_trade", {})
-        except Exception:
+        except Exception as exc:
+            logger.warning("_risk_config: failed to load %s — risk limits disabled: %s",
+                           _RISK_CONFIG_PATH, exc)
             return {}
 
     @staticmethod

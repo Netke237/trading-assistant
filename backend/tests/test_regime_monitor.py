@@ -1,6 +1,6 @@
 """Tests for regime_monitor background task and conviction cache."""
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 @pytest.mark.asyncio
@@ -66,5 +66,36 @@ def test_conviction_cache_set_and_get():
     from app.services.regime_monitor import set_last_conviction, get_last_conviction
     set_last_conviction(42)
     assert get_last_conviction() == 42
-    set_last_conviction(-10)
-    assert get_last_conviction() == -10
+    set_last_conviction(0)
+    assert get_last_conviction() == 0
+
+
+@pytest.mark.asyncio
+async def test_update_conviction_cache_stores_value(mocker):
+    """_update_conviction_cache must call set_last_conviction when OMM returns a value."""
+    mock_loop = MagicMock()
+    # run_in_executor is called as `await loop.run_in_executor(None, fn)` — must be a coroutine
+    mock_loop.run_in_executor = AsyncMock(return_value=37.0)
+    mocker.patch("app.services.regime_monitor.asyncio.get_running_loop", return_value=mock_loop)
+
+    set_conv_spy = mocker.patch("app.services.regime_monitor.set_last_conviction")
+
+    from app.services.regime_monitor import _update_conviction_cache
+    await _update_conviction_cache()
+
+    set_conv_spy.assert_called_once_with(37.0)
+
+
+@pytest.mark.asyncio
+async def test_update_conviction_cache_no_op_on_none(mocker):
+    """If OMM returns None (no candles), set_last_conviction must not be called."""
+    mock_loop = MagicMock()
+    mock_loop.run_in_executor = AsyncMock(return_value=None)
+    mocker.patch("app.services.regime_monitor.asyncio.get_running_loop", return_value=mock_loop)
+
+    set_conv_spy = mocker.patch("app.services.regime_monitor.set_last_conviction")
+
+    from app.services.regime_monitor import _update_conviction_cache
+    await _update_conviction_cache()
+
+    set_conv_spy.assert_not_called()
