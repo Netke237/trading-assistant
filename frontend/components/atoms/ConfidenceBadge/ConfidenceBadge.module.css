@@ -9,7 +9,7 @@
 .badge[data-tier='high'] {
   background: color-mix(in srgb, var(--pass) 12%, var(--bg-surface));
 }
-.badge[data-tier='medium'] {
+.badge[data-tier='moderate'] {
   background: color-mix(in srgb, var(--caution) 12%, var(--bg-surface));
 }
 .badge[data-tier='low'] {
