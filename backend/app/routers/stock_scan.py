@@ -219,6 +219,7 @@ async def _process_stock(
                 regime_gate=full_cfg["regime_gate"] if regime_signal else None,
                 fundamentals=_fh,
                 fundamentals_gate=fund_gate,
+                overrides=req.overrides,
             )
             if card.status == "REJECT":
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}

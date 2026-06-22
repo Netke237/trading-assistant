@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 from app.schemas import SentimentData, FundamentalsOut
 
@@ -42,6 +42,9 @@ class StockScanRequest(BaseModel):
     fundamentals_caution_below:  Optional[float] = None
     fundamentals_reject_below:   Optional[float] = None
     fundamentals_de_reject:      Optional[float] = None
+    # Per-scan scorer overrides — keys map directly to stock_scorer.py override handlers.
+    # Options contract params and iv_rank_pass_max are excluded (irrelevant in stock mode).
+    overrides: dict[str, Any] = {}
 
 
 class StrategySignalOut(BaseModel):

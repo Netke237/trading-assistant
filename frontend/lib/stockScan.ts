@@ -38,6 +38,25 @@ export async function runStockScan(
   const requireReversal =
     (store.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
 
+  // Keys from scanStore.scanOverrides that stock_scorer.py reads via the overrides dict.
+  // Options-only params (max_delta, min_dte, etc.) and iv_rank_pass_max are excluded.
+  const STOCKS_SCORER_KEYS = new Set([
+    'weight_trend', 'weight_pullback', 'weight_trigger', 'weight_event', 'weight_vol',
+    'trend_method', 'ma_type', 'fast_ema', 'slow_ema',
+    'additive_ma_type', 'additive_ma_period', 'additive_slope_lookback',
+    'additive_adx_period', 'additive_adx_pass', 'additive_adx_caution',
+    'additive_price_max', 'additive_slope_max', 'additive_adx_max',
+    'rs_period', 'rs_pass_threshold', 'rs_caution_threshold', 'rs_benchmark',
+    'swing_high_lookback_bars', 'atr_caution_max',
+    'macd_fast', 'macd_slow', 'macd_signal', 'rsi_floor',
+    'event_reject_days', 'event_caution_days',
+  ]);
+
+  const rawOverrides = store.scanOverrides;
+  const stocksOverrides = Object.fromEntries(
+    Object.entries(rawOverrides).filter(([k]) => STOCKS_SCORER_KEYS.has(k))
+  );
+
   store.setActiveStrategy(strategy);
   store.setStockScanResult(null);
   store.setScanState('SCANNING');
@@ -65,6 +84,7 @@ export async function runStockScan(
       account_size: 50_000,
       risk_pct: 0.01,
       shortlist_max_candidates: p.stockShortlistMax,
+      overrides: stocksOverrides,
     });
     store.setStockScanResult(result);
     store.setScanState('COMPLETED');
