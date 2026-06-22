@@ -14,7 +14,7 @@
 import React, { useState, useEffect } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
-import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig, type FundamentalsGate } from '@/lib/settingsStore';
+import { useSettingsStore, MARKOV_PRESETS, type MarkovPreset, type MarkovConfig, type FundamentalsGate, type ScheduleConfig, DEFAULT_SCHEDULE_CONFIG } from '@/lib/settingsStore';
 import { useIvThresholdsStore, type HorizonIvThresholds } from '@/lib/ivThresholdsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
@@ -180,10 +180,20 @@ function ScanForm() {
     maxContractPrice, setMaxContractPrice,
     confidenceGate, setConfidenceGate,
     fundamentalsGate, setFundamentalsGate,
+    scheduleConfig, setScheduleConfig,
   } = useSettingsStore();
   const horizon = useScanStore((s) => s.context?.horizon);
   const isIntraday = horizon?.toLowerCase().includes('intraday') ?? false;
   const [continuous, setContinuous] = useState(false);
+  const [schedule, setSchedule] = useState<ScheduleConfig>(scheduleConfig ?? DEFAULT_SCHEDULE_CONFIG);
+
+  // Sync when store resets
+  useEffect(() => { setSchedule(scheduleConfig ?? DEFAULT_SCHEDULE_CONFIG); }, [scheduleConfig]);
+
+  async function handleSaveSchedule() {
+    await api.putSchedule(schedule);
+    setScheduleConfig(schedule);
+  }
 
   // Local text buffers — let the user type freely; validate on blur
   const [cadenceText,    setCadenceText]    = useState('60');
@@ -376,6 +386,83 @@ function ScanForm() {
       />
       <SpreadsSection />
       <IvThresholdsSection />
+
+      <SectionIntro
+        title="Scheduled scanning"
+        blurb="Automatically triggers scans on a recurring interval within the configured time window. Options and Stocks run independently. Changes take effect on the next server restart."
+      />
+      <Row label="Enable Options scan" hint="Runs the Options scan on the interval below" defaultValue="Off">
+        <Toggle
+          defaultOn={schedule.enabledOptions}
+          onChange={(on) => setSchedule((s) => ({ ...s, enabledOptions: on }))}
+        />
+      </Row>
+      <Row label="Enable Stocks scan" hint="Runs the Stocks scan on the interval below" defaultValue="Off">
+        <Toggle
+          defaultOn={schedule.enabledStocks}
+          onChange={(on) => setSchedule((s) => ({ ...s, enabledStocks: on }))}
+        />
+      </Row>
+      <Row label="Interval" hint="How often the scan fires within the active window" defaultValue="Every 1 hour">
+        <select
+          className={styles.input}
+          value={schedule.cadenceMinutes}
+          onChange={(e) => setSchedule((s) => ({ ...s, cadenceMinutes: Number(e.target.value) }))}
+        >
+          <option value={15}>Every 15 min</option>
+          <option value={30}>Every 30 min</option>
+          <option value={60}>Every 1 hour</option>
+          <option value={120}>Every 2 hours</option>
+          <option value={240}>Every 4 hours</option>
+        </select>
+      </Row>
+      <Row label="Active days" hint="Scans only run on checked days (US market: Mon–Fri)" defaultValue="Mon–Fri">
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const).map((label, day) => (
+            <label key={day} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={schedule.daysOfWeek.includes(day)}
+                onChange={(e) => {
+                  const next = e.target.checked
+                    ? [...schedule.daysOfWeek, day].sort((a, b) => a - b)
+                    : schedule.daysOfWeek.filter((d) => d !== day);
+                  setSchedule((s) => ({ ...s, daysOfWeek: next }));
+                }}
+              />
+              <Text size={11}>{label}</Text>
+            </label>
+          ))}
+        </div>
+      </Row>
+      <Row label="Window start hour (ET)" hint="Scan will not fire before this hour. 9 = 9:00 AM ET" defaultValue="9">
+        <input
+          type="number"
+          className={styles.input}
+          min={0}
+          max={23}
+          value={schedule.windowStartHour}
+          onChange={(e) => setSchedule((s) => ({ ...s, windowStartHour: Number(e.target.value) }))}
+        />
+      </Row>
+      <Row label="Window end hour (ET)" hint="Scan will not fire after this hour. 17 = 5:00 PM ET" defaultValue="17">
+        <input
+          type="number"
+          className={styles.input}
+          min={1}
+          max={24}
+          value={schedule.windowEndHour}
+          onChange={(e) => setSchedule((s) => ({ ...s, windowEndHour: Number(e.target.value) }))}
+        />
+      </Row>
+      <div className={styles.row}>
+        <div className={styles.rowLabel} />
+        <div className={styles.rowControl}>
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSaveSchedule}>
+            Save schedule
+          </button>
+        </div>
+      </div>
     </>
   );
 }

@@ -4,6 +4,7 @@ import type { StockScanResult } from '@/types/stockDomain';
 import type { OptionsPipeline } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import type { AlertRule, AlertHistory } from '@/types/alerts';
+import type { ScheduleConfig } from '@/lib/settingsStore';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
@@ -292,6 +293,18 @@ export const api = {
     get<Record<string, { pass_max: number | null; caution_max: number | null }>>(
       '/api/config/iv-thresholds'
     ),
+
+  getSchedule: () => get<ScheduleConfig>('/settings/schedule'),
+  putSchedule: (cfg: ScheduleConfig) =>
+    put<ScheduleConfig>('/settings/schedule', {
+      enabled_options:   cfg.enabledOptions,
+      enabled_stocks:    cfg.enabledStocks,
+      cadence_minutes:   cfg.cadenceMinutes,
+      days_of_week:      cfg.daysOfWeek,
+      window_start_hour: cfg.windowStartHour,
+      window_end_hour:   cfg.windowEndHour,
+      timezone_name:     cfg.timezoneName,
+    }),
 };
 
 /* ---------- Risk settings ---------- */

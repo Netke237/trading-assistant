@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from typing import Callable, Awaitable
 
 from app.schemas import ScanResult, ScanHistoryEntry
+from app.schemas.schedule import ScheduleConfig
 
 
 class ScanScheduler:
@@ -12,11 +14,13 @@ class ScanScheduler:
     Background scan scheduler.
 
     Runs an async loop: execute scan → sleep for cadence → repeat.
+    Respects a ScheduleConfig to enforce day-of-week and hour windows.
     Stores the last result in memory so consecutive runs can compute deltas.
     """
 
     def __init__(self, cadence_minutes: int = 60):
         self.cadence = cadence_minutes
+        self._cfg: ScheduleConfig | None = None
         self._task: asyncio.Task | None = None
         self._last_result: ScanResult | None = None
         self._history: list[ScanHistoryEntry] = []
@@ -29,6 +33,21 @@ class ScanScheduler:
     def bind(self, scan_fn: Callable[[], Awaitable[ScanResult]]) -> None:
         """Attach the coroutine that performs a single scan."""
         self._scan_fn = scan_fn
+
+    def configure(self, cfg: ScheduleConfig) -> None:
+        """Apply a ScheduleConfig; also updates the cadence."""
+        self._cfg = cfg
+        self.cadence = cfg.cadence_minutes
+
+    def _should_run_now(self) -> bool:
+        """Return True if the current wall-clock time is inside the configured window."""
+        if self._cfg is None:
+            return True
+        tz = ZoneInfo(self._cfg.timezone_name)
+        now = datetime.now(tz)
+        if now.weekday() not in self._cfg.days_of_week:
+            return False
+        return self._cfg.window_start_hour <= now.hour < self._cfg.window_end_hour
 
     async def start(self) -> None:
         """Start the scheduler loop in a background task."""
@@ -53,10 +72,11 @@ class ScanScheduler:
     def get_status(self) -> dict:
         """Return scheduler status for the status endpoint."""
         return {
-            "running": self._running and not self._cancelled,
-            "last_run_at": self._last_run_at.isoformat() if self._last_run_at else None,
-            "next_run_at": self._next_run_at.isoformat() if self._next_run_at else None,
+            "running":         self._running and not self._cancelled,
+            "last_run_at":     self._last_run_at.isoformat() if self._last_run_at else None,
+            "next_run_at":     self._next_run_at.isoformat() if self._next_run_at else None,
             "cadence_minutes": self.cadence,
+            "schedule":        self._cfg.model_dump() if self._cfg else None,
         }
 
     def get_last_result(self) -> ScanResult | None:
@@ -71,6 +91,14 @@ class ScanScheduler:
             raise RuntimeError("ScanScheduler: no scan function bound")
 
         while not self._cancelled:
+            if not self._should_run_now():
+                try:
+                    await asyncio.sleep(900)  # re-check every 15 min when outside window
+                except asyncio.CancelledError:
+                    self._running = False
+                    raise
+                continue
+
             self._last_run_at = datetime.now(timezone.utc)
             self._next_run_at = self._last_run_at + timedelta(minutes=self.cadence)
 
@@ -80,20 +108,18 @@ class ScanScheduler:
                 self._running = False
                 raise
             except Exception:
-                self._running = False
-                # Log failure but keep loop alive
-                continue
-
-            self._last_result = result
-            self._history.append(
-                ScanHistoryEntry(
-                    scan_id=result.scan_id,
-                    timestamp=result.timestamp,
-                    candidate_count=len(result.candidates),
-                    rejected_count=len(result.rejected),
-                    state=result.state,
+                pass  # keep scheduler alive on scan errors
+            else:
+                self._last_result = result
+                self._history.append(
+                    ScanHistoryEntry(
+                        scan_id=result.scan_id,
+                        timestamp=result.timestamp,
+                        candidate_count=len(result.candidates),
+                        rejected_count=len(result.rejected),
+                        state=result.state,
+                    )
                 )
-            )
 
             # Sleep until next run
             now = datetime.now(timezone.utc)

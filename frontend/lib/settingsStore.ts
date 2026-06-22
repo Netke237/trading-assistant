@@ -69,6 +69,26 @@ export const DEFAULT_FUNDAMENTALS_GATE: FundamentalsGate = {
   deReject: 3.0,
 };
 
+export interface ScheduleConfig {
+  enabledOptions:  boolean;
+  enabledStocks:   boolean;
+  cadenceMinutes:  number;
+  daysOfWeek:      number[];
+  windowStartHour: number;
+  windowEndHour:   number;
+  timezoneName:    string;
+}
+
+export const DEFAULT_SCHEDULE_CONFIG: ScheduleConfig = {
+  enabledOptions:  false,
+  enabledStocks:   false,
+  cadenceMinutes:  60,
+  daysOfWeek:      [0, 1, 2, 3, 4],
+  windowStartHour: 9,
+  windowEndHour:   17,
+  timezoneName:    'America/New_York',
+};
+
 export interface SpreadsConfig {
   shortLegDelta:      number;   // delta of the short leg (e.g. 0.30 = 30Δ)
   widthPoints:        number;   // spread width in strike points
@@ -162,6 +182,7 @@ interface SettingsState {
   alpacaPaper:                 AlpacaPaperConfig;
   alpacaLive:                  AlpacaLiveConfig;
   spreads:                     SpreadsConfig;
+  scheduleConfig:              ScheduleConfig;
   setBroker:                    (b: BrokerConfig) => void;
   setAlertDeduplicationHours:   (h: number) => void;
   setMarkov:                    (cfg: MarkovConfig) => void;
@@ -172,6 +193,7 @@ interface SettingsState {
   setConfidenceGate:           (g: ConfidenceGate) => void;
   setFundamentalsGate:         (g: FundamentalsGate) => void;
   setSpreads:                  (s: Partial<SpreadsConfig>) => void;
+  setScheduleConfig:           (c: ScheduleConfig) => void;
   setIbkrPaper:                (c: IbkrPaperConfig)    => void;
   setTradierPaper:             (c: TradierPaperConfig) => void;
   setTradierLive:              (c: TradierLiveConfig)  => void;
@@ -220,6 +242,9 @@ export function migrateSettings(
     delete (next as Record<string, unknown>).ivPassThreshold;
     delete (next as Record<string, unknown>).ivCautionThreshold;
   }
+  if (version < 19) {
+    (next as Record<string, unknown>).scheduleConfig = { ...DEFAULT_SCHEDULE_CONFIG };
+  }
   return next as unknown as SettingsState;
 }
 
@@ -242,6 +267,7 @@ export const useSettingsStore = create<SettingsState>()(
       alpacaPaper:          { ...DEFAULT_ALPACA_PAPER },
       alpacaLive:           { ...DEFAULT_ALPACA_LIVE },
       spreads:              { ...DEFAULT_SPREADS },
+      scheduleConfig:       { ...DEFAULT_SCHEDULE_CONFIG },
       setBroker:                    (b) => set({ broker: b }),
       setAlertDeduplicationHours:   (h) => set({ alertDeduplicationHours: h }),
       setMarkov:                    (cfg) => set({ markov: cfg }),
@@ -252,6 +278,7 @@ export const useSettingsStore = create<SettingsState>()(
       setConfidenceGate:       (g) => set({ confidenceGate: g }),
       setFundamentalsGate:     (g) => set({ fundamentalsGate: g }),
       setSpreads:              (s) => set((state) => ({ spreads: { ...state.spreads, ...s } })),
+      setScheduleConfig:       (c) => set({ scheduleConfig: c }),
       setIbkrPaper:    (c) => set({ ibkrPaper: c }),
       setTradierPaper: (c) => set({ tradierPaper: c }),
       setTradierLive:  (c) => set({ tradierLive: c }),
@@ -272,7 +299,8 @@ export const useSettingsStore = create<SettingsState>()(
         ibkrLive:     { ...DEFAULT_IBKR_LIVE },
         alpacaPaper:  { ...DEFAULT_ALPACA_PAPER },
         alpacaLive:   { ...DEFAULT_ALPACA_LIVE },
-        spreads:      { ...DEFAULT_SPREADS },
+        spreads:        { ...DEFAULT_SPREADS },
+        scheduleConfig: { ...DEFAULT_SCHEDULE_CONFIG },
       }),
     }),
     {
@@ -282,7 +310,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 18,
+      version: 19,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
@@ -294,10 +322,11 @@ export const useSettingsStore = create<SettingsState>()(
         confidenceGate:         state.confidenceGate,
         fundamentalsGate:       state.fundamentalsGate,
         ibkrPaper:    state.ibkrPaper,
-        tradierPaper: state.tradierPaper,
-        tradierLive:  state.tradierLive,
-        alpacaPaper:  state.alpacaPaper,
-        spreads:      state.spreads,
+        tradierPaper:   state.tradierPaper,
+        tradierLive:    state.tradierLive,
+        alpacaPaper:    state.alpacaPaper,
+        spreads:        state.spreads,
+        scheduleConfig: state.scheduleConfig,
       }),
       migrate: (persistedState, version) => migrateSettings(persistedState, version),
     }

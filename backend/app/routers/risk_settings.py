@@ -10,10 +10,25 @@ from pydantic import BaseModel, Field
 
 from app.services import portfolio_risk, alert_generator
 from app.routers import scan as scan_router
+from app.schemas.schedule import ScheduleConfig
 
 router = APIRouter(prefix='/settings', tags=['settings'])
 
 _RISK_PATH = Path(__file__).parent.parent.parent / 'config' / 'risk_rules.yaml'
+_SETTINGS_PATH = Path(__file__).parent.parent.parent / 'config' / 'settings.yaml'
+
+
+def _load_settings() -> dict:
+    if _SETTINGS_PATH.exists():
+        return yaml.safe_load(_SETTINGS_PATH.read_text()) or {}
+    return {}
+
+
+def _save_settings(data: dict) -> None:
+    _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _SETTINGS_PATH.write_text(
+        yaml.dump(data, default_flow_style=False, allow_unicode=True)
+    )
 
 
 def _load_risk() -> dict:
@@ -111,3 +126,17 @@ async def save_risk_settings(body: RiskConfig) -> dict:
         'maxConcurrentPositions': body.maxConcurrentPositions,
         'maxDailyRecommendations': body.maxDailyRecommendations,
     }
+
+
+@router.get('/schedule', response_model=ScheduleConfig)
+def get_schedule() -> ScheduleConfig:
+    raw = _load_settings().get('scan', {}).get('schedule', {})
+    return ScheduleConfig(**raw)
+
+
+@router.put('/schedule', response_model=ScheduleConfig)
+def put_schedule(cfg: ScheduleConfig) -> ScheduleConfig:
+    data = _load_settings()
+    data.setdefault('scan', {})['schedule'] = cfg.model_dump()
+    _save_settings(data)
+    return cfg
