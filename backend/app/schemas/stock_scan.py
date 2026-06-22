@@ -44,7 +44,7 @@ class StockScanRequest(BaseModel):
     fundamentals_de_reject:      Optional[float] = None
     # Per-scan scorer overrides — keys map directly to stock_scorer.py override handlers.
     # Options contract params and iv_rank_pass_max are excluded (irrelevant in stock mode).
-    overrides: dict[str, Any] = {}
+    overrides: dict[str, Any] = Field(default_factory=dict)
 
 
 class StrategySignalOut(BaseModel):
