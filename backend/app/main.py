@@ -64,6 +64,17 @@ async def lifespan(app: FastAPI):
     status = await restore_from_db()
     if status == "running":
         _scheduler.bind(_scheduled_scan)
+        # Restore persisted schedule config so cadence/window/days survive restarts
+        try:
+            from app.schemas.schedule import ScheduleConfig as _ScheduleConfig
+            import yaml as _yaml
+            from pathlib import Path as _Path
+            _settings_path = _Path(__file__).parent.parent.parent / "config" / "settings.yaml"
+            _raw = _yaml.safe_load(_settings_path.read_text()) or {} if _settings_path.exists() else {}
+            _sched_cfg = _ScheduleConfig(**_raw.get("scan", {}).get("schedule", {}))
+            _scheduler.configure(_sched_cfg)
+        except Exception as _exc:
+            logger.warning("scan scheduler configure on startup failed: %s", _exc)
         await _scheduler.start()
     # Keep strong references so the GC never collects background tasks.
     from app.services.notifications.queue import notification_worker

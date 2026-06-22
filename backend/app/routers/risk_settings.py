@@ -139,4 +139,8 @@ def put_schedule(cfg: ScheduleConfig) -> ScheduleConfig:
     data = _load_settings()
     data.setdefault('scan', {})['schedule'] = cfg.model_dump()
     _save_settings(data)
+    try:
+        scan_router._scheduler.configure(cfg)
+    except Exception:
+        pass  # scheduler not started yet (startup order) or import failed
     return cfg

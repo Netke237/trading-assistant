@@ -186,13 +186,22 @@ function ScanForm() {
   const isIntraday = horizon?.toLowerCase().includes('intraday') ?? false;
   const [continuous, setContinuous] = useState(false);
   const [schedule, setSchedule] = useState<ScheduleConfig>(scheduleConfig ?? DEFAULT_SCHEDULE_CONFIG);
+  const [scheduleSaveResult, setScheduleSaveResult] = useState('');
 
   // Sync when store resets
   useEffect(() => { setSchedule(scheduleConfig ?? DEFAULT_SCHEDULE_CONFIG); }, [scheduleConfig]);
 
   async function handleSaveSchedule() {
-    await api.putSchedule(schedule);
-    setScheduleConfig(schedule);
+    setScheduleSaveResult('');
+    try {
+      await api.putSchedule(schedule);
+      setScheduleConfig(schedule);
+      setScheduleSaveResult('Saved');
+    } catch {
+      setScheduleSaveResult('Save failed');
+    } finally {
+      setTimeout(() => setScheduleSaveResult(''), 2500);
+    }
   }
 
   // Local text buffers — let the user type freely; validate on blur
@@ -457,10 +466,11 @@ function ScanForm() {
       </Row>
       <div className={styles.row}>
         <div className={styles.rowLabel} />
-        <div className={styles.rowControl}>
+        <div className={styles.rowControl} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSaveSchedule}>
             Save schedule
           </button>
+          {scheduleSaveResult && <Text size={11} tone="secondary">{scheduleSaveResult}</Text>}
         </div>
       </div>
     </>

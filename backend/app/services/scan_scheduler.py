@@ -91,7 +91,11 @@ class ScanScheduler:
             raise RuntimeError("ScanScheduler: no scan function bound")
 
         while not self._cancelled:
-            if not self._should_run_now():
+            try:
+                should_run = self._should_run_now()
+            except Exception:
+                should_run = True  # bad timezone or config — fall back to always run
+            if not should_run:
                 try:
                     await asyncio.sleep(900)  # re-check every 15 min when outside window
                 except asyncio.CancelledError:

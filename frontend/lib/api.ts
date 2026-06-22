@@ -294,7 +294,18 @@ export const api = {
       '/api/config/iv-thresholds'
     ),
 
-  getSchedule: () => get<ScheduleConfig>('/settings/schedule'),
+  getSchedule: async (): Promise<ScheduleConfig> => {
+    const raw = await get<Record<string, unknown>>('/settings/schedule');
+    return {
+      enabledOptions:  (raw.enabled_options  as boolean)  ?? false,
+      enabledStocks:   (raw.enabled_stocks   as boolean)  ?? false,
+      cadenceMinutes:  (raw.cadence_minutes  as number)   ?? 60,
+      daysOfWeek:      (raw.days_of_week     as number[]) ?? [0, 1, 2, 3, 4],
+      windowStartHour: (raw.window_start_hour as number)  ?? 9,
+      windowEndHour:   (raw.window_end_hour   as number)  ?? 17,
+      timezoneName:    (raw.timezone_name     as string)  ?? 'America/New_York',
+    };
+  },
   putSchedule: (cfg: ScheduleConfig) =>
     put<ScheduleConfig>('/settings/schedule', {
       enabled_options:   cfg.enabledOptions,
