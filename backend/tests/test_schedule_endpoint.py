@@ -1,9 +1,22 @@
+import pytest
+from pathlib import Path
 from fastapi.testclient import TestClient
 from app.main import app
 from app.schemas.schedule import ScheduleConfig
 from app.services.scan_scheduler import ScanScheduler
 
 client = TestClient(app)
+
+SETTINGS_YAML = Path(__file__).parent.parent / "config" / "settings.yaml"
+
+
+@pytest.fixture(autouse=True)
+def restore_settings_yaml():
+    """Restore settings.yaml to its original content after each test."""
+    original = SETTINGS_YAML.read_text() if SETTINGS_YAML.exists() else None
+    yield
+    if original is not None:
+        SETTINGS_YAML.write_text(original)
 
 
 def test_get_schedule_returns_defaults():

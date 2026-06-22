@@ -1,8 +1,20 @@
 """Tests: portfolio limits round-trip through GET/POST /settings/risk."""
+import pytest
+from pathlib import Path
 from fastapi.testclient import TestClient
 from app.main import app
 
 client = TestClient(app)
+
+RISK_YAML = Path(__file__).parent.parent / "config" / "risk_rules.yaml"
+
+
+@pytest.fixture(autouse=True)
+def restore_risk_yaml():
+    """Restore risk_rules.yaml to its original content after each test."""
+    original = RISK_YAML.read_text()
+    yield
+    RISK_YAML.write_text(original)
 
 
 def test_risk_settings_accepts_portfolio_limits():

@@ -141,6 +141,9 @@ def put_schedule(cfg: ScheduleConfig) -> ScheduleConfig:
     _save_settings(data)
     try:
         scan_router._scheduler.configure(cfg)
-    except Exception:
-        pass  # scheduler not started yet (startup order) or import failed
+    except Exception as _exc:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "put_schedule: live scheduler configure failed (scheduler may not be started): %s", _exc
+        )
     return cfg

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ScheduleConfig(BaseModel):
@@ -10,3 +10,12 @@ class ScheduleConfig(BaseModel):
     window_start_hour:  int       = Field(9,  ge=0, le=23)
     window_end_hour:    int       = Field(17, ge=1, le=24)
     timezone_name:      str       = "America/New_York"
+
+    @model_validator(mode='after')
+    def check_window_order(self) -> 'ScheduleConfig':
+        if self.window_start_hour >= self.window_end_hour:
+            raise ValueError(
+                f"window_start_hour ({self.window_start_hour}) must be less than "
+                f"window_end_hour ({self.window_end_hour})"
+            )
+        return self

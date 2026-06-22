@@ -231,7 +231,7 @@ async def _process_stock(
                 bars=bars[-120:],
                 scoring_mode="stock",
                 regime_signal=regime_signal,
-                regime_gate=_regime_gate if regime_signal else None,
+                regime_gate=(_regime_gate or None) if regime_signal else None,
                 fundamentals=_fh,
                 fundamentals_gate=fund_gate,
                 overrides=req.overrides,

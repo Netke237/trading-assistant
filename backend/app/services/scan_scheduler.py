@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from typing import Callable, Awaitable
+
+_logger = logging.getLogger(__name__)
 
 from app.schemas import ScanResult, ScanHistoryEntry
 from app.schemas.schedule import ScheduleConfig
@@ -111,8 +114,8 @@ class ScanScheduler:
             except asyncio.CancelledError:
                 self._running = False
                 raise
-            except Exception:
-                pass  # keep scheduler alive on scan errors
+            except Exception as _exc:
+                _logger.exception("Scheduled scan failed: %s", _exc)
             else:
                 self._last_result = result
                 self._history.append(
