@@ -714,12 +714,20 @@ function RiskForm() {
     setLocalStopPct(premiumStopPct);
   }, [premiumStopPct]);
 
-  // Fetch premiumStopPct from backend on mount
+  // Fetch risk settings from backend on mount and hydrate all fields
   useEffect(() => {
     getRiskSettings()
       .then((s) => {
         setPremiumStopPct(s.premiumStopPct);
         setLocalStopPct(s.premiumStopPct);
+        setLocalLimits((prev) => ({
+          ...prev,
+          ...(s.portfolioValue           !== undefined && { portfolioValue:             s.portfolioValue }),
+          ...(s.maxSinglePositionPct     !== undefined && { maxSingleTradeExposurePct:  s.maxSinglePositionPct }),
+          ...(s.maxTotalExposurePct      !== undefined && { maxTotalExposurePct:        s.maxTotalExposurePct }),
+          ...(s.maxConcurrentPositions   !== undefined && { maxConcurrentPositions:     s.maxConcurrentPositions }),
+          ...(s.maxDailyRecommendations  !== undefined && { maxDailyRecommendations:    s.maxDailyRecommendations }),
+        }));
       })
       .catch(() => {});
   }, [setPremiumStopPct]);
@@ -768,6 +776,7 @@ function RiskForm() {
           step={1000}
           value={localLimits.portfolioValue}
           onChange={(e) => updateLimit('portfolioValue', Math.max(1000, Number(e.target.value)))}
+          onBlur={handleSaveRisk}
         />
       </Row>
       <Row
@@ -783,6 +792,7 @@ function RiskForm() {
           step={1}
           value={Math.round(localLimits.maxSingleTradeExposurePct * 100)}
           onChange={(e) => updateLimit('maxSingleTradeExposurePct', Math.max(1, Math.min(100, Number(e.target.value))) / 100)}
+          onBlur={handleSaveRisk}
         />
       </Row>
       <Row
@@ -798,6 +808,7 @@ function RiskForm() {
           step={1}
           value={Math.round(localLimits.maxTotalExposurePct * 100)}
           onChange={(e) => updateLimit('maxTotalExposurePct', Math.max(1, Math.min(100, Number(e.target.value))) / 100)}
+          onBlur={handleSaveRisk}
         />
       </Row>
       <Row
@@ -813,6 +824,7 @@ function RiskForm() {
           step={1}
           value={localLimits.maxConcurrentPositions}
           onChange={(e) => updateLimit('maxConcurrentPositions', Math.max(1, Math.min(50, Number(e.target.value))))}
+          onBlur={handleSaveRisk}
         />
       </Row>
       <Row
@@ -828,6 +840,7 @@ function RiskForm() {
           step={1}
           value={localLimits.maxDailyRecommendations}
           onChange={(e) => updateLimit('maxDailyRecommendations', Math.max(1, Math.min(50, Number(e.target.value))))}
+          onBlur={handleSaveRisk}
         />
       </Row>
       <Row
