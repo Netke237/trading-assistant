@@ -36,6 +36,29 @@ class AutoTradeState:
     history:  list[dict] = field(default_factory=list)
 
 
+def _market_is_open(symbol: str) -> bool:
+    """Return True if the market appears open for this symbol.
+
+    Calls fetch_price — conservative: if no price returns (None, 0, or exception),
+    treat as closed and block the fire.
+    Runs inside threading.Lock so must complete quickly.
+    fetch_price has no built-in timeout; wrap in a thread with a 3-second deadline
+    to prevent holding the lock across a slow network call.
+    """
+    import concurrent.futures
+    try:
+        from app.data.market import fetch_price
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            future = ex.submit(fetch_price, symbol)
+            try:
+                price = future.result(timeout=3.0)
+            except concurrent.futures.TimeoutError:
+                return False
+        return price is not None and float(price) > 0
+    except Exception:
+        return False
+
+
 def execute_option_order(strategy: ArmedStrategy):
     """Execute the armed option order via the broker router. Importable for mocking."""
     from app.services.broker_router import build_router_from_credentials
@@ -92,6 +115,12 @@ class AutoTradeService:
         with self._lock:
             if not self._state.armed or self._state.strategy is None:
                 raise RuntimeError("AutoTrader not armed — cannot fire")
+            # Halt check before disarm: if market is closed, preserve armed state
+            if not _market_is_open(self._state.strategy.symbol):
+                raise RuntimeError(
+                    f"Market closed or {self._state.strategy.symbol} halted "
+                    f"— armed state preserved for retry"
+                )
             strategy = self._state.strategy
             self._state.armed = False
             self._state.strategy = None

@@ -44,6 +44,7 @@ def test_disarm_clears_state():
 def test_fire_executes_and_disarms(mocker):
     from app.data.ibkr_paper import OrderResult
     svc = AutoTradeService()
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mock_result = OrderResult(order_id="999", status="PreSubmitted", broker="ibkr_paper")
     mock_execute = mocker.patch(
         "app.services.auto_trader.execute_option_order",
@@ -87,6 +88,7 @@ def test_fire_blocked_when_exposure_cap_breached(mocker):
     entry_premium=30.0 × 1 contract × 100 multiplier = $3,000 → exceeds cap"""
     from app.data.ibkr_paper import OrderResult
     svc = AutoTradeService()
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch(
         "app.services.auto_trader.execute_option_order",
         return_value=OrderResult(order_id="x", status="PreSubmitted", broker="ibkr_paper"),
@@ -107,6 +109,7 @@ def test_fire_passes_when_within_cap(mocker):
     """fire() executes when trade is within exposure limit."""
     from app.data.ibkr_paper import OrderResult
     svc = AutoTradeService()
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mock_execute = mocker.patch(
         "app.services.auto_trader.execute_option_order",
         return_value=OrderResult(order_id="ok", status="PreSubmitted", broker="ibkr_paper"),
@@ -133,6 +136,7 @@ def test_fire_no_snapshot_skips_check(mocker):
     """
     from app.data.ibkr_paper import OrderResult
     svc = AutoTradeService()
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch(
         "app.services.auto_trader.execute_option_order",
         return_value=OrderResult(order_id="y", status="PreSubmitted", broker="ibkr_paper"),
@@ -210,6 +214,7 @@ def test_fire_blocked_records_cap_blocked_history(mocker):
     """Exposure cap breach must be written to history so the event is not lost."""
     from app.data.ibkr_paper import OrderResult
     svc = AutoTradeService()
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch(
         "app.services.auto_trader.execute_option_order",
         return_value=OrderResult(order_id="x", status="PreSubmitted", broker="ibkr_paper"),
@@ -233,6 +238,7 @@ def test_fire_blocked_records_cap_blocked_history(mocker):
 def test_fire_failed_order_records_order_failed_history(mocker):
     """Broker execute failure must be written to history with status 'order_failed'."""
     svc = AutoTradeService()
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch(
         "app.services.auto_trader.execute_option_order",
         side_effect=RuntimeError("broker timeout"),
@@ -257,6 +263,7 @@ def test_maybe_fire_on_scan_fires_fresh_order(mocker):
     from app.data.ibkr_paper import OrderResult
 
     svc = AutoTradeService()
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mock_execute = mocker.patch(
         "app.services.auto_trader.execute_option_order",
         return_value=OrderResult(order_id="fresh", status="PreSubmitted", broker="ibkr_paper"),
@@ -288,6 +295,7 @@ def _make_armed(symbol="AAPL", premium=2.50, qty=1, pv=100_000.0):
 def test_daily_loss_blocks_fire_when_limit_exceeded(mocker):
     """If today's premium_at_risk already exceeds the daily limit, fire raises."""
     from app.data.ibkr_paper import OrderResult
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order",
                  return_value=OrderResult("x", "ok", "ibkr_paper"))
 
@@ -315,6 +323,7 @@ def test_daily_loss_blocks_fire_when_limit_exceeded(mocker):
 def test_daily_loss_allows_fire_when_under_limit(mocker):
     """If today's premium_at_risk is under the limit, fire proceeds."""
     from app.data.ibkr_paper import OrderResult
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mock_exec = mocker.patch("app.services.auto_trader.execute_option_order",
                               return_value=OrderResult("y", "ok", "ibkr_paper"))
 
@@ -335,6 +344,7 @@ def test_daily_loss_allows_fire_when_under_limit(mocker):
 def test_daily_loss_ignores_prior_day_entries(mocker):
     """History entries from prior UTC days must not count toward today's limit."""
     from app.data.ibkr_paper import OrderResult
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
     mocker.patch("app.services.auto_trader.execute_option_order",
                  return_value=OrderResult("z", "ok", "ibkr_paper"))
 
@@ -348,4 +358,29 @@ def test_daily_loss_ignores_prior_day_entries(mocker):
 
     svc.arm(_make_armed(premium=1.0, qty=1, pv=100_000.0))
     svc.fire()   # must not raise
+    assert svc.get_state().armed is False
+
+
+# ── Halt check (Task 6) ───────────────────────────────────────────────────────
+
+def test_fire_blocked_when_market_closed(mocker):
+    """If _market_is_open returns False, fire raises without disarming."""
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=False)
+    svc = AutoTradeService()
+    svc.arm(_make_armed())
+    with pytest.raises(RuntimeError, match="Market closed"):
+        svc.fire()
+    # State must still be ARMED after a halt-blocked fire
+    assert svc.get_state().armed is True, "Armed state must be preserved after halt block"
+
+
+def test_fire_proceeds_when_market_open(mocker):
+    """If _market_is_open returns True, fire executes normally."""
+    from app.data.ibkr_paper import OrderResult
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.auto_trader.execute_option_order",
+                 return_value=OrderResult("ord1", "ok", "ibkr_paper"))
+    svc = AutoTradeService()
+    svc.arm(_make_armed())
+    svc.fire()
     assert svc.get_state().armed is False
