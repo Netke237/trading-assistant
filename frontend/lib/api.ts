@@ -297,13 +297,13 @@ export const api = {
   getSchedule: async (): Promise<ScheduleConfig> => {
     const raw = await get<Record<string, unknown>>('/settings/schedule');
     return {
-      enabledOptions:  (raw.enabled_options  as boolean)  ?? false,
-      enabledStocks:   (raw.enabled_stocks   as boolean)  ?? false,
-      cadenceMinutes:  (raw.cadence_minutes  as number)   ?? 60,
-      daysOfWeek:      (raw.days_of_week     as number[]) ?? [0, 1, 2, 3, 4],
-      windowStartHour: (raw.window_start_hour as number)  ?? 9,
-      windowEndHour:   (raw.window_end_hour   as number)  ?? 17,
-      timezoneName:    (raw.timezone_name     as string)  ?? 'America/New_York',
+      enabledOptions:  typeof raw.enabled_options   === 'boolean' ? raw.enabled_options  : false,
+      enabledStocks:   typeof raw.enabled_stocks    === 'boolean' ? raw.enabled_stocks   : false,
+      cadenceMinutes:  typeof raw.cadence_minutes   === 'number'  ? raw.cadence_minutes  : 60,
+      daysOfWeek:      Array.isArray(raw.days_of_week)            ? (raw.days_of_week as number[]) : [0, 1, 2, 3, 4],
+      windowStartHour: typeof raw.window_start_hour === 'number'  ? raw.window_start_hour : 9,
+      windowEndHour:   typeof raw.window_end_hour   === 'number'  ? raw.window_end_hour   : 17,
+      timezoneName:    typeof raw.timezone_name     === 'string'  ? raw.timezone_name     : 'America/New_York',
     };
   },
   putSchedule: (cfg: ScheduleConfig) =>
