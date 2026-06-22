@@ -89,6 +89,8 @@ horizons:
       stoch_smooth: 3
       stoch_oversold: 30
       stoch_tolerance_pct: 5
+      rsi_ceiling: 60        # bearish: RSI falls through this level from above
+      stoch_overbought: 70   # bearish: stoch exits above this level
       setup_window_bars: 8
       momentum_signals_for_pass: 2
       volume_lookback_bars: 20
@@ -159,6 +161,8 @@ horizons:
       stoch_smooth: 3
       stoch_oversold: 30
       stoch_tolerance_pct: 5
+      rsi_ceiling: 60        # bearish: RSI falls through this level from above
+      stoch_overbought: 70   # bearish: stoch exits above this level
       setup_window_bars: 10
       momentum_signals_for_pass: 1
       volume_lookback_bars: 20
@@ -229,6 +233,8 @@ horizons:
       stoch_smooth: 3
       stoch_oversold: 30
       stoch_tolerance_pct: 5
+      rsi_ceiling: 60        # bearish: RSI falls through this level from above
+      stoch_overbought: 70   # bearish: stoch exits above this level
       setup_window_bars: 5
       momentum_signals_for_pass: 2
       volume_lookback_bars: 20
