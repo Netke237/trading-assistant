@@ -1,6 +1,6 @@
 # backend/tests/test_stock_scorer_stock_mode.py
 import pytest
-from app.scoring.stock_scorer import score_stock
+from app.scoring.stock_scorer import score_stock, _load_config
 
 
 def _bars(n=120, trend="up"):
@@ -73,6 +73,7 @@ def test_options_mode_vol_rule_uses_iv_rank_not_rvol():
     With iv_rank_pass_max=34 set for Swing, passing no iv_rank returns CAUTION 50
     ("no_iv_data"), confirming that rvol is ignored in options mode.
     """
+    _load_config.cache_clear()
     bars = _bars_rvol(current_vol_mult=0.1)   # tiny volume — would score 20 in stock mode
     card = score_stock("X", "Bullish", "Swing", bars, scoring_mode="options")
     vol_rule = next(r for r in card.rules if r.name == "vol")

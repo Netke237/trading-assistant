@@ -1,14 +1,14 @@
-"""Tests for vol scoring rule — iv_rank_pass_max gate.
-
-These tests verify that scoring_rules.yaml has real values (not null) for
-iv_rank_pass_max in the Swing and Position horizon vol sections.
-
-Before the YAML fix:  iv_rank_pass_max: null → scorer always returns PASS 90
-After the YAML fix:   iv_rank_pass_max: 34 (Swing) / 44 (Position) → gate enforced
-"""
+"""Tests for vol scoring rule — iv_rank_pass_max gate."""
 import pytest
 from app.scoring.stock_scorer import score_stock, _load_config
 from app.fixtures.candles import candles_for
+
+
+@pytest.fixture(autouse=True)
+def _clear_config_cache():
+    _load_config.cache_clear()
+    yield
+    _load_config.cache_clear()
 
 
 def _bars(symbol: str = "AAPL") -> list[dict]:
@@ -30,7 +30,6 @@ def _vol_status(result) -> str:
 
 def test_swing_iv_rank_above_pass_max_returns_caution_after_yaml_update():
     """With iv_rank_pass_max=34 in YAML (Swing), iv_rank=40 must return CAUTION on vol rule."""
-    _load_config.cache_clear()   # ensure fresh YAML read
     result = score_stock(
         symbol="TEST",
         direction="Bullish",
@@ -47,7 +46,6 @@ def test_swing_iv_rank_above_pass_max_returns_caution_after_yaml_update():
 
 def test_swing_iv_rank_below_pass_max_returns_pass_after_yaml_update():
     """With iv_rank_pass_max=34 in YAML (Swing), iv_rank=20 must return PASS on vol rule."""
-    _load_config.cache_clear()
     result = score_stock(
         symbol="TEST",
         direction="Bullish",
@@ -63,7 +61,6 @@ def test_swing_iv_rank_below_pass_max_returns_pass_after_yaml_update():
 
 def test_swing_iv_rank_above_caution_max_returns_reject():
     """iv_rank=60 exceeds caution_max=55 (Swing) -> REJECT."""
-    _load_config.cache_clear()
     result = score_stock(
         symbol="TEST",
         direction="Bullish",
@@ -83,7 +80,6 @@ def test_swing_iv_rank_above_caution_max_returns_reject():
 
 def test_position_iv_rank_above_pass_max_returns_caution_after_yaml_update():
     """With iv_rank_pass_max=44 in YAML (Position), iv_rank=50 must return CAUTION on vol rule."""
-    _load_config.cache_clear()
     result = score_stock(
         symbol="TEST",
         direction="Bullish",
@@ -100,7 +96,6 @@ def test_position_iv_rank_above_pass_max_returns_caution_after_yaml_update():
 
 def test_position_iv_rank_below_pass_max_returns_pass_after_yaml_update():
     """With iv_rank_pass_max=44 in YAML (Position), iv_rank=30 must return PASS on vol rule."""
-    _load_config.cache_clear()
     result = score_stock(
         symbol="TEST",
         direction="Bullish",
@@ -120,7 +115,6 @@ def test_position_iv_rank_below_pass_max_returns_pass_after_yaml_update():
 
 def test_intraday_vol_gate_remains_disabled():
     """Intraday iv_rank_pass_max stays null — vol rule always returns PASS regardless of iv_rank."""
-    _load_config.cache_clear()
     result = score_stock(
         symbol="TEST",
         direction="Bullish",
