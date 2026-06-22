@@ -205,10 +205,11 @@ async def _process_stock(
 
             # ── Fundamentals (skipped for intraday) ───────────────────────────
             _fund_gate = dict(fund_gate) if fund_gate else {}
-            if req.fundamentals_caution_above is not None:
-                _fund_gate["cautionAbove"] = req.fundamentals_caution_above
-            if req.fundamentals_reject_above is not None:
-                _fund_gate["rejectAbove"] = req.fundamentals_reject_above
+            if req.direction.lower() in ("bearish", "bear"):
+                if req.fundamentals_caution_above is not None:
+                    _fund_gate["cautionAbove"] = req.fundamentals_caution_above
+                if req.fundamentals_reject_above is not None:
+                    _fund_gate["rejectAbove"] = req.fundamentals_reject_above
             fund_gate = _fund_gate if _fund_gate else None
 
             _fh: FundamentalHealth | None = None
