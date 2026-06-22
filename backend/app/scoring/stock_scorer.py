@@ -1009,6 +1009,12 @@ def score_stock(
     final_score    = round(weighted_score)
     final_status   = _status_from_score(final_score, thresholds)
 
+    # Pullback timing veto: a REJECT pullback means the setup timing is wrong.
+    # Cap at CAUTION so the candidate remains visible but cannot PASS.
+    _pb = next((r for r in rules if r.name == "pullback"), None)
+    if _pb is not None and _pb.status == "REJECT":
+        final_status = _worse(final_status, "CAUTION")
+
     # Confidence gate: demote-only. Append a confidence RuleResult and cap status.
     if confidence_gate is not None:
         from app.scoring.signal_confidence import status_cap, interpret
