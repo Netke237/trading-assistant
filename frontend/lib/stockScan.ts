@@ -1,6 +1,7 @@
 import { api } from '@/lib/api';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import type { StockScanResult } from '@/types/stockDomain';
 
 /** Optional per-run param overrides (the page passes its locally-edited params). */
@@ -37,6 +38,7 @@ export async function runStockScan(
   const context = store.context;
   const requireReversal =
     (store.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
+  const { confidenceGate } = useSettingsStore.getState();
 
   // Keys from scanStore.scanOverrides that stock_scorer.py reads via the overrides dict.
   // Options-only params (max_delta, min_dte, etc.) and iv_rank_pass_max are excluded.
@@ -85,6 +87,9 @@ export async function runStockScan(
       risk_pct: 0.01,
       shortlist_max_candidates: p.stockShortlistMax,
       overrides: stocksOverrides,
+      confidence_caution_below: confidenceGate.enabled ? confidenceGate.cautionBelow : undefined,
+      confidence_reject_below:  confidenceGate.enabled ? confidenceGate.rejectBelow  : undefined,
+      confidence_atr_mult:      confidenceGate.enabled ? confidenceGate.atrMult       : undefined,
     });
     store.setStockScanResult(result);
     store.setScanState('COMPLETED');

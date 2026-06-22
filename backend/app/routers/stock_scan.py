@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import dataclasses
 import functools
 import hashlib
 import logging
@@ -270,12 +271,29 @@ async def _process_stock(
             _cached = get_cached(_ck)
             if _cached is None:
                 _res = await asyncio.to_thread(
-                    compute_confidence, bars, direction=req.direction, horizon=req.horizon
+                    compute_confidence, bars, direction=req.direction, horizon=req.horizon,
+                    atr_mult=req.confidence_atr_mult,
                 )
                 _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
                 set_cached(_ck, _cached)
             conf_val = _cached["confidence"]
             conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
+
+            _SEVERITY = {"PASS": 0, "CAUTION": 1, "REJECT": 2}
+
+            if conf_val is not None and req.confidence_reject_below is not None:
+                if conf_val < req.confidence_reject_below:
+                    return {
+                        "symbol": symbol,
+                        "reason": (
+                            f"confidence gate REJECT: {conf_val:.0f}% "
+                            f"< {req.confidence_reject_below:.0f}%"
+                        ),
+                    }
+            if conf_val is not None and req.confidence_caution_below is not None:
+                if conf_val < req.confidence_caution_below:
+                    if _SEVERITY.get(card.status, 0) < _SEVERITY["CAUTION"]:
+                        card = dataclasses.replace(card, status="CAUTION")
 
             sizing_cfg = full_cfg.get("regime_sizing", {"enabled": False})
             mult = _conviction_mult(regime_signal["conviction_pct"], sizing_cfg) if regime_signal else 1.0

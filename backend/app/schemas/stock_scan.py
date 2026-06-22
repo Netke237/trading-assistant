@@ -45,6 +45,11 @@ class StockScanRequest(BaseModel):
     # Per-scan scorer overrides — keys map directly to stock_scorer.py override handlers.
     # Options contract params and iv_rank_pass_max are excluded (irrelevant in stock mode).
     overrides: dict[str, Any] = Field(default_factory=dict)
+    # Confidence gate — caps a stock's verdict when signal backtest win-rate is low.
+    # When None, the gate is disabled (backend falls back to scoring_rules.yaml defaults).
+    confidence_caution_below: Optional[float] = None  # win-rate < this → cap at CAUTION
+    confidence_reject_below:  Optional[float] = None  # win-rate < this → cap at REJECT
+    confidence_atr_mult:      Optional[float] = None  # ATR multiplier for backtest barriers
 
 
 class StrategySignalOut(BaseModel):

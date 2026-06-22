@@ -1,0 +1,135 @@
+# backend/tests/test_confidence_gate_stocks.py
+import asyncio
+import dataclasses
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from app.schemas.stock_scan import StockScanRequest
+
+
+def test_stock_scan_request_accepts_confidence_gate_fields():
+    req = StockScanRequest(
+        universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema",
+        confidence_caution_below=50.0,
+        confidence_reject_below=35.0,
+        confidence_atr_mult=1.5,
+    )
+    assert req.confidence_caution_below == 50.0
+    assert req.confidence_reject_below == 35.0
+    assert req.confidence_atr_mult == 1.5
+
+
+def test_confidence_gate_fields_default_to_none():
+    req = StockScanRequest(
+        universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema"
+    )
+    assert req.confidence_caution_below is None
+    assert req.confidence_reject_below is None
+    assert req.confidence_atr_mult is None
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_fake_bars(n: int = 130) -> list[dict]:
+    """Return n minimal OHLCV bar dicts with plausible values."""
+    return [{"time": f"2024-01-{i:02d}", "open": 150.0, "high": 155.0,
+             "low": 148.0, "close": 152.0, "volume": 1_000_000} for i in range(1, n + 1)]
+
+
+def _make_fake_card(status: str = "PASS", score: int = 70):
+    """Return a real StockScoreCard dataclass instance."""
+    from app.scoring.stock_scorer import StockScoreCard, RuleResult
+    return StockScoreCard(
+        symbol="AAPL",
+        direction="Bullish",
+        horizon="Swing",
+        score=score,
+        status=status,
+        rules=[RuleResult(name="trend", status="PASS", score=60, detail={})],
+    )
+
+
+def _make_fake_signal():
+    sig = MagicMock()
+    sig.strategy = "pullback_ema"
+    sig.entry_price = 152.0
+    sig.stop_price = 148.0
+    sig.target_price = 160.0
+    sig.rr_ratio = 2.0
+    sig.atr = 3.0
+    sig.detail = {}
+    return sig
+
+
+def _make_fake_bt():
+    bt = MagicMock()
+    bt.passes_gate = True
+    bt.n_trades = 10
+    bt.win_rate = 0.60
+    bt.total_return_pct = 15.0
+    bt.max_drawdown_pct = 5.0
+    bt.expectancy = 1.2
+    bt.sharpe = 1.5
+    bt.confidence = 65
+    bt.summary_text = "ok"
+    return bt
+
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
+
+def _run_process_stock(req, conf_val: float):
+    """Run _process_stock with all heavy I/O patched out; returns the raw result."""
+    import app.routers.stock_scan as _router_mod
+
+    fake_bars = _make_fake_bars()
+    fake_card = _make_fake_card(status="PASS", score=70)
+    fake_signal = _make_fake_signal()
+    fake_bt = _make_fake_bt()
+    conf_cache_hit = {"confidence": conf_val, "sample_size": 50}
+    fake_signal_fns = {"pullback_ema": lambda *a, **kw: fake_signal}
+
+    async def run():
+        with patch("app.routers.stock_scan.get_historical_bars", new=AsyncMock(return_value=fake_bars)), \
+             patch("app.routers.stock_scan.fetch_company_name_async", new=AsyncMock(return_value="Apple Inc")), \
+             patch("app.routers.stock_scan.fetch_price_async", new=AsyncMock(return_value=152.0)), \
+             patch("app.routers.stock_scan.score_stock", return_value=fake_card), \
+             patch("app.routers.stock_scan.compute_omm", return_value=None), \
+             patch("app.routers.stock_scan._get_fundamentals", new=AsyncMock(return_value=None)), \
+             patch.object(_router_mod, "_SIGNAL_FNS", fake_signal_fns), \
+             patch("app.routers.stock_scan._get_backtest_cached", return_value=fake_bt), \
+             patch("app.routers.stock_scan.get_cached", return_value=conf_cache_hit):
+            from app.routers.stock_scan import _process_stock
+            return await _process_stock("AAPL", req, "scan-1", {}, [])
+
+    return asyncio.run(run())
+
+
+def test_confidence_gate_reject_excludes_low_confidence_symbol():
+    """When conf_val < reject_below, _process_stock must return a 'reason' dict."""
+    req = StockScanRequest(
+        universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema",
+        confidence_reject_below=35.0,
+    )
+    result = _run_process_stock(req, conf_val=30.0)
+    assert "reason" in result, f"Expected exclusion dict with 'reason', got: {result}"
+    assert "confidence gate REJECT" in result["reason"]
+
+
+def test_confidence_gate_caution_caps_pass_to_caution():
+    """When reject_below <= conf_val < caution_below, status must be capped at CAUTION."""
+    req = StockScanRequest(
+        universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema",
+        confidence_caution_below=50.0,
+        confidence_reject_below=35.0,
+    )
+    result = _run_process_stock(req, conf_val=40.0)
+    # Must not be rejected
+    assert "reason" not in result, f"Unexpected rejection: {result}"
+    # Result is a PositionCardOut; its stock_status must be CAUTION
+    from app.schemas.stock_scan import PositionCardOut
+    assert isinstance(result, PositionCardOut), f"Expected PositionCardOut, got: {result}"
+    assert result.stock_status == "CAUTION", \
+        f"Expected CAUTION status, got: {result.stock_status}"

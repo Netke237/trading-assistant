@@ -173,6 +173,9 @@ export const api = {
     fundamentals_reject_below?: number;
     fundamentals_de_reject?: number;
     overrides?: Record<string, number | boolean | string>;
+    confidence_caution_below?: number;
+    confidence_reject_below?:  number;
+    confidence_atr_mult?:      number;
   }) => post<StockScanResult>('/api/stock-scan', req),
 
   postStockOrder: (req: {
