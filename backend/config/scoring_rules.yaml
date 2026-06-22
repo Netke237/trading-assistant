@@ -270,7 +270,7 @@ regime_gate:
   require_stable_for_reject: true
 
 regime_sizing:
-  enabled: false
+  enabled: true
   min_mult: 0.5
   full_conviction_pct: 40
 

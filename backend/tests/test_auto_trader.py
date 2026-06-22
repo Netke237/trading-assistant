@@ -384,3 +384,79 @@ def test_fire_proceeds_when_market_open(mocker):
     svc.arm(_make_armed())
     svc.fire()
     assert svc.get_state().armed is False
+
+
+# ── Vol-scaled sizing (Task 8) ─────────────────────────────────────────────────
+
+def test_vol_sizing_halves_quantity_at_low_conviction(mocker):
+    """conviction=20, full=40 → mult=0.5 → quantity=2 halved to 1."""
+    from app.data.ibkr_paper import OrderResult
+    captured = {}
+    def mock_execute(s):
+        captured["quantity"] = s.quantity
+        return OrderResult("s1", "ok", "ibkr_paper")
+
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=20)
+
+    svc = AutoTradeService()
+    strategy = ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol="AAPL260620C00185000",
+        action="BUY", quantity=2, order_type="LMT",
+        limit_price=2.50, conid=None,
+        entry_premium=2.50, portfolio_value=100_000.0,
+    )
+    svc.arm(strategy)
+    svc.fire()
+    assert captured.get("quantity") == 1, "Low conviction must halve quantity from 2 to 1"
+
+
+def test_vol_sizing_keeps_full_quantity_at_high_conviction(mocker):
+    """conviction=50, full=40 → mult capped at 1.0 → quantity unchanged."""
+    from app.data.ibkr_paper import OrderResult
+    captured = {}
+    def mock_execute(s):
+        captured["quantity"] = s.quantity
+        return OrderResult("s2", "ok", "ibkr_paper")
+
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=50)
+
+    svc = AutoTradeService()
+    strategy = ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol="AAPL260620C00185000",
+        action="BUY", quantity=4, order_type="LMT",
+        limit_price=2.50, conid=None,
+        entry_premium=2.50, portfolio_value=100_000.0,
+    )
+    svc.arm(strategy)
+    svc.fire()
+    assert captured.get("quantity") == 4, "High conviction must not reduce quantity"
+
+
+def test_vol_sizing_skipped_when_conviction_is_none(mocker):
+    """If conviction cache is None (monitor hasn't run), sizing is skipped — full quantity fires."""
+    from app.data.ibkr_paper import OrderResult
+    captured = {}
+    def mock_execute(s):
+        captured["quantity"] = s.quantity
+        return OrderResult("s3", "ok", "ibkr_paper")
+
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.auto_trader.execute_option_order", side_effect=mock_execute)
+    mocker.patch("app.services.regime_monitor.get_last_conviction", return_value=None)
+
+    svc = AutoTradeService()
+    svc.arm(ArmedStrategy(
+        broker="ibkr_paper", symbol="AAPL",
+        option_symbol="AAPL260620C00185000",
+        action="BUY", quantity=3, order_type="LMT",
+        limit_price=2.50, conid=None,
+        entry_premium=2.50, portfolio_value=100_000.0,
+    ))
+    svc.fire()
+    assert captured.get("quantity") == 3

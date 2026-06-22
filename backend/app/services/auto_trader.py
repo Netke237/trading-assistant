@@ -4,7 +4,7 @@ import functools
 import logging
 import threading
 import yaml
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
@@ -57,6 +57,52 @@ def _market_is_open(symbol: str) -> bool:
         return price is not None and float(price) > 0
     except Exception:
         return False
+
+
+_SCORING_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
+
+
+@functools.lru_cache(maxsize=1)
+def _load_scoring_config() -> dict:
+    """Load regime_sizing block from scoring_rules.yaml (cached)."""
+    try:
+        with open(_SCORING_CONFIG_PATH) as f:
+            return yaml.safe_load(f).get("regime_sizing", {})
+    except Exception:
+        return {}
+
+
+def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
+    """Return a (possibly quantity-adjusted) copy of strategy based on regime conviction.
+
+    Reads cached conviction from regime_monitor (no network call).
+    If conviction is None or regime_sizing is disabled, returns strategy unchanged.
+    """
+    cfg = _load_scoring_config()
+    if not cfg.get("enabled", False):
+        return strategy
+
+    from app.services.regime_monitor import get_last_conviction
+    conviction = get_last_conviction()
+    if conviction is None:
+        return strategy
+
+    min_mult        = float(cfg.get("min_mult", 0.5))
+    full_conviction = float(cfg.get("full_conviction_pct", 40))
+
+    # Direction-aware: BUY uses conviction as-is, SELL negates (bearish regime = tailwind)
+    directional_conv = conviction if strategy.action == "BUY" else -conviction
+    mult = max(min_mult, min(1.0, directional_conv / full_conviction))
+    adjusted_qty = max(1, round(strategy.quantity * mult))
+
+    if adjusted_qty == strategy.quantity:
+        return strategy
+
+    logger.info(
+        "vol_sizing: %s qty %d → %d (conviction=%d, mult=%.2f)",
+        strategy.symbol, strategy.quantity, adjusted_qty, directional_conv, mult,
+    )
+    return _dc_replace(strategy, quantity=adjusted_qty)
 
 
 def execute_option_order(strategy: ArmedStrategy):
@@ -124,6 +170,9 @@ class AutoTradeService:
             strategy = self._state.strategy
             self._state.armed = False
             self._state.strategy = None
+
+        # Vol-scaled sizing: adjust quantity using cached regime conviction (no network call)
+        strategy = _apply_vol_sizing(strategy)
 
         # Exposure cap check — runs after disarm so a double-fire is impossible.
         pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
