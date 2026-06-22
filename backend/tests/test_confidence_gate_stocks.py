@@ -133,3 +133,24 @@ def test_confidence_gate_caution_caps_pass_to_caution():
     assert isinstance(result, PositionCardOut), f"Expected PositionCardOut, got: {result}"
     assert result.stock_status == "CAUTION", \
         f"Expected CAUTION status, got: {result.stock_status}"
+
+
+def test_confidence_gate_disabled_preserves_pass_status():
+    """When all three confidence gate fields are None, the gate is skipped entirely
+    and a PASS card must come through as a PositionCardOut with status PASS."""
+    req = StockScanRequest(
+        universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema",
+        # confidence_caution_below, confidence_reject_below, confidence_atr_mult all default to None
+    )
+    result = _run_process_stock(req, conf_val=20.0)  # very low conf_val — gate must not fire
+    assert "reason" not in result, (
+        f"Gate should be disabled when all confidence fields are None, "
+        f"but got exclusion: {result}"
+    )
+    from app.schemas.stock_scan import PositionCardOut
+    assert isinstance(result, PositionCardOut), (
+        f"Expected PositionCardOut when gate is disabled, got: {result}"
+    )
+    assert result.stock_status == "PASS", (
+        f"PASS card must be preserved when gate is disabled, got: {result.stock_status}"
+    )
