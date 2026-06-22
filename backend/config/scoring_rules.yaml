@@ -1,5 +1,7 @@
 # backend/config/scoring_rules.yaml
 
+# score_thresholds: used by the backend scan pipeline to classify candidates.
+# The frontend statusForScore() mirrors these values — see frontend/lib/status.ts.
 score_thresholds:
   pass: 55
   caution: 35
@@ -97,7 +99,7 @@ horizons:
       caution_days: 21
     vol:
       iv_rank_compressed_caution: 5
-      iv_rank_pass_max: null
+      iv_rank_pass_max: 34     # IV rank <= this -> PASS; mirrors frontend ivThresholds.ts
       iv_rank_caution_max: 55
 
   intraday:
@@ -237,7 +239,7 @@ horizons:
       caution_days: 60
     vol:
       iv_rank_compressed_caution: 5
-      iv_rank_pass_max: null
+      iv_rank_pass_max: 44     # IV rank <= this -> PASS; mirrors frontend ivThresholds.ts
       iv_rank_caution_max: 65
 
 # Entry quality thresholds (FR-45)

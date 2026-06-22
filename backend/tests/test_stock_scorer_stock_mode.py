@@ -67,12 +67,17 @@ def test_rvol_low_scores_caution_in_stock_mode():
     assert vol_rule.score == 20
 
 
-def test_options_mode_vol_rule_unchanged():
-    """options mode vol rule must still return PASS 90 (iv_rank_pass_max=null path)."""
+def test_options_mode_vol_rule_uses_iv_rank_not_rvol():
+    """options mode must use IV rank gate, not rvol — tiny volume must NOT score 20.
+
+    With iv_rank_pass_max=34 set for Swing, passing no iv_rank returns CAUTION 50
+    ("no_iv_data"), confirming that rvol is ignored in options mode.
+    """
     bars = _bars_rvol(current_vol_mult=0.1)   # tiny volume — would score 20 in stock mode
     card = score_stock("X", "Bullish", "Swing", bars, scoring_mode="options")
     vol_rule = next(r for r in card.rules if r.name == "vol")
-    assert vol_rule.score == 90   # unchanged — always PASS 90 in options mode
+    assert vol_rule.score != 20, "options mode must not use rvol scoring"
+    assert vol_rule.score == 50   # no iv_rank provided → "no_iv_data" CAUTION 50
 
 
 from app.scoring.stock_scorer import _rule_trigger, _horizon_cfg, _rule_event
