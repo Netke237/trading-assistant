@@ -97,18 +97,20 @@ class AutoTradeService:
             self._state.strategy = None
 
         # Exposure cap check — runs after disarm so a double-fire is impossible.
+        pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
         if portfolio_snapshot is not None and strategy.entry_premium > 0:
-            pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
             try:
                 self._check_exposure(strategy, portfolio_snapshot, pv)
             except RuntimeError:
                 with self._lock:
                     self._state.history.append({
-                        "order_id": None,
-                        "status":   "cap_blocked",
-                        "broker":   strategy.broker,
-                        "symbol":   strategy.symbol,
-                        "option":   strategy.option_symbol,
+                        "order_id":        None,
+                        "status":          "cap_blocked",
+                        "broker":          strategy.broker,
+                        "symbol":          strategy.symbol,
+                        "option":          strategy.option_symbol,
+                        "timestamp":       datetime.now(timezone.utc).isoformat(),
+                        "premium_at_risk": 0.0,
                     })
                 raise
         elif portfolio_snapshot is not None and strategy.entry_premium == 0.0:
@@ -117,28 +119,44 @@ class AutoTradeService:
                 strategy.symbol,
             )
 
+        # Daily loss circuit breaker — runs after cap check, before order submission.
+        with self._lock:
+            _history_snapshot = list(self._state.history)
+        try:
+            self._check_daily_loss(strategy, _history_snapshot, pv)
+        except RuntimeError:
+            with self._lock:
+                self._state.armed = False
+                self._state.strategy = None
+            raise
+
         try:
             result = execute_option_order(strategy)
         except Exception as exc:
             with self._lock:
                 self._state.history.append({
-                    "order_id": None,
-                    "status":   "order_failed",
-                    "broker":   strategy.broker,
-                    "symbol":   strategy.symbol,
-                    "option":   strategy.option_symbol,
-                    "error":    str(exc),
+                    "order_id":        None,
+                    "status":          "order_failed",
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                    "error":           str(exc),
                 })
             logger.error("AutoTrader order failed for %s: %s", strategy.symbol, exc)
             raise RuntimeError(f"Order failed: {exc}") from exc
 
+        stop_pct = float(self._risk_config().get("premium_stop_pct", 0.60))
         with self._lock:
             self._state.history.append({
-                "order_id": result.order_id,
-                "status":   result.status,
-                "broker":   result.broker,
-                "symbol":   strategy.symbol,
-                "option":   strategy.option_symbol,
+                "order_id":        result.order_id,
+                "status":          result.status,
+                "broker":          result.broker,
+                "symbol":          strategy.symbol,
+                "option":          strategy.option_symbol,
+                "timestamp":       datetime.now(timezone.utc).isoformat(),
+                "premium_at_risk": strategy.entry_premium * strategy.quantity * 100 * stop_pct,
             })
         logger.info("AutoTrader fired: order %s status %s", result.order_id, result.status)
         return result
@@ -208,6 +226,42 @@ class AutoTradeService:
             return int(cfg.get("auto_trade", {}).get("max_arm_age_minutes", 30))
         except Exception:
             return 30
+
+    @staticmethod
+    @functools.lru_cache(maxsize=1)
+    def _risk_config() -> dict:
+        """Load full auto_trade config section (cached; restart to reload)."""
+        try:
+            with open(_RISK_CONFIG_PATH) as f:
+                cfg = yaml.safe_load(f)
+            return cfg.get("auto_trade", {})
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _check_daily_loss(strategy: ArmedStrategy, history: list[dict], portfolio_value: float) -> None:
+        """Raise RuntimeError if today's premium-at-risk exceeds the daily loss limit."""
+        risk_cfg = AutoTradeService._risk_config()
+        max_pct  = float(risk_cfg.get("max_daily_loss_pct", 0.02))
+        stop_pct = float(risk_cfg.get("premium_stop_pct", 0.60))
+        limit    = max_pct * portfolio_value
+
+        today_str = datetime.now(timezone.utc).date().isoformat()   # UTC date "YYYY-MM-DD"
+
+        # Sum premium_at_risk from today's history entries only
+        today_risk = sum(
+            float(e.get("premium_at_risk") or 0)
+            for e in history
+            if isinstance(e.get("timestamp"), str) and e["timestamp"].startswith(today_str)
+        )
+
+        # Add this trade's prospective risk
+        this_risk = strategy.entry_premium * strategy.quantity * 100 * stop_pct
+        if today_risk + this_risk > limit:
+            raise RuntimeError(
+                f"Daily loss limit reached: {today_risk + this_risk:.0f} at risk "
+                f"vs limit {limit:.0f} — no further trades today"
+            )
 
 
 # Module-level singleton

@@ -125,7 +125,12 @@ def test_fire_passes_when_within_cap(mocker):
 
 
 def test_fire_no_snapshot_skips_check(mocker):
-    """fire() with no portfolio_snapshot still executes (backward compat)."""
+    """fire() with no portfolio_snapshot still executes (backward compat).
+
+    portfolio_value=200_000 keeps this trade ($30 × 1 × 100 × 0.60 = $1,800)
+    well inside the daily loss limit ($4,000) so only the exposure-cap path
+    is tested here, not the circuit breaker.
+    """
     from app.data.ibkr_paper import OrderResult
     svc = AutoTradeService()
     mocker.patch(
@@ -137,10 +142,10 @@ def test_fire_no_snapshot_skips_check(mocker):
         option_symbol="AAPL260620C00185000",
         action="BUY", quantity=1, order_type="LMT",
         limit_price=30.0, conid=None,
-        entry_premium=30.0, portfolio_value=50_000.0,   # would fail cap if snapshot provided
+        entry_premium=30.0, portfolio_value=200_000.0,   # would fail cap if snapshot provided
     )
     svc.arm(armed)
-    result = svc.fire()   # no portfolio_snapshot → check skipped
+    result = svc.fire()   # no portfolio_snapshot → cap check skipped
     assert result.order_id == "y"
 
 
@@ -266,3 +271,81 @@ def test_maybe_fire_on_scan_fires_fresh_order(mocker):
     svc.arm(armed)
     svc.maybe_fire_on_scan()
     mock_execute.assert_called_once()
+
+
+# ── Daily loss circuit breaker (Task 5) ──────────────────────────────────────
+
+def _make_armed(symbol="AAPL", premium=2.50, qty=1, pv=100_000.0):
+    return ArmedStrategy(
+        broker="ibkr_paper", symbol=symbol,
+        option_symbol=f"{symbol}260620C00185000",
+        action="BUY", quantity=qty, order_type="LMT",
+        limit_price=premium, conid=None,
+        entry_premium=premium, portfolio_value=pv,
+    )
+
+
+def test_daily_loss_blocks_fire_when_limit_exceeded(mocker):
+    """If today's premium_at_risk already exceeds the daily limit, fire raises."""
+    from app.data.ibkr_paper import OrderResult
+    mocker.patch("app.services.auto_trader.execute_option_order",
+                 return_value=OrderResult("x", "ok", "ibkr_paper"))
+
+    svc = AutoTradeService()
+    # Inject history: one entry today with large premium_at_risk
+    today = datetime.now(timezone.utc).date().isoformat()
+    svc._state.history.append({
+        "order_id": "prev1",
+        "status": "ok",
+        "broker": "ibkr_paper",
+        "symbol": "NVDA",
+        "option": "NVDA_opt",
+        "timestamp": f"{today}T10:00:00+00:00",
+        "premium_at_risk": 2500.0,   # $2,500 already at risk (> 2% of $100k = $2,000)
+    })
+
+    svc.arm(_make_armed(premium=1.0, qty=1, pv=100_000.0))
+    with pytest.raises(RuntimeError, match="Daily loss limit"):
+        svc.fire()
+
+    # Must be disarmed after the block (fail-closed)
+    assert svc.get_state().armed is False
+
+
+def test_daily_loss_allows_fire_when_under_limit(mocker):
+    """If today's premium_at_risk is under the limit, fire proceeds."""
+    from app.data.ibkr_paper import OrderResult
+    mock_exec = mocker.patch("app.services.auto_trader.execute_option_order",
+                              return_value=OrderResult("y", "ok", "ibkr_paper"))
+
+    svc = AutoTradeService()
+    today = datetime.now(timezone.utc).date().isoformat()
+    svc._state.history.append({
+        "order_id": "prev1", "status": "ok", "broker": "ibkr_paper",
+        "symbol": "TSLA", "option": "TSLA_opt",
+        "timestamp": f"{today}T10:00:00+00:00",
+        "premium_at_risk": 500.0,    # only $500 used — well under $2,000
+    })
+
+    svc.arm(_make_armed(premium=1.0, qty=1, pv=100_000.0))
+    svc.fire()   # should not raise
+    mock_exec.assert_called_once()
+
+
+def test_daily_loss_ignores_prior_day_entries(mocker):
+    """History entries from prior UTC days must not count toward today's limit."""
+    from app.data.ibkr_paper import OrderResult
+    mocker.patch("app.services.auto_trader.execute_option_order",
+                 return_value=OrderResult("z", "ok", "ibkr_paper"))
+
+    svc = AutoTradeService()
+    svc._state.history.append({
+        "order_id": "old", "status": "ok", "broker": "ibkr_paper",
+        "symbol": "MSFT", "option": "MSFT_opt",
+        "timestamp": "2020-01-01T10:00:00+00:00",   # old date
+        "premium_at_risk": 9999.0,   # huge — but from a prior day
+    })
+
+    svc.arm(_make_armed(premium=1.0, qty=1, pv=100_000.0))
+    svc.fire()   # must not raise
+    assert svc.get_state().armed is False
