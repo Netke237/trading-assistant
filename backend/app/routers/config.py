@@ -16,6 +16,9 @@ def _scoring_cfg() -> dict:
     return yaml.safe_load(_CFG_PATH.read_text())
 
 
+clear_scoring_cfg_cache = _scoring_cfg.cache_clear
+
+
 @router.get("/iv-thresholds")
 def get_iv_thresholds() -> dict:
     """Return per-horizon IV rank pass/caution thresholds from scoring_rules.yaml."""

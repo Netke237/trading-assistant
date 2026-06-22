@@ -615,15 +615,17 @@ function IvThresholdsSection() {
   useEffect(() => { setSwingPassText(String(thresholds.Swing?.pass_max    ?? 34));    }, [thresholds.Swing?.pass_max]);
   useEffect(() => { setPositionPassText(String(thresholds.Position?.pass_max ?? 44)); }, [thresholds.Position?.pass_max]);
 
-  function handleSaveIvThresholds(
-    swingPass: number,
-    positionPass: number,
-    existing: Record<string, HorizonIvThresholds>,
-  ) {
+  function handleSaveIvThresholds() {
+    const swingVal = parseInt(swingPassText, 10);
+    const swingPass = isNaN(swingVal) ? 34 : Math.max(1, Math.min(100, swingVal));
+    const posVal = parseInt(positionPassText, 10);
+    const positionPass = isNaN(posVal) ? 44 : Math.max(1, Math.min(100, posVal));
+    setSwingPassText(String(swingPass));
+    setPositionPassText(String(positionPass));
     setThresholds({
-      ...existing,
-      Swing:    { ...existing.Swing,    pass_max: swingPass    },
-      Position: { ...existing.Position, pass_max: positionPass },
+      ...thresholds,
+      Swing:    { ...thresholds.Swing,    pass_max: swingPass    },
+      Position: { ...thresholds.Position, pass_max: positionPass },
     });
   }
 
@@ -644,14 +646,6 @@ function IvThresholdsSection() {
           className={styles.numInput}
           value={swingPassText}
           onChange={(e) => setSwingPassText(e.target.value)}
-          onBlur={() => {
-            const val = parseInt(swingPassText, 10);
-            const clamped = isNaN(val) ? 34 : Math.max(1, Math.min(100, val));
-            setSwingPassText(String(clamped));
-            const posPass = parseInt(positionPassText, 10);
-            const positionPass = isNaN(posPass) ? 44 : Math.max(1, Math.min(100, posPass));
-            handleSaveIvThresholds(clamped, positionPass, thresholds);
-          }}
         />
         <Text size={12} tone="secondary">%</Text>
       </Row>
@@ -666,17 +660,18 @@ function IvThresholdsSection() {
           className={styles.numInput}
           value={positionPassText}
           onChange={(e) => setPositionPassText(e.target.value)}
-          onBlur={() => {
-            const val = parseInt(positionPassText, 10);
-            const clamped = isNaN(val) ? 44 : Math.max(1, Math.min(100, val));
-            setPositionPassText(String(clamped));
-            const swingPass = parseInt(swingPassText, 10);
-            const swingPassClamped = isNaN(swingPass) ? 34 : Math.max(1, Math.min(100, swingPass));
-            handleSaveIvThresholds(swingPassClamped, clamped, thresholds);
-          }}
         />
         <Text size={12} tone="secondary">%</Text>
       </Row>
+      <div className={styles.applyRow}>
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={handleSaveIvThresholds}
+        >
+          Apply thresholds
+        </button>
+      </div>
     </>
   );
 }

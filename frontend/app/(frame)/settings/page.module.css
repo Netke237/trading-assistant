@@ -394,3 +394,7 @@
   outline: none;
   border-color: var(--border-strong);
 }
+
+.applyRow {
+  padding: var(--space-2) 0 var(--space-1);
+}
