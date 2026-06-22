@@ -11,6 +11,8 @@ import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { Text } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
+import { statusForScore } from '@/lib/status';
+import { IV_PASS_MAX, IV_CAUTION_MAX } from '@/lib/ivThresholds';
 import type { TradeCardData, WatchlistRow } from '@/types/domain';
 import type { Status } from '@/lib/status';
 import styles from './page.module.css';
@@ -24,6 +26,7 @@ function buildChecklist(
   candidate: TradeCardData,
   wlRow: WatchlistRow | undefined,
   regime: Status,
+  horizonKey: string,
 ): Gate[] {
   const gates: Gate[] = [];
 
@@ -34,13 +37,17 @@ function buildChecklist(
     gates.push({ label: 'Regime PASS', status: regimeStatus });
   }
 
-  // IV rank acceptable (≤50 PASS, 51–70 CAUTION, >70 REJECT)
+  // IV rank acceptable — thresholds mirror scoring_rules.yaml and ivThresholds.ts
   const ivRank = candidate.contractDetails?.ivRank;
   if (ivRank !== undefined) {
-    gates.push({
-      label: 'IV rank acceptable',
-      status: ivRank <= 50 ? 'PASS' : ivRank <= 70 ? 'CAUTION' : 'REJECT',
-    });
+    const ivPassMax    = IV_PASS_MAX[horizonKey];
+    const ivCautionMax = IV_CAUTION_MAX[horizonKey];
+    const ivStatus: 'PASS' | 'CAUTION' | 'REJECT' =
+      ivPassMax === null    ? 'PASS' :           // Intraday: no IV gate
+      ivRank <= ivPassMax   ? 'PASS' :
+      ivCautionMax !== null && ivRank <= ivCautionMax ? 'CAUTION' :
+      'REJECT';
+    gates.push({ label: 'IV rank acceptable', status: ivStatus });
   }
 
   // Earnings > 7d away
@@ -52,11 +59,11 @@ function buildChecklist(
     });
   }
 
-  // Score ≥ 70 (both stock and contract)
+  // Score ≥ 55 (both stock and contract) — thresholds from statusForScore()
   const minScore = Math.min(candidate.stockScore, candidate.contractScore);
   gates.push({
-    label: 'Score ≥ 70',
-    status: minScore >= 70 ? 'PASS' : minScore >= 50 ? 'CAUTION' : 'REJECT',
+    label: 'Score ≥ 55',
+    status: statusForScore(minScore) as 'PASS' | 'CAUTION' | 'REJECT',
   });
 
   // R:R ≥ 2.0
@@ -78,8 +85,13 @@ function buildChecklist(
 export default function TradeCardContextRail() {
   const selectedSymbol      = useScanStore((s) => s.selectedSymbol);
   const regime              = useScanStore((s) => s.combinedRegime);
+  const horizon             = useScanStore((s) => s.context?.horizon);
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
   const candidates          = scanResultCandidates ?? [];
+
+  const horizonKey = horizon?.startsWith('Intraday') ? 'Intraday'
+    : horizon?.startsWith('Position') ? 'Position'
+    : 'Swing';
 
   const candidate = candidates.find((c) => c.symbol === selectedSymbol) ?? candidates[0];
 
@@ -101,7 +113,7 @@ export default function TradeCardContextRail() {
       }
     : undefined;
 
-  const gates = candidate ? buildChecklist(candidate, wlRow, regime) : [];
+  const gates = candidate ? buildChecklist(candidate, wlRow, regime, horizonKey) : [];
 
   return (
     <>

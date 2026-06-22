@@ -79,7 +79,13 @@ def score_fundamentals(
         # Load from scoring_rules.yaml[fundamentals_gate] — same cached loader as signal_confidence.
         # The YAML dict includes extra keys (cautionAbove, rejectAbove) not in the old _DEFAULT_CFG;
         # these are unused by score_fundamentals but harmless.
-        cfg = _load_yaml_cfg()["fundamentals_gate"]
+        raw = _load_yaml_cfg()
+        cfg = raw.get("fundamentals_gate")
+        if cfg is None:
+            raise KeyError(
+                "Missing 'fundamentals_gate' key in scoring_rules.yaml — "
+                "check backend/config/scoring_rules.yaml"
+            )
 
     # ---- Growth bucket -------------------------------------------------------
     rev_s = _metric_score(snap.revenue_growth_yoy, strong=0.15, weak=0.0)
