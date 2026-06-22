@@ -31,9 +31,25 @@ def test_put_schedule_persists():
 
 
 def test_scheduler_skips_weekend():
-    cfg = ScheduleConfig(days_of_week=[0, 1, 2, 3, 4])
-    assert 5 not in cfg.days_of_week  # Saturday not included
-    assert 6 not in cfg.days_of_week  # Sunday not included
+    """_should_run_now() must return False when current day is not in days_of_week."""
+    from unittest.mock import patch
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    cfg = ScheduleConfig(
+        days_of_week=[0, 1, 2, 3, 4],  # Mon-Fri only
+        window_start_hour=9,
+        window_end_hour=17,
+        timezone_name="America/New_York",
+    )
+    scheduler = ScanScheduler()
+    scheduler.configure(cfg)
+
+    # Mock datetime.now() to return a Saturday (weekday 5) at 10 AM ET
+    saturday_10am = datetime(2026, 6, 21, 10, 0, tzinfo=ZoneInfo("America/New_York"))
+    with patch("app.services.scan_scheduler.datetime") as mock_dt:
+        mock_dt.now.return_value = saturday_10am
+        assert scheduler._should_run_now() is False, "Should skip Saturday"
 
 
 def test_scheduler_cadence_clamped():
