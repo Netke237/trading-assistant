@@ -23,8 +23,8 @@ export const STATUS_LABEL: Record<Status, string> = {
  */
 export function statusForScore(value: number, max = 100): Status {
   const pct = (value / max) * 100;
-  if (pct >= 70) return 'PASS';
-  if (pct >= 50) return 'CAUTION';
+  if (pct >= 55) return 'PASS';
+  if (pct >= 35) return 'CAUTION';
   return 'REJECT';
 }
 
