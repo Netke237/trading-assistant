@@ -294,6 +294,11 @@ export const api = {
 
 export interface RiskSettings {
   premiumStopPct: number;
+  portfolioValue?: number;
+  maxSinglePositionPct?: number;
+  maxTotalExposurePct?: number;
+  maxConcurrentPositions?: number;
+  maxDailyRecommendations?: number;
 }
 
 export async function getRiskSettings(): Promise<RiskSettings> {

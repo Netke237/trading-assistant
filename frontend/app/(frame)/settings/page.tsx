@@ -733,7 +733,14 @@ function RiskForm() {
   async function handleSaveRisk() {
     setSaveResult('');
     try {
-      await saveRiskSettings({ premiumStopPct: localStopPct });
+      await saveRiskSettings({
+        premiumStopPct:          localStopPct,
+        portfolioValue:          localLimits.portfolioValue,
+        maxSinglePositionPct:    localLimits.maxSingleTradeExposurePct,
+        maxTotalExposurePct:     localLimits.maxTotalExposurePct,
+        maxConcurrentPositions:  localLimits.maxConcurrentPositions,
+        maxDailyRecommendations: localLimits.maxDailyRecommendations,
+      });
       setPremiumStopPct(localStopPct);
       setSaveResult('Saved');
     } catch {
