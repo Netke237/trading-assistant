@@ -137,6 +137,11 @@ class AutoTradeService:
         self._state = AutoTradeState(armed=False, strategy=None)
 
     def arm(self, strategy: ArmedStrategy) -> None:
+        if strategy.entry_premium <= 0:
+            raise ValueError(
+                f"entry_premium must be > 0 before arming (got {strategy.entry_premium}). "
+                "Set it from the contract's mid price so the exposure check can run."
+            )
         with self._lock:
             self._state.armed = True
             self._state.strategy = strategy

@@ -21,6 +21,7 @@ def test_arm_sets_state():
         order_type="LMT",
         limit_price=2.50,
         conid=None,
+        entry_premium=2.50,
     )
     svc.arm(armed)
     state = svc.get_state()
@@ -35,6 +36,7 @@ def test_disarm_clears_state():
         option_symbol="NVDA260620C00130000",
         action="BUY", quantity=2, order_type="MKT",
         limit_price=None, conid=None,
+        entry_premium=3.00,
     )
     svc.arm(armed)
     svc.disarm()
@@ -55,6 +57,7 @@ def test_fire_executes_and_disarms(mocker):
         option_symbol="AAPL260620C00185000",
         action="BUY", quantity=1, order_type="LMT",
         limit_price=2.50, conid=None,
+        entry_premium=2.50,
     )
     svc.arm(armed)
     result = svc.fire()
@@ -202,6 +205,7 @@ def test_maybe_fire_on_scan_disarms_stale_order(mocker):
         option_symbol="AAPL260620C00185000",
         action="BUY", quantity=1, order_type="LMT",
         limit_price=2.50, conid=None,
+        entry_premium=2.50,
         armed_at=stale_time,
     )
     svc.arm(armed)
@@ -248,6 +252,7 @@ def test_fire_failed_order_records_order_failed_history(mocker):
         option_symbol="AAPL260620C00185000",
         action="BUY", quantity=1, order_type="LMT",
         limit_price=2.50, conid=None,
+        entry_premium=2.50,
     )
     svc.arm(armed)
     with pytest.raises(RuntimeError, match="Order failed"):
@@ -273,6 +278,7 @@ def test_maybe_fire_on_scan_fires_fresh_order(mocker):
         option_symbol="AAPL260620C00185000",
         action="BUY", quantity=1, order_type="LMT",
         limit_price=2.50, conid=None,
+        entry_premium=2.50,
         # armed_at defaults to now via field(default_factory=...)
     )
     svc.arm(armed)
@@ -486,3 +492,54 @@ def test_vol_sizing_sell_halved_in_strongly_bullish_market(mocker):
     assert captured.get("quantity") == 2, (
         "SELL in strongly bullish market (conviction=80) must halve from 4 to 2"
     )
+
+
+# ── entry_premium guard (Task 5) ──────────────────────────────────────────────
+
+def test_arm_raises_if_entry_premium_is_zero():
+    """arm() must refuse a zero entry_premium — exposure check would be silently bypassed."""
+    svc = AutoTradeService()
+    with pytest.raises(ValueError, match="entry_premium"):
+        svc.arm(ArmedStrategy(
+            broker="ibkr_paper",
+            symbol="AAPL",
+            option_symbol="AAPL260620C00185000",
+            action="BUY",
+            quantity=1,
+            order_type="LMT",
+            limit_price=2.50,
+            conid=None,
+            entry_premium=0.0,
+        ))
+
+
+def test_arm_raises_if_entry_premium_negative():
+    svc = AutoTradeService()
+    with pytest.raises(ValueError, match="entry_premium"):
+        svc.arm(ArmedStrategy(
+            broker="ibkr_paper",
+            symbol="AAPL",
+            option_symbol="AAPL260620C00185000",
+            action="BUY",
+            quantity=1,
+            order_type="LMT",
+            limit_price=2.50,
+            conid=None,
+            entry_premium=-1.0,
+        ))
+
+
+def test_arm_succeeds_with_positive_entry_premium():
+    svc = AutoTradeService()
+    svc.arm(ArmedStrategy(
+        broker="ibkr_paper",
+        symbol="AAPL",
+        option_symbol="AAPL260620C00185000",
+        action="BUY",
+        quantity=1,
+        order_type="LMT",
+        limit_price=2.50,
+        conid=None,
+        entry_premium=2.50,
+    ))
+    assert svc.get_state().armed is True
