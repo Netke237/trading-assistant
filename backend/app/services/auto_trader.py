@@ -210,12 +210,6 @@ class AutoTradeService:
                         "premium_at_risk": 0.0,
                     })
                 raise
-        elif portfolio_snapshot is not None and strategy.entry_premium == 0.0:
-            logger.warning(
-                "AutoTrader: exposure check skipped for %s — entry_premium is 0.0 (set it in ArmRequest)",
-                strategy.symbol,
-            )
-
         # Daily loss circuit breaker — runs after cap check, before order submission.
         # Armed state is already cleared above; circuit breaker blocks permanently (no retry).
         with self._lock:

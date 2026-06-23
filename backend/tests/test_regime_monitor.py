@@ -7,6 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 async def test_no_alert_when_regime_is_pass(mocker):
     """Monitor must not broadcast when regime is PASS."""
     mocker.patch(
+        "app.services.regime_monitor._update_conviction_cache",
+        new=AsyncMock(),
+    )
+    mocker.patch(
         "app.services.regime_monitor._get_overall_regime",
         new=AsyncMock(return_value="PASS"),
     )
@@ -26,6 +30,10 @@ async def test_no_alert_when_regime_is_pass(mocker):
 @pytest.mark.asyncio
 async def test_alert_sent_when_regime_reject_with_positions(mocker):
     """Monitor broadcasts when regime=REJECT and open positions exist."""
+    mocker.patch(
+        "app.services.regime_monitor._update_conviction_cache",
+        new=AsyncMock(),
+    )
     mocker.patch(
         "app.services.regime_monitor._get_overall_regime",
         new=AsyncMock(return_value="REJECT"),
@@ -52,6 +60,10 @@ async def test_alert_sent_when_regime_reject_with_positions(mocker):
 @pytest.mark.asyncio
 async def test_no_alert_when_regime_reject_but_no_positions(mocker):
     """No alert if regime is REJECT but no open positions."""
+    mocker.patch(
+        "app.services.regime_monitor._update_conviction_cache",
+        new=AsyncMock(),
+    )
     mocker.patch(
         "app.services.regime_monitor._get_overall_regime",
         new=AsyncMock(return_value="REJECT"),
