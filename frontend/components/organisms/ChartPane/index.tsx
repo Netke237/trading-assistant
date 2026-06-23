@@ -28,15 +28,19 @@ interface Props {
   height?: number;   // 0 or omitted = fill container height
   chartApiRef?: React.MutableRefObject<IChartApi | null>;
   mainSeriesRef?: React.MutableRefObject<ISeriesApi<'Candlestick'> | null>;
+  /** Called whenever the pane-0 main series is created or replaced (e.g. chart-type switch). */
+  onSeriesReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void;
 }
 
-export default function ChartPane({ series, onCrosshairMove, height = 0, chartApiRef, mainSeriesRef }: Props) {
+export default function ChartPane({ series, onCrosshairMove, height = 0, chartApiRef, mainSeriesRef, onSeriesReady }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesMap = useRef<Map<string, ISeriesApi<'Candlestick' | 'Bar' | 'Line' | 'Histogram'>>>(new Map());
   const onCrosshairMoveRef = useRef(onCrosshairMove);
   const prevPaneCountRef = useRef(0);
   useEffect(() => { onCrosshairMoveRef.current = onCrosshairMove; }, [onCrosshairMove]);
+  const onSeriesReadyRef = useRef(onSeriesReady);
+  useEffect(() => { onSeriesReadyRef.current = onSeriesReady; }, [onSeriesReady]);
 
   const getHeight = useCallback(() => {
     if (height > 0) return height;
@@ -127,14 +131,18 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
             wickUpColor: '#4caf50',
             wickDownColor: '#e05050',
           }, cfg.paneIndex ?? 0);
-          // Set mainSeriesRef only if this is the pane-0 candles series
-          if (mainSeriesRef && (cfg.paneIndex ?? 0) === 0) mainSeriesRef.current = s as ISeriesApi<'Candlestick'>;
+          if ((cfg.paneIndex ?? 0) === 0) {
+            if (mainSeriesRef) mainSeriesRef.current = s as ISeriesApi<'Candlestick'>;
+            onSeriesReadyRef.current?.(chart, s as ISeriesApi<'Candlestick'>);
+          }
         } else if (cfg.type === 'Bar') {
           s = chart.addSeries(BarSeries, {
             upColor: '#4caf50', downColor: '#e05050',
           }, cfg.paneIndex ?? 0);
-          // Bar is used as main series — update ref so ChartOverlays still works (pane 0 only)
-          if (mainSeriesRef && (cfg.paneIndex ?? 0) === 0) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
+          if ((cfg.paneIndex ?? 0) === 0) {
+            if (mainSeriesRef) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
+            onSeriesReadyRef.current?.(chart, s as unknown as ISeriesApi<'Candlestick'>);
+          }
         } else if (cfg.type === 'Histogram') {
           s = chart.addSeries(HistogramSeries, {
             color: cfg.color ?? '#4a4a6a',
@@ -146,9 +154,9 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
             lineWidth: 1,
             priceScaleId: cfg.priceScaleId ?? 'right',
           }, cfg.paneIndex ?? 0);
-          // Line is used as main series (line chart mode) — update ref so ChartOverlays still works (pane 0 only)
-          if (mainSeriesRef && (cfg.paneIndex ?? 0) === 0) {
-            mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
+          if ((cfg.paneIndex ?? 0) === 0) {
+            if (mainSeriesRef) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
+            onSeriesReadyRef.current?.(chart, s as unknown as ISeriesApi<'Candlestick'>);
           }
         }
         seriesMap.current.set(cfg.id, s);
