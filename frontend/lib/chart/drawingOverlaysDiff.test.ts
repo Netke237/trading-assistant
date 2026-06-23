@@ -49,6 +49,14 @@ describe('diffDrawings', () => {
     expect(result.toRemove).toHaveLength(0);
   });
 
+  it('deduplicates drawings with the same id in next (last entry wins)', () => {
+    const result = diffDrawings(new Map(), [d('a', 100), d('a', 200)]);
+    expect(result.toAdd).toHaveLength(1);
+    expect(result.toAdd[0].points[0].price).toBe(200);
+    expect(result.toRemove).toHaveLength(0);
+    expect(result.toUpdate).toHaveLength(0);
+  });
+
   it('handles add + remove + update in one call', () => {
     const existing = d('a');
     const modified = d('a', 999);

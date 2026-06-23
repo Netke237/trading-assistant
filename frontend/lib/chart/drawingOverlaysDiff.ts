@@ -36,11 +36,12 @@ export function diffDrawings(
     }
   });
 
-  for (const drawing of next) {
-    if (!prev.has(drawing.id)) {
+  // Iterate nextById (not next) so duplicate ids in next only produce one toAdd entry.
+  nextById.forEach((drawing, id) => {
+    if (!prev.has(id)) {
       toAdd.push(drawing);
     }
-  }
+  });
 
   return { toAdd, toRemove, toUpdate };
 }

@@ -23,6 +23,7 @@ function makePrimitive(drawing: Drawing): UpdatablePrimitive | null {
     case 'trendline': return new TrendLinePrimitive(drawing);
     case 'rect':      return new RectanglePrimitive(drawing);
     case 'text':      return new TextPrimitive(drawing);
+    // DrawingKind is a closed union — default is unreachable but guards future additions.
     default:          return null;
   }
 }
@@ -40,7 +41,11 @@ export default function DrawingOverlays({ chart, mainSeries, drawings }: Props) 
     const { toAdd, toRemove, toUpdate } = diffDrawings(attached, drawings);
 
     for (const entry of toRemove) {
-      try { mainSeries.detachPrimitive(entry.primitive); } catch { /* ignore */ }
+      try {
+        mainSeries.detachPrimitive(entry.primitive);
+      } catch (e) {
+        if (process.env.NODE_ENV !== 'production') throw e;
+      }
       attached.delete(entry.drawing.id);
     }
 
@@ -63,10 +68,16 @@ export default function DrawingOverlays({ chart, mainSeries, drawings }: Props) 
   // Deps are intentionally [chart, mainSeries] only — not drawings — so this
   // cleanup never fires on a drawings update, only on series replacement or unmount.
   useEffect(() => {
-    const attached = attachedRef.current;
     return () => {
+      // Read ref inside cleanup (not setup) so a future map swap doesn't leave a
+      // stale reference here while Effect 1 writes to the new map.
+      const attached = attachedRef.current;
       for (const entry of attached.values()) {
-        try { mainSeries?.detachPrimitive(entry.primitive); } catch { /* ignore */ }
+        try {
+          mainSeries?.detachPrimitive(entry.primitive);
+        } catch (e) {
+          if (process.env.NODE_ENV !== 'production') throw e;
+        }
       }
       attached.clear();
     };
