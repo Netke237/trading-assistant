@@ -1,5 +1,4 @@
 """Tests that _detect_fvg returns the correct gap direction."""
-import pytest
 from app.scoring.stock_scorer import _detect_fvg
 
 
@@ -38,17 +37,17 @@ def test_bullish_fvg_not_detected_when_downward_gap():
 def test_bearish_fvg_detected_when_downward_gap_present():
     """
     3-bar bearish FVG: prev_bar is higher, next_bar is lower — downward gap.
-    prev_bar.low (104) > next_bar.high (102) → gap is (102, 104).
-    Current price = 103 should be inside.
+    prev_bar.low (104) > next_bar.high (103) → gap is (103, 104).
+    Current price (close of newest bar) = 103 is at the lower edge of the gap.
     """
     bars = [
         _make_bar(106, 108, 104, 107),  # prev_bar (oldest)
         _make_bar(104, 105, 100, 101),  # impulse candle
-        _make_bar(100, 102, 99, 103),   # next_bar (newest) — close = 103 (inside gap)
+        _make_bar(100, 103, 99, 103),   # next_bar (newest) — high=103, close=103 (consistent)
     ]
     hit, gap_low, gap_high = _detect_fvg(bars, "Bearish")
     assert hit is True, "Should detect bearish FVG"
-    assert gap_low == 102.0
+    assert gap_low == 103.0
     assert gap_high == 104.0
 
 
@@ -61,3 +60,35 @@ def test_bearish_fvg_not_detected_when_upward_gap():
     ]
     hit, _, _ = _detect_fvg(bars, "Bearish")
     assert hit is False
+
+
+def test_no_bars_returns_false():
+    """len(bars) < 3 early-return guard — must return (False, 0.0, 0.0)."""
+    hit, gap_low, gap_high = _detect_fvg([], "Bullish")
+    assert hit is False
+    assert gap_low == 0.0
+    assert gap_high == 0.0
+
+
+def test_overlapping_candles_no_gap():
+    """
+    Bars that overlap (no gap between prev_bar.high and next_bar.low) should
+    return (False, 0.0, 0.0) for both Bullish and Bearish directions.
+    """
+    # Bullish: next_bar.low (100) <= prev_bar.high (102) — gap_high <= gap_low, no gap
+    bars_bullish = [
+        _make_bar(98, 102, 97, 101),   # prev_bar  — high = 102
+        _make_bar(99, 105, 98, 104),   # impulse candle
+        _make_bar(101, 104, 100, 101), # next_bar  — low  = 100
+    ]
+    hit, _, _ = _detect_fvg(bars_bullish, "Bullish")
+    assert hit is False, "Overlapping bullish bars should not produce an FVG"
+
+    # Bearish: next_bar.high (105) >= prev_bar.low (103) — gap_high <= gap_low, no gap
+    bars_bearish = [
+        _make_bar(106, 108, 103, 107),  # prev_bar  — low  = 103
+        _make_bar(104, 105, 100, 101),  # impulse candle
+        _make_bar(104, 105, 103, 104),  # next_bar  — high = 105
+    ]
+    hit, _, _ = _detect_fvg(bars_bearish, "Bearish")
+    assert hit is False, "Overlapping bearish bars should not produce an FVG"
