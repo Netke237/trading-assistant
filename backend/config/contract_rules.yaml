@@ -13,6 +13,7 @@ hard_reject:
   max_delta: 0.85               # absolute delta — above this = too deep ITM
   min_dte: 21                   # calendar days to expiry — below this = too short
   max_dte: 90                   # calendar days to expiry — above this = too long
+  max_iv_rank: 70               # long-premium strategy: never buy when IV rank > 70
   max_soft_fail_count: 3        # reject if this many soft rules fail
 
 # Soft-rank rules (FR-25) — penalise score but do not block

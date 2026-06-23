@@ -52,6 +52,7 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
 
     volume = contract.get("volume") or 0
     oi = contract.get("open_interest") or 0
+    iv_rank = contract.get("iv_rank")
     bid = contract.get("bid") or 0
     ask = contract.get("ask") or 0
     mid = (bid + ask) / 2 if (bid + ask) > 0 else 0
@@ -81,6 +82,9 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
         reasons.append("dte_too_short")
     if dte > hr["max_dte"]:
         reasons.append("dte_too_long")
+    max_iv = hr.get("max_iv_rank")
+    if max_iv is not None and iv_rank is not None and iv_rank > max_iv:
+        reasons.append("iv_rank_too_high")
 
     return reasons
 
@@ -212,6 +216,7 @@ def validate_contract(
             elif key == "min_open_interest":    hr["min_open_interest"]      = int(val)
             elif key == "min_dte":              hr["min_dte"]                = int(val)
             elif key == "max_dte":              hr["max_dte"]                = int(val)
+            elif key == "max_iv_rank":          hr["max_iv_rank"]            = float(val)
     contract_id = _contract_id(contract)
 
     reject_reasons = _hard_reject_reasons(contract, cfg)
