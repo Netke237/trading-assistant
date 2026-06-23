@@ -50,12 +50,12 @@ strategies:
       bullish:
         base_lookback: 20
         atr_tight_max: 1.5
-        volume_mult: 1.1
+        volume_mult: 1.5
         rr_target_mult: 2.0
       bearish:
         base_lookback: 20
         atr_tight_max: 1.5
-        volume_mult: 1.1
+        volume_mult: 1.5
         rr_target_mult: 2.0
     search:
       base_lookback: [15, 20, 30]

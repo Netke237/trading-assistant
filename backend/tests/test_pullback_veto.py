@@ -53,9 +53,8 @@ def test_pullback_caution_does_not_cap():
     """Pullback CAUTION (not REJECT) must not trigger the hard cap."""
     bars = _flat_bars()
     card = _force_rules(bars, pullback_status="CAUTION")
-    # Should still be able to reach PASS via weighted score
-    assert card.status in ("PASS", "CAUTION"), (
-        f"Pullback CAUTION must not force REJECT, got {card.status}"
+    assert card.status == "PASS", (
+        f"Pullback CAUTION must not cap a high-scoring setup, got {card.status}"
     )
 
 

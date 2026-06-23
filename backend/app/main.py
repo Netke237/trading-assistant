@@ -46,11 +46,12 @@ from app.routers.config          import router as config_router
 
 _notification_worker_task: asyncio.Task | None = None
 _portfolio_monitor_task: asyncio.Task | None = None
+_regime_monitor_task: asyncio.Task | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _notification_worker_task, _portfolio_monitor_task
+    global _notification_worker_task, _portfolio_monitor_task, _regime_monitor_task
     # ── Startup ──────────────────────────────────────────────────────────
     _web_concurrency = int(os.getenv("WEB_CONCURRENCY", "1"))
     if _web_concurrency > 1:
@@ -81,6 +82,8 @@ async def lifespan(app: FastAPI):
     _notification_worker_task = asyncio.create_task(notification_worker())
     from app.services.portfolio_alert_monitor import run_portfolio_alert_monitor
     _portfolio_monitor_task = asyncio.create_task(run_portfolio_alert_monitor())
+    from app.services.regime_monitor import run_regime_monitor
+    _regime_monitor_task = asyncio.create_task(run_regime_monitor())
     # ── Nightly ingestion scheduler ──────────────────────────────────────
     try:
         from app.services.ingestion_schedule_store import ingestion_schedule_store as _sched_store
@@ -188,7 +191,7 @@ async def lifespan(app: FastAPI):
         pass
     if _scheduler._running:
         await _scheduler.stop()
-    for task in (_notification_worker_task, _portfolio_monitor_task):
+    for task in (_notification_worker_task, _portfolio_monitor_task, _regime_monitor_task):
         if task:
             task.cancel()
             try:

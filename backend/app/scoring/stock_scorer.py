@@ -659,33 +659,58 @@ def _rule_trigger(
 
     candle_found, candle_name = _detect_candle(bars, direction)
 
-    # MACD
+    # ── MACD ──────────────────────────────────────────────────────────────────
     hist = _macd_histogram(closes, tc["macd_fast"], tc["macd_slow"], tc["macd_signal"])
-    macd_pass = (len(hist) >= 2 and hist[-2] < 0 and hist[-1] >= 0 and
-                 (hist[-1] > hist[-2] if tc["macd_histogram_rising"] else True))
+    if direction == "Bearish":
+        # Histogram crosses DOWN: was positive, now zero/negative
+        macd_pass = len(hist) >= 2 and hist[-2] > 0 and hist[-1] <= 0
+    else:
+        macd_pass = (len(hist) >= 2 and hist[-2] < 0 and hist[-1] >= 0 and
+                     (hist[-1] > hist[-2] if tc["macd_histogram_rising"] else True))
 
-    # RSI
+    # ── RSI ───────────────────────────────────────────────────────────────────
     rsi_vals = _rsi(closes, tc["rsi_period"])
     rsi_pass = False
-    rsi_floor = tc["rsi_floor"]
-    if len(rsi_vals) >= 2:
-        rsi_pass = rsi_vals[-2] < rsi_floor <= rsi_vals[-1]
-        if not rsi_pass:
-            div_win = tc["rsi_div_window_bars"]
-            if len(closes) >= div_win and len(rsi_vals) >= div_win:
+    div_win = tc["rsi_div_window_bars"]
+
+    if direction == "Bearish":
+        rsi_ceiling = tc.get("rsi_ceiling", 60)
+        if len(rsi_vals) >= 2:
+            rsi_pass = rsi_vals[-2] > rsi_ceiling >= rsi_vals[-1]
+            if not rsi_pass and len(closes) >= div_win and len(rsi_vals) >= div_win:
+                # Bearish divergence: price HH while RSI LH
+                price_high_now  = max(closes[-div_win:])
+                price_high_prev = max(closes[-2 * div_win:-div_win]) if len(closes) >= 2 * div_win else price_high_now
+                rsi_high_now    = max(rsi_vals[-div_win:])
+                rsi_high_prev   = max(rsi_vals[-2 * div_win:-div_win]) if len(rsi_vals) >= 2 * div_win else rsi_high_now
+                if price_high_now > price_high_prev and rsi_high_now < rsi_high_prev:
+                    rsi_pass = True
+    else:
+        rsi_floor = tc["rsi_floor"]
+        if len(rsi_vals) >= 2:
+            rsi_pass = rsi_vals[-2] < rsi_floor <= rsi_vals[-1]
+            if not rsi_pass and len(closes) >= div_win and len(rsi_vals) >= div_win:
+                # Bullish divergence: price LL while RSI HL
                 price_low_now  = min(closes[-div_win:])
-                price_low_prev = min(closes[-2 * div_win: -div_win]) if len(closes) >= 2 * div_win else price_low_now
+                price_low_prev = min(closes[-2 * div_win:-div_win]) if len(closes) >= 2 * div_win else price_low_now
                 rsi_low_now    = min(rsi_vals[-div_win:])
-                rsi_low_prev   = min(rsi_vals[-2 * div_win: -div_win]) if len(rsi_vals) >= 2 * div_win else rsi_low_now
+                rsi_low_prev   = min(rsi_vals[-2 * div_win:-div_win]) if len(rsi_vals) >= 2 * div_win else rsi_low_now
                 if price_low_now < price_low_prev and rsi_low_now > rsi_low_prev:
                     rsi_pass = True
 
-    # Stochastic
+    # ── Stochastic ────────────────────────────────────────────────────────────
     stoch_k, stoch_d = _stoch(bars, tc["stoch_k"], tc["stoch_d"])
-    oversold_threshold = tc["stoch_oversold"] * (1 + tc["stoch_tolerance_pct"] / 100)
-    stoch_pass = (len(stoch_k) >= 2 and len(stoch_d) >= 2 and
-                  stoch_k[-2] <= oversold_threshold and stoch_k[-1] > stoch_d[-1] and
-                  stoch_k[-2] <= stoch_d[-2])
+    if direction == "Bearish":
+        # K exits overbought from above: was >= overbought, now K < D
+        overbought = tc.get("stoch_overbought", 70) * (1 - tc.get("stoch_tolerance_pct", 5) / 100)
+        stoch_pass = (len(stoch_k) >= 2 and len(stoch_d) >= 2 and
+                      stoch_k[-2] >= overbought and stoch_k[-1] < stoch_d[-1] and
+                      stoch_k[-2] >= stoch_d[-2])
+    else:
+        oversold_threshold = tc["stoch_oversold"] * (1 + tc["stoch_tolerance_pct"] / 100)
+        stoch_pass = (len(stoch_k) >= 2 and len(stoch_d) >= 2 and
+                      stoch_k[-2] <= oversold_threshold and stoch_k[-1] > stoch_d[-1] and
+                      stoch_k[-2] <= stoch_d[-2])
 
     momentum_count = sum([macd_pass, rsi_pass, stoch_pass])
     required = tc["momentum_signals_for_pass"]

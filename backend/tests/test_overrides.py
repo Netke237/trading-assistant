@@ -112,8 +112,8 @@ def test_tight_spread_override_rejects_wide_contract():
 
 
 def test_min_dte_override_rejects_near_expiry():
-    """Contract expiring in 20 days passes default min_dte=14 but fails min_dte=30."""
-    contract = _make_contract(days=20)
+    """Contract expiring in 25 days passes default min_dte=21 but fails min_dte=30."""
+    contract = _make_contract(days=25)
     card_default = validate_contract(contract, 70)
     card_strict  = validate_contract(contract, 70, overrides={"min_dte": 30})
     assert "dte_too_short" not in card_default.reject_reasons

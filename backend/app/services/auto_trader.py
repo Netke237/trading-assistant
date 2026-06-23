@@ -4,7 +4,7 @@ import functools
 import logging
 import threading
 import yaml
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
@@ -34,6 +34,81 @@ class AutoTradeState:
     armed:    bool
     strategy: Optional[ArmedStrategy]
     history:  list[dict] = field(default_factory=list)
+
+
+def _market_is_open(symbol: str) -> bool:
+    """Return True if the market appears open for this symbol.
+
+    Calls fetch_price — conservative: if no price returns (None, 0, or exception),
+    treat as closed and block the fire.
+    Must NOT be called while holding threading.Lock (3-second network deadline).
+    fetch_price has no built-in timeout; wrap in a thread and use shutdown(wait=False)
+    after timeout so we never block the caller beyond the deadline.
+    """
+    import concurrent.futures
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        from app.data.market import fetch_price
+        future = ex.submit(fetch_price, symbol)
+        try:
+            price = future.result(timeout=3.0)
+        except concurrent.futures.TimeoutError:
+            ex.shutdown(wait=False)
+            return False
+        ex.shutdown(wait=False)
+        return price is not None and float(price) > 0
+    except Exception:
+        ex.shutdown(wait=False)
+        return False
+
+
+_SCORING_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
+
+
+@functools.lru_cache(maxsize=1)
+def _load_scoring_config() -> dict:
+    """Load regime_sizing block from scoring_rules.yaml (cached)."""
+    try:
+        with open(_SCORING_CONFIG_PATH) as f:
+            return yaml.safe_load(f).get("regime_sizing", {})
+    except Exception as exc:
+        logger.warning("_load_scoring_config: failed to load %s — vol sizing disabled: %s",
+                       _SCORING_CONFIG_PATH, exc)
+        return {}
+
+
+def _apply_vol_sizing(strategy: ArmedStrategy) -> ArmedStrategy:
+    """Return a (possibly quantity-adjusted) copy of strategy based on regime conviction.
+
+    Reads cached conviction from regime_monitor (no network call).
+    If conviction is None or regime_sizing is disabled, returns strategy unchanged.
+    """
+    cfg = _load_scoring_config()
+    if not cfg.get("enabled", False):
+        return strategy
+
+    from app.services.regime_monitor import get_last_conviction
+    conviction = get_last_conviction()
+    if conviction is None:
+        return strategy
+
+    min_mult        = float(cfg.get("min_mult", 0.5))
+    full_conviction = float(cfg.get("full_conviction_pct", 40))
+
+    # Direction-aware: BUY scales with bullish conviction; SELL scales with bearish conviction
+    # (bearish conviction = 100 - bullish conviction, capped to full_conviction scale)
+    directional_conv = conviction if strategy.action == "BUY" else (100 - conviction)
+    mult = max(min_mult, min(1.0, directional_conv / full_conviction))
+    adjusted_qty = max(1, round(strategy.quantity * mult))
+
+    if adjusted_qty == strategy.quantity:
+        return strategy
+
+    logger.info(
+        "vol_sizing: %s qty %d → %d (conviction=%.1f, mult=%.2f)",
+        strategy.symbol, strategy.quantity, adjusted_qty, directional_conv, mult,
+    )
+    return _dc_replace(strategy, quantity=adjusted_qty)
 
 
 def execute_option_order(strategy: ArmedStrategy):
@@ -92,23 +167,42 @@ class AutoTradeService:
         with self._lock:
             if not self._state.armed or self._state.strategy is None:
                 raise RuntimeError("AutoTrader not armed — cannot fire")
+            _symbol = self._state.strategy.symbol
+
+        # Halt check outside lock — network call must not hold the lock.
+        # Armed state is preserved: we haven't disarmed yet.
+        if not _market_is_open(_symbol):
+            raise RuntimeError(
+                f"Market closed or {_symbol} halted "
+                f"— armed state preserved for retry"
+            )
+
+        with self._lock:
+            # Re-check: another thread may have disarmed while we checked market.
+            if not self._state.armed or self._state.strategy is None:
+                raise RuntimeError("AutoTrader not armed — cannot fire")
             strategy = self._state.strategy
             self._state.armed = False
             self._state.strategy = None
 
+        # Vol-scaled sizing: adjust quantity using cached regime conviction (no network call)
+        strategy = _apply_vol_sizing(strategy)
+
         # Exposure cap check — runs after disarm so a double-fire is impossible.
+        pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
         if portfolio_snapshot is not None and strategy.entry_premium > 0:
-            pv = portfolio_value if portfolio_value is not None else strategy.portfolio_value
             try:
                 self._check_exposure(strategy, portfolio_snapshot, pv)
             except RuntimeError:
                 with self._lock:
                     self._state.history.append({
-                        "order_id": None,
-                        "status":   "cap_blocked",
-                        "broker":   strategy.broker,
-                        "symbol":   strategy.symbol,
-                        "option":   strategy.option_symbol,
+                        "order_id":        None,
+                        "status":          "cap_blocked",
+                        "broker":          strategy.broker,
+                        "symbol":          strategy.symbol,
+                        "option":          strategy.option_symbol,
+                        "timestamp":       datetime.now(timezone.utc).isoformat(),
+                        "premium_at_risk": 0.0,
                     })
                 raise
         elif portfolio_snapshot is not None and strategy.entry_premium == 0.0:
@@ -117,28 +211,39 @@ class AutoTradeService:
                 strategy.symbol,
             )
 
+        # Daily loss circuit breaker — runs after cap check, before order submission.
+        # Armed state is already cleared above; circuit breaker blocks permanently (no retry).
+        with self._lock:
+            _history_snapshot = list(self._state.history)
+        self._check_daily_loss(strategy, _history_snapshot, pv)
+
         try:
             result = execute_option_order(strategy)
         except Exception as exc:
             with self._lock:
                 self._state.history.append({
-                    "order_id": None,
-                    "status":   "order_failed",
-                    "broker":   strategy.broker,
-                    "symbol":   strategy.symbol,
-                    "option":   strategy.option_symbol,
-                    "error":    str(exc),
+                    "order_id":        None,
+                    "status":          "order_failed",
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                    "error":           str(exc),
                 })
             logger.error("AutoTrader order failed for %s: %s", strategy.symbol, exc)
             raise RuntimeError(f"Order failed: {exc}") from exc
 
+        stop_pct = float(self._risk_config().get("premium_stop_pct", 0.60))
         with self._lock:
             self._state.history.append({
-                "order_id": result.order_id,
-                "status":   result.status,
-                "broker":   result.broker,
-                "symbol":   strategy.symbol,
-                "option":   strategy.option_symbol,
+                "order_id":        result.order_id,
+                "status":          result.status,
+                "broker":          result.broker,
+                "symbol":          strategy.symbol,
+                "option":          strategy.option_symbol,
+                "timestamp":       datetime.now(timezone.utc).isoformat(),
+                "premium_at_risk": strategy.entry_premium * strategy.quantity * 100 * stop_pct,
             })
         logger.info("AutoTrader fired: order %s status %s", result.order_id, result.status)
         return result
@@ -208,6 +313,44 @@ class AutoTradeService:
             return int(cfg.get("auto_trade", {}).get("max_arm_age_minutes", 30))
         except Exception:
             return 30
+
+    @staticmethod
+    @functools.lru_cache(maxsize=1)
+    def _risk_config() -> dict:
+        """Load full auto_trade config section (cached; restart to reload)."""
+        try:
+            with open(_RISK_CONFIG_PATH) as f:
+                cfg = yaml.safe_load(f)
+            return cfg.get("auto_trade", {})
+        except Exception as exc:
+            logger.warning("_risk_config: failed to load %s — risk limits disabled: %s",
+                           _RISK_CONFIG_PATH, exc)
+            return {}
+
+    @staticmethod
+    def _check_daily_loss(strategy: ArmedStrategy, history: list[dict], portfolio_value: float) -> None:
+        """Raise RuntimeError if today's premium-at-risk exceeds the daily loss limit."""
+        risk_cfg = AutoTradeService._risk_config()
+        max_pct  = float(risk_cfg.get("max_daily_loss_pct", 0.02))
+        stop_pct = float(risk_cfg.get("premium_stop_pct", 0.60))
+        limit    = max_pct * portfolio_value
+
+        today_str = datetime.now(timezone.utc).date().isoformat()   # UTC date "YYYY-MM-DD"
+
+        # Sum premium_at_risk from today's history entries only
+        today_risk = sum(
+            float(e.get("premium_at_risk") or 0)
+            for e in history
+            if isinstance(e.get("timestamp"), str) and e["timestamp"].startswith(today_str)
+        )
+
+        # Add this trade's prospective risk
+        this_risk = strategy.entry_premium * strategy.quantity * 100 * stop_pct
+        if today_risk + this_risk > limit:
+            raise RuntimeError(
+                f"Daily loss limit reached: {today_risk + this_risk:.0f} at risk "
+                f"vs limit {limit:.0f} — no further trades today"
+            )
 
 
 # Module-level singleton

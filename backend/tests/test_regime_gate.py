@@ -9,7 +9,7 @@ def test_regime_config_blocks_present():
     assert cfg["regime"]["swing"]["timeframe"] == "daily"
     assert cfg["regime_gate"]["headwind_caution_pct"] == -15
     assert cfg["regime_gate"]["headwind_reject_pct"] == -40
-    assert cfg["regime_sizing"]["enabled"] is False
+    assert cfg["regime_sizing"]["enabled"] is True
 
 
 # ---------------------------------------------------------------------------
