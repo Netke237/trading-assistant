@@ -27,3 +27,4 @@ auto_trade:
   max_daily_loss_pct: 0.02     # 2% of portfolio_value = $2,000 on $100k
   premium_stop_pct: 0.60       # matches reward_risk.premium_stop_pct default
   regime_monitor_interval_minutes: 15
+  gap_threshold_pct: 0.05       # alert when position's stock crosses its stop level

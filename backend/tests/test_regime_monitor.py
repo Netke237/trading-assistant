@@ -10,6 +10,10 @@ async def test_no_alert_when_regime_is_pass(mocker):
         "app.services.regime_monitor._get_overall_regime",
         new=AsyncMock(return_value="PASS"),
     )
+    mocker.patch(
+        "app.services.regime_monitor._check_overnight_gaps",
+        new=AsyncMock(),
+    )
     broadcast_mock = mocker.patch(
         "app.services.regime_monitor._broadcast_alert",
         new=AsyncMock(),
@@ -29,6 +33,10 @@ async def test_alert_sent_when_regime_reject_with_positions(mocker):
     mocker.patch(
         "app.services.regime_monitor._has_open_positions",
         new=AsyncMock(return_value=True),
+    )
+    mocker.patch(
+        "app.services.regime_monitor._check_overnight_gaps",
+        new=AsyncMock(),
     )
     broadcast_mock = mocker.patch(
         "app.services.regime_monitor._broadcast_alert",
@@ -51,6 +59,10 @@ async def test_no_alert_when_regime_reject_but_no_positions(mocker):
     mocker.patch(
         "app.services.regime_monitor._has_open_positions",
         new=AsyncMock(return_value=False),
+    )
+    mocker.patch(
+        "app.services.regime_monitor._check_overnight_gaps",
+        new=AsyncMock(),
     )
     broadcast_mock = mocker.patch(
         "app.services.regime_monitor._broadcast_alert",
@@ -99,3 +111,120 @@ async def test_update_conviction_cache_no_op_on_none(mocker):
     await _update_conviction_cache()
 
     set_conv_spy.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_regime_flip_alert_includes_close_advice(mocker):
+    """The REGIME_FLIP_WARNING payload must tell the trader to consider closing."""
+    mocker.patch(
+        "app.services.regime_monitor._get_overall_regime",
+        new=AsyncMock(return_value="REJECT"),
+    )
+    mocker.patch(
+        "app.services.regime_monitor._has_open_positions",
+        new=AsyncMock(return_value=True),
+    )
+    mocker.patch(
+        "app.services.regime_monitor._check_overnight_gaps",
+        new=AsyncMock(),
+    )
+    broadcast_mock = mocker.patch(
+        "app.services.regime_monitor._broadcast_alert",
+        new=AsyncMock(),
+    )
+    from app.services.regime_monitor import _tick
+    await _tick()
+    payload = broadcast_mock.call_args[0][0]
+    assert "Consider closing" in payload["message"]
+
+
+@pytest.mark.asyncio
+async def test_gap_check_broadcasts_when_stop_breached(mocker):
+    """When a bullish position's stop level is breached, broadcast OVERNIGHT_GAP_RISK."""
+    positions = [
+        {"symbol": "AAPL", "direction": "Bullish", "stop": 180.0},
+    ]
+    mocker.patch(
+        "app.services.regime_monitor._get_open_positions",
+        new=AsyncMock(return_value=positions),
+    )
+    mocker.patch(
+        "app.services.regime_monitor._fetch_stock_price",
+        new=AsyncMock(return_value=175.0),  # below stop of 180
+    )
+    broadcast_mock = mocker.patch(
+        "app.services.regime_monitor._broadcast_alert",
+        new=AsyncMock(),
+    )
+    from app.services.regime_monitor import _check_overnight_gaps
+    await _check_overnight_gaps()
+    broadcast_mock.assert_called_once()
+    payload = broadcast_mock.call_args[0][0]
+    assert payload["type"] == "OVERNIGHT_GAP_RISK"
+    assert payload["symbol"] == "AAPL"
+
+
+@pytest.mark.asyncio
+async def test_gap_check_no_alert_when_stop_not_breached(mocker):
+    """No alert when price is above stop for a bullish position."""
+    positions = [
+        {"symbol": "NVDA", "direction": "Bullish", "stop": 100.0},
+    ]
+    mocker.patch(
+        "app.services.regime_monitor._get_open_positions",
+        new=AsyncMock(return_value=positions),
+    )
+    mocker.patch(
+        "app.services.regime_monitor._fetch_stock_price",
+        new=AsyncMock(return_value=120.0),  # above stop — safe
+    )
+    broadcast_mock = mocker.patch(
+        "app.services.regime_monitor._broadcast_alert",
+        new=AsyncMock(),
+    )
+    from app.services.regime_monitor import _check_overnight_gaps
+    await _check_overnight_gaps()
+    broadcast_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_gap_check_bearish_stop_breached(mocker):
+    """For bearish positions, a stop breach means price went ABOVE the stop level."""
+    positions = [
+        {"symbol": "SPY", "direction": "Bearish", "stop": 450.0},
+    ]
+    mocker.patch(
+        "app.services.regime_monitor._get_open_positions",
+        new=AsyncMock(return_value=positions),
+    )
+    mocker.patch(
+        "app.services.regime_monitor._fetch_stock_price",
+        new=AsyncMock(return_value=460.0),  # above bearish stop
+    )
+    broadcast_mock = mocker.patch(
+        "app.services.regime_monitor._broadcast_alert",
+        new=AsyncMock(),
+    )
+    from app.services.regime_monitor import _check_overnight_gaps
+    await _check_overnight_gaps()
+    broadcast_mock.assert_called_once()
+    assert broadcast_mock.call_args[0][0]["type"] == "OVERNIGHT_GAP_RISK"
+
+
+@pytest.mark.asyncio
+async def test_gap_check_skips_position_with_no_stop(mocker):
+    """Positions without a stop value must be skipped."""
+    positions = [
+        {"symbol": "MSFT", "direction": "Bullish", "stop": None},
+    ]
+    mocker.patch(
+        "app.services.regime_monitor._get_open_positions",
+        new=AsyncMock(return_value=positions),
+    )
+    broadcast_mock = mocker.patch(
+        "app.services.regime_monitor._broadcast_alert",
+        new=AsyncMock(),
+    )
+    from app.services.regime_monitor import _check_overnight_gaps
+    await _check_overnight_gaps()
+    broadcast_mock.assert_not_called()

@@ -64,6 +64,90 @@ async def _broadcast_alert(payload: dict) -> None:
         logger.warning("regime_monitor: broadcast failed: %s", exc)
 
 
+async def _get_open_positions() -> list[dict]:
+    """Return list of {symbol, direction, stop} for all open positions."""
+    try:
+        from app.database import AsyncSessionLocal
+        from sqlalchemy import text
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text("SELECT symbol, direction, stop FROM portfolio_positions")
+            )
+            rows = result.fetchall()
+            return [
+                {"symbol": row[0], "direction": row[1], "stop": row[2]}
+                for row in rows
+            ]
+    except Exception as exc:
+        logger.debug("regime_monitor: get_open_positions failed: %s", exc)
+        return []
+
+
+async def _fetch_stock_price(symbol: str) -> float | None:
+    """Fetch current stock price. Returns None on failure."""
+    try:
+        loop = asyncio.get_running_loop()
+        from app.data.market import fetch_price
+        price = await loop.run_in_executor(None, fetch_price, symbol)
+        return float(price) if price else None
+    except Exception as exc:
+        logger.debug("regime_monitor: price fetch failed for %s: %s", symbol, exc)
+        return None
+
+
+async def _check_overnight_gaps() -> None:
+    """Broadcast OVERNIGHT_GAP_RISK for any position whose stock has crossed its stop level.
+
+    Bullish: alert if current_price <= stop.
+    Bearish: alert if current_price >= stop.
+    Positions with stop=None are skipped.
+    """
+    positions = await _get_open_positions()
+    if not positions:
+        return
+
+    seen_symbols: set[str] = set()
+    for pos in positions:
+        symbol = pos.get("symbol")
+        direction = pos.get("direction", "Bullish")
+        stop = pos.get("stop")
+
+        if not symbol or stop is None:
+            continue
+        if symbol in seen_symbols:
+            continue
+        seen_symbols.add(symbol)
+
+        price = await _fetch_stock_price(symbol)
+        if price is None:
+            continue
+
+        breached = (
+            (direction == "Bullish" and price <= stop) or
+            (direction == "Bearish" and price >= stop)
+        )
+        if not breached:
+            continue
+
+        payload = {
+            "type": "OVERNIGHT_GAP_RISK",
+            "symbol": symbol,
+            "direction": direction,
+            "current_price": price,
+            "stop_level": stop,
+            "message": (
+                f"{symbol} has gapped through its stop level (stop={stop}, current={price}). "
+                "Consider closing this position before the next session."
+            ),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await _broadcast_alert(payload)
+        logger.warning(
+            "regime_monitor: gap risk — %s current=%.2f stop=%.2f (%s)",
+            symbol, price, stop, direction,
+        )
+
+
 async def _update_conviction_cache() -> None:
     """Refresh the module-level conviction cache from the current OMM result."""
     try:
@@ -92,6 +176,7 @@ async def _tick() -> None:
     """One monitoring cycle."""
     try:
         await _update_conviction_cache()
+        await _check_overnight_gaps()
 
         regime = await _get_overall_regime()
         if regime != "REJECT":
@@ -104,7 +189,10 @@ async def _tick() -> None:
         payload = {
             "type": "REGIME_FLIP_WARNING",
             "regime": "REJECT",
-            "message": "Market regime has turned REJECT while positions are open",
+            "message": (
+                "Market regime has turned REJECT while positions are open. "
+                "Consider closing positions before next session."
+            ),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         await _broadcast_alert(payload)
