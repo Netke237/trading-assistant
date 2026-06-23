@@ -516,7 +516,7 @@ export default function ChartWorkspace() {
       el.removeEventListener('pointermove', onPointerMove);
       el.removeEventListener('pointerup', onPointerUp);
       el.removeEventListener('pointercancel', onPointerCancel);
-      chart.applyOptions({ handleScroll: true, handleScale: true });
+      try { chart.applyOptions({ handleScroll: true, handleScale: true }); } catch { /* chart may be destroyed on unmount */ }
       dragRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
