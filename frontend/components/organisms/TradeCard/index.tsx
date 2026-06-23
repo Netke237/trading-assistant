@@ -258,6 +258,7 @@ export function TradeCard({
           confidence={data.stockConfidence}
           confidenceScore={data.confidence ?? null}
           confidenceText={data.confidenceText ?? null}
+          statusTooltip="Backtested confidence tier for the stock signal. CAUTION means the pattern's historical win rate is marginal — consider reducing position size or waiting for a higher-conviction entry."
         />
 
         <ScoreCardPanel
@@ -265,6 +266,8 @@ export function TradeCard({
           bars={contractBars}
           total={data.contractScore}
           confidence={data.contractConfidence}
+          statusTooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
+          statusTooltipAlignRight
         />
 
         {/* 4. Fundamental Health — full-width bar below scorecards */}

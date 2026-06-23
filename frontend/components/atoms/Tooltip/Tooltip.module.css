@@ -1,0 +1,50 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+  background: var(--bg-surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-family: var(--font-dm), system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s, visibility 0.12s;
+  z-index: 200;
+  box-shadow: var(--shadow-elevated);
+}
+
+.wrap:hover .tip,
+.wrap:focus-within .tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* position bottom */
+.wrap[data-position='bottom'] .tip {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+
+/* right-anchored: panel right-aligns with the trigger */
+.wrap[data-align='right'] .tip {
+  left: auto;
+  right: 0;
+  transform: none;
+}

@@ -86,11 +86,13 @@ class TradierPaperAdapter:
                 headers=self._headers(), timeout=self._timeout,
             )
         except Exception as exc:
-            raise RuntimeError(f"Tradier paper order failed: connection error — {exc}") from exc
+            msg = f"Tradier paper order failed: connection error — {exc}"
+            logger.error(msg)
+            raise RuntimeError(msg) from exc
         if resp.status_code >= 400:
-            raise RuntimeError(
-                f"Tradier paper order failed: HTTP {resp.status_code} — {resp.text[:500]}"
-            )
+            msg = f"Tradier paper order failed: HTTP {resp.status_code} — {resp.text[:500]}"
+            logger.error(msg)
+            raise RuntimeError(msg)
         data = resp.json().get("order", {})
         return OrderResult(
             order_id=str(data.get("id", "")),

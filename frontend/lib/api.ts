@@ -8,9 +8,19 @@ import type { ScheduleConfig } from '@/lib/settingsStore';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
+async function apiError(path: string, res: Response): Promise<never> {
+  const text = await res.text().catch(() => '');
+  let detail = text;
+  try {
+    const json = JSON.parse(text);
+    detail = typeof json?.detail === 'string' ? json.detail : text;
+  } catch { /* not JSON — use raw text */ }
+  throw new Error(`API ${path} → ${res.status}${detail ? `: ${detail}` : ''}`);
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`);
-  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  if (!res.ok) return apiError(path, res);
   return res.json() as Promise<T>;
 }
 
@@ -20,7 +30,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  if (!res.ok) return apiError(path, res);
   return res.json() as Promise<T>;
 }
 
@@ -30,7 +40,7 @@ async function put<T>(path: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  if (!res.ok) return apiError(path, res);
   return res.json() as Promise<T>;
 }
 
@@ -40,13 +50,13 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  if (!res.ok) return apiError(path, res);
   return res.json() as Promise<T>;
 }
 
 async function del(path: string): Promise<void> {
   const res = await fetch(`${BASE_URL}${path}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  if (!res.ok) return apiError(path, res);
 }
 
 export interface DataSourceInfo {

@@ -27,6 +27,10 @@ interface ScoreCardPanelProps {
   /** Optional numeric signal-confidence (0–100); when set, shown left of the status badge. */
   confidenceScore?: number | null;
   confidenceText?: string | null;
+  /** Business-interpretation tooltip for the status badge. */
+  statusTooltip?: string;
+  /** Right-align the status tooltip panel (use when the panel sits near the right edge). */
+  statusTooltipAlignRight?: boolean;
   className?: string;
 }
 
@@ -38,6 +42,8 @@ export function ScoreCardPanel({
   confidence,
   confidenceScore,
   confidenceText,
+  statusTooltip,
+  statusTooltipAlignRight,
   className,
 }: ScoreCardPanelProps) {
   return (
@@ -75,7 +81,11 @@ export function ScoreCardPanel({
           {confidenceScore !== undefined && (
             <ConfidenceBadge confidence={confidenceScore} title={confidenceText ?? undefined} />
           )}
-          <StatusBadge status={confidence} />
+          <StatusBadge
+            status={confidence}
+            tooltip={statusTooltip}
+            tooltipAlign={statusTooltipAlignRight ? 'right' : 'center'}
+          />
         </div>
       </div>
     </div>

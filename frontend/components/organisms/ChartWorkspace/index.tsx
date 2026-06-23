@@ -425,16 +425,25 @@ export default function ChartWorkspace() {
       const newTime = chart.timeScale().coordinateToTime(x);
       const newPrice = series.coordinateToPrice(y);
       if (newTime == null || newPrice == null) return null;
-      const startTime0 = chart.timeScale().coordinateToTime(drag.startX);
       const startPrice0 = series.coordinateToPrice(drag.startY);
-      if (startTime0 == null || startPrice0 == null) return null;
-      const dt = Number(newTime) - Number(startTime0);
+      if (startPrice0 == null) return null;
       const dp = newPrice - startPrice0;
       const { handle, startDrawing } = drag;
-      if (handle === 'p0') return [{ time: Number(newTime), price: newPrice }, ...startDrawing.points.slice(1)];
-      if (handle === 'p1') return [startDrawing.points[0], { time: Number(newTime), price: newPrice }];
+      // coordinateToTime returns Time (string on daily charts, number on intraday).
+      // Number(string_date) = NaN which corrupts stored points. Cast directly instead.
+      const asDrawingTime = (t: Time) => t as unknown as number;
+      if (handle === 'p0') return [{ time: asDrawingTime(newTime), price: newPrice }, ...startDrawing.points.slice(1)];
+      if (handle === 'p1') return [startDrawing.points[0], { time: asDrawingTime(newTime), price: newPrice }];
       if (handle === 'whole' && startDrawing.kind === 'hline') return startDrawing.points.map((p) => ({ time: p.time, price: p.price + dp }));
-      return startDrawing.points.map((p) => ({ time: p.time + dt, price: p.price + dp }));
+      // For whole-body move of 2-point drawings: apply pixel offset to each point's x, then snap to
+      // the nearest bar. Raw timestamp arithmetic (p.time + dt) produces timestamps that don't
+      // correspond to any bar when dragging across data gaps, making timeToCoordinate return null.
+      const dx = x - drag.startX;
+      return startDrawing.points.map((p) => {
+        const origX = chart.timeScale().timeToCoordinate(p.time as unknown as Time);
+        const snapTime = origX != null ? chart.timeScale().coordinateToTime(origX + dx) : null;
+        return { time: snapTime != null ? asDrawingTime(snapTime) : p.time, price: p.price + dp };
+      });
     };
 
     const toX = (t: number): number | null => {

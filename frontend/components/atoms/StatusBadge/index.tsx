@@ -5,6 +5,7 @@
 
 import type { Status } from '@/lib/status';
 import { STATUS_LABEL } from '@/lib/status';
+import { Tooltip } from '@/components/atoms/Tooltip';
 import styles from './StatusBadge.module.css';
 
 interface StatusBadgeProps {
@@ -12,6 +13,10 @@ interface StatusBadgeProps {
   /** Optional override of the default label (e.g. 'HIGH CONFIDENCE'). */
   label?: string;
   className?: string;
+  /** Business-interpretation tooltip shown on hover. */
+  tooltip?: string;
+  tooltipPosition?: 'top' | 'bottom';
+  tooltipAlign?: 'center' | 'right';
 }
 
 const STATUS_CLASS: Record<Status, string> = {
@@ -22,10 +27,18 @@ const STATUS_CLASS: Record<Status, string> = {
   NO_DATA: styles.noData,
 };
 
-export function StatusBadge({ status, label, className }: StatusBadgeProps) {
-  return (
+export function StatusBadge({ status, label, className, tooltip, tooltipPosition, tooltipAlign }: StatusBadgeProps) {
+  const badge = (
     <span className={[styles.badge, STATUS_CLASS[status], className].filter(Boolean).join(' ')}>
       {label ?? STATUS_LABEL[status]}
     </span>
   );
+  if (tooltip) {
+    return (
+      <Tooltip text={tooltip} position={tooltipPosition} align={tooltipAlign}>
+        {badge}
+      </Tooltip>
+    );
+  }
+  return badge;
 }
