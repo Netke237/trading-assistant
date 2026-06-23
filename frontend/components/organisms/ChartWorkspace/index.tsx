@@ -411,7 +411,7 @@ export default function ChartWorkspace() {
       series.attachPrimitive(vpPrimRef.current);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles.length, activeIndicators, mainSeries]);
+  }, [candles, activeIndicators, mainSeries]);
 
   // Drag-to-move drawings (cursor tool only)
   useEffect(() => {
