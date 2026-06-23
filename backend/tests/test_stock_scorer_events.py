@@ -1,7 +1,7 @@
 """Tests for event rule thresholds (options and stock modes)."""
 import pytest
 from datetime import date, timedelta
-from app.scoring.stock_scorer import _rule_event
+from app.scoring.stock_scorer import _rule_event, score_stock
 
 
 def test_options_earnings_within_21_days_is_reject():
@@ -87,3 +87,49 @@ def test_stock_mode_note_in_detail():
     )
     assert "note" in result.detail
     assert "weight" in result.detail["note"].lower() or "score" in result.detail["note"].lower()
+
+
+def _bars_up(n=120):
+    bars, price = [], 100.0
+    for _ in range(n):
+        price += 0.4
+        bars.append({"open": price - 0.2, "high": price + 0.5,
+                     "low": price - 0.5, "close": price, "volume": 2_000_000})
+    return bars
+
+
+def test_event_weight_zero_in_stock_mode():
+    """
+    A candidate with upcoming earnings (5 days) should score differently in
+    options vs stock mode because stock mode zeroes the event weight.
+    The event rule result should be in the rules list but contribute 0.
+    """
+    bars = _bars_up()
+    earnings = date.today() + timedelta(days=5)
+
+    card_options = score_stock(
+        "X", "Bullish", "Swing", bars,
+        earnings_date=earnings,
+        scoring_mode="options",
+    )
+    card_stock = score_stock(
+        "X", "Bullish", "Swing", bars,
+        earnings_date=earnings,
+        scoring_mode="stock",
+    )
+
+    # Event rule exists in both
+    ev_stock = next((r for r in card_stock.rules if r.name == "event"), None)
+    assert ev_stock is not None
+
+    # In stock mode, the event REJECT should not pull the final score down
+    # because its weight is 0. Stock score must be >= options score when event
+    # would otherwise trigger a REJECT in options mode.
+    assert card_stock.score >= card_options.score
+
+
+def test_stock_mode_score_in_range():
+    """Renormalized weights must keep final score in [0, 100]."""
+    bars = _bars_up()
+    card = score_stock("X", "Bullish", "Swing", bars, scoring_mode="stock")
+    assert 0 <= card.score <= 100

@@ -1010,6 +1010,16 @@ def score_stock(
     rules = [trend_result, pullback_result, trigger_result, event_result, vol_result]
 
     weights = cfg["weights"]
+
+    # Stock mode: event proximity is displayed but does not count toward score.
+    # Zero the event weight and renormalize so other weights still sum to 1.0.
+    if scoring_mode == "stock":
+        weights = dict(weights)   # don't mutate the cached config
+        weights["event"] = 0.0
+        total_w = sum(weights.values())
+        if total_w > 0:
+            weights = {k: v / total_w for k, v in weights.items()}
+
     name_to_weight = {
         "trend":    weights["trend"],
         "pullback": weights["pullback"],
