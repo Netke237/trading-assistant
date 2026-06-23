@@ -422,7 +422,7 @@ export default function ChartWorkspace() {
       const { handle, startDrawing } = drag;
       if (handle === 'p0') return [{ time: Number(newTime), price: newPrice }, ...startDrawing.points.slice(1)];
       if (handle === 'p1') return [startDrawing.points[0], { time: Number(newTime), price: newPrice }];
-      if (startDrawing.kind === 'hline') return startDrawing.points.map((p) => ({ time: p.time, price: p.price + dp }));
+      if (handle === 'whole' && startDrawing.kind === 'hline') return startDrawing.points.map((p) => ({ time: p.time, price: p.price + dp }));
       return startDrawing.points.map((p) => ({ time: p.time + dt, price: p.price + dp }));
     };
 
