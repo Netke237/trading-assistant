@@ -196,6 +196,9 @@ export default function ChartWorkspace() {
   const updateDrawing = useDrawingStore((s) => s.updateDrawing);
   const clearForSymbol = useDrawingStore((s) => s.clearForSymbol);
 
+  const updateDrawingRef = useRef(updateDrawing);
+  useEffect(() => { updateDrawingRef.current = updateDrawing; }, [updateDrawing]);
+
   const structureVisible = useStructureStore((s) => s.structureVisible);
   const structureVisibility = useStructureStore((s) => s.visibility);
 
@@ -407,6 +410,22 @@ export default function ChartWorkspace() {
     if (!chart || !series) return;
     const el = chart.chartElement();
 
+    const calcUpdatedPoints = (drag: DragState, x: number, y: number): DrawingPoint[] | null => {
+      const newTime = chart.timeScale().coordinateToTime(x);
+      const newPrice = series.coordinateToPrice(y);
+      if (newTime == null || newPrice == null) return null;
+      const startTime0 = chart.timeScale().coordinateToTime(drag.startX);
+      const startPrice0 = series.coordinateToPrice(drag.startY);
+      if (startTime0 == null || startPrice0 == null) return null;
+      const dt = Number(newTime) - Number(startTime0);
+      const dp = newPrice - startPrice0;
+      const { handle, startDrawing } = drag;
+      if (handle === 'p0') return [{ time: Number(newTime), price: newPrice }, ...startDrawing.points.slice(1)];
+      if (handle === 'p1') return [startDrawing.points[0], { time: Number(newTime), price: newPrice }];
+      if (startDrawing.kind === 'hline') return startDrawing.points.map((p) => ({ time: p.time, price: p.price + dp }));
+      return startDrawing.points.map((p) => ({ time: p.time + dt, price: p.price + dp }));
+    };
+
     const toX = (t: number): number | null => {
       const coord = chart.timeScale().timeToCoordinate(t as unknown as Time);
       return coord ?? null;
@@ -441,55 +460,37 @@ export default function ChartWorkspace() {
     const onPointerMove = (e: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
-      wasDragRef.current = true;
       const rect = el.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      const newTime = chart.timeScale().coordinateToTime(x);
-      const newPrice = series.coordinateToPrice(y);
-      if (newTime == null || newPrice == null) return;
-      const { handle, startDrawing, startX, startY } = drag;
-      const startTime0 = chart.timeScale().coordinateToTime(startX);
-      const startPrice0 = series.coordinateToPrice(startY);
-      if (startTime0 == null || startPrice0 == null) return;
-      const dt = Number(newTime) - Number(startTime0);
-      const dp = newPrice - startPrice0;
-      let updatedPoints: DrawingPoint[];
-      if (handle === 'p0') {
-        updatedPoints = [
-          { time: Number(newTime), price: newPrice },
-          ...startDrawing.points.slice(1),
-        ];
-      } else if (handle === 'p1') {
-        updatedPoints = [
-          startDrawing.points[0],
-          { time: Number(newTime), price: newPrice },
-        ];
-      } else {
-        // 'whole' — translate all points; hline: price-only delta, keep time
-        if (startDrawing.kind === 'hline') {
-          updatedPoints = startDrawing.points.map((p) => ({
-            time: p.time,
-            price: p.price + dp,
-          }));
-        } else {
-          updatedPoints = startDrawing.points.map((p) => ({
-            time: p.time + dt,
-            price: p.price + dp,
-          }));
-        }
+      if (Math.hypot(x - drag.startX, y - drag.startY) > 4) {
+        wasDragRef.current = true;
       }
-      // Throttle updateDrawing: call at most every 50ms during drag
+      const updatedPoints = calcUpdatedPoints(drag, x, y);
+      if (!updatedPoints) return;
       const now = Date.now();
       if (now - (drag.lastUpdateMs ?? 0) >= 50) {
         drag.lastUpdateMs = now;
-        updateDrawing(drag.id, { points: updatedPoints });
+        updateDrawingRef.current(drag.id, { points: updatedPoints });
       }
     };
 
-    const onPointerUp = () => {
+    const onPointerUp = (e: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const updatedPoints = calcUpdatedPoints(drag, x, y);
+      if (updatedPoints) {
+        updateDrawingRef.current(drag.id, { points: updatedPoints });
+      }
+      dragRef.current = null;
+      chart.applyOptions({ handleScroll: true, handleScale: true });
+    };
+
+    const onPointerCancel = () => {
       if (!dragRef.current) return;
-      // Ensure final position is synced before clearing drag state
       dragRef.current = null;
       chart.applyOptions({ handleScroll: true, handleScale: true });
     };
@@ -497,17 +498,18 @@ export default function ChartWorkspace() {
     el.addEventListener('pointerdown', onPointerDown);
     el.addEventListener('pointermove', onPointerMove);
     el.addEventListener('pointerup', onPointerUp);
+    el.addEventListener('pointercancel', onPointerCancel);
 
     return () => {
       el.removeEventListener('pointerdown', onPointerDown);
       el.removeEventListener('pointermove', onPointerMove);
       el.removeEventListener('pointerup', onPointerUp);
-      // Re-enable chart scroll/zoom in case effect re-runs during drag
+      el.removeEventListener('pointercancel', onPointerCancel);
       chart.applyOptions({ handleScroll: true, handleScale: true });
       dragRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawingTool, symbol, interval, updateDrawing]);
+  }, [drawingTool, symbol, interval]);
 
   // Click-to-draw for trendline / hline / rect tools
   useEffect(() => {
