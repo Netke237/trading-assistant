@@ -1,5 +1,4 @@
 import type {
-  ISeriesPrimitive,
   IPrimitivePaneView,
   IPrimitivePaneRenderer,
   ISeriesApi,
@@ -7,6 +6,7 @@ import type {
 } from 'lightweight-charts';
 import type { CanvasRenderingTarget2D } from 'fancy-canvas';
 import type { Drawing } from '@/types/overlays';
+import type { UpdatablePrimitive } from './types';
 
 class HorizontalLineRenderer implements IPrimitivePaneRenderer {
   constructor(
@@ -39,14 +39,21 @@ class HorizontalLinePaneView implements IPrimitivePaneView {
   }
 }
 
-export class HorizontalLinePrimitive implements ISeriesPrimitive {
+export class HorizontalLinePrimitive implements UpdatablePrimitive {
   private series: ISeriesApi<'Candlestick'> | null = null;
+  private requestUpdateFn?: () => void;
 
-  constructor(private readonly d: Drawing) {}
+  constructor(private d: Drawing) {}
 
   attached(param: SeriesAttachedParameter): void {
     this.series = param.series as ISeriesApi<'Candlestick'>;
+    this.requestUpdateFn = param.requestUpdate;
     param.requestUpdate();
+  }
+
+  update(drawing: Drawing): void {
+    this.d = drawing;
+    this.requestUpdateFn?.();
   }
 
   paneViews(): readonly IPrimitivePaneView[] {
