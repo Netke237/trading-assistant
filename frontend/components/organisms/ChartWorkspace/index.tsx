@@ -168,10 +168,23 @@ export default function ChartWorkspace() {
   const [buyQty, setBuyQty] = useState(1);
   const [crosshair, setCrosshair] = useState<DataValues>({ time: null, indicators: {} });
   const [connState, setConnState] = useState<ConnectionState>('connecting');
+  const [chartApi, setChartApi] = useState<IChartApi | null>(null);
+  const [mainSeries, setMainSeries] = useState<ISeriesApi<'Candlestick'> | null>(null);
   const [wsError, setWsError] = useState<string | null>(null);
   const wsRef = useRef<ChartWSClient | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const mainSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const handleSeriesReady = useCallback(
+    (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
+      chartApiRef.current = chart;
+      mainSeriesRef.current = series;
+      setChartApi(chart);
+      setMainSeries(series);
+    },
+    // chartApiRef and mainSeriesRef are stable refs — no deps needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
   const vpPrimRef = useRef<VolumeProfilePrimitive | null>(null);
   const previewRef = useRef<PreviewPrimitive | null>(null);
   const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
@@ -219,26 +232,18 @@ export default function ChartWorkspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally run only once on mount
 
-  // Attach PreviewPrimitive once the main series is ready.
-  // candles.length transitions from 0 → N after the WS history message arrives,
-  // which is always after ChartPane has assigned mainSeriesRef.current.
-  // Using candles.length (same pattern as the VP/markers effect below) ensures
-  // this re-runs if the series was null on the first render.
+  // Keyed on mainSeries identity — re-attaches correctly when chart type switches
+  // (Candlestick → Line/Bar creates a new series object and fires onSeriesReady again).
   useEffect(() => {
-    const series = mainSeriesRef.current;
-    if (!series) return;
-    // Avoid double-attaching if candles.length fires more than once while the
-    // same series instance is mounted.
-    if (previewRef.current) return;
+    if (!mainSeries) return;
     const prim = new PreviewPrimitive();
-    series.attachPrimitive(prim);
+    mainSeries.attachPrimitive(prim);
     previewRef.current = prim;
     return () => {
-      try { series.detachPrimitive(prim); } catch { /* ignore */ }
+      try { mainSeries.detachPrimitive(prim); } catch { /* ignore */ }
       previewRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles.length]);
+  }, [mainSeries]);
 
   // Sync alert rules from backend on mount
   useEffect(() => {
@@ -379,8 +384,14 @@ export default function ChartWorkspace() {
     [activeIndicators, interval, candles],
   );
 
+  // Reset markers plugin ref when series changes (chart-type switch).
+  // Separate from the markers+VP effect to avoid resetting on candle ticks.
   useEffect(() => {
-    const series = mainSeriesRef.current;
+    markersApiRef.current = null;
+  }, [mainSeries]);
+
+  useEffect(() => {
+    const series = mainSeries;
     if (!series) return;
     // markers
     const markers: { time: Time; position: 'aboveBar' | 'belowBar'; color: string; shape: 'arrowUp' | 'arrowDown'; text: string }[] = [];
@@ -400,13 +411,13 @@ export default function ChartWorkspace() {
       series.attachPrimitive(vpPrimRef.current);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles.length, activeIndicators]);
+  }, [candles.length, activeIndicators, mainSeries]);
 
   // Drag-to-move drawings (cursor tool only)
   useEffect(() => {
     if (drawingTool !== 'cursor') return;
-    const chart = chartApiRef.current;
-    const series = mainSeriesRef.current;
+    const chart = chartApi;
+    const series = mainSeries;
     if (!chart || !series) return;
     const el = chart.chartElement();
 
@@ -509,12 +520,12 @@ export default function ChartWorkspace() {
       dragRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawingTool, symbol, interval]);
+  }, [drawingTool, symbol, interval, chartApi, mainSeries]);
 
   // Click-to-draw for trendline / hline / rect tools
   useEffect(() => {
-    const chart = chartApiRef.current;
-    const series = mainSeriesRef.current;
+    const chart = chartApi;
+    const series = mainSeries;
     if (!chart || !series) return;
     if (drawingTool !== 'cursor' && drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy' && drawingTool !== 'text' && drawingTool !== 'eraser') {
       pendingPtsRef.current = [];
@@ -535,8 +546,8 @@ export default function ChartWorkspace() {
       if (drawingTool === 'cursor' || drawingTool === 'text') {
         // Check if clicking (not dragging) on an existing text drawing — open popover in edit mode
         if (!wasDragRef.current) {
-          const toX = (t: number): number | null => chartApiRef.current?.timeScale().timeToCoordinate(t as unknown as Time) ?? null;
-          const toY = (p: number): number | null => mainSeriesRef.current?.priceToCoordinate(p) ?? null;
+          const toX = (t: number): number | null => chartApi?.timeScale().timeToCoordinate(t as unknown as Time) ?? null;
+          const toY = (p: number): number | null => mainSeries?.priceToCoordinate(p) ?? null;
           const textDrawings = useDrawingStore.getState().drawings.filter(
             d => d.symbol === symbol && d.interval === interval && d.kind === 'text',
           );
@@ -551,8 +562,8 @@ export default function ChartWorkspace() {
         // For text tool: fall through to create a new annotation
       }
       if (drawingTool === 'eraser') {
-        const toX = (t: number): number | null => chartApiRef.current?.timeScale().timeToCoordinate(t as unknown as Time) ?? null;
-        const toY = (p: number): number | null => mainSeriesRef.current?.priceToCoordinate(p) ?? null;
+        const toX = (t: number): number | null => chartApi?.timeScale().timeToCoordinate(t as unknown as Time) ?? null;
+        const toY = (p: number): number | null => mainSeries?.priceToCoordinate(p) ?? null;
         const eraserDrawings = useDrawingStore.getState().drawings.filter(d => d.symbol === symbol && d.interval === interval);
         const hit = eraserDrawings.find(d => hitTestDrawing(d, param.point!.x, param.point!.y, toX, toY, 6).hit);
         if (hit) removeDrawing(hit.id);
@@ -599,7 +610,7 @@ export default function ChartWorkspace() {
       chart.unsubscribeCrosshairMove(onCrosshair);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawingTool, symbol, interval]);
+  }, [drawingTool, symbol, interval, chartApi, mainSeries]);
 
   return (
     <div className={styles.workspace}>
@@ -620,17 +631,18 @@ export default function ChartWorkspace() {
               onCrosshairMove={handleCrosshair}
               chartApiRef={chartApiRef}
               mainSeriesRef={mainSeriesRef}
+              onSeriesReady={handleSeriesReady}
             />
             <ChartOverlays
-              chart={chartApiRef.current}
-              mainSeries={mainSeriesRef.current}
+              chart={chartApi}
+              mainSeries={mainSeries}
               signals={structureSignals}
               visibility={structureVisibility}
               visible={structureVisible}
             />
             <DrawingOverlays
-              chart={chartApiRef.current}
-              mainSeries={mainSeriesRef.current}
+              chart={chartApi}
+              mainSeries={mainSeries}
               drawings={drawings.filter((d) => d.symbol === symbol && d.interval === interval)}
             />
             {mtfRows.length > 0 && <MtfDashboard rows={mtfRows} />}
