@@ -172,6 +172,18 @@ describe('TradeCard', () => {
     expect(screen.getByRole('button', { name: /hide chart/i })).toBeInTheDocument();
   });
 
+  it('shows historical accuracy label for confidence row', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    expect(screen.getByText('Historical accuracy (3×ATR exit)')).toBeInTheDocument();
+    expect(screen.queryByText('Stock confidence')).not.toBeInTheDocument();
+  });
+
+  it('shows projected RR label with method note', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    expect(screen.getByText('Projected R/R (+8% stock move)')).toBeInTheDocument();
+    expect(screen.queryByText('R:R ratio')).not.toBeInTheDocument();
+  });
+
   describe('editable fields', () => {
     it('renders editable fields with aria-label affordance', () => {
       render(<TradeCard data={mockTradeCard} />);

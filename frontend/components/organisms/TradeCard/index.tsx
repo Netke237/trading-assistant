@@ -466,7 +466,7 @@ export function TradeCard({
           </div>
           <div className={styles.scoreCardBody}>
             <div className={styles.scoreRow}>
-              <Text size={12} tone="secondary">Stock confidence</Text>
+              <Text size={12} tone="secondary">Historical accuracy (3×ATR exit)</Text>
               <StatusBadge status={data.stockConfidence} />
             </div>
             <div className={styles.scoreRow}>
@@ -474,7 +474,7 @@ export function TradeCard({
               <StatusBadge status={data.contractConfidence} />
             </div>
             <div className={styles.scoreRow}>
-              <Text size={12} tone="secondary">R:R ratio</Text>
+              <Text size={12} tone="secondary">Projected R/R (+8% stock move)</Text>
               <Data size={14} tone="primary">{editedRR.rr.toFixed(2)}x</Data>
             </div>
             <div className={styles.scoreRow}>
