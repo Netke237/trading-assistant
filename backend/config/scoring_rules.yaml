@@ -100,8 +100,8 @@ horizons:
       volume_multiplier: 1.50
       volume_bonus_pts: 10
     event:
-      reject_days: 7
-      caution_days: 21
+      reject_days: 21
+      caution_days: 45
     vol:
       iv_rank_compressed_caution: 5
       iv_rank_pass_max: 34     # IV rank <= this -> PASS; mirrors frontend ivThresholds.ts

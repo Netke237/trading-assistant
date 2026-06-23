@@ -150,14 +150,16 @@ def test_trigger_options_mode_still_caps_no_candle_at_35():
         assert result.score == 35
 
 
-def test_event_neutral_in_stock_mode():
-    """Stock mode: earnings tomorrow must return PASS 90 (event = flag not penalty)."""
+def test_event_shown_with_note_in_stock_mode():
+    """Stock mode: earnings tomorrow shows REJECT (displayed only) with note — weight is zero."""
     cfg = copy.deepcopy(_horizon_cfg("Swing"))
     tomorrow = date.today() + timedelta(days=1)
     result = _rule_event(tomorrow, None, cfg, scoring_mode="stock")
-    assert result.status == "PASS"
-    assert result.score == 90
+    # Stock mode now applies thresholds for display; earnings tomorrow is within reject_days
+    assert result.status == "REJECT"
+    assert result.score == 5
     assert result.detail.get("days_to_event") is not None   # metadata still present
+    assert result.detail.get("note") is not None             # weight-zero note must be present
 
 
 def test_event_still_penalises_in_options_mode():

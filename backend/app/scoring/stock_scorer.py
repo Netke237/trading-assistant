@@ -797,15 +797,26 @@ def _rule_event(
             event_label = label
 
     if worst_days is None:
-        return RuleResult("event", "PASS", 90, {"event": "none"})
-
-    detail = {"event": event_label, "days_to_event": worst_days}
-
-    # ── Stock mode: event = informational flag only, no penalty ───────────────
-    if scoring_mode == "stock":
+        detail: dict = {"event": "none"}
+        if scoring_mode == "stock":
+            detail["note"] = "Event weight is zero — shown for context only, does not affect stock score."
         return RuleResult("event", "PASS", 90, detail)
 
-    # ── Options mode: unchanged original logic ────────────────────────────────
+    detail = {
+        "event": event_label,
+        "days_to_event": worst_days,
+    }
+
+    if scoring_mode == "stock":
+        # Apply thresholds for display — but weight is zero so score is unaffected.
+        detail["note"] = "Event weight is zero — shown for context only, does not affect stock score."
+        if worst_days < ec["reject_days"]:
+            return RuleResult("event", "REJECT", 5, detail)
+        elif worst_days < ec["caution_days"]:
+            return RuleResult("event", "CAUTION", 55, detail)
+        return RuleResult("event", "PASS", 90, detail)
+
+    # ── Options mode ──────────────────────────────────────────────────────────
     if worst_days < ec["reject_days"]:
         return RuleResult("event", "REJECT", 5, detail)
     elif worst_days < ec["caution_days"]:
