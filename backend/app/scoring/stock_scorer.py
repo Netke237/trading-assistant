@@ -369,12 +369,12 @@ def _detect_fvg(bars: list[dict], direction: str) -> tuple[bool, float, float]:
     Returns (hit, gap_low, gap_high). gap_low/gap_high are 0.0 if no hit.
 
     Bullish FVG (for bullish direction):
-        bar[i-1].low > bar[i+1].high  — unfilled gap above bar[i+1]
-        gap = (bar[i+1].high, bar[i-1].low)
+        bar[i-1].high < bar[i+1].low  — upward gap left by bullish impulse
+        gap = (bar[i-1].high, bar[i+1].low)
 
     Bearish FVG (for bearish direction):
-        bar[i-1].high < bar[i+1].low  — unfilled gap below bar[i+1]
-        gap = (bar[i-1].high, bar[i+1].low)
+        bar[i-1].low > bar[i+1].high  — downward gap left by bearish impulse
+        gap = (bar[i+1].high, bar[i-1].low)
     """
     if len(bars) < 3:
         return False, 0.0, 0.0
@@ -386,13 +386,15 @@ def _detect_fvg(bars: list[dict], direction: str) -> tuple[bool, float, float]:
         curr_bar  = window[i]      # noqa: F841 — middle candle (the gap candle)
         next_bar  = window[i + 1]
         if direction == "Bullish":
-            gap_low  = next_bar["high"]
-            gap_high = prev_bar["low"]
+            # Bullish FVG: upward gap — prev_bar.high < next_bar.low
+            gap_low  = prev_bar["high"]
+            gap_high = next_bar["low"]
             if gap_high > gap_low and gap_low <= current_price <= gap_high:
                 return True, round(gap_low, 2), round(gap_high, 2)
         else:  # Bearish
-            gap_low  = prev_bar["high"]
-            gap_high = next_bar["low"]
+            # Bearish FVG: downward gap — prev_bar.low > next_bar.high
+            gap_low  = next_bar["high"]
+            gap_high = prev_bar["low"]
             if gap_high > gap_low and gap_low <= current_price <= gap_high:
                 return True, round(gap_low, 2), round(gap_high, 2)
     return False, 0.0, 0.0
