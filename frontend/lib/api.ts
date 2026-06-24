@@ -128,6 +128,8 @@ export const api = {
   ),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards'),
   getCandles:    (symbol: string) => get<Candle[]>(`/api/candles/${encodeURIComponent(symbol)}`),
+  getSymbolInfo: (symbol: string) =>
+    get<{ symbol: string; name: string }>(`/api/symbol/${encodeURIComponent(symbol)}/info`),
   getNews:         (symbols: string[]) => get<NewsItem[]>(`/api/news?symbols=${symbols.join(',')}`),
   addWatchlist:    (symbol: string) => post<{ symbol: string }>('/api/watchlist', { symbol }),
   removeWatchlist: (symbol: string) => del(`/api/watchlist/${encodeURIComponent(symbol)}`),

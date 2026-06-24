@@ -1,5 +1,7 @@
 'use client';
+import { useEffect } from 'react';
 import { useChartStore, type Interval, type ChartType } from '@/lib/chartStore';
+import { api } from '@/lib/api';
 import type { ConnectionState } from '@/lib/chartWS';
 import styles from './ChartTopBar.module.css';
 
@@ -21,7 +23,16 @@ interface Props {
 }
 
 export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onToggleAlerts, connState, wsError }: Props) {
-  const { symbol, interval, chartType, setSymbol, setInterval, setChartType } = useChartStore();
+  const { symbol, interval, chartType, symbolName, setSymbol, setInterval, setChartType, setSymbolName } = useChartStore();
+
+  // Fetch company name whenever the active symbol changes.
+  useEffect(() => {
+    let cancelled = false;
+    api.getSymbolInfo(symbol)
+      .then(({ name }) => { if (!cancelled) setSymbolName(name); })
+      .catch(() => { if (!cancelled) setSymbolName(symbol); });
+    return () => { cancelled = true; };
+  }, [symbol, setSymbolName]);
 
   const handleSymbolKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -38,10 +49,15 @@ export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onT
       <input
         className={styles.symbolInput}
         defaultValue={symbol}
+        key={symbol}
         onKeyDown={handleSymbolKeyDown}
         onBlur={(e) => setSymbol(e.target.value.toUpperCase().trim())}
         aria-label="Symbol"
       />
+
+      {symbolName && symbolName !== symbol && (
+        <span className={styles.symbolName}>{symbolName}</span>
+      )}
 
       <div className={styles.intervals}>
         {INTERVALS.map(i => (

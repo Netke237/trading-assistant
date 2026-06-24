@@ -21,11 +21,13 @@ export interface PaneLayout {
 
 interface ChartState {
   symbol: string;
+  symbolName: string;
   interval: Interval;
   chartType: ChartType;
   activeIndicators: IndicatorConfig[];
   paneLayout: PaneLayout;
   setSymbol: (s: string) => void;
+  setSymbolName: (n: string) => void;
   setInterval: (i: Interval) => void;
   setChartType: (t: ChartType) => void;
   addIndicator: (cfg: IndicatorConfig) => void;
@@ -53,11 +55,13 @@ export const useChartStore = create<ChartState>()(
   persist(
     (set) => ({
       symbol: 'AAPL',
+      symbolName: 'AAPL',
       interval: '1D',
       chartType: 'candle',
       activeIndicators: DEFAULT_INDICATORS,
       paneLayout: DEFAULT_PANE_LAYOUT,
-      setSymbol: (symbol) => set({ symbol }),
+      setSymbol: (symbol) => set({ symbol, symbolName: symbol }),
+      setSymbolName: (symbolName) => set({ symbolName }),
       setInterval: (interval) => set({ interval }),
       setChartType: (chartType) => set({ chartType }),
       addIndicator: (cfg) => set(s => ({ activeIndicators: [...s.activeIndicators, cfg] })),
@@ -75,21 +79,29 @@ export const useChartStore = create<ChartState>()(
       skipHydration: true,
       partialize: (state) => ({
         symbol: state.symbol,
+        symbolName: state.symbolName,
         interval: state.interval,
         chartType: state.chartType,
         activeIndicators: state.activeIndicators,
         paneLayout: state.paneLayout,
       }),
-      version: 1,
+      version: 2,
       migrate: (persistedState, version) => {
         const prev = (persistedState as Partial<ChartState> | null) ?? {};
         if (version < 1) {
           return {
             symbol: prev.symbol ?? 'AAPL',
+            symbolName: prev.symbol ?? 'AAPL',
             interval: prev.interval ?? '1D',
             chartType: prev.chartType ?? 'candle',
             activeIndicators: Array.isArray(prev.activeIndicators) ? prev.activeIndicators : DEFAULT_INDICATORS,
             paneLayout: prev.paneLayout ?? DEFAULT_PANE_LAYOUT,
+          } as ChartState;
+        }
+        if (version < 2) {
+          return {
+            ...prev,
+            symbolName: (prev as { symbolName?: string }).symbolName ?? prev.symbol ?? 'AAPL',
           } as ChartState;
         }
         return prev as ChartState;

@@ -24,6 +24,7 @@ import { useWatchlistStore } from '@/lib/watchlistStore';
 import { contractLabel, type OptionContract } from '@/types/domain';
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
 import type { WatchlistRow } from '@/types/domain';
+import { useChartStore } from '@/lib/chartStore';
 import styles from './page.module.css';
 
 type Tab     = 'stocks' | 'contracts';
@@ -45,6 +46,9 @@ export default function WatchlistPage() {
   const [watchlist, setWatchlist]   = useState<WatchlistRow[]>([]);
   const [contracts, setContracts]   = useState<OptionContract[]>([]);
   const [offline, setOffline]       = useState(false);
+
+  const setChartSymbol     = useChartStore((s) => s.setSymbol);
+  const setChartSymbolName = useChartStore((s) => s.setSymbolName);
 
   const watchedSymbols            = useWatchlistStore((s) => s.added);
   const syncFromBackend           = useWatchlistStore((s) => s.syncFromBackend);
@@ -161,8 +165,10 @@ export default function WatchlistPage() {
     else { setSortKey(k); setSortDir(k === 'symbol' ? 'asc' : 'desc'); }
   };
 
-  const onSelect = (symbol: string) => {
+  const onSelect = (symbol: string, company: string) => {
     setSelected((cur) => (cur === symbol ? null : symbol));
+    setChartSymbol(symbol);
+    setChartSymbolName(company);
   };
 
   return (
@@ -232,7 +238,7 @@ export default function WatchlistPage() {
                     status={row.status}
                     columns={COLUMNS}
                     selected={selected === row.symbol}
-                    onClick={() => onSelect(row.symbol)}
+                    onClick={() => onSelect(row.symbol, row.company)}
                   >
                     <WatchStar symbol={row.symbol} size="sm" />
                     <button

@@ -42,6 +42,7 @@ from app.routers.ingestion       import router as ingestion_router
 from app.routers.strategy_watch  import router as strategy_watch_router
 from app.routers.strategy_tuning import router as strategy_tuning_router
 from app.routers.config          import router as config_router
+from app.routers.symbols         import router as symbols_router
 
 
 _notification_worker_task: asyncio.Task | None = None
@@ -236,6 +237,7 @@ def create_app() -> FastAPI:
     app.include_router(watched_contracts_router)
     app.include_router(contracts_router)
     app.include_router(candles_router)
+    app.include_router(symbols_router)
     app.include_router(regime_router)
     app.include_router(sectors_router)
     app.include_router(tradecards_router)
