@@ -16,7 +16,7 @@ export function ChartPanelHeader({ symbol, onClose, label = 'Chart', timeframe =
   return (
     <header className={styles.root}>
       <div className={styles.titleGroup}>
-        <Text size={14} weight={500}>{label}</Text>
+        <Text size={14} weight={600}>{label}</Text>
         <Data size={13} weight={500}>{symbol}</Data>
         {symbol && <WatchStar symbol={symbol} size="sm" />}
         <Text size={11} tone="dim">{timeframe}</Text>
