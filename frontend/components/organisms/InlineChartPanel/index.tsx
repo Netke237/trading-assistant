@@ -22,10 +22,11 @@ import styles from './InlineChartPanel.module.css';
 interface InlineChartPanelProps {
   open: boolean;
   symbol: string;
+  companyName?: string;
   onClose: () => void;
 }
 
-export function InlineChartPanel({ open, symbol, onClose }: InlineChartPanelProps) {
+export function InlineChartPanel({ open, symbol, companyName, onClose }: InlineChartPanelProps) {
   const [candles, setCandles] = useState<Candle[]>([]);
   const [candleError, setCandleError] = useState(false);
 
@@ -49,7 +50,11 @@ export function InlineChartPanel({ open, symbol, onClose }: InlineChartPanelProp
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           aria-label={`${symbol} chart panel`}
         >
-          <ChartPanelHeader symbol={symbol} onClose={onClose} />
+          <ChartPanelHeader
+            symbol={symbol}
+            label={companyName && companyName !== symbol ? companyName : undefined}
+            onClose={onClose}
+          />
           <div className={styles.chartArea}>
             {candleError ? (
               <Text size={12} tone="dim">Chart unavailable</Text>
