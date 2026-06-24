@@ -1,6 +1,7 @@
 'use client';
 import { useEffect } from 'react';
 import { useChartStore, type Interval, type ChartType } from '@/lib/chartStore';
+import { WatchStar } from '@/components/atoms/WatchStar';
 import { api } from '@/lib/api';
 import type { ConnectionState } from '@/lib/chartWS';
 import styles from './ChartTopBar.module.css';
@@ -46,6 +47,7 @@ export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onT
 
   return (
     <div className={styles.bar}>
+      <WatchStar symbol={symbol} size="sm" />
       <input
         className={styles.symbolInput}
         defaultValue={symbol}
