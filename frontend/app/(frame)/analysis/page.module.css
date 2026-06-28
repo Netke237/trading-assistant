@@ -28,3 +28,22 @@
 }
 .rsStrip { display: flex; gap: 12px; margin-top: 4px; }
 .rsCell { display: flex; flex-direction: column; }
+.chartRegion { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; }
+.tableCol { display: flex; flex-direction: column; gap: 8px; }
+.tableHeader, .row {
+  display: grid; grid-template-columns: 1.2fr repeat(6, 1fr); gap: 8px; align-items: center;
+  padding: 8px; border-bottom: 1px solid var(--border-subtle);
+}
+.gateFlags { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.gateFlag { display: flex; align-items: center; gap: 8px; }
+.chartCol { min-height: 360px; }
+.scoreCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.scoreCard {
+  display: flex; flex-direction: column; gap: 4px; padding: 12px;
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+}
+.newsRegion { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.newsCol {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 12px; border: 1px solid var(--border-subtle); border-radius: 8px;
+}
