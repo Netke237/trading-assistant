@@ -4,32 +4,45 @@
 
 **Goal:** Add an **Analysis** page that lets the user analyse any stock or index on demand — even one that fails the scanner's gates — showing its regime (OMM/HMM by horizon), market sentiment, fundamentals, sector context, full score breakdown, chart, and news.
 
-**Architecture:** Reuse `_process_stock()` (which already computes score, OMM+HMM regime, fundamentals, sentiment, sector RS for a single symbol). Add a `bypass_gates` mode that converts gate early-returns into advisory flags. Expose a new `POST /api/analyze-stock` endpoint returning an extended `StockAnalysisOut` schema. On the frontend, add a new top-level page cloned from the Stock Ranking layout, driven by a new non-persisted Zustand store.
+**Architecture:** Instead of mutating the gated scan pipeline, add a dedicated **gate-free** `_analyze_core()` in `backend/app/routers/stock_scan.py` that reuses the same sub-services (`score_stock`, `compute_omm`, `compute_directional_hmm`, the strategy signal fns, `run_strategy_backtest`, fundamentals) but performs **no early-return gates** and treats the strategy `signal` as optional. It records which gates a symbol *would* have failed as advisory `gate_flags`. The scan path (`_process_stock`) is left completely untouched (zero regression risk). A new `POST /api/analyze-stock` endpoint assembles a `StockAnalysisOut`. On the frontend, a new top-level Analysis page (cloned from the Stock Ranking layout) is driven by a non-persisted Zustand store.
 
 **Tech Stack:** FastAPI + Pydantic v2 (backend), Next.js 15 + TypeScript + Zustand v5 + lightweight-charts v5 (frontend), pytest + Jest (tests).
 
 **Reference spec:** `docs/superpowers/specs/2026-06-29-single-stock-analysis-design.md`
+
+**Verified codebase facts this plan relies on:**
+- `StockScanRequest` (schemas/stock_scan.py:10-15) requires `universe, direction, horizon, strategy` (no defaults).
+- `RuleResult` (stock_scorer.py:20-25) has ONLY `name, status, score, detail` — no `weight`/`points`/`signal`.
+- `PositionCardOut.strategy` / `.backtest` are **required, non-Optional** (schemas:91-92) — so the no-signal case must NOT use `PositionCardOut`.
+- Frontend `NewsItem` (types/domain.ts:362) is `{ id, symbol, headline, source, timestamp, sentiment }` — no `title`/`url`.
+- `api.getNews(symbols)` hits `/api/news?symbols=...`; empty list returns `[]` (news.py:16). General market news = `getNews(['SPY','QQQ'])`.
+- `lib/api.ts` does NOT export `StrategySignal/Backtest/Sentiment/Fundamentals/Candle/NewsItem` — define/alias locally.
+- `ScanContext.horizon` (scanStore.ts:15) is a DISPLAY LABEL like `"Swing (5–15d)"` — must be mapped to the `Intraday|Swing|Position` enum before sending.
+- `regime.py:_ema(closes, period) -> float|None` exists — reuse it. `compute_overall_regime() -> str` (regime.py:94) is the cheap backdrop source.
+- `stock_scan_router` IS registered in main.py:259.
+- symbol→sector: `data/sp500.csv` has `symbol,sector`; `data/sector_names.py:NORMALIZE` canonicalises; `routers/sectors.py:_ETF_NAME` maps ETF→canonical name (reverse it for name→ETF).
 
 ---
 
 ## File Structure
 
 **Backend:**
-- Modify `backend/app/schemas/stock_scan.py` — add `GateFlag`, `EmaTrendOut`, `RegimeHorizonBlock`, `SectorTileOut`, `SectorRsOut`, `MarketBackdropOut`, `StockAnalysisOut`, `StockAnalysisRequest`.
-- Modify `backend/app/routers/stock_scan.py` — add `bypass_gates` to `_process_stock`, helper builders, and `POST /api/analyze-stock` handler.
-- Test `backend/tests/test_analyze_stock.py`.
+- Modify `backend/app/schemas/stock_scan.py` — add analysis output schemas.
+- Create `backend/app/data/sector_map.py` — symbol→(sector_name, etf) lookup.
+- Modify `backend/app/routers/stock_scan.py` — `_analyze_core`, helper builders, `POST /api/analyze-stock`.
+- Test `backend/tests/test_analyze_stock.py`, `backend/tests/test_sector_map.py`.
 
 **Frontend:**
-- Modify `frontend/lib/api.ts` — add `analyzeStock(...)` + response types.
-- Create `frontend/lib/analysisStore.ts` — Zustand store.
-- Modify `frontend/components/organisms/NavItems/index.tsx` — add Analysis nav item.
+- Modify `frontend/lib/api.ts` — `analyzeStock(...)` + response types.
+- Create `frontend/lib/analysisStore.ts` — Zustand store (+ horizon-label mapping).
+- Modify `frontend/components/organisms/NavItems/index.tsx` — Analysis nav item + icon.
 - Create `frontend/app/(frame)/analysis/page.tsx` + `page.module.css`.
-- Create `frontend/app/(frame)/@contextRail/analysis/default.tsx` (parallel-route slot default).
+- Create `frontend/app/(frame)/@contextRail/analysis/default.tsx`.
 - Test `frontend/lib/__tests__/analysisStore.test.ts`.
 
 ---
 
-## Task 1: Backend schemas for analysis output
+## Task 1: Backend analysis schemas
 
 **Files:**
 - Modify: `backend/app/schemas/stock_scan.py`
@@ -41,7 +54,7 @@ Create `backend/tests/test_analyze_stock.py`:
 
 ```python
 from app.schemas.stock_scan import (
-    StockAnalysisOut, StockAnalysisRequest, GateFlag,
+    StockAnalysisOut, StockAnalysisRequest, GateFlag, RuleContribution,
     EmaTrendOut, RegimeHorizonBlock, SectorTileOut, SectorRsOut, MarketBackdropOut,
 )
 
@@ -50,11 +63,14 @@ def test_stock_analysis_out_minimal():
     out = StockAnalysisOut(
         symbol="AMD", company="Advanced Micro Devices Inc", price=100.0,
         direction="Bullish", stock_score=55, stock_status="PASS",
-        is_index=False, gate_flags=[], regime_by_horizon={},
+        is_index=False,
     )
     assert out.symbol == "AMD"
     assert out.is_index is False
     assert out.gate_flags == []
+    assert out.regime_by_horizon == {}
+    assert out.strategy is None      # optional — None when no signal
+    assert out.backtest is None
 
 
 def test_gate_flag_shape():
@@ -63,22 +79,31 @@ def test_gate_flag_shape():
     assert g.status == "CAUTION"
 
 
+def test_rule_contribution_matches_ruleresult_fields():
+    r = RuleContribution(name="trend", status="PASS", score=80, detail={"adx": 34})
+    assert r.name == "trend"
+    assert r.status == "PASS"
+    assert r.score == 80
+
+
 def test_analysis_request_defaults():
+    # StockAnalysisRequest must be constructible from symbol alone (defaults supply the rest).
     req = StockAnalysisRequest(symbol="AMD")
     assert req.symbol == "AMD"
     assert req.horizon == "Swing"
     assert req.direction == "Bullish"
     assert req.strategy == "pullback_ema"
+    assert req.universe == []
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && pytest tests/test_analyze_stock.py -v`
-Expected: FAIL with `ImportError: cannot import name 'StockAnalysisOut'`.
+Expected: FAIL — `ImportError: cannot import name 'StockAnalysisOut'`.
 
 - [ ] **Step 3: Add the schemas**
 
-Append to `backend/app/schemas/stock_scan.py` (after `PositionCardOut`). Reuse existing imports already present in the file (`BaseModel`, `ConfigDict`, `Optional`, `Field`, `SentimentData`, `FundamentalsOut`, `StrategySignalOut`, `BacktestOut`):
+Append to `backend/app/schemas/stock_scan.py` (after `PositionCardOut`). The file already imports `BaseModel, ConfigDict, Field` (line 3), `Optional, Literal, Any` (line 2), and `SentimentData, FundamentalsOut` (line 4). `StrategySignalOut`/`BacktestOut`/`StockScanRequest` are defined above in the same file.
 
 ```python
 class GateFlag(BaseModel):
@@ -87,10 +112,19 @@ class GateFlag(BaseModel):
     detail: str
 
 
+class RuleContribution(BaseModel):
+    # Mirrors stock_scorer.RuleResult EXACTLY (name/status/score/detail).
+    name: str
+    status: str                  # 'PASS' | 'CAUTION' | 'REJECT'
+    score: int
+    detail: dict = Field(default_factory=dict)
+
+
 class EmaTrendOut(BaseModel):
     state: str                   # 'Above' | 'Below'
-    slope_pct: float
-    status: str                  # 'PASS' | 'CAUTION' | 'REJECT'
+    ema: float
+    last: float
+    status: str                  # 'PASS' | 'CAUTION'
 
 
 class RegimeHorizonBlock(BaseModel):
@@ -116,6 +150,7 @@ class SectorTileOut(BaseModel):
 
 
 class SectorRsOut(BaseModel):
+    benchmark: str                          # ETF actually used (sector ETF or SPY fallback)
     d1: Optional[float] = None
     w1: Optional[float] = None
     m1: Optional[float] = None
@@ -128,10 +163,15 @@ class MarketBackdropOut(BaseModel):
 
 
 class StockAnalysisRequest(StockScanRequest):
-    # Inherits all StockScanRequest params (horizon/direction/strategy/overrides).
-    # symbols becomes a single symbol field; universe is unused for analysis.
+    # Override the four required StockScanRequest fields with defaults so the
+    # endpoint is callable from `{symbol}` alone (the frontend always sends the
+    # real horizon/direction/strategy; defaults exist for tests + safety).
     model_config = ConfigDict(populate_by_name=True)
     symbol: str
+    universe: list[str] = Field(default_factory=list)
+    direction: Literal["Bullish", "Bearish"] = "Bullish"
+    horizon: Literal["Intraday", "Swing", "Position"] = "Swing"
+    strategy: Strategy = "pullback_ema"
 
 
 class StockAnalysisOut(BaseModel):
@@ -143,7 +183,7 @@ class StockAnalysisOut(BaseModel):
     stock_score: int
     stock_status: str
     is_index: bool = False
-    # Reused PositionCardOut-style payloads (optional — may be N/A for indices)
+    # Signal-dependent payloads — None when no strategy setup exists (bypass path)
     strategy: Optional[StrategySignalOut] = None
     backtest: Optional[BacktestOut] = None
     confidence: Optional[int] = None
@@ -153,6 +193,7 @@ class StockAnalysisOut(BaseModel):
     next_event_days: Optional[int] = None
     next_event_label: Optional[str] = None
     # Analysis-specific additions
+    rules: list[RuleContribution] = Field(default_factory=list)
     gate_flags: list[GateFlag] = Field(default_factory=list)
     ema_trend: Optional[EmaTrendOut] = None
     iv_rank: Optional[float] = None
@@ -162,232 +203,132 @@ class StockAnalysisOut(BaseModel):
     market_backdrop: Optional[MarketBackdropOut] = None
 ```
 
-Note: confirm `StockScanRequest` is defined above this point in the file; if not, move the new classes below it. Confirm `Field` is imported (add `from pydantic import Field` if missing).
+Confirm `Strategy` (the `Literal[...]` alias) is defined at module top (line 7) — it is.
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && pytest tests/test_analyze_stock.py -v`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add backend/app/schemas/stock_scan.py backend/tests/test_analyze_stock.py
-git commit -m "feat(analysis): add StockAnalysisOut schemas" --no-verify
+git commit -m "feat(analysis): add StockAnalysisOut schemas"
 ```
 
 ---
 
-## Task 2: Add `bypass_gates` to `_process_stock`
+## Task 2: Symbol → sector lookup
 
-Convert each gate early-return into an advisory flag when `bypass_gates=True`, so a gated symbol still produces a full card.
+A real `symbol → (sector_name, etf)` map, built from `sp500.csv` + `NORMALIZE` + reversed `_ETF_NAME`. Falls back to `(None, None)` for unknown symbols (analysis then benchmarks RS against SPY).
 
 **Files:**
-- Modify: `backend/app/routers/stock_scan.py`
-- Test: `backend/tests/test_analyze_stock.py`
+- Create: `backend/app/data/sector_map.py`
+- Test: `backend/tests/test_sector_map.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `backend/tests/test_analyze_stock.py`:
+Create `backend/tests/test_sector_map.py`:
 
 ```python
-import asyncio
-import pytest
-from app.routers import stock_scan as ss
-from app.schemas.stock_scan import StockScanRequest
+from app.data.sector_map import sector_for_symbol
 
 
-@pytest.mark.asyncio
-async def test_bypass_gates_returns_card_for_low_score(monkeypatch):
-    """A symbol that would REJECT on score still returns a PositionCardOut when bypassed."""
-    req = StockScanRequest(
-        symbols=["TEST"], universe=[], direction="Bullish", horizon="Swing",
-        strategy="pullback_ema",
-    )
-    # _process_stock with bypass_gates=True must return a card-like object with gate_flags,
-    # never a {"reason": ...} dict, for a symbol with valid history.
-    # (Integration-level: relies on get_historical_bars returning a fixture symbol.)
-    res = await ss._process_stock(
-        "AAPL", req, "test-scan", {}, [], fund_gate=None, bypass_gates=True,
-    )
-    # Either a card (PositionCardOut) or, if no history in test env, an insufficient dict.
-    if isinstance(res, dict):
-        assert res.get("reason", "").startswith("insufficient") or "no price" in res.get("reason", "")
-    else:
-        assert hasattr(res, "stock_score")
-        assert hasattr(res, "gate_flags")
+def test_known_sp500_symbol_maps_to_sector_and_etf():
+    name, etf = sector_for_symbol("MMM")   # Industrials in sp500.csv
+    assert name == "Industrials"
+    assert etf == "XLI"
+
+
+def test_unknown_symbol_returns_none():
+    name, etf = sector_for_symbol("ZZZZ_NOT_A_TICKER")
+    assert name is None
+    assert etf is None
+
+
+def test_case_insensitive():
+    name, etf = sector_for_symbol("mmm")
+    assert etf == "XLI"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd backend && pytest tests/test_analyze_stock.py::test_bypass_gates_returns_card_for_low_score -v`
-Expected: FAIL — `_process_stock()` got an unexpected keyword argument `bypass_gates`.
+Run: `cd backend && pytest tests/test_sector_map.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.data.sector_map'`.
 
-- [ ] **Step 3: Implement bypass_gates**
+- [ ] **Step 3: Implement the lookup**
 
-In `backend/app/routers/stock_scan.py`, change the `_process_stock` signature (line ~123) to add the param and a flag accumulator:
-
-```python
-async def _process_stock(
-    symbol: str,
-    req: StockScanRequest,
-    scan_id: str,
-    price_map: dict[str, dict],
-    benchmark_closes: list[float],
-    fund_gate: dict | None = None,
-    bypass_gates: bool = False,
-) -> PositionCardOut | dict:
-    async with _SCAN_SEM:
-        gate_flags: list[dict] = []
-
-        def _gate(gate: str, status: str, detail: str, reason: str):
-            """Record advisory flag and signal whether to early-return."""
-            gate_flags.append({"gate": gate, "status": status, "detail": detail})
-            return None if bypass_gates else {"symbol": symbol, "reason": reason}
-        ...
-```
-
-Then replace each gate early-return. For the price-min gate (line ~156):
+Create `backend/app/data/sector_map.py`:
 
 ```python
-            if req.min_price is not None and price < req.min_price:
-                r = _gate("price", "REJECT", f"price ${price:.2f} < min", f"price ${price:.2f} < min")
-                if r is not None:
-                    return r
-            if req.max_price is not None and price > req.max_price:
-                r = _gate("price", "REJECT", f"price ${price:.2f} > max", f"price ${price:.2f} > max")
-                if r is not None:
-                    return r
+from __future__ import annotations
+
+import csv
+import functools
+from pathlib import Path
+
+from app.data.sector_names import NORMALIZE
+
+_SP500_CSV = Path(__file__).parent / "sp500.csv"
+
+# Reverse of routers.sectors._ETF_NAME: canonical sector name → ETF symbol.
+_NAME_TO_ETF: dict[str, str] = {
+    "Technology": "XLK",
+    "Comm. Services": "XLC",
+    "Consumer Discretionary": "XLY",
+    "Industrials": "XLI",
+    "Financials": "XLF",
+    "Consumer Staples": "XLP",
+    "Health Care": "XLV",
+    "Materials": "XLB",
+    "Real Estate": "XLRE",
+    "Utilities": "XLU",
+    "Energy": "XLE",
+}
+
+
+@functools.lru_cache(maxsize=1)
+def _symbol_to_raw_sector() -> dict[str, str]:
+    out: dict[str, str] = {}
+    try:
+        with open(_SP500_CSV, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                sym = (row.get("symbol") or "").strip().upper()
+                sec = (row.get("sector") or "").strip()
+                if sym and sec:
+                    out[sym] = sec
+    except FileNotFoundError:
+        pass
+    return out
+
+
+def sector_for_symbol(symbol: str) -> tuple[str | None, str | None]:
+    """Return (canonical_sector_name, sector_etf) or (None, None) if unknown."""
+    raw = _symbol_to_raw_sector().get(symbol.strip().upper())
+    if not raw:
+        return None, None
+    name = NORMALIZE.get(raw, raw)
+    return name, _NAME_TO_ETF.get(name)
 ```
-
-For the score REJECT gate (line ~239):
-
-```python
-            if card.status == "REJECT":
-                r = _gate("score", "REJECT", f"score={card.score}", f"REJECT score={card.score}")
-                if r is not None:
-                    return r
-```
-
-For the direction-conviction gate (lines ~243-252), wrap each `return` similarly:
-
-```python
-            if req.horizon != "Intraday":
-                _trend_score = next((r.score for r in card.rules if r.name == "trend"), 50)
-                if req.direction == "Bearish":
-                    _max_trend = 40 if req.horizon == "Position" else 50
-                    if _trend_score > _max_trend:
-                        r = _gate("direction_conviction", "REJECT",
-                                  f"trend {_trend_score} > {_max_trend}",
-                                  f"direction_conviction: trend {_trend_score} > {_max_trend} for Bearish {req.horizon}")
-                        if r is not None:
-                            return r
-                elif req.direction == "Bullish":
-                    _min_trend = 40 if req.horizon == "Position" else 30
-                    if _trend_score < _min_trend:
-                        r = _gate("direction_conviction", "REJECT",
-                                  f"trend {_trend_score} < {_min_trend}",
-                                  f"direction_conviction: trend {_trend_score} < {_min_trend} for Bullish {req.horizon}")
-                        if r is not None:
-                            return r
-```
-
-For the regime-headwind gate (lines ~254-256):
-
-```python
-            if req.regime_filter and regime_signal and \
-               regime_signal["conviction_pct"] <= _regime_gate.get("headwind_caution_pct", -15):
-                r = _gate("regime_headwind", "REJECT", "regime headwind", "regime headwind")
-                if r is not None:
-                    return r
-```
-
-For the no-signal gate (line ~266) — when bypassed and there is no signal, set `signal = None` and continue (strategy/backtest become N/A):
-
-```python
-            signal = signal_fn(bars[-120:], direction=req.direction, **signal_kwargs)
-            if signal is None:
-                r = _gate("signal", "CAUTION", f"no {req.strategy} setup", f"no {req.strategy} setup")
-                if r is not None:
-                    return r
-```
-
-For the backtest gate (line ~281):
-
-```python
-            if not bt_result.passes_gate:
-                r = _gate("backtest", "CAUTION", bt_result.summary_text, f"backtest gate: {bt_result.summary_text}")
-                if r is not None:
-                    return r
-```
-
-For the confidence REJECT gate (lines ~300-308):
-
-```python
-            if conf_val is not None and req.confidence_reject_below is not None:
-                if conf_val < req.confidence_reject_below:
-                    r = _gate("confidence", "REJECT",
-                              f"{conf_val:.0f}% < {req.confidence_reject_below:.0f}%",
-                              f"confidence gate REJECT: {conf_val:.0f}% < {req.confidence_reject_below:.0f}%")
-                    if r is not None:
-                        return r
-```
-
-Guard the `signal`-dependent block (position sizing, return payload). When `signal is None` (bypass path), use safe defaults:
-
-```python
-            if signal is not None:
-                _bt_key = _backtest_key(symbol, req.strategy, req.direction, bars)
-                ... existing backtest + confidence + sizing logic ...
-            else:
-                bt_result = None
-                conf_val, conf_txt = None, None
-                shares, dollar_risk = 0, 0.0
-                signal = None
-```
-
-Note: this requires the backtest/confidence/sizing code to be inside the `if signal is not None:` block. Keep the non-bypass path identical by ensuring `signal` is always truthy there (gate returned otherwise).
-
-Finally, attach `gate_flags` to the returned `PositionCardOut` by stashing it on the object via a side channel — since `PositionCardOut` has no `gate_flags` field, return a tuple-free approach: store flags in a module-level contextvar OR (simpler) return the card and let the caller rebuild. **Chosen approach:** the analyze handler (Task 3) calls a thin wrapper that returns `(card, gate_flags)`. Modify `_process_stock` to return the card as today; expose `gate_flags` by making `_process_stock` set `card._gate_flags` is not possible on a frozen pydantic model. Instead, refactor: have `_process_stock` return `PositionCardOut | dict` unchanged for the scan path, and add a NEW function `_analyze_stock_core` (Task 3) that wraps the same body. To avoid duplication, extract the gate-aware body so both share it.
-
-**Simplification:** Rather than dual return types, change `_process_stock` to also accept an optional `flags_sink: list | None = None`; when provided, it appends gate dicts to it. The analyze handler passes its own list and reads it after the call:
-
-```python
-        # at each _gate call site, if flags_sink is not None: flags_sink.extend(...)
-```
-
-Implement by giving `_gate` closure access to `flags_sink`:
-
-```python
-    async def _process_stock(..., bypass_gates=False, flags_sink=None):
-        async with _SCAN_SEM:
-            def _gate(gate, status, detail, reason):
-                if flags_sink is not None:
-                    flags_sink.append({"gate": gate, "status": status, "detail": detail})
-                return None if bypass_gates else {"symbol": symbol, "reason": reason}
-```
-
-The scan path passes neither `bypass_gates` nor `flags_sink`, so behaviour is unchanged.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd backend && pytest tests/test_analyze_stock.py -v`
-Expected: PASS. Also run the existing scan tests to confirm no regression:
-Run: `cd backend && pytest tests/ -k stock -v`
-Expected: existing stock-scan tests still PASS.
+Run: `cd backend && pytest tests/test_sector_map.py -v`
+Expected: PASS (3 tests). If `sp500.csv`'s first data row symbol differs, adjust the test symbol to one present in the file (`head -5 backend/app/data/sp500.csv`).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/app/routers/stock_scan.py backend/tests/test_analyze_stock.py
-git commit -m "feat(analysis): bypass_gates mode in _process_stock with advisory flags" --no-verify
+git add backend/app/data/sector_map.py backend/tests/test_sector_map.py
+git commit -m "feat(analysis): symbol->sector lookup"
 ```
 
 ---
 
-## Task 3: `POST /api/analyze-stock` endpoint
+## Task 3: `_analyze_core` — gate-free single-symbol computation
 
-Assemble the full `StockAnalysisOut`: run the gate-bypassed core, plus all-three-horizon regime, EMA trend, IV rank, sector tile + RS strip, and market backdrop.
+A new function that mirrors `_process_stock`'s computation but with **no early-return gates** and an **optional** signal. Returns a dataclass the endpoint maps to `StockAnalysisOut`. The existing `_process_stock` and the scan path are NOT modified.
 
 **Files:**
 - Modify: `backend/app/routers/stock_scan.py`
@@ -398,61 +339,333 @@ Assemble the full `StockAnalysisOut`: run the gate-bypassed core, plus all-three
 Append to `backend/tests/test_analyze_stock.py`:
 
 ```python
+import pytest
+
+
 @pytest.mark.asyncio
-async def test_analyze_endpoint_index(monkeypatch):
-    from app.routers.stock_scan import analyze_stock
+async def test_analyze_core_low_score_still_returns(monkeypatch):
+    """A symbol the scanner would REJECT still yields a core result + gate_flags."""
+    from app.routers import stock_scan as ss
     from app.schemas.stock_scan import StockAnalysisRequest
 
-    req = StockAnalysisRequest(symbol="SPY", universe=[], direction="Bullish",
-                               horizon="Swing", strategy="pullback_ema")
-    out = await analyze_stock(req)
-    assert out.symbol == "SPY"
-    # SPY is treated as an index/ETF → fundamentals N/A
-    assert out.is_index is True
-    assert out.fundamentals is None
-    assert "Intraday" in out.regime_by_horizon or out.regime_by_horizon == {} or len(out.regime_by_horizon) >= 1
+    # Stub history + price so the test is deterministic & offline.
+    bars = [{"time": i, "open": 100, "high": 101, "low": 99, "close": 100 + (i % 3)} for i in range(300)]
+
+    async def _fake_bars(symbol, start, end):
+        return bars
+
+    monkeypatch.setattr(ss, "get_historical_bars", _fake_bars)
+    monkeypatch.setattr(ss, "fetch_quotes", lambda syms: {})
+
+    async def _fake_name(client, symbol):
+        return "Test Co"
+
+    monkeypatch.setattr(ss, "fetch_company_name_async", _fake_name)
+
+    req = StockAnalysisRequest(symbol="TEST", direction="Bullish", horizon="Swing",
+                               strategy="pullback_ema")
+    core = await ss._analyze_core("TEST", req)
+    assert core.card is not None
+    assert hasattr(core, "gate_flags")
+    assert isinstance(core.gate_flags, list)
+    # signal may be None (flat synthetic series → no setup); that is allowed.
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd backend && pytest tests/test_analyze_stock.py::test_analyze_endpoint_index -v`
-Expected: FAIL — `cannot import name 'analyze_stock'`.
+Run: `cd backend && pytest tests/test_analyze_stock.py::test_analyze_core_low_score_still_returns -v`
+Expected: FAIL — `module 'app.routers.stock_scan' has no attribute '_analyze_core'`.
 
-- [ ] **Step 3: Implement the endpoint and helpers**
+- [ ] **Step 3: Implement `_analyze_core`**
 
-Add to `backend/app/routers/stock_scan.py`:
+Add to `backend/app/routers/stock_scan.py` (imports first — most already present; add the missing ones):
 
 ```python
-from app.schemas.stock_scan import (
-    StockAnalysisRequest, StockAnalysisOut, GateFlag, EmaTrendOut,
-    RegimeHorizonBlock, SectorTileOut, SectorRsOut, MarketBackdropOut,
-)
+import dataclasses
+from app.scoring.stock_scorer import score_stock   # already imported at top — keep single import
+```
 
-# Index/ETF symbols get N/A fundamentals + IV rank.
+Define the result container and the core near the other module functions:
+
+```python
+@dataclasses.dataclass
+class _AnalyzeCore:
+    company: str
+    price: float
+    card: object                      # StockScoreCard
+    regime_signal: dict | None
+    fundamentals: object | None       # FundamentalHealth | None
+    signal: object | None             # StrategySignal | None
+    bt_result: object | None
+    conf_val: int | None
+    conf_txt: str | None
+    sector_rs_pct: float | None
+    next_event_days: int | None
+    next_event_label: str | None
+    daily_bars: list[dict]
+    gate_flags: list[dict]
+
+
+async def _analyze_core(symbol: str, req: StockAnalysisRequest) -> _AnalyzeCore | None:
+    """Gate-free single-symbol computation for the analysis page.
+
+    Mirrors _process_stock's pipeline but records gate failures as advisory
+    flags instead of returning early, and tolerates a missing strategy signal.
+    Returns None if there is no usable price history at all.
+    """
+    is_index = _is_index(symbol)
+    end = date.today()
+    start = end - timedelta(days=_HISTORY_YEARS * 365)
+    bars = await get_historical_bars(symbol, start, end)
+    if not bars or len(bars) < 60:
+        return None
+
+    gate_flags: list[dict] = []
+
+    # Price
+    try:
+        price_map = await asyncio.to_thread(fetch_quotes, [symbol])
+    except Exception:
+        price_map = {}
+    quote = price_map.get(symbol)
+    price = (float(quote.get("last") or 0) or None) if quote else None
+    if not price:
+        price = float(bars[-1]["close"]) or None
+    async with httpx.AsyncClient(timeout=10) as client:
+        if not price:
+            price = await fetch_price_async(client, symbol)
+        if not price:
+            return None
+        company = await fetch_company_name_async(client, symbol)
+
+    # Price-range advisory (does not block)
+    if req.min_price is not None and price < req.min_price:
+        gate_flags.append({"gate": "price", "status": "REJECT", "detail": f"price ${price:.2f} < min"})
+    if req.max_price is not None and price > req.max_price:
+        gate_flags.append({"gate": "price", "status": "REJECT", "detail": f"price ${price:.2f} > max"})
+
+    # Regime sentiment (selected horizon) — reuse the same config + services
+    full_cfg = _load_full_scoring_cfg()
+    rcfg = _load_regime_cfg(req.horizon)
+    regime_signal = None
+    if rcfg["timeframe"] == "15min":
+        try:
+            regime_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 55)
+        except Exception:
+            regime_bars = []
+    else:
+        regime_bars = bars
+    if regime_bars and len(regime_bars) >= rcfg.get("min_obs", 10):
+        omm = compute_omm([b["close"] for b in regime_bars], direction=req.direction,
+                          lookback=rcfg["lookback"], window=rcfg["window"], min_obs=rcfg["min_obs"])
+        if omm:
+            dh = None
+            try:
+                dh = compute_directional_hmm(regime_bars)
+            except Exception:
+                pass
+            regime_signal = {
+                "horizon": req.horizon, "timeframe": rcfg["timeframe"], "state": omm.state,
+                "p_stay": omm.p_stay, "stability": omm.stability,
+                "regime_age_days": omm.regime_age_days, "avg_regime_duration": omm.avg_regime_duration,
+                "conviction_pct": omm.conviction_pct, "conviction_label": omm.conviction_label,
+                "interpretation": omm.interpretation, "hmm_state": dh.state if dh else None,
+                "alignment": alignment(omm.state, dh.state if dh else None), "insufficient_data": False,
+            }
+
+    # Fundamentals (skip for index / intraday)
+    _fh = None
+    if not is_index and req.horizon.lower() != "intraday":
+        fund_gate = _resolve_fundamentals_gate(req)
+        if fund_gate is not None:
+            _snap = await _get_fundamentals(symbol, staleness_days=fund_gate.get("staleness_days", 90))
+            _fh = _score_fundamentals(_snap, req.direction, fund_gate) if _snap else None
+
+    _regime_gate = dict(full_cfg.get("regime_gate") or {})
+    card = score_stock(
+        symbol=symbol, direction=req.direction, horizon=req.horizon, bars=bars[-120:],
+        scoring_mode="stock", regime_signal=regime_signal,
+        regime_gate=(_regime_gate or None) if regime_signal else None,
+        fundamentals=_fh, fundamentals_gate=(None if is_index else _resolve_fundamentals_gate(req)),
+        overrides=req.overrides,
+    )
+    if card.status == "REJECT":
+        gate_flags.append({"gate": "score", "status": "REJECT", "detail": f"score={card.score}"})
+
+    if regime_signal and regime_signal["conviction_pct"] <= _regime_gate.get("headwind_caution_pct", -15):
+        gate_flags.append({"gate": "regime_headwind", "status": "CAUTION",
+                           "detail": f"conviction {regime_signal['conviction_pct']}%"})
+
+    # Strategy signal (optional)
+    signal = None
+    signal_fn = _SIGNAL_FNS.get(req.strategy)
+    if signal_fn:
+        signal_kwargs = _merge_strategy_params(
+            req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req))
+        try:
+            signal = signal_fn(bars[-120:], direction=req.direction, **signal_kwargs)
+        except Exception:
+            signal = None
+    if signal is None:
+        gate_flags.append({"gate": "signal", "status": "CAUTION", "detail": f"no {req.strategy} setup"})
+
+    # Backtest + confidence (only meaningful with a signal)
+    bt_result = None
+    conf_val = conf_txt = None
+    if signal is not None:
+        _bt_key = _backtest_key(symbol, req.strategy, req.direction, bars)
+        bt_result = _get_backtest_cached(_bt_key)
+        if bt_result is None:
+            bt_result = await asyncio.get_running_loop().run_in_executor(
+                _BACKTEST_POOL,
+                functools.partial(run_strategy_backtest, bars, strategy=req.strategy,
+                                  direction=req.direction, min_trades=req.bt_min_trades,
+                                  min_win_rate=req.bt_min_win_rate))
+            _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
+        if not bt_result.passes_gate:
+            gate_flags.append({"gate": "backtest", "status": "CAUTION", "detail": bt_result.summary_text})
+        _ck = conf_cache_key(symbol, req.direction, req.horizon)
+        _cached = get_cached(_ck)
+        if _cached is None:
+            _res = await asyncio.to_thread(compute_confidence, bars, direction=req.direction,
+                                           horizon=req.horizon, atr_mult=req.confidence_atr_mult)
+            _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
+            set_cached(_ck, _cached)
+        conf_val = _cached["confidence"]
+        conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
+        if conf_val is not None and req.confidence_reject_below is not None and conf_val < req.confidence_reject_below:
+            gate_flags.append({"gate": "confidence", "status": "REJECT",
+                               "detail": f"{conf_val:.0f}% < {req.confidence_reject_below:.0f}%"})
+
+    # Event proximity
+    next_event_days = next_event_label = None
+    if quote:
+        for field_name, label in [("earnings_date", "earnings"), ("ex_dividend_date", "dividend")]:
+            raw = quote.get(field_name)
+            if raw:
+                try:
+                    ev = date.fromisoformat(str(raw)[:10])
+                    days = (ev - date.today()).days
+                    if days >= 0 and (next_event_days is None or days < next_event_days):
+                        next_event_days, next_event_label = days, label
+                except (ValueError, TypeError):
+                    pass
+
+    return _AnalyzeCore(
+        company=company or symbol, price=price, card=card, regime_signal=regime_signal,
+        fundamentals=_fh, signal=signal, bt_result=bt_result, conf_val=conf_val, conf_txt=conf_txt,
+        sector_rs_pct=None, next_event_days=next_event_days, next_event_label=next_event_label,
+        daily_bars=bars, gate_flags=gate_flags,
+    )
+```
+
+Add the `_is_index` helper (also used by the endpoint):
+
+```python
 _INDEX_SYMBOLS = {"SPY", "QQQ", "DIA", "IWM", "SPX", "NDX", "VIX",
                   "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI", "XLB", "XLU", "XLRE", "XLC"}
 
 
 def _is_index(symbol: str) -> bool:
     return symbol.upper() in _INDEX_SYMBOLS
+```
+
+Note: this code references names already imported at the top of `stock_scan.py` (`get_historical_bars`, `fetch_quotes`, `fetch_price_async`, `fetch_company_name_async`, `fetch_intraday_candles`, `compute_omm`, `compute_directional_hmm`, `alignment`, `_get_fundamentals`, `_score_fundamentals`, `_resolve_fundamentals_gate`, `compute_confidence`, `interpret`, `conf_cache_key`, `get_cached`, `set_cached`, `run_strategy_backtest`, `score_stock`, `_SIGNAL_FNS`, `_SIGNAL_KWARGS`, `_merge_strategy_params`, `_backtest_key`, `_get_backtest_cached`, `_BACKTEST_POOL`, `_BACKTEST_CACHE`, `_BACKTEST_TTL`, `_load_full_scoring_cfg`, `_load_regime_cfg`). Verify each exists; all are defined/imported in the current file.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd backend && pytest tests/test_analyze_stock.py::test_analyze_core_low_score_still_returns -v`
+Expected: PASS.
+
+- [ ] **Step 5: Run the full stock suite to confirm no regression**
+
+Run: `cd backend && pytest tests/ -k "stock or scan" -q`
+Expected: existing tests still PASS (the scan path is untouched).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add backend/app/routers/stock_scan.py backend/tests/test_analyze_stock.py
+git commit -m "feat(analysis): gate-free _analyze_core"
+```
+
+---
+
+## Task 4: `POST /api/analyze-stock` endpoint
+
+Assembles `StockAnalysisOut` from `_analyze_core` plus EMA trend, all-three-horizon regime, sector tile + 1D/1W/1M RS, and a cheap market backdrop.
+
+**Files:**
+- Modify: `backend/app/routers/stock_scan.py`
+- Test: `backend/tests/test_analyze_stock.py`
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `backend/tests/test_analyze_stock.py`:
+
+```python
+@pytest.mark.asyncio
+async def test_analyze_endpoint_offline(monkeypatch):
+    from app.routers import stock_scan as ss
+    from app.schemas.stock_scan import StockAnalysisRequest, StockAnalysisOut
+
+    bars = [{"time": i, "open": 100, "high": 101, "low": 99, "close": 100 + (i % 5)} for i in range(400)]
+
+    async def _fake_bars(symbol, start, end):
+        return bars
+    async def _fake_name(client, symbol):
+        return "Test Co"
+
+    monkeypatch.setattr(ss, "get_historical_bars", _fake_bars)
+    monkeypatch.setattr(ss, "fetch_quotes", lambda syms: {})
+    monkeypatch.setattr(ss, "fetch_company_name_async", _fake_name)
+    monkeypatch.setattr(ss, "_market_backdrop", _make_async_none)
+
+    req = StockAnalysisRequest(symbol="SPY", direction="Bullish", horizon="Swing",
+                               strategy="pullback_ema")
+    out = await ss.analyze_stock(req)
+    assert isinstance(out, StockAnalysisOut)
+    assert out.symbol == "SPY"
+    assert out.is_index is True
+    assert out.fundamentals is None         # index → fundamentals N/A
+    assert set(out.regime_by_horizon.keys()) <= {"Intraday", "Swing", "Position"}
+
+
+async def _make_async_none():
+    return None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && pytest tests/test_analyze_stock.py::test_analyze_endpoint_offline -v`
+Expected: FAIL — `module 'app.routers.stock_scan' has no attribute 'analyze_stock'`.
+
+- [ ] **Step 3: Implement helpers + endpoint**
+
+Add imports and helpers to `backend/app/routers/stock_scan.py`:
+
+```python
+from app.schemas.stock_scan import (
+    StockAnalysisRequest, StockAnalysisOut, GateFlag, RuleContribution, EmaTrendOut,
+    RegimeHorizonBlock, SectorTileOut, SectorRsOut, MarketBackdropOut,
+)
+from app.data.sector_map import sector_for_symbol
+from app.routers.regime import _ema as _regime_ema, compute_overall_regime
 
 
 def _ema_trend(closes: list[float], period: int = 200) -> EmaTrendOut | None:
-    if len(closes) < period + 5:
+    if len(closes) < period + 1:
         return None
-    k = 2 / (period + 1)
-    ema = closes[0]
-    for c in closes[1:]:
-        ema = c * k + ema * (1 - k)
+    ema = _regime_ema(closes, period)
+    if ema is None:
+        return None
     last = closes[-1]
-    prev_ema = closes[-6]  # crude slope proxy
-    slope_pct = round((closes[-1] - closes[-6]) / closes[-6] * 100, 2) if closes[-6] else 0.0
     state = "Above" if last >= ema else "Below"
-    status = "PASS" if state == "Above" else "CAUTION"
-    return EmaTrendOut(state=state, slope_pct=slope_pct, status=status)
+    return EmaTrendOut(state=state, ema=round(ema, 2), last=round(last, 2),
+                       status="PASS" if state == "Above" else "CAUTION")
 
 
-def _regime_block_for_horizon(symbol: str, bars: list[dict], horizon: str, direction: str) -> RegimeHorizonBlock | None:
+def _regime_block_for_horizon(symbol: str, bars: list[dict], horizon: str, direction: str) -> RegimeHorizonBlock:
     rcfg = _load_regime_cfg(horizon)
     if rcfg["timeframe"] == "15min":
         try:
@@ -461,18 +674,19 @@ def _regime_block_for_horizon(symbol: str, bars: list[dict], horizon: str, direc
             rbars = []
     else:
         rbars = bars
-    if not rbars or len(rbars) < rcfg.get("min_obs", 10):
+
+    def _empty() -> RegimeHorizonBlock:
         return RegimeHorizonBlock(horizon=horizon, timeframe=rcfg["timeframe"], state="Unknown",
                                   p_stay=0.0, stability="Fragile", regime_age_days=0,
                                   avg_regime_duration=0.0, conviction_pct=0,
                                   conviction_label="Neutral", insufficient_data=True)
+
+    if not rbars or len(rbars) < rcfg.get("min_obs", 10):
+        return _empty()
     omm = compute_omm([b["close"] for b in rbars], direction=direction,
                       lookback=rcfg["lookback"], window=rcfg["window"], min_obs=rcfg["min_obs"])
     if not omm:
-        return RegimeHorizonBlock(horizon=horizon, timeframe=rcfg["timeframe"], state="Unknown",
-                                  p_stay=0.0, stability="Fragile", regime_age_days=0,
-                                  avg_regime_duration=0.0, conviction_pct=0,
-                                  conviction_label="Neutral", insufficient_data=True)
+        return _empty()
     dh = None
     try:
         dh = compute_directional_hmm(rbars)
@@ -484,171 +698,177 @@ def _regime_block_for_horizon(symbol: str, bars: list[dict], horizon: str, direc
         avg_regime_duration=omm.avg_regime_duration, conviction_pct=omm.conviction_pct,
         conviction_label=omm.conviction_label, hmm_state=(dh.state if dh else None),
         alignment=alignment(omm.state, dh.state if dh else None),
-        transition_row=omm.transition_row, insufficient_data=False,
-    )
+        transition_row=list(omm.transition_row), insufficient_data=False)
 
 
-async def _sector_context(symbol: str, bars: list[dict]) -> tuple[SectorTileOut | None, SectorRsOut | None]:
-    """Sector tile + 1D/1W/1M relative strength vs the stock's sector ETF."""
+async def _sector_context(symbol: str, closes: list[float]) -> tuple[SectorTileOut, SectorRsOut]:
+    name, etf = sector_for_symbol(symbol)
+    benchmark = etf or "SPY"
+    end = date.today()
+    start = end - timedelta(days=_HISTORY_YEARS * 365)
     try:
-        from app.routers.sectors import get_sectors  # existing sector data
-        tiles = await get_sectors()
+        bench_bars = await get_historical_bars(benchmark, start, end)
+        bench = [b["close"] for b in bench_bars] if bench_bars else []
     except Exception:
-        tiles = []
-    # Map symbol → sector via a lookup; fall back to SPY benchmark if unknown.
-    sector_name, sector_etf, sector_change = None, None, None
-    # NOTE: reuse existing symbol→sector mapping if present in data layer; otherwise None.
-    rs = SectorRsOut()
-    closes = [b["close"] for b in bars]
-
-    async def _bench_closes(etf: str) -> list[float]:
-        try:
-            end = date.today()
-            start = end - timedelta(days=_HISTORY_YEARS * 365)
-            b = await get_historical_bars(etf, start, end)
-            return [x["close"] for x in b] if b else []
-        except Exception:
-            return []
-
-    bench = await _bench_closes(sector_etf or "SPY")
+        bench = []
+    rs = SectorRsOut(benchmark=benchmark)
     for attr, lookback in (("d1", 1), ("w1", 5), ("m1", 21)):
         if len(closes) > lookback and len(bench) > lookback:
             s = (closes[-1] - closes[-(lookback + 1)]) / closes[-(lookback + 1)] * 100
             bm = (bench[-1] - bench[-(lookback + 1)]) / bench[-(lookback + 1)] * 100
             setattr(rs, attr, round(s - bm, 2))
-    tile = SectorTileOut(name=sector_name or "Unknown", etf=sector_etf, change_pct=sector_change)
+    tile = SectorTileOut(name=name or "Unknown", etf=etf, change_pct=None)
     return tile, rs
 
 
 async def _market_backdrop() -> MarketBackdropOut | None:
+    """Cheap macro backdrop — uses compute_overall_regime() (no heavy recompute)."""
     try:
-        from app.routers.regime import get_regime  # existing market regime handler
-        mr = await get_regime()  # default horizon
-        return MarketBackdropOut(
-            overall=getattr(mr, "overall", "PENDING"),
-            direction=getattr(mr, "regime_direction", None),
-            vix=None,
-        )
+        overall = await asyncio.to_thread(compute_overall_regime)
+        return MarketBackdropOut(overall=overall, direction=None, vix=None)
     except Exception:
         return None
+```
 
+Add the endpoint:
 
+```python
 @router.post("/analyze-stock")
 async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
     symbol = req.symbol.upper()
     is_index = _is_index(symbol)
 
-    # Reuse the scan's single-symbol pipeline with gates bypassed.
-    scan_req = req  # StockAnalysisRequest extends StockScanRequest
-    if not scan_req.symbols:
-        scan_req.symbols = [symbol]
+    core = await _analyze_core(symbol, req)
+    if core is None:
+        raise HTTPException(status_code=404, detail=f"No usable data for {symbol}")
 
-    try:
-        price_map = await asyncio.to_thread(fetch_quotes, [symbol])
-    except Exception:
-        price_map = {}
+    card = core.card
+    closes = [b["close"] for b in core.daily_bars]
 
-    fund_gate = None if is_index else _resolve_fundamentals_gate(req)
-    flags: list[dict] = []
-    core = await _process_stock(symbol, scan_req, new_rec_id(), price_map, [],
-                                fund_gate=fund_gate, bypass_gates=True, flags_sink=flags)
+    regime_by_horizon: dict[str, RegimeHorizonBlock] = {
+        h: _regime_block_for_horizon(symbol, core.daily_bars, h, req.direction)
+        for h in ("Intraday", "Swing", "Position")
+    }
 
-    if isinstance(core, dict):  # no usable history/price
-        raise HTTPException(status_code=404, detail=core.get("reason", f"No data for {symbol}"))
-
-    # Daily bars for regime-by-horizon + EMA + sector RS
-    end = date.today()
-    start = end - timedelta(days=_HISTORY_YEARS * 365)
-    bars = await get_historical_bars(symbol, start, end) or []
-    closes = [b["close"] for b in bars]
-
-    regime_by_horizon: dict[str, RegimeHorizonBlock] = {}
-    for h in ("Intraday", "Swing", "Position"):
-        blk = _regime_block_for_horizon(symbol, bars, h, req.direction)
-        if blk:
-            regime_by_horizon[h] = blk
-
-    ema = _ema_trend(closes) if closes else None
-    sector_tile, sector_rs = await _sector_context(symbol, bars)
+    sector_tile, sector_rs = await _sector_context(symbol, closes)
     backdrop = await _market_backdrop()
+
+    strategy_out = backtest_out = None
+    if core.signal is not None:
+        strategy_out = StrategySignalOut(
+            strategy=core.signal.strategy, entry_price=core.signal.entry_price,
+            stop_price=core.signal.stop_price, target_price=core.signal.target_price,
+            rr_ratio=round(core.signal.rr_ratio, 2), atr=core.signal.atr, detail=core.signal.detail)
+    if core.bt_result is not None:
+        bt = core.bt_result
+        backtest_out = BacktestOut(
+            n_trades=bt.n_trades, win_rate=round(bt.win_rate, 3),
+            total_return_pct=round(bt.total_return_pct, 2),
+            max_drawdown_pct=round(bt.max_drawdown_pct, 2), expectancy=bt.expectancy,
+            sharpe=bt.sharpe, confidence=bt.confidence, passes_gate=bt.passes_gate,
+            summary_text=bt.summary_text)
+
+    fundamentals_out = None
+    if core.fundamentals is not None and not is_index:
+        _fh = core.fundamentals
+        fundamentals_out = FundamentalsOut(
+            score=_fh.score, quality_label=_fh.quality_label, risk_label=_fh.risk_label,
+            growth_score=_fh.growth_score, quality_score=_fh.quality_score,
+            risk_score=_fh.risk_score, safety_flags=_fh.safety_flags, detail=_fh.detail)
 
     return StockAnalysisOut(
         symbol=symbol, company=core.company, price=core.price, direction=req.direction,
-        stock_score=core.stock_score, stock_status=core.stock_status, is_index=is_index,
-        strategy=core.strategy, backtest=core.backtest,
-        confidence=core.confidence, confidence_text=core.confidence_text,
-        sentiment=core.sentiment, fundamentals=(None if is_index else core.fundamentals),
+        stock_score=card.score, stock_status=card.status, is_index=is_index,
+        strategy=strategy_out, backtest=backtest_out,
+        confidence=core.conf_val, confidence_text=core.conf_txt,
+        sentiment=SentimentData(**core.regime_signal) if core.regime_signal else None,
+        fundamentals=fundamentals_out,
         next_event_days=core.next_event_days, next_event_label=core.next_event_label,
-        gate_flags=[GateFlag(**g) for g in flags],
-        ema_trend=ema, iv_rank=None,
-        regime_by_horizon=regime_by_horizon,
-        sector=sector_tile, sector_rs=sector_rs, market_backdrop=backdrop,
-    )
+        rules=[RuleContribution(name=r.name, status=r.status, score=r.score, detail=r.detail or {})
+               for r in card.rules],
+        gate_flags=[GateFlag(**g) for g in core.gate_flags],
+        ema_trend=_ema_trend(closes), iv_rank=None,
+        regime_by_horizon=regime_by_horizon, sector=sector_tile, sector_rs=sector_rs,
+        market_backdrop=backdrop)
 ```
 
-Notes for the implementer:
-- Confirm the real handler names for sectors (`get_sectors`) and regime (`get_regime`) in their routers; if they differ or require args, adapt. If a symbol→sector map does not exist in the data layer, leave `sector_name="Unknown"` and `sector_etf=None` (RS falls back to SPY) — flag this as a follow-up.
-- `iv_rank` is left `None` for now (degrade-to-N/A per spec); wire to the options IV source in a follow-up if available.
-- `_ema_trend` recomputes EMA over the full series each call — acceptable for one symbol.
+Confirm `StrategySignalOut`, `BacktestOut`, `FundamentalsOut`, `SentimentData` are imported in `stock_scan.py` (they are — used by `_process_stock`).
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && pytest tests/test_analyze_stock.py -v`
-Expected: PASS (may skip/branch if no network in test env — the test tolerates `is_index` + `fundamentals is None`).
+Expected: PASS (all tests).
 
-- [ ] **Step 5: Register is automatic** (the handler is on the existing `stock_scan_router`, already registered in `main.py`). Verify by starting the app:
+- [ ] **Step 5: Verify route registration (router already in main.py:259)**
 
-Run: `cd backend && python -c "from app.main import create_app; app=create_app(); print([r.path for r in app.routes if 'analyze' in r.path])"`
+Run: `cd backend && python -c "from app.main import create_app; app=create_app(); print([r.path for r in app.routes if 'analyze' in getattr(r,'path','')])"`
 Expected: prints `['/api/analyze-stock']`.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add backend/app/routers/stock_scan.py backend/tests/test_analyze_stock.py
-git commit -m "feat(analysis): POST /api/analyze-stock endpoint" --no-verify
+git commit -m "feat(analysis): POST /api/analyze-stock endpoint"
 ```
 
 ---
 
-## Task 4: Frontend API client + types
+## Task 5: Frontend API client + types
 
 **Files:**
 - Modify: `frontend/lib/api.ts`
-- Test: `frontend/lib/__tests__/analysisStore.test.ts` (created in Task 5; types verified via typecheck here)
 
 - [ ] **Step 1: Add response types and the client method**
 
-In `frontend/lib/api.ts`, add exported types near the other domain types:
+In `frontend/lib/api.ts`, add these exported interfaces (define them locally — none of the underlying shapes are currently exported). Place near the other `export interface` blocks:
 
 ```typescript
+export interface AnalysisStrategySignal {
+  strategy: string; entry_price: number; stop_price: number; target_price: number;
+  rr_ratio: number; atr: number; detail: Record<string, unknown>;
+}
+export interface AnalysisBacktest {
+  n_trades: number; win_rate: number; total_return_pct: number; max_drawdown_pct: number;
+  expectancy: number; sharpe: number; confidence: number | null; passes_gate: boolean; summary_text: string;
+}
+export interface AnalysisSentiment {
+  horizon: string; timeframe: string; state: string; p_stay: number; stability: string;
+  regime_age_days: number; avg_regime_duration: number; conviction_pct: number;
+  conviction_label: string; interpretation: string; hmm_state: string | null;
+  alignment: string; insufficient_data: boolean;
+}
+export interface AnalysisFundamentals {
+  score: number; quality_label: string; risk_label: string; growth_score: number;
+  quality_score: number; risk_score: number; safety_flags: string[]; detail: Record<string, unknown>;
+}
+export interface RuleContribution { name: string; status: 'PASS' | 'CAUTION' | 'REJECT'; score: number; detail: Record<string, unknown>; }
 export interface GateFlag { gate: string; status: 'PASS' | 'CAUTION' | 'REJECT'; detail: string; }
-export interface EmaTrend { state: 'Above' | 'Below'; slope_pct: number; status: string; }
+export interface EmaTrend { state: 'Above' | 'Below'; ema: number; last: number; status: string; }
 export interface RegimeHorizonBlock {
   horizon: string; timeframe: string; state: string; p_stay: number; stability: string;
   regime_age_days: number; avg_regime_duration: number; conviction_pct: number;
   conviction_label: string; hmm_state: string | null; alignment: string;
   transition_row: number[]; insufficient_data: boolean;
 }
-export interface SectorTile { name: string; etf: string | null; change_pct: number | null; }
-export interface SectorRs { d1: number | null; w1: number | null; m1: number | null; }
+export interface SectorTileLite { name: string; etf: string | null; change_pct: number | null; }
+export interface SectorRs { benchmark: string; d1: number | null; w1: number | null; m1: number | null; }
 export interface MarketBackdrop { overall: string; direction: string | null; vix: number | null; }
 
 export interface StockAnalysis {
   symbol: string; company: string; price: number; direction: string;
-  stock_score: number; stock_status: string; is_index: boolean;
-  strategy: StrategySignal | null; backtest: Backtest | null;
+  stock_score: number; stock_status: 'PASS' | 'CAUTION' | 'REJECT'; is_index: boolean;
+  strategy: AnalysisStrategySignal | null; backtest: AnalysisBacktest | null;
   confidence: number | null; confidence_text: string | null;
-  sentiment: Sentiment | null; fundamentals: Fundamentals | null;
+  sentiment: AnalysisSentiment | null; fundamentals: AnalysisFundamentals | null;
   next_event_days: number | null; next_event_label: string | null;
-  gate_flags: GateFlag[]; ema_trend: EmaTrend | null; iv_rank: number | null;
+  rules: RuleContribution[]; gate_flags: GateFlag[]; ema_trend: EmaTrend | null; iv_rank: number | null;
   regime_by_horizon: Record<string, RegimeHorizonBlock>;
-  sector: SectorTile | null; sector_rs: SectorRs | null; market_backdrop: MarketBackdrop | null;
+  sector: SectorTileLite | null; sector_rs: SectorRs | null; market_backdrop: MarketBackdrop | null;
 }
 
 export interface AnalyzeStockRequest {
-  symbol: string; direction: string; horizon: string; strategy: string;
+  symbol: string; direction: string; horizon: 'Intraday' | 'Swing' | 'Position'; strategy: string;
   overrides?: Record<string, number | boolean | string>;
-  // optional strategy params (same names the stock-scan request accepts)
   pullback_tolerance_pct?: number; pullback_ema_period?: number; pullback_trend_ema?: number;
   pullback_ma_type?: 'EMA' | 'SMA'; pullback_require_reversal?: boolean;
   ma_crossover_fast?: number; ma_crossover_slow?: number; ma_crossover_lookback?: number;
@@ -656,9 +876,7 @@ export interface AnalyzeStockRequest {
 }
 ```
 
-Reuse existing `StrategySignal`, `Backtest`, `Sentiment`, `Fundamentals` types if already exported in `api.ts` (the stock-scan result already references them). If they are named differently, alias accordingly.
-
-Add the method inside the `api` object:
+Add the method inside the `api` object (e.g. after `getNews`, line 142):
 
 ```typescript
   analyzeStock: (req: AnalyzeStockRequest) => post<StockAnalysis>('/api/analyze-stock', req),
@@ -667,18 +885,18 @@ Add the method inside the `api` object:
 - [ ] **Step 2: Verify typecheck**
 
 Run: `cd frontend && npm run typecheck`
-Expected: clean (no errors). If `StrategySignal`/`Backtest`/`Sentiment`/`Fundamentals` are not exported, export them or define minimal interfaces here.
+Expected: clean.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add frontend/lib/api.ts
-git commit -m "feat(analysis): analyzeStock api client + types" --no-verify
+git commit -m "feat(analysis): analyzeStock api client + types"
 ```
 
 ---
 
-## Task 5: Analysis Zustand store
+## Task 6: Analysis Zustand store (with horizon-label mapping)
 
 **Files:**
 - Create: `frontend/lib/analysisStore.ts`
@@ -689,12 +907,10 @@ git commit -m "feat(analysis): analyzeStock api client + types" --no-verify
 Create `frontend/lib/__tests__/analysisStore.test.ts`:
 
 ```typescript
-import { useAnalysisStore } from '@/lib/analysisStore';
+import { useAnalysisStore, _horizonEnum } from '@/lib/analysisStore';
 import { api } from '@/lib/api';
 
-jest.mock('@/lib/api', () => ({
-  api: { analyzeStock: jest.fn() },
-}));
+jest.mock('@/lib/api', () => ({ api: { analyzeStock: jest.fn() } }));
 
 describe('analysisStore', () => {
   beforeEach(() => {
@@ -702,22 +918,29 @@ describe('analysisStore', () => {
     (api.analyzeStock as jest.Mock).mockReset();
   });
 
-  it('sets result on success', async () => {
+  it('maps display horizon labels to the backend enum', () => {
+    expect(_horizonEnum('Swing (5–15d)')).toBe('Swing');
+    expect(_horizonEnum('Position (1–6m)')).toBe('Position');
+    expect(_horizonEnum('Intraday')).toBe('Intraday');
+    expect(_horizonEnum('weird')).toBe('Swing');   // safe default
+  });
+
+  it('sets result on success and uppercases symbol', async () => {
     (api.analyzeStock as jest.Mock).mockResolvedValue({ symbol: 'AMD', stock_score: 55 });
     await useAnalysisStore.getState().analyze('amd');
     const s = useAnalysisStore.getState();
-    expect(s.symbol).toBe('AMD');
+    expect((api.analyzeStock as jest.Mock).mock.calls[0][0].symbol).toBe('AMD');
     expect(s.result?.stock_score).toBe(55);
     expect(s.loading).toBe(false);
     expect(s.error).toBeNull();
   });
 
   it('sets error on failure', async () => {
-    (api.analyzeStock as jest.Mock).mockRejectedValue(new Error('404: No data for ZZZZ'));
+    (api.analyzeStock as jest.Mock).mockRejectedValue(new Error('404: No usable data for ZZZZ'));
     await useAnalysisStore.getState().analyze('ZZZZ');
     const s = useAnalysisStore.getState();
     expect(s.result).toBeNull();
-    expect(s.error).toContain('No data');
+    expect(s.error).toContain('No usable data');
     expect(s.loading).toBe(false);
   });
 });
@@ -737,6 +960,16 @@ import { create } from 'zustand';
 import { api, type StockAnalysis } from '@/lib/api';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
+
+export type HorizonEnum = 'Intraday' | 'Swing' | 'Position';
+
+/** ScanContext.horizon is a display label like "Swing (5–15d)" — map to the backend enum. */
+export function _horizonEnum(label: string | undefined): HorizonEnum {
+  const l = (label ?? '').toLowerCase();
+  if (l.startsWith('intraday')) return 'Intraday';
+  if (l.startsWith('position')) return 'Position';
+  return 'Swing';
+}
 
 interface AnalysisState {
   symbol: string;
@@ -761,7 +994,7 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       const result = await api.analyzeStock({
         symbol,
         direction: ctx?.direction ?? 'Bullish',
-        horizon: ctx?.horizon ?? 'Swing',
+        horizon: _horizonEnum(ctx?.horizon),
         strategy: useScanStore.getState().activeStrategy ?? 'pullback_ema',
         pullback_tolerance_pct: p.pullbackTolerancePct,
         pullback_ema_period: p.pullbackEmaPeriod,
@@ -783,54 +1016,67 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
 }));
 ```
 
-Confirm `activeStrategy` and `context` exist on `scanStore` (they do — used by step-4-stocks). Confirm the param field names on `scanParamsStore` match (they're the same ones step-4-stocks reads).
+Confirm `scanParamsStore` exposes the field names used (`pullbackTolerancePct`, `pullbackEmaPeriod`, `pullbackTrendEma`, `pullbackMaType`, `maCrossoverFast`, `maCrossoverSlow`, `maCrossoverLookback`, `breakoutVolumeMult`, `rsiPeriod`, `rsiOversold`, `rsiTrendSma`) — these are the same fields `step-4-stocks/page.tsx` reads (lines 79-83). If any differ, adjust.
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npm run test -- --testPathPattern=analysisStore`
-Expected: PASS (2 tests).
+Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add frontend/lib/analysisStore.ts frontend/lib/__tests__/analysisStore.test.ts
-git commit -m "feat(analysis): analysisStore" --no-verify
+git commit -m "feat(analysis): analysisStore with horizon mapping"
 ```
 
 ---
 
-## Task 6: Add Analysis nav item
+## Task 7: Add Analysis nav item
 
 **Files:**
 - Modify: `frontend/components/organisms/NavItems/index.tsx`
 
-- [ ] **Step 1: Add the item**
+- [ ] **Step 1: Add the nav item**
 
-In `frontend/components/organisms/NavItems/index.tsx`, add to the `ITEMS` array (after `Screener`). Reuse an existing icon (e.g. `ChartIcon`) or import an appropriate one already used in the file:
+In `frontend/components/organisms/NavItems/index.tsx`, add to the `ITEMS` array after the `Screener` entry (line 18):
 
 ```typescript
-  { label: 'Analysis',  match: '/analysis',  href: '/analysis',  Icon: ChartIcon },
+  { label: 'Analysis',  match: '/analysis',  href: '/analysis',  Icon: AnalysisIcon },
 ```
 
-(If `ChartIcon` is already used for `/chart`, pick another existing icon import in the file to keep them visually distinct, e.g. `ScreenerIcon`.)
+- [ ] **Step 2: Add the icon**
 
-- [ ] **Step 2: Verify typecheck**
+In the same file's icon section (after `ScreenerIcon`, near line 87), add an `AnalysisIcon` following the existing inline-SVG pattern used by the other icons (match their `viewBox`, `stroke`, `fill` conventions — copy the shape of `ScreenerIcon` and change the path):
+
+```tsx
+function AnalysisIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 3v18h18" />
+      <path d="M7 14l3-3 3 3 4-5" />
+    </svg>
+  );
+}
+```
+
+Adjust attributes to match the existing icons exactly if they differ (check `ScreenerIcon`'s SVG attributes first).
+
+- [ ] **Step 3: Verify typecheck**
 
 Run: `cd frontend && npm run typecheck`
 Expected: clean.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add frontend/components/organisms/NavItems/index.tsx
-git commit -m "feat(analysis): add Analysis nav item" --no-verify
+git commit -m "feat(analysis): add Analysis nav item"
 ```
 
 ---
 
-## Task 7: Analysis page — search + header + regime context
-
-Build the page incrementally. This task delivers the search bar, header strip, and the regime/EMA/sentiment/fundamentals/sector context row.
+## Task 8: Analysis page — search, header, regime context
 
 **Files:**
 - Create: `frontend/app/(frame)/analysis/page.tsx`
@@ -847,7 +1093,7 @@ export default function AnalysisContextRailDefault() {
 }
 ```
 
-- [ ] **Step 2: Create the page skeleton with search + header**
+- [ ] **Step 2: Create the page with search + header + regime context**
 
 Create `frontend/app/(frame)/analysis/page.tsx`:
 
@@ -861,7 +1107,7 @@ import { useAnalysisStore } from '@/lib/analysisStore';
 import styles from './page.module.css';
 
 export default function AnalysisPage() {
-  const { symbol, result, loading, error, analyze } = useAnalysisStore();
+  const { result, loading, error, analyze } = useAnalysisStore();
   const [input, setInput] = useState('');
 
   function onSubmit(e: React.FormEvent) {
@@ -896,18 +1142,14 @@ export default function AnalysisPage() {
             <Data size={18} weight={600}>{result.symbol}</Data>
             <Text size={13} tone="secondary">{result.company}</Text>
             <Data size={14}>${result.price.toFixed(2)}</Data>
-            <StatusBadge status={result.stock_status as 'PASS' | 'CAUTION' | 'REJECT'} />
+            <StatusBadge status={result.stock_status} />
             <span className={styles.dirPill}>{result.direction}</span>
             {result.market_backdrop && (
-              <span className={styles.backdropChip}>
-                Market: {result.market_backdrop.overall}
-                {result.market_backdrop.direction ? ` · ${result.market_backdrop.direction}` : ''}
-              </span>
+              <span className={styles.backdropChip}>Market: {result.market_backdrop.overall}</span>
             )}
           </div>
 
           <div className={styles.contextRow}>
-            {/* EMA / IV */}
             <article className={styles.ctxCard}>
               <Text size={11} tone="dim">EMA / IV</Text>
               {result.ema_trend ? (
@@ -916,11 +1158,10 @@ export default function AnalysisPage() {
                 </Data>
               ) : <Text size={12} tone="dim">N/A</Text>}
               <Text size={11} tone="secondary">
-                IV rank: {result.iv_rank != null ? `${result.iv_rank.toFixed(0)}` : (result.is_index ? 'N/A' : '—')}
+                IV rank: {result.iv_rank != null ? result.iv_rank.toFixed(0) : (result.is_index ? 'N/A' : '—')}
               </Text>
             </article>
 
-            {/* Market sentiment */}
             <article className={styles.ctxCard}>
               <Text size={11} tone="dim">Market sentiment</Text>
               {result.sentiment ? (
@@ -930,7 +1171,6 @@ export default function AnalysisPage() {
               ) : <Text size={12} tone="dim">—</Text>}
             </article>
 
-            {/* Fundamental health */}
             <article className={styles.ctxCard}>
               <Text size={11} tone="dim">Fundamental Health</Text>
               {result.fundamentals ? (
@@ -945,10 +1185,9 @@ export default function AnalysisPage() {
               ) : <Text size={12} tone="dim">{result.is_index ? 'N/A (index)' : '—'}</Text>}
             </article>
 
-            {/* Sector tile + RS strip */}
             <article className={styles.ctxCard}>
               <Text size={11} tone="dim">Sector</Text>
-              <Data size={13}>{result.sector?.name ?? 'Unknown'}{result.sector?.change_pct != null ? ` ${result.sector.change_pct > 0 ? '+' : ''}${result.sector.change_pct}%` : ''}</Data>
+              <Data size={13}>{result.sector?.name ?? 'Unknown'}</Data>
               {result.sector_rs && (
                 <div className={styles.rsStrip}>
                   {(['d1', 'w1', 'm1'] as const).map((k) => {
@@ -965,10 +1204,12 @@ export default function AnalysisPage() {
                   })}
                 </div>
               )}
+              {result.sector_rs && (
+                <Text size={10} tone="dim">vs {result.sector_rs.benchmark}</Text>
+              )}
             </article>
           </div>
 
-          {/* Regime by horizon */}
           <div className={styles.regimeRow}>
             {(['Intraday', 'Swing', 'Position'] as const).map((h) => {
               const blk = result.regime_by_horizon[h];
@@ -995,7 +1236,7 @@ export default function AnalysisPage() {
 
 - [ ] **Step 3: Create the CSS**
 
-Create `frontend/app/(frame)/analysis/page.module.css` — follow the project's token conventions (borders not shadows, CSS variables only):
+Create `frontend/app/(frame)/analysis/page.module.css`:
 
 ```css
 .main { display: flex; flex-direction: column; gap: 16px; padding: 24px; }
@@ -1011,8 +1252,10 @@ Create `frontend/app/(frame)/analysis/page.module.css` — follow the project's 
   background: var(--bg-surface); color: var(--text-primary); cursor: pointer;
 }
 .searchBtn:disabled { opacity: 0.6; cursor: default; }
-.headerStrip { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 12px; border: 1px solid var(--border-subtle); border-radius: 8px; }
+.headerStrip {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px; border: 1px solid var(--border-subtle); border-radius: 8px;
+}
 .dirPill, .backdropChip {
   font-size: 11px; padding: 2px 8px; border-radius: 4px;
   border: 1px solid var(--border-subtle); color: var(--text-secondary);
@@ -1037,29 +1280,32 @@ Expected: clean.
 
 ```bash
 git add "frontend/app/(frame)/analysis" "frontend/app/(frame)/@contextRail/analysis"
-git commit -m "feat(analysis): page search + header + regime context" --no-verify
+git commit -m "feat(analysis): page search + header + regime context"
 ```
 
 ---
 
-## Task 8: Analysis page — chart, score table row, score breakdown cards, news
-
-Add the cloned Stock-Ranking lower region: chart, single-symbol table row with advisory gate badges, per-component score breakdown cards, and news.
+## Task 9: Analysis page — chart, score row, gate flags, score cards, news
 
 **Files:**
 - Modify: `frontend/app/(frame)/analysis/page.tsx`
 - Modify: `frontend/app/(frame)/analysis/page.module.css`
 
-- [ ] **Step 1: Fetch candles + news when a result arrives**
+- [ ] **Step 1: Add candle + news fetching and the lower regions**
 
-Add to `AnalysisPage` (inside the component, above the return). Reuse the existing `api.getCandles` and `api.getNews`:
+Update the imports at the top of `page.tsx`:
 
 ```tsx
-import { useEffect } from 'react';
-import { api, type Candle, type NewsItem } from '@/lib/api';
+import { useState, useEffect } from 'react';
+import type { Candle } from '@/types/chart';
+import type { NewsItem } from '@/types/domain';
+import { api } from '@/lib/api';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
+```
 
-// inside component:
+Inside `AnalysisPage`, above the `return`, add:
+
+```tsx
 const [candles, setCandles] = useState<Candle[]>([]);
 const [stockNews, setStockNews] = useState<NewsItem[]>([]);
 const [marketNews, setMarketNews] = useState<NewsItem[]>([]);
@@ -1072,18 +1318,21 @@ useEffect(() => {
       const [c, sn, mn] = await Promise.all([
         api.getCandles(result.symbol),
         api.getNews([result.symbol]),
-        api.getNews([]),
+        api.getNews(['SPY', 'QQQ']),   // general market news
       ]);
       if (!cancelled) { setCandles(c); setStockNews(sn); setMarketNews(mn); }
     } catch { /* non-fatal */ }
   })();
   return () => { cancelled = true; };
 }, [result?.symbol]);
+
+// Per-component weights for the score-breakdown cards (matches stock-mode HORIZON_WEIGHTS).
+const HORIZON_WEIGHTS: Record<string, Record<string, number>> = {
+  Intraday: { trend: 35, pullback: 20, trigger: 30, event: 5, vol: 10 },
+  Swing:    { trend: 30, pullback: 20, trigger: 25, event: 15, vol: 10 },
+  Position: { trend: 30, pullback: 20, trigger: 20, event: 20, vol: 10 },
+};
 ```
-
-Confirm `api.getNews([])` returns general market news; if the backend requires symbols, call the dedicated market-news helper used by the regime page instead (check `lib/api.ts` for `getMarketNews`).
-
-- [ ] **Step 2: Render chart + table row + gate flags + score + news**
 
 Add inside the `{result && (...)}` block, after the regime row:
 
@@ -1128,31 +1377,47 @@ Add inside the `{result && (...)}` block, after the regime row:
             </div>
           </div>
 
+          {/* Per-component score breakdown */}
+          {result.rules.length > 0 && (
+            <div className={styles.scoreCards}>
+              {result.rules.map((r) => {
+                const w = HORIZON_WEIGHTS[result.regime_by_horizon ? 'Swing' : 'Swing'][r.name] ?? 0;
+                const tone = r.status === 'PASS' ? 'pass' : r.status === 'CAUTION' ? 'caution' : 'reject';
+                return (
+                  <article key={r.name} className={styles.scoreCard}>
+                    <Text size={12} weight={500}>{r.name}</Text>
+                    <Data size={14} tone={tone}>{r.score}/100</Data>
+                    <Text size={11} tone="dim">weight {w}% · {((r.score * w) / 100).toFixed(1)} pts</Text>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+
           {/* News */}
           <div className={styles.newsRegion}>
             <div className={styles.newsCol}>
               <Text size={12} weight={500}>{result.symbol} news</Text>
               {stockNews.length === 0 && <Text size={11} tone="dim">No headlines.</Text>}
-              {stockNews.map((n, i) => (
-                <a key={i} href={n.url} target="_blank" rel="noreferrer" className={styles.newsItem}>
-                  <Text size={12} tone="secondary">{n.title}</Text>
-                </a>
+              {stockNews.map((n) => (
+                <Text key={n.id} size={12} tone="secondary">{n.headline}</Text>
               ))}
             </div>
             <div className={styles.newsCol}>
               <Text size={12} weight={500}>Market news</Text>
-              {marketNews.map((n, i) => (
-                <a key={i} href={n.url} target="_blank" rel="noreferrer" className={styles.newsItem}>
-                  <Text size={12} tone="secondary">{n.title}</Text>
-                </a>
+              {marketNews.length === 0 && <Text size={11} tone="dim">No headlines.</Text>}
+              {marketNews.map((n) => (
+                <Text key={n.id} size={12} tone="secondary">{n.headline}</Text>
               ))}
             </div>
           </div>
 ```
 
-Confirm the `NewsItem` shape (`title`, `url`) matches `lib/api.ts`; adapt field names if different.
+Note: the weight lookup uses a fixed `'Swing'` map for simplicity. If you want it to follow the active horizon, derive the horizon from `useAnalysisStore`/`scanStore` and index `HORIZON_WEIGHTS[horizon]`. `r.name` values are `trend|pullback|trigger|event|vol` (per `RuleResult` comment). `NewsItem` has `headline` (no URL) — render as text, not a link.
 
-- [ ] **Step 3: Add CSS for the new regions**
+Confirm `CandlestickChart` props: `data: Candle[]`, `height?: number | 'auto'`, `defaultIndicators?: IndicatorType[]` where `IndicatorType` includes `'volume' | 'rsi' | 'macd'` (CandlestickChart/index.tsx). If `IndicatorType` is exported and strict, import it; otherwise the string literals satisfy it.
+
+- [ ] **Step 2: Add CSS for the new regions**
 
 Append to `frontend/app/(frame)/analysis/page.module.css`:
 
@@ -1166,133 +1431,30 @@ Append to `frontend/app/(frame)/analysis/page.module.css`:
 .gateFlags { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .gateFlag { display: flex; align-items: center; gap: 8px; }
 .chartCol { min-height: 360px; }
+.scoreCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.scoreCard {
+  display: flex; flex-direction: column; gap: 4px; padding: 12px;
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+}
 .newsRegion { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.newsCol { display: flex; flex-direction: column; gap: 6px;
-  padding: 12px; border: 1px solid var(--border-subtle); border-radius: 8px; }
-.newsItem { text-decoration: none; }
-.newsItem:hover { text-decoration: underline; }
+.newsCol {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 12px; border: 1px solid var(--border-subtle); border-radius: 8px;
+}
 ```
 
-- [ ] **Step 4: Verify typecheck + tests**
+- [ ] **Step 3: Verify typecheck + store test**
 
 Run: `cd frontend && npm run typecheck`
 Expected: clean.
 Run: `cd frontend && npm run test -- --testPathPattern=analysisStore`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add "frontend/app/(frame)/analysis"
-git commit -m "feat(analysis): chart, score row, gate flags, news" --no-verify
-```
-
----
-
-## Task 9: Per-component score breakdown cards (optional parity with Stock Ranking)
-
-The score breakdown cards (trend/pullback/trigger/event/vol) require the per-rule contribution data. `StockAnalysisOut` currently exposes `stock_score` but not the per-rule `card.rules`. This task adds them.
-
-**Files:**
-- Modify: `backend/app/schemas/stock_scan.py` (add `rules` to `StockAnalysisOut`)
-- Modify: `backend/app/routers/stock_scan.py` (populate from `card.rules`)
-- Modify: `frontend/lib/api.ts` (add `rules` type)
-- Modify: `frontend/app/(frame)/analysis/page.tsx` (render cards)
-
-- [ ] **Step 1: Check whether `PositionCardOut` already carries rule contributions**
-
-Run: search `backend/app/schemas/stock_scan.py` and `score_stock` return for a `rules`/`contributions` field.
-Run: `cd backend && grep -n "rules" backend/app/scoring/stock_scorer.py | head`
-Expected: identifies the per-rule structure (name, score, weight, points, signal).
-
-- [ ] **Step 2: Add `rules` to the schema**
-
-Add to `backend/app/schemas/stock_scan.py`:
-
-```python
-class RuleContribution(BaseModel):
-    name: str
-    score: float
-    weight: float
-    points: float
-    signal: str          # 'positive' | 'neutral' | 'negative'
-    detail: dict = Field(default_factory=dict)
-```
-
-Add `rules: list[RuleContribution] = Field(default_factory=list)` to `StockAnalysisOut`.
-
-- [ ] **Step 3: Populate in the endpoint**
-
-In `analyze_stock`, after computing `core`, map the scorer card's rules. Since `_process_stock` returns `PositionCardOut` (which does not currently include rules), extend `_process_stock` to also surface `card.rules` via the `flags_sink` pattern is wrong here — instead, have `_process_stock` attach rules to the `PositionCardOut` only for analysis. Simplest: in `analyze_stock`, re-run `score_stock` is wasteful. **Chosen:** add an optional `rules_sink: list | None = None` param to `_process_stock` (same pattern as `flags_sink`); right after `card = score_stock(...)`, do:
-
-```python
-            if rules_sink is not None:
-                rules_sink.extend({
-                    "name": r.name, "score": r.score, "weight": r.weight,
-                    "points": getattr(r, "points", 0.0), "signal": getattr(r, "signal", "neutral"),
-                    "detail": getattr(r, "detail", {}) or {},
-                } for r in card.rules)
-```
-
-Then in `analyze_stock`:
-
-```python
-    rules: list[dict] = []
-    core = await _process_stock(symbol, scan_req, new_rec_id(), price_map, [],
-                                fund_gate=fund_gate, bypass_gates=True,
-                                flags_sink=flags, rules_sink=rules)
-    ...
-    return StockAnalysisOut(..., rules=[RuleContribution(**r) for r in rules])
-```
-
-Confirm the actual attribute names on `card.rules[i]` (`name`, `score`, `weight`, `points`, `signal`, `detail`) by reading `stock_scorer.py`; adapt the mapping to the real attributes.
-
-- [ ] **Step 4: Add frontend type + render**
-
-In `frontend/lib/api.ts` add:
-
-```typescript
-export interface RuleContribution { name: string; score: number; weight: number; points: number; signal: string; detail: Record<string, unknown>; }
-```
-
-Add `rules: RuleContribution[]` to `StockAnalysis`.
-
-In `page.tsx`, after the chart region, render:
-
-```tsx
-          {result.rules.length > 0 && (
-            <div className={styles.scoreCards}>
-              {result.rules.map((r) => (
-                <article key={r.name} className={`${styles.scoreCard} ${styles[`sig_${r.signal}`] ?? ''}`}>
-                  <Text size={12} weight={500}>{r.name}</Text>
-                  <Data size={14}>{r.score.toFixed(0)}/100</Data>
-                  <Text size={11} tone="dim">weight {(r.weight * 100).toFixed(0)}% · {r.points.toFixed(1)} pts</Text>
-                </article>
-              ))}
-            </div>
-          )}
-```
-
-Add CSS:
-
-```css
-.scoreCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-.scoreCard { display: flex; flex-direction: column; gap: 4px; padding: 12px;
-  border: 1px solid var(--border-subtle); border-radius: 8px; }
-```
-
-- [ ] **Step 5: Verify**
-
-Run: `cd backend && pytest tests/test_analyze_stock.py -v`
-Expected: PASS.
-Run: `cd frontend && npm run typecheck`
-Expected: clean.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add backend/app/schemas/stock_scan.py backend/app/routers/stock_scan.py frontend/lib/api.ts "frontend/app/(frame)/analysis"
-git commit -m "feat(analysis): per-component score breakdown cards" --no-verify
+git commit -m "feat(analysis): chart, score row, gate flags, score cards, news"
 ```
 
 ---
@@ -1301,34 +1463,35 @@ git commit -m "feat(analysis): per-component score breakdown cards" --no-verify
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: Backend up**
-
-Run: `cd backend && uvicorn app.main:app --port 8000` (background)
-Run: `curl -s -X POST localhost:8000/api/analyze-stock -H "Content-Type: application/json" -d '{"symbol":"AMD","universe":[],"direction":"Bullish","horizon":"Swing","strategy":"pullback_ema"}' | python -m json.tool | head -40`
-Expected: JSON with `symbol`, `stock_score`, `regime_by_horizon`, `gate_flags`.
-
-- [ ] **Step 2: Test an index**
-
-Run: `curl -s -X POST localhost:8000/api/analyze-stock -H "Content-Type: application/json" -d '{"symbol":"SPY","universe":[],"direction":"Bullish","horizon":"Swing","strategy":"pullback_ema"}' | python -m json.tool | grep -E "is_index|fundamentals"`
-Expected: `"is_index": true`, `"fundamentals": null`.
-
-- [ ] **Step 3: Full backend suite**
+- [ ] **Step 1: Backend full suite**
 
 Run: `cd backend && pytest tests/ -q`
-Expected: no new failures vs. baseline.
+Expected: no new failures vs. baseline (run `git stash` baseline comparison if unsure).
 
-- [ ] **Step 4: Frontend checks**
+- [ ] **Step 2: Live endpoint smoke (requires backend running + network)**
+
+Start backend, then:
+Run: `curl -s -X POST localhost:8000/api/analyze-stock -H "Content-Type: application/json" -d '{"symbol":"AMD","direction":"Bullish","horizon":"Swing","strategy":"pullback_ema"}' | python -m json.tool | head -40`
+Expected: JSON with `symbol`, `stock_score`, `regime_by_horizon` (3 keys), `gate_flags`, `rules` (5 entries), `sector`, `sector_rs`.
+
+Run: `curl -s -X POST localhost:8000/api/analyze-stock -H "Content-Type: application/json" -d '{"symbol":"SPY","direction":"Bullish","horizon":"Swing","strategy":"pullback_ema"}' | python -m json.tool | grep -E "is_index|fundamentals"`
+Expected: `"is_index": true`, `"fundamentals": null`.
+
+Run: `curl -s -o /dev/null -w "%{http_code}" -X POST localhost:8000/api/analyze-stock -H "Content-Type: application/json" -d '{"symbol":"ZZZZNOPE"}'`
+Expected: `404`.
+
+- [ ] **Step 3: Frontend checks**
 
 Run: `cd frontend && npm run typecheck && npm run test -- --testPathPattern=analysisStore`
 Expected: clean + PASS.
 
-- [ ] **Step 5: Manual smoke (preview)**
+- [ ] **Step 4: Manual smoke (preview)**
 
-Start dev server, open `/analysis`, search `AMD` → see header, regime cards, chart, gate flags, score cards, news. Search a junk ticker → inline "No data" error. Search `SPY` → N/A fundamentals.
+Start `npm run dev`, open `/analysis`. Search `AMD` → header strip, 4 context cards, 3 regime cards, chart, score row, gate flags (if any), 5 score cards, news columns. Search `SPY` → fundamentals/IV show N/A, `is_index` behaviour. Search junk → inline "No usable data" error.
 
-- [ ] **Step 6: Final commit (if any cleanups)**
+- [ ] **Step 5: Final commit (if cleanups)**
 
 ```bash
 git add -A
-git commit -m "chore(analysis): verification cleanups" --no-verify
+git commit -m "chore(analysis): verification cleanups"
 ```
