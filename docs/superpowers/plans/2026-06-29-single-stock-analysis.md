@@ -473,20 +473,19 @@ async def _analyze_core(symbol: str, req: StockAnalysisRequest) -> _AnalyzeCore 
                 "alignment": alignment(omm.state, dh.state if dh else None), "insufficient_data": False,
             }
 
-    # Fundamentals (skip for index / intraday)
+    # Fundamentals (skip for index / intraday) — resolve the gate ONCE and reuse.
+    fund_gate = None if is_index else _resolve_fundamentals_gate(req)
     _fh = None
-    if not is_index and req.horizon.lower() != "intraday":
-        fund_gate = _resolve_fundamentals_gate(req)
-        if fund_gate is not None:
-            _snap = await _get_fundamentals(symbol, staleness_days=fund_gate.get("staleness_days", 90))
-            _fh = _score_fundamentals(_snap, req.direction, fund_gate) if _snap else None
+    if fund_gate is not None and req.horizon.lower() != "intraday":
+        _snap = await _get_fundamentals(symbol, staleness_days=fund_gate.get("staleness_days", 90))
+        _fh = _score_fundamentals(_snap, req.direction, fund_gate) if _snap else None
 
     _regime_gate = dict(full_cfg.get("regime_gate") or {})
     card = score_stock(
         symbol=symbol, direction=req.direction, horizon=req.horizon, bars=bars[-120:],
         scoring_mode="stock", regime_signal=regime_signal,
         regime_gate=(_regime_gate or None) if regime_signal else None,
-        fundamentals=_fh, fundamentals_gate=(None if is_index else _resolve_fundamentals_gate(req)),
+        fundamentals=_fh, fundamentals_gate=fund_gate,
         overrides=req.overrides,
     )
     if card.status == "REJECT":
@@ -619,6 +618,7 @@ async def test_analyze_endpoint_offline(monkeypatch):
     monkeypatch.setattr(ss, "get_historical_bars", _fake_bars)
     monkeypatch.setattr(ss, "fetch_quotes", lambda syms: {})
     monkeypatch.setattr(ss, "fetch_company_name_async", _fake_name)
+    monkeypatch.setattr(ss, "fetch_intraday_candles", lambda *a, **k: [])  # no live intraday I/O
     monkeypatch.setattr(ss, "_market_backdrop", _make_async_none)
 
     req = StockAnalysisRequest(symbol="SPY", direction="Bullish", horizon="Swing",
@@ -1326,13 +1326,9 @@ useEffect(() => {
   return () => { cancelled = true; };
 }, [result?.symbol]);
 
-// Per-component weights for the score-breakdown cards (matches stock-mode HORIZON_WEIGHTS).
-const HORIZON_WEIGHTS: Record<string, Record<string, number>> = {
-  Intraday: { trend: 35, pullback: 20, trigger: 30, event: 5, vol: 10 },
-  Swing:    { trend: 30, pullback: 20, trigger: 25, event: 15, vol: 10 },
-  Position: { trend: 30, pullback: 20, trigger: 20, event: 20, vol: 10 },
-};
 ```
+
+Note: the score-breakdown cards show each rule's `score/100` + status only. We deliberately do NOT render a "weight · pts" line: the real per-rule weights live in `scoring_rules.yaml` and stock-mode zeroes `event` then renormalizes (stock_scorer.py:1016-1021), so any frontend-guessed weight would print wrong numbers. If accurate weights are wanted later, attach them to `RuleContribution` from the backend (where `name_to_weight` is in scope) rather than hardcoding them here.
 
 Add inside the `{result && (...)}` block, after the regime row:
 
@@ -1377,17 +1373,16 @@ Add inside the `{result && (...)}` block, after the regime row:
             </div>
           </div>
 
-          {/* Per-component score breakdown */}
+          {/* Per-component score breakdown — score + status only (see note above on weights) */}
           {result.rules.length > 0 && (
             <div className={styles.scoreCards}>
               {result.rules.map((r) => {
-                const w = HORIZON_WEIGHTS[result.regime_by_horizon ? 'Swing' : 'Swing'][r.name] ?? 0;
                 const tone = r.status === 'PASS' ? 'pass' : r.status === 'CAUTION' ? 'caution' : 'reject';
                 return (
                   <article key={r.name} className={styles.scoreCard}>
                     <Text size={12} weight={500}>{r.name}</Text>
                     <Data size={14} tone={tone}>{r.score}/100</Data>
-                    <Text size={11} tone="dim">weight {w}% · {((r.score * w) / 100).toFixed(1)} pts</Text>
+                    <StatusBadge status={r.status} />
                   </article>
                 );
               })}
