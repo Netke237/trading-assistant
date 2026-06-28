@@ -18,8 +18,8 @@ async function apiError(path: string, res: Response): Promise<never> {
   throw new Error(`API ${path} → ${res.status}${detail ? `: ${detail}` : ''}`);
 }
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`);
+async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, { signal });
   if (!res.ok) return apiError(path, res);
   return res.json() as Promise<T>;
 }
@@ -94,6 +94,156 @@ export interface StrategyWatchSchedule {
   poll_hours: number;
 }
 
+export interface AnalysisStrategySignal {
+  strategy: string;
+  entry_price: number;
+  stop_price: number;
+  target_price: number;
+  rr_ratio: number;
+  atr: number;
+  detail: Record<string, unknown>;
+}
+
+export interface AnalysisBacktest {
+  n_trades: number;
+  win_rate: number;
+  total_return_pct: number;
+  max_drawdown_pct: number;
+  expectancy: number;
+  sharpe: number;
+  confidence: number | null;
+  passes_gate: boolean;
+  summary_text: string;
+}
+
+export interface AnalysisSentiment {
+  horizon: string;
+  timeframe: string;
+  state: string;
+  p_stay: number;
+  stability: string;
+  regime_age_days: number;
+  avg_regime_duration: number;
+  conviction_pct: number;
+  conviction_label: string;
+  interpretation: string;
+  hmm_state: string | null;
+  alignment: string;
+  insufficient_data: boolean;
+}
+
+export interface AnalysisFundamentals {
+  score: number;
+  quality_label: string;
+  risk_label: string;
+  growth_score: number;
+  quality_score: number;
+  risk_score: number;
+  safety_flags: string[];
+  detail: Record<string, unknown>;
+}
+
+export interface RuleContribution {
+  name: string;
+  status: 'PASS' | 'CAUTION' | 'REJECT';
+  score: number;
+  detail: Record<string, unknown>;
+}
+
+export interface GateFlag {
+  gate: string;
+  status: 'PASS' | 'CAUTION' | 'REJECT';
+  detail: string;
+}
+
+export interface EmaTrend {
+  state: 'Above' | 'Below';
+  ema: number;
+  last: number;
+  status: string;
+}
+
+export interface RegimeHorizonBlock {
+  horizon: string;
+  timeframe: string;
+  state: string;
+  p_stay: number;
+  stability: string;
+  regime_age_days: number;
+  avg_regime_duration: number;
+  conviction_pct: number;
+  conviction_label: string;
+  hmm_state: string | null;
+  alignment: string;
+  transition_row: number[];
+  insufficient_data: boolean;
+}
+
+export interface SectorTileLite {
+  name: string;
+  etf: string | null;
+  change_pct: number | null;
+}
+
+export interface SectorRs {
+  benchmark: string;
+  d1: number | null;
+  w1: number | null;
+  m1: number | null;
+}
+
+export interface MarketBackdrop {
+  overall: string;
+  direction: string | null;
+  vix: number | null;
+}
+
+export interface StockAnalysis {
+  symbol: string;
+  company: string;
+  price: number;
+  direction: string;
+  stock_score: number;
+  stock_status: 'PASS' | 'CAUTION' | 'REJECT';
+  is_index: boolean;
+  strategy: AnalysisStrategySignal | null;
+  backtest: AnalysisBacktest | null;
+  confidence: number | null;
+  confidence_text: string | null;
+  sentiment: AnalysisSentiment | null;
+  fundamentals: AnalysisFundamentals | null;
+  next_event_days: number | null;
+  next_event_label: string | null;
+  rules: RuleContribution[];
+  gate_flags: GateFlag[];
+  ema_trend: EmaTrend | null;
+  iv_rank: number | null;
+  regime_by_horizon: Record<string, RegimeHorizonBlock>;
+  sector: SectorTileLite | null;
+  sector_rs: SectorRs | null;
+  market_backdrop: MarketBackdrop | null;
+}
+
+export interface AnalyzeStockRequest {
+  symbol: string;
+  direction: string;
+  horizon: 'Intraday' | 'Swing' | 'Position';
+  strategy: string;
+  overrides?: Record<string, number | boolean | string>;
+  pullback_tolerance_pct?: number;
+  pullback_ema_period?: number;
+  pullback_trend_ema?: number;
+  pullback_ma_type?: 'EMA' | 'SMA';
+  pullback_require_reversal?: boolean;
+  ma_crossover_fast?: number;
+  ma_crossover_slow?: number;
+  ma_crossover_lookback?: number;
+  breakout_volume_mult?: number;
+  rsi_period?: number;
+  rsi_oversold?: number;
+  rsi_trend_sma?: number;
+}
+
 export const api = {
   getWatchlist:  () => get<WatchlistRow[]>('/api/watchlist'),
   getPortfolio:  () => get<PortfolioPosition[]>('/api/portfolio'),
@@ -117,20 +267,30 @@ export const api = {
   getContracts: (
     symbol: string,
     right: 'C' | 'P' = 'C',
-    ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number }
+    ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number },
+    signal?: AbortSignal,
   ) => get<OptionContract[]>(
     `/api/contracts?symbol=${encodeURIComponent(symbol)}&right=${right}` +
     (ctx?.stock_score != null ? `&stock_score=${ctx.stock_score}` : '') +
     (ctx?.direction ? `&direction=${encodeURIComponent(ctx.direction)}` : '') +
     (ctx?.horizon ? `&horizon=${encodeURIComponent(ctx.horizon)}` : '') +
     (ctx?.limit != null ? `&limit=${ctx.limit}` : '') +
-    (ctx?.max_price != null ? `&max_price=${ctx.max_price}` : '')
+    (ctx?.max_price != null ? `&max_price=${ctx.max_price}` : ''),
+    signal,
   ),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards'),
+  getContractQuote: (symbol: string, strike: number, expiry: string, right: 'C' | 'P', signal?: AbortSignal) =>
+    get<{ price: number; delta: number; theta: number; ivRank: number; spread: number; volume: number }>(
+      `/api/quote/option?symbol=${encodeURIComponent(symbol)}&strike=${strike}&expiry=${encodeURIComponent(expiry)}&right=${right}`,
+      signal,
+    ),
+  getStockQuote: (symbol: string, signal?: AbortSignal) =>
+    get<{ symbol: string; price: number }>(`/api/quote/stock?symbol=${encodeURIComponent(symbol)}`, signal),
   getCandles:    (symbol: string) => get<Candle[]>(`/api/candles/${encodeURIComponent(symbol)}`),
   getSymbolInfo: (symbol: string) =>
     get<{ symbol: string; name: string }>(`/api/symbol/${encodeURIComponent(symbol)}/info`),
   getNews:         (symbols: string[]) => get<NewsItem[]>(`/api/news?symbols=${symbols.join(',')}`),
+  analyzeStock:    (req: AnalyzeStockRequest) => post<StockAnalysis>('/api/analyze-stock', req),
   addWatchlist:    (symbol: string) => post<{ symbol: string }>('/api/watchlist', { symbol }),
   removeWatchlist: (symbol: string) => del(`/api/watchlist/${encodeURIComponent(symbol)}`),
   getWatchedContracts:    () => get<string[]>('/api/watched-contracts'),
