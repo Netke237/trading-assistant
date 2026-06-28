@@ -104,6 +104,103 @@ class PositionCardOut(BaseModel):
     fundamentals: Optional[FundamentalsOut] = None
 
 
+class GateFlag(BaseModel):
+    gate: str
+    status: str                  # 'PASS' | 'CAUTION' | 'REJECT'
+    detail: str
+
+
+class RuleContribution(BaseModel):
+    # Mirrors stock_scorer.RuleResult EXACTLY (name/status/score/detail).
+    name: str
+    status: str                  # 'PASS' | 'CAUTION' | 'REJECT'
+    score: int
+    detail: dict = Field(default_factory=dict)
+
+
+class EmaTrendOut(BaseModel):
+    state: str                   # 'Above' | 'Below'
+    ema: float
+    last: float
+    status: str                  # 'PASS' | 'CAUTION'
+
+
+class RegimeHorizonBlock(BaseModel):
+    horizon: str                 # 'Intraday' | 'Swing' | 'Position'
+    timeframe: str
+    state: str
+    p_stay: float
+    stability: str
+    regime_age_days: int
+    avg_regime_duration: float
+    conviction_pct: int
+    conviction_label: str
+    hmm_state: Optional[str] = None
+    alignment: str = "Unavailable"
+    transition_row: list[float] = Field(default_factory=list)
+    insufficient_data: bool = False
+
+
+class SectorTileOut(BaseModel):
+    name: str
+    etf: Optional[str] = None
+    change_pct: Optional[float] = None
+
+
+class SectorRsOut(BaseModel):
+    benchmark: str                          # ETF actually used (sector ETF or SPY fallback)
+    d1: Optional[float] = None
+    w1: Optional[float] = None
+    m1: Optional[float] = None
+
+
+class MarketBackdropOut(BaseModel):
+    overall: str
+    direction: Optional[str] = None
+    vix: Optional[float] = None
+
+
+class StockAnalysisRequest(StockScanRequest):
+    # Override the four required StockScanRequest fields with defaults so the
+    # endpoint is callable from `{symbol}` alone (the frontend always sends the
+    # real horizon/direction/strategy; defaults exist for tests + safety).
+    model_config = ConfigDict(populate_by_name=True)
+    symbol: str
+    universe: list[str] = Field(default_factory=list)
+    direction: Literal["Bullish", "Bearish"] = "Bullish"
+    horizon: Literal["Intraday", "Swing", "Position"] = "Swing"
+    strategy: Strategy = "pullback_ema"
+
+
+class StockAnalysisOut(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    symbol: str
+    company: str
+    price: float
+    direction: str
+    stock_score: int
+    stock_status: str
+    is_index: bool = False
+    # Signal-dependent payloads — None when no strategy setup exists (bypass path)
+    strategy: Optional[StrategySignalOut] = None
+    backtest: Optional[BacktestOut] = None
+    confidence: Optional[int] = None
+    confidence_text: Optional[str] = None
+    sentiment: Optional[SentimentData] = None
+    fundamentals: Optional[FundamentalsOut] = None
+    next_event_days: Optional[int] = None
+    next_event_label: Optional[str] = None
+    # Analysis-specific additions
+    rules: list[RuleContribution] = Field(default_factory=list)
+    gate_flags: list[GateFlag] = Field(default_factory=list)
+    ema_trend: Optional[EmaTrendOut] = None
+    iv_rank: Optional[float] = None
+    regime_by_horizon: dict[str, RegimeHorizonBlock] = Field(default_factory=dict)
+    sector: Optional[SectorTileOut] = None
+    sector_rs: Optional[SectorRsOut] = None
+    market_backdrop: Optional[MarketBackdropOut] = None
+
+
 class StockPipeline(BaseModel):
     scanned:         int   # total symbols attempted
     failed_history:  int   # "insufficient history" / "no price data" / "price $..."
