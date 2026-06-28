@@ -72,3 +72,34 @@ async def test_analyze_core_low_score_still_returns(monkeypatch):
     assert hasattr(core, "gate_flags")
     assert isinstance(core.gate_flags, list)
     # signal may be None (flat synthetic series → no setup); that is allowed.
+
+
+@pytest.mark.asyncio
+async def test_analyze_endpoint_offline(monkeypatch):
+    from app.routers import stock_scan as ss
+    from app.schemas.stock_scan import StockAnalysisRequest, StockAnalysisOut
+
+    bars = [{"time": i, "open": 100, "high": 101, "low": 99, "close": 100 + (i % 5), "volume": 1000000} for i in range(400)]
+
+    async def _fake_bars(symbol, start, end):
+        return bars
+    async def _fake_name(client, symbol):
+        return "Test Co"
+
+    monkeypatch.setattr(ss, "get_historical_bars", _fake_bars)
+    monkeypatch.setattr(ss, "fetch_quotes", lambda syms: {})
+    monkeypatch.setattr(ss, "fetch_company_name_async", _fake_name)
+    monkeypatch.setattr(ss, "fetch_intraday_candles", lambda *a, **k: [])
+
+    async def _make_async_none():
+        return None
+    monkeypatch.setattr(ss, "_market_backdrop", _make_async_none)
+
+    req = StockAnalysisRequest(symbol="SPY", direction="Bullish", horizon="Swing",
+                               strategy="pullback_ema")
+    out = await ss.analyze_stock(req)
+    assert isinstance(out, StockAnalysisOut)
+    assert out.symbol == "SPY"
+    assert out.is_index is True
+    assert out.fundamentals is None         # index → fundamentals N/A
+    assert set(out.regime_by_horizon.keys()) <= {"Intraday", "Swing", "Position"}

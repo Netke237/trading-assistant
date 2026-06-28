@@ -21,7 +21,11 @@ from app.services.audit import new_rec_id
 from app.schemas.stock_scan import (
     StockScanRequest, StockScanResult, PositionCardOut,
     StrategySignalOut, BacktestOut, StockPipeline, StockAnalysisRequest,
+    StockAnalysisOut, GateFlag, RuleContribution, EmaTrendOut,
+    RegimeHorizonBlock, SectorTileOut, SectorRsOut, MarketBackdropOut,
 )
+from app.data.sector_map import sector_for_symbol
+from app.routers.regime import _ema as _regime_ema, compute_overall_regime
 from app.schemas import SentimentData
 from app.data.market import fetch_company_name_async, fetch_price_async, fetch_quotes, fetch_intraday_candles
 from app.services.historical_store import get_bars as get_historical_bars
@@ -281,6 +285,143 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         sector_rs_pct=None, next_event_days=next_event_days, next_event_label=next_event_label,
         daily_bars=bars, gate_flags=gate_flags,
     )
+
+
+def _ema_trend(closes: list[float], period: int = 200) -> "EmaTrendOut | None":
+    if len(closes) < period + 1:
+        return None
+    ema = _regime_ema(closes, period)
+    if ema is None:
+        return None
+    last = closes[-1]
+    state = "Above" if last >= ema else "Below"
+    return EmaTrendOut(state=state, ema=round(ema, 2), last=round(last, 2),
+                       status="PASS" if state == "Above" else "CAUTION")
+
+
+def _regime_block_for_horizon(symbol: str, bars: list[dict], horizon: str, direction: str) -> "RegimeHorizonBlock":
+    rcfg = _load_regime_cfg(horizon)
+    if rcfg["timeframe"] == "15min":
+        try:
+            rbars = fetch_intraday_candles(symbol, "15min", 55)
+        except Exception:
+            rbars = []
+    else:
+        rbars = bars
+
+    def _empty() -> "RegimeHorizonBlock":
+        return RegimeHorizonBlock(horizon=horizon, timeframe=rcfg["timeframe"], state="Unknown",
+                                  p_stay=0.0, stability="Fragile", regime_age_days=0,
+                                  avg_regime_duration=0.0, conviction_pct=0,
+                                  conviction_label="Neutral", insufficient_data=True)
+
+    if not rbars or len(rbars) < rcfg.get("min_obs", 10):
+        return _empty()
+    omm = compute_omm([b["close"] for b in rbars], direction=direction,
+                      lookback=rcfg["lookback"], window=rcfg["window"], min_obs=rcfg["min_obs"])
+    if not omm:
+        return _empty()
+    dh = None
+    try:
+        dh = compute_directional_hmm(rbars)
+    except Exception:
+        pass
+    return RegimeHorizonBlock(
+        horizon=horizon, timeframe=rcfg["timeframe"], state=omm.state, p_stay=omm.p_stay,
+        stability=omm.stability, regime_age_days=omm.regime_age_days,
+        avg_regime_duration=omm.avg_regime_duration, conviction_pct=omm.conviction_pct,
+        conviction_label=omm.conviction_label, hmm_state=(dh.state if dh else None),
+        alignment=alignment(omm.state, dh.state if dh else None),
+        transition_row=list(omm.transition_row) if hasattr(omm, 'transition_row') else [],
+        insufficient_data=False)
+
+
+async def _sector_context(symbol: str, closes: list[float]) -> "tuple[SectorTileOut, SectorRsOut]":
+    name, etf = sector_for_symbol(symbol)
+    benchmark = etf or "SPY"
+    end = date.today()
+    start = end - timedelta(days=_HISTORY_YEARS * 365)
+    try:
+        bench_bars = await get_historical_bars(benchmark, start, end)
+        bench = [b["close"] for b in bench_bars] if bench_bars else []
+    except Exception:
+        bench = []
+    rs = SectorRsOut(benchmark=benchmark)
+    for attr, lookback in (("d1", 1), ("w1", 5), ("m1", 21)):
+        if len(closes) > lookback and len(bench) > lookback:
+            s = (closes[-1] - closes[-(lookback + 1)]) / closes[-(lookback + 1)] * 100
+            bm = (bench[-1] - bench[-(lookback + 1)]) / bench[-(lookback + 1)] * 100
+            setattr(rs, attr, round(s - bm, 2))
+    tile = SectorTileOut(name=name or "Unknown", etf=etf, change_pct=None)
+    return tile, rs
+
+
+async def _market_backdrop() -> "MarketBackdropOut | None":
+    """Cheap macro backdrop — uses compute_overall_regime() (no heavy recompute)."""
+    try:
+        overall = await asyncio.to_thread(compute_overall_regime)
+        return MarketBackdropOut(overall=overall, direction=None, vix=None)
+    except Exception:
+        return None
+
+
+@router.post("/analyze-stock")
+async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
+    symbol = req.symbol.upper()
+    is_index = _is_index(symbol)
+
+    core = await _analyze_core(symbol, req)
+    if core is None:
+        raise HTTPException(status_code=404, detail=f"No usable data for {symbol}")
+
+    card = core.card
+    closes = [b["close"] for b in core.daily_bars]
+
+    regime_by_horizon: dict[str, RegimeHorizonBlock] = {
+        h: _regime_block_for_horizon(symbol, core.daily_bars, h, req.direction)
+        for h in ("Intraday", "Swing", "Position")
+    }
+
+    sector_tile, sector_rs = await _sector_context(symbol, closes)
+    backdrop = await _market_backdrop()
+
+    strategy_out = backtest_out = None
+    if core.signal is not None:
+        strategy_out = StrategySignalOut(
+            strategy=core.signal.strategy, entry_price=core.signal.entry_price,
+            stop_price=core.signal.stop_price, target_price=core.signal.target_price,
+            rr_ratio=round(core.signal.rr_ratio, 2), atr=core.signal.atr, detail=core.signal.detail)
+    if core.bt_result is not None:
+        bt = core.bt_result
+        backtest_out = BacktestOut(
+            n_trades=bt.n_trades, win_rate=round(bt.win_rate, 3),
+            total_return_pct=round(bt.total_return_pct, 2),
+            max_drawdown_pct=round(bt.max_drawdown_pct, 2), expectancy=bt.expectancy,
+            sharpe=bt.sharpe, confidence=getattr(bt, 'confidence', None), passes_gate=bt.passes_gate,
+            summary_text=bt.summary_text)
+
+    fundamentals_out = None
+    if core.fundamentals is not None and not is_index:
+        _fh = core.fundamentals
+        fundamentals_out = FundamentalsOut(
+            score=_fh.score, quality_label=_fh.quality_label, risk_label=_fh.risk_label,
+            growth_score=_fh.growth_score, quality_score=_fh.quality_score,
+            risk_score=_fh.risk_score, safety_flags=_fh.safety_flags, detail=_fh.detail)
+
+    return StockAnalysisOut(
+        symbol=symbol, company=core.company, price=core.price, direction=req.direction,
+        stock_score=card.score, stock_status=card.status, is_index=is_index,
+        strategy=strategy_out, backtest=backtest_out,
+        confidence=core.conf_val, confidence_text=core.conf_txt,
+        sentiment=SentimentData(**core.regime_signal) if core.regime_signal else None,
+        fundamentals=fundamentals_out,
+        next_event_days=core.next_event_days, next_event_label=core.next_event_label,
+        rules=[RuleContribution(name=r.name, status=r.status, score=r.score, detail=r.detail or {})
+               for r in card.rules],
+        gate_flags=[GateFlag(**g) for g in core.gate_flags],
+        ema_trend=_ema_trend(closes), iv_rank=None,
+        regime_by_horizon=regime_by_horizon, sector=sector_tile, sector_rs=sector_rs,
+        market_backdrop=backdrop)
 
 
 def _position_size(account: float, risk_pct: float | None, risk_fixed: float | None,
