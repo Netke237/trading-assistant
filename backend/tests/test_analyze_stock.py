@@ -39,3 +39,36 @@ def test_analysis_request_defaults():
     assert req.direction == "Bullish"
     assert req.strategy == "pullback_ema"
     assert req.universe == []
+
+
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_analyze_core_low_score_still_returns(monkeypatch):
+    """A symbol the scanner would REJECT still yields a core result + gate_flags."""
+    from app.routers import stock_scan as ss
+    from app.schemas.stock_scan import StockAnalysisRequest
+
+    # Stub history + price so the test is deterministic & offline.
+    bars = [{"time": i, "open": 100, "high": 101, "low": 99, "close": 100 + (i % 3), "volume": 1_000_000} for i in range(300)]
+
+    async def _fake_bars(symbol, start, end):
+        return bars
+
+    monkeypatch.setattr(ss, "get_historical_bars", _fake_bars)
+    monkeypatch.setattr(ss, "fetch_quotes", lambda syms: {})
+
+    async def _fake_name(client, symbol):
+        return "Test Co"
+
+    monkeypatch.setattr(ss, "fetch_company_name_async", _fake_name)
+    monkeypatch.setattr(ss, "fetch_intraday_candles", lambda *a, **k: [])
+
+    req = StockAnalysisRequest(symbol="TEST", direction="Bullish", horizon="Swing",
+                               strategy="pullback_ema")
+    core = await ss._analyze_core("TEST", req)
+    assert core.card is not None
+    assert hasattr(core, "gate_flags")
+    assert isinstance(core.gate_flags, list)
+    # signal may be None (flat synthetic series → no setup); that is allowed.

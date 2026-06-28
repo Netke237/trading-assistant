@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException
 from app.services.audit import new_rec_id
 from app.schemas.stock_scan import (
     StockScanRequest, StockScanResult, PositionCardOut,
-    StrategySignalOut, BacktestOut, StockPipeline,
+    StrategySignalOut, BacktestOut, StockPipeline, StockAnalysisRequest,
 )
 from app.schemas import SentimentData
 from app.data.market import fetch_company_name_async, fetch_price_async, fetch_quotes, fetch_intraday_candles
@@ -108,6 +108,179 @@ def _get_backtest_cached(key: str):
     if entry and time.time() < entry[1]:
         return entry[0]
     return None
+
+
+_INDEX_SYMBOLS = {"SPY", "QQQ", "DIA", "IWM", "SPX", "NDX", "VIX",
+                  "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI", "XLB", "XLU", "XLRE", "XLC"}
+
+
+def _is_index(symbol: str) -> bool:
+    return symbol.upper() in _INDEX_SYMBOLS
+
+
+@dataclasses.dataclass
+class _AnalyzeCore:
+    company: str
+    price: float
+    card: object                      # StockScoreCard
+    regime_signal: dict | None
+    fundamentals: object | None       # FundamentalHealth | None
+    signal: object | None             # StrategySignal | None
+    bt_result: object | None
+    conf_val: int | None
+    conf_txt: str | None
+    sector_rs_pct: float | None
+    next_event_days: int | None
+    next_event_label: str | None
+    daily_bars: list[dict]
+    gate_flags: list[dict]
+
+
+async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCore | None":
+    """Gate-free single-symbol computation for the analysis page."""
+    is_index = _is_index(symbol)
+    end = date.today()
+    start = end - timedelta(days=_HISTORY_YEARS * 365)
+    bars = await get_historical_bars(symbol, start, end)
+    if not bars or len(bars) < 60:
+        return None
+
+    gate_flags: list[dict] = []
+
+    # Price
+    try:
+        price_map = await asyncio.to_thread(fetch_quotes, [symbol])
+    except Exception:
+        price_map = {}
+    quote = price_map.get(symbol)
+    price = (float(quote.get("last") or 0) or None) if quote else None
+    if not price:
+        price = float(bars[-1]["close"]) or None
+    async with httpx.AsyncClient(timeout=10) as client:
+        if not price:
+            price = await fetch_price_async(client, symbol)
+        if not price:
+            return None
+        company = await fetch_company_name_async(client, symbol)
+
+    # Price-range advisory
+    if req.min_price is not None and price < req.min_price:
+        gate_flags.append({"gate": "price", "status": "REJECT", "detail": f"price ${price:.2f} < min"})
+    if req.max_price is not None and price > req.max_price:
+        gate_flags.append({"gate": "price", "status": "REJECT", "detail": f"price ${price:.2f} > max"})
+
+    # Regime sentiment
+    full_cfg = _load_full_scoring_cfg()
+    rcfg = _load_regime_cfg(req.horizon)
+    regime_signal = None
+    if rcfg["timeframe"] == "15min":
+        try:
+            regime_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 55)
+        except Exception:
+            regime_bars = []
+    else:
+        regime_bars = bars
+    if regime_bars and len(regime_bars) >= rcfg.get("min_obs", 10):
+        omm = compute_omm([b["close"] for b in regime_bars], direction=req.direction,
+                          lookback=rcfg["lookback"], window=rcfg["window"], min_obs=rcfg["min_obs"])
+        if omm:
+            dh = None
+            try:
+                dh = compute_directional_hmm(regime_bars)
+            except Exception:
+                pass
+            regime_signal = {
+                "horizon": req.horizon, "timeframe": rcfg["timeframe"], "state": omm.state,
+                "p_stay": omm.p_stay, "stability": omm.stability,
+                "regime_age_days": omm.regime_age_days, "avg_regime_duration": omm.avg_regime_duration,
+                "conviction_pct": omm.conviction_pct, "conviction_label": omm.conviction_label,
+                "interpretation": omm.interpretation, "hmm_state": dh.state if dh else None,
+                "alignment": alignment(omm.state, dh.state if dh else None), "insufficient_data": False,
+            }
+
+    # Fundamentals
+    fund_gate = None if is_index else _resolve_fundamentals_gate(req)
+    _fh = None
+    if fund_gate is not None and req.horizon.lower() != "intraday":
+        _snap = await _get_fundamentals(symbol, staleness_days=fund_gate.get("staleness_days", 90))
+        _fh = _score_fundamentals(_snap, req.direction, fund_gate) if _snap else None
+
+    _regime_gate = dict(full_cfg.get("regime_gate") or {})
+    card = score_stock(
+        symbol=symbol, direction=req.direction, horizon=req.horizon, bars=bars[-120:],
+        scoring_mode="stock", regime_signal=regime_signal,
+        regime_gate=(_regime_gate or None) if regime_signal else None,
+        fundamentals=_fh, fundamentals_gate=fund_gate,
+        overrides=req.overrides,
+    )
+    if card.status == "REJECT":
+        gate_flags.append({"gate": "score", "status": "REJECT", "detail": f"score={card.score}"})
+
+    if regime_signal and regime_signal["conviction_pct"] <= _regime_gate.get("headwind_caution_pct", -15):
+        gate_flags.append({"gate": "regime_headwind", "status": "CAUTION",
+                           "detail": f"conviction {regime_signal['conviction_pct']}%"})
+
+    # Strategy signal (optional)
+    signal = None
+    signal_fn = _SIGNAL_FNS.get(req.strategy)
+    if signal_fn:
+        signal_kwargs = _merge_strategy_params(
+            req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req))
+        try:
+            signal = signal_fn(bars[-120:], direction=req.direction, **signal_kwargs)
+        except Exception:
+            signal = None
+    if signal is None:
+        gate_flags.append({"gate": "signal", "status": "CAUTION", "detail": f"no {req.strategy} setup"})
+
+    # Backtest + confidence
+    bt_result = None
+    conf_val = conf_txt = None
+    if signal is not None:
+        _bt_key = _backtest_key(symbol, req.strategy, req.direction, bars)
+        bt_result = _get_backtest_cached(_bt_key)
+        if bt_result is None:
+            bt_result = await asyncio.get_running_loop().run_in_executor(
+                _BACKTEST_POOL,
+                functools.partial(run_strategy_backtest, bars, strategy=req.strategy,
+                                  direction=req.direction, min_trades=req.bt_min_trades,
+                                  min_win_rate=req.bt_min_win_rate))
+            _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
+        if not bt_result.passes_gate:
+            gate_flags.append({"gate": "backtest", "status": "CAUTION", "detail": bt_result.summary_text})
+        _ck = conf_cache_key(symbol, req.direction, req.horizon)
+        _cached = get_cached(_ck)
+        if _cached is None:
+            _res = await asyncio.to_thread(compute_confidence, bars, direction=req.direction,
+                                           horizon=req.horizon, atr_mult=req.confidence_atr_mult)
+            _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
+            set_cached(_ck, _cached)
+        conf_val = _cached["confidence"]
+        conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
+        if conf_val is not None and req.confidence_reject_below is not None and conf_val < req.confidence_reject_below:
+            gate_flags.append({"gate": "confidence", "status": "REJECT",
+                               "detail": f"{conf_val:.0f}% < {req.confidence_reject_below:.0f}%"})
+
+    # Event proximity
+    next_event_days = next_event_label = None
+    if quote:
+        for field_name, label in [("earnings_date", "earnings"), ("ex_dividend_date", "dividend")]:
+            raw = quote.get(field_name)
+            if raw:
+                try:
+                    ev = date.fromisoformat(str(raw)[:10])
+                    days = (ev - date.today()).days
+                    if days >= 0 and (next_event_days is None or days < next_event_days):
+                        next_event_days, next_event_label = days, label
+                except (ValueError, TypeError):
+                    pass
+
+    return _AnalyzeCore(
+        company=company or symbol, price=price, card=card, regime_signal=regime_signal,
+        fundamentals=_fh, signal=signal, bt_result=bt_result, conf_val=conf_val, conf_txt=conf_txt,
+        sector_rs_pct=None, next_event_days=next_event_days, next_event_label=next_event_label,
+        daily_bars=bars, gate_flags=gate_flags,
+    )
 
 
 def _position_size(account: float, risk_pct: float | None, risk_fixed: float | None,
