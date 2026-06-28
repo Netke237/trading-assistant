@@ -16,6 +16,7 @@ interface NavItemDef {
 const ITEMS: NavItemDef[] = [
   { label: 'Dashboard', match: '/dashboard', href: '/dashboard', Icon: DashboardIcon },
   { label: 'Screener',  match: '/screener',  href: '/screener',  Icon: ScreenerIcon  },
+  { label: 'Analysis',  match: '/analysis',  href: '/analysis',  Icon: AnalysisIcon  },
   { label: 'Watchlist', match: '/watchlist', href: '/watchlist', Icon: WatchlistIcon },
   { label: 'Portfolio', match: '/portfolio', href: '/portfolio', Icon: PortfolioIcon },
   { label: 'Calendar',  match: '/calendar',  href: '/calendar',  Icon: CalendarIcon  },
@@ -89,6 +90,14 @@ function ScreenerIcon() {
     <svg {...svgProps()}>
       <circle cx="11" cy="11" r="7" />
       <path d="m21 21-4.35-4.35" />
+    </svg>
+  );
+}
+function AnalysisIcon() {
+  return (
+    <svg {...svgProps()}>
+      <path d="M3 3v18h18" />
+      <path d="M7 14l3-3 3 3 4-5" />
     </svg>
   );
 }
