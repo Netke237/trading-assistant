@@ -91,15 +91,36 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
   };
 }
 
-async function postPosition(p: PortfolioPosition): Promise<void> {
+async function postPosition(p: PortfolioPosition, portfolioValue = 100_000): Promise<void> {
   try {
     await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(toBackendPayload(p)),
+      body: JSON.stringify(toBackendPayload(p, portfolioValue)),
     });
     // 409 = already exists → fine. Other errors silently ignored (backend may be offline).
   } catch { /* network unavailable */ }
+}
+
+/** POST to the backend and return whether it was accepted.
+ *  Used by the single-order buttons in Step 7 so rejections (risk check, duplicate
+ *  symbol) surface to the user instead of being silently dropped. */
+export async function persistPosition(
+  p: PortfolioPosition,
+  portfolioValue = 100_000,
+): Promise<{ ok: boolean; detail?: string }> {
+  try {
+    const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(toBackendPayload(p, portfolioValue)),
+    });
+    if (res.ok || res.status === 409) return { ok: true };
+    const body = await res.json().catch(() => ({}));
+    return { ok: false, detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
+  } catch {
+    return { ok: true }; // backend offline — don't block the user
+  }
 }
 
 async function deletePosition(recId: string): Promise<void> {
@@ -154,10 +175,18 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         }),
       addPosition: (p) => {
         let resolvedPosition: PortfolioPosition | null = null;
+        let computedPortfolioValue = 100_000;
         set((s) => {
           const recId = (p as PortfolioPosition & { recId?: string }).recId || generateRecId();
           const incoming = { ...p, recId } as PortfolioPosition;
           resolvedPosition = incoming;
+
+          // Compute portfolio value from existing positions so the backend risk
+          // check is calibrated against real capital, not the 100k default.
+          computedPortfolioValue = s.positions.reduce((sum, pos) => {
+            const multiplier = pos.contract?.endsWith('|STOCK') ? 1 : 100;
+            return sum + pos.entryPrice * (pos.contracts ?? 1) * multiplier;
+          }, 0) || 100_000;
 
           const idxByRecId = s.positions.findIndex((x) => x.recId === incoming.recId);
           if (idxByRecId >= 0) {
@@ -191,7 +220,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           return { positions: [...s.positions, incoming] };
         });
         // Fire-and-forget sync to backend so the monitor sees new positions
-        if (resolvedPosition) postPosition(resolvedPosition);
+        if (resolvedPosition) postPosition(resolvedPosition, computedPortfolioValue);
       },
       updatePosition: (contract, patch) =>
         set((s) => ({
@@ -240,7 +269,11 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
       syncToBackend: async () => {
         // Push all local positions to the backend (409 = already there, safe to ignore).
         const { positions } = usePortfolioStore.getState();
-        await Promise.all(positions.map(postPosition));
+        const totalValue = positions.reduce((sum, pos) => {
+          const multiplier = pos.contract?.endsWith('|STOCK') ? 1 : 100;
+          return sum + pos.entryPrice * (pos.contracts ?? 1) * multiplier;
+        }, 0) || 100_000;
+        await Promise.all(positions.map((p) => postPosition(p, totalValue)));
       },
     }),
     {

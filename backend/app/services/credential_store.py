@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 from typing import Any
@@ -64,8 +65,7 @@ class CredentialStore:
         with self._lock:
             data_copy = {k: dict(v) for k, v in self._data.items()}
         tmp.write_text(yaml.dump(data_copy, default_flow_style=False))
-        import os as _os_save
-        _os_save.replace(tmp, self._path)
+        os.replace(tmp, self._path)
 
     def get(self, key: str) -> dict | None:
         with self._lock:
@@ -84,6 +84,5 @@ class CredentialStore:
             return {k: _mask_dict(dict(v)) for k, v in self._data.items()}
 
 
-import os as _os
-_creds_path = Path(_os.getenv("BAMENDJOU_CREDS_PATH", str(_DEFAULT_PATH))) if _os.getenv("BAMENDJOU_CREDS_PATH") else _DEFAULT_PATH
+_creds_path = Path(os.getenv("BAMENDJOU_CREDS_PATH", str(_DEFAULT_PATH))) if os.getenv("BAMENDJOU_CREDS_PATH") else _DEFAULT_PATH
 credential_store = CredentialStore(path=_creds_path)

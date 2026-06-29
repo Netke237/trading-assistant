@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 
 from app.database import get_db
 from app.models.portfolio import PortfolioPositionModel
@@ -80,8 +80,9 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
             schema.theta        = quote.get("theta")
             schema.ivRank       = quote.get("ivRank")
             if schema.entryPrice:
+                mult = _contract_multiplier(schema.contract)
                 schema.pnlDollar = round(
-                    (schema.currentPrice - schema.entryPrice) * 100 * schema.qty, 2
+                    (schema.currentPrice - schema.entryPrice) * mult * schema.qty, 2
                 )
                 schema.pnlPct = round(
                     (schema.currentPrice - schema.entryPrice) / schema.entryPrice * 100, 2
@@ -269,10 +270,9 @@ async def delete_history(history_id: str, db: AsyncSession = Depends(get_db)) ->
 async def _upsert_equity_snapshot(db: AsyncSession, open_value: float, open_pnl: float) -> None:
     """Record/refresh today's total-account-value point (one row per calendar day)."""
     today = date.today().isoformat()
-    realized_cum = sum(
-        r.realized_pnl_dollar
-        for r in (await db.execute(select(ClosedPositionModel))).scalars().all()
-    )
+    realized_cum = (
+        await db.execute(select(func.sum(ClosedPositionModel.realized_pnl_dollar)))
+    ).scalar() or 0.0
     total = round(realized_cum + open_value, 2)
     snap = (await db.execute(
         select(EquitySnapshotModel).where(EquitySnapshotModel.snapshot_date == today)
@@ -294,7 +294,9 @@ async def _upsert_equity_snapshot(db: AsyncSession, open_value: float, open_pnl:
 
 @router.get('/portfolio/performance', response_model=PerformanceResponse)
 async def get_performance(db: AsyncSession = Depends(get_db)) -> PerformanceResponse:
-    closed = (await db.execute(select(ClosedPositionModel))).scalars().all()
+    closed = (await db.execute(
+        select(ClosedPositionModel.exit_date, ClosedPositionModel.realized_pnl_dollar)
+    )).all()
     rows = [{"exit_date": c.exit_date, "realized_pnl_dollar": c.realized_pnl_dollar}
             for c in closed]
     buckets = bucket_realized_by_calendar(rows, today=date.today())

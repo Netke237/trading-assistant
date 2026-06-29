@@ -85,18 +85,16 @@ _DEFAULT_CADENCE = 60
 
 
 def _load_default_cadence() -> int:
-    # 3 levels up from app/routers/scan.py → backend/ → backend/config/settings.yaml
-    path = str((_Path(__file__).parent.parent.parent / "config" / "settings.yaml").resolve())
-    if os.path.exists(path):
-        with open(path, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f) or {}
-        return int(data.get('scan', {}).get('cadence_minutes', _DEFAULT_CADENCE))
-    return _DEFAULT_CADENCE
+    # Reuse the already-loaded _settings dict — no second disk read.
+    return int(_settings.get('scan', {}).get('cadence_minutes', _DEFAULT_CADENCE))
 
 
 _scheduler = ScanScheduler(cadence_minutes=_load_default_cadence())
 _last_request: ScanRequest | None = None
 _last_result: ScanResult | None = None
+# Serialises concurrent reads/writes of _last_request and _last_result so that
+# a scheduler-triggered scan and a user-triggered scan don't race on these globals.
+_state_lock = asyncio.Lock()
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -179,6 +177,75 @@ def _alt_reason(alt: dict, primary: dict, *, is_call: bool) -> str:
 # 3 concurrent × 5 calls = 15 simultaneous requests → consistent ~4-6s/symbol.
 # O-3 batch price fetch drops Pass 1 to 3 calls; 5 × 3 = 15 — same ceiling, more throughput.
 _SCAN_CONCURRENCY = 5
+
+
+async def _build_spreads(
+    symbol: str,
+    direction: str,
+    contract: dict,
+    iv_rank: float | None,
+    client: httpx.AsyncClient,
+    sem: asyncio.Semaphore,
+    *,
+    spread_width: float = 5.0,
+    short_leg_delta: float = 0.30,
+    iv_rank_threshold: float = 50.0,
+    min_credit: float = 0.50,
+    max_debit_pct: float = 40.0,
+):
+    """Fetch chains and build primary + alternative spread for Bearish direction.
+
+    Returns (primary_sp, alt_sp) — both None for Bullish or on fetch failure.
+    """
+    if direction != "Bearish":
+        return None, None
+
+    _primary_type = choose_primary(iv_rank=iv_rank or 0.0, threshold=iv_rank_threshold)
+    try:
+        async with sem:
+            _puts_chain, _calls_chain = await asyncio.gather(
+                fetch_option_chain_async(client, symbol, option_type="P"),
+                fetch_option_chain_async(client, symbol, option_type="C"),
+            )
+    except Exception as exc:
+        _log.debug("Spread: chain fetch failed for %s: %s", symbol, exc)
+        return None, None
+
+    _spread_expiry = contract.get("expiry", "TBD")
+    primary_sp = None
+    alt_sp = None
+
+    if _primary_type == "bear_put" and len(_puts_chain) >= 2:
+        try:
+            _sp = build_bear_put(_puts_chain, expiry=_spread_expiry, width=spread_width, short_delta=short_leg_delta)
+            if _sp.net_debit_credit <= (spread_width * max_debit_pct / 100):
+                primary_sp = _sp
+        except Exception as exc:
+            _log.debug("Spread: build_bear_put failed for %s: %s", symbol, exc)
+        if len(_calls_chain) >= 2:
+            try:
+                _sp = build_bear_call(_calls_chain, expiry=_spread_expiry, width=spread_width, short_delta=short_leg_delta)
+                if -_sp.net_debit_credit >= min_credit:
+                    alt_sp = _sp
+            except Exception as exc:
+                _log.debug("Spread: build_bear_call (alt) failed for %s: %s", symbol, exc)
+
+    elif _primary_type == "bear_call" and len(_calls_chain) >= 2:
+        try:
+            _sp = build_bear_call(_calls_chain, expiry=_spread_expiry, width=spread_width, short_delta=short_leg_delta)
+            if -_sp.net_debit_credit >= min_credit:
+                primary_sp = _sp
+        except Exception as exc:
+            _log.debug("Spread: build_bear_call failed for %s: %s", symbol, exc)
+        if len(_puts_chain) >= 2:
+            try:
+                _sp = build_bear_put(_puts_chain, expiry=_spread_expiry, width=spread_width, short_delta=short_leg_delta)
+                if _sp.net_debit_credit <= (spread_width * max_debit_pct / 100):
+                    alt_sp = _sp
+            except Exception as exc:
+                _log.debug("Spread: build_bear_put (alt) failed for %s: %s", symbol, exc)
+
+    return primary_sp, alt_sp
 
 
 def _safe(model_cls, d: dict | None):
@@ -567,98 +634,34 @@ async def _process_symbol(
     ) if _fh else None
 
     # ── Bearish spread attachment (Pass 2 survivors only) ────────────────────────
-    _primary_sp = None
-    _alt_sp = None
-    if direction == "Bearish":
-        _primary_type = choose_primary(iv_rank=iv_rank or 0.0, threshold=iv_rank_threshold)
-        try:
-            async with sem:
-                _puts_chain, _calls_chain = await asyncio.gather(
-                    fetch_option_chain_async(client, symbol, option_type="P"),
-                    fetch_option_chain_async(client, symbol, option_type="C"),
-                )
-        except Exception as _chain_exc:
-            _log.debug("Spread: chain fetch failed for %s: %s", symbol, _chain_exc)
-            _puts_chain, _calls_chain = [], []
+    _primary_sp, _alt_sp = await _build_spreads(
+        symbol, direction, contract, iv_rank, client, sem,
+        spread_width=spread_width,
+        short_leg_delta=short_leg_delta,
+        iv_rank_threshold=iv_rank_threshold,
+        min_credit=min_credit,
+        max_debit_pct=max_debit_pct,
+    )
 
-        # Determine expiry from primary contract for spread legs
-        _spread_expiry = contract.get("expiry", "TBD")
-
-        if _primary_type == "bear_put" and len(_puts_chain) >= 2:
-            try:
-                _sp = build_bear_put(
-                    _puts_chain,
-                    expiry=_spread_expiry,
-                    width=spread_width,
-                    short_delta=short_leg_delta,
-                )
-                # Filter: reject if debit > max_debit_pct of width
-                if _sp.net_debit_credit <= (spread_width * max_debit_pct / 100):
-                    _primary_sp = _sp
-            except Exception as _exc:
-                _log.debug("Spread: build_bear_put failed for %s: %s", symbol, _exc)
-
-            if len(_calls_chain) >= 2:
-                try:
-                    _alt_sp = build_bear_call(
-                        _calls_chain,
-                        expiry=_spread_expiry,
-                        width=spread_width,
-                        short_delta=short_leg_delta,
-                    )
-                    # Filter: reject if credit < min_credit
-                    if -_alt_sp.net_debit_credit < min_credit:
-                        _alt_sp = None
-                except Exception as _exc:
-                    _log.debug("Spread: build_bear_call (alt) failed for %s: %s", symbol, _exc)
-
-        elif _primary_type == "bear_call" and len(_calls_chain) >= 2:
-            try:
-                _sp = build_bear_call(
-                    _calls_chain,
-                    expiry=_spread_expiry,
-                    width=spread_width,
-                    short_delta=short_leg_delta,
-                )
-                # Filter: reject if credit < min_credit
-                if -_sp.net_debit_credit >= min_credit:
-                    _primary_sp = _sp
-            except Exception as _exc:
-                _log.debug("Spread: build_bear_call failed for %s: %s", symbol, _exc)
-
-            if len(_puts_chain) >= 2:
-                try:
-                    _alt_sp = build_bear_put(
-                        _puts_chain,
-                        expiry=_spread_expiry,
-                        width=spread_width,
-                        short_delta=short_leg_delta,
-                    )
-                    # Filter: reject if debit > max_debit_pct of width
-                    if _alt_sp.net_debit_credit > (spread_width * max_debit_pct / 100):
-                        _alt_sp = None
-                except Exception as _exc:
-                    _log.debug("Spread: build_bear_put (alt) failed for %s: %s", symbol, _exc)
-
-        if _primary_sp is not None:
-            from app.schemas import OptionLeg as _OptionLeg
-            trade_card.spreadType = _primary_sp.spread_type
-            trade_card.netDebitCredit = _primary_sp.net_debit_credit
-            trade_card.maxProfit = _primary_sp.max_profit
-            trade_card.maxLoss = _primary_sp.max_loss
-            trade_card.breakeven = _primary_sp.breakeven
-            trade_card.legs = [
-                _OptionLeg(
-                    right=leg.right,
-                    strike=leg.strike,
-                    expiry=leg.expiry,
-                    action=leg.action,
-                    qty=leg.qty,
-                    bid=leg.bid,
-                    ask=leg.ask,
-                )
-                for leg in _primary_sp.legs
-            ]
+    if _primary_sp is not None:
+        from app.schemas import OptionLeg as _OptionLeg
+        trade_card.spreadType = _primary_sp.spread_type
+        trade_card.netDebitCredit = _primary_sp.net_debit_credit
+        trade_card.maxProfit = _primary_sp.max_profit
+        trade_card.maxLoss = _primary_sp.max_loss
+        trade_card.breakeven = _primary_sp.breakeven
+        trade_card.legs = [
+            _OptionLeg(
+                right=leg.right,
+                strike=leg.strike,
+                expiry=leg.expiry,
+                action=leg.action,
+                qty=leg.qty,
+                bid=leg.bid,
+                ask=leg.ask,
+            )
+            for leg in _primary_sp.legs
+        ]
 
     alts: list[AlternativeContract] = []
     for alt_card, alt_c in runner_ups:
@@ -798,7 +801,6 @@ async def restore_from_db() -> str | None:
 @router.post('/scan', response_model=ScanResult)
 async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> ScanResult:
     global _last_request, _last_result
-    _last_request = req
     scan_id = new_rec_id()
     log_event("scan_started", scan_id, {"universe": req.universe, "direction": req.direction})
 
@@ -896,10 +898,10 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         scan_id, _bars_from_db, _bars_missed, len(symbols),
     )
 
-    for result in results:
+    for symbol, result in zip(symbols, results):
         if isinstance(result, Exception):
             has_exception = True
-            rejected.append(RejectedCandidate(symbol="unknown", reason=str(result)))
+            rejected.append(RejectedCandidate(symbol=symbol, reason=str(result)))
         elif isinstance(result, RejectedCandidate):
             rejected.append(result)
         elif isinstance(result, TradeCardData):
@@ -986,25 +988,27 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
     elif has_exception and not candidates:
         state = 'FAILED'
 
-    deltas = _compute_deltas(
-        ScanResult(scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(), candidates=candidates, rejected=rejected),
-        _last_result,
-    )
+    async with _state_lock:
+        deltas = _compute_deltas(
+            ScanResult(scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(), candidates=candidates, rejected=rejected),
+            _last_result,
+        )
 
-    result = ScanResult(
-        scan_id=scan_id,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        candidates=candidates,
-        rejected=rejected,
-        state=state,
-        previous_run_id=_last_result.scan_id if _last_result else None,
-        deltas=deltas,
-        shortlist_truncated=shortlist_truncated,
-        original_count=original_count,
-        pipeline=_pipeline,
-        direction_banner=_direction_banner,
-    )
-    _last_result = result
+        result = ScanResult(
+            scan_id=scan_id,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            candidates=candidates,
+            rejected=rejected,
+            state=state,
+            previous_run_id=_last_result.scan_id if _last_result else None,
+            deltas=deltas,
+            shortlist_truncated=shortlist_truncated,
+            original_count=original_count,
+            pipeline=_pipeline,
+            direction_banner=_direction_banner,
+        )
+        _last_result = result
+        _last_request = req
     # Trigger #2: fire armed auto-trade only when at least one PASS candidate exists.
     # Run off the event loop — the broker call inside is synchronous network I/O.
     if any(c.finalStatus == 'PASS' for c in result.candidates):
@@ -1028,10 +1032,12 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
 
 async def _scheduled_scan() -> ScanResult:
     """Wrapper used by the scheduler. Re-uses the last request configuration."""
-    if _last_request is None:
+    async with _state_lock:
+        req = _last_request
+    if req is None:
         raise RuntimeError("No previous scan request to repeat")
     async with AsyncSessionLocal() as db:
-        return await run_scan(_last_request, db)
+        return await run_scan(req, db)
 
 
 @router.post('/scan/prewarm-candles')
