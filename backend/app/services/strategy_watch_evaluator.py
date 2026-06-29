@@ -178,7 +178,7 @@ async def evaluate_all() -> list[WatchEvent]:
             interval = w.get("interval", "15m")
             try:
                 from app.data.market import fetch_intraday_candles
-                bars_intraday = await fetch_intraday_candles(symbol, interval=interval, limit=300)
+                bars_intraday = fetch_intraday_candles(symbol, interval=interval, days=55)
             except Exception as exc:
                 logger.warning("composite-watch: intraday fetch failed for %s — %s", symbol, exc)
         try:

@@ -319,7 +319,7 @@ async def get_intraday_hmm_series(
     # Use the same intraday fetch mechanism as the existing /regime endpoint:
     # fetch_intraday_candles from app.data.market
     try:
-        bars = fetch_intraday_candles(symbol, interval='15min', days=55)
+        bars = fetch_intraday_candles(symbol, interval=interval, days=55)
     except Exception:
         bars = []
     if not bars:
