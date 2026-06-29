@@ -87,6 +87,25 @@ export interface StrategyWatch {
   last_state: StrategyWatchState;
 }
 
+export interface CompositeWatch {
+  id: string;
+  watch_type: 'composite';
+  symbol: string;
+  direction: string;
+  interval: string;
+  trigger_def: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string;
+  last_state: Record<string, unknown>;
+}
+
+export interface CompositeWatchDefaults {
+  conviction_min: number;
+  p_transition_min: number;
+  p_stay_min: number;
+  min_confirmations: number;
+}
+
 export interface StrategyWatchSchedule {
   enabled: boolean;
   mode: 'eod' | 'poll';
@@ -461,6 +480,25 @@ export const api = {
     post<{ fired: number; events: unknown[] }>('/api/strategy-watch/evaluate', {}),
   getStrategyWatchStatus: () =>
     get<{ running: boolean; last_run_at: string | null; mode: string; enabled: boolean }>('/api/strategy-watch/status'),
+
+  // ── Composite watches ────────────────────────────────────────────────────────
+  listCompositeWatches: () =>
+    get<CompositeWatch[]>('/api/composite-watches/'),
+  addCompositeWatch: (symbol: string, triggerDef: Record<string, unknown>, direction: string = 'Bullish', interval: string = '1D') =>
+    post<CompositeWatch>('/api/composite-watches/', { symbol, trigger_def: triggerDef, direction, interval }),
+  removeCompositeWatch: (id: string) =>
+    del(`/api/composite-watches/${id}`),
+  setCompositeWatchEnabled: (id: string, enabled: boolean) =>
+    patch<{ id: string; enabled: boolean }>(`/api/composite-watches/${id}`, { enabled }),
+  getCompositeWatchDefaults: () =>
+    get<CompositeWatchDefaults>('/api/composite-watches/defaults'),
+
+  // ── Pre-breakout scan ────────────────────────────────────────────────────────
+  prebreakoutScan: (symbols: string[], direction: string, paramsOverride?: Record<string, unknown>) =>
+    post<Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>>(
+      '/api/scan/prebreakout',
+      { symbols, direction, params_override: paramsOverride ?? null }
+    ),
 
   getIvThresholds: () =>
     get<Record<string, { pass_max: number | null; caution_max: number | null }>>(

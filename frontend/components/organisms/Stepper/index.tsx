@@ -36,11 +36,20 @@ export const SCREENER_STEPS_STOCKS: ScreenerStep[] = [
   { index: 4, slug: 'step-4-stocks',    label: 'Stocks'        },
 ];
 
+export const SCREENER_STEPS_PREBREAKOUT: ScreenerStep[] = [
+  { index: 1, slug: 'step-1-regime',          label: 'Market Regime' },
+  { index: 2, slug: 'step-2-universe',        label: 'Universe'      },
+  { index: 3, slug: 'step-3-direction',       label: 'Direction'     },
+  { index: 4, slug: 'step-4-prebreakout',     label: 'Pre-Breakout'  },
+];
+
 // Backward-compat export (existing imports keep working):
 export const SCREENER_STEPS = SCREENER_STEPS_OPTIONS;
 
-export function getSteps(mode: 'options' | 'stocks'): ScreenerStep[] {
-  return mode === 'stocks' ? SCREENER_STEPS_STOCKS : SCREENER_STEPS_OPTIONS;
+export function getSteps(mode: 'options' | 'stocks' | 'prebreakout'): ScreenerStep[] {
+  if (mode === 'stocks') return SCREENER_STEPS_STOCKS;
+  if (mode === 'prebreakout') return SCREENER_STEPS_PREBREAKOUT;
+  return SCREENER_STEPS_OPTIONS;
 }
 
 export function currentStepFromPath(pathname: string | null): number {
