@@ -137,6 +137,7 @@ class _AnalyzeCore:
     next_event_days: int | None
     next_event_label: str | None
     daily_bars: list[dict]
+    intraday_bars: list[dict]
     gate_flags: list[dict]
 
 
@@ -173,15 +174,18 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     if req.max_price is not None and price > req.max_price:
         gate_flags.append({"gate": "price", "status": "REJECT", "detail": f"price ${price:.2f} > max"})
 
-    # Regime sentiment
+    # Regime sentiment — fetch intraday bars once and reuse in the return value
+    # so analyze_stock() doesn't need a second fetch for _regime_block_for_horizon.
     full_cfg = _load_full_scoring_cfg()
     rcfg = _load_regime_cfg(req.horizon)
     regime_signal = None
+    _intraday_bars: list[dict] = []
     if rcfg["timeframe"] == "15min":
         try:
-            regime_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 55)
+            _intraday_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 55)
         except Exception:
-            regime_bars = []
+            _intraday_bars = []
+        regime_bars = _intraday_bars
     else:
         regime_bars = bars
     if regime_bars and len(regime_bars) >= rcfg.get("min_obs", 10):
@@ -290,7 +294,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         company=company or symbol, price=price, card=card, regime_signal=regime_signal,
         fundamentals=_fh, signal=signal, bt_result=bt_result, conf_val=conf_val, conf_txt=conf_txt,
         sector_rs_pct=None, next_event_days=next_event_days, next_event_label=next_event_label,
-        daily_bars=bars, gate_flags=gate_flags,
+        daily_bars=bars, intraday_bars=_intraday_bars, gate_flags=gate_flags,
     )
 
 
@@ -343,7 +347,7 @@ def _regime_block_for_horizon(
         avg_regime_duration=omm.avg_regime_duration, conviction_pct=omm.conviction_pct,
         conviction_label=omm.conviction_label, hmm_state=(dh.state if dh else None),
         alignment=alignment(omm.state, dh.state if dh else None),
-        transition_row=list(omm.transition_row) if hasattr(omm, 'transition_row') else [],
+        transition_row=list(omm.transition_row),
         insufficient_data=False)
 
 
@@ -388,11 +392,8 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
     card = core.card
     closes = [b["close"] for b in core.daily_bars]
 
-    # Pre-fetch intraday bars once (avoids blocking inside _regime_block_for_horizon).
-    try:
-        intraday_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 55)
-    except Exception:
-        intraday_bars = []
+    # Intraday bars already fetched inside _analyze_core — reuse to avoid a second call.
+    intraday_bars = core.intraday_bars
 
     # Run all three regime blocks + sector context + backdrop concurrently,
     # each CPU-bound block in a thread so the event loop stays free.
