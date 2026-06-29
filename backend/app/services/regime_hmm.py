@@ -120,3 +120,52 @@ def compute_intraday_hmm(bars: list[dict]) -> HmmResult | None:
         p_stay=round(p_stay, 4),
         p_transition=p_transition,
     )
+
+
+def compute_intraday_hmm_series(candles: list[dict], max_bars: int = 252) -> list[dict]:
+    """Compute per-bar HMM state and conviction for intraday chart overlay.
+
+    DISPLAY ONLY — State labels are Viterbi-decoded over the full window and are
+    not point-in-time. Do not use for live signal generation.
+
+    Returns one entry per candle (up to max_bars) with state label and conviction.
+    """
+    window = candles[-max_bars:]
+    if len(window) < MIN_BARS:
+        return []
+
+    try:
+        from hmmlearn.hmm import GaussianHMM
+    except ImportError:
+        return []
+
+    closes_arr = np.array([float(b['close']) for b in window], dtype=float)
+    returns = np.diff(closes_arr) / closes_arr[:-1]
+    X = returns.reshape(-1, 1)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        model = GaussianHMM(
+            n_components=3,
+            covariance_type='full',
+            n_iter=100,
+            random_state=42,
+        )
+        model.fit(X)
+
+    label_map = _assign_labels(model.means_, model.covars_)
+
+    # Viterbi decode over full window — display only, not point-in-time
+    states = model.predict(X)            # integer state index per bar, length n-1
+    posteriors = model.predict_proba(X)  # shape (n-1, n_states)
+
+    # X has n-1 rows (returns); align to window[1:] to pair each return with its bar
+    result = []
+    for i, bar in enumerate(window[1:]):
+        state_idx = int(states[i])
+        result.append({
+            "time": bar["time"],
+            "state": label_map[state_idx],
+            "conviction": float(posteriors[i, state_idx]),
+        })
+    return result

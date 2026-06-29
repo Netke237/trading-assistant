@@ -276,3 +276,52 @@ async def get_regime(
             ndx.status if ndx else None,
         ),
     )
+
+
+@router.get('/regime/series')
+async def get_regime_series(
+    symbol: str = 'SPX',
+    limit: int = 500,
+):
+    """Get per-bar OMM regime state for chart background overlay.
+
+    Returns list of {time, state} dicts — one per trading day.
+    state: 'Bull' | 'Bear' | 'Choppy'
+    """
+    from app.services.historical_store import get_bars
+    from app.services.regime_omm import compute_regime_series
+    from datetime import date, timedelta
+
+    end = date.today()
+    start = end - timedelta(days=max(limit * 2, 730))  # fetch enough history
+    try:
+        bars = await get_bars(symbol, start, end)
+    except Exception:
+        bars = []
+    if not bars:
+        return []
+    return compute_regime_series(bars[-limit:] if len(bars) > limit else bars)
+
+
+@router.get('/regime/intraday-series')
+async def get_intraday_hmm_series(
+    symbol: str = 'SPY',
+    interval: str = '15m',
+    limit: int = 252,
+):
+    """Get per-bar HMM state and conviction for intraday chart overlay.
+
+    Returns list of {time, state, conviction} dicts.
+    Display only — Viterbi-decoded over full window, not point-in-time.
+    """
+    from app.services.regime_hmm import compute_intraday_hmm_series
+
+    # Use the same intraday fetch mechanism as the existing /regime endpoint:
+    # fetch_intraday_candles from app.data.market
+    try:
+        bars = fetch_intraday_candles(symbol, interval='15min', days=55)
+    except Exception:
+        bars = []
+    if not bars:
+        return []
+    return compute_intraday_hmm_series(bars, max_bars=limit)
