@@ -333,7 +333,7 @@ export default function WatchlistPage() {
                   <div key={w.id} className={styles.compositeRow}>
                     <div className={styles.compositeInfo}>
                       <Text size={13} weight={500}>{w.symbol}</Text>
-                      <Text size={11} tone="secondary">{w.direction} · {primary?.model ?? 'OMM'} → {(primary?.to_state as string) ?? 'any'} · {w.interval}</Text>
+                      <Text size={11} tone="secondary">{w.direction} · {(primary?.model as string | undefined) ?? 'OMM'} → {(primary?.to_state as string | undefined) ?? 'any'} · {w.interval}</Text>
                     </div>
                     <div className={styles.compositeActions}>
                       <label className={styles.toggleLabel}>

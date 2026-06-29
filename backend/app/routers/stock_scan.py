@@ -34,6 +34,7 @@ from app.scoring.stock_scorer import score_stock
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
     ma_crossover_signal, mean_reversion_rsi_signal,
+    mean_reversion_bb_signal,
     breakout_setup_signal,
 )
 from app.services.strategy_backtest import run_strategy_backtest
@@ -89,13 +90,15 @@ _SIGNAL_FNS = {
     "breakout_base":       breakout_base_signal,
     "ma_crossover":        ma_crossover_signal,
     "mean_reversion_rsi":  mean_reversion_rsi_signal,
+    "mean_reversion_bb":   mean_reversion_bb_signal,
 }
 
 _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
     "pullback_ema":       lambda r: {"tolerance": r.pullback_tolerance_pct, "ema_period": r.pullback_ema_period, "trend_ema": r.pullback_trend_ema, "ma_type": r.pullback_ma_type, "require_reversal": r.pullback_require_reversal},
     "breakout_base":      lambda r: {"volume_mult": r.breakout_volume_mult},
     "ma_crossover":       lambda r: {"fast": r.ma_crossover_fast, "slow": r.ma_crossover_slow, "lookback": r.ma_crossover_lookback},
-    "mean_reversion_rsi": lambda r: {"rsi_period": r.rsi_period, "rsi_oversold": r.rsi_oversold, "rsi_overbought": getattr(r, "rsi_overbought", 70.0), "trend_sma": r.rsi_trend_sma},
+    "mean_reversion_rsi": lambda r: {"rsi_period": r.rsi_period, "rsi_oversold": r.rsi_oversold, "rsi_overbought": getattr(r, "rsi_overbought", 70.0), "trend_sma": r.rsi_trend_sma, "require_choppy_regime": r.require_choppy_regime},
+    "mean_reversion_bb":  lambda r: {"require_choppy_regime": r.require_choppy_regime},
 }
 
 def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
