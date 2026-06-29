@@ -392,6 +392,17 @@ async def evaluate_and_notify_for_symbol(
         if not rows:
             return []
 
+        # Separate composite rules from standard rules
+        standard_rows = []
+        composite_rows = []
+        for _row in rows:
+            _rj = json.loads(_row.rule_json)
+            if _rj.get("__type") == "composite":
+                composite_rows.append((_row, _rj))
+            else:
+                standard_rows.append(_row)
+        rows = standard_rows  # existing path only processes standard rules
+
         rule_inputs = [_deserialize_rule(row.rule_json, row) for row in rows]
 
         # Compute indicators referenced by rule conditions
@@ -436,6 +447,55 @@ async def evaluate_and_notify_for_symbol(
                 _dispatch('telegram',
                     bot_token=_tg.get('bot_token', ''), chat_id=_tg.get('chat_id', ''), text=html_body,
                 )
+
+        # ── Composite rule evaluation ─────────────────────────────────────────
+        if composite_rows:
+            from app.services.composite_trigger_evaluator import evaluate_from_context
+            from app.services.regime_omm import compute_omm
+            _closes = [c["close"] for c in all_candles] if all_candles else []
+            _omm = compute_omm(_closes) if len(_closes) >= 100 else None
+            for _row, _rj in composite_rows:
+                _td = {k: v for k, v in _rj.items() if k != "__type"}
+                try:
+                    _fired = evaluate_from_context(_td, _omm, signals, indicators)
+                except Exception as _exc:
+                    logger.warning("composite rule eval failed for %s: %s", symbol, _exc)
+                    continue
+                if not _fired:
+                    continue
+                _now = datetime.now().isoformat()
+                _entry = {
+                    "id": uuid.uuid4().hex,
+                    "rule_id": _row.id,
+                    "symbol": symbol,
+                    "interval": interval,
+                    "triggered_at": _now,
+                    "candle": closed_candle,
+                    "trigger_values": {"composite": True, "omm_state": _omm.state if _omm else None},
+                    "reason": f"Composite Markov trigger: {_td.get('primary', {}).get('to_state', 'any')} regime",
+                }
+                _hist = AlertHistoryModel(
+                    id=_entry["id"], rule_id=_entry["rule_id"], symbol=_entry["symbol"],
+                    interval=_entry["interval"], triggered_at=_entry["triggered_at"],
+                    candle_json=json.dumps(_entry["candle"]),
+                    trigger_values=json.dumps(_entry["trigger_values"]),
+                    reason=_entry["reason"],
+                )
+                db.add(_hist)
+                if _row.last_triggered_at is not None or True:  # always update
+                    _row.last_triggered_at = _now
+                _rn = (await db.execute(select(AlertRuleModel).where(AlertRuleModel.id == _row.id))).scalar_one_or_none()
+                _rname = _rn.name if _rn else None
+                _subj, _plain, _html = _build_notification_text(_entry, _rname)
+                _ncfg = _load_notification_config()
+                _gm = _ncfg.get('gmail', {})
+                _tg = _ncfg.get('telegram', {})
+                if _gm.get('enabled'):
+                    _dispatch('gmail', to=_gm.get('to', ''), subject=_subj, body=_plain,
+                              smtp_user=_gm.get('smtp_user', ''), smtp_password=_gm.get('smtp_password', ''))
+                if _tg.get('enabled'):
+                    _dispatch('telegram', bot_token=_tg.get('bot_token', ''), chat_id=_tg.get('chat_id', ''), text=_html)
+                triggered.append(_entry)
 
         await db.commit()
     return triggered
