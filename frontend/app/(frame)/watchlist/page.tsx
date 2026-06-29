@@ -20,7 +20,7 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { statusForScore } from '@/lib/status';
-import { api } from '@/lib/api';
+import { api, type CompositeWatch } from '@/lib/api';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { contractLabel, type OptionContract } from '@/types/domain';
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
@@ -47,10 +47,7 @@ export default function WatchlistPage() {
   const [watchlist, setWatchlist]   = useState<WatchlistRow[]>([]);
   const [contracts, setContracts]   = useState<OptionContract[]>([]);
   const [offline, setOffline]       = useState(false);
-  const [compositeWatches, setCompositeWatches] = useState<Array<{
-    id: string; symbol: string; direction: string; enabled: boolean;
-    interval: string; trigger_def: Record<string, unknown>; created_at: string;
-  }>>([]);
+  const [compositeWatches, setCompositeWatches] = useState<CompositeWatch[]>([]);
 
   const setChartSymbol     = useChartStore((s) => s.setSymbol);
   const setChartSymbolName = useChartStore((s) => s.setSymbolName);
@@ -62,7 +59,7 @@ export default function WatchlistPage() {
 
   const refreshComposite = useCallback(async () => {
     try {
-      const data = await fetch('/api/composite-watches/').then((r) => r.json());
+      const data = await api.listCompositeWatches();
       setCompositeWatches(Array.isArray(data) ? data : []);
     } catch { /* ignore */ }
   }, []);
@@ -343,11 +340,7 @@ export default function WatchlistPage() {
                           onChange={async (e) => {
                             const enabled = e.target.checked;
                             try {
-                              await fetch(`/api/composite-watches/${w.id}`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ enabled }),
-                              });
+                              await api.setCompositeWatchEnabled(w.id, enabled);
                               setCompositeWatches((prev) =>
                                 prev.map((x) => x.id === w.id ? { ...x, enabled } : x)
                               );
@@ -361,7 +354,7 @@ export default function WatchlistPage() {
                         className={styles.deleteBtn}
                         onClick={async () => {
                           try {
-                            await fetch(`/api/composite-watches/${w.id}`, { method: 'DELETE' });
+                            await api.removeCompositeWatch(w.id);
                             setCompositeWatches((prev) => prev.filter((x) => x.id !== w.id));
                           } catch { /* ignore */ }
                         }}
