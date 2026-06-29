@@ -16,6 +16,7 @@ from app.services.historical_store import get_bars
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
     ma_crossover_signal, mean_reversion_rsi_signal,
+    mean_reversion_bb_signal,
 )
 from app.services.strategy_watch_store import strategy_watch_store
 from app.services.strategy_param_store import get_active
@@ -29,6 +30,7 @@ _SIGNAL_FNS = {
     "breakout_base":      breakout_base_signal,
     "ma_crossover":       ma_crossover_signal,
     "mean_reversion_rsi": mean_reversion_rsi_signal,
+    "mean_reversion_bb":  mean_reversion_bb_signal,
 }
 
 _HISTORY_DAYS = 730  # ~2 calendar years — enough for the 200-SMA strategy
@@ -78,7 +80,7 @@ async def evaluate_all() -> list[WatchEvent]:
         close = float(bars[-1]["close"])
         wdir = w.get("direction", "Bullish")
         try:
-            adopted = get_active(key)
+            adopted = get_active(key, wdir)
             params_override = w.get("params_override") or {}
             adopted.update(params_override)  # params_override wins
             signal = fn(bars, direction=wdir, **adopted)
@@ -153,6 +155,49 @@ async def evaluate_all() -> list[WatchEvent]:
         if event is not None:
             strategy_watch_store.update_state(w["id"], state)
             events.append(event)
+
+    # ── Composite watches ──────────────────────────────────────────────────────
+    for w in strategy_watch_store.list_watches():
+        if not w.get("enabled"):
+            continue
+        if w.get("watch_type") != "composite":
+            continue
+        symbol = w["symbol"]
+        trigger_def = w.get("trigger_def") or {}
+        wdir = w.get("direction", "Bullish")
+        model = (trigger_def.get("primary") or {}).get("model", "OMM")
+        try:
+            bars = await get_bars(symbol, start, end)
+        except Exception as exc:
+            logger.warning("composite-watch: get_bars failed for %s — %s", symbol, exc)
+            continue
+        if not bars:
+            continue
+        bars_intraday: list[dict] = []
+        if model == "HMM_intraday":
+            interval = w.get("interval", "15m")
+            try:
+                from app.data.market import fetch_intraday_candles
+                bars_intraday = await fetch_intraday_candles(symbol, interval=interval, limit=300)
+            except Exception as exc:
+                logger.warning("composite-watch: intraday fetch failed for %s — %s", symbol, exc)
+        try:
+            from app.services.composite_trigger_evaluator import evaluate_scheduled
+            fired = evaluate_scheduled(symbol, trigger_def, bars, bars_intraday)
+        except Exception as exc:
+            logger.warning("composite-watch: evaluate_scheduled failed for %s — %s", symbol, exc)
+            continue
+        if not fired:
+            continue
+        close = float(bars[-1]["close"])
+        event = WatchEvent(
+            watch_id=w["id"], symbol=symbol, strategy_key="composite",
+            event_type="entry", direction=wdir,
+            entry=None, stop=None, target=None, rr_ratio=None,
+            close=close,
+            reason=f"{symbol}: composite Markov trigger fired",
+        )
+        events.append(event)
 
     return events
 
