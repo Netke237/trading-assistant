@@ -18,8 +18,17 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-# Canonical strategy keys — must match app/routers/stock_scan.py:_SIGNAL_FNS.
-VALID_STRATEGIES = {"pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi"}
+# Canonical strategy keys for strategy watches — must match strategy_watch_evaluator._SIGNAL_FNS.
+# IMPORTANT: Do NOT add 'breakout_setup' or 'mean_reversion_vwap' here:
+#   breakout_setup returns SetupSignal (no entry/stop/target) — not watchable.
+#   mean_reversion_vwap is intraday-only — watch evaluator uses daily bars.
+VALID_STRATEGIES = {
+    "pullback_ema",
+    "breakout_base",
+    "ma_crossover",
+    "mean_reversion_rsi",
+    "mean_reversion_bb",    # SWS-1: added
+}
 
 _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "strategy_watches.yaml"
 
@@ -56,6 +65,13 @@ class StrategyWatchStore:
             return
         with self._lock:
             self._watches = list(raw.get("watches") or [])
+            # Forward-compatibility migration: ensure all watch entries have required fields.
+            for w in self._watches:
+                w.setdefault("watch_type", "strategy")
+                w.setdefault("trigger_def", None)
+                w.setdefault("interval", "1D")
+                w.setdefault("last_state", _fresh_state())
+                w.setdefault("enabled", True)
             self._schedule = {**_DEFAULT_SCHEDULE, **(raw.get("schedule") or {})}
 
     def save(self) -> None:
@@ -107,6 +123,36 @@ class StrategyWatchStore:
             except ValueError:
                 continue  # skip duplicates / blanks
         return added
+
+    def add_composite_watch(
+        self,
+        symbol: str,
+        trigger_def: dict,
+        direction: str = "Bullish",
+        interval: str = "1D",
+    ) -> dict:
+        """Create a composite (Markov + N-of-M confirmation) watch entry.
+
+        Does NOT check VALID_STRATEGIES — composite watches are not tied to a signal function.
+        Does NOT deduplicate — multiple composite watches per symbol with different trigger
+        definitions are allowed. Each call creates a new entry with a unique ID.
+        """
+        symbol = symbol.strip().upper()
+        with self._lock:
+            entry = {
+                "id": f"cwch_{uuid.uuid4().hex[:12]}",
+                "watch_type": "composite",
+                "symbol": symbol,
+                "direction": direction,
+                "interval": interval,
+                "trigger_def": dict(trigger_def),
+                "enabled": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "last_state": _fresh_state(),
+            }
+            self._watches.append(entry)
+        self.save()
+        return dict(entry)
 
     def remove_watch(self, watch_id: str) -> bool:
         with self._lock:
