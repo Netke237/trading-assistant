@@ -182,16 +182,16 @@ def test_conviction_is_direction_aware():
 
 
 def test_conviction_label_bands():
-    assert conviction_label(50) == "Strong tailwind"
-    assert conviction_label(25) == "Mild tailwind"
+    assert conviction_label(50) == "Strong conviction"
+    assert conviction_label(25) == "Moderate conviction"
     assert conviction_label(0)  == "Neutral"
-    assert conviction_label(-25) == "Mild headwind"
-    assert conviction_label(-50) == "Strong headwind"
+    assert conviction_label(-25) == "Low conviction"
+    assert conviction_label(-50) == "Weak conviction"
 
 
 def test_conviction_interpretation_smoke():
     s = conviction_interpretation(25, "Stable", "Bull")
-    assert "Mild tailwind" in s
+    assert "Moderate conviction" in s
     assert "+25%" in s
     assert "favours" in s
     assert "stable" in s
