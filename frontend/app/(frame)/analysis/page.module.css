@@ -11,29 +11,49 @@
   background: var(--bg-surface); color: var(--text-primary); cursor: pointer;
 }
 .searchBtn:disabled { opacity: 0.6; cursor: default; }
+
+/* ── Header strip ───────────────────────────────────────────────────── */
 .headerStrip {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 12px; border: 1px solid var(--border-subtle); border-radius: 8px;
 }
+.symbolName { display: flex; flex-direction: column; gap: 1px; }
 .chartLinkBtn {
   margin-left: auto; padding: 4px 10px; border: 1px solid var(--border-subtle); border-radius: 4px;
   background: var(--bg-surface); color: var(--text-secondary); font-size: 11px; cursor: pointer;
 }
 .chartLinkBtn:hover { color: var(--text-primary); }
-.symbolName { display: flex; flex-direction: column; gap: 1px; }
 .dirPill, .backdropChip {
   font-size: 11px; padding: 2px 8px; border-radius: 4px;
   border: 1px solid var(--border-subtle); color: var(--text-secondary);
 }
-.contextRow, .regimeRow {
+
+/* ── Context row ────────────────────────────────────────────────────── */
+.contextRow {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;
 }
-.ctxCard, .regimeCard {
+.ctxCard {
   display: flex; flex-direction: column; gap: 4px;
   padding: 12px; border: 1px solid var(--border-subtle); border-radius: 8px;
 }
 .rsStrip { display: flex; gap: 12px; margin-top: 4px; }
 .rsCell { display: flex; flex-direction: column; }
+
+/* ── Regime by horizon — matches step-1-regime .horizonCard ────────── */
+.sectionHeader {
+  display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px;
+}
+.horizonCard {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden;
+}
+.horizonCol {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-4); background: var(--bg-surface);
+}
+.horizonCol + .horizonCol { border-left: 1px solid var(--border-subtle); }
+
+/* ── Chart region ───────────────────────────────────────────────────── */
 .chartRegion { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; }
 .tableCol { display: flex; flex-direction: column; gap: 8px; }
 .tableHeader, .row {
@@ -42,12 +62,53 @@
 }
 .gateFlags { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .gateFlag { display: flex; align-items: center; gap: 8px; }
-.chartCol { min-height: 360px; }
-.scoreCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-.scoreCard {
-  display: flex; flex-direction: column; gap: 4px; padding: 12px;
-  border: 1px solid var(--border-subtle); border-radius: 8px;
+.chartCol { display: flex; flex-direction: column; gap: var(--space-2); }
+.chartBox {
+  height: 320px;
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden;
+  display: flex; flex-direction: column;
 }
+
+/* ── Score details — same card style as Stock Ranking page ─────────── */
+.detailsHeader {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: var(--space-3); padding: 0 var(--space-1);
+}
+.components {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-3);
+}
+.compCard {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3); background: var(--bg-surface);
+  border: 1px solid var(--border-subtle); border-left: 3px solid var(--border-subtle);
+  border-radius: var(--radius-md); min-width: 0;
+}
+.compCard_pos { border-left-color: var(--pass);    background: color-mix(in srgb, var(--pass)    6%, var(--bg-surface)); }
+.compCard_neu { border-left-color: var(--caution); background: color-mix(in srgb, var(--caution) 6%, var(--bg-surface)); }
+.compCard_neg { border-left-color: var(--reject);  background: color-mix(in srgb, var(--reject)  6%, var(--bg-surface)); }
+
+.compHeader { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
+
+.meter {
+  position: relative; width: 100%; height: 4px;
+  background: var(--bg-surface-2); border-radius: 2px; overflow: hidden;
+}
+.meterFill {
+  position: absolute; inset: 0 auto 0 0;
+  background: var(--text-dim); border-radius: 2px; transition: width 180ms ease-out;
+}
+.meterFill_pos { background: var(--pass);    }
+.meterFill_neu { background: var(--caution); }
+.meterFill_neg { background: var(--reject);  }
+
+.compMeta {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: var(--space-2); padding-top: var(--space-2);
+  border-top: 1px dashed var(--border-subtle);
+}
+.compMetaCell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+/* ── News ───────────────────────────────────────────────────────────── */
 .newsRegion { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .newsCol {
   display: flex; flex-direction: column; gap: 6px;

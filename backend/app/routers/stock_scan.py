@@ -348,6 +348,7 @@ def _regime_block_for_horizon(
         conviction_label=omm.conviction_label, hmm_state=(dh.state if dh else None),
         alignment=alignment(omm.state, dh.state if dh else None),
         transition_row=list(omm.transition_row),
+        state_order=list(omm.state_order),
         insufficient_data=False)
 
 

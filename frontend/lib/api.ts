@@ -176,6 +176,7 @@ export interface RegimeHorizonBlock {
   hmm_state: string | null;
   alignment: string;
   transition_row: number[];
+  state_order: string[];
   insufficient_data: boolean;
 }
 

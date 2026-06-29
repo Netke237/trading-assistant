@@ -13,6 +13,36 @@ import type { Candle } from '@/types/chart';
 import type { NewsItem } from '@/types/domain';
 import styles from './page.module.css';
 
+/* ── Regime helpers (mirrors step-1-regime) ─────────────────────────── */
+function ommStateIcon(state: string): string {
+  if (state === 'Bull') return '↑';
+  if (state === 'Bear') return '↓';
+  return '≈';
+}
+function toneForOmmState(state: string): 'pass' | 'caution' | 'reject' {
+  if (state === 'Bull') return 'pass';
+  if (state === 'Bear') return 'reject';
+  return 'caution';
+}
+function hmmStateIcon(state: string): string {
+  if (state === 'Trending') return '▲';
+  if (state === 'Mean-reverting') return '↕';
+  return '≈';
+}
+function pct(p: number): string { return `${Math.round(p * 100)}%`; }
+
+/* ── Score-card signal helper ────────────────────────────────────────── */
+function signalFromStatus(status: string): 'pos' | 'neu' | 'neg' {
+  if (status === 'PASS')    return 'pos';
+  if (status === 'REJECT')  return 'neg';
+  return 'neu';
+}
+function signalLabel(sig: 'pos' | 'neu' | 'neg'): string {
+  if (sig === 'pos') return 'Positive';
+  if (sig === 'neg') return 'Negative';
+  return 'Neutral';
+}
+
 export default function AnalysisPage() {
   const router = useRouter();
   const { result, loading, error, analyze } = useAnalysisStore();
@@ -65,6 +95,7 @@ export default function AnalysisPage() {
 
       {result && (
         <>
+          {/* ── Header strip ─────────────────────────────────────────── */}
           <div className={styles.headerStrip}>
             <WatchStar symbol={result.symbol} />
             <div className={styles.symbolName}>
@@ -88,6 +119,7 @@ export default function AnalysisPage() {
             </button>
           </div>
 
+          {/* ── Context row ──────────────────────────────────────────── */}
           <div className={styles.contextRow}>
             <article className={styles.ctxCard}>
               <Text size={11} tone="dim">EMA / IV</Text>
@@ -149,25 +181,52 @@ export default function AnalysisPage() {
             </article>
           </div>
 
-          <div className={styles.regimeRow}>
+          {/* ── Regime by horizon — same text / colour as Market Regime step ── */}
+          <div className={styles.sectionHeader}>
+            <Text size={13} weight={600}>Regime by Horizon</Text>
+            <Text size={12} tone="secondary">Same macro signal — emphasis varies by timeframe</Text>
+          </div>
+          <div className={styles.horizonCard}>
             {(['Intraday', 'Swing', 'Position'] as const).map((h) => {
               const blk = result.regime_by_horizon[h];
               return (
-                <article key={h} className={styles.regimeCard}>
-                  <Text size={11} tone="dim">{h.toUpperCase()}</Text>
+                <div key={h} className={styles.horizonCol}>
+                  <Text size={11} tone="dim" weight={500}>{h.toUpperCase()}</Text>
                   {blk && !blk.insufficient_data ? (
                     <>
-                      <Data size={14}>{blk.state}</Data>
-                      <Text size={11} tone="secondary">stay {(blk.p_stay * 100).toFixed(0)}% · {blk.stability}</Text>
-                      {blk.hmm_state && <Text size={11} tone="dim">HMM {blk.hmm_state} · {blk.alignment}</Text>}
+                      <Data size={14} weight={500} tone={toneForOmmState(blk.state)}>
+                        {ommStateIcon(blk.state)} {blk.state}
+                      </Data>
+                      <Text size={12} tone="secondary">
+                        Day {blk.regime_age_days} · avg ~{Math.round(blk.avg_regime_duration)} days · {blk.stability}
+                      </Text>
+                      <Text size={12} tone="secondary">
+                        {pct(blk.p_stay)} chance of staying in this regime
+                      </Text>
+                      {blk.state_order.map((s, i) => {
+                        const prob = blk.transition_row[i] ?? 0;
+                        if (s === blk.state || prob < 0.08) return null;
+                        return (
+                          <Text key={s} size={11} tone={toneForOmmState(s)}>
+                            {pct(prob)} chance of switching to {s}
+                          </Text>
+                        );
+                      })}
+                      {blk.hmm_state && (
+                        <Text size={11} tone="dim">
+                          {hmmStateIcon(blk.hmm_state)} HMM {blk.hmm_state} · {blk.alignment}
+                        </Text>
+                      )}
                     </>
-                  ) : <Text size={12} tone="dim">insufficient data</Text>}
-                </article>
+                  ) : (
+                    <StatusBadge status="NO_DATA" label="Insufficient data" />
+                  )}
+                </div>
               );
             })}
           </div>
 
-          {/* Chart + single-symbol table */}
+          {/* ── Chart + single-symbol table ───────────────────────────── */}
           <div className={styles.chartRegion}>
             <div className={styles.tableCol}>
               <div className={styles.tableHeader}>
@@ -211,27 +270,56 @@ export default function AnalysisPage() {
                 status={result.stock_status}
                 size={14}
               />
-              <CandlestickChart data={candles} height="auto" defaultIndicators={['volume', 'macd']} />
+              <div className={styles.chartBox}>
+                <CandlestickChart data={candles} height="auto" defaultIndicators={['volume', 'rsi']} />
+              </div>
             </div>
           </div>
 
-          {/* Per-component score breakdown */}
+          {/* ── Score breakdown — same card style as Stock Ranking page ── */}
           {result.rules.length > 0 && (
-            <div className={styles.scoreCards}>
-              {result.rules.map((r) => {
-                const tone = r.status === 'PASS' ? 'pass' : r.status === 'CAUTION' ? 'caution' : r.status === 'REJECT' ? 'reject' : 'dim';
-                return (
-                  <article key={r.name} className={styles.scoreCard}>
-                    <Text size={12} weight={500}>{r.name}</Text>
-                    <Data size={14} tone={tone}>{r.score}/100</Data>
-                    <StatusBadge status={r.status} />
-                  </article>
-                );
-              })}
-            </div>
+            <>
+              <div className={styles.detailsHeader}>
+                <Text size={13} weight={600}>{result.symbol} · Score details</Text>
+                <Text size={12} tone="secondary">
+                  Points = raw score per component
+                </Text>
+              </div>
+              <div className={styles.components}>
+                {result.rules.map((r) => {
+                  const sig = signalFromStatus(r.status);
+                  return (
+                    <article key={r.name} className={`${styles.compCard} ${styles[`compCard_${sig}`]}`}>
+                      <header className={styles.compHeader}>
+                        <Text size={13} weight={600}>{r.name}</Text>
+                        <Text size={11} weight={500} tone={sig === 'pos' ? 'pass' : sig === 'neg' ? 'reject' : 'caution'}>
+                          {signalLabel(sig)}
+                        </Text>
+                      </header>
+                      <div className={styles.meter} aria-hidden>
+                        <div
+                          className={`${styles.meterFill} ${styles[`meterFill_${sig}`]}`}
+                          style={{ width: `${r.score}%` }}
+                        />
+                      </div>
+                      <div className={styles.compMeta}>
+                        <div className={styles.compMetaCell}>
+                          <Text size={10} tone="dim">RAW</Text>
+                          <Data size={13} weight={500}>{r.score}/100</Data>
+                        </div>
+                        <div className={styles.compMetaCell}>
+                          <Text size={10} tone="dim">STATUS</Text>
+                          <StatusBadge status={r.status} />
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </>
           )}
 
-          {/* News */}
+          {/* ── News ─────────────────────────────────────────────────── */}
           <div className={styles.newsRegion}>
             <div className={styles.newsCol}>
               <Text size={12} weight={500}>{result.symbol} news</Text>

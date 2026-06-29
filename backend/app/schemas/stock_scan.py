@@ -138,6 +138,7 @@ class RegimeHorizonBlock(BaseModel):
     hmm_state: Optional[str] = None
     alignment: str = "Unavailable"
     transition_row: list[float] = Field(default_factory=list)
+    state_order: list[str] = Field(default_factory=list)
     insufficient_data: bool = False
 
 
