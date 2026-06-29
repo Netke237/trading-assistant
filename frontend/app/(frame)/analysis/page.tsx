@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { WatchStar } from '@/components/atoms/WatchStar';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { useAnalysisStore } from '@/lib/analysisStore';
 import { api } from '@/lib/api';
@@ -11,6 +13,7 @@ import type { NewsItem } from '@/types/domain';
 import styles from './page.module.css';
 
 export default function AnalysisPage() {
+  const router = useRouter();
   const { result, loading, error, analyze } = useAnalysisStore();
   const [input, setInput] = useState('');
   const [candles, setCandles] = useState<Candle[]>([]);
@@ -62,6 +65,7 @@ export default function AnalysisPage() {
       {result && (
         <>
           <div className={styles.headerStrip}>
+            <WatchStar symbol={result.symbol} />
             <Data size={18} weight={500}>{result.symbol}</Data>
             <Text size={13} tone="secondary">{result.company}</Text>
             <Data size={14}>${result.price.toFixed(2)}</Data>
@@ -70,6 +74,13 @@ export default function AnalysisPage() {
             {result.market_backdrop && (
               <span className={styles.backdropChip}>Market: {result.market_backdrop.overall}</span>
             )}
+            <button
+              className={styles.chartLinkBtn}
+              title="Open in Chart"
+              onClick={() => router.push(`/chart?symbol=${result.symbol}`)}
+            >
+              Open in Chart ↗
+            </button>
           </div>
 
           <div className={styles.contextRow}>
