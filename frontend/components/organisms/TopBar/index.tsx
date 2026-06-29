@@ -72,13 +72,17 @@ function pillLabel(
 }
 
 export function TopBar() {
-  const scanState    = useScanStore((s) => s.scanState);
-  const scanAt       = useScanStore((s) => s.scanAt);
-  const scanDuration = useScanStore((s) => s.scanDurationMs);
-  const context      = useScanStore((s) => s.context);
-  const stockScanAt  = useScanStore((s) => s.stockScanAt);
+  const scanState      = useScanStore((s) => s.scanState);
+  const scanAt         = useScanStore((s) => s.scanAt);
+  const optionsScanAt  = useScanStore((s) => s.optionsScanAt);
+  const scanDuration   = useScanStore((s) => s.scanDurationMs);
+  const context        = useScanStore((s) => s.context);
+  const stockScanAt    = useScanStore((s) => s.stockScanAt);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // Prefer the dedicated "last completed" timestamp; fall back to scan-start time.
+  const optionsDateIso = optionsScanAt ?? scanAt;
 
   return (
     <header className={styles.bar}>
@@ -91,8 +95,8 @@ export function TopBar() {
         {context && (
           <Text size={12} tone="secondary">
             Last option scan: {context.universe} · {context.direction} · {context.horizon}
-            {scanAt && mounted && (
-              <> · started {labelWithDate(scanAt)}</>
+            {optionsDateIso && mounted && (
+              <> · {labelWithDate(optionsDateIso)}</>
             )}
             {scanDuration != null && scanDuration >= 500 && (
               <> · {formatDuration(scanDuration)}</>
@@ -107,7 +111,7 @@ export function TopBar() {
       </div>
 
       <span className={[styles.pill, PILL_CLASS[scanState]].join(' ')}>
-        {pillLabel(scanState, scanAt, mounted, scanDuration)}
+        {pillLabel(scanState, optionsDateIso, mounted, scanDuration)}
       </span>
 
       <RegimeIndicator />

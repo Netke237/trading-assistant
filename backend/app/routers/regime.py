@@ -187,6 +187,7 @@ async def get_regime(
                 lookback=lookback,
                 threshold=threshold,
                 smoothing=smoothing,
+                min_obs=30,
             )
             if result:
                 omm_out = OmmData(
@@ -200,14 +201,18 @@ async def get_regime(
                     conviction_pct=result.conviction_pct,
                     conviction_label=result.conviction_label,
                 )
+            else:
+                _log.warning("compute_omm returned None for SPX (%d bars, state min_obs<30)", len(closes))
             # Directional HMM on same SPX series
             try:
                 _dh_res = _compute_directional_hmm(spx_candles)
                 _spx_hmm_state = _dh_res.state if _dh_res else None
             except Exception as exc:
                 _log.debug("Directional HMM unavailable for SPX: %s", exc)
-    except Exception:
-        pass
+        else:
+            _log.warning("fetch_candles('SPX', bars=600) returned empty — omm will be null")
+    except Exception as exc:
+        _log.warning("OMM computation failed for SPX: %s", exc)
 
     # ── 4. Gaussian HMM (always computed — regime step is before horizon selection) ─
     intraday_hmm_out: IntraHmmData | None = None

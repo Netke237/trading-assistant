@@ -33,6 +33,7 @@ class BrokerRouter:
 def build_router_from_credentials() -> BrokerRouter:
     """Build a BrokerRouter using live credentials from the credential store."""
     from app.services.credential_store import credential_store
+    credential_store.load()  # pick up any yaml edits without requiring a restart
     from app.data.ibkr_paper import IbkrPaperAdapter
     from app.data.tradier_paper import TradierPaperAdapter
     from app.data.alpaca_paper_execution import AlpacaPaperAdapter
@@ -44,11 +45,14 @@ def build_router_from_credentials() -> BrokerRouter:
             base_url=ibkr.get("base_url", "https://localhost:7499/v1/api"),
             account_id=ibkr["account_id"],
         )
-    tradier = credential_store.get("tradier_paper")
-    if tradier and tradier.get("token") and tradier.get("account_id"):
+    import os as _os
+    tradier = credential_store.get("tradier_paper") or {}
+    tradier_token = (tradier.get("token") or "").strip() or _os.environ.get("TRADIER_PAPER_TOKEN", "").strip()
+    tradier_account = (tradier.get("account_id") or "").strip() or _os.environ.get("TRADIER_PAPER_ACCOUNT_ID", "").strip()
+    if tradier_token and tradier_account:
         adapters["tradier_paper"] = TradierPaperAdapter(
-            token=tradier["token"],
-            account_id=tradier["account_id"],
+            token=tradier_token,
+            account_id=tradier_account,
         )
     alpaca = credential_store.get("alpaca_paper")
     if alpaca and alpaca.get("key_id") and alpaca.get("secret_key"):

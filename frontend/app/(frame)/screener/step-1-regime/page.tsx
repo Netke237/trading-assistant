@@ -326,7 +326,9 @@ export default function Step1RegimePage() {
                     <Text size={11} tone="dim">VIX at {Math.round(vix252)}th percentile (252-day window)</Text>
                   )}
                 </>
-              ) : null}
+              ) : (
+                <StatusBadge status="NO_DATA" label="Insufficient history" />
+              )}
             </div>
 
             {/* Position column */}
@@ -354,7 +356,9 @@ export default function Step1RegimePage() {
                     <Text size={11} tone="dim">VIX at {Math.round(vix252)}th percentile (252-day window)</Text>
                   )}
                 </>
-              ) : null}
+              ) : (
+                <StatusBadge status="NO_DATA" label="Insufficient history" />
+              )}
             </div>
 
           </div>
