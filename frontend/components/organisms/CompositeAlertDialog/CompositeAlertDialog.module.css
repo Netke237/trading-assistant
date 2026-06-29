@@ -1,0 +1,35 @@
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.dialog {
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: 10px; padding: 20px; width: 400px; max-width: 95vw;
+  display: flex; flex-direction: column; gap: 14px; max-height: 85vh; overflow-y: auto;
+}
+.header { display: flex; justify-content: space-between; align-items: center; }
+.closeBtn { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--text-dim); padding: 2px 6px; }
+.row { display: flex; flex-direction: column; gap: 4px; }
+.select {
+  padding: 5px 8px; border: 1px solid var(--border-subtle); border-radius: 6px;
+  background: var(--bg-surface-2); color: var(--text-primary); font-size: 12px;
+}
+.range { width: 100%; accent-color: var(--accent); }
+.section { display: flex; flex-direction: column; gap: 8px; }
+.confirmList { display: flex; flex-direction: column; gap: 4px; }
+.confirmItem {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border: 1px solid var(--border-subtle); border-radius: 6px; cursor: pointer;
+}
+.confirmItemSelected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface)); }
+.actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 4px; }
+.cancelBtn {
+  padding: 7px 14px; border: 1px solid var(--border-subtle); border-radius: 6px;
+  background: transparent; cursor: pointer; font-size: 13px; color: var(--text-secondary);
+}
+.saveBtn {
+  padding: 7px 14px; border: 1px solid var(--accent); border-radius: 6px;
+  background: var(--accent); color: var(--accent-fg); cursor: pointer; font-size: 13px;
+}
+.saveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.doneMsg { padding: 16px; text-align: center; }
