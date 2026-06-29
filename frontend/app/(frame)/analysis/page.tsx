@@ -67,8 +67,10 @@ export default function AnalysisPage() {
         <>
           <div className={styles.headerStrip}>
             <WatchStar symbol={result.symbol} />
-            <Data size={18} weight={500}>{result.symbol}</Data>
-            <Text size={13} tone="secondary">{result.company}</Text>
+            <div className={styles.symbolName}>
+              <Data size={18} weight={500}>{result.symbol}</Data>
+              <Text size={14} tone="secondary">{result.company}</Text>
+            </div>
             <Data size={14}>${result.price.toFixed(2)}</Data>
             <StatusBadge status={result.stock_status} />
             <span className={styles.dirPill}>{result.direction}</span>
