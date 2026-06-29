@@ -198,12 +198,19 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
                 "p_stay": omm.p_stay, "stability": omm.stability,
                 "regime_age_days": omm.regime_age_days, "avg_regime_duration": omm.avg_regime_duration,
                 "conviction_pct": omm.conviction_pct, "conviction_label": omm.conviction_label,
-                "interpretation": omm.interpretation, "hmm_state": dh.state if dh else None,
+                "interpretation": omm.interpretation or "", "hmm_state": dh.state if dh else None,
                 "alignment": alignment(omm.state, dh.state if dh else None), "insufficient_data": False,
             }
 
-    # Fundamentals
+    # Fundamentals — apply bearish overrides (same logic as _process_stock lines 521-527).
     fund_gate = None if is_index else _resolve_fundamentals_gate(req)
+    if fund_gate is not None and req.direction.lower() in ("bearish", "bear"):
+        _fg = dict(fund_gate)
+        if req.fundamentals_caution_above is not None:
+            _fg["cautionAbove"] = req.fundamentals_caution_above
+        if req.fundamentals_reject_above is not None:
+            _fg["rejectAbove"] = req.fundamentals_reject_above
+        fund_gate = _fg if _fg else None
     _fh = None
     if fund_gate is not None and req.horizon.lower() != "intraday":
         _snap = await _get_fundamentals(symbol, staleness_days=fund_gate.get("staleness_days", 90))
@@ -299,13 +306,17 @@ def _ema_trend(closes: list[float], period: int = 200) -> "EmaTrendOut | None":
                        status="PASS" if state == "Above" else "CAUTION")
 
 
-def _regime_block_for_horizon(symbol: str, bars: list[dict], horizon: str, direction: str) -> "RegimeHorizonBlock":
+def _regime_block_for_horizon(
+    symbol: str,
+    bars: list[dict],
+    horizon: str,
+    direction: str,
+    intraday_bars: list[dict] | None = None,
+) -> "RegimeHorizonBlock":
     rcfg = _load_regime_cfg(horizon)
     if rcfg["timeframe"] == "15min":
-        try:
-            rbars = fetch_intraday_candles(symbol, "15min", 55)
-        except Exception:
-            rbars = []
+        # Use pre-loaded bars when provided to avoid blocking the event loop.
+        rbars = intraday_bars if intraday_bars is not None else []
     else:
         rbars = bars
 
@@ -377,13 +388,26 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
     card = core.card
     closes = [b["close"] for b in core.daily_bars]
 
-    regime_by_horizon: dict[str, RegimeHorizonBlock] = {
-        h: _regime_block_for_horizon(symbol, core.daily_bars, h, req.direction)
-        for h in ("Intraday", "Swing", "Position")
-    }
+    # Pre-fetch intraday bars once (avoids blocking inside _regime_block_for_horizon).
+    try:
+        intraday_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 55)
+    except Exception:
+        intraday_bars = []
 
-    sector_tile, sector_rs = await _sector_context(symbol, closes)
-    backdrop = await _market_backdrop()
+    # Run all three regime blocks + sector context + backdrop concurrently,
+    # each CPU-bound block in a thread so the event loop stays free.
+    (intra_blk, swing_blk, pos_blk), (sector_tile, sector_rs), backdrop = await asyncio.gather(
+        asyncio.gather(
+            asyncio.to_thread(_regime_block_for_horizon, symbol, core.daily_bars, "Intraday", req.direction, intraday_bars),
+            asyncio.to_thread(_regime_block_for_horizon, symbol, core.daily_bars, "Swing",    req.direction, None),
+            asyncio.to_thread(_regime_block_for_horizon, symbol, core.daily_bars, "Position", req.direction, None),
+        ),
+        _sector_context(symbol, closes),
+        _market_backdrop(),
+    )
+    regime_by_horizon: dict[str, RegimeHorizonBlock] = {
+        "Intraday": intra_blk, "Swing": swing_blk, "Position": pos_blk,
+    }
 
     strategy_out = backtest_out = None
     if core.signal is not None:

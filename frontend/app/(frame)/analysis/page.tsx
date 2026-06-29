@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { WatchStar } from '@/components/atoms/WatchStar';
+import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { useAnalysisStore } from '@/lib/analysisStore';
 import { api } from '@/lib/api';
@@ -72,7 +73,9 @@ export default function AnalysisPage() {
             <StatusBadge status={result.stock_status} />
             <span className={styles.dirPill}>{result.direction}</span>
             {result.market_backdrop && (
-              <span className={styles.backdropChip}>Market: {result.market_backdrop.overall}</span>
+              <span className={styles.backdropChip}>
+                Market: <StatusBadge status={result.market_backdrop.overall as 'PASS' | 'CAUTION' | 'REJECT' | 'PENDING' | 'NO_DATA'} />
+              </span>
             )}
             <button
               className={styles.chartLinkBtn}
@@ -198,6 +201,14 @@ export default function AnalysisPage() {
             </div>
 
             <div className={styles.chartCol}>
+              <SymbolHeader
+                ticker={result.symbol}
+                company={result.company}
+                price={result.price}
+                direction={result.direction as 'Bullish' | 'Bearish'}
+                status={result.stock_status}
+                size={14}
+              />
               <CandlestickChart data={candles} height="auto" defaultIndicators={['volume', 'macd']} />
             </div>
           </div>
@@ -206,7 +217,7 @@ export default function AnalysisPage() {
           {result.rules.length > 0 && (
             <div className={styles.scoreCards}>
               {result.rules.map((r) => {
-                const tone = r.status === 'PASS' ? 'pass' : r.status === 'CAUTION' ? 'caution' : 'reject';
+                const tone = r.status === 'PASS' ? 'pass' : r.status === 'CAUTION' ? 'caution' : r.status === 'REJECT' ? 'reject' : 'dim';
                 return (
                   <article key={r.name} className={styles.scoreCard}>
                     <Text size={12} weight={500}>{r.name}</Text>
