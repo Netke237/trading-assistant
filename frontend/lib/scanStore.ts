@@ -71,8 +71,8 @@ interface ScanStoreState {
   setPickedContract:    (symbol: string, contractId: string) => void;
   clearPickedContracts: () => void;
   setContractsBySymbol: (map: Record<string, OptionContract[]>) => void;
-  screenerMode:        'options' | 'stocks';
-  setScreenerMode:     (m: 'options' | 'stocks') => void;
+  screenerMode:        'options' | 'stocks' | 'prebreakout';
+  setScreenerMode:     (m: 'options' | 'stocks' | 'prebreakout') => void;
   stockScanResult:          StockScanResult | null;
   /** Previous stock scan result for delta calculation (rankDelta / scoreDelta). */
   previousStockScanResult:  StockScanResult | null;
@@ -91,6 +91,8 @@ interface ScanStoreState {
   /** Session-only — not persisted; cleared on page load. */
   regimeDirection:    'BULL' | 'BEAR' | 'MIXED' | null;
   setRegimeDirection: (d: 'BULL' | 'BEAR' | 'MIXED' | null) => void;
+  preBreakoutResults: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>;
+  setPreBreakoutResults: (results: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>) => void;
 }
 
 export const useScanStore = create<ScanStoreState>()(
@@ -127,6 +129,8 @@ export const useScanStore = create<ScanStoreState>()(
       setCombinedRegime: (r) => set({ combinedRegime: r }),
       regimeDirection:    null,
       setRegimeDirection: (d) => set({ regimeDirection: d }),
+      preBreakoutResults: [],
+      setPreBreakoutResults: (results) => set({ preBreakoutResults: results }),
       setScanResult:   (r) => set((state) => ({
         scanResult: r,
         previousRun: r !== null ? state.scanResult : state.previousRun,
@@ -169,7 +173,7 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 7,
+      version: 8,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -180,6 +184,7 @@ export const useScanStore = create<ScanStoreState>()(
         if (version < 5) s = { ...s, previousStockScanResult: null, stockBasket: [] };
         if (version < 6) s = { ...s, stockScanAt: null };
         if (version < 7) s = { ...s, optionsScanAt: null };
+        if (version < 8) s = { ...s, preBreakoutResults: [] };
         return s;
       },
       partialize: (state) => ({

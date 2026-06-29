@@ -187,3 +187,19 @@
   flex-shrink: 0;
 }
 .chartBtn:hover { opacity: 1; }
+
+.section { padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; }
+.compositeList { display: flex; flex-direction: column; gap: 6px; }
+.compositeRow {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; border: 1px solid var(--border-subtle); border-radius: 8px;
+  background: var(--bg-surface);
+}
+.compositeInfo { display: flex; flex-direction: column; gap: 2px; }
+.compositeActions { display: flex; align-items: center; gap: 12px; }
+.toggleLabel { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.deleteBtn {
+  background: none; border: 1px solid var(--border-subtle); border-radius: 4px;
+  padding: 3px 8px; cursor: pointer;
+}
+.deleteBtn:hover { border-color: var(--reject); }

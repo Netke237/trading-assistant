@@ -44,6 +44,14 @@ const STRATEGIES = [
     stop: 'Below recent swing low',
     exit: 'RSI returns to mid / take-profit target',
   },
+  {
+    key: 'mean_reversion_bb',
+    label: 'Mean Reversion BB',
+    when: 'Choppy / range-bound',
+    entry: 'Price touches lower Bollinger Band + reversal signal',
+    stop: 'Below lower band',
+    exit: 'Return to mid-band / upper band',
+  },
 ] as const;
 
 type RegimeFit = 'PASS' | 'CAUTION' | 'REJECT';
@@ -54,6 +62,7 @@ const REGIME_FIT: Record<string, Partial<Record<string, RegimeFit>>> = {
   breakout_base:      { PASS: 'PASS',    CAUTION: 'REJECT',  REJECT: 'REJECT'  },
   ma_crossover:       { PASS: 'CAUTION', CAUTION: 'CAUTION', REJECT: 'REJECT'  },
   mean_reversion_rsi: { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
+  mean_reversion_bb:  { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
 };
 
 const REGIME_BADGE: Record<RegimeFit, { label: string; cls: string }> = {
@@ -81,6 +90,7 @@ export default function Step5StrategyPage() {
     rsiPeriod:            s.rsiPeriod,
     rsiOversold:          s.rsiOversold,
     rsiTrendSma:          s.rsiTrendSma,
+    requireChoppyRegime:  s.requireChoppyRegime ?? false,
     btMinTrades:          s.btMinTrades,
     btMinWinRate:         s.btMinWinRate,
     eventFilter:          s.eventFilter,

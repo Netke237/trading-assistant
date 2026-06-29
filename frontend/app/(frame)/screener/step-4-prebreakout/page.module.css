@@ -1,0 +1,30 @@
+.main { display: flex; flex-direction: column; gap: 16px; padding: 20px 24px; }
+.header { display: flex; flex-direction: column; gap: 4px; }
+.inputRow { display: flex; gap: 10px; align-items: flex-start; }
+.symbolInput {
+  flex: 1; padding: 8px 10px; font-size: 12px;
+  border: 1px solid var(--border-subtle); border-radius: 6px;
+  background: var(--bg-surface); color: var(--text-primary);
+  resize: vertical; font-family: inherit;
+}
+.symbolInput:focus { outline: none; border-color: var(--accent); }
+.runBtn {
+  padding: 8px 16px; border: 1px solid var(--accent); border-radius: 6px;
+  background: var(--accent); color: var(--accent-fg); cursor: pointer; font-size: 13px;
+  white-space: nowrap; align-self: flex-end;
+}
+.runBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.tableWrap { border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.tableHeader, .tableRow {
+  display: grid;
+  grid-template-columns: 24px 80px 32px 80px 80px 72px 90px 80px;
+  gap: 8px; align-items: center; padding: 6px 12px;
+}
+.tableHeader { background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); }
+.tableRow { border-bottom: 1px solid var(--border-subtle); }
+.tableRow:last-child { border-bottom: none; }
+.alertBtn {
+  padding: 3px 8px; border: 1px solid var(--border-subtle); border-radius: 4px;
+  background: transparent; cursor: pointer; color: var(--text-secondary);
+}
+.alertBtn:hover { border-color: var(--accent); color: var(--accent); }

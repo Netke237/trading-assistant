@@ -5,6 +5,7 @@
  * Tabs:
  *   - Stocks:    sortable table of ranked candidates + inline chart on select.
  *   - Contracts: every option contract the user has starred on Step 6.
+ *   - Composite Alerts: Markov regime alerts created from the Pre-Breakout scanner.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -19,7 +20,7 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { statusForScore } from '@/lib/status';
-import { api } from '@/lib/api';
+import { api, type CompositeWatch } from '@/lib/api';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { contractLabel, type OptionContract } from '@/types/domain';
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
@@ -27,7 +28,7 @@ import type { WatchlistRow } from '@/types/domain';
 import { useChartStore } from '@/lib/chartStore';
 import styles from './page.module.css';
 
-type Tab     = 'stocks' | 'contracts';
+type Tab     = 'stocks' | 'contracts' | 'composite';
 type SortKey = 'score' | 'symbol' | 'price' | 'rank' | 'scoreDelta';
 type SortDir = 'asc' | 'desc';
 type ContractSortKey = 'score' | 'dte' | 'price';
@@ -43,12 +44,13 @@ export default function WatchlistPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [contractSortKey, setContractSortKey] = useState<ContractSortKey>('score');
   const [contractSortDir, setContractSortDir] = useState<SortDir>('desc');
-  const [watchlist, setWatchlist]         = useState<WatchlistRow[]>([]);
-  const [contracts, setContracts]         = useState<OptionContract[]>([]);
-  const [offline, setOffline]             = useState(false);
+  const [watchlist, setWatchlist]             = useState<WatchlistRow[]>([]);
+  const [contracts, setContracts]             = useState<OptionContract[]>([]);
+  const [offline, setOffline]                 = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [refreshingWatchlist, setRefreshingWatchlist] = useState(false);
   const [refreshingContracts, setRefreshingContracts] = useState(false);
+  const [compositeWatches, setCompositeWatches] = useState<CompositeWatch[]>([]);
   const contractsAbortRef = useRef<AbortController | null>(null);
 
   const setChartSymbol     = useChartStore((s) => s.setSymbol);
@@ -71,6 +73,13 @@ export default function WatchlistPage() {
     } finally {
       setRefreshingWatchlist(false);
     }
+  }, []);
+
+  const refreshComposite = useCallback(async () => {
+    try {
+      const data = await api.listCompositeWatches();
+      setCompositeWatches(Array.isArray(data) ? data : []);
+    } catch { /* ignore */ }
   }, []);
 
   const refreshContracts = useCallback(async () => {
@@ -106,7 +115,8 @@ export default function WatchlistPage() {
     syncFromBackend();
     syncContractsFromBackend();
     refreshWatchlist();
-  }, [syncFromBackend, syncContractsFromBackend, refreshWatchlist]);
+    refreshComposite();
+  }, [syncFromBackend, syncContractsFromBackend, refreshWatchlist, refreshComposite]);
 
   useEffect(() => {
     refreshContracts();
@@ -226,7 +236,9 @@ export default function WatchlistPage() {
         <Text size={13} tone="secondary">
           {tab === 'stocks'
             ? `${displayRows.length} starred · sorted by ${sortKey} ${sortDir === 'asc' ? '↑' : '↓'}`
-            : `${sortedContracts.length} starred contract${sortedContracts.length === 1 ? '' : 's'} · sorted by ${contractSortKey} ${contractSortDir === 'asc' ? '↑' : '↓'}`}
+            : tab === 'contracts'
+            ? `${sortedContracts.length} starred contract${sortedContracts.length === 1 ? '' : 's'} · sorted by ${contractSortKey} ${contractSortDir === 'asc' ? '↑' : '↓'}`
+            : `${compositeWatches.length} composite alert${compositeWatches.length === 1 ? '' : 's'}`}
         </Text>
         {offline && (
           <Text size={13} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
@@ -252,9 +264,18 @@ export default function WatchlistPage() {
         >
           Contracts <span className={styles.tabCount}>{watchedContracts.length}</span>
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'composite'}
+          className={`${styles.tab} ${tab === 'composite' ? styles.tabActive : ''}`}
+          onClick={() => setTab('composite')}
+        >
+          Composite Alerts
+        </button>
       </div>
 
-      {tab === 'stocks' ? (
+      {tab === 'stocks' && (
         <>
           {displayRows.length === 0 ? (
             <div className={styles.empty}>
@@ -333,13 +354,69 @@ export default function WatchlistPage() {
             onClose={() => setSelected(null)}
           />
         </>
-      ) : (
+      )}
+
+      {tab === 'contracts' && (
         <ContractsTab
           contracts={sortedContracts}
           sortKey={contractSortKey}
           sortDir={contractSortDir}
           onSort={toggleContractSort}
         />
+      )}
+
+      {tab === 'composite' && (
+        <div className={styles.section}>
+          <Title as="h2" size={20}>Composite Alerts</Title>
+          <Text size={13} tone="secondary">Markov regime alerts created from the Pre-Breakout scanner.</Text>
+          {compositeWatches.length === 0 ? (
+            <Text size={13} tone="dim">No composite alerts yet. Create one from the Pre-Breakout Scanner in the Screener.</Text>
+          ) : (
+            <div className={styles.compositeList}>
+              {compositeWatches.map((w) => {
+                const primary = (w.trigger_def as Record<string, unknown>)?.primary as Record<string, unknown> | undefined;
+                return (
+                  <div key={w.id} className={styles.compositeRow}>
+                    <div className={styles.compositeInfo}>
+                      <Text size={13} weight={500}>{w.symbol}</Text>
+                      <Text size={11} tone="secondary">{w.direction} · {(primary?.model as string | undefined) ?? 'OMM'} → {(primary?.to_state as string | undefined) ?? 'any'} · {w.interval}</Text>
+                    </div>
+                    <div className={styles.compositeActions}>
+                      <label className={styles.toggleLabel}>
+                        <input
+                          type="checkbox"
+                          checked={w.enabled}
+                          onChange={async (e) => {
+                            const enabled = e.target.checked;
+                            try {
+                              await api.setCompositeWatchEnabled(w.id, enabled);
+                              setCompositeWatches((prev) =>
+                                prev.map((x) => x.id === w.id ? { ...x, enabled } : x)
+                              );
+                            } catch { /* ignore */ }
+                          }}
+                        />
+                        <Text size={11} tone="secondary">{w.enabled ? 'Active' : 'Paused'}</Text>
+                      </label>
+                      <button
+                        type="button"
+                        className={styles.deleteBtn}
+                        onClick={async () => {
+                          try {
+                            await api.removeCompositeWatch(w.id);
+                            setCompositeWatches((prev) => prev.filter((x) => x.id !== w.id));
+                          } catch { /* ignore */ }
+                        }}
+                      >
+                        <Text size={11} tone="reject">Remove</Text>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

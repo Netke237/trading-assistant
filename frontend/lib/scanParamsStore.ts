@@ -13,6 +13,7 @@ export interface ScanParams {
   rsiPeriod:            number;   // RSI look-back period
   rsiOversold:          number;   // RSI oversold threshold (e.g. 30)
   rsiTrendSma:          number;   // trend-confirmation SMA (e.g. 200)
+  requireChoppyRegime:  boolean;  // mean-reversion RSI only fires in Choppy regime
   btMinTrades:          number;   // count
   btMinWinRate:         number;   // fraction: 0.30 = 30%
   eventFilter: 'include' | 'avoid' | 'only_pre_event';
@@ -31,6 +32,7 @@ const DEFAULTS: ScanParams = {
   rsiPeriod:            14,
   rsiOversold:          30,
   rsiTrendSma:          200,
+  requireChoppyRegime:  false,
   btMinTrades:          5,
   btMinWinRate:         0.45,
   eventFilter:          'include' as const,
@@ -52,7 +54,7 @@ export const useScanParamsStore = create<ScanParamsStore>()(
     {
       name: 'bamendjou:scan-params',
       skipHydration: true,
-      version: 9,
+      version: 10,
       migrate: (state: unknown, v: number) => {
         if (v < 2) return { ...DEFAULTS, ...(state as Partial<ScanParams>) };
         if (v < 4) return { ...DEFAULTS, ...(state as Partial<ScanParams>), pullbackMaType: 'EMA' as const };
@@ -67,6 +69,7 @@ export const useScanParamsStore = create<ScanParamsStore>()(
           }
           return migrated;
         }
+        if (v < 10) return { ...DEFAULTS, ...(state as Partial<ScanParams>), requireChoppyRegime: false };
         return state as ScanParams;
       },
     },

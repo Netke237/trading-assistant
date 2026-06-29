@@ -19,11 +19,12 @@ interface Props {
   onToggleIndicators: () => void;
   onToggleStructure: () => void;
   onToggleAlerts?: () => void;
+  onToggleRegime?: () => void;
   connState?: ConnectionState;
   wsError?: string | null;
 }
 
-export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onToggleAlerts, connState, wsError }: Props) {
+export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onToggleAlerts, onToggleRegime, connState, wsError }: Props) {
   const { symbol, interval, chartType, symbolName, setSymbol, setInterval, setChartType, setSymbolName } = useChartStore();
 
   // Fetch company name whenever the active symbol changes.
@@ -87,6 +88,7 @@ export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onT
       <button className={styles.btn} onClick={onToggleIndicators}>Indicators</button>
       <button className={styles.btn} onClick={onToggleStructure}>Structure</button>
       {onToggleAlerts && <button className={styles.btn} onClick={onToggleAlerts}>Alerts</button>}
+      {onToggleRegime && <button className={styles.btn} onClick={onToggleRegime}>Regime</button>}
 
       {connState && connState !== 'connected' && (
         <span

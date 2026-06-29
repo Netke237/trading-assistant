@@ -60,6 +60,39 @@ def _swing_high(bars: list[dict], lookback: int = 20) -> float:
     return max(b["high"] for b in window)
 
 
+def _bollinger(values: list[float], period: int, n_std: float) -> tuple[list[float], list[float], list[float]]:
+    mid = _sma(values, period)
+    if not mid:
+        return [], [], []
+    upper, lower = [], []
+    for i, m in enumerate(mid):
+        window = values[i : i + period]
+        std = (sum((x - m) ** 2 for x in window) / period) ** 0.5
+        upper.append(m + n_std * std)
+        lower.append(m - n_std * std)
+    return upper, mid, lower
+
+
+def _vwap(bars: list[dict]) -> float:
+    num = sum(((b["high"] + b["low"] + b["close"]) / 3) * b["volume"] for b in bars)
+    den = sum(b["volume"] for b in bars)
+    return num / den if den > 0 else 0.0
+
+
+def _atr_series(bars: list[dict], period: int = 14) -> list[float]:
+    if len(bars) < 2:
+        return []
+    trs = []
+    for i in range(1, len(bars)):
+        h, l, pc = bars[i]["high"], bars[i]["low"], bars[i - 1]["close"]
+        trs.append(max(h - l, abs(h - pc), abs(l - pc)))
+    result = []
+    for i in range(len(trs)):
+        window = trs[max(0, i - period + 1): i + 1]
+        result.append(sum(window) / len(window))
+    return result
+
+
 # ── Signal dataclass ──────────────────────────────────────────────────────────
 
 @dataclass
@@ -83,6 +116,15 @@ class StrategySignal:
     @property
     def rr_ratio(self) -> float:
         return self.reward / self.risk if self.risk > 0 else 0.0
+
+
+@dataclass
+class SetupSignal:
+    strategy:   str
+    direction:  Literal["Bullish", "Bearish"]
+    symbol:     str
+    confidence: int   # 0–100
+    metrics:    dict  # atr_ratio, range_ratio, vol_ratio, proximity_pct, swing_level
 
 
 # ── Strategy 1: Pullback to 20-EMA ───────────────────────────────────────────
@@ -280,6 +322,7 @@ def mean_reversion_rsi_signal(
     rsi_oversold: float = 30.0,
     rsi_overbought: float = 70.0,
     trend_sma: int = 200,
+    require_choppy_regime: bool = False,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
 ) -> StrategySignal | None:
     """RSI mean-reversion signal in the direction of the trend.
@@ -296,6 +339,11 @@ def mean_reversion_rsi_signal(
     rsi = _rsi(closes, rsi_period)
     if not rsi or len(rsi) < 2:
         return None
+    if require_choppy_regime:
+        from app.services.regime_omm import compute_omm
+        omm = compute_omm(closes, direction=direction)
+        if omm is None or omm.state != "Choppy":
+            return None
     current = closes[-1]
     atr = _atr(bars)
     if direction == "Bullish":
@@ -318,4 +366,243 @@ def mean_reversion_rsi_signal(
         target_price=round(target, 2),
         atr=round(atr, 2),
         detail={"rsi": round(rsi[-1], 1), f"sma_{trend_sma}": round(trend[-1], 2)},
+    )
+
+
+# ── Strategy 5: Mean reversion Bollinger Band ─────────────────────────────────
+
+def mean_reversion_bb_signal(
+    bars: list[dict],
+    *,
+    bb_period: int = 20,
+    bb_std: float = 2.0,
+    trend_sma: int = 200,
+    stop_atr_mult: float = 0.5,
+    rr_target_mult: float = 2.0,
+    require_choppy_regime: bool = False,
+    direction: Literal["Bullish", "Bearish"] = "Bullish",
+) -> StrategySignal | None:
+    """Bollinger Band mean-reversion signal.
+
+    Bullish: price above trend SMA (uptrend context), prev bar low touched lower band,
+             current close back inside band (above lower), and still below midline.
+    Bearish: price below trend SMA (downtrend context), prev bar high touched upper band,
+             current close back inside band (below upper), and still above midline.
+    require_choppy_regime: when True, returns None unless OMM detects 'Choppy' state.
+    """
+    if len(bars) < trend_sma + bb_period + 5:
+        return None
+    closes = [b["close"] for b in bars]
+    trend = _sma(closes, trend_sma)
+    if not trend:
+        return None
+    upper, mid, lower = _bollinger(closes, bb_period, bb_std)
+    if not upper:
+        return None
+
+    current = closes[-1]
+    atr = _atr(bars)
+
+    if require_choppy_regime:
+        from app.services.regime_omm import compute_omm
+        omm = compute_omm(closes, direction=direction)
+        if omm is None or omm.state != "Choppy":
+            return None
+
+    if direction == "Bullish":
+        if closes[-1] <= trend[-1]:
+            return None  # must be above trend (uptrend context)
+        if bars[-2]["low"] > lower[-2]:
+            return None  # prev bar must have touched lower band
+        if current <= lower[-1]:
+            return None  # current close must be back inside band (above lower)
+        if current >= mid[-1]:
+            return None  # must still be below midline (not fully recovered)
+        stop = lower[-1] - stop_atr_mult * atr
+        risk = current - stop
+        if risk <= 0:
+            return None
+        target = current + risk * rr_target_mult
+    else:  # Bearish
+        if closes[-1] >= trend[-1]:
+            return None  # must be below trend (downtrend context)
+        if bars[-2]["high"] < upper[-2]:
+            return None  # prev bar must have touched upper band
+        if current >= upper[-1]:
+            return None  # current close must be back inside band (below upper)
+        if current <= mid[-1]:
+            return None  # must still be above midline
+        stop = upper[-1] + stop_atr_mult * atr
+        risk = stop - current
+        if risk <= 0:
+            return None
+        target = current - risk * rr_target_mult
+
+    return StrategySignal(
+        strategy="mean_reversion_bb",
+        direction=direction,
+        entry_price=round(current, 2),
+        stop_price=round(stop, 2),
+        target_price=round(target, 2),
+        atr=round(atr, 2),
+        detail={
+            "bb_upper": round(upper[-1], 2),
+            "bb_mid": round(mid[-1], 2),
+            "bb_lower": round(lower[-1], 2),
+            f"sma_{trend_sma}": round(trend[-1], 2),
+        },
+    )
+
+
+# ── Strategy 6: Mean reversion VWAP ──────────────────────────────────────────
+
+def mean_reversion_vwap_signal(
+    bars: list[dict],
+    *,
+    vwap_dev_pct: float = 1.5,
+    reversal_pct: float = 0.3,
+    stop_atr_mult: float = 0.5,
+    rr_target_mult: float = 2.0,
+    interval: str = "15m",
+    direction: Literal["Bullish", "Bearish"] = "Bullish",
+) -> StrategySignal | None:
+    """VWAP mean-reversion signal (intraday only).
+
+    Returns None if interval is not an intraday value.
+    Bullish: price deviated vwap_dev_pct% below VWAP AND last bar reversed reversal_pct% back toward VWAP.
+    Bearish: mirror logic above VWAP.
+    """
+    if interval not in ("1m", "5m", "15m", "30m", "1h"):
+        return None
+    if len(bars) < 30:
+        return None
+
+    vwap = _vwap(bars)
+    if vwap <= 0:
+        return None
+    atr = _atr(bars)
+    current = bars[-1]["close"]
+    prev = bars[-2]["close"] if len(bars) >= 2 else current
+
+    if direction == "Bullish":
+        dev = (vwap - current) / vwap * 100
+        if dev < vwap_dev_pct:
+            return None   # not deviated enough below VWAP
+        reversal = (current - prev) / prev * 100
+        if reversal < reversal_pct:
+            return None   # not reversing toward VWAP yet
+        stop = current - stop_atr_mult * atr
+        risk = current - stop
+        if risk <= 0:
+            return None
+        target = current + risk * rr_target_mult
+    else:  # Bearish
+        dev = (current - vwap) / vwap * 100
+        if dev < vwap_dev_pct:
+            return None
+        reversal = (prev - current) / prev * 100
+        if reversal < reversal_pct:
+            return None
+        stop = current + stop_atr_mult * atr
+        risk = stop - current
+        if risk <= 0:
+            return None
+        target = current - risk * rr_target_mult
+
+    return StrategySignal(
+        strategy="mean_reversion_vwap",
+        direction=direction,
+        entry_price=round(current, 2),
+        stop_price=round(stop, 2),
+        target_price=round(target, 2),
+        atr=round(atr, 2),
+        detail={"vwap": round(vwap, 2), "deviation_pct": round(dev, 2)},
+    )
+
+
+# ── Strategy 7: Pre-breakout setup scanner ────────────────────────────────────
+
+def breakout_setup_signal(
+    bars: list[dict],
+    symbol: str,
+    *,
+    atr_compression_ratio: float = 0.7,
+    atr_avg_lookback: int = 20,
+    range_atr_mult: float = 0.8,
+    range_lookback_bars: int = 10,
+    vol_compression_ratio: float = 0.8,
+    resistance_proximity_pct: float = 0.05,
+    swing_lookback: int = 50,
+    direction: Literal["Bullish", "Bearish"] = "Bullish",
+) -> SetupSignal | None:
+    """Pre-breakout setup scanner. Returns SetupSignal (NOT StrategySignal).
+
+    Identifies stocks in consolidation near a key level, ready to break out.
+    All four conditions must pass:
+    1. ATR compression: current ATR < atr_compression_ratio × N-bar average ATR
+    2. Range compression: range of last range_lookback_bars < range_atr_mult × current ATR
+    3. Volume compression: last bar volume < vol_compression_ratio × 20-bar average
+    4. Proximity: for Bullish, close within resistance_proximity_pct of swing_lookback-bar high from below
+                  for Bearish, close within resistance_proximity_pct of swing_lookback-bar low from above
+    """
+    min_bars = max(atr_avg_lookback + 1, swing_lookback, 30)
+    if len(bars) < min_bars:
+        return None
+
+    # ATR compression
+    atr_series = _atr_series(bars, period=14)
+    if len(atr_series) < atr_avg_lookback:
+        return None
+    current_atr = atr_series[-1]
+    avg_atr = sum(atr_series[-atr_avg_lookback:]) / atr_avg_lookback
+    if avg_atr <= 0 or current_atr >= atr_compression_ratio * avg_atr:
+        return None
+    atr_ratio = current_atr / avg_atr
+
+    # Range compression
+    recent = bars[-range_lookback_bars:]
+    rng = max(b["high"] for b in recent) - min(b["low"] for b in recent)
+    if current_atr <= 0 or rng >= range_atr_mult * current_atr:
+        return None
+    range_ratio = rng / current_atr if current_atr > 0 else 99
+
+    # Volume compression
+    vols = [b["volume"] for b in bars]
+    avg_vol = sum(vols[-21:-1]) / 20 if len(vols) >= 21 else (vols[-1] if vols else 1)
+    if avg_vol <= 0 or vols[-1] >= vol_compression_ratio * avg_vol:
+        return None
+    vol_ratio = vols[-1] / avg_vol if avg_vol > 0 else 99
+
+    # Proximity to key level
+    current = bars[-1]["close"]
+    if direction == "Bullish":
+        swing_level = _swing_high(bars, lookback=swing_lookback)
+        prox = (swing_level - current) / swing_level if swing_level > 0 else 99
+        if prox < 0 or prox > resistance_proximity_pct:
+            return None   # must be below swing high but within tolerance
+    else:
+        swing_level = _swing_low(bars, lookback=swing_lookback)
+        prox = (current - swing_level) / swing_level if swing_level > 0 else 99
+        if prox < 0 or prox > resistance_proximity_pct:
+            return None   # must be above swing low but within tolerance
+
+    # Confidence score 0-100: weighted average of how strongly each condition is met
+    atr_score = max(0, 100 * (1 - atr_ratio / atr_compression_ratio))
+    vol_score = max(0, 100 * (1 - vol_ratio / vol_compression_ratio))
+    prox_score = max(0, 100 * (1 - prox / resistance_proximity_pct)) if resistance_proximity_pct > 0 else 50
+    confidence = int((atr_score * 0.4 + vol_score * 0.3 + prox_score * 0.3))
+
+    return SetupSignal(
+        strategy="breakout_setup",
+        direction=direction,
+        symbol=symbol,
+        confidence=min(100, max(0, confidence)),
+        metrics={
+            "atr_ratio": round(atr_ratio, 3),
+            "range_ratio": round(range_ratio, 3),
+            "vol_ratio": round(vol_ratio, 3),
+            "proximity_pct": round(prox * 100, 2),
+            "swing_level": round(swing_level, 2),
+            "current_atr": round(current_atr, 4),
+        },
     )

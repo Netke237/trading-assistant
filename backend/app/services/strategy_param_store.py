@@ -127,3 +127,18 @@ def adopt(strategy: str, params: dict, direction: str = "Bullish") -> None:
     os.replace(tmp, CFG)
     # Invalidate cache AFTER the write succeeds — no window of stale reads.
     _CACHE = None
+
+
+def get_composite_trigger_defaults() -> dict:
+    """Get default composite trigger thresholds from strategy_params.yaml."""
+    return dict(
+        _load().get(
+            "composite_trigger",
+            {
+                "conviction_min": 60,
+                "p_transition_min": 0.35,
+                "p_stay_min": 0.70,
+                "min_confirmations": 1,
+            },
+        )
+    )

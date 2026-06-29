@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas import SentimentData, FundamentalsOut
 
 
-Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi"]
+Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb"]
 
 
 class StockScanRequest(BaseModel):
@@ -26,6 +26,7 @@ class StockScanRequest(BaseModel):
     rsi_oversold:           float = Field(30.0, gt=0, le=100)   # RSI oversold threshold
     rsi_overbought:         float = Field(70.0, gt=0, le=100)   # RSI overbought threshold (bearish)
     rsi_trend_sma:          int   = Field(200,  gt=0)           # trend-confirmation SMA
+    require_choppy_regime:  bool  = False                        # live filter: only fire when OMM state is Choppy
     min_price:   Optional[float] = None
     max_price:   Optional[float] = None
     min_cap_usd: Optional[float] = None

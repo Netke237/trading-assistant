@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 import yaml as _yaml
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from app.services.audit import new_rec_id
 from app.schemas.stock_scan import (
@@ -33,6 +34,8 @@ from app.scoring.stock_scorer import score_stock
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
     ma_crossover_signal, mean_reversion_rsi_signal,
+    mean_reversion_bb_signal,
+    breakout_setup_signal,
 )
 from app.services.strategy_backtest import run_strategy_backtest
 from app.services.strategy_param_store import get_active
@@ -44,6 +47,19 @@ from app.services.fundamentals_store import get_fundamentals as _get_fundamental
 from app.scoring.fundamentals_scorer import score_fundamentals as _score_fundamentals, FundamentalHealth
 from app.schemas import FundamentalsOut
 from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
+
+
+class PreBreakoutScanRequest(BaseModel):
+    symbols: list[str]
+    direction: str = "Bullish"
+    params_override: dict | None = None
+
+
+class PreBreakoutResult(BaseModel):
+    symbol: str
+    confidence: int
+    direction: str
+    metrics: dict
 
 
 _SCORING_CFG = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
@@ -74,13 +90,15 @@ _SIGNAL_FNS = {
     "breakout_base":       breakout_base_signal,
     "ma_crossover":        ma_crossover_signal,
     "mean_reversion_rsi":  mean_reversion_rsi_signal,
+    "mean_reversion_bb":   mean_reversion_bb_signal,
 }
 
 _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
     "pullback_ema":       lambda r: {"tolerance": r.pullback_tolerance_pct, "ema_period": r.pullback_ema_period, "trend_ema": r.pullback_trend_ema, "ma_type": r.pullback_ma_type, "require_reversal": r.pullback_require_reversal},
     "breakout_base":      lambda r: {"volume_mult": r.breakout_volume_mult},
     "ma_crossover":       lambda r: {"fast": r.ma_crossover_fast, "slow": r.ma_crossover_slow, "lookback": r.ma_crossover_lookback},
-    "mean_reversion_rsi": lambda r: {"rsi_period": r.rsi_period, "rsi_oversold": r.rsi_oversold, "rsi_overbought": getattr(r, "rsi_overbought", 70.0), "trend_sma": r.rsi_trend_sma},
+    "mean_reversion_rsi": lambda r: {"rsi_period": r.rsi_period, "rsi_oversold": r.rsi_oversold, "rsi_overbought": getattr(r, "rsi_overbought", 70.0), "trend_sma": r.rsi_trend_sma, "require_choppy_regime": r.require_choppy_regime},
+    "mean_reversion_bb":  lambda r: {"require_choppy_regime": r.require_choppy_regime},
 }
 
 def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
@@ -831,3 +849,44 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
         original_count=original_count, shortlist_truncated=shortlist_truncated,
         direction_banner=_direction_banner,
     )
+
+
+@router.post("/scan/prebreakout")
+async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
+    """Scan symbols for pre-breakout consolidation setups using breakout_setup_signal."""
+    from datetime import date, timedelta
+    end = date.today()
+    start = end - timedelta(days=365)
+
+    base_params = get_active("breakout_setup", body.direction)
+    if body.params_override:
+        base_params.update(body.params_override)
+
+    results: list[dict] = []
+    for sym in body.symbols:
+        sym = sym.strip().upper()
+        if not sym:
+            continue
+        try:
+            bars = await get_historical_bars(sym, start, end)
+        except Exception as exc:
+            logger.warning("prebreakout scan: get_bars failed for %s — %s", sym, exc)
+            continue
+        if not bars:
+            continue
+        try:
+            signal = breakout_setup_signal(bars, sym, direction=body.direction, **base_params)
+        except Exception as exc:
+            logger.warning("prebreakout scan: signal failed for %s — %s", sym, exc)
+            continue
+        if signal is None:
+            continue
+        results.append({
+            "symbol": sym,
+            "confidence": signal.confidence,
+            "direction": signal.direction,
+            "metrics": signal.metrics,
+        })
+
+    results.sort(key=lambda r: r["confidence"], reverse=True)
+    return results

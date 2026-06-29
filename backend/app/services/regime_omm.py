@@ -218,3 +218,21 @@ def compute_omm(
         conviction_label=conviction_label(conv_pct),
         interpretation=conviction_interpretation(conv_pct, stability, current),
     )
+
+
+def compute_regime_series(candles: list[dict]) -> list[dict]:
+    """Compute per-bar OMM regime state for chart overlay.
+
+    Returns one entry per candle with the OMM state label.
+    Uses label_daily_states() for a single-pass O(n) computation.
+    Safe for display — each label is computed from data up to and including that bar.
+    """
+    if not candles:
+        return []
+    closes = [c["close"] for c in candles]
+    labels = label_daily_states(closes)
+    # label_daily_states returns the same length as closes (warm-up bars get 'Choppy')
+    return [
+        {"time": candles[i]["time"], "state": labels[i]}
+        for i in range(len(labels))
+    ]

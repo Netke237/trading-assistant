@@ -161,3 +161,112 @@ def test_pullback_ema_is_default_ma_type():
     assert (signal_default is None) == (signal_ema is None)
     if signal_default and signal_ema:
         assert signal_default.entry_price == signal_ema.entry_price
+
+
+# ── New strategy helpers ──────────────────────────────────────────────────────
+
+from app.services.strategy_engine import (
+    _bollinger, _vwap, _atr_series,
+    SetupSignal,
+    mean_reversion_bb_signal,
+    mean_reversion_vwap_signal,
+    breakout_setup_signal,
+)
+
+
+def test_bollinger_lengths_match():
+    values = [float(i) for i in range(50)]
+    upper, mid, lower = _bollinger(values, period=20, n_std=2.0)
+    assert len(upper) == len(mid) == len(lower)
+    assert len(upper) == len(values) - 20 + 1
+
+
+def test_bollinger_ordering():
+    values = [100.0 + i * 0.1 for i in range(50)]
+    upper, mid, lower = _bollinger(values, period=20, n_std=2.0)
+    for u, m, l in zip(upper, mid, lower):
+        assert u >= m >= l
+
+
+def test_vwap_returns_float():
+    bars = [{"high": 101.0, "low": 99.0, "close": 100.0, "volume": 1000} for _ in range(10)]
+    assert isinstance(_vwap(bars), float)
+    assert _vwap(bars) == pytest.approx(100.0)
+
+
+def test_atr_series_length():
+    bars = _rising_bars(50)
+    series = _atr_series(bars, period=14)
+    assert len(series) == len(bars) - 1   # one less because TR needs previous bar
+
+
+def test_setup_signal_has_no_entry_stop_target():
+    sig = SetupSignal(strategy="breakout_setup", direction="Bullish",
+                      symbol="AAPL", confidence=75, metrics={})
+    assert not hasattr(sig, "entry_price")
+    assert not hasattr(sig, "stop_price")
+    assert not hasattr(sig, "target_price")
+    assert not hasattr(sig, "rr_ratio")
+
+
+def test_mean_reversion_bb_signal_structure():
+    """Signal function returns correct type on synthetic data."""
+    bars = _rising_bars(300)
+    sig = mean_reversion_bb_signal(bars)
+    assert sig is None or isinstance(sig, StrategySignal)
+
+
+def test_mean_reversion_bb_signal_bearish_structure():
+    """Bearish direction returns correct type."""
+    bars = _rising_bars(300)
+    sig = mean_reversion_bb_signal(bars, direction="Bearish")
+    assert sig is None or isinstance(sig, StrategySignal)
+
+
+def test_mean_reversion_vwap_signal_returns_none_for_daily():
+    """Daily interval guard must return None."""
+    bars = _rising_bars(100)
+    sig = mean_reversion_vwap_signal(bars, interval="1D")
+    assert sig is None
+
+
+def test_mean_reversion_vwap_signal_returns_none_for_empty_interval():
+    """Unknown interval guard must return None."""
+    bars = _rising_bars(100)
+    sig = mean_reversion_vwap_signal(bars, interval="weekly")
+    assert sig is None
+
+
+def test_breakout_setup_signal_requires_symbol():
+    """Function signature must accept symbol kwarg."""
+    bars = _rising_bars(100)
+    # Should not raise TypeError
+    sig = breakout_setup_signal(bars, "AAPL")
+    assert sig is None or isinstance(sig, SetupSignal)
+
+
+def test_breakout_setup_signal_returns_setup_signal_type():
+    """When it fires, must return SetupSignal not StrategySignal."""
+    # Build bars with compressed ATR, tight range, low volume, near swing high
+    bars = []
+    price = 100.0
+    for i in range(80):
+        bars.append({"open": price - 0.1, "high": price + 2.0, "low": price - 2.0,
+                     "close": price, "volume": 2000})
+        price += 0.2
+    # Last 10 bars: tight range, low volume, near the swing high
+    swing_high = price
+    for _ in range(10):
+        bars.append({"open": swing_high - 0.1, "high": swing_high + 0.05,
+                     "low": swing_high - 0.05, "close": swing_high - 0.02, "volume": 400})
+    sig = breakout_setup_signal(bars, "TEST",
+                                 atr_compression_ratio=0.9,
+                                 range_atr_mult=2.0,
+                                 vol_compression_ratio=0.9,
+                                 resistance_proximity_pct=0.10)
+    # It may or may not fire depending on exact values — just verify type if it fires
+    assert sig is None or isinstance(sig, SetupSignal)
+    if sig is not None:
+        assert isinstance(sig.confidence, int)
+        assert 0 <= sig.confidence <= 100
+        assert "atr_ratio" in sig.metrics

@@ -15,6 +15,7 @@ export interface StrategyParams {
   rsiPeriod: number;
   rsiOversold: number;
   rsiTrendSma: number;
+  requireChoppyRegime: boolean;
   btMinTrades: number;
   btMinWinRate: number;
   eventFilter: 'include' | 'avoid' | 'only_pre_event';
@@ -205,6 +206,21 @@ export function StrategyParamsPanel({ params, setParams, onReset }: Props) {
                 setParams((p) => ({ ...p, rsiTrendSma: Number(e.target.value) }))
               }
             />
+          </div>
+        </label>
+
+        <label className={styles.paramLabel}>
+          <Text size={11} tone="dim">Require Choppy regime (mean reversion RSI only)</Text>
+          <Text size={10} tone="dim">When enabled, the mean-reversion RSI signal only fires when the OMM market regime is Choppy — more selective but higher precision in range-bound markets.</Text>
+          <div className={styles.paramInput}>
+            <input
+              type="checkbox"
+              checked={params.requireChoppyRegime}
+              onChange={(e) =>
+                setParams((p) => ({ ...p, requireChoppyRegime: e.target.checked }))
+              }
+            />
+            <Text size={11} tone="secondary">Require Choppy regime</Text>
           </div>
         </label>
 

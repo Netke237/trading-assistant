@@ -106,6 +106,12 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 function conditionText(cond: Condition): string {
   if (cond.kind === 'price') return `Price ${cond.operator} ${cond.value}`;
   if (cond.kind === 'indicator') return `${cond.indicator} ${cond.operator} ${cond.value}`;
+  if (cond.kind === 'regime') {
+    const modelPart = cond.model === 'any' ? '' : `${cond.model} `;
+    const convPart = cond.min_conviction != null ? ` (conv≥${cond.min_conviction}%)` : '';
+    return `Regime ${modelPart}state = ${cond.state}${convPart}`.trim();
+  }
+  // structure
   let text = cond.signal_kind;
   if (cond.direction) text += ` ${cond.direction}`;
   if (cond.min_confidence != null) text += ` (${cond.min_confidence}%)`;

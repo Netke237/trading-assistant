@@ -40,6 +40,7 @@ from app.routers.historical_data import router as historical_data_router
 from app.routers.chart_drawings  import router as chart_drawings_router
 from app.routers.ingestion       import router as ingestion_router
 from app.routers.strategy_watch  import router as strategy_watch_router
+from app.routers.composite_watch import router as composite_watch_router
 from app.routers.strategy_tuning import router as strategy_tuning_router
 from app.routers.config          import router as config_router
 from app.routers.symbols         import router as symbols_router
@@ -262,6 +263,7 @@ def create_app() -> FastAPI:
     app.include_router(chart_drawings_router)
     app.include_router(ingestion_router)
     app.include_router(strategy_watch_router)
+    app.include_router(composite_watch_router)
     app.include_router(strategy_tuning_router)
     app.include_router(config_router)
 

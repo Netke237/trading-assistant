@@ -40,6 +40,13 @@ export default function ScreenerLayout({ children }: { children: React.ReactNode
         >
           Stocks
         </button>
+        <button
+          type="button"
+          className={`${styles.modeBtn} ${mode === 'prebreakout' ? styles.modeBtnActive : ''}`}
+          onClick={() => setMode('prebreakout')}
+        >
+          Pre-Breakout
+        </button>
       </div>
       <div className={styles.scroll}>{children}</div>
       <StepNavBar />
