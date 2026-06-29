@@ -14,7 +14,7 @@ import type { MtfRow } from '@/types/overlays';
 import { useStructureStore } from '@/lib/structureStore';
 import type { StructureSignal } from '@/types/structure';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
-import { evaluateRules } from '@/lib/chartAlertEngine';
+import { evaluateRules, type RegimeSnapshot } from '@/lib/chartAlertEngine';
 import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
 import AlertToast from '@/components/organisms/AlertToast';
 import ChartClickPopover from '@/components/molecules/ChartClickPopover';
@@ -173,6 +173,7 @@ export default function ChartWorkspace() {
   const [mainSeries, setMainSeries] = useState<ISeriesApi<'Candlestick'> | null>(null);
   const [showRegime, setShowRegime] = useState(false);
   const regimeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const regimeDataRef = useRef<Array<{ time: string; state: string }>>([]);
   const [wsError, setWsError] = useState<string | null>(null);
   const wsRef = useRef<ChartWSClient | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
@@ -268,7 +269,10 @@ export default function ChartWorkspace() {
       regimeSeriesRef.current = null;
     }
 
-    if (!showRegime) return;
+    if (!showRegime) {
+      regimeDataRef.current = [];
+      return;
+    }
 
     let cancelled = false;
     const isIntraday = interval !== '1D' && interval !== '1W';
@@ -286,6 +290,8 @@ export default function ChartWorkspace() {
           : await api.getRegimeSeries(symbol);
 
         if (cancelled || !chart) return;
+
+        regimeDataRef.current = rawData;
 
         const rs = chart.addSeries(HistogramSeries, {
           priceScaleId: 'regime',
@@ -312,7 +318,14 @@ export default function ChartWorkspace() {
     }
 
     loadRegime();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Remove the series on cleanup (effect re-run or unmount)
+      if (regimeSeriesRef.current) {
+        try { chart.removeSeries(regimeSeriesRef.current); } catch { /* chart may already be destroyed */ }
+        regimeSeriesRef.current = null;
+      }
+    };
   }, [showRegime, symbol, interval, chartApi]);
 
   // Connect/reconnect WebSocket when symbol or interval changes
@@ -380,6 +393,12 @@ export default function ChartWorkspace() {
       );
       if (alertRules.length > 0) {
         const indicatorPoints = getIndicatorPoints(candles, activeIndicators);
+        const regimeEntry = regimeDataRef.current.find(
+          (d) => d.time === String(closedCandle.time),
+        );
+        const currentRegime: RegimeSnapshot | null = regimeEntry
+          ? { state: regimeEntry.state }
+          : null;
         const triggered = evaluateRules(
           alertRules,
           closedCandle,
@@ -389,6 +408,7 @@ export default function ChartWorkspace() {
           new Date(),
           symbol,
           interval,
+          currentRegime,
         );
         for (const history of triggered) {
           useChartAlertStore.getState().addHistory(history);

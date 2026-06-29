@@ -1,7 +1,12 @@
-import type { AlertRule, Condition, AlertHistory } from '@/types/alerts';
+import type { AlertRule, Condition, AlertHistory, RegimeCondition } from '@/types/alerts';
 import type { Candle } from '@/lib/indicators';
 import type { StructureSignal } from '@/types/structure';
 import type { Interval } from '@/lib/chartStore';
+
+export interface RegimeSnapshot {
+  state: string;
+  conviction?: number;
+}
 
 interface Point {
   time: string | number;
@@ -29,14 +34,32 @@ function comparePrice(op: string, a: number, b: number): boolean {
   }
 }
 
+function evaluateRegimeCondition(
+  condition: RegimeCondition,
+  regime: RegimeSnapshot | null,
+): { met: boolean; triggerValues: Record<string, number> } {
+  if (!regime) return { met: false, triggerValues: {} };
+  const stateMatch = condition.state === 'any' || regime.state === condition.state;
+  const convictionMatch =
+    condition.min_conviction == null ||
+    (regime.conviction != null && regime.conviction >= condition.min_conviction);
+  const met = stateMatch && convictionMatch;
+  return { met, triggerValues: met ? { regime_state: 1 } : {} };
+}
+
 function evaluateCondition(
   condition: Condition,
   closedCandle: Candle,
   indicators: Record<string, Point[]>,
   signals: StructureSignal[],
   candleTime: string | number,
+  regime: RegimeSnapshot | null,
 ): { met: boolean; triggerValues: Record<string, number> } {
   const triggerValues: Record<string, number> = {};
+
+  if (condition.kind === 'regime') {
+    return evaluateRegimeCondition(condition, regime);
+  }
 
   if (condition.kind === 'price') {
     triggerValues.close = closedCandle.close;
@@ -88,6 +111,9 @@ function evaluateCondition(
 
 function buildReason(rule: AlertRule, triggerValues: Record<string, number>): string {
   if (rule.group.conditions.length === 0) return '';
+  const sep = rule.group.logic === 'N_OF_M'
+    ? ` (${rule.group.n_of_m_threshold ?? 1}-of-${rule.group.conditions.length}) `
+    : ` ${rule.group.logic} `;
   return rule.group.conditions
     .map((c) => {
       if (c.kind === 'price') return `Price ${c.operator} ${c.value}`;
@@ -99,10 +125,13 @@ function buildReason(rule: AlertRule, triggerValues: Record<string, number>): st
       if (c.kind === 'structure') {
         return `${c.signal_kind} ${c.direction ?? ''} detected`.trim();
       }
+      if (c.kind === 'regime') {
+        return `Regime ${c.model === 'any' ? '' : c.model + ' '}state = ${c.state}${c.min_conviction != null ? ` (conv≥${c.min_conviction}%)` : ''}`.trim();
+      }
       return '';
     })
     .filter(Boolean)
-    .join(` ${rule.group.logic} `);
+    .join(sep);
 }
 
 export function evaluateRules(
@@ -114,6 +143,7 @@ export function evaluateRules(
   now: Date,
   activeSymbol: string,
   activeInterval: Interval,
+  regime?: RegimeSnapshot | null,
 ): AlertHistory[] {
   const results: AlertHistory[] = [];
 
@@ -127,15 +157,16 @@ export function evaluateRules(
 
     const accumulatedTriggerValues: Record<string, number> = {};
     const evaluations = rule.group.conditions.map((c) => {
-      const ev = evaluateCondition(c, closedCandle, indicators, signals, closedCandle.time);
+      const ev = evaluateCondition(c, closedCandle, indicators, signals, closedCandle.time, regime ?? null);
       Object.assign(accumulatedTriggerValues, ev.triggerValues);
       return ev.met;
     });
 
+    const threshold = rule.group.n_of_m_threshold ?? 1;
     const triggered =
-      rule.group.logic === 'AND'
-        ? evaluations.every(Boolean)
-        : evaluations.some(Boolean);
+      rule.group.logic === 'AND'   ? evaluations.every(Boolean) :
+      rule.group.logic === 'OR'    ? evaluations.some(Boolean) :
+      /* N_OF_M */                   evaluations.filter(Boolean).length >= threshold;
 
     if (triggered) {
       const id = now.getTime().toString(36) + Math.random().toString(36).slice(2, 6);

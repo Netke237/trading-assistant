@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useChartStore } from '@/lib/chartStore';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
 import { Text } from '@/components/primitives';
-import type { Condition, ConditionOperator, AlertRule, LogicOperator, PriceCondition, IndicatorCondition, StructureCondition } from '@/types/alerts';
+import type { Condition, ConditionOperator, AlertRule, LogicOperator, PriceCondition, IndicatorCondition, StructureCondition, RegimeCondition, RegimeState, RegimeModel } from '@/types/alerts';
 import type { SignalKind } from '@/types/structure';
 import styles from './AlertRuleBuilder.module.css';
 
@@ -30,6 +30,9 @@ const DIRECTIONS = [
   { value: 'bearish', label: 'bearish' },
 ];
 
+const REGIME_STATES: RegimeState[] = ['any', 'Bull', 'Bear', 'Choppy'];
+const REGIME_MODELS: RegimeModel[] = ['any', 'OMM', 'HMM'];
+
 function emptyPriceCondition(): PriceCondition {
   return { kind: 'price', operator: '>', value: 0 };
 }
@@ -40,6 +43,10 @@ function emptyIndicatorCondition(): IndicatorCondition {
 
 function emptyStructureCondition(): StructureCondition {
   return { kind: 'structure', signal_kind: 'BOS' };
+}
+
+function emptyRegimeCondition(): RegimeCondition {
+  return { kind: 'regime', model: 'OMM', state: 'Bull' };
 }
 
 function makeId(): string {
@@ -55,6 +62,7 @@ export default function AlertRuleBuilder({ onClose, editRule, prefill }: Props) 
     ?? (prefill ? [{ kind: 'price', operator: 'crosses_above', value: prefill.price } as PriceCondition] : [emptyPriceCondition()]),
   );
   const [logic, setLogic] = useState<LogicOperator>(editRule?.group.logic ?? 'AND');
+  const [nOfMThreshold, setNOfMThreshold] = useState(editRule?.group.n_of_m_threshold ?? 1);
   const [cooldown, setCooldown] = useState(editRule?.cooldown_minutes ?? 60);
   const [expiryType, setExpiryType] = useState<'never' | 'custom'>(
     editRule?.expiry_date ? 'custom' : 'never',
@@ -76,10 +84,11 @@ export default function AlertRuleBuilder({ onClose, editRule, prefill }: Props) 
     setConditions((c) => c.filter((_, i) => i !== idx));
   };
 
-  const addCondition = (kind: 'price' | 'indicator' | 'structure') => {
+  const addCondition = (kind: 'price' | 'indicator' | 'structure' | 'regime') => {
     if (kind === 'price') setConditions((c) => [...c, emptyPriceCondition()]);
     if (kind === 'indicator') setConditions((c) => [...c, emptyIndicatorCondition()]);
     if (kind === 'structure') setConditions((c) => [...c, emptyStructureCondition()]);
+    if (kind === 'regime') setConditions((c) => [...c, emptyRegimeCondition()]);
   };
 
   const handleSave = () => {
@@ -94,7 +103,7 @@ export default function AlertRuleBuilder({ onClose, editRule, prefill }: Props) 
       symbol,
       interval,
       enabled: editRule?.enabled ?? true,
-      group: { logic, conditions },
+      group: { logic, conditions, n_of_m_threshold: logic === 'N_OF_M' ? nOfMThreshold : undefined },
       cooldown_minutes: cooldown,
       expiry_date: expiryType === 'custom' && expiryDate ? expiryDate : null,
       created_at: editRule?.created_at ?? new Date().toISOString(),
@@ -166,8 +175,29 @@ export default function AlertRuleBuilder({ onClose, editRule, prefill }: Props) 
             >
               ANY
             </button>
+            <button
+              className={`${styles.logicBtn} ${logic === 'N_OF_M' ? styles.logicActive : ''}`}
+              onClick={() => setLogic('N_OF_M')}
+            >
+              N of M
+            </button>
           </div>
-          <Text size={11} tone="dim">conditions are met</Text>
+          {logic === 'N_OF_M' ? (
+            <span className={styles.nOfMRow}>
+              <input
+                className={styles.numInput}
+                type="number"
+                min={1}
+                max={conditions.length}
+                value={nOfMThreshold}
+                onChange={(e) => setNOfMThreshold(Math.max(1, Math.min(conditions.length, Number(e.target.value))))}
+                style={{ width: 40 }}
+              />
+              <Text size={11} tone="dim">of {conditions.length} conditions met</Text>
+            </span>
+          ) : (
+            <Text size={11} tone="dim">conditions are met</Text>
+          )}
         </div>
 
         <div className={styles.conditions}>
@@ -177,15 +207,17 @@ export default function AlertRuleBuilder({ onClose, editRule, prefill }: Props) 
                 className={styles.select}
                 value={c.kind}
                 onChange={(e) => {
-                  const k = e.target.value as 'price' | 'indicator' | 'structure';
+                  const k = e.target.value as 'price' | 'indicator' | 'structure' | 'regime';
                   if (k === 'price') updateCondition(idx, emptyPriceCondition());
                   if (k === 'indicator') updateCondition(idx, emptyIndicatorCondition());
                   if (k === 'structure') updateCondition(idx, emptyStructureCondition());
+                  if (k === 'regime') updateCondition(idx, emptyRegimeCondition());
                 }}
               >
                 <option value="price">Price</option>
                 <option value="indicator">Indicator</option>
                 <option value="structure">Structure</option>
+                <option value="regime">Regime (OMM/HMM)</option>
               </select>
 
               {c.kind === 'price' && (
@@ -276,6 +308,42 @@ export default function AlertRuleBuilder({ onClose, editRule, prefill }: Props) 
                 </>
               )}
 
+              {c.kind === 'regime' && (
+                <>
+                  <select
+                    className={styles.select}
+                    value={c.model}
+                    onChange={(e) => updateCondition(idx, { model: e.target.value as RegimeModel })}
+                  >
+                    {REGIME_MODELS.map((m) => (
+                      <option key={m} value={m}>{m === 'any' ? 'any model' : m}</option>
+                    ))}
+                  </select>
+                  <select
+                    className={styles.select}
+                    value={c.state}
+                    onChange={(e) => updateCondition(idx, { state: e.target.value as RegimeState })}
+                  >
+                    {REGIME_STATES.map((s) => (
+                      <option key={s} value={s}>{s === 'any' ? 'any state' : s}</option>
+                    ))}
+                  </select>
+                  <input
+                    className={styles.numInput}
+                    type="number"
+                    min={0}
+                    max={100}
+                    placeholder="Conv%"
+                    value={c.min_conviction ?? ''}
+                    onChange={(e) =>
+                      updateCondition(idx, {
+                        min_conviction: e.target.value ? Number(e.target.value) : undefined,
+                      })
+                    }
+                  />
+                </>
+              )}
+
               {conditions.length > 1 && (
                 <button
                   className={styles.removeBtn}
@@ -291,13 +359,16 @@ export default function AlertRuleBuilder({ onClose, editRule, prefill }: Props) 
 
         <div className={styles.addRow}>
           <button className={styles.addBtn} onClick={() => addCondition('price')}>
-            + Add Price
+            + Price
           </button>
           <button className={styles.addBtn} onClick={() => addCondition('indicator')}>
-            + Add Indicator
+            + Indicator
           </button>
           <button className={styles.addBtn} onClick={() => addCondition('structure')}>
-            + Add Structure
+            + Structure
+          </button>
+          <button className={styles.addBtn} onClick={() => addCondition('regime')}>
+            + Regime
           </button>
         </div>
 

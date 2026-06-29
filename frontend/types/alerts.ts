@@ -3,7 +3,9 @@ import type { SignalKind } from '@/types/structure';
 import type { Candle } from '@/lib/indicators';
 
 export type ConditionOperator = '>' | '<' | '>=' | '<=' | 'crosses_above' | 'crosses_below';
-export type LogicOperator = 'AND' | 'OR';
+export type LogicOperator = 'AND' | 'OR' | 'N_OF_M';
+export type RegimeState = 'Bull' | 'Bear' | 'Choppy' | 'any';
+export type RegimeModel = 'OMM' | 'HMM' | 'any';
 
 export interface PriceCondition {
   kind: 'price';
@@ -25,10 +27,18 @@ export interface StructureCondition {
   min_confidence?: number;
 }
 
-export type Condition = PriceCondition | IndicatorCondition | StructureCondition;
+export interface RegimeCondition {
+  kind: 'regime';
+  model: RegimeModel;
+  state: RegimeState;
+  min_conviction?: number;
+}
+
+export type Condition = PriceCondition | IndicatorCondition | StructureCondition | RegimeCondition;
 
 export interface ConditionGroup {
   logic: LogicOperator;
+  n_of_m_threshold?: number;
   conditions: Condition[];
 }
 

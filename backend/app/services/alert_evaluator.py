@@ -32,9 +32,18 @@ class StructureCondition:
 
 
 @dataclass
+class RegimeCondition:
+    kind: Literal['regime']
+    model: str = 'OMM'        # 'OMM' | 'HMM' | 'any'
+    state: str = 'Bull'       # 'Bull' | 'Bear' | 'Choppy' | 'any'
+    min_conviction: Optional[float] = None
+
+
+@dataclass
 class ConditionGroup:
-    logic: Literal['AND', 'OR']
+    logic: Literal['AND', 'OR', 'N_OF_M']
     conditions: list = field(default_factory=list)
+    n_of_m_threshold: Optional[int] = None
 
 
 @dataclass
@@ -85,9 +94,25 @@ def _compare(op: str, a: float, b: float) -> bool:
     return ops.get(op, lambda x, y: False)(a, b)
 
 
+def _evaluate_regime_condition(condition, regime: Optional[dict]) -> tuple[bool, dict]:
+    if not regime:
+        return False, {}
+    state_match = condition.state == 'any' or regime.get('state') == condition.state
+    conviction_match = (
+        condition.min_conviction is None
+        or (regime.get('conviction') is not None and regime['conviction'] >= condition.min_conviction)
+    )
+    met = state_match and conviction_match
+    return met, {'regime_state': 1} if met else {}
+
+
 def _evaluate_condition(condition, closed_candle: dict, indicators: dict,
-                        signals: list[dict], candle_time: str) -> tuple[bool, dict]:
+                        signals: list[dict], candle_time: str,
+                        regime: Optional[dict] = None) -> tuple[bool, dict]:
     trigger_values: dict = {}
+
+    if condition.kind == 'regime':
+        return _evaluate_regime_condition(condition, regime)
 
     if condition.kind == 'price':
         trigger_values['close'] = closed_candle['close']
@@ -152,12 +177,18 @@ def _build_reason(rule: AlertRuleInput, trigger_values: dict) -> str:
             parts.append(f'{c.indicator} {c.operator} {c.value}{val_str}')
         elif c.kind == 'structure':
             parts.append(f'{c.signal_kind} {c.direction or ""} detected'.strip())
-    return f' {rule.group.logic} '.join(p for p in parts if p)
+        elif c.kind == 'regime':
+            conv_str = f' (conv≥{c.min_conviction}%)' if c.min_conviction is not None else ''
+            model_str = f'{c.model} ' if c.model != 'any' else ''
+            parts.append(f'Regime {model_str}state = {c.state}{conv_str}')
+    sep = (f' ({rule.group.n_of_m_threshold or 1}-of-{len(rule.group.conditions)}) '
+           if rule.group.logic == 'N_OF_M' else f' {rule.group.logic} ')
+    return sep.join(p for p in parts if p)
 
 
 def evaluate_rules(rules: list[AlertRuleInput], closed_candle: dict,
                    all_candles: list[dict], indicators: dict, signals: list[dict],
-                   now: datetime) -> list[dict]:
+                   now: datetime, regime: Optional[dict] = None) -> list[dict]:
     results = []
     for rule in rules:
         if not rule.enabled:
@@ -172,11 +203,17 @@ def evaluate_rules(rules: list[AlertRuleInput], closed_candle: dict,
         accumulated_trigger_values: dict = {}
         evaluations = []
         for c in rule.group.conditions:
-            met, tv = _evaluate_condition(c, closed_candle, indicators, signals, closed_candle['time'])
+            met, tv = _evaluate_condition(c, closed_candle, indicators, signals, closed_candle['time'], regime)
             accumulated_trigger_values.update(tv)
             evaluations.append(met)
 
-        triggered = all(evaluations) if rule.group.logic == 'AND' else any(evaluations)
+        if rule.group.logic == 'AND':
+            triggered = all(evaluations)
+        elif rule.group.logic == 'OR':
+            triggered = any(evaluations)
+        else:  # N_OF_M
+            threshold = rule.group.n_of_m_threshold or 1
+            triggered = sum(evaluations) >= threshold
 
         if triggered:
             entry_id = make_history_id()
