@@ -17,6 +17,7 @@ export interface StockScanParamOverrides {
   rsiPeriod?: number;
   rsiOversold?: number;
   rsiTrendSma?: number;
+  requireChoppyRegime?: boolean;
   btMinTrades?: number;
   btMinWinRate?: number;
   stockShortlistMax?: number;
@@ -84,6 +85,7 @@ export async function runStockScan(
       rsi_period:             p.rsiPeriod,
       rsi_oversold:           p.rsiOversold,
       rsi_trend_sma:          p.rsiTrendSma,
+      require_choppy_regime:  p.requireChoppyRegime ?? false,
       bt_min_trades:          p.btMinTrades,
       bt_min_win_rate:        p.btMinWinRate,
       account_size: 50_000,

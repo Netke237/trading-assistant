@@ -5,9 +5,10 @@
  * Tabs:
  *   - Stocks:    sortable table of ranked candidates + inline chart on select.
  *   - Contracts: every option contract the user has starred on Step 6.
+ *   - Composite Alerts: Markov regime alerts created from the Pre-Breakout scanner.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
@@ -27,7 +28,7 @@ import type { WatchlistRow } from '@/types/domain';
 import { useChartStore } from '@/lib/chartStore';
 import styles from './page.module.css';
 
-type Tab     = 'stocks' | 'contracts';
+type Tab     = 'stocks' | 'contracts' | 'composite';
 type SortKey = 'score' | 'symbol' | 'price' | 'rank' | 'scoreDelta';
 type SortDir = 'asc' | 'desc';
 type ContractSortKey = 'score' | 'dte' | 'price';
@@ -46,6 +47,10 @@ export default function WatchlistPage() {
   const [watchlist, setWatchlist]   = useState<WatchlistRow[]>([]);
   const [contracts, setContracts]   = useState<OptionContract[]>([]);
   const [offline, setOffline]       = useState(false);
+  const [compositeWatches, setCompositeWatches] = useState<Array<{
+    id: string; symbol: string; direction: string; enabled: boolean;
+    interval: string; trigger_def: Record<string, unknown>; created_at: string;
+  }>>([]);
 
   const setChartSymbol     = useChartStore((s) => s.setSymbol);
   const setChartSymbolName = useChartStore((s) => s.setSymbolName);
@@ -55,11 +60,19 @@ export default function WatchlistPage() {
   const syncContractsFromBackend  = useWatchedContractsStore((s) => s.syncFromBackend);
   const watchedIds = useWatchedContractsStore((s) => s.ids);
 
+  const refreshComposite = useCallback(async () => {
+    try {
+      const data = await fetch('/api/composite-watches/').then((r) => r.json());
+      setCompositeWatches(Array.isArray(data) ? data : []);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     syncFromBackend();
     syncContractsFromBackend();
     api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
-  }, [syncFromBackend, syncContractsFromBackend]);
+    refreshComposite();
+  }, [syncFromBackend, syncContractsFromBackend, refreshComposite]);
 
   useEffect(() => {
     if (watchedIds.length === 0) { setContracts([]); return; }
@@ -178,7 +191,9 @@ export default function WatchlistPage() {
         <Text size={13} tone="secondary">
           {tab === 'stocks'
             ? `${displayRows.length} starred · sorted by ${sortKey} ${sortDir === 'asc' ? '↑' : '↓'}`
-            : `${sortedContracts.length} starred contract${sortedContracts.length === 1 ? '' : 's'} · sorted by ${contractSortKey} ${contractSortDir === 'asc' ? '↑' : '↓'}`}
+            : tab === 'contracts'
+            ? `${sortedContracts.length} starred contract${sortedContracts.length === 1 ? '' : 's'} · sorted by ${contractSortKey} ${contractSortDir === 'asc' ? '↑' : '↓'}`
+            : `${compositeWatches.length} composite alert${compositeWatches.length === 1 ? '' : 's'}`}
         </Text>
         {offline && (
           <Text size={13} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
@@ -204,9 +219,18 @@ export default function WatchlistPage() {
         >
           Contracts <span className={styles.tabCount}>{watchedContracts.length}</span>
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'composite'}
+          className={`${styles.tab} ${tab === 'composite' ? styles.tabActive : ''}`}
+          onClick={() => setTab('composite')}
+        >
+          Composite Alerts
+        </button>
       </div>
 
-      {tab === 'stocks' ? (
+      {tab === 'stocks' && (
         <>
           {displayRows.length === 0 ? (
             <div className={styles.empty}>
@@ -284,13 +308,73 @@ export default function WatchlistPage() {
             onClose={() => setSelected(null)}
           />
         </>
-      ) : (
+      )}
+
+      {tab === 'contracts' && (
         <ContractsTab
           contracts={sortedContracts}
           sortKey={contractSortKey}
           sortDir={contractSortDir}
           onSort={toggleContractSort}
         />
+      )}
+
+      {tab === 'composite' && (
+        <div className={styles.section}>
+          <Title as="h2" size={20}>Composite Alerts</Title>
+          <Text size={13} tone="secondary">Markov regime alerts created from the Pre-Breakout scanner.</Text>
+          {compositeWatches.length === 0 ? (
+            <Text size={13} tone="dim">No composite alerts yet. Create one from the Pre-Breakout Scanner in the Screener.</Text>
+          ) : (
+            <div className={styles.compositeList}>
+              {compositeWatches.map((w) => {
+                const primary = (w.trigger_def as Record<string, unknown>)?.primary as Record<string, unknown> | undefined;
+                return (
+                  <div key={w.id} className={styles.compositeRow}>
+                    <div className={styles.compositeInfo}>
+                      <Text size={13} weight={500}>{w.symbol}</Text>
+                      <Text size={11} tone="secondary">{w.direction} · {primary?.model ?? 'OMM'} → {(primary?.to_state as string) ?? 'any'} · {w.interval}</Text>
+                    </div>
+                    <div className={styles.compositeActions}>
+                      <label className={styles.toggleLabel}>
+                        <input
+                          type="checkbox"
+                          checked={w.enabled}
+                          onChange={async (e) => {
+                            const enabled = e.target.checked;
+                            try {
+                              await fetch(`/api/composite-watches/${w.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ enabled }),
+                              });
+                              setCompositeWatches((prev) =>
+                                prev.map((x) => x.id === w.id ? { ...x, enabled } : x)
+                              );
+                            } catch { /* ignore */ }
+                          }}
+                        />
+                        <Text size={11} tone="secondary">{w.enabled ? 'Active' : 'Paused'}</Text>
+                      </label>
+                      <button
+                        type="button"
+                        className={styles.deleteBtn}
+                        onClick={async () => {
+                          try {
+                            await fetch(`/api/composite-watches/${w.id}`, { method: 'DELETE' });
+                            setCompositeWatches((prev) => prev.filter((x) => x.id !== w.id));
+                          } catch { /* ignore */ }
+                        }}
+                      >
+                        <Text size={11} tone="reject">Remove</Text>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

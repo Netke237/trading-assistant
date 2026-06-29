@@ -357,6 +357,7 @@ export const api = {
     rsi_period?: number;
     rsi_oversold?: number;
     rsi_trend_sma?: number;
+    require_choppy_regime?: boolean;
     account_size?: number; risk_pct?: number;
     risk_fixed_usd?: number; bt_min_trades?: number; bt_min_win_rate?: number;
     min_price?: number; max_price?: number;
