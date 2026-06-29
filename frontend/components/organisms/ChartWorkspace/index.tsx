@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { api } from '@/lib/api';
 import { useChartStore, type IndicatorConfig, type Interval, type ChartType } from '@/lib/chartStore';
 import { ChartWSClient, type WSMessage, type ConnectionState } from '@/lib/chartWS';
 import { calcEMA, calcSMA, calcRSI, calcMACD, calcBB, calcATR, calcVWAP, type Candle, type Point } from '@/lib/indicators';
@@ -33,7 +34,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
 import type { DrawingPoint, Drawing } from '@/types/overlays';
 import type { IChartApi, ISeriesApi, MouseEventParams } from 'lightweight-charts';
-import { createSeriesMarkers, type Time, type ISeriesMarkersPluginApi } from 'lightweight-charts';
+import { HistogramSeries, createSeriesMarkers, type Time, type ISeriesMarkersPluginApi } from 'lightweight-charts';
 import styles from './ChartWorkspace.module.css';
 
 // ── Indicator computation helpers ─────────────────────────────────────────────
@@ -170,6 +171,8 @@ export default function ChartWorkspace() {
   const [connState, setConnState] = useState<ConnectionState>('connecting');
   const [chartApi, setChartApi] = useState<IChartApi | null>(null);
   const [mainSeries, setMainSeries] = useState<ISeriesApi<'Candlestick'> | null>(null);
+  const [showRegime, setShowRegime] = useState(false);
+  const regimeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const [wsError, setWsError] = useState<string | null>(null);
   const wsRef = useRef<ChartWSClient | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
@@ -254,6 +257,63 @@ export default function ChartWorkspace() {
   useEffect(() => {
     useDrawingStore.getState().syncFromBackend(symbol, interval);
   }, [symbol, interval]);
+
+  // Regime background overlay
+  useEffect(() => {
+    const chart = chartApi;
+    if (!chart) return;
+
+    if (regimeSeriesRef.current) {
+      try { chart.removeSeries(regimeSeriesRef.current); } catch { /* already removed */ }
+      regimeSeriesRef.current = null;
+    }
+
+    if (!showRegime) return;
+
+    let cancelled = false;
+    const isIntraday = interval !== '1D' && interval !== '1W';
+
+    const STATE_COLOR: Record<string, string> = {
+      Bull:   'rgba(38,166,154,0.18)',
+      Bear:   'rgba(239,83,80,0.18)',
+      Choppy: 'rgba(251,192,45,0.12)',
+    };
+
+    async function loadRegime() {
+      try {
+        const rawData: Array<{ time: string; state: string }> = isIntraday
+          ? await api.getIntradayRegimeSeries(symbol, interval)
+          : await api.getRegimeSeries(symbol);
+
+        if (cancelled || !chart) return;
+
+        const rs = chart.addSeries(HistogramSeries, {
+          priceScaleId: 'regime',
+          lastValueVisible: false,
+          priceLineVisible: false,
+          color: 'rgba(128,128,128,0.1)',
+        }, 0);
+
+        chart.priceScale('regime').applyOptions({
+          visible: false,
+          scaleMargins: { top: 0, bottom: 0 },
+        });
+
+        rs.setData(rawData.map(d => ({
+          time: d.time as Time,
+          value: 1,
+          color: STATE_COLOR[d.state] ?? 'rgba(128,128,128,0.10)',
+        })));
+
+        regimeSeriesRef.current = rs;
+      } catch {
+        // regime data unavailable — silent fail
+      }
+    }
+
+    loadRegime();
+    return () => { cancelled = true; };
+  }, [showRegime, symbol, interval, chartApi]);
 
   // Connect/reconnect WebSocket when symbol or interval changes
   useEffect(() => {
@@ -627,6 +687,7 @@ export default function ChartWorkspace() {
         onToggleIndicators={() => setShowIndicators(v => !v)}
         onToggleStructure={() => setShowStructure(v => !v)}
         onToggleAlerts={() => setShowAlerts(v => !v)}
+        onToggleRegime={() => setShowRegime(v => !v)}
         connState={connState}
         wsError={wsError}
       />

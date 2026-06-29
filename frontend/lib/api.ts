@@ -501,6 +501,16 @@ export const api = {
       { symbols, direction, params_override: paramsOverride ?? null }
     ),
 
+  // ── Regime series (for chart overlay) ────────────────────────────────────────
+  getRegimeSeries: (symbol: string, limit?: number) =>
+    get<Array<{ time: string; state: string }>>(
+      `/regime/series?symbol=${encodeURIComponent(symbol)}${limit != null ? `&limit=${limit}` : ''}`
+    ),
+  getIntradayRegimeSeries: (symbol: string, interval?: string, limit?: number) =>
+    get<Array<{ time: string; state: string; conviction: number }>>(
+      `/regime/intraday-series?symbol=${encodeURIComponent(symbol)}${interval ? `&interval=${encodeURIComponent(interval)}` : ''}${limit != null ? `&limit=${limit}` : ''}`
+    ),
+
   getIvThresholds: () =>
     get<Record<string, { pass_max: number | null; caution_max: number | null }>>(
       '/api/config/iv-thresholds'
