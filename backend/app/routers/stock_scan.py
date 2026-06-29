@@ -174,20 +174,17 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     if req.max_price is not None and price > req.max_price:
         gate_flags.append({"gate": "price", "status": "REJECT", "detail": f"price ${price:.2f} > max"})
 
-    # Regime sentiment — fetch intraday bars once and reuse in the return value
-    # so analyze_stock() doesn't need a second fetch for _regime_block_for_horizon.
+    # Always fetch intraday bars — the analysis page shows all three horizon blocks
+    # (Intraday / Swing / Position) regardless of req.horizon, so we always need them.
+    try:
+        _intraday_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 80)
+    except Exception:
+        _intraday_bars = []
+
     full_cfg = _load_full_scoring_cfg()
     rcfg = _load_regime_cfg(req.horizon)
     regime_signal = None
-    _intraday_bars: list[dict] = []
-    if rcfg["timeframe"] == "15min":
-        try:
-            _intraday_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 80)
-        except Exception:
-            _intraday_bars = []
-        regime_bars = _intraday_bars
-    else:
-        regime_bars = bars
+    regime_bars = _intraday_bars if rcfg["timeframe"] == "15min" else bars
     if regime_bars and len(regime_bars) >= rcfg.get("min_obs", 10):
         omm = compute_omm([b["close"] for b in regime_bars], direction=req.direction,
                           lookback=rcfg["lookback"], window=rcfg["window"], min_obs=rcfg["min_obs"])
