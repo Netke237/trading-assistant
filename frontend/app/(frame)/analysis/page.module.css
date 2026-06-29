@@ -35,6 +35,7 @@
 .ctxCard {
   display: flex; flex-direction: column; gap: 4px;
   padding: 12px; border: 1px solid var(--border-subtle); border-radius: 8px;
+  background: var(--bg-surface);
 }
 .rsStrip { display: flex; gap: 12px; margin-top: 4px; }
 .rsCell { display: flex; flex-direction: column; }

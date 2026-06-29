@@ -115,7 +115,7 @@ export default function AnalysisPage() {
             <button
               className={styles.chartLinkBtn}
               title="Open in Chart"
-              onClick={() => router.push(`/chart?symbol=${result.symbol}`)}
+              onClick={() => window.open(`/chart?symbol=${result.symbol}`, '_blank')}
             >
               Open in Chart ↗
             </button>
@@ -147,26 +147,36 @@ export default function AnalysisPage() {
             <FundamentalHealthCard f={result.is_index ? null : (result.fundamentals as FundamentalsOut | null)} />
 
             <article className={styles.ctxCard}>
-              <Text size={11} tone="dim">Sector</Text>
+              <Text size={11} tone="dim">Sector vs stock</Text>
               <Data size={13}>{result.sector?.name ?? 'Unknown'}</Data>
-              {result.sector_rs && (
-                <div className={styles.rsStrip}>
-                  {(['d1', 'w1', 'm1'] as const).map((k) => {
-                    const v = result.sector_rs![k];
-                    const lbl = k === 'd1' ? '1D' : k === 'w1' ? '1W' : '1M';
-                    return (
-                      <span key={k} className={styles.rsCell}>
-                        <Text size={10} tone="dim">{lbl}</Text>
-                        <Data size={12} tone={v == null ? 'dim' : v >= 0 ? 'pass' : 'reject'}>
-                          {v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`}
-                        </Data>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-              {result.sector_rs && (
-                <Text size={10} tone="dim">vs {result.sector_rs.benchmark}</Text>
+              {result.sector_rs ? (
+                <>
+                  <Text size={11} tone="secondary">
+                    Stock return minus {result.sector_rs.benchmark} ETF return:
+                  </Text>
+                  <div className={styles.rsStrip}>
+                    {(['d1', 'w1', 'm1'] as const).map((k) => {
+                      const v = result.sector_rs![k];
+                      const lbl = k === 'd1' ? '1D' : k === 'w1' ? '1W' : '1M';
+                      const verdict = v == null ? null : v > 0.5 ? 'outperforming' : v < -0.5 ? 'lagging' : 'in line';
+                      return (
+                        <span key={k} className={styles.rsCell}>
+                          <Text size={10} tone="dim">{lbl}</Text>
+                          <Data size={12} tone={v == null ? 'dim' : v >= 0 ? 'pass' : 'reject'}>
+                            {v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`}
+                          </Data>
+                          {verdict && (
+                            <Text size={10} tone={v! > 0.5 ? 'pass' : v! < -0.5 ? 'reject' : 'dim'}>
+                              {verdict}
+                            </Text>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <Text size={11} tone="dim">No sector data</Text>
               )}
             </article>
           </div>
