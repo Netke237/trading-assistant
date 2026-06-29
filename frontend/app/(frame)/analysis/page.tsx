@@ -7,7 +7,9 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
+import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import { useAnalysisStore } from '@/lib/analysisStore';
+import type { FundamentalsOut } from '@/types/domain';
 import { api } from '@/lib/api';
 import type { Candle } from '@/types/chart';
 import type { NewsItem } from '@/types/domain';
@@ -142,19 +144,7 @@ export default function AnalysisPage() {
               ) : <Text size={12} tone="dim">—</Text>}
             </article>
 
-            <article className={styles.ctxCard}>
-              <Text size={11} tone="dim">Fundamental Health</Text>
-              {result.fundamentals ? (
-                <>
-                  <Data size={14} tone={result.fundamentals.score >= 65 ? 'pass' : result.fundamentals.score >= 40 ? 'caution' : 'reject'}>
-                    {result.fundamentals.score}
-                  </Data>
-                  <Text size={11} tone="secondary">
-                    G {result.fundamentals.growth_score} · Q {result.fundamentals.quality_score} · R {result.fundamentals.risk_score}
-                  </Text>
-                </>
-              ) : <Text size={12} tone="dim">{result.is_index ? 'N/A (index)' : '—'}</Text>}
-            </article>
+            <FundamentalHealthCard f={result.is_index ? null : (result.fundamentals as FundamentalsOut | null)} />
 
             <article className={styles.ctxCard}>
               <Text size={11} tone="dim">Sector</Text>
