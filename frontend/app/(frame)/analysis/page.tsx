@@ -9,6 +9,7 @@ import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import { useAnalysisStore } from '@/lib/analysisStore';
+import { alignmentVerdict, descriptorFromState } from '@/lib/regimeAlignment';
 import type { FundamentalsOut } from '@/types/domain';
 import { api } from '@/lib/api';
 import type { Candle } from '@/types/chart';
@@ -136,12 +137,26 @@ export default function AnalysisPage() {
             </article>
 
             <article className={styles.ctxCard}>
-              <Text size={11} tone="dim">Market sentiment</Text>
-              {result.sentiment ? (
-                <Data size={14} tone={result.sentiment.conviction_pct >= 0 ? 'pass' : 'reject'}>
-                  {result.sentiment.conviction_label} ({result.sentiment.conviction_pct > 0 ? '+' : ''}{result.sentiment.conviction_pct}%)
-                </Data>
-              ) : <Text size={12} tone="dim">—</Text>}
+              <Text size={11} tone="dim">Stock regime</Text>
+              {result.sentiment ? (() => {
+                const descriptor = descriptorFromState(result.sentiment.state);
+                const verdict = alignmentVerdict(result.direction as 'Bullish' | 'Bearish', descriptor);
+                const verdictLabel = verdict === 'PASS' ? 'Tailwind' : verdict === 'REJECT' ? 'Headwind' : 'Choppy';
+                const verdictTone = verdict === 'PASS' ? 'pass' : verdict === 'REJECT' ? 'reject' : 'caution';
+                return (
+                  <>
+                    <Data size={14} tone={verdictTone}>
+                      {ommStateIcon(result.sentiment.state)} {result.sentiment.state} · {verdictLabel}
+                    </Data>
+                    <Text size={11} tone="secondary">
+                      Conviction: {result.sentiment.conviction_pct > 0 ? '+' : ''}{result.sentiment.conviction_pct}% ({result.sentiment.conviction_label})
+                    </Text>
+                    <Text size={11} tone="dim">
+                      Day {result.sentiment.regime_age_days} · {result.sentiment.stability}
+                    </Text>
+                  </>
+                );
+              })() : <Text size={12} tone="dim">—</Text>}
             </article>
 
             <FundamentalHealthCard f={result.is_index ? null : (result.fundamentals as FundamentalsOut | null)} />
