@@ -7,7 +7,7 @@
  *   - Contracts: every option contract the user has starred on Step 6.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
@@ -43,9 +43,13 @@ export default function WatchlistPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [contractSortKey, setContractSortKey] = useState<ContractSortKey>('score');
   const [contractSortDir, setContractSortDir] = useState<SortDir>('desc');
-  const [watchlist, setWatchlist]   = useState<WatchlistRow[]>([]);
-  const [contracts, setContracts]   = useState<OptionContract[]>([]);
-  const [offline, setOffline]       = useState(false);
+  const [watchlist, setWatchlist]         = useState<WatchlistRow[]>([]);
+  const [contracts, setContracts]         = useState<OptionContract[]>([]);
+  const [offline, setOffline]             = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const [refreshingWatchlist, setRefreshingWatchlist] = useState(false);
+  const [refreshingContracts, setRefreshingContracts] = useState(false);
+  const contractsAbortRef = useRef<AbortController | null>(null);
 
   const setChartSymbol     = useChartStore((s) => s.setSymbol);
   const setChartSymbolName = useChartStore((s) => s.setSymbolName);
@@ -55,14 +59,27 @@ export default function WatchlistPage() {
   const syncContractsFromBackend  = useWatchedContractsStore((s) => s.syncFromBackend);
   const watchedIds = useWatchedContractsStore((s) => s.ids);
 
-  useEffect(() => {
-    syncFromBackend();
-    syncContractsFromBackend();
-    api.getWatchlist().then(setWatchlist).catch(() => setOffline(true));
-  }, [syncFromBackend, syncContractsFromBackend]);
+  const refreshWatchlist = useCallback(async () => {
+    setRefreshingWatchlist(true);
+    try {
+      const data = await api.getWatchlist();
+      setWatchlist(data);
+      setLastRefreshedAt(new Date());
+      setOffline(false);
+    } catch {
+      setOffline(true);
+    } finally {
+      setRefreshingWatchlist(false);
+    }
+  }, []);
 
-  useEffect(() => {
+  const refreshContracts = useCallback(async () => {
     if (watchedIds.length === 0) { setContracts([]); return; }
+    // Abort any in-flight contracts fetch before starting a new one (CRITICAL-3 fix).
+    contractsAbortRef.current?.abort();
+    const controller = new AbortController();
+    contractsAbortRef.current = controller;
+    setRefreshingContracts(true);
     const pairs = [...new Set(
       watchedIds.map((id) => {
         const parts = id.split('|');
@@ -70,14 +87,30 @@ export default function WatchlistPage() {
       })
     )].map((key) => {
       const [sym, right] = key.split('|');
-      return { sym, right: (right === 'P' ? 'P' : 'C') as 'C' | 'P' };
+      return { sym: sym!, right: (right === 'P' ? 'P' : 'C') as 'C' | 'P' };
     });
-    let cancelled = false;
-    Promise.all(pairs.map(({ sym, right }) => api.getContracts(sym, right)))
-      .then((results) => { if (!cancelled) setContracts(results.flat()); })
-      .catch(() => { if (!cancelled) setOffline(true); });
-    return () => { cancelled = true; };
+    try {
+      const results = await Promise.all(pairs.map(({ sym, right }) => api.getContracts(sym, right, undefined, controller.signal)));
+      if (!controller.signal.aborted) {
+        setContracts(results.flat());
+        setOffline(false);
+      }
+    } catch {
+      if (!controller.signal.aborted) setOffline(true);
+    } finally {
+      if (!controller.signal.aborted) setRefreshingContracts(false);
+    }
   }, [watchedIds]);
+
+  useEffect(() => {
+    syncFromBackend();
+    syncContractsFromBackend();
+    refreshWatchlist();
+  }, [syncFromBackend, syncContractsFromBackend, refreshWatchlist]);
+
+  useEffect(() => {
+    refreshContracts();
+  }, [refreshContracts]);
 
   const sorted = useMemo<WatchlistRow[]>(() => {
     const rows = [...watchlist];
@@ -174,7 +207,22 @@ export default function WatchlistPage() {
   return (
     <div className={styles.main}>
       <div className={styles.heading}>
-        <Title as="h1" size={24}>Watchlist</Title>
+        <div className={styles.headingTop}>
+          <Title as="h1" size={24}>Watchlist</Title>
+          <div className={styles.refreshRow}>
+            {tab === 'stocks' && lastRefreshedAt && (
+              <Text size={11} tone="dim">Scan data refreshed {timeAgoLabel(lastRefreshedAt)}</Text>
+            )}
+            <button
+              type="button"
+              className={styles.refreshBtn}
+              onClick={tab === 'stocks' ? refreshWatchlist : refreshContracts}
+              disabled={tab === 'stocks' ? refreshingWatchlist : refreshingContracts}
+            >
+              {(tab === 'stocks' ? refreshingWatchlist : refreshingContracts) ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+        </div>
         <Text size={13} tone="secondary">
           {tab === 'stocks'
             ? `${displayRows.length} starred · sorted by ${sortKey} ${sortDir === 'asc' ? '↑' : '↓'}`
@@ -281,6 +329,7 @@ export default function WatchlistPage() {
           <InlineChartPanel
             open={selected !== null}
             symbol={selected ?? ''}
+            companyName={displayRows.find((r) => r.symbol === selected)?.company}
             onClose={() => setSelected(null)}
           />
         </>
@@ -379,4 +428,10 @@ function SortBtn({
       {label} {active ? (dir === 'asc' ? '↑' : '↓') : ''}
     </button>
   );
+}
+
+function timeAgoLabel(d: Date): string {
+  const diff = Date.now() - d.getTime();
+  if (diff < 60_000) return 'just now';
+  return `${Math.floor(diff / 60_000)} min ago`;
 }

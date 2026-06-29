@@ -78,6 +78,23 @@ export default function DashboardPage() {
         }
       })
       .catch(() => {});
+
+    // Every 30 s: refresh live quotes, then immediately scan alerts on the
+    // fresh prices, then refresh the equity curve. Running them chained (not on
+    // independent timers) guarantees the alert engine never sees stale prices.
+    const runCycle = () => {
+      usePortfolioStore.getState().syncFromBackend?.()
+        .then(() => {
+          const positions = usePortfolioStore.getState().positions;
+          const pct = useSettingsStore.getState().premiumStopPct;
+          const addToast = useAlertStore.getState().addToast;
+          for (const r of scanPortfolio(positions, { premiumStopPct: pct })) addToast(r);
+          usePerformanceStore.getState().fetchPerformance();
+        })
+        .catch(() => {});
+    };
+    const id = setInterval(runCycle, 30_000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -110,17 +127,10 @@ export default function DashboardPage() {
     api.getNews(watchlist.map((r) => r.symbol)).then(setNews).catch(() => {});
   }, [watchlist]);
 
+  // Immediate scan when positions or stop-% change between refresh cycles.
   useEffect(() => {
-    const tick = () => {
-      const reasons = scanPortfolio(portfolio, { premiumStopPct });
-      const addToast = useAlertStore.getState().addToast;
-      for (const r of reasons) {
-        addToast(r);
-      }
-    };
-    tick();
-    const id = setInterval(tick, 30_000);
-    return () => clearInterval(id);
+    const addToast = useAlertStore.getState().addToast;
+    for (const r of scanPortfolio(portfolio, { premiumStopPct })) addToast(r);
   }, [portfolio, premiumStopPct]);
 
   const top5 = watchlist.slice(0, 5);

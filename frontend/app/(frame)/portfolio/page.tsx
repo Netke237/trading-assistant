@@ -17,6 +17,9 @@ import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer'
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
 import { usePerformanceStore } from '@/lib/performanceStore';
+import { useSettingsStore } from '@/lib/settingsStore';
+import { useAlertStore } from '@/lib/alertStore';
+import { scanPortfolio } from '@/lib/alertEngine';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
 import type { PortfolioPosition } from '@/types/domain';
 import styles from './page.module.css';
@@ -71,6 +74,22 @@ export default function PortfolioPage() {
       fetchPerformance();
     })();
     fetchHistory();
+
+    // Every 30 s: refresh live quotes → run alert engine → refresh equity curve.
+    // Chained so alerts always fire on freshly-fetched prices, not a parallel clock.
+    const runCycle = () => {
+      usePortfolioStore.getState().syncFromBackend?.()
+        .then(() => {
+          const positions = usePortfolioStore.getState().positions;
+          const pct = useSettingsStore.getState().premiumStopPct;
+          const addToast = useAlertStore.getState().addToast;
+          for (const r of scanPortfolio(positions, { premiumStopPct: pct })) addToast(r);
+          usePerformanceStore.getState().fetchPerformance();
+        })
+        .catch(() => {});
+    };
+    const id = setInterval(runCycle, 30_000);
+    return () => clearInterval(id);
   }, [syncFromBackend, fetchHistory, fetchPerformance]);
 
   const deployed = positions.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
