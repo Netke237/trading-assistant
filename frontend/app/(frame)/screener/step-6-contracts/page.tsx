@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
@@ -60,6 +60,9 @@ export default function Step6Page() {
   const [sortKey, setSortKey]   = useState<SortKey>('score');
   const [sortDir, setSortDir]   = useState<SortDir>('desc');
   const [offline, setOffline]   = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  // Shared ref for both mount-triggered and manual-refresh fetch so they cancel each other.
+  const fetchControllerRef = useRef<AbortController | null>(null);
 
   const { maxContractsPerChain, maxContractPrice } = useSettingsStore();
   const scanResult              = useScanStore((s) => s.scanResult);
@@ -74,33 +77,55 @@ export default function Step6Page() {
     (scanResult?.candidates ?? []).map((c) => [c.symbol, c.stockScore ?? 70]),
   );
 
-  useEffect(() => {
-    if (candidates.length === 0) return;
+  const loadContracts = useCallback(async (signal?: AbortSignal) => {
+    if ((rawCandidates ?? []).length === 0) return;
+    setRefreshing(true);
     setOffline(false);
     const right = (context?.direction ?? 'Bullish') === 'Bullish' ? 'C' : 'P';
-    Promise.all(candidates.map((c) => api.getContracts(c.symbol, right, {
-      stock_score: stockScoreBySymbol[c.symbol] ?? 70,
-      direction:   context?.direction ?? 'Bullish',
-      horizon:     context?.horizon ?? 'swing',
-      limit:       maxContractsPerChain,
-      max_price:   maxContractPrice,
-    })))
-      .then((results) => {
-        const bySymbol: Record<string, OptionContract[]> = {};
-        candidates.forEach((c, i) => { bySymbol[c.symbol] = results[i] ?? []; });
-        setLocalContractsBySymbol(bySymbol);
-        setContractsBySymbol(bySymbol);
-        const firstSymbol = candidates[0]?.symbol ?? '';
-        const storedPick = pickedContracts[firstSymbol];
-        const first = storedPick
-          ? bySymbol[firstSymbol]?.find((c) => c.id === storedPick) ?? results[0]?.[0]
-          : results[0]?.[0];
-        if (first) setPick(first.id);
-        if (candidates[0]) setExpanded(candidates[0].symbol);
-      })
-      .catch(() => setOffline(true));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawCandidates]);
+    try {
+      const results = await Promise.all(
+        candidates.map((c) => api.getContracts(c.symbol, right, {
+          stock_score: stockScoreBySymbol[c.symbol] ?? 70,
+          direction:   context?.direction ?? 'Bullish',
+          horizon:     context?.horizon ?? 'swing',
+          limit:       maxContractsPerChain,
+          max_price:   maxContractPrice,
+        }, signal))
+      );
+      if (signal?.aborted) return;
+      const bySymbol: Record<string, OptionContract[]> = {};
+      candidates.forEach((c, i) => { bySymbol[c.symbol] = results[i] ?? []; });
+      setLocalContractsBySymbol(bySymbol);
+      setContractsBySymbol(bySymbol);
+      const firstSymbol = candidates[0]?.symbol ?? '';
+      const storedPick = pickedContracts[firstSymbol];
+      const first = storedPick
+        ? bySymbol[firstSymbol]?.find((c) => c.id === storedPick) ?? results[0]?.[0]
+        : results[0]?.[0];
+      if (first) setPick(first.id);
+      if (candidates[0]) setExpanded(candidates[0].symbol);
+    } catch {
+      if (!signal?.aborted) setOffline(true);
+    } finally {
+      if (!signal?.aborted) setRefreshing(false);
+    }
+  }, [rawCandidates, candidates, context, stockScoreBySymbol, maxContractsPerChain, maxContractPrice, pickedContracts]);
+
+  // Trigger on new scan results; abort any in-flight fetch (manual or auto) first.
+  useEffect(() => {
+    fetchControllerRef.current?.abort();
+    const controller = new AbortController();
+    fetchControllerRef.current = controller;
+    loadContracts(controller.signal);
+    return () => { controller.abort(); };
+  }, [rawCandidates]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRefresh = () => {
+    fetchControllerRef.current?.abort();
+    const controller = new AbortController();
+    fetchControllerRef.current = controller;
+    loadContracts(controller.signal);
+  };
 
   const toggleSort = (k: SortKey) => {
     if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -119,13 +144,23 @@ export default function Step6Page() {
           Scored by DTE fit, delta, IV attractiveness, liquidity and spread. Click a stock to
           expand its chain. Click a column header to sort. Star a contract to track it.
         </Text>
-        <button
-          type="button"
-          className={styles.backLink}
-          onClick={() => router.push('/screener/step-4-ranking')}
-        >
-          &larr; Back to Ranking
-        </button>
+        <div className={styles.stepHeaderActions}>
+          <button
+            type="button"
+            className={styles.backLink}
+            onClick={() => router.push('/screener/step-4-ranking')}
+          >
+            &larr; Back to Ranking
+          </button>
+          <button
+            type="button"
+            className={styles.refreshBtn}
+            onClick={handleRefresh}
+            disabled={refreshing || candidates.length === 0}
+          >
+            {refreshing ? 'Refreshing…' : 'Refresh prices'}
+          </button>
+        </div>
       </div>
 
       {offline && (

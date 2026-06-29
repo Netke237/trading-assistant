@@ -1,13 +1,30 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+import asyncio
+import httpx
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.schemas import OptionContract
-from app.data.market import fetch_option_chain, fetch_price
+from app.data.market import fetch_option_chain, fetch_price, fetch_contract_quote_async, fetch_price_async
 from app.data.augment import _augment
 from app.scoring.contract_validator import validate_contract
 
 router = APIRouter(prefix='/api', tags=['trading'])
+
+
+class ContractQuoteResponse(BaseModel):
+    price: float   # mid price
+    delta: float
+    theta: float
+    ivRank: int
+    spread: float
+    volume: int
+
+
+class StockQuoteResponse(BaseModel):
+    symbol: str
+    price: float
 
 
 @router.get('/contracts', response_model=list[OptionContract])
@@ -67,3 +84,47 @@ async def get_contracts(
 
     # 8. Return top limit contracts
     return results[:limit]
+
+
+@router.get('/quote/option', response_model=ContractQuoteResponse)
+async def get_option_quote(
+    symbol: str = Query(...),
+    strike: int = Query(...),
+    expiry: str = Query(...),
+    right: str = Query(...),
+) -> ContractQuoteResponse:
+    right_upper = right.upper()
+    if right_upper not in ('C', 'P'):
+        raise HTTPException(status_code=400, detail="right must be C or P")
+    contract_id = f"{symbol.upper()}|{strike}|{expiry}|{right_upper}"
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            quote = await asyncio.wait_for(
+                fetch_contract_quote_async(client, contract_id),
+                timeout=8.0,
+            )
+    except (asyncio.TimeoutError, httpx.TimeoutException):
+        raise HTTPException(status_code=504, detail="Quote request timed out")
+    if quote is None:
+        raise HTTPException(status_code=404, detail="Quote not available")
+    if quote.get("expiry") != expiry:
+        raise HTTPException(status_code=404, detail="Quote not available for requested expiry")
+    return ContractQuoteResponse(
+        price=float(quote["price"]),
+        delta=float(quote["delta"]),
+        theta=float(quote["theta"]),
+        ivRank=int(quote["ivRank"]),
+        spread=float(quote["spread"]),
+        volume=int(quote["volume"]),
+    )
+
+
+@router.get('/quote/stock', response_model=StockQuoteResponse)
+async def get_stock_quote(
+    symbol: str = Query(...),
+) -> StockQuoteResponse:
+    async with httpx.AsyncClient(timeout=10) as client:
+        price = await fetch_price_async(client, symbol.upper())
+    if price is None:
+        raise HTTPException(status_code=404, detail="Price not available")
+    return StockQuoteResponse(symbol=symbol.upper(), price=price)

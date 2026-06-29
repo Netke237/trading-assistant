@@ -14,7 +14,7 @@ import { Title, Text } from '@/components/primitives';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
-import { usePortfolioStore } from '@/lib/portfolioStore';
+import { usePortfolioStore, persistPosition } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { contractId as buildContractId } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
@@ -109,6 +109,8 @@ export default function Step7Page() {
   const [marketPlacing,  setMarketPlacing]    = useState(false);
   const [paperOrderId,   setPaperOrderId]     = useState<string | null>(null);
   const [orderError,     setOrderError]       = useState<string | null>(null);
+  const [liveQuote,      setLiveQuote]        = useState<{ price: number; delta: number; theta: number; ivRank: number; spread: number; volume: number } | null>(null);
+  const [fetchingQuote,  setFetchingQuote]    = useState(false);
 
   const scanResult          = useScanStore((s) => s.scanResult);
   const setSelectedSymbol   = useScanStore((s) => s.setSelectedSymbol);
@@ -175,6 +177,30 @@ export default function Step7Page() {
     [basket, cardIndex],
   );
 
+  // Fetch a fresh live mid-price for the active contract (1-3 s — full chain call via Tradier).
+  // Dep key: composite of symbol+strike+expiry+right, placed after effectiveCard so TypeScript
+  // can see the declaration. Re-runs on both candidate navigation and user contract-override.
+  const liveQcd = effectiveCard?.contractDetails;
+  const contractKey = liveQcd?.strike != null && liveQcd.expiry && liveQcd.right && effectiveCard?.symbol
+    ? `${effectiveCard.symbol}|${liveQcd.strike}|${liveQcd.expiry}|${liveQcd.right}`
+    : null;
+
+  useEffect(() => {
+    if (!contractKey || !effectiveCard?.symbol || !liveQcd?.strike || !liveQcd.expiry || !liveQcd.right) {
+      setLiveQuote(null);
+      return;
+    }
+    let cancelled = false;
+    setLiveQuote(null);
+    setFetchingQuote(true);
+    api.getContractQuote(effectiveCard.symbol, liveQcd.strike, liveQcd.expiry, liveQcd.right as 'C' | 'P')
+      .then((q) => { if (!cancelled) setLiveQuote(q); })
+      .catch(() => { /* silently ignore — scan price shown as fallback */ })
+      .finally(() => { if (!cancelled) setFetchingQuote(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contractKey]);
+
   /** Build the pipe-delimited option id the OCC converter and broker adapters expect. */
   function toOptionSymbol(card: TradeCardData): string {
     const cd = card.contractDetails;
@@ -184,16 +210,16 @@ export default function Step7Page() {
     return card.contract; // fallback (display label — broker may reject, best effort)
   }
 
-  /** Add a successfully executed paper order to the portfolio for tracking. */
-  function addPaperPosition(card: TradeCardData, orderType: 'LMT' | 'MKT', broker: string, orderId: string) {
+  /** Build a paper position object without touching the store. */
+  function buildPaperPosition(card: TradeCardData, orderType: 'LMT' | 'MKT', broker: string, orderId: string): PortfolioPosition {
     const cd  = card.contractDetails;
     const mid = cd?.mid ?? card.entry.limit;
     const dte = cd?.dte ?? 24;
     const brokerLabel = broker === 'tradier_paper' ? 'Tradier Paper' : 'IBKR Paper';
     const typeLabel   = orderType === 'LMT' ? 'Limit' : 'Market';
-    addPosition({
+    return {
       symbol:        card.symbol,
-      contract:      card.contract,
+      contract:      toOptionSymbol(card),
       direction:     card.direction,
       entryDate:     todayISO(),
       expiry:        cd?.expiry ?? '2026-12-31',
@@ -215,7 +241,7 @@ export default function Step7Page() {
       sourceLabel:   `${brokerLabel} — ${typeLabel} (ID: ${orderId})`,
       orderedAt:     nowISOLocal(),
       recId:         generateRecId(),
-    });
+    };
   }
 
   async function placeLimitPaper() {
@@ -226,15 +252,21 @@ export default function Step7Page() {
       const res = await api.postOptionOrder({
         broker:        selectedBroker,
         symbol:        card.symbol,
-        option_symbol: toOptionSymbol(card),   // pipe format → OCC converter
-        action:        'BUY',   // long single-leg option (call or put) is always buy-to-open
+        option_symbol: toOptionSymbol(card),
+        action:        'BUY',
         quantity:      1,
         order_type:    'LMT',
         limit_price:   card.entry.limit,
         tif:           'DAY',
       });
+      const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id);
+      const saved = await persistPosition(pos);
+      if (!saved.ok) {
+        setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${saved.detail}`);
+        return;
+      }
       setPaperOrderId(res.order_id);
-      addPaperPosition(card, 'LMT', selectedBroker, res.order_id);
+      addPosition(pos);
     } catch (e) {
       setOrderError(String(e));
     } finally {
@@ -250,15 +282,21 @@ export default function Step7Page() {
       const res = await api.postOptionOrder({
         broker:        selectedBroker,
         symbol:        card.symbol,
-        option_symbol: toOptionSymbol(card),   // pipe format → OCC converter
-        action:        'BUY',   // long single-leg option (call or put) is always buy-to-open
+        option_symbol: toOptionSymbol(card),
+        action:        'BUY',
         quantity:      1,
         order_type:    'MKT',
         limit_price:   null,
         tif:           'DAY',
       });
+      const pos = buildPaperPosition(card, 'MKT', selectedBroker, res.order_id);
+      const saved = await persistPosition(pos);
+      if (!saved.ok) {
+        setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${saved.detail}`);
+        return;
+      }
       setPaperOrderId(res.order_id);
-      addPaperPosition(card, 'MKT', selectedBroker, res.order_id);
+      addPosition(pos);
     } catch (e) {
       setOrderError(String(e));
     } finally {
@@ -340,6 +378,12 @@ export default function Step7Page() {
             sendLabel={sendLabel}
             sendDisabled={basketEmpty}
           />
+          {fetchingQuote && (
+            <Text size={11} tone="dim">Fetching live price…</Text>
+          )}
+          {liveQuote && !fetchingQuote && (
+            <Text size={11} tone="secondary">Live mid: ${liveQuote.price.toFixed(2)}</Text>
+          )}
         </>
       )}
 

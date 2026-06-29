@@ -1214,13 +1214,22 @@ async def fetch_contract_quote_async(
     client: httpx.AsyncClient,
     contract_id: str,
 ) -> dict | None:
-    """Fetch live mid price + greeks for a single contract.
+    """Fetch live mid price + greeks for a single contract or stock position.
 
-    contract_id format: SYMBOL|STRIKE|EXPIRY|C/P  (e.g. AAPL|185|2025-05-16|C)
-    Returns a chain-entry dict with: price, delta, theta, ivRank, dte — or None.
+    Option format: SYMBOL|STRIKE|EXPIRY|C/P  (e.g. AAPL|185|2025-05-16|C)
+    Stock format:  SYMBOL|STOCK               (e.g. BA|STOCK)
+    Returns a dict with: price, delta, theta, ivRank — or None on failure.
     """
     try:
         parts = contract_id.split("|")
+        # Stock position — fetch underlying price, no greeks.
+        if len(parts) == 2 and parts[1].upper() == "STOCK":
+            symbol = parts[0]
+            price = await fetch_price_async(client, symbol)
+            if price is None:
+                return None
+            return {"price": price, "delta": None, "theta": None, "ivRank": None}
+
         if len(parts) != 4:
             return None
         symbol, strike_str, expiry, right = parts

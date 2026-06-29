@@ -56,6 +56,21 @@ export default function Step7PositionCardPage() {
   const candidates = result?.candidates.filter((c) => c.backtest.passes_gate) ?? [];
   const card: PositionCardData | undefined = candidates[selectedIdx];
 
+  const [spotPrice,    setSpotPrice]    = useState<number | null>(null);
+  const [fetchingSpot, setFetchingSpot] = useState(false);
+
+  useEffect(() => {
+    if (!card?.symbol) { setSpotPrice(null); return; }
+    let cancelled = false;
+    setSpotPrice(null);
+    setFetchingSpot(true);
+    api.getStockQuote(card.symbol)
+      .then((q) => { if (!cancelled) setSpotPrice(q.price); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setFetchingSpot(false); });
+    return () => { cancelled = true; };
+  }, [card?.symbol]);
+
   if (!card) {
     return (
       <div className={styles.main}>
@@ -116,7 +131,14 @@ export default function Step7PositionCardPage() {
         </div>
 
         <div className={styles.grid4}>
-          <div><Text size={10} tone="dim">ENTRY</Text><Data size={16} weight={500}>${card.strategy.entry_price}</Data></div>
+          <div>
+            <Text size={10} tone="dim">ENTRY</Text>
+            <Data size={16} weight={500}>${card.strategy.entry_price}</Data>
+            {fetchingSpot && <Text size={10} tone="dim">Fetching…</Text>}
+            {spotPrice !== null && !fetchingSpot && (
+              <Text size={10} tone="secondary">Now ${spotPrice.toFixed(2)}</Text>
+            )}
+          </div>
           <div><Text size={10} tone="dim">STOP</Text><Data size={16} weight={500} tone="reject">${card.strategy.stop_price}</Data></div>
           <div><Text size={10} tone="dim">TARGET</Text><Data size={16} weight={500} tone="pass">${card.strategy.target_price}</Data></div>
           <div><Text size={10} tone="dim">R:R</Text><Data size={16} weight={500}>{card.strategy.rr_ratio.toFixed(1)}</Data></div>
