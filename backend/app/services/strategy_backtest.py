@@ -8,7 +8,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi"]
+Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb"]
 
 
 def _entry_side(direction: str, *, entry: float, sl: float, tp: float) -> str | None:
@@ -68,6 +68,7 @@ def run_strategy_backtest(
     from app.services.strategy_engine import (
         pullback_ema_signal, breakout_base_signal,
         ma_crossover_signal, mean_reversion_rsi_signal,
+        mean_reversion_bb_signal,
     )
 
     _signal_fn = {
@@ -75,6 +76,7 @@ def run_strategy_backtest(
         "breakout_base":       breakout_base_signal,
         "ma_crossover":        ma_crossover_signal,
         "mean_reversion_rsi":  mean_reversion_rsi_signal,
+        "mean_reversion_bb":   mean_reversion_bb_signal,
     }.get(strategy)
 
     if not _signal_fn:
@@ -94,10 +96,11 @@ def run_strategy_backtest(
             n = len(self.data.Close)
             if n < 60:
                 return
-            # Only the trailing window is needed (mean_reversion_rsi needs ~219 bars,
-            # the largest of the four strategies). Capping at 250 avoids rebuilding
-            # the full history every bar (was O(n²) over a 5-year scan per symbol).
-            start = max(0, n - 250)
+            # Only the trailing window is needed (mean_reversion_bb needs ~225+ bars
+            # with trend_sma:200 headroom — the largest of the five strategies).
+            # Capping at 350 avoids rebuilding the full history every bar (was O(n²)
+            # over a 5-year scan per symbol).
+            start = max(0, n - 350)
             slice_bars = [
                 {"open": float(self.data.Open[i]), "high": float(self.data.High[i]),
                  "low": float(self.data.Low[i]),   "close": float(self.data.Close[i]),
