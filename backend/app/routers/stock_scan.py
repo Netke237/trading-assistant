@@ -182,7 +182,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     _intraday_bars: list[dict] = []
     if rcfg["timeframe"] == "15min":
         try:
-            _intraday_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 55)
+            _intraday_bars = await asyncio.to_thread(fetch_intraday_candles, symbol, "15min", 80)
         except Exception:
             _intraday_bars = []
         regime_bars = _intraday_bars
