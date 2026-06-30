@@ -15,7 +15,12 @@ import {
 } from '@/components/organisms/PreBreakoutParamsPanel';
 import styles from './page.module.css';
 
-type ScanRow = { symbol: string; confidence: number; direction: string; metrics: Record<string, number> };
+type ScanRowMetrics = Record<string, number> & {
+  fib_at_level?: boolean;
+  fib_level_hit?: string | null;
+  fib_dist_pct?: number | null;
+};
+type ScanRow = { symbol: string; confidence: number; direction: string; metrics: ScanRowMetrics };
 type ScanMode = 'prebreakout' | 'pullback';
 
 const SECTOR_LABELS: Record<string, string> = {
@@ -122,6 +127,11 @@ export default function Step4PreBreakoutPage() {
         vol_compression_ratio:    params.volCompressionRatio,
         resistance_proximity_pct: params.resistanceProximityPct,
         swing_lookback:           params.swingLookback,
+        // Fibonacci pullback
+        fib_enabled:              params.fibEnabled,
+        fib_swing_lookback:       params.fibSwingLookback,
+        fib_levels:               params.fibLevels,
+        fib_tolerance_pct:        params.fibTolerancePct,
       };
       const results = await api.prebreakoutScan(symbols, direction, paramsOverride, universe);
       setResults(results);
@@ -222,6 +232,9 @@ export default function Step4PreBreakoutPage() {
                 <Text size={11} tone="dim" weight={500}>ATR Ratio</Text>
                 <Text size={11} tone="dim" weight={500}>Vol Ratio</Text>
                 <Text size={11} tone="dim" weight={500}>Proximity %</Text>
+                {params.fibEnabled && (
+                  <Text size={11} tone="dim" weight={500}>Fib Level</Text>
+                )}
                 <span />
               </div>
               {sorted.map((row) => (
@@ -241,6 +254,13 @@ export default function Step4PreBreakoutPage() {
                   <Data size={12} tone="secondary">
                     {row.metrics.proximity_pct != null ? row.metrics.proximity_pct.toFixed(1) : '—'}
                   </Data>
+                  {params.fibEnabled && (
+                    <Data size={12} tone={row.metrics.fib_at_level ? 'pass' : 'secondary'}>
+                      {row.metrics.fib_level_hit != null
+                        ? `${row.metrics.fib_level_hit}%${row.metrics.fib_at_level ? ' ✓' : ''}`
+                        : '—'}
+                    </Data>
+                  )}
                   <button
                     type="button"
                     className={styles.alertBtn}
