@@ -260,6 +260,11 @@ export default function ChartWorkspace() {
     useDrawingStore.getState().syncFromBackend(symbol, interval);
   }, [symbol, interval]);
 
+  // On intraday charts the model toggle is irrelevant — always use intraday HMM.
+  // Using effectiveRegimeModel in the dep array prevents a pointless re-fetch+flash
+  // when the user clicks OMM↔HMM while viewing a sub-daily interval.
+  const effectiveRegimeModel = interval !== '1D' && interval !== '1W' ? 'HMM' : regimeModel;
+
   // Regime background overlay
   useEffect(() => {
     const chart = chartApi;
@@ -293,7 +298,7 @@ export default function ChartWorkspace() {
       try {
         const rawData: Array<{ time: string; state: string }> = isIntraday
           ? await api.getIntradayRegimeSeries(symbol, interval)
-          : await api.getRegimeSeries(symbol, undefined, regimeModel);
+          : await api.getRegimeSeries(symbol, undefined, effectiveRegimeModel);
 
         if (cancelled || !chart) return;
 
@@ -332,7 +337,7 @@ export default function ChartWorkspace() {
         regimeSeriesRef.current = null;
       }
     };
-  }, [showRegime, regimeModel, symbol, interval, chartApi]);
+  }, [showRegime, effectiveRegimeModel, symbol, interval, chartApi]);
 
   // Connect/reconnect WebSocket when symbol or interval changes
   useEffect(() => {
@@ -402,8 +407,9 @@ export default function ChartWorkspace() {
         const regimeEntry = regimeDataRef.current.find(
           (d) => d.time === String(closedCandle.time),
         );
+        const _isIntraday = interval !== '1D' && interval !== '1W';
         const currentRegime: RegimeSnapshot | null = regimeEntry
-          ? { state: regimeEntry.state }
+          ? { state: regimeEntry.state, model: _isIntraday ? 'HMM' : regimeModel }
           : null;
         const triggered = evaluateRules(
           alertRules,

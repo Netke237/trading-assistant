@@ -106,6 +106,7 @@ def _check_strategy_signals(
     strategy_keys: list[str],
     bars_daily: list[dict],
     bars_intraday: list[dict],
+    direction: str = "Bullish",
 ) -> int:
     """Return how many of the given mean-reversion strategies fired within the last few bars."""
     from app.services.strategy_engine import (
@@ -128,11 +129,12 @@ def _check_strategy_signals(
         fn, bar_type = entry
         bars = bars_intraday if bar_type == "intraday" else bars_daily
         if len(bars) < 60:
+            logger.debug("_check_strategy_signals: skipping %s — insufficient bars (%d)", key, len(bars))
             continue
         for i in range(len(bars) - _MR_STRATEGY_LOOKBACK, len(bars)):
             slice_bars = bars[max(0, i - 119): i + 1]
             try:
-                if fn(slice_bars) is not None:
+                if fn(slice_bars, direction=direction) is not None:
                     count += 1
                     break
             except Exception:
@@ -246,28 +248,28 @@ def evaluate_scheduled(
     if not primary_met:
         return False
 
-    # Count confirmations using structure detection on daily bars
+    # Count structure confirmations (only runs if min_confirmations > 0).
     min_conf_count = td.get("min_confirmations", 1)
-    if min_conf_count == 0:
-        return True
+    if min_conf_count > 0:
+        structure_signals: list[dict] = []
+        if bars_daily:
+            try:
+                # compute_structure(candles, interval, symbol) is the entry point
+                structure_signals = compute_structure(bars_daily, "1D", symbol) or []
+            except Exception as exc:
+                logger.warning("evaluate_scheduled: structure detection failed for %s — %s", symbol, exc)
 
-    structure_signals: list[dict] = []
-    if bars_daily:
-        try:
-            # compute_structure(candles, interval, symbol) is the entry point
-            structure_signals = compute_structure(bars_daily, "1D", symbol) or []
-        except Exception as exc:
-            logger.warning("evaluate_scheduled: structure detection failed for %s — %s", symbol, exc)
-
-    count = _count_confirmations(td, structure_signals, {})
-    if count < min_conf_count:
-        return False
+        count = _count_confirmations(td, structure_signals, {})
+        if count < min_conf_count:
+            return False
 
     # Strategy confirmations — independent N-of-M gate for mean-reversion strategies.
+    # Evaluated regardless of min_confirmations to ensure the strategy gate is never skipped.
     strategy_conf_list: list[str] = td.get("strategy_confirmations", [])
     min_strategy_conf: int = td.get("min_strategy_confirmations", 1)
     if strategy_conf_list:
-        strategy_fired = _check_strategy_signals(strategy_conf_list, bars_daily, bars_intraday)
+        direction: str = td.get("direction") or "Bullish"
+        strategy_fired = _check_strategy_signals(strategy_conf_list, bars_daily, bars_intraday, direction=direction)
         if strategy_fired < min_strategy_conf:
             return False
 

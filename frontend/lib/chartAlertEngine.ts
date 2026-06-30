@@ -6,6 +6,7 @@ import type { Interval } from '@/lib/chartStore';
 export interface RegimeSnapshot {
   state: string;
   conviction?: number;
+  model?: 'OMM' | 'HMM';
 }
 
 interface Point {
@@ -39,11 +40,12 @@ function evaluateRegimeCondition(
   regime: RegimeSnapshot | null,
 ): { met: boolean; triggerValues: Record<string, number> } {
   if (!regime) return { met: false, triggerValues: {} };
+  const modelMatch = condition.model === 'any' || !regime.model || regime.model === condition.model;
   const stateMatch = condition.state === 'any' || regime.state === condition.state;
   const convictionMatch =
     condition.min_conviction == null ||
     (regime.conviction != null && regime.conviction >= condition.min_conviction);
-  const met = stateMatch && convictionMatch;
+  const met = modelMatch && stateMatch && convictionMatch;
   return { met, triggerValues: met ? { regime_state: 1 } : {} };
 }
 

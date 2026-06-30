@@ -58,7 +58,12 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
   const toggleConfirm = (i: number) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(i)) next.delete(i); else next.add(i);
+      if (next.has(i)) {
+        next.delete(i);
+        setMinConf((m) => Math.min(m, next.size || 1));
+      } else {
+        next.add(i);
+      }
       return next;
     });
   };
@@ -66,7 +71,12 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
   const toggleMr = (i: number) => {
     setMrSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(i)) next.delete(i); else next.add(i);
+      if (next.has(i)) {
+        next.delete(i);
+        setMinMrConf((m) => Math.min(m, next.size || 1));
+      } else {
+        next.add(i);
+      }
       return next;
     });
   };

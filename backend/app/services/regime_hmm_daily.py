@@ -71,7 +71,6 @@ def compute_directional_hmm_series(
     except ImportError:
         return []
 
-    import warnings
     closes = np.array([float(b["close"]) for b in window], dtype=float)
     returns = (np.diff(closes) / closes[:-1]).reshape(-1, 1)
 

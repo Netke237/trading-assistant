@@ -314,7 +314,14 @@ export default function AlertRuleBuilder({ onClose, editRule, prefill }: Props) 
                   <select
                     className={styles.select}
                     value={c.model}
-                    onChange={(e) => updateCondition(idx, { model: e.target.value as RegimeModel })}
+                    onChange={(e) => {
+                      const newModel = e.target.value as RegimeModel;
+                      const validStates: readonly RegimeState[] = newModel === 'OMM' ? REGIME_STATES_OMM : REGIME_STATES_HMM;
+                      const prev = conditions[idx];
+                      const prevState = prev.kind === 'regime' ? prev.state : 'any';
+                      const nextState: RegimeState = (validStates as readonly string[]).includes(prevState) ? prevState as RegimeState : 'any';
+                      updateCondition(idx, { model: newModel, state: nextState });
+                    }}
                   >
                     {REGIME_MODELS.map((m) => (
                       <option key={m} value={m}>{m === 'any' ? 'any model' : m}</option>

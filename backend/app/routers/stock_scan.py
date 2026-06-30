@@ -279,8 +279,10 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     if signal_fn:
         signal_kwargs = _merge_strategy_params(
             req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req))
+        _sig_bars = (_intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES
+                     else bars[-120:])
         try:
-            signal = signal_fn(bars[-120:], direction=req.direction, **signal_kwargs)
+            signal = signal_fn(_sig_bars, direction=req.direction, **signal_kwargs)
         except Exception:
             signal = None
     if signal is None:
@@ -290,12 +292,13 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     bt_result = None
     conf_val = conf_txt = None
     if signal is not None:
-        _bt_key = _backtest_key(symbol, req.strategy, req.direction, bars)
+        _bt_bars = _intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
+        _bt_key = _backtest_key(symbol, req.strategy, req.direction, _bt_bars)
         bt_result = _get_backtest_cached(_bt_key)
         if bt_result is None:
             bt_result = await asyncio.get_running_loop().run_in_executor(
                 _BACKTEST_POOL,
-                functools.partial(run_strategy_backtest, bars, strategy=req.strategy,
+                functools.partial(run_strategy_backtest, _bt_bars, strategy=req.strategy,
                                   direction=req.direction, min_trades=req.bt_min_trades,
                                   min_win_rate=req.bt_min_win_rate))
             _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
