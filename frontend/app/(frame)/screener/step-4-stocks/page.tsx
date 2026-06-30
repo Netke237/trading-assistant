@@ -33,28 +33,31 @@ function _labelWithDate(iso: string): string {
 }
 
 const STRATEGIES_BULLISH = [
-  { key: 'pullback_ema',       label: 'Pullback to 20-EMA',        when: 'Steady uptrends',        entry: 'Dip to 20-EMA + reversal candle in uptrend',              stop: 'Below recent swing low', exit: 'Prior high / trailing stop under higher lows' },
-  { key: 'breakout_base',      label: 'Breakout from tight base',  when: 'Momentum stocks',        entry: 'Break above N-day high after narrow range + volume spike', stop: 'Below the base low',     exit: 'Measured move / trailing stop' },
-  { key: 'ma_crossover',       label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses above 50-SMA',                             stop: 'Below 50-SMA',           exit: 'Cross back down' },
-  { key: 'mean_reversion_rsi', label: 'Mean Reversion RSI',        when: 'Oversold in uptrend',    entry: 'RSI < 30 while above 200-SMA',                            stop: 'Below recent swing low', exit: 'RSI returns to mid / take-profit target' },
-  { key: 'mean_reversion_bb',  label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches lower Bollinger Band + reversal signal',     stop: 'Below lower band',       exit: 'Return to mid-band / upper band' },
+  { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady uptrends',        entry: 'Dip to 20-EMA + reversal candle in uptrend',              stop: 'Below recent swing low', exit: 'Prior high / trailing stop under higher lows' },
+  { key: 'breakout_base',         label: 'Breakout from tight base',  when: 'Momentum stocks',        entry: 'Break above N-day high after narrow range + volume spike', stop: 'Below the base low',     exit: 'Measured move / trailing stop' },
+  { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses above 50-SMA',                             stop: 'Below 50-SMA',           exit: 'Cross back down' },
+  { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Oversold in uptrend',    entry: 'RSI < 30 while above 200-SMA',                            stop: 'Below recent swing low', exit: 'RSI returns to mid / take-profit target' },
+  { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches lower Bollinger Band + reversal signal',     stop: 'Below lower band',       exit: 'Return to mid-band / upper band' },
+  { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% below VWAP + reversal bar',           stop: '0.5 ATR below entry',    exit: '2× risk above VWAP' },
 ];
 
 const STRATEGIES_BEARISH = [
-  { key: 'pullback_ema',       label: 'Pullback to 20-EMA',        when: 'Steady downtrends',      entry: 'Bounce to 20-EMA + reversal candle in downtrend',          stop: 'Above recent swing high', exit: 'Prior low / trailing stop above lower highs' },
-  { key: 'breakout_base',      label: 'Breakdown from tight base', when: 'Momentum shorts',        entry: 'Break below N-day low after narrow range + volume spike',  stop: 'Above the base high',    exit: 'Measured move / trailing stop' },
-  { key: 'ma_crossover',       label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses below 50-SMA',                             stop: 'Above 50-SMA',           exit: 'Cross back up' },
-  { key: 'mean_reversion_rsi', label: 'Mean Reversion RSI',        when: 'Overbought in downtrend', entry: 'RSI > 70 while below 200-SMA',                           stop: 'Above recent swing high', exit: 'RSI returns to mid / take-profit target' },
-  { key: 'mean_reversion_bb',  label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches upper Bollinger Band + reversal signal',     stop: 'Above upper band',       exit: 'Return to mid-band / lower band' },
+  { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady downtrends',      entry: 'Bounce to 20-EMA + reversal candle in downtrend',          stop: 'Above recent swing high', exit: 'Prior low / trailing stop above lower highs' },
+  { key: 'breakout_base',         label: 'Breakdown from tight base', when: 'Momentum shorts',        entry: 'Break below N-day low after narrow range + volume spike',  stop: 'Above the base high',    exit: 'Measured move / trailing stop' },
+  { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses below 50-SMA',                             stop: 'Above 50-SMA',           exit: 'Cross back up' },
+  { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Overbought in downtrend', entry: 'RSI > 70 while below 200-SMA',                           stop: 'Above recent swing high', exit: 'RSI returns to mid / take-profit target' },
+  { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches upper Bollinger Band + reversal signal',     stop: 'Above upper band',       exit: 'Return to mid-band / lower band' },
+  { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% above VWAP + reversal bar',           stop: '0.5 ATR above entry',    exit: '2× risk below VWAP' },
 ];
 
 type RegimeFit = 'PASS' | 'CAUTION' | 'REJECT';
 const REGIME_FIT: Record<string, Partial<Record<string, RegimeFit>>> = {
-  pullback_ema:       { PASS: 'PASS',    CAUTION: 'CAUTION', REJECT: 'REJECT'  },
-  breakout_base:      { PASS: 'PASS',    CAUTION: 'REJECT',  REJECT: 'REJECT'  },
-  ma_crossover:       { PASS: 'CAUTION', CAUTION: 'CAUTION', REJECT: 'REJECT'  },
-  mean_reversion_rsi: { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
-  mean_reversion_bb:  { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
+  pullback_ema:         { PASS: 'PASS',    CAUTION: 'CAUTION', REJECT: 'REJECT'  },
+  breakout_base:        { PASS: 'PASS',    CAUTION: 'REJECT',  REJECT: 'REJECT'  },
+  ma_crossover:         { PASS: 'CAUTION', CAUTION: 'CAUTION', REJECT: 'REJECT'  },
+  mean_reversion_rsi:   { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
+  mean_reversion_bb:    { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
+  mean_reversion_vwap:  { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
 };
 const REGIME_BADGE: Record<RegimeFit, { label: string }> = {
   PASS:    { label: 'Recommended' },
@@ -112,26 +115,29 @@ export default function Step4StocksPage() {
   const scanning = scanState === 'SCANNING';
 
   const strategyLabel: Record<string, string> = {
-    pullback_ema:       `${bearish ? 'Bounce' : 'Pullback'} to ${params.pullbackEmaPeriod}-${params.pullbackMaType}`,
-    ma_crossover:       `MA Crossover ${params.maCrossoverFast}/${params.maCrossoverSlow}`,
-    mean_reversion_rsi: `Mean Reversion RSI / ${params.rsiTrendSma}-SMA`,
-    mean_reversion_bb:  'Mean Reversion BB',
-    breakout_base:      bearish ? 'Breakdown from tight base' : 'Breakout from tight base',
+    pullback_ema:          `${bearish ? 'Bounce' : 'Pullback'} to ${params.pullbackEmaPeriod}-${params.pullbackMaType}`,
+    ma_crossover:          `MA Crossover ${params.maCrossoverFast}/${params.maCrossoverSlow}`,
+    mean_reversion_rsi:    `Mean Reversion RSI / ${params.rsiTrendSma}-SMA`,
+    mean_reversion_bb:     'Mean Reversion BB',
+    mean_reversion_vwap:   'Mean Reversion VWAP (15m)',
+    breakout_base:         bearish ? 'Breakdown from tight base' : 'Breakout from tight base',
   };
   const entryLabel: Record<string, string> = bearish
     ? {
-        pullback_ema:       `Bounce to ${params.pullbackEmaPeriod}-${params.pullbackMaType} in downtrend${requireReversal ? ' + reversal candle' : ''}`,
-        ma_crossover:       `${params.maCrossoverFast}-SMA crosses below ${params.maCrossoverSlow}-SMA`,
-        mean_reversion_rsi: `RSI > 70 while below ${params.rsiTrendSma}-SMA`,
-        mean_reversion_bb:  'Price touches upper Bollinger Band + reversal signal',
-        breakout_base:      `Break below N-day low after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
+        pullback_ema:          `Bounce to ${params.pullbackEmaPeriod}-${params.pullbackMaType} in downtrend${requireReversal ? ' + reversal candle' : ''}`,
+        ma_crossover:          `${params.maCrossoverFast}-SMA crosses below ${params.maCrossoverSlow}-SMA`,
+        mean_reversion_rsi:    `RSI > 70 while below ${params.rsiTrendSma}-SMA`,
+        mean_reversion_bb:     'Price touches upper Bollinger Band + reversal signal',
+        mean_reversion_vwap:   'Price deviates >1.5% above VWAP + reversal bar toward VWAP (15m bars)',
+        breakout_base:         `Break below N-day low after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
       }
     : {
-        pullback_ema:       `Dip to ${params.pullbackEmaPeriod}-${params.pullbackMaType} in uptrend${requireReversal ? ' + reversal candle' : ''}`,
-        ma_crossover:       `${params.maCrossoverFast}-SMA crosses above ${params.maCrossoverSlow}-SMA`,
-        mean_reversion_rsi: `RSI < ${params.rsiOversold} while above ${params.rsiTrendSma}-SMA`,
-        mean_reversion_bb:  'Price touches lower Bollinger Band + reversal signal',
-        breakout_base:      `Break above N-day high after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
+        pullback_ema:          `Dip to ${params.pullbackEmaPeriod}-${params.pullbackMaType} in uptrend${requireReversal ? ' + reversal candle' : ''}`,
+        ma_crossover:          `${params.maCrossoverFast}-SMA crosses above ${params.maCrossoverSlow}-SMA`,
+        mean_reversion_rsi:    `RSI < ${params.rsiOversold} while above ${params.rsiTrendSma}-SMA`,
+        mean_reversion_bb:     'Price touches lower Bollinger Band + reversal signal',
+        mean_reversion_vwap:   'Price deviates >1.5% below VWAP + reversal bar toward VWAP (15m bars)',
+        breakout_base:         `Break above N-day high after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
       };
 
   function onAfterScanToggle(symbol: string, armed: boolean) {

@@ -71,6 +71,30 @@
 
 .btn:hover { color: var(--text-primary); }
 
+.btnActive {
+  background: color-mix(in srgb, var(--pass) 15%, var(--bg-surface));
+  color: var(--pass);
+  border-color: color-mix(in srgb, var(--pass) 40%, transparent);
+}
+
+.modelBtn {
+  padding: 2px 6px;
+  font-size: 10px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.modelBtn:hover { color: var(--text-primary); }
+
+.modelBtnActive {
+  background: color-mix(in srgb, var(--pass) 15%, var(--bg-surface));
+  color: var(--pass);
+  border-color: color-mix(in srgb, var(--pass) 40%, transparent);
+}
+
 .spacer { flex: 1; }
 
 .popOut {

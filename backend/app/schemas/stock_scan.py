@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas import SentimentData, FundamentalsOut
 
 
-Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb"]
+Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap"]
 
 
 class StockScanRequest(BaseModel):

@@ -507,9 +507,9 @@ export const api = {
     ),
 
   // ── Regime series (for chart overlay) ────────────────────────────────────────
-  getRegimeSeries: (symbol: string, limit?: number) =>
-    get<Array<{ time: string; state: string }>>(
-      `/api/regime/series?symbol=${encodeURIComponent(symbol)}${limit != null ? `&limit=${limit}` : ''}`
+  getRegimeSeries: (symbol: string, limit?: number, model?: 'OMM' | 'HMM') =>
+    get<Array<{ time: string; state: string; conviction?: number }>>(
+      `/api/regime/series?symbol=${encodeURIComponent(symbol)}${limit != null ? `&limit=${limit}` : ''}${model ? `&model=${model}` : ''}`
     ),
   getIntradayRegimeSeries: (symbol: string, interval?: string, limit?: number) =>
     get<Array<{ time: string; state: string; conviction: number }>>(

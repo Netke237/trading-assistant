@@ -8,7 +8,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb"]
+Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap"]
 
 
 def _entry_side(direction: str, *, entry: float, sl: float, tp: float) -> str | None:
@@ -68,15 +68,16 @@ def run_strategy_backtest(
     from app.services.strategy_engine import (
         pullback_ema_signal, breakout_base_signal,
         ma_crossover_signal, mean_reversion_rsi_signal,
-        mean_reversion_bb_signal,
+        mean_reversion_bb_signal, mean_reversion_vwap_signal,
     )
 
     _signal_fn = {
-        "pullback_ema":        pullback_ema_signal,
-        "breakout_base":       breakout_base_signal,
-        "ma_crossover":        ma_crossover_signal,
-        "mean_reversion_rsi":  mean_reversion_rsi_signal,
-        "mean_reversion_bb":   mean_reversion_bb_signal,
+        "pullback_ema":          pullback_ema_signal,
+        "breakout_base":         breakout_base_signal,
+        "ma_crossover":          ma_crossover_signal,
+        "mean_reversion_rsi":    mean_reversion_rsi_signal,
+        "mean_reversion_bb":     mean_reversion_bb_signal,
+        "mean_reversion_vwap":   mean_reversion_vwap_signal,
     }.get(strategy)
 
     if not _signal_fn:

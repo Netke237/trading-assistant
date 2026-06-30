@@ -30,7 +30,8 @@ const DIRECTIONS = [
   { value: 'bearish', label: 'bearish' },
 ];
 
-const REGIME_STATES: RegimeState[] = ['any', 'Bull', 'Bear', 'Choppy'];
+const REGIME_STATES_OMM: RegimeState[] = ['any', 'Bull', 'Bear', 'Choppy'];
+const REGIME_STATES_HMM: RegimeState[] = ['any', 'Bull', 'Bear', 'Sideways', 'Trending', 'Choppy', 'Mean-reverting'];
 const REGIME_MODELS: RegimeModel[] = ['any', 'OMM', 'HMM'];
 
 function emptyPriceCondition(): PriceCondition {
@@ -324,7 +325,7 @@ export default function AlertRuleBuilder({ onClose, editRule, prefill }: Props) 
                     value={c.state}
                     onChange={(e) => updateCondition(idx, { state: e.target.value as RegimeState })}
                   >
-                    {REGIME_STATES.map((s) => (
+                    {(c.model === 'OMM' ? REGIME_STATES_OMM : REGIME_STATES_HMM).map((s) => (
                       <option key={s} value={s}>{s === 'any' ? 'any state' : s}</option>
                     ))}
                   </select>

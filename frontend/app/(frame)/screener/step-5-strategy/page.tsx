@@ -52,17 +52,26 @@ const STRATEGIES = [
     stop: 'Below lower band',
     exit: 'Return to mid-band / upper band',
   },
+  {
+    key: 'mean_reversion_vwap',
+    label: 'Mean Reversion VWAP',
+    when: 'Intraday · 15m session',
+    entry: 'Price deviates >1.5% below VWAP + reversal bar toward VWAP (15m bars)',
+    stop: '0.5 ATR below entry',
+    exit: '2× risk above VWAP',
+  },
 ] as const;
 
 type RegimeFit = 'PASS' | 'CAUTION' | 'REJECT';
 
 // Maps each strategy to how well it fits each market regime.
 const REGIME_FIT: Record<string, Partial<Record<string, RegimeFit>>> = {
-  pullback_ema:       { PASS: 'PASS',    CAUTION: 'CAUTION', REJECT: 'REJECT'  },
-  breakout_base:      { PASS: 'PASS',    CAUTION: 'REJECT',  REJECT: 'REJECT'  },
-  ma_crossover:       { PASS: 'CAUTION', CAUTION: 'CAUTION', REJECT: 'REJECT'  },
-  mean_reversion_rsi: { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
-  mean_reversion_bb:  { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
+  pullback_ema:         { PASS: 'PASS',    CAUTION: 'CAUTION', REJECT: 'REJECT'  },
+  breakout_base:        { PASS: 'PASS',    CAUTION: 'REJECT',  REJECT: 'REJECT'  },
+  ma_crossover:         { PASS: 'CAUTION', CAUTION: 'CAUTION', REJECT: 'REJECT'  },
+  mean_reversion_rsi:   { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
+  mean_reversion_bb:    { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
+  mean_reversion_vwap:  { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
 };
 
 const REGIME_BADGE: Record<RegimeFit, { label: string; cls: string }> = {
@@ -104,17 +113,19 @@ export default function Step5StrategyPage() {
 
   // Dynamic card titles reflecting the current parameter values
   const strategyLabel: Record<string, string> = {
-    pullback_ema:        `Pullback to ${params.pullbackEmaPeriod}-${params.pullbackMaType}`,
-    ma_crossover:        `MA Crossover ${params.maCrossoverFast}/${params.maCrossoverSlow}`,
-    mean_reversion_rsi:  `Mean Reversion RSI / ${params.rsiTrendSma}-SMA`,
-    breakout_base:       'Breakout from tight base',
+    pullback_ema:          `Pullback to ${params.pullbackEmaPeriod}-${params.pullbackMaType}`,
+    ma_crossover:          `MA Crossover ${params.maCrossoverFast}/${params.maCrossoverSlow}`,
+    mean_reversion_rsi:    `Mean Reversion RSI / ${params.rsiTrendSma}-SMA`,
+    mean_reversion_vwap:   'Mean Reversion VWAP (15m)',
+    breakout_base:         'Breakout from tight base',
   };
 
   const entryLabel: Record<string, string> = {
-    pullback_ema:       `Dip to ${params.pullbackEmaPeriod}-${params.pullbackMaType} in uptrend${requireReversal ? ' + reversal candle' : ''}`,
-    ma_crossover:       `${params.maCrossoverFast}-SMA crosses above ${params.maCrossoverSlow}-SMA`,
-    mean_reversion_rsi: `RSI < ${params.rsiOversold} while above ${params.rsiTrendSma}-SMA`,
-    breakout_base:      `Break above N-day high after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
+    pullback_ema:          `Dip to ${params.pullbackEmaPeriod}-${params.pullbackMaType} in uptrend${requireReversal ? ' + reversal candle' : ''}`,
+    ma_crossover:          `${params.maCrossoverFast}-SMA crosses above ${params.maCrossoverSlow}-SMA`,
+    mean_reversion_rsi:    `RSI < ${params.rsiOversold} while above ${params.rsiTrendSma}-SMA`,
+    mean_reversion_vwap:   'Price deviates >1.5% below VWAP + reversal bar toward VWAP (15m bars)',
+    breakout_base:         `Break above N-day high after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
   };
 
   const portfolioValue = useRiskStore((s) => s.limits.portfolioValue);

@@ -4,7 +4,7 @@ import type { Candle } from '@/lib/indicators';
 
 export type ConditionOperator = '>' | '<' | '>=' | '<=' | 'crosses_above' | 'crosses_below';
 export type LogicOperator = 'AND' | 'OR' | 'N_OF_M';
-export type RegimeState = 'Bull' | 'Bear' | 'Choppy' | 'any';
+export type RegimeState = 'Bull' | 'Bear' | 'Choppy' | 'Sideways' | 'Trending' | 'Mean-reverting' | 'any';
 export type RegimeModel = 'OMM' | 'HMM' | 'any';
 
 export interface PriceCondition {

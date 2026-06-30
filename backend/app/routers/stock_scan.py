@@ -34,7 +34,7 @@ from app.scoring.stock_scorer import score_stock
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
     ma_crossover_signal, mean_reversion_rsi_signal,
-    mean_reversion_bb_signal,
+    mean_reversion_bb_signal, mean_reversion_vwap_signal,
     breakout_setup_signal,
 )
 from app.services.strategy_backtest import run_strategy_backtest
@@ -104,18 +104,23 @@ router = APIRouter(prefix="/api", tags=["stock-scan"])
 logger = logging.getLogger(__name__)
 
 _SIGNAL_FNS = {
-    "pullback_ema":        pullback_ema_signal,
-    "breakout_base":       breakout_base_signal,
-    "ma_crossover":        ma_crossover_signal,
-    "mean_reversion_rsi":  mean_reversion_rsi_signal,
-    "mean_reversion_bb":   mean_reversion_bb_signal,
+    "pullback_ema":          pullback_ema_signal,
+    "breakout_base":         breakout_base_signal,
+    "ma_crossover":          ma_crossover_signal,
+    "mean_reversion_rsi":    mean_reversion_rsi_signal,
+    "mean_reversion_bb":     mean_reversion_bb_signal,
+    "mean_reversion_vwap":   mean_reversion_vwap_signal,
 }
 
+# Strategies that require intraday (15m) bars instead of daily bars for signal + backtest.
+_INTRADAY_STRATEGIES = frozenset({"mean_reversion_vwap"})
+
 _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
-    "pullback_ema":       lambda r: {"tolerance": r.pullback_tolerance_pct, "ema_period": r.pullback_ema_period, "trend_ema": r.pullback_trend_ema, "ma_type": r.pullback_ma_type, "require_reversal": r.pullback_require_reversal},
-    "breakout_base":      lambda r: {"volume_mult": r.breakout_volume_mult},
-    "ma_crossover":       lambda r: {"fast": r.ma_crossover_fast, "slow": r.ma_crossover_slow, "lookback": r.ma_crossover_lookback},
-    "mean_reversion_rsi": lambda r: {"rsi_period": r.rsi_period, "rsi_oversold": r.rsi_oversold, "rsi_overbought": getattr(r, "rsi_overbought", 70.0), "trend_sma": r.rsi_trend_sma, "require_choppy_regime": r.require_choppy_regime},
+    "pullback_ema":          lambda r: {"tolerance": r.pullback_tolerance_pct, "ema_period": r.pullback_ema_period, "trend_ema": r.pullback_trend_ema, "ma_type": r.pullback_ma_type, "require_reversal": r.pullback_require_reversal},
+    "breakout_base":         lambda r: {"volume_mult": r.breakout_volume_mult},
+    "ma_crossover":          lambda r: {"fast": r.ma_crossover_fast, "slow": r.ma_crossover_slow, "lookback": r.ma_crossover_lookback},
+    "mean_reversion_rsi":    lambda r: {"rsi_period": r.rsi_period, "rsi_oversold": r.rsi_oversold, "rsi_overbought": getattr(r, "rsi_overbought", 70.0), "trend_sma": r.rsi_trend_sma, "require_choppy_regime": r.require_choppy_regime},
+    "mean_reversion_vwap":   lambda r: {"interval": "15m"},
     "mean_reversion_bb":  lambda r: {"require_choppy_regime": r.require_choppy_regime},
 }
 
@@ -511,6 +516,18 @@ async def _process_stock(
             if not bars or len(bars) < 60:
                 return {"symbol": symbol, "reason": "insufficient history"}
 
+            # For intraday strategies, fetch 15m bars used for signal + backtest.
+            intraday_bars: list[dict] = []
+            if req.strategy in _INTRADAY_STRATEGIES:
+                try:
+                    intraday_bars = await asyncio.to_thread(
+                        fetch_intraday_candles, symbol, "15min", 55
+                    )
+                except Exception as exc:
+                    logger.warning("fetch_intraday_candles failed for %s: %s", symbol, exc)
+                if len(intraday_bars) < 30:
+                    return {"symbol": symbol, "reason": "insufficient intraday history"}
+
             # Price fallback chain mirrors the options scan: Tradier batch quote →
             # last stored close (history table) → yfinance. Keeps the stock track
             # usable when Tradier is unavailable.
@@ -635,17 +652,20 @@ async def _process_stock(
                 req.strategy, req.direction,
                 _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
             )
-            signal = signal_fn(bars[-120:], direction=req.direction, **signal_kwargs)
+            # Intraday strategies use intraday bars for both signal and backtest.
+            signal_bars = intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES else bars[-120:]
+            signal = signal_fn(signal_bars, direction=req.direction, **signal_kwargs)
             if signal is None:
                 return {"symbol": symbol, "reason": f"no {req.strategy} setup"}
 
-            _bt_key = _backtest_key(symbol, req.strategy, req.direction, bars)
+            bt_bars = intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
+            _bt_key = _backtest_key(symbol, req.strategy, req.direction, bt_bars)
             bt_result = _get_backtest_cached(_bt_key)
             if bt_result is None:
                 bt_result = await asyncio.get_running_loop().run_in_executor(
                     _BACKTEST_POOL,
                     functools.partial(
-                        run_strategy_backtest, bars,
+                        run_strategy_backtest, bt_bars,
                         strategy=req.strategy, direction=req.direction,
                         min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
                     ),

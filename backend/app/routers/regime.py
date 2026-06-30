@@ -287,25 +287,30 @@ async def get_regime(
 async def get_regime_series(
     symbol: str = 'SPX',
     limit: int = 500,
+    model: str = 'OMM',
 ):
-    """Get per-bar OMM regime state for chart background overlay.
+    """Get per-bar regime state for chart background overlay.
 
-    Returns list of {time, state} dicts — one per trading day.
-    state: 'Bull' | 'Bear' | 'Choppy'
+    OMM (default): state is 'Bull' | 'Bear' | 'Choppy'.
+    HMM:           state is 'Bull' | 'Bear' | 'Sideways' + conviction field (Viterbi decoded — display only).
     """
     from app.services.historical_store import get_bars
     from app.services.regime_omm import compute_regime_series
+    from app.services.regime_hmm_daily import compute_directional_hmm_series
     from datetime import date, timedelta
 
     end = date.today()
-    start = end - timedelta(days=max(limit * 2, 730))  # fetch enough history
+    start = end - timedelta(days=max(limit * 2, 730))
     try:
         bars = await get_bars(symbol, start, end)
     except Exception:
         bars = []
     if not bars:
         return []
-    return compute_regime_series(bars[-limit:] if len(bars) > limit else bars)
+    window = bars[-limit:] if len(bars) > limit else bars
+    if model.upper() == 'HMM':
+        return compute_directional_hmm_series(window)
+    return compute_regime_series(window)
 
 
 @router.get('/regime/intraday-series')
