@@ -7,25 +7,30 @@ from app.services.strategy_engine import pullback_ema_signal, _ema
 def _downtrend_pullback_bars():
     """130 bars trending DOWN, final bar bouncing up to just below the 50-EMA (resistance).
 
-    We compute the 50-EMA on the base trend first, then pin the last bar's close to
-    fast_val * 0.96 so the bearish tolerance check (0–8% below fast MA) passes.
+    Uses the 50-EMA because that is pullback_ema_signal's ema_period default.
+    Pin the last bar's close to fast_val * 0.98 (2% below, well within 4% tolerance).
+    Last 4 bars use low volume (30% of base) so the volume contraction gate passes.
     """
     bars = []
     price = 200.0
+    base_vol = 1_000_000
     for i in range(130):
         price -= 0.6                      # steady downtrend
         o = price + 0.1; c = price
         bars.append({"open": o, "high": o + 0.5, "low": c - 0.5,
-                     "close": c, "volume": 1_000_000, "time": i})
-    # Compute the 50-EMA on this trend to find resistance level
+                     "close": c, "volume": base_vol, "time": i})
+    # Compute the 50-EMA (default ema_period) on this trend to find resistance level
     closes = [b["close"] for b in bars]
     fast_ma = _ema(closes, 50)
     ema50 = fast_ma[-1]
-    # Pin the last bar: bounce UP to ~4% below the falling 50-EMA (within 8% tolerance)
-    bounce_close = round(ema50 * 0.96, 2)
+    # Pin last 4 bars: low volume for contraction check
+    for j in range(-4, 0):
+        bars[j]["volume"] = int(base_vol * 0.3)
+    # Last bar: bounce UP to ~2% below the falling 50-EMA (within 4% tolerance)
+    bounce_close = round(ema50 * 0.98, 2)
     base_open = bars[-1]["open"]
     bars[-1] = {"open": base_open, "high": bounce_close + 0.5, "low": base_open - 0.2,
-                "close": bounce_close, "volume": 1_000_000, "time": 129}
+                "close": bounce_close, "volume": int(base_vol * 0.3), "time": 129}
     return bars
 
 

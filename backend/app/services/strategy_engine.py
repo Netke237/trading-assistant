@@ -226,6 +226,16 @@ def pullback_ema_signal(
     """
     if len(bars) < trend_ema + 10:
         return None
+
+    # Volume contraction during pullback: 3-bar avg (excluding today) must be
+    # below 90% of the 20-bar avg. Expanding volume on a pullback is not a clean re-test.
+    if len(bars) >= 21:
+        vols = [b["volume"] for b in bars]
+        avg_vol_20 = sum(vols[-21:-1]) / 20
+        avg_vol_3  = sum(vols[-4:-1]) / 3   # last 3 complete bars, mirrors -21:-1 convention
+        if avg_vol_20 > 0 and avg_vol_3 >= 0.9 * avg_vol_20:
+            return None
+
     closes = [b["close"] for b in bars]
 
     _ma = _sma if ma_type.upper() == "SMA" else _ema
