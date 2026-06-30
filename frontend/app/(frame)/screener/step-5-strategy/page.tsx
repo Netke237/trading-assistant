@@ -10,6 +10,7 @@ import { useShallow } from 'zustand/shallow';
 import { api, getLastDataRefresh } from '@/lib/api';
 import styles from './page.module.css';
 import { StrategyParamsPanel } from '@/components/organisms/StrategyParamsPanel';
+import { MeanReversionConfirmPanel } from '@/components/molecules/MeanReversionConfirmPanel';
 
 const STRATEGIES = [
   {
@@ -52,6 +53,14 @@ const STRATEGIES = [
     stop: 'Below lower band',
     exit: 'Return to mid-band / upper band',
   },
+  {
+    key: 'mean_reversion_multi',
+    label: 'Mean Reversion Multi-Signal',
+    when: 'High-conviction oversold entries',
+    entry: 'RSI + BB + VWAP daily all confirm simultaneously',
+    stop: 'Below recent swing low',
+    exit: 'Return to mid-band / take-profit target',
+  },
 ] as const;
 
 type RegimeFit = 'PASS' | 'CAUTION' | 'REJECT';
@@ -62,7 +71,8 @@ const REGIME_FIT: Record<string, Partial<Record<string, RegimeFit>>> = {
   breakout_base:      { PASS: 'PASS',    CAUTION: 'REJECT',  REJECT: 'REJECT'  },
   ma_crossover:       { PASS: 'CAUTION', CAUTION: 'CAUTION', REJECT: 'REJECT'  },
   mean_reversion_rsi: { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
-  mean_reversion_bb:  { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
+  mean_reversion_bb:    { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
+  mean_reversion_multi: { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
 };
 
 const REGIME_BADGE: Record<RegimeFit, { label: string; cls: string }> = {
@@ -98,6 +108,16 @@ export default function Step5StrategyPage() {
   })));
   const scanOverrides = useScanStore((s) => s.scanOverrides);
   const requireReversal = (scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
+
+  const meanReversionVariants   = useScanParamsStore((s) => s.meanReversionVariants);
+  const meanReversionMinConfirm = useScanParamsStore((s) => s.meanReversionMinConfirm);
+  const vwapLookback            = useScanParamsStore((s) => s.vwapLookback);
+  const vwapDeviationPct        = useScanParamsStore((s) => s.vwapDeviationPct);
+  const setMeanReversionVariants   = useScanParamsStore((s) => s.setMeanReversionVariants);
+  const setMeanReversionMinConfirm = useScanParamsStore((s) => s.setMeanReversionMinConfirm);
+  const setVwapLookback            = useScanParamsStore((s) => s.setVwapLookback);
+  const setVwapDeviationPct        = useScanParamsStore((s) => s.setVwapDeviationPct);
+
   const [params, setParams] = useState(() => ({ ...savedParams }));
 
   function resetParams() { setParams({ ...savedParams }); }
@@ -167,6 +187,12 @@ export default function Step5StrategyPage() {
         account_size: portfolioValue,
         risk_pct: 0.01,
         shortlist_max_candidates: params.stockShortlistMax,
+        ...(stratKey === 'mean_reversion_multi' ? {
+          mean_reversion_variants:          meanReversionVariants,
+          mean_reversion_min_confirmations: meanReversionMinConfirm,
+          vwap_lookback:                    vwapLookback,
+          vwap_deviation_pct:               vwapDeviationPct,
+        } : {}),
       });
       setStockScanResult(result);
       router.push('/screener/step-6-backtest');
@@ -215,6 +241,21 @@ export default function Step5StrategyPage() {
         setParams={setParams}
         onReset={resetParams}
       />
+
+      {activeStrategy === 'mean_reversion_multi' && (
+        <MeanReversionConfirmPanel
+          variants={meanReversionVariants}
+          minConfirmations={meanReversionMinConfirm}
+          vwapLookback={vwapLookback}
+          vwapDeviationPct={vwapDeviationPct}
+          onChange={(update) => {
+            if (update.variants !== undefined)         setMeanReversionVariants(update.variants);
+            if (update.minConfirmations !== undefined) setMeanReversionMinConfirm(update.minConfirmations);
+            if (update.vwapLookback !== undefined)     setVwapLookback(update.vwapLookback);
+            if (update.vwapDeviationPct !== undefined) setVwapDeviationPct(update.vwapDeviationPct);
+          }}
+        />
+      )}
 
       {error && <Text size={12} tone="reject">{error}</Text>}
 

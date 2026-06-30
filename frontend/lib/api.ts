@@ -374,6 +374,10 @@ export const api = {
     regime_headwind_reject_pct?:  number;
     fundamentals_caution_above?:  number;
     fundamentals_reject_above?:   number;
+    mean_reversion_variants?: string[];
+    mean_reversion_min_confirmations?: number;
+    vwap_lookback?: number;
+    vwap_deviation_pct?: number;
   }) => post<StockScanResult>('/api/stock-scan', req),
 
   postStockOrder: (req: {

@@ -18,6 +18,10 @@ export interface ScanParams {
   btMinWinRate:         number;   // fraction: 0.30 = 30%
   eventFilter: 'include' | 'avoid' | 'only_pre_event';
   stockShortlistMax:    number;   // max stock candidates returned
+  meanReversionVariants:    string[];  // active signal variants for mean_reversion_multi
+  meanReversionMinConfirm:  number;   // min confirmations required
+  vwapLookback:             number;   // VWAP lookback bars
+  vwapDeviationPct:         number;   // VWAP deviation fraction (0.02 = 2%)
 }
 
 const DEFAULTS: ScanParams = {
@@ -37,11 +41,19 @@ const DEFAULTS: ScanParams = {
   btMinWinRate:         0.45,
   eventFilter:          'include' as const,
   stockShortlistMax:    10,
+  meanReversionVariants:   ['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap'],
+  meanReversionMinConfirm: 2,
+  vwapLookback:            20,
+  vwapDeviationPct:        0.02,
 };
 
 interface ScanParamsStore extends ScanParams {
   setParam: <K extends keyof ScanParams>(key: K, value: ScanParams[K]) => void;
   resetToDefaults: () => void;
+  setMeanReversionVariants:   (v: string[]) => void;
+  setMeanReversionMinConfirm: (v: number) => void;
+  setVwapLookback:            (v: number) => void;
+  setVwapDeviationPct:        (v: number) => void;
 }
 
 export const useScanParamsStore = create<ScanParamsStore>()(
@@ -50,11 +62,15 @@ export const useScanParamsStore = create<ScanParamsStore>()(
       ...DEFAULTS,
       setParam: (key, value) => set({ [key]: value }),
       resetToDefaults: () => set({ ...DEFAULTS }),
+      setMeanReversionVariants:   (v) => set({ meanReversionVariants: v }),
+      setMeanReversionMinConfirm: (v) => set({ meanReversionMinConfirm: v }),
+      setVwapLookback:            (v) => set({ vwapLookback: v }),
+      setVwapDeviationPct:        (v) => set({ vwapDeviationPct: v }),
     }),
     {
       name: 'bamendjou:scan-params',
       skipHydration: true,
-      version: 10,
+      version: 11,
       migrate: (state: unknown, v: number) => {
         if (v < 2) return { ...DEFAULTS, ...(state as Partial<ScanParams>) };
         if (v < 4) return { ...DEFAULTS, ...(state as Partial<ScanParams>), pullbackMaType: 'EMA' as const };
@@ -70,6 +86,14 @@ export const useScanParamsStore = create<ScanParamsStore>()(
           return migrated;
         }
         if (v < 10) return { ...DEFAULTS, ...(state as Partial<ScanParams>), requireChoppyRegime: false };
+        if (v < 11) return {
+          ...DEFAULTS,
+          ...(state as Partial<ScanParams>),
+          meanReversionVariants:   ['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap'],
+          meanReversionMinConfirm: 2,
+          vwapLookback:            20,
+          vwapDeviationPct:        0.02,
+        };
         return state as ScanParams;
       },
     },
