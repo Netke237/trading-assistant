@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path as _Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 import yaml as _yaml
@@ -930,6 +930,113 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
         original_count=original_count, shortlist_truncated=shortlist_truncated,
         direction_banner=_direction_banner,
     )
+
+
+_FIB_ALLOWED_OVERRIDE_KEYS = frozenset({
+    "fib_swing_lookback",
+    "fib_levels",
+    "fib_tolerance_pct",
+})
+_FIB_INT_OVERRIDE_KEYS = frozenset({"fib_swing_lookback"})
+
+_FIB_DEFAULTS = {
+    "fib_swing_lookback": 100,
+    "fib_levels": [38.2, 61.8],
+    "fib_tolerance_pct": 0.015,
+}
+
+
+class FibPullbackScanRequest(BaseModel):
+    symbols: list[str] = []
+    direction: Literal["Bullish", "Bearish"] = "Bullish"
+    params_override: dict | None = None
+    universe: list[str] | None = None
+
+
+@router.post("/scan/fib-pullback")
+async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
+    """Scan symbols for Fibonacci retracement setups using fibonacci_pullback_signal."""
+    from app.services.strategy_engine import fibonacci_pullback_signal
+
+    end = date.today()
+    start = end - timedelta(days=365)
+
+    if body.universe:
+        try:
+            symbols_to_scan = expand_universe(body.universe)
+        except PresetUnavailableError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    else:
+        symbols_to_scan = [s.strip().upper() for s in body.symbols if s.strip()]
+
+    if not symbols_to_scan:
+        return []
+
+    scan_params: dict = dict(_FIB_DEFAULTS)
+    if body.params_override:
+        unknown = set(body.params_override) - _FIB_ALLOWED_OVERRIDE_KEYS
+        if unknown:
+            raise HTTPException(status_code=422, detail=f"Unknown override keys: {sorted(unknown)}")
+        coerced: dict = {}
+        for k, v in body.params_override.items():
+            if k in _FIB_INT_OVERRIDE_KEYS:
+                try:
+                    coerced[k] = int(v)
+                except (TypeError, ValueError):
+                    raise HTTPException(status_code=422, detail=f"Override key '{k}' must be an integer")
+            elif k == "fib_levels":
+                if not isinstance(v, list):
+                    raise HTTPException(status_code=422, detail="fib_levels must be a list of numbers")
+                coerced[k] = [float(x) for x in v]
+            else:
+                coerced[k] = float(v) if isinstance(v, (int, float)) else v
+        scan_params.update(coerced)
+
+    results: list[dict] = []
+    for sym in symbols_to_scan:
+        sym = sym.strip().upper()
+        if not sym:
+            continue
+        try:
+            bars = await get_historical_bars(sym, start, end)
+        except Exception as exc:
+            logger.warning("fib-pullback scan: get_bars failed for %s — %s", sym, exc)
+            continue
+        if not bars:
+            continue
+        try:
+            at_level, dist_pct, level_hit = fibonacci_pullback_signal(
+                bars,
+                body.direction,
+                fib_swing_lookback=scan_params["fib_swing_lookback"],
+                fib_levels=scan_params["fib_levels"],
+                fib_tolerance_pct=scan_params["fib_tolerance_pct"],
+            )
+        except Exception as exc:
+            logger.warning("fib-pullback scan: signal failed for %s — %s", sym, exc)
+            continue
+        if level_hit is None:
+            # Insufficient bars or no swing found — skip
+            continue
+        # Confidence: 100 if at level, scaled by proximity otherwise
+        tol = scan_params["fib_tolerance_pct"] * 100  # convert to pct units
+        if dist_pct is None:
+            confidence = 0
+        elif at_level:
+            confidence = max(60, round(100 - (dist_pct / tol) * 40))
+        else:
+            confidence = max(0, round(60 - ((dist_pct - tol) / tol) * 30))
+        results.append({
+            "symbol": sym,
+            "direction": body.direction,
+            "fib_level_hit": level_hit,
+            "fib_dist_pct": dist_pct,
+            "at_level": at_level,
+            "confidence": confidence,
+        })
+
+    results.sort(key=lambda r: (r["at_level"], -r["fib_dist_pct"] if r["fib_dist_pct"] else 0), reverse=True)
+    return results
 
 
 @router.post("/scan/prebreakout")
