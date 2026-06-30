@@ -242,20 +242,18 @@ export default function Step5StrategyPage() {
         onReset={resetParams}
       />
 
-      {activeStrategy === 'mean_reversion_multi' && (
-        <MeanReversionConfirmPanel
-          variants={meanReversionVariants}
-          minConfirmations={meanReversionMinConfirm}
-          vwapLookback={vwapLookback}
-          vwapDeviationPct={vwapDeviationPct}
-          onChange={(update) => {
-            if (update.variants !== undefined)         setMeanReversionVariants(update.variants);
-            if (update.minConfirmations !== undefined) setMeanReversionMinConfirm(update.minConfirmations);
-            if (update.vwapLookback !== undefined)     setVwapLookback(update.vwapLookback);
-            if (update.vwapDeviationPct !== undefined) setVwapDeviationPct(update.vwapDeviationPct);
-          }}
-        />
-      )}
+      <MeanReversionConfirmPanel
+        variants={meanReversionVariants}
+        minConfirmations={meanReversionMinConfirm}
+        vwapLookback={vwapLookback}
+        vwapDeviationPct={vwapDeviationPct}
+        onChange={(update) => {
+          if (update.variants !== undefined)         setMeanReversionVariants(update.variants);
+          if (update.minConfirmations !== undefined) setMeanReversionMinConfirm(update.minConfirmations);
+          if (update.vwapLookback !== undefined)     setVwapLookback(update.vwapLookback);
+          if (update.vwapDeviationPct !== undefined) setVwapDeviationPct(update.vwapDeviationPct);
+        }}
+      />
 
       {error && <Text size={12} tone="reject">{error}</Text>}
 
@@ -265,7 +263,7 @@ export default function Step5StrategyPage() {
             key={s.key}
             className={`${styles.card} ${activeStrategy === s.key ? styles.cardActive : ''}`}
             onClick={() => runScan(s.key)}
-            disabled={loadingStrategy !== null}
+            disabled={loadingStrategy !== null || (s.key === 'mean_reversion_multi' && meanReversionVariants.length === 0)}
           >
             <div className={styles.cardHeader}>
               <Text size={14} weight={600}>{strategyLabel[s.key] ?? s.label}</Text>

@@ -17,9 +17,9 @@ interface Props {
 }
 
 const VARIANT_OPTIONS = [
-  { key: 'mean_reversion_rsi',  label: 'RSI extremes + trend filter' },
-  { key: 'mean_reversion_bb',   label: 'Bollinger Band touch + close' },
-  { key: 'mean_reversion_vwap', label: 'Daily VWAP snap-back' },
+  { key: 'mean_reversion_rsi',       label: 'RSI extremes + trend filter' },
+  { key: 'mean_reversion_bb',        label: 'Bollinger Band touch + close' },
+  { key: 'mean_reversion_vwap_daily', label: 'Daily VWAP snap-back' },
 ] as const;
 
 export function MeanReversionConfirmPanel({
@@ -33,10 +33,15 @@ export function MeanReversionConfirmPanel({
     const next = variants.includes(key)
       ? variants.filter((v) => v !== key)
       : [...variants, key];
-    onChange({ variants: next });
+    const update: Parameters<typeof onChange>[0] = { variants: next };
+    // Auto-clamp minConfirmations when variants shrink below the threshold
+    if (next.length < minConfirmations) {
+      update.minConfirmations = Math.max(1, next.length);
+    }
+    onChange(update);
   }
 
-  const vwapChecked = variants.includes('mean_reversion_vwap');
+  const vwapChecked = variants.includes('mean_reversion_vwap_daily');
   const maxSelect = variants.length;
   const showWarning = minConfirmations > maxSelect;
 

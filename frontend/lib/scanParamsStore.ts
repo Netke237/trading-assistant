@@ -41,7 +41,7 @@ const DEFAULTS: ScanParams = {
   btMinWinRate:         0.45,
   eventFilter:          'include' as const,
   stockShortlistMax:    10,
-  meanReversionVariants:   ['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap'],
+  meanReversionVariants:   ['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap_daily'],
   meanReversionMinConfirm: 2,
   vwapLookback:            20,
   vwapDeviationPct:        0.02,
@@ -89,7 +89,7 @@ export const useScanParamsStore = create<ScanParamsStore>()(
         if (v < 11) return {
           ...DEFAULTS,
           ...(state as Partial<ScanParams>),
-          meanReversionVariants:   ['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap'],
+          meanReversionVariants:   ['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap_daily'],
           meanReversionMinConfirm: 2,
           vwapLookback:            20,
           vwapDeviationPct:        0.02,
