@@ -495,10 +495,15 @@ export const api = {
     get<CompositeWatchDefaults>('/api/composite-watches/defaults'),
 
   // ── Pre-breakout scan ────────────────────────────────────────────────────────
-  prebreakoutScan: (symbols: string[], direction: string, paramsOverride?: Record<string, unknown>) =>
+  prebreakoutScan: (
+    symbols: string[],
+    direction: string,
+    paramsOverride?: Record<string, unknown>,
+    universe?: string[],
+  ) =>
     post<Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>>(
       '/api/scan/prebreakout',
-      { symbols, direction, params_override: paramsOverride ?? null }
+      { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
     ),
 
   // ── Regime series (for chart overlay) ────────────────────────────────────────

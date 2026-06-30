@@ -28,3 +28,36 @@
   background: transparent; cursor: pointer; color: var(--text-secondary);
 }
 .alertBtn:hover { border-color: var(--accent); color: var(--accent); }
+
+.modeToggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  overflow: hidden;
+  width: fit-content;
+  margin-bottom: 12px;
+}
+.modeBtn {
+  background: none;
+  border: none;
+  padding: 6px 18px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.15s;
+}
+.modeBtn + .modeBtn {
+  border-left: 1px solid var(--border-subtle);
+}
+.modeBtnActive {
+  background: var(--bg-card, var(--bg-surface));
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.pullbackInfo {
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  margin-bottom: 16px;
+}

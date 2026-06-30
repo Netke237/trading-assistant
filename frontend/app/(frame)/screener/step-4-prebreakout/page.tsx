@@ -1,14 +1,26 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { useScanStore } from '@/lib/scanStore';
+import { useUniverseStore } from '@/lib/universeStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
 import { api } from '@/lib/api';
 import { CompositeAlertDialog } from '@/components/organisms/CompositeAlertDialog';
+import {
+  PreBreakoutParamsPanel,
+  PREBREAKOUT_DEFAULTS,
+  type PreBreakoutParams,
+} from '@/components/organisms/PreBreakoutParamsPanel';
 import styles from './page.module.css';
 
 type ScanRow = { symbol: string; confidence: number; direction: string; metrics: Record<string, number> };
+type ScanMode = 'prebreakout' | 'pullback';
+
+function parseSymbols(raw: string): string[] {
+  return raw.split(/[\s,\n]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+}
 
 function _confidenceTone(c: number): 'pass' | 'caution' | 'reject' {
   return c >= 70 ? 'pass' : c >= 40 ? 'caution' : 'reject';
@@ -17,113 +29,187 @@ function _confidenceTone(c: number): 'pass' | 'caution' | 'reject' {
 export default function Step4PreBreakoutPage() {
   const context     = useScanStore((s) => s.context);
   const direction   = context?.direction ?? 'Bullish';
-  const prevResults = useScanStore((s) => s.stockScanResult);
   const preResults  = useScanStore((s) => s.preBreakoutResults);
   const setResults  = useScanStore((s) => s.setPreBreakoutResults);
 
-  const [symbolInput, setSymbolInput] = useState('');
-  const [scanning, setScanning]       = useState(false);
-  const [error, setError]             = useState<string | null>(null);
-  const [alertSymbol, setAlertSymbol] = useState<string | null>(null);
+  const universePick = useUniverseStore((s) => s.pick);
+  const customRaw    = useUniverseStore((s) => s.customRaw);
 
-  useEffect(() => {
-    if (prevResults?.candidates?.length) {
-      setSymbolInput(prevResults.candidates.map((c) => c.symbol).join(', '));
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [symbolOverride, setSymbolOverride] = useState('');
+  const [scanMode, setScanMode]             = useState<ScanMode>('prebreakout');
+  const [params, setParams]                 = useState<PreBreakoutParams>({ ...PREBREAKOUT_DEFAULTS });
+  const [scanning, setScanning]             = useState(false);
+  const [error, setError]                   = useState<string | null>(null);
+  const [alertSymbol, setAlertSymbol]       = useState<string | null>(null);
 
   const runScan = useCallback(async () => {
-    const symbols = symbolInput
-      .split(/[\s,\n]+/)
-      .map((s) => s.trim().toUpperCase())
-      .filter(Boolean);
-    if (!symbols.length) { setError('Enter at least one symbol.'); return; }
+    // Universe resolution mirrors RunScanButton/index.tsx lines 76–91
+    const manualSymbols = parseSymbols(symbolOverride);
+    let symbols: string[];
+    let universe: string[] | undefined;
+
+    if (manualSymbols.length > 0) {
+      symbols = manualSymbols;
+      universe = undefined;
+    } else if (universePick === 'Custom') {
+      symbols = parseSymbols(customRaw);
+      universe = undefined;
+    } else if (universePick === 'Watchlist') {
+      symbols = useWatchlistStore.getState().added;
+      universe = undefined;
+    } else {
+      symbols = [];
+      universe = [universePick];
+    }
+
+    if (symbols.length === 0 && !universe) {
+      setError('Add symbols to the Watchlist or enter them manually.');
+      return;
+    }
+
     setError(null);
     setScanning(true);
     try {
-      const results = await api.prebreakoutScan(symbols, direction);
+      const paramsOverride: Record<string, unknown> = {
+        atr_compression_ratio:    params.atrCompressionRatio,
+        range_atr_mult:           params.rangeAtrMult,
+        range_lookback_bars:      params.rangeLookbackBars,
+        vol_compression_ratio:    params.volCompressionRatio,
+        resistance_proximity_pct: params.resistanceProximityPct,
+        swing_lookback:           params.swingLookback,
+      };
+      const results = await api.prebreakoutScan(symbols, direction, paramsOverride, universe);
       setResults(results);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setScanning(false);
     }
-  }, [symbolInput, direction, setResults]);
+  }, [symbolOverride, universePick, customRaw, direction, params, setResults]);
 
   const sorted: ScanRow[] = [...preResults].sort((a, b) => b.confidence - a.confidence);
+
+  const universeLabel =
+    symbolOverride.trim()          ? 'manual symbols'
+    : universePick === 'Custom'    ? 'custom symbols'
+    : universePick === 'Watchlist' ? 'watchlist'
+    : universePick;
 
   return (
     <div className={styles.main}>
       <div className={styles.header}>
-        <Title as="h2" size={20}>Pre-Breakout Scanner</Title>
+        <Title as="h2" size={20}>Setup Scanner</Title>
         <Text size={13} tone="secondary">
-          Identify stocks in consolidation near a key level, ready to break out. Set a Markov regime alert to be notified when conditions align.
+          Scanning {universeLabel} · {direction}
         </Text>
       </div>
 
-      <div className={styles.inputRow}>
-        <textarea
-          className={styles.symbolInput}
-          rows={3}
-          placeholder="AAPL, MSFT, TSLA..."
-          value={symbolInput}
-          onChange={(e) => setSymbolInput(e.target.value)}
-        />
+      {/* Mode toggle */}
+      <div className={styles.modeToggle}>
         <button
           type="button"
-          className={styles.runBtn}
-          onClick={runScan}
-          disabled={scanning}
+          className={`${styles.modeBtn} ${scanMode === 'prebreakout' ? styles.modeBtnActive : ''}`}
+          onClick={() => setScanMode('prebreakout')}
         >
-          {scanning ? 'Scanning…' : 'Run Scan'}
+          Pre-Breakout
+        </button>
+        <button
+          type="button"
+          className={`${styles.modeBtn} ${scanMode === 'pullback' ? styles.modeBtnActive : ''}`}
+          onClick={() => setScanMode('pullback')}
+        >
+          Pullback to EMA
         </button>
       </div>
 
-      {error && <Text size={12} tone="reject">{error}</Text>}
-
-      {sorted.length > 0 && (
-        <div className={styles.tableWrap}>
-          <div className={styles.tableHeader}>
-            <span />
-            <Text size={11} tone="dim" weight={500}>Symbol</Text>
-            <Text size={11} tone="dim" weight={500}>Dir</Text>
-            <Text size={11} tone="dim" weight={500}>Confidence</Text>
-            <Text size={11} tone="dim" weight={500}>ATR Ratio</Text>
-            <Text size={11} tone="dim" weight={500}>Vol Ratio</Text>
-            <Text size={11} tone="dim" weight={500}>Proximity %</Text>
-            <span />
-          </div>
-          {sorted.map((row) => (
-            <div key={row.symbol} className={styles.tableRow}>
-              <WatchStar symbol={row.symbol} size="sm" />
-              <Text size={13} weight={500}>{row.symbol}</Text>
-              <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
-                {row.direction === 'Bullish' ? '↑' : '↓'}
-              </Text>
-              <Data size={13} tone={_confidenceTone(row.confidence)}>{row.confidence}%</Data>
-              <Data size={12} tone="secondary">
-                {row.metrics.atr_ratio != null ? row.metrics.atr_ratio.toFixed(2) : '—'}
-              </Data>
-              <Data size={12} tone="secondary">
-                {row.metrics.vol_ratio != null ? row.metrics.vol_ratio.toFixed(2) : '—'}
-              </Data>
-              <Data size={12} tone="secondary">
-                {row.metrics.proximity_pct != null ? row.metrics.proximity_pct.toFixed(1) : '—'}
-              </Data>
-              <button
-                type="button"
-                className={styles.alertBtn}
-                onClick={() => setAlertSymbol(row.symbol)}
-              >
-                <Text size={11} weight={500}>Set Alert</Text>
-              </button>
-            </div>
-          ))}
+      {scanMode === 'pullback' ? (
+        <div className={styles.pullbackInfo}>
+          <Text size={13} tone="secondary">
+            Trending stocks that have pulled back to their EMA are handled in the full
+            <strong> Stocks screener</strong> (Steps 1–3 → Stocks mode → Step 4 → pick
+            <em> Pullback to 20-EMA</em>). That flow includes a historical backtest, confidence
+            gate, and broker execution. Use this tab for pre-breakout consolidation setups only.
+          </Text>
         </div>
-      )}
+      ) : (
+        <>
+          <Text size={12} tone="dim">
+            Stocks coiling near a key resistance level — ATR compressed, volume dry, close
+            within {(params.resistanceProximityPct * 100).toFixed(1)}% of swing high.
+            Set a regime alert to be notified when conditions align.
+          </Text>
 
-      {sorted.length === 0 && !scanning && (
-        <Text size={13} tone="dim">No results yet — enter symbols and run the scan.</Text>
+          <div className={styles.inputRow}>
+            <textarea
+              className={styles.symbolInput}
+              rows={2}
+              placeholder={`Leave blank to use universe (${universeLabel}) · or enter specific symbols to override`}
+              value={symbolOverride}
+              onChange={(e) => setSymbolOverride(e.target.value)}
+            />
+            <button
+              type="button"
+              className={styles.runBtn}
+              onClick={runScan}
+              disabled={scanning}
+            >
+              {scanning ? 'Scanning…' : 'Run Scan'}
+            </button>
+          </div>
+
+          <PreBreakoutParamsPanel
+            params={params}
+            setParams={setParams}
+            onReset={() => setParams({ ...PREBREAKOUT_DEFAULTS })}
+          />
+
+          {error && <Text size={12} tone="reject">{error}</Text>}
+
+          {sorted.length > 0 && (
+            <div className={styles.tableWrap}>
+              <div className={styles.tableHeader}>
+                <span />
+                <Text size={11} tone="dim" weight={500}>Symbol</Text>
+                <Text size={11} tone="dim" weight={500}>Dir</Text>
+                <Text size={11} tone="dim" weight={500}>Confidence</Text>
+                <Text size={11} tone="dim" weight={500}>ATR Ratio</Text>
+                <Text size={11} tone="dim" weight={500}>Vol Ratio</Text>
+                <Text size={11} tone="dim" weight={500}>Proximity %</Text>
+                <span />
+              </div>
+              {sorted.map((row) => (
+                <div key={row.symbol} className={styles.tableRow}>
+                  <WatchStar symbol={row.symbol} size="sm" />
+                  <Text size={13} weight={500}>{row.symbol}</Text>
+                  <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
+                    {row.direction === 'Bullish' ? '↑' : '↓'}
+                  </Text>
+                  <Data size={13} tone={_confidenceTone(row.confidence)}>{row.confidence}%</Data>
+                  <Data size={12} tone="secondary">
+                    {row.metrics.atr_ratio != null ? row.metrics.atr_ratio.toFixed(2) : '—'}
+                  </Data>
+                  <Data size={12} tone="secondary">
+                    {row.metrics.vol_ratio != null ? row.metrics.vol_ratio.toFixed(2) : '—'}
+                  </Data>
+                  <Data size={12} tone="secondary">
+                    {row.metrics.proximity_pct != null ? row.metrics.proximity_pct.toFixed(1) : '—'}
+                  </Data>
+                  <button
+                    type="button"
+                    className={styles.alertBtn}
+                    onClick={() => setAlertSymbol(row.symbol)}
+                  >
+                    <Text size={11} weight={500}>Set Alert</Text>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {sorted.length === 0 && !scanning && (
+            <Text size={13} tone="dim">No results yet — run the scan.</Text>
+          )}
+        </>
       )}
 
       {alertSymbol && (
