@@ -66,6 +66,16 @@ class PreBreakoutResult(BaseModel):
 
 _SCORING_CFG = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
 
+_ALLOWED_OVERRIDE_KEYS = frozenset({
+    "atr_compression_ratio",
+    "atr_avg_lookback",
+    "range_atr_mult",
+    "range_lookback_bars",
+    "vol_compression_ratio",
+    "resistance_proximity_pct",
+    "swing_lookback",
+})
+
 
 @functools.lru_cache(maxsize=1)
 def _load_full_scoring_cfg() -> dict:
@@ -873,6 +883,9 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
 
     base_params = get_active("breakout_setup", body.direction)
     if body.params_override:
+        unknown = set(body.params_override) - _ALLOWED_OVERRIDE_KEYS
+        if unknown:
+            raise HTTPException(status_code=422, detail=f"Unknown override keys: {sorted(unknown)}")
         base_params.update(body.params_override)
 
     results: list[dict] = []

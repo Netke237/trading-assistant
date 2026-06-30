@@ -43,3 +43,32 @@ async def test_prebreakout_unknown_preset_returns_400():
             "direction": "Bullish",
         })
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_prebreakout_manual_symbols_skips_expand_universe():
+    """When symbols are provided without universe, expand_universe must NOT be called."""
+    with patch(
+        "app.routers.stock_scan.expand_universe",
+    ) as mock_expand, patch(
+        "app.routers.stock_scan.get_historical_bars",
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        async with AsyncClient(app=app, base_url="http://test") as client:
+            resp = await client.post("/api/scan/prebreakout", json={
+                "symbols": ["AAPL", "MSFT"],
+                "direction": "Bullish",
+            })
+        assert resp.status_code == 200
+        mock_expand.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_prebreakout_unknown_override_key_returns_422():
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        resp = await client.post("/api/scan/prebreakout", json={
+            "symbols": ["AAPL"],
+            "params_override": {"direction": "injected"},
+        })
+    assert resp.status_code == 422
