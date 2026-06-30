@@ -520,6 +520,69 @@ def mean_reversion_vwap_signal(
     )
 
 
+# ── Strategy 6b: Mean reversion VWAP (daily / rolling) ───────────────────────
+
+def mean_reversion_vwap_daily_signal(
+    bars: list[dict],
+    *,
+    vwap_lookback: int = 20,
+    vwap_deviation_pct: float = 0.02,
+    stop_atr_mult: float = 0.5,
+    rr_target_mult: float = 2.0,
+    direction: str = "Bullish",
+) -> StrategySignal | None:
+    """Rolling daily-VWAP mean-reversion signal (no intraday data needed).
+
+    Bullish: bar[-2] closed >= vwap_deviation_pct below rolling VWAP,
+             bar[-1] closes back above rolling VWAP.
+    """
+    if len(bars) < vwap_lookback + 2:
+        return None
+
+    window = bars[-vwap_lookback:]
+    vwap = _vwap(window)
+    if vwap <= 0:
+        return None
+
+    current = bars[-1]["close"]
+    prev    = bars[-2]["close"]
+    atr     = _atr(bars)
+    if atr <= 0:
+        return None
+
+    if direction == "Bullish":
+        if (vwap - prev) / vwap < vwap_deviation_pct:
+            return None
+        if current <= vwap:
+            return None
+        stop   = current - stop_atr_mult * atr
+        risk   = current - stop
+        if risk <= 0:
+            return None
+        target = current + risk * rr_target_mult
+    else:
+        if (prev - vwap) / vwap < vwap_deviation_pct:
+            return None
+        if current >= vwap:
+            return None
+        stop   = current + stop_atr_mult * atr
+        risk   = stop - current
+        if risk <= 0:
+            return None
+        target = current - risk * rr_target_mult
+
+    dev_pct = abs(vwap - prev) / vwap
+    return StrategySignal(
+        strategy="mean_reversion_vwap",
+        direction=direction,
+        entry_price=round(current, 2),
+        stop_price=round(stop, 2),
+        target_price=round(target, 2),
+        atr=round(atr, 2),
+        detail={"rolling_vwap": round(vwap, 2), "deviation_pct": round(dev_pct * 100, 2)},
+    )
+
+
 # ── Strategy 7: Pre-breakout setup scanner ────────────────────────────────────
 
 def breakout_setup_signal(

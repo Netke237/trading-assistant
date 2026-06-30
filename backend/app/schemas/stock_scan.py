@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas import SentimentData, FundamentalsOut
 
 
-Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb"]
+Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_multi"]
 
 
 class StockScanRequest(BaseModel):
@@ -57,6 +57,11 @@ class StockScanRequest(BaseModel):
     # Per-scan fundamentals bearish overrides — applied only on Bearish scans.
     fundamentals_caution_above:  Optional[float] = None
     fundamentals_reject_above:   Optional[float] = None
+    # Mean reversion multi-signal params
+    mean_reversion_variants: list[str] = Field(default_factory=lambda: ["mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap"])
+    mean_reversion_min_confirmations: int = Field(2, ge=1, le=3)
+    vwap_lookback:       int   = Field(20,   gt=0)
+    vwap_deviation_pct:  float = Field(0.02, gt=0)
 
 
 class StrategySignalOut(BaseModel):

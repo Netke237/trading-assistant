@@ -35,6 +35,7 @@ from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
     ma_crossover_signal, mean_reversion_rsi_signal,
     mean_reversion_bb_signal,
+    mean_reversion_vwap_daily_signal,
     breakout_setup_signal,
 )
 from app.services.strategy_backtest import run_strategy_backtest
@@ -109,6 +110,7 @@ _SIGNAL_FNS = {
     "ma_crossover":        ma_crossover_signal,
     "mean_reversion_rsi":  mean_reversion_rsi_signal,
     "mean_reversion_bb":   mean_reversion_bb_signal,
+    "mean_reversion_vwap": mean_reversion_vwap_daily_signal,
 }
 
 _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
@@ -628,25 +630,54 @@ async def _process_stock(
                regime_signal["conviction_pct"] <= _regime_gate.get("headwind_caution_pct", -15):
                 return {"symbol": symbol, "reason": "regime headwind"}
 
-            signal_fn = _SIGNAL_FNS.get(req.strategy)
-            if not signal_fn:
-                return {"symbol": symbol, "reason": f"unknown strategy {req.strategy}"}
-            signal_kwargs = _merge_strategy_params(
-                req.strategy, req.direction,
-                _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
-            )
-            signal = signal_fn(bars[-120:], direction=req.direction, **signal_kwargs)
-            if signal is None:
-                return {"symbol": symbol, "reason": f"no {req.strategy} setup"}
+            if req.strategy == "mean_reversion_multi":
+                valid_variants = [v for v in req.mean_reversion_variants if v in _SIGNAL_FNS]
+                fired: list = []
+                for variant in valid_variants:
+                    fn = _SIGNAL_FNS[variant]
+                    if variant == "mean_reversion_vwap":
+                        extra_kw = {"vwap_lookback": req.vwap_lookback, "vwap_deviation_pct": req.vwap_deviation_pct}
+                    else:
+                        extra_kw = {}
+                    variant_kwargs = _merge_strategy_params(
+                        variant, req.direction,
+                        {**_SIGNAL_KWARGS.get(variant, lambda r: {})(req), **extra_kw},
+                    )
+                    try:
+                        sig = fn(bars[-120:], direction=req.direction, **variant_kwargs)
+                    except Exception:
+                        sig = None
+                    if sig is not None:
+                        fired.append(sig)
+                if len(fired) < req.mean_reversion_min_confirmations:
+                    return {"symbol": symbol, "reason": f"no mean_reversion_multi: {len(fired)}/{len(valid_variants)} signals fired"}
+                signal = dataclasses.replace(
+                    fired[0],
+                    strategy="mean_reversion_multi",
+                    detail={**fired[0].detail, "confirmations": len(fired), "fired": [s.strategy for s in fired]},
+                )
+                _bt_strategy = fired[0].strategy
+            else:
+                signal_fn = _SIGNAL_FNS.get(req.strategy)
+                if not signal_fn:
+                    return {"symbol": symbol, "reason": f"unknown strategy {req.strategy}"}
+                signal_kwargs = _merge_strategy_params(
+                    req.strategy, req.direction,
+                    _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
+                )
+                signal = signal_fn(bars[-120:], direction=req.direction, **signal_kwargs)
+                if signal is None:
+                    return {"symbol": symbol, "reason": f"no {req.strategy} setup"}
+                _bt_strategy = req.strategy
 
-            _bt_key = _backtest_key(symbol, req.strategy, req.direction, bars)
+            _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bars)
             bt_result = _get_backtest_cached(_bt_key)
             if bt_result is None:
                 bt_result = await asyncio.get_running_loop().run_in_executor(
                     _BACKTEST_POOL,
                     functools.partial(
                         run_strategy_backtest, bars,
-                        strategy=req.strategy, direction=req.direction,
+                        strategy=_bt_strategy, direction=req.direction,
                         min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
                     ),
                 )
