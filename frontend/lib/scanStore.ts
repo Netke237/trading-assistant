@@ -93,6 +93,22 @@ interface ScanStoreState {
   setRegimeDirection: (d: 'BULL' | 'BEAR' | 'MIXED' | null) => void;
   preBreakoutResults: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>;
   setPreBreakoutResults: (results: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>) => void;
+  fibPullbackResults: Array<{
+    symbol: string;
+    direction: string;
+    fib_level_hit: string;
+    fib_dist_pct: number | null;
+    at_level: boolean;
+    confidence: number;
+  }>;
+  setFibPullbackResults: (results: Array<{
+    symbol: string;
+    direction: string;
+    fib_level_hit: string;
+    fib_dist_pct: number | null;
+    at_level: boolean;
+    confidence: number;
+  }>) => void;
 }
 
 export const useScanStore = create<ScanStoreState>()(
@@ -131,6 +147,8 @@ export const useScanStore = create<ScanStoreState>()(
       setRegimeDirection: (d) => set({ regimeDirection: d }),
       preBreakoutResults: [],
       setPreBreakoutResults: (results) => set({ preBreakoutResults: results }),
+      fibPullbackResults: [],
+      setFibPullbackResults: (results) => set({ fibPullbackResults: results }),
       setScanResult:   (r) => set((state) => ({
         scanResult: r,
         previousRun: r !== null ? state.scanResult : state.previousRun,
@@ -173,7 +191,7 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 8,
+      version: 9,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -185,6 +203,7 @@ export const useScanStore = create<ScanStoreState>()(
         if (version < 6) s = { ...s, stockScanAt: null };
         if (version < 7) s = { ...s, optionsScanAt: null };
         if (version < 8) s = { ...s, preBreakoutResults: [] };
+        if (version < 9) s = { ...s, fibPullbackResults: [] };
         return s;
       },
       partialize: (state) => ({

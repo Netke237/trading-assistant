@@ -510,6 +510,25 @@ export const api = {
       { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
     ),
 
+  // ── Fibonacci pullback scan ──────────────────────────────────────────────────
+  fibPullbackScan: (
+    symbols: string[],
+    direction: string,
+    paramsOverride?: { fib_swing_lookback?: number; fib_levels?: number[]; fib_tolerance_pct?: number },
+    universe?: string[],
+  ) =>
+    post<Array<{
+      symbol: string;
+      direction: string;
+      fib_level_hit: string;
+      fib_dist_pct: number | null;
+      at_level: boolean;
+      confidence: number;
+    }>>(
+      '/api/scan/fib-pullback',
+      { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
+    ),
+
   // ── Regime series (for chart overlay) ────────────────────────────────────────
   getRegimeSeries: (symbol: string, limit?: number, model?: 'OMM' | 'HMM') =>
     get<Array<{ time: string; state: string; conviction?: number }>>(
