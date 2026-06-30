@@ -110,7 +110,7 @@ _SIGNAL_FNS = {
     "ma_crossover":        ma_crossover_signal,
     "mean_reversion_rsi":  mean_reversion_rsi_signal,
     "mean_reversion_bb":   mean_reversion_bb_signal,
-    "mean_reversion_vwap": mean_reversion_vwap_daily_signal,
+    "mean_reversion_vwap_daily": mean_reversion_vwap_daily_signal,
 }
 
 _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
@@ -635,7 +635,7 @@ async def _process_stock(
                 fired: list = []
                 for variant in valid_variants:
                     fn = _SIGNAL_FNS[variant]
-                    if variant == "mean_reversion_vwap":
+                    if variant == "mean_reversion_vwap_daily":
                         extra_kw = {"vwap_lookback": req.vwap_lookback, "vwap_deviation_pct": req.vwap_deviation_pct}
                     else:
                         extra_kw = {}
@@ -656,7 +656,8 @@ async def _process_stock(
                     strategy="mean_reversion_multi",
                     detail={**fired[0].detail, "confirmations": len(fired), "fired": [s.strategy for s in fired]},
                 )
-                _bt_strategy = fired[0].strategy
+                # Use RSI as canonical backtest proxy for multi-signal — deterministic regardless of fired order
+                _bt_strategy = "mean_reversion_rsi"
             else:
                 signal_fn = _SIGNAL_FNS.get(req.strategy)
                 if not signal_fn:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas import SentimentData, FundamentalsOut
 
 
@@ -58,10 +58,22 @@ class StockScanRequest(BaseModel):
     fundamentals_caution_above:  Optional[float] = None
     fundamentals_reject_above:   Optional[float] = None
     # Mean reversion multi-signal params
-    mean_reversion_variants: list[str] = Field(default_factory=lambda: ["mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap"])
+    mean_reversion_variants: list[str] = Field(default_factory=lambda: ["mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap_daily"])
     mean_reversion_min_confirmations: int = Field(2, ge=1, le=3)
     vwap_lookback:       int   = Field(20,   gt=0)
     vwap_deviation_pct:  float = Field(0.02, gt=0)
+
+    @model_validator(mode='after')
+    def check_min_confirmations(self) -> 'StockScanRequest':
+        if (
+            self.strategy == 'mean_reversion_multi'
+            and self.mean_reversion_min_confirmations > len(self.mean_reversion_variants)
+        ):
+            raise ValueError(
+                f"mean_reversion_min_confirmations ({self.mean_reversion_min_confirmations}) "
+                f"cannot exceed the number of selected variants ({len(self.mean_reversion_variants)})"
+            )
+        return self
 
 
 class StrategySignalOut(BaseModel):

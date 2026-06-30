@@ -65,7 +65,7 @@ def test_vwap_daily_bullish_snap_back():
     assert signal is not None, "Expected signal on Bullish snap-back"
     assert signal.direction == "Bullish"
     assert signal.entry_price > 0
-    assert signal.strategy == "mean_reversion_vwap"
+    assert signal.strategy == "mean_reversion_vwap_daily"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -230,7 +230,7 @@ def test_vwap_daily_signal_structure():
 
     assert signal is not None
     assert isinstance(signal, StrategySignal)
-    assert signal.strategy == "mean_reversion_vwap"
+    assert signal.strategy == "mean_reversion_vwap_daily"
     assert signal.direction == "Bullish"
     assert signal.entry_price > 0
     assert signal.stop_price > 0
@@ -398,3 +398,43 @@ def test_vwap_daily_with_realistic_bars():
 
     assert signal is not None, "Expected signal with realistic bars"
     assert signal.entry_price == pytest.approx(151.0, abs=0.01)
+
+
+# --- Integration tests for multi-signal scan endpoint ---
+
+from unittest.mock import patch, AsyncMock, MagicMock
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_multi_signal_rejects_empty_variants():
+    """min_confirmations=2 with zero variants should return 422 from model_validator."""
+    from httpx import AsyncClient
+    from app.main import app
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        resp = await client.post("/api/stock-scan", json={
+            "universe": ["SP500"],
+            "direction": "Bullish",
+            "horizon": "Swing",
+            "strategy": "mean_reversion_multi",
+            "mean_reversion_variants": [],
+            "mean_reversion_min_confirmations": 2,
+        })
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_multi_signal_rejects_when_min_exceeds_variants():
+    """3 confirmations with 1 variant should return 422."""
+    from httpx import AsyncClient
+    from app.main import app
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        resp = await client.post("/api/stock-scan", json={
+            "universe": ["SP500"],
+            "direction": "Bullish",
+            "horizon": "Swing",
+            "strategy": "mean_reversion_multi",
+            "mean_reversion_variants": ["mean_reversion_rsi"],
+            "mean_reversion_min_confirmations": 3,
+        })
+    assert resp.status_code == 422

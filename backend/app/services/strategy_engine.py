@@ -539,7 +539,7 @@ def mean_reversion_vwap_daily_signal(
     if len(bars) < vwap_lookback + 2:
         return None
 
-    window = bars[-vwap_lookback:]
+    window = bars[-(vwap_lookback + 2):-2]
     vwap = _vwap(window)
     if vwap <= 0:
         return None
@@ -573,7 +573,7 @@ def mean_reversion_vwap_daily_signal(
 
     dev_pct = abs(vwap - prev) / vwap
     return StrategySignal(
-        strategy="mean_reversion_vwap",
+        strategy="mean_reversion_vwap_daily",
         direction=direction,
         entry_price=round(current, 2),
         stop_price=round(stop, 2),
