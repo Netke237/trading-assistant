@@ -87,3 +87,19 @@ async def test_fib_pullback_universe_expansion():
             })
     assert resp.status_code == 200
     assert len(resp.json()) == 2
+
+
+@pytest.mark.asyncio
+async def test_fib_pullback_skips_when_no_swing_found():
+    """Symbols where fibonacci_pullback_signal returns level_hit=None must be excluded."""
+    with patch("app.routers.stock_scan.get_historical_bars", new_callable=AsyncMock) as mock_bars, \
+         patch("app.services.strategy_engine.fibonacci_pullback_signal", return_value=(False, None, None)) as mock_sig:
+        mock_bars.return_value = [{"open": 100, "high": 101, "low": 99, "close": 100, "volume": 1_000_000}] * 15
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/api/scan/fib-pullback", json={
+                "symbols": ["AAPL"],
+                "direction": "Bullish",
+            })
+    assert resp.status_code == 200
+    assert resp.json() == []
+    mock_sig.assert_called_once()

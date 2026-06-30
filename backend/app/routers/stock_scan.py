@@ -989,7 +989,10 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
                     raise HTTPException(status_code=422, detail="fib_levels must be a list of numbers")
                 coerced[k] = [float(x) for x in v]
             else:
-                coerced[k] = float(v) if isinstance(v, (int, float)) else v
+                try:
+                    coerced[k] = float(v)
+                except (TypeError, ValueError):
+                    raise HTTPException(status_code=422, detail=f"Override key '{k}' must be a number")
         scan_params.update(coerced)
 
     results: list[dict] = []
@@ -1035,7 +1038,7 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
             "confidence": confidence,
         })
 
-    results.sort(key=lambda r: (r["at_level"], -r["fib_dist_pct"] if r["fib_dist_pct"] else 0), reverse=True)
+    results.sort(key=lambda r: (r["at_level"], -r["fib_dist_pct"] if r["fib_dist_pct"] is not None else 0), reverse=True)
     return results
 
 
