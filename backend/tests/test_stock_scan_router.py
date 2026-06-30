@@ -197,13 +197,15 @@ def _make_bearish_bars(n: int = 130) -> list[dict]:
     bounce_n = n - trend_n  # 20 bars
     for j in range(bounce_n):
         price = 115.0 + (3.0 * j / max(bounce_n - 1, 1))
+        # Last 4 bars at low volume so volume contraction gate passes
+        vol = 450_000 if j >= bounce_n - 4 else 1_500_000
         bars.append({
             "time": f"2025-01-{(j % 28 + 1):02d}",
             "open": price - 0.3,
             "high": price + 0.5,
             "low":  price - 0.5,
             "close": price,
-            "volume": 1_500_000,
+            "volume": vol,
         })
     return bars
 
