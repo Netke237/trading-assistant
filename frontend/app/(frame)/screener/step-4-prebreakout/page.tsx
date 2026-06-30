@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { useScanStore } from '@/lib/scanStore';
@@ -13,7 +13,6 @@ import {
   PREBREAKOUT_DEFAULTS,
   type PreBreakoutParams,
 } from '@/components/organisms/PreBreakoutParamsPanel';
-import { statusForScore } from '@/lib/status';
 import styles from './page.module.css';
 
 type ScanRow = { symbol: string; confidence: number; direction: string; metrics: Record<string, number> };
@@ -31,6 +30,10 @@ const SECTOR_LABELS: Record<string, string> = {
   'SECTOR:XLRE': 'Real Estate',
   'SECTOR:XLU': 'Utilities',
   'SECTOR:XLE': 'Energy',
+  'SP500': 'S&P 500',
+  'NDX100': 'Nasdaq 100',
+  'DOW30': 'Dow 30',
+  'SPY': 'SPY ETF',
 };
 
 function universeDisplayName(pick: string): string {
@@ -47,8 +50,9 @@ function parseSymbols(raw: string): string[] {
 }
 
 function _confidenceTone(c: number): 'pass' | 'caution' | 'reject' {
-  const s = statusForScore(c);
-  return s === 'PASS' ? 'pass' : s === 'REJECT' ? 'reject' : 'caution';
+  if (c >= 70) return 'pass';
+  if (c >= 40) return 'caution';
+  return 'reject';
 }
 
 export default function Step4PreBreakoutPage() {
@@ -66,8 +70,13 @@ export default function Step4PreBreakoutPage() {
   const [scanning, setScanning]             = useState(false);
   const [error, setError]                   = useState<string | null>(null);
   const [alertSymbol, setAlertSymbol]       = useState<string | null>(null);
+  const isFirstRender                       = useRef(true);
 
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     setResults([]);
   }, [params, universePick, direction, setResults]);
 
