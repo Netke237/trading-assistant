@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { useScanStore } from '@/lib/scanStore';
@@ -13,17 +13,42 @@ import {
   PREBREAKOUT_DEFAULTS,
   type PreBreakoutParams,
 } from '@/components/organisms/PreBreakoutParamsPanel';
+import { statusForScore } from '@/lib/status';
 import styles from './page.module.css';
 
 type ScanRow = { symbol: string; confidence: number; direction: string; metrics: Record<string, number> };
 type ScanMode = 'prebreakout' | 'pullback';
 
+const SECTOR_LABELS: Record<string, string> = {
+  'SECTOR:XLK': 'Technology',
+  'SECTOR:XLC': 'Communication Services',
+  'SECTOR:XLY': 'Consumer Discretionary',
+  'SECTOR:XLI': 'Industrials',
+  'SECTOR:XLF': 'Financials',
+  'SECTOR:XLP': 'Consumer Staples',
+  'SECTOR:XLV': 'Health Care',
+  'SECTOR:XLB': 'Materials',
+  'SECTOR:XLRE': 'Real Estate',
+  'SECTOR:XLU': 'Utilities',
+  'SECTOR:XLE': 'Energy',
+};
+
+function universeDisplayName(pick: string): string {
+  return SECTOR_LABELS[pick] ?? pick;
+}
+
+const TICKER_RE = /^[A-Z][A-Z0-9.\-]{0,5}$/;
+
 function parseSymbols(raw: string): string[] {
-  return raw.split(/[\s,\n]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+  return raw
+    .split(/[\s,;\n]+/)
+    .map((s) => s.trim().toUpperCase())
+    .filter((s) => TICKER_RE.test(s));
 }
 
 function _confidenceTone(c: number): 'pass' | 'caution' | 'reject' {
-  return c >= 70 ? 'pass' : c >= 40 ? 'caution' : 'reject';
+  const s = statusForScore(c);
+  return s === 'PASS' ? 'pass' : s === 'REJECT' ? 'reject' : 'caution';
 }
 
 export default function Step4PreBreakoutPage() {
@@ -41,6 +66,10 @@ export default function Step4PreBreakoutPage() {
   const [scanning, setScanning]             = useState(false);
   const [error, setError]                   = useState<string | null>(null);
   const [alertSymbol, setAlertSymbol]       = useState<string | null>(null);
+
+  useEffect(() => {
+    setResults([]);
+  }, [params, universePick, direction, setResults]);
 
   const runScan = useCallback(async () => {
     // Universe resolution mirrors RunScanButton/index.tsx lines 76–91
@@ -63,7 +92,13 @@ export default function Step4PreBreakoutPage() {
     }
 
     if (symbols.length === 0 && !universe) {
-      setError('Add symbols to the Watchlist or enter them manually.');
+      if (universePick === 'Custom') {
+        setError('Custom universe is empty — add symbols in Step 2 (Universe) or enter them above.');
+      } else if (universePick === 'Watchlist') {
+        setError('Watchlist is empty — star some symbols or enter them above.');
+      } else {
+        setError('No symbols to scan.');
+      }
       return;
     }
 
@@ -72,6 +107,7 @@ export default function Step4PreBreakoutPage() {
     try {
       const paramsOverride: Record<string, unknown> = {
         atr_compression_ratio:    params.atrCompressionRatio,
+        atr_avg_lookback:         params.atrAvgLookback,
         range_atr_mult:           params.rangeAtrMult,
         range_lookback_bars:      params.rangeLookbackBars,
         vol_compression_ratio:    params.volCompressionRatio,
@@ -93,7 +129,7 @@ export default function Step4PreBreakoutPage() {
     symbolOverride.trim()          ? 'manual symbols'
     : universePick === 'Custom'    ? 'custom symbols'
     : universePick === 'Watchlist' ? 'watchlist'
-    : universePick;
+    : universeDisplayName(universePick);
 
   return (
     <div className={styles.main}>
@@ -108,6 +144,7 @@ export default function Step4PreBreakoutPage() {
       <div className={styles.modeToggle}>
         <button
           type="button"
+          aria-pressed={scanMode === 'prebreakout'}
           className={`${styles.modeBtn} ${scanMode === 'prebreakout' ? styles.modeBtnActive : ''}`}
           onClick={() => setScanMode('prebreakout')}
         >
@@ -115,6 +152,7 @@ export default function Step4PreBreakoutPage() {
         </button>
         <button
           type="button"
+          aria-pressed={scanMode === 'pullback'}
           className={`${styles.modeBtn} ${scanMode === 'pullback' ? styles.modeBtnActive : ''}`}
           onClick={() => setScanMode('pullback')}
         >

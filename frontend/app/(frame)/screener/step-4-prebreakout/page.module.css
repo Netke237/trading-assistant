@@ -51,7 +51,7 @@
   border-left: 1px solid var(--border-subtle);
 }
 .modeBtnActive {
-  background: var(--bg-card, var(--bg-surface));
+  background: var(--bg-surface);
   color: var(--text-primary);
   font-weight: 500;
 }
