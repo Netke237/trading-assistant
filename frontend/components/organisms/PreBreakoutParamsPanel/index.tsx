@@ -5,6 +5,7 @@ import styles from './PreBreakoutParamsPanel.module.css';
 
 export interface PreBreakoutParams {
   atrCompressionRatio: number;    // 0.1–1.0,  default 0.7
+  atrAvgLookback: number;         // 5–50,     default 20
   rangeAtrMult: number;           // 0.1–2.0,  default 0.8
   rangeLookbackBars: number;      // 3–30,     default 10
   volCompressionRatio: number;    // 0.1–1.0,  default 0.8
@@ -14,6 +15,7 @@ export interface PreBreakoutParams {
 
 export const PREBREAKOUT_DEFAULTS: PreBreakoutParams = {
   atrCompressionRatio: 0.7,
+  atrAvgLookback: 20,
   rangeAtrMult: 0.8,
   rangeLookbackBars: 10,
   volCompressionRatio: 0.8,
@@ -59,6 +61,23 @@ export function PreBreakoutParamsPanel({ params, setParams, onReset }: Props) {
               min={0.1} max={1.0} step={0.05}
               onChange={(e) => setParams((p) => ({ ...p, atrCompressionRatio: Number(e.target.value) }))}
             />
+          </div>
+        </label>
+
+        <label className={styles.paramLabel}>
+          <Text size={11} tone="dim">ATR average lookback</Text>
+          <Text size={10} tone="dim">
+            Number of bars used to compute the average ATR that current ATR is compared against.
+            ↑ Higher → smoother average (less noise) · ↓ Lower → reacts faster to recent volatility
+          </Text>
+          <div className={styles.paramInput}>
+            <input
+              type="number"
+              value={params.atrAvgLookback}
+              min={5} max={50} step={1}
+              onChange={(e) => setParams((p) => ({ ...p, atrAvgLookback: Number(e.target.value) }))}
+            />
+            <Text size={11} tone="dim">bars</Text>
           </div>
         </label>
 
