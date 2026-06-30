@@ -1,0 +1,73 @@
+.paramsPanel {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.paramsSummary {
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+.paramsSummary::-webkit-details-marker { display: none; }
+.paramsGrid {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.paramSection {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.paramLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.paramInput {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.paramInput input[type="number"] {
+  width: 72px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--bg-input, var(--bg-surface));
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.fibLevels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.fibLevelCheck {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.fibLevelCheck input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.resetBtn {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.resetBtn:hover { background: var(--bg-hover, rgba(255,255,255,0.05)); }
