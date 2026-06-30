@@ -99,6 +99,47 @@ def _count_confirmations(trigger_def: dict, structure_signals: list[dict], indic
     return count
 
 
+_MR_STRATEGY_LOOKBACK = 3   # bars scanned to detect a recent signal
+
+
+def _check_strategy_signals(
+    strategy_keys: list[str],
+    bars_daily: list[dict],
+    bars_intraday: list[dict],
+) -> int:
+    """Return how many of the given mean-reversion strategies fired within the last few bars."""
+    from app.services.strategy_engine import (
+        mean_reversion_rsi_signal,
+        mean_reversion_bb_signal,
+        mean_reversion_vwap_signal,
+    )
+
+    _FNS: dict[str, tuple] = {
+        "mean_reversion_rsi":  (mean_reversion_rsi_signal,  "daily"),
+        "mean_reversion_bb":   (mean_reversion_bb_signal,   "daily"),
+        "mean_reversion_vwap": (mean_reversion_vwap_signal, "intraday"),
+    }
+
+    count = 0
+    for key in strategy_keys:
+        entry = _FNS.get(key)
+        if entry is None:
+            continue
+        fn, bar_type = entry
+        bars = bars_intraday if bar_type == "intraday" else bars_daily
+        if len(bars) < 60:
+            continue
+        for i in range(len(bars) - _MR_STRATEGY_LOOKBACK, len(bars)):
+            slice_bars = bars[max(0, i - 119): i + 1]
+            try:
+                if fn(slice_bars) is not None:
+                    count += 1
+                    break
+            except Exception:
+                pass
+    return count
+
+
 def evaluate_from_context(
     trigger_def: dict,
     omm_result,              # OmmResult dataclass | None
@@ -219,4 +260,15 @@ def evaluate_scheduled(
             logger.warning("evaluate_scheduled: structure detection failed for %s — %s", symbol, exc)
 
     count = _count_confirmations(td, structure_signals, {})
-    return count >= min_conf_count
+    if count < min_conf_count:
+        return False
+
+    # Strategy confirmations — independent N-of-M gate for mean-reversion strategies.
+    strategy_conf_list: list[str] = td.get("strategy_confirmations", [])
+    min_strategy_conf: int = td.get("min_strategy_confirmations", 1)
+    if strategy_conf_list:
+        strategy_fired = _check_strategy_signals(strategy_conf_list, bars_daily, bars_intraday)
+        if strategy_fired < min_strategy_conf:
+            return False
+
+    return True
