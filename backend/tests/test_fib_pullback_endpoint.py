@@ -103,3 +103,97 @@ async def test_fib_pullback_skips_when_no_swing_found():
     assert resp.status_code == 200
     assert resp.json() == []
     mock_sig.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_fib_pullback_bearish_direction():
+    """Bearish direction should be passed through to the signal and appear in results."""
+    with patch("app.routers.stock_scan.get_historical_bars", new_callable=AsyncMock) as mock_bars:
+        mock_bars.return_value = BARS_50
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/api/scan/fib-pullback", json={
+                "symbols": ["TSLA"],
+                "direction": "Bearish",
+            })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    if data:
+        assert data[0]["direction"] == "Bearish"
+
+
+@pytest.mark.asyncio
+async def test_fib_pullback_rejects_empty_fib_levels():
+    """An empty fib_levels list must be rejected with 422."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/scan/fib-pullback", json={
+            "symbols": ["AAPL"],
+            "direction": "Bullish",
+            "params_override": {"fib_levels": []},
+        })
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_fib_pullback_rejects_invalid_fib_level_values():
+    """Non-standard fib level values (e.g. 50.1) must be rejected with 422."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/scan/fib-pullback", json={
+            "symbols": ["AAPL"],
+            "direction": "Bullish",
+            "params_override": {"fib_levels": [50.1]},
+        })
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_fib_pullback_rejects_zero_tolerance():
+    """fib_tolerance_pct of 0 must be rejected with 422."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/scan/fib-pullback", json={
+            "symbols": ["AAPL"],
+            "direction": "Bullish",
+            "params_override": {"fib_tolerance_pct": 0.0},
+        })
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_fib_pullback_sort_order_at_level_first():
+    """At-level hits must rank before non-at-level results."""
+    at_level_result = (True, 0.5, "61.8")
+    not_at_level_result = (False, 3.0, "38.2")
+    call_count = {"n": 0}
+
+    async def fake_bars(sym, *_a, **_kw):
+        return BARS_50
+
+    def fake_signal(bars, direction, **kwargs):
+        call_count["n"] += 1
+        # First symbol returns at-level, second does not
+        return at_level_result if call_count["n"] == 1 else not_at_level_result
+
+    with patch("app.routers.stock_scan.get_historical_bars", side_effect=fake_bars), \
+         patch("app.services.strategy_engine.fibonacci_pullback_signal", side_effect=fake_signal):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/api/scan/fib-pullback", json={
+                "symbols": ["AAPL", "MSFT"],
+                "direction": "Bullish",
+            })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    assert data[0]["at_level"] is True, "at-level hit must sort first"
+    assert data[1]["at_level"] is False
+
+
+@pytest.mark.asyncio
+async def test_fib_pullback_rejects_lookback_below_minimum():
+    """fib_swing_lookback < 10 must be rejected with 422."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/scan/fib-pullback", json={
+            "symbols": ["AAPL"],
+            "direction": "Bullish",
+            "params_override": {"fib_swing_lookback": 5},
+        })
+    assert resp.status_code == 422

@@ -984,15 +984,29 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
                     coerced[k] = int(v)
                 except (TypeError, ValueError):
                     raise HTTPException(status_code=422, detail=f"Override key '{k}' must be an integer")
+                if k == "fib_swing_lookback" and coerced[k] < 10:
+                    raise HTTPException(status_code=422, detail="fib_swing_lookback must be >= 10")
             elif k == "fib_levels":
                 if not isinstance(v, list):
                     raise HTTPException(status_code=422, detail="fib_levels must be a list of numbers")
-                coerced[k] = [float(x) for x in v]
+                if len(v) == 0:
+                    raise HTTPException(status_code=422, detail="fib_levels must contain at least one level")
+                _VALID_FIB_LEVELS = {23.6, 38.2, 50.0, 61.8, 78.6}
+                parsed_levels = [float(x) for x in v]
+                invalid_levels = [x for x in parsed_levels if x not in _VALID_FIB_LEVELS]
+                if invalid_levels:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Invalid fib_levels values: {invalid_levels}. Allowed: {sorted(_VALID_FIB_LEVELS)}",
+                    )
+                coerced[k] = parsed_levels
             else:
                 try:
                     coerced[k] = float(v)
                 except (TypeError, ValueError):
                     raise HTTPException(status_code=422, detail=f"Override key '{k}' must be a number")
+                if k == "fib_tolerance_pct" and not (0 < coerced[k] <= 0.20):
+                    raise HTTPException(status_code=422, detail="fib_tolerance_pct must be between 0 (exclusive) and 0.20")
         scan_params.update(coerced)
 
     results: list[dict] = []
@@ -1038,7 +1052,11 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
             "confidence": confidence,
         })
 
-    results.sort(key=lambda r: (r["at_level"], -r["fib_dist_pct"] if r["fib_dist_pct"] is not None else 0), reverse=True)
+    # Sort: at-level hits first, then by proximity ascending (closer = better rank).
+    results.sort(key=lambda r: (
+        not r["at_level"],  # False (0) = at-level → sorts first
+        r["fib_dist_pct"] if r["fib_dist_pct"] is not None else float("inf"),
+    ))
     return results
 
 

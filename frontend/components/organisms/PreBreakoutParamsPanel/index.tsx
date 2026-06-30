@@ -184,7 +184,7 @@ export function PreBreakoutParamsPanel({ params, setParams, onReset }: Props) {
           </div>
         </label>
 
-<button type="button" className={styles.resetBtn} onClick={onReset}>
+        <button type="button" className={styles.resetBtn} onClick={onReset}>
           Reset to defaults
         </button>
 
