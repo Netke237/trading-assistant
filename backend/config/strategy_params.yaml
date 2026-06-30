@@ -142,7 +142,7 @@ strategies:
         range_atr_mult: 0.8
         range_lookback_bars: 10
         vol_compression_ratio: 0.8
-        resistance_proximity_pct: 0.05
+        resistance_proximity_pct: 0.08
         swing_lookback: 50
       bearish:
         atr_compression_ratio: 0.7
@@ -150,7 +150,7 @@ strategies:
         range_atr_mult: 0.8
         range_lookback_bars: 10
         vol_compression_ratio: 0.8
-        resistance_proximity_pct: 0.05
+        resistance_proximity_pct: 0.08
         swing_lookback: 50
     # no search block — SetupSignal has no entry/stop/target; cannot be backtested
 
