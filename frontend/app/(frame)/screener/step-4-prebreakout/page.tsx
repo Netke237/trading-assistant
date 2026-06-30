@@ -15,10 +15,17 @@ import {
 } from '@/components/organisms/PreBreakoutParamsPanel';
 import styles from './page.module.css';
 
-type ScanRowMetrics = Record<string, number> & {
+type ScanRowMetrics = {
+  atr_ratio?: number;
+  range_ratio?: number;
+  vol_ratio?: number;
+  proximity_pct?: number;
+  swing_level?: number;
+  current_atr?: number;
   fib_at_level?: boolean;
   fib_level_hit?: string | null;
   fib_dist_pct?: number | null;
+  [key: string]: number | boolean | string | null | undefined;
 };
 type ScanRow = { symbol: string; confidence: number; direction: string; metrics: ScanRowMetrics };
 type ScanMode = 'prebreakout' | 'pullback';

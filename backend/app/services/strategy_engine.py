@@ -738,6 +738,16 @@ def breakout_setup_signal(
     fib_label: str | None = None
 
     if fib_enabled:
+        # Guard: if no valid fib levels are provided fall back to non-fib scoring
+        # to avoid silently penalising the confidence score by 20 pts.
+        _effective_fib_levels = [l for l in (fib_levels or []) if l in _FIB_RATIOS]
+        if not _effective_fib_levels:
+            fib_enabled = False
+            fib_at_level = False
+            fib_dist_pct = None
+            fib_label = None
+
+    if fib_enabled:
         fib_at_level, fib_dist_pct, fib_label = _fibonacci_pullback_signal(
             bars,
             direction,
@@ -745,9 +755,18 @@ def breakout_setup_signal(
             fib_levels=fib_levels,
             fib_tolerance_pct=fib_tolerance_pct,
         )
-        fib_score = 100 if fib_at_level else max(0, 100 * (1 - (fib_dist_pct or 100) / (fib_tolerance_pct * 100 * 2)))
-        confidence = int(atr_score * 0.32 + vol_score * 0.24 + prox_score * 0.24 + fib_score * 0.20)
-    else:
+        # If fib helper returned None distance (insufficient bars), fall back to non-fib
+        # rather than penalising the confidence score with a 0 fib_score.
+        if fib_dist_pct is None and not fib_at_level:
+            fib_enabled = False
+        else:
+            # fib_dist_pct is already in percent (e.g. 1.5 means 1.5% away).
+            # Normalise against 2× tolerance expressed in the same percent scale.
+            _tol_pct = fib_tolerance_pct * 100
+            fib_score = 100 if fib_at_level else max(0, 100 * (1 - (fib_dist_pct or 100) / (_tol_pct * 2)))
+            confidence = int(atr_score * 0.32 + vol_score * 0.24 + prox_score * 0.24 + fib_score * 0.20)
+
+    if not fib_enabled:
         confidence = int(atr_score * 0.40 + vol_score * 0.30 + prox_score * 0.30)
 
     metrics: dict = {

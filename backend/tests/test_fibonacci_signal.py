@@ -158,3 +158,57 @@ class TestFibonacciSignal:
         # Just must not throw; confidence is 0-100 if returned
         if result is not None:
             assert 0 <= result.confidence <= 100
+
+    def test_fib_enabled_empty_levels_falls_back_to_nonfib(self):
+        """fib_enabled=True with fib_levels=[] must not penalise confidence.
+
+        Internally the backend falls back to the non-fib weight scheme so the
+        confidence should equal the fib_disabled result.
+        """
+        _bypass = dict(
+            resistance_proximity_pct=0.25,
+            swing_lookback=70,
+            range_atr_mult=10.0,
+            atr_compression_ratio=1.5,
+            vol_compression_ratio=1.5,
+        )
+        bars = _make_bars()
+        without_fib = breakout_setup_signal(bars, "TEST", direction="Bullish",
+                                            fib_enabled=False, **_bypass)
+        with_empty_levels = breakout_setup_signal(bars, "TEST", direction="Bullish",
+                                                  fib_enabled=True,
+                                                  fib_levels=[],
+                                                  **_bypass)
+        # Both should return a signal and have equal confidence (fallback applied)
+        assert without_fib is not None
+        assert with_empty_levels is not None
+        assert with_empty_levels.confidence == without_fib.confidence
+
+    def test_fib_enabled_insufficient_bars_falls_back_to_nonfib(self):
+        """fib_enabled=True with fewer than 10 bars in fib window must not penalise confidence."""
+        _bypass = dict(
+            resistance_proximity_pct=0.25,
+            swing_lookback=5,
+            range_atr_mult=10.0,
+            atr_compression_ratio=1.5,
+            vol_compression_ratio=1.5,
+        )
+        # Minimal bar set — just enough to pass min_bars gate but fib window < 10
+        bars = []
+        for i in range(35):
+            price = 100.0 + i * 0.1
+            bars.append({"open": price, "high": price + 0.1, "low": price - 0.1,
+                         "close": price, "volume": 300_000})
+
+        without_fib = breakout_setup_signal(bars, "TEST", direction="Bullish",
+                                            fib_enabled=False,
+                                            fib_swing_lookback=100,
+                                            **_bypass)
+        with_fib = breakout_setup_signal(bars, "TEST", direction="Bullish",
+                                         fib_enabled=True,
+                                         fib_levels=[38.2, 61.8],
+                                         fib_swing_lookback=5,   # forces < 10 bars in window
+                                         **_bypass)
+        # If both return signals they must have equal confidence (fib fell back)
+        if without_fib is not None and with_fib is not None:
+            assert with_fib.confidence == without_fib.confidence

@@ -227,23 +227,29 @@ export function PreBreakoutParamsPanel({ params, setParams, onReset }: Props) {
                 More levels mean more results but more false positives.
               </Text>
               <div className={styles.fibLevels}>
-                {[23.6, 38.2, 50.0, 61.8, 78.6].map((lvl) => (
-                  <label key={lvl} className={styles.fibLevelCheck}>
-                    <input
-                      type="checkbox"
-                      checked={params.fibLevels.includes(lvl)}
-                      onChange={(e) => {
-                        const next = e.target.checked
-                          ? [...params.fibLevels, lvl].sort((a, b) => a - b)
-                          : params.fibLevels.filter((l) => l !== lvl);
-                        setParams((p) => ({ ...p, fibLevels: next }));
-                      }}
-                    />
-                    <Text size={11} tone={params.fibLevels.includes(lvl) ? 'primary' : 'dim'}>
-                      {lvl}%
-                    </Text>
-                  </label>
-                ))}
+                {[23.6, 38.2, 50.0, 61.8, 78.6].map((lvl) => {
+                  const isChecked = params.fibLevels.includes(lvl);
+                  // Prevent unchecking the last remaining level — at least one must stay selected.
+                  const isLastRemaining = isChecked && params.fibLevels.length === 1;
+                  return (
+                    <label key={lvl} className={styles.fibLevelCheck}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={isLastRemaining}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...params.fibLevels, lvl].sort((a, b) => a - b)
+                            : params.fibLevels.filter((l) => l !== lvl);
+                          setParams((p) => ({ ...p, fibLevels: next }));
+                        }}
+                      />
+                      <Text size={11} tone={isChecked ? 'primary' : 'dim'}>
+                        {lvl}%
+                      </Text>
+                    </label>
+                  );
+                })}
               </div>
             </label>
 
