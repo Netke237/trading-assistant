@@ -76,6 +76,7 @@ _ALLOWED_OVERRIDE_KEYS = frozenset({
     "vol_compression_ratio",
     "resistance_proximity_pct",
     "swing_lookback",
+    "require_trend",
     # Fibonacci pullback
     "fib_enabled",
     "fib_swing_lookback",
@@ -1091,7 +1092,7 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
                     coerced[k] = int(v)
                 except (TypeError, ValueError):
                     raise HTTPException(status_code=422, detail=f"Override key '{k}' must be an integer")
-            elif k == "fib_enabled":
+            elif k in ("fib_enabled", "require_trend"):
                 coerced[k] = bool(v)
             elif k == "fib_levels":
                 if not isinstance(v, list):

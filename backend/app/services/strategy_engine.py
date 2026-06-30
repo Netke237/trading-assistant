@@ -690,6 +690,7 @@ def breakout_setup_signal(
     resistance_proximity_pct: float = 0.05,
     swing_lookback: int = 50,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
+    require_trend: bool = True,
     # ── Fibonacci pullback ──
     fib_enabled: bool = False,
     fib_swing_lookback: int = 100,
@@ -747,8 +748,20 @@ def breakout_setup_signal(
         if prox < 0 or prox > resistance_proximity_pct:
             return None   # must be above swing low but within tolerance
 
+    # Trend filter: coil must be on the right side of the trend MA.
+    # Guards against surfacing bearish consolidations near resistance as bullish setups.
+    if require_trend:
+        closes_all = [b["close"] for b in bars]
+        ema20 = _ema(closes_all, 20)
+        if ema20:
+            ema20_val = ema20[-1]
+            if direction == "Bullish" and current < ema20_val:
+                return None
+            if direction == "Bearish" and current > ema20_val:
+                return None
+
     # Confidence score 0-100
-    # Base weights: ATR 40%, vol 30%, prox 30%. When fib enabled: ATR 32%, vol 24%, prox 24%, fib 20%.
+    # Base weights: ATR 30%, vol 25%, prox 45%. When fib enabled: ATR 24%, vol 20%, prox 36%, fib 20%.
     atr_score  = max(0, 100 * (1 - atr_ratio / atr_compression_ratio))
     vol_score  = max(0, 100 * (1 - vol_ratio / vol_compression_ratio))
     prox_score = max(0, 100 * (1 - prox / resistance_proximity_pct)) if resistance_proximity_pct > 0 else 50
@@ -784,10 +797,10 @@ def breakout_setup_signal(
             # Normalise against 2× tolerance expressed in the same percent scale.
             _tol_pct = fib_tolerance_pct * 100
             fib_score = 100 if fib_at_level else max(0, 100 * (1 - (fib_dist_pct or 100) / (_tol_pct * 2)))
-            confidence = int(atr_score * 0.32 + vol_score * 0.24 + prox_score * 0.24 + fib_score * 0.20)
+            confidence = int(atr_score * 0.24 + vol_score * 0.20 + prox_score * 0.36 + fib_score * 0.20)
 
     if not fib_enabled:
-        confidence = int(atr_score * 0.40 + vol_score * 0.30 + prox_score * 0.30)
+        confidence = int(atr_score * 0.30 + vol_score * 0.25 + prox_score * 0.45)
 
     metrics: dict = {
         "atr_ratio":     round(atr_ratio, 3),
