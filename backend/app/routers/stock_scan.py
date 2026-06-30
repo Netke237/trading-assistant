@@ -937,13 +937,17 @@ _FIB_ALLOWED_OVERRIDE_KEYS = frozenset({
     "fib_swing_lookback",
     "fib_levels",
     "fib_tolerance_pct",
+    "impulse_min_pct",
+    "retracement_recency_bars",
 })
-_FIB_INT_OVERRIDE_KEYS = frozenset({"fib_swing_lookback"})
+_FIB_INT_OVERRIDE_KEYS = frozenset({"fib_swing_lookback", "retracement_recency_bars"})
 
 _FIB_DEFAULTS = {
     "fib_swing_lookback": 100,
     "fib_levels": [38.2, 61.8],
     "fib_tolerance_pct": 0.015,
+    "impulse_min_pct": 0.08,
+    "retracement_recency_bars": 40,
 }
 
 
@@ -1008,6 +1012,8 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
                     raise HTTPException(status_code=422, detail=f"Override key '{k}' must be a number")
                 if k == "fib_tolerance_pct" and not (0 < coerced[k] <= 0.20):
                     raise HTTPException(status_code=422, detail="fib_tolerance_pct must be between 0 (exclusive) and 0.20")
+                if k == "impulse_min_pct" and not (0.0 <= coerced[k] <= 0.50):
+                    raise HTTPException(status_code=422, detail="impulse_min_pct must be between 0 and 0.50")
         scan_params.update(coerced)
 
     results: list[dict] = []
@@ -1029,6 +1035,8 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
                 fib_swing_lookback=scan_params["fib_swing_lookback"],
                 fib_levels=scan_params["fib_levels"],
                 fib_tolerance_pct=scan_params["fib_tolerance_pct"],
+                impulse_min_pct=scan_params["impulse_min_pct"],
+                retracement_recency_bars=scan_params["retracement_recency_bars"],
             )
         except Exception as exc:
             logger.warning("fib-pullback scan: signal failed for %s — %s", sym, exc)

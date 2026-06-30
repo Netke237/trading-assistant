@@ -111,6 +111,8 @@ def _fibonacci_pullback_signal(
     fib_swing_lookback: int = 100,
     fib_levels: list[float] | None = None,
     fib_tolerance_pct: float = 0.015,
+    impulse_min_pct: float = 0.0,
+    retracement_recency_bars: int = 0,
 ) -> tuple[bool, float | None, str | None]:
     """Check if close is near a Fibonacci retracement level of the dominant swing move.
 
@@ -118,9 +120,15 @@ def _fibonacci_pullback_signal(
     Retracement levels are measured downward from the swing high.
     For Bearish: swing high → swing low. Retracement levels measured upward from swing low.
 
+    impulse_min_pct: minimum (swing_high - swing_low) / swing_low to qualify as a
+                     real impulse. 0.0 disables (backward compatible).
+    retracement_recency_bars: for Bullish, the swing high must fall within the most
+                              recent N bars; for Bearish, the swing low. 0 disables.
+
     Returns:
         (at_level: bool, nearest_pct: float|None, level_label: str|None)
         nearest_pct is expressed as a percentage (e.g. 1.5 means 1.5% away).
+        Returns (False, None, None) when impulse/recency checks fail.
     """
     if fib_levels is None:
         fib_levels = [23.6, 38.2, 50.0, 61.8]
@@ -133,6 +141,26 @@ def _fibonacci_pullback_signal(
     move = swing_high - swing_low
     if move <= 0:
         return False, None, None
+
+    # Impulse size gate: skip trivial drifts that just cross a fib line.
+    # Guard swing_low > 0 before division to avoid ZeroDivisionError on bad data.
+    if impulse_min_pct > 0:
+        if swing_low <= 0 or (move / swing_low) < impulse_min_pct:
+            return False, None, None
+
+    # Recency gate: the swing extreme (peak for bullish, trough for bearish) must
+    # have occurred within the most recent N bars, confirming an active retracement.
+    if retracement_recency_bars > 0:
+        recent = bars[-retracement_recency_bars:] if len(bars) >= retracement_recency_bars else bars
+        if direction == "Bullish":
+            recent_high = max(b["high"] for b in recent)
+            # Allow 0.5% slop: the peak may not be at exactly the lookback max
+            if swing_high > 0 and abs(recent_high - swing_high) / swing_high > 0.005:
+                return False, None, None
+        else:
+            recent_low = min(b["low"] for b in recent)
+            if swing_low > 0 and abs(recent_low - swing_low) / swing_low > 0.005:
+                return False, None, None
 
     close = bars[-1]["close"]
 
@@ -161,6 +189,9 @@ def _fibonacci_pullback_signal(
         if dist_pct < best_dist_pct:
             best_dist_pct = dist_pct
             best_label = str(label)
+
+    if best_label is None:
+        return False, None, None
 
     at_level = best_dist_pct <= fib_tolerance_pct
     return at_level, round(best_dist_pct * 100, 2), best_label
