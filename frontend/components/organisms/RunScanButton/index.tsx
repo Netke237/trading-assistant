@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useScanStore } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
@@ -59,6 +60,7 @@ export function RunScanButton() {
   const shortlistMaxCandidates = useSettingsStore((s) => s.shortlistMaxCandidates);
   const fundamentalsGate = useSettingsStore((s) => s.fundamentalsGate);
   const scanning    = scanState === 'SCANNING';
+  const router = useRouter();
   const customEmpty = pick === 'Custom' && parseSymbols(customRaw).length === 0;
 
   const [showRegimeConfirm, setShowRegimeConfirm] = useState(false);
@@ -66,6 +68,11 @@ export function RunScanButton() {
 
   const onClick = useCallback(() => {
     if (scanning) return;
+
+    if (screenerMode === 'prebreakout') {
+      router.push('/screener/step-4-prebreakout');
+      return;
+    }
 
     if (screenerMode === 'stocks') {
       if (!activeStrategy) return;
@@ -187,7 +194,7 @@ export function RunScanButton() {
           alertType: 'SCAN_FAILED',
         });
       });
-  }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit, screenerMode, activeStrategy, shortlistMaxCandidates, fundamentalsGate]);
+  }, [scanning, setScanState, setScanResult, context, pick, customRaw, minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit, screenerMode, activeStrategy, shortlistMaxCandidates, fundamentalsGate, router]);
 
   return (
     <>
@@ -224,13 +231,13 @@ export function RunScanButton() {
         onClick={onClick}
         disabled={scanning || customEmpty}
         title={customEmpty ? 'Enter at least one valid symbol' : undefined}
-        aria-label={scanning ? 'Scan in progress' : screenerMode === 'stocks' ? 'Run stock scan' : 'Run scan'}
+        aria-label={scanning ? 'Scan in progress' : screenerMode === 'stocks' ? 'Run stock scan' : screenerMode === 'prebreakout' ? 'Go to Setup Scanner' : 'Run scan'}
         aria-live="polite"
       >
         <span className={`${styles.icon} ${scanning ? styles.spin : ''}`} aria-hidden>
           {scanning ? <SpinnerIcon /> : <PlayIcon />}
         </span>
-        <span>{scanning ? 'Scanning…' : screenerMode === 'stocks' ? 'Run Stock Scan' : 'Run Scan'}</span>
+        <span>{scanning ? 'Scanning…' : screenerMode === 'stocks' ? 'Run Stock Scan' : screenerMode === 'prebreakout' ? 'Go to Setup Scanner' : 'Run Scan'}</span>
       </button>
     </>
   );
