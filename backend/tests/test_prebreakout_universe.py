@@ -72,3 +72,22 @@ async def test_prebreakout_unknown_override_key_returns_422():
             "params_override": {"direction": "injected"},
         })
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_prebreakout_valid_override_key_accepted():
+    """atr_avg_lookback is whitelisted and must not be rejected."""
+    with patch(
+        "app.routers.stock_scan.expand_universe",
+    ) as mock_expand, patch(
+        "app.routers.stock_scan.get_historical_bars",
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        mock_expand.return_value = []
+        async with AsyncClient(app=app, base_url="http://test") as client:
+            resp = await client.post("/api/scan/prebreakout", json={
+                "universe": ["SP500"],
+                "params_override": {"atr_avg_lookback": 10},
+            })
+        assert resp.status_code == 200

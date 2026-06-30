@@ -76,6 +76,12 @@ _ALLOWED_OVERRIDE_KEYS = frozenset({
     "swing_lookback",
 })
 
+_INT_OVERRIDE_KEYS = frozenset({
+    "atr_avg_lookback",
+    "range_lookback_bars",
+    "swing_lookback",
+})
+
 
 @functools.lru_cache(maxsize=1)
 def _load_full_scoring_cfg() -> dict:
@@ -886,7 +892,17 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
         unknown = set(body.params_override) - _ALLOWED_OVERRIDE_KEYS
         if unknown:
             raise HTTPException(status_code=422, detail=f"Unknown override keys: {sorted(unknown)}")
-        base_params.update(body.params_override)
+        # Coerce integer params
+        coerced: dict = {}
+        for k, v in body.params_override.items():
+            if k in _INT_OVERRIDE_KEYS:
+                try:
+                    coerced[k] = int(v)
+                except (TypeError, ValueError):
+                    raise HTTPException(status_code=422, detail=f"Override key '{k}' must be an integer")
+            else:
+                coerced[k] = float(v) if isinstance(v, (int, float)) else v
+        base_params.update(coerced)
 
     results: list[dict] = []
     for sym in symbols_to_scan:
