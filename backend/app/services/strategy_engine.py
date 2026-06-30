@@ -213,7 +213,7 @@ def pullback_ema_signal(
     trend_ema: int = 100,
     atr_stop_mult: float = 1.5,
     rr_target_mult: float = 2.0,
-    tolerance: float = 0.08,
+    tolerance: float = 0.04,
     ma_type: str = "EMA",
     require_reversal: bool = False,
     direction: Literal["Bullish", "Bearish"] = "Bullish",

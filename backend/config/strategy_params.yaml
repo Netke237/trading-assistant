@@ -31,19 +31,19 @@ strategies:
         trend_ema: 100
         atr_stop_mult: 1.5
         rr_target_mult: 2.0
-        tolerance: 0.08
+        tolerance: 0.04
       bearish:
         ema_period: 35
         trend_ema: 100
         atr_stop_mult: 1.5
         rr_target_mult: 2.0
-        tolerance: 0.08
+        tolerance: 0.04
     search:
       ema_period: [20, 50]
       trend_ema: [100, 150, 200]
       atr_stop_mult: [1.0, 1.5, 2.0]
       rr_target_mult: [1.5, 2.0, 2.5, 3.0]
-      tolerance: [0.05, 0.08, 0.10]
+      tolerance: [0.02, 0.04, 0.06, 0.08]
 
   breakout_base:
     active:
