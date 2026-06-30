@@ -25,17 +25,25 @@ const CONFIRMATION_OPTIONS = [
   { type: 'structure', signal_kind: 'MACDDivergence', label: 'MACD Divergence' },
 ];
 
+const MR_STRATEGY_OPTIONS = [
+  { key: 'mean_reversion_rsi',  label: 'Mean Reversion RSI',  note: 'RSI extremes + trend filter (daily)' },
+  { key: 'mean_reversion_bb',   label: 'Mean Reversion BB',   note: 'Bollinger Band touch + close back inside (daily)' },
+  { key: 'mean_reversion_vwap', label: 'Mean Reversion VWAP', note: 'VWAP deviation snap-back (intraday 15m)' },
+];
+
 export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
-  const [model, setModel]                 = useState<MarkovModel>('OMM');
-  const [toState, setToState]             = useState<string>('Bull');
-  const [convictionMin, setConvictionMin] = useState(60);
-  const [pStayMin, setPStayMin]           = useState(0.7);
-  const [minConf, setMinConf]             = useState(1);
-  const [selected, setSelected]           = useState<Set<number>>(new Set());
-  const [saving, setSaving]               = useState(false);
-  const [done, setDone]                   = useState(false);
-  const [error, setError]                 = useState<string | null>(null);
-  const [interval, setIntervalVal]        = useState('1D');
+  const [model, setModel]                   = useState<MarkovModel>('OMM');
+  const [toState, setToState]               = useState<string>('Bull');
+  const [convictionMin, setConvictionMin]   = useState(60);
+  const [pStayMin, setPStayMin]             = useState(0.7);
+  const [minConf, setMinConf]               = useState(1);
+  const [selected, setSelected]             = useState<Set<number>>(new Set());
+  const [mrSelected, setMrSelected]         = useState<Set<number>>(new Set());
+  const [minMrConf, setMinMrConf]           = useState(1);
+  const [saving, setSaving]                 = useState(false);
+  const [done, setDone]                     = useState(false);
+  const [error, setError]                   = useState<string | null>(null);
+  const [interval, setIntervalVal]          = useState('1D');
 
   useEffect(() => {
     api.getCompositeWatchDefaults().then((d) => {
@@ -50,7 +58,25 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
   const toggleConfirm = (i: number) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(i)) next.delete(i); else next.add(i);
+      if (next.has(i)) {
+        next.delete(i);
+        setMinConf((m) => Math.min(m, next.size || 1));
+      } else {
+        next.add(i);
+      }
+      return next;
+    });
+  };
+
+  const toggleMr = (i: number) => {
+    setMrSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) {
+        next.delete(i);
+        setMinMrConf((m) => Math.min(m, next.size || 1));
+      } else {
+        next.add(i);
+      }
       return next;
     });
   };
@@ -64,6 +90,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
       direction: direction === 'any' ? null : direction,
       min_confidence: 60,
     }));
+    const strategyConfirmations = Array.from(mrSelected).map((i) => MR_STRATEGY_OPTIONS[i]!.key);
     const triggerDef: Record<string, unknown> = {
       primary: {
         model,
@@ -74,6 +101,8 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
       },
       confirmations,
       min_confirmations: Math.min(minConf, confirmations.length),
+      strategy_confirmations: strategyConfirmations,
+      min_strategy_confirmations: strategyConfirmations.length > 0 ? Math.min(minMrConf, strategyConfirmations.length) : 0,
       horizon: 'swing',
     };
     try {
@@ -160,7 +189,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
             </div>
 
             <div className={styles.section}>
-              <Text size={12} tone="secondary" weight={500}>Confirmations (select {minConf} required)</Text>
+              <Text size={12} tone="secondary" weight={500}>Structure confirmations</Text>
               <div className={styles.confirmList}>
                 {CONFIRMATION_OPTIONS.map((opt, i) => (
                   <label
@@ -174,11 +203,40 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
               </div>
               {selected.size > 0 && (
                 <div className={styles.row}>
-                  <Text size={12} tone="secondary">Require {minConf} of {selected.size}</Text>
+                  <Text size={12} tone="secondary">Require {Math.min(minConf, selected.size)} of {selected.size}</Text>
                   <input
-                    type="range" min={0} max={selected.size} step={1}
+                    type="range" min={1} max={selected.size} step={1}
                     value={Math.min(minConf, selected.size)}
                     onChange={(e) => setMinConf(Number(e.target.value))}
+                    className={styles.range}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className={styles.section}>
+              <Text size={12} tone="secondary" weight={500}>Mean Reversion strategies</Text>
+              <div className={styles.confirmList}>
+                {MR_STRATEGY_OPTIONS.map((opt, i) => (
+                  <label
+                    key={opt.key}
+                    className={`${styles.confirmItem} ${mrSelected.has(i) ? styles.confirmItemSelected : ''}`}
+                  >
+                    <input type="checkbox" checked={mrSelected.has(i)} onChange={() => toggleMr(i)} />
+                    <span>
+                      <Text size={12}>{opt.label}</Text>
+                      <Text size={11} tone="dim"> — {opt.note}</Text>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {mrSelected.size > 0 && (
+                <div className={styles.row}>
+                  <Text size={12} tone="secondary">At least {Math.min(minMrConf, mrSelected.size)} of {mrSelected.size} must fire</Text>
+                  <input
+                    type="range" min={1} max={mrSelected.size} step={1}
+                    value={Math.min(minMrConf, mrSelected.size)}
+                    onChange={(e) => setMinMrConf(Number(e.target.value))}
                     className={styles.range}
                   />
                 </div>

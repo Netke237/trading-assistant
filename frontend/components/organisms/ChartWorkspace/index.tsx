@@ -172,6 +172,7 @@ export default function ChartWorkspace() {
   const [chartApi, setChartApi] = useState<IChartApi | null>(null);
   const [mainSeries, setMainSeries] = useState<ISeriesApi<'Candlestick'> | null>(null);
   const [showRegime, setShowRegime] = useState(false);
+  const [regimeModel, setRegimeModel] = useState<'OMM' | 'HMM'>('OMM');
   const regimeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const regimeDataRef = useRef<Array<{ time: string; state: string }>>([]);
   const [wsError, setWsError] = useState<string | null>(null);
@@ -259,6 +260,11 @@ export default function ChartWorkspace() {
     useDrawingStore.getState().syncFromBackend(symbol, interval);
   }, [symbol, interval]);
 
+  // On intraday charts the model toggle is irrelevant — always use intraday HMM.
+  // Using effectiveRegimeModel in the dep array prevents a pointless re-fetch+flash
+  // when the user clicks OMM↔HMM while viewing a sub-daily interval.
+  const effectiveRegimeModel = interval !== '1D' && interval !== '1W' ? 'HMM' : regimeModel;
+
   // Regime background overlay
   useEffect(() => {
     const chart = chartApi;
@@ -278,16 +284,21 @@ export default function ChartWorkspace() {
     const isIntraday = interval !== '1D' && interval !== '1W';
 
     const STATE_COLOR: Record<string, string> = {
-      Bull:   'rgba(38,166,154,0.18)',
-      Bear:   'rgba(239,83,80,0.18)',
-      Choppy: 'rgba(251,192,45,0.12)',
+      // OMM + daily directional HMM states
+      Bull:             'rgba(38,166,154,0.18)',
+      Bear:             'rgba(239,83,80,0.18)',
+      Choppy:           'rgba(251,192,45,0.12)',
+      Sideways:         'rgba(251,192,45,0.12)',
+      // Intraday HMM states
+      Trending:         'rgba(38,166,154,0.18)',
+      'Mean-reverting': 'rgba(120,86,210,0.14)',
     };
 
     async function loadRegime() {
       try {
         const rawData: Array<{ time: string; state: string }> = isIntraday
           ? await api.getIntradayRegimeSeries(symbol, interval)
-          : await api.getRegimeSeries(symbol);
+          : await api.getRegimeSeries(symbol, undefined, effectiveRegimeModel);
 
         if (cancelled || !chart) return;
 
@@ -326,7 +337,7 @@ export default function ChartWorkspace() {
         regimeSeriesRef.current = null;
       }
     };
-  }, [showRegime, symbol, interval, chartApi]);
+  }, [showRegime, effectiveRegimeModel, symbol, interval, chartApi]);
 
   // Connect/reconnect WebSocket when symbol or interval changes
   useEffect(() => {
@@ -396,8 +407,9 @@ export default function ChartWorkspace() {
         const regimeEntry = regimeDataRef.current.find(
           (d) => d.time === String(closedCandle.time),
         );
+        const _isIntraday = interval !== '1D' && interval !== '1W';
         const currentRegime: RegimeSnapshot | null = regimeEntry
-          ? { state: regimeEntry.state }
+          ? { state: regimeEntry.state, model: _isIntraday ? 'HMM' : regimeModel }
           : null;
         const triggered = evaluateRules(
           alertRules,
@@ -708,6 +720,9 @@ export default function ChartWorkspace() {
         onToggleStructure={() => setShowStructure(v => !v)}
         onToggleAlerts={() => setShowAlerts(v => !v)}
         onToggleRegime={() => setShowRegime(v => !v)}
+        showRegime={showRegime}
+        regimeModel={regimeModel}
+        onSetRegimeModel={setRegimeModel}
         connState={connState}
         wsError={wsError}
       />

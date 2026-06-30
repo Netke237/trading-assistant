@@ -51,6 +51,53 @@ def compute_directional_hmm(bars: list[dict], *, min_obs: int = MIN_OBS,
                                 transition_row=[round(v, 4) for v in row])
 
 
+def compute_directional_hmm_series(
+    bars: list[dict],
+    *,
+    max_bars: int = 500,
+    min_obs: int = MIN_OBS,
+    random_state: int = 42,
+) -> list[dict]:
+    """Compute per-bar directional HMM state for chart background overlay (display only — Viterbi decoded).
+
+    States: Bull | Bear | Sideways — directly comparable to OMM's Bull/Bear/Choppy labels.
+    Returns one entry per bar (up to max_bars) with keys: time, state, conviction.
+    """
+    window = bars[-max_bars:] if len(bars) > max_bars else bars
+    if len(window) < min_obs:
+        return []
+    try:
+        from hmmlearn.hmm import GaussianHMM
+    except ImportError:
+        return []
+
+    closes = np.array([float(b["close"]) for b in window], dtype=float)
+    returns = (np.diff(closes) / closes[:-1]).reshape(-1, 1)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = GaussianHMM(n_components=3, covariance_type="diag",
+                            n_iter=200, random_state=random_state)
+        model.fit(returns)
+
+    means = np.array([model.means_[k][0] for k in range(3)])
+    order = np.argsort(means)
+    label_by_state = {int(order[0]): "Bear", int(order[1]): "Sideways", int(order[2]): "Bull"}
+
+    states = model.predict(returns)
+    posteriors = model.predict_proba(returns)
+
+    result = []
+    for i, bar in enumerate(window[1:]):
+        state_idx = int(states[i])
+        result.append({
+            "time": bar["time"],
+            "state": label_by_state[state_idx],
+            "conviction": round(float(posteriors[i, state_idx]), 4),
+        })
+    return result
+
+
 def alignment(omm_state: str | None, hmm_state: str | None) -> str:
     if not omm_state or not hmm_state:
         return "Unavailable"

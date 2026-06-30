@@ -20,11 +20,14 @@ interface Props {
   onToggleStructure: () => void;
   onToggleAlerts?: () => void;
   onToggleRegime?: () => void;
+  showRegime?: boolean;
+  regimeModel?: 'OMM' | 'HMM';
+  onSetRegimeModel?: (model: 'OMM' | 'HMM') => void;
   connState?: ConnectionState;
   wsError?: string | null;
 }
 
-export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onToggleAlerts, onToggleRegime, connState, wsError }: Props) {
+export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onToggleAlerts, onToggleRegime, showRegime, regimeModel, onSetRegimeModel, connState, wsError }: Props) {
   const { symbol, interval, chartType, symbolName, setSymbol, setInterval, setChartType, setSymbolName } = useChartStore();
 
   // Fetch company name whenever the active symbol changes.
@@ -88,7 +91,32 @@ export default function ChartTopBar({ onToggleIndicators, onToggleStructure, onT
       <button className={styles.btn} onClick={onToggleIndicators}>Indicators</button>
       <button className={styles.btn} onClick={onToggleStructure}>Structure</button>
       {onToggleAlerts && <button className={styles.btn} onClick={onToggleAlerts}>Alerts</button>}
-      {onToggleRegime && <button className={styles.btn} onClick={onToggleRegime}>Regime</button>}
+      {onToggleRegime && (
+        <button
+          className={`${styles.btn} ${showRegime ? styles.btnActive : ''}`}
+          onClick={onToggleRegime}
+        >
+          Regime
+        </button>
+      )}
+      {showRegime && onSetRegimeModel && (
+        <>
+          <button
+            className={`${styles.modelBtn} ${regimeModel === 'OMM' ? styles.modelBtnActive : ''}`}
+            onClick={() => onSetRegimeModel('OMM')}
+            title="Observable Markov Model — Bull / Bear / Choppy"
+          >
+            OMM
+          </button>
+          <button
+            className={`${styles.modelBtn} ${regimeModel === 'HMM' ? styles.modelBtnActive : ''}`}
+            onClick={() => onSetRegimeModel('HMM')}
+            title="Hidden Markov Model — Bull / Bear / Sideways (daily) or Trending / Choppy / Mean-reverting (intraday)"
+          >
+            HMM
+          </button>
+        </>
+      )}
 
       {connState && connState !== 'connected' && (
         <span
