@@ -91,3 +91,35 @@ async def test_prebreakout_valid_override_key_accepted():
                 "params_override": {"atr_avg_lookback": 10},
             })
         assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_prebreakout_fib_override_keys_accepted():
+    """fib_enabled, fib_swing_lookback, fib_levels, fib_tolerance_pct must be accepted."""
+    with patch(
+        "app.routers.stock_scan.get_historical_bars",
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        async with AsyncClient(app=app, base_url="http://test") as client:
+            resp = await client.post("/api/scan/prebreakout", json={
+                "symbols": ["AAPL"],
+                "params_override": {
+                    "fib_enabled": True,
+                    "fib_swing_lookback": 80,
+                    "fib_levels": [23.6, 38.2, 50.0],
+                    "fib_tolerance_pct": 0.02,
+                },
+            })
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_prebreakout_fib_unknown_key_still_rejected():
+    """A spurious fib key must still return 422."""
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        resp = await client.post("/api/scan/prebreakout", json={
+            "symbols": ["AAPL"],
+            "params_override": {"fib_unknown_key": 1},
+        })
+    assert resp.status_code == 422

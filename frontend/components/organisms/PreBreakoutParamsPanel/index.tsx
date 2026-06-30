@@ -11,6 +11,11 @@ export interface PreBreakoutParams {
   volCompressionRatio: number;    // 0.1–1.0,  default 0.8
   resistanceProximityPct: number; // 0.01–0.20,default 0.08
   swingLookback: number;          // 10–100,   default 50
+  // Fibonacci pullback
+  fibEnabled: boolean;            // default false
+  fibSwingLookback: number;       // 10–200,   default 100
+  fibLevels: number[];            // subset of [23.6, 38.2, 50.0, 61.8, 78.6]
+  fibTolerancePct: number;        // 0.005–0.05, default 0.015 (stored as fraction)
 }
 
 export const PREBREAKOUT_DEFAULTS: PreBreakoutParams = {
@@ -21,6 +26,10 @@ export const PREBREAKOUT_DEFAULTS: PreBreakoutParams = {
   volCompressionRatio: 0.8,
   resistanceProximityPct: 0.08,
   swingLookback: 50,
+  fibEnabled: false,
+  fibSwingLookback: 100,
+  fibLevels: [23.6, 38.2, 50.0, 61.8],
+  fibTolerancePct: 0.015,
 };
 
 interface Props {
@@ -183,6 +192,104 @@ export function PreBreakoutParamsPanel({ params, setParams, onReset }: Props) {
             <Text size={11} tone="dim">bars</Text>
           </div>
         </label>
+
+        {/* ── Fibonacci pullback ── */}
+        <div className={styles.paramSection}>
+          <Text size={11} weight={500} tone="secondary">Fibonacci pullback (optional)</Text>
+          <Text size={10} tone="dim">
+            When enabled, the scanner also checks if the close is within tolerance of a
+            key Fibonacci retracement level (measured from the dominant swing move).
+            Price landing near 38.2% or 61.8% of a prior up-move is a high-probability
+            support zone. Increases confidence score by up to 20 pts when at a level.
+          </Text>
+        </div>
+
+        <label className={styles.paramLabel}>
+          <div className={styles.paramInput}>
+            <input
+              type="checkbox"
+              checked={params.fibEnabled}
+              onChange={(e) => setParams((p) => ({ ...p, fibEnabled: e.target.checked }))}
+              id="fib-enabled"
+            />
+            <Text size={11} tone={params.fibEnabled ? 'primary' : 'dim'}>
+              Enable Fibonacci proximity check
+            </Text>
+          </div>
+        </label>
+
+        {params.fibEnabled && (
+          <>
+            <label className={styles.paramLabel}>
+              <Text size={11} tone="dim">Fibonacci retracement levels</Text>
+              <Text size={10} tone="dim">
+                Which levels to treat as support. 38.2% and 61.8% are the most reliable.
+                More levels mean more results but more false positives.
+              </Text>
+              <div className={styles.fibLevels}>
+                {[23.6, 38.2, 50.0, 61.8, 78.6].map((lvl) => {
+                  const isChecked = params.fibLevels.includes(lvl);
+                  // Prevent unchecking the last remaining level — at least one must stay selected.
+                  const isLastRemaining = isChecked && params.fibLevels.length === 1;
+                  return (
+                    <label key={lvl} className={styles.fibLevelCheck}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={isLastRemaining}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...params.fibLevels, lvl].sort((a, b) => a - b)
+                            : params.fibLevels.filter((l) => l !== lvl);
+                          setParams((p) => ({ ...p, fibLevels: next }));
+                        }}
+                      />
+                      <Text size={11} tone={isChecked ? 'primary' : 'dim'}>
+                        {lvl}%
+                      </Text>
+                    </label>
+                  );
+                })}
+              </div>
+            </label>
+
+            <label className={styles.paramLabel}>
+              <Text size={11} tone="dim">Swing lookback for fib move</Text>
+              <Text size={10} tone="dim">
+                How many bars back to search for the significant swing high and low
+                that define the Fibonacci move. Higher values capture larger structural moves.
+              </Text>
+              <div className={styles.paramInput}>
+                <input
+                  type="number"
+                  value={params.fibSwingLookback}
+                  min={20} max={200} step={5}
+                  onChange={(e) => setParams((p) => ({ ...p, fibSwingLookback: Number(e.target.value) }))}
+                />
+                <Text size={11} tone="dim">bars</Text>
+              </div>
+            </label>
+
+            <label className={styles.paramLabel}>
+              <Text size={11} tone="dim">Fib tolerance</Text>
+              <Text size={10} tone="dim">
+                How close (in %) the close must be to a fib level to count as &quot;at level&quot;.
+                Higher values widen the net (more results); lower values require very precise hits.
+              </Text>
+              <div className={styles.paramInput}>
+                <input
+                  type="number"
+                  value={Math.round(params.fibTolerancePct * 100 * 10) / 10}
+                  min={0.5} max={5.0} step={0.1}
+                  onChange={(e) =>
+                    setParams((p) => ({ ...p, fibTolerancePct: Number(e.target.value) / 100 }))
+                  }
+                />
+                <Text size={11} tone="dim">%</Text>
+              </div>
+            </label>
+          </>
+        )}
 
         <button type="button" className={styles.resetBtn} onClick={onReset}>
           Reset to defaults

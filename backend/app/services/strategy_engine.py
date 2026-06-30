@@ -93,6 +93,79 @@ def _atr_series(bars: list[dict], period: int = 14) -> list[float]:
     return result
 
 
+# ── Fibonacci retracement helper ──────────────────────────────────────────────
+
+_FIB_RATIOS: dict[float, float] = {
+    23.6: 0.236,
+    38.2: 0.382,
+    50.0: 0.500,
+    61.8: 0.618,
+    78.6: 0.786,
+}
+
+
+def _fibonacci_pullback_signal(
+    bars: list[dict],
+    direction: Literal["Bullish", "Bearish"],
+    *,
+    fib_swing_lookback: int = 100,
+    fib_levels: list[float] | None = None,
+    fib_tolerance_pct: float = 0.015,
+) -> tuple[bool, float | None, str | None]:
+    """Check if close is near a Fibonacci retracement level of the dominant swing move.
+
+    For Bullish: swing low → swing high within fib_swing_lookback bars.
+    Retracement levels are measured downward from the swing high.
+    For Bearish: swing high → swing low. Retracement levels measured upward from swing low.
+
+    Returns:
+        (at_level: bool, nearest_pct: float|None, level_label: str|None)
+        nearest_pct is expressed as a percentage (e.g. 1.5 means 1.5% away).
+    """
+    if fib_levels is None:
+        fib_levels = [23.6, 38.2, 50.0, 61.8]
+    window = bars[-fib_swing_lookback:] if len(bars) >= fib_swing_lookback else bars
+    if len(window) < 10:
+        return False, None, None
+
+    swing_high = max(b["high"] for b in window)
+    swing_low  = min(b["low"]  for b in window)
+    move = swing_high - swing_low
+    if move <= 0:
+        return False, None, None
+
+    close = bars[-1]["close"]
+
+    if direction == "Bullish":
+        # Retracement levels from swing_high downward
+        levels = {
+            label: swing_high - _FIB_RATIOS[label] * move
+            for label in fib_levels
+            if label in _FIB_RATIOS
+        }
+    else:
+        # Retracement levels from swing_low upward
+        levels = {
+            label: swing_low + _FIB_RATIOS[label] * move
+            for label in fib_levels
+            if label in _FIB_RATIOS
+        }
+
+    best_label: str | None = None
+    best_dist_pct: float = float("inf")
+
+    for label, level in levels.items():
+        if level <= 0:
+            continue
+        dist_pct = abs(close - level) / level
+        if dist_pct < best_dist_pct:
+            best_dist_pct = dist_pct
+            best_label = str(label)
+
+    at_level = best_dist_pct <= fib_tolerance_pct
+    return at_level, round(best_dist_pct * 100, 2), best_label
+
+
 # ── Signal dataclass ──────────────────────────────────────────────────────────
 
 @dataclass
@@ -597,6 +670,11 @@ def breakout_setup_signal(
     resistance_proximity_pct: float = 0.05,
     swing_lookback: int = 50,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
+    # ── Fibonacci pullback ──
+    fib_enabled: bool = False,
+    fib_swing_lookback: int = 100,
+    fib_levels: list[float] | None = None,
+    fib_tolerance_pct: float = 0.015,
 ) -> SetupSignal | None:
     """Pre-breakout setup scanner. Returns SetupSignal (NOT StrategySignal).
 
@@ -649,23 +727,65 @@ def breakout_setup_signal(
         if prox < 0 or prox > resistance_proximity_pct:
             return None   # must be above swing low but within tolerance
 
-    # Confidence score 0-100: weighted average of how strongly each condition is met
-    atr_score = max(0, 100 * (1 - atr_ratio / atr_compression_ratio))
-    vol_score = max(0, 100 * (1 - vol_ratio / vol_compression_ratio))
+    # Confidence score 0-100
+    # Base weights: ATR 40%, vol 30%, prox 30%. When fib enabled: ATR 32%, vol 24%, prox 24%, fib 20%.
+    atr_score  = max(0, 100 * (1 - atr_ratio / atr_compression_ratio))
+    vol_score  = max(0, 100 * (1 - vol_ratio / vol_compression_ratio))
     prox_score = max(0, 100 * (1 - prox / resistance_proximity_pct)) if resistance_proximity_pct > 0 else 50
-    confidence = int((atr_score * 0.4 + vol_score * 0.3 + prox_score * 0.3))
+
+    fib_at_level: bool = False
+    fib_dist_pct: float | None = None
+    fib_label: str | None = None
+
+    if fib_enabled:
+        # Guard: if no valid fib levels are provided fall back to non-fib scoring
+        # to avoid silently penalising the confidence score by 20 pts.
+        _effective_fib_levels = [l for l in (fib_levels or []) if l in _FIB_RATIOS]
+        if not _effective_fib_levels:
+            fib_enabled = False
+            fib_at_level = False
+            fib_dist_pct = None
+            fib_label = None
+
+    if fib_enabled:
+        fib_at_level, fib_dist_pct, fib_label = _fibonacci_pullback_signal(
+            bars,
+            direction,
+            fib_swing_lookback=fib_swing_lookback,
+            fib_levels=fib_levels,
+            fib_tolerance_pct=fib_tolerance_pct,
+        )
+        # If fib helper returned None distance (insufficient bars), fall back to non-fib
+        # rather than penalising the confidence score with a 0 fib_score.
+        if fib_dist_pct is None and not fib_at_level:
+            fib_enabled = False
+        else:
+            # fib_dist_pct is already in percent (e.g. 1.5 means 1.5% away).
+            # Normalise against 2× tolerance expressed in the same percent scale.
+            _tol_pct = fib_tolerance_pct * 100
+            fib_score = 100 if fib_at_level else max(0, 100 * (1 - (fib_dist_pct or 100) / (_tol_pct * 2)))
+            confidence = int(atr_score * 0.32 + vol_score * 0.24 + prox_score * 0.24 + fib_score * 0.20)
+
+    if not fib_enabled:
+        confidence = int(atr_score * 0.40 + vol_score * 0.30 + prox_score * 0.30)
+
+    metrics: dict = {
+        "atr_ratio":     round(atr_ratio, 3),
+        "range_ratio":   round(range_ratio, 3),
+        "vol_ratio":     round(vol_ratio, 3),
+        "proximity_pct": round(prox * 100, 2),
+        "swing_level":   round(swing_level, 2),
+        "current_atr":   round(current_atr, 4),
+    }
+    if fib_enabled:
+        metrics["fib_at_level"]  = fib_at_level
+        metrics["fib_level_hit"] = fib_label
+        metrics["fib_dist_pct"]  = fib_dist_pct
 
     return SetupSignal(
         strategy="breakout_setup",
         direction=direction,
         symbol=symbol,
         confidence=min(100, max(0, confidence)),
-        metrics={
-            "atr_ratio": round(atr_ratio, 3),
-            "range_ratio": round(range_ratio, 3),
-            "vol_ratio": round(vol_ratio, 3),
-            "proximity_pct": round(prox * 100, 2),
-            "swing_level": round(swing_level, 2),
-            "current_atr": round(current_atr, 4),
-        },
+        metrics=metrics,
     )
