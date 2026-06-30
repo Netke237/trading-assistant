@@ -61,3 +61,21 @@
   border-radius: 6px;
   margin-bottom: 16px;
 }
+
+.fibTableHeader,
+.fibTableRow {
+  display: grid;
+  grid-template-columns: 24px 80px 32px 80px 72px 72px 72px 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+}
+.fibTableHeader {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.fibTableRow {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.fibTableRow:last-child {
+  border-bottom: none;
+}

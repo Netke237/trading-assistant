@@ -13,6 +13,11 @@ import {
   PREBREAKOUT_DEFAULTS,
   type PreBreakoutParams,
 } from '@/components/organisms/PreBreakoutParamsPanel';
+import {
+  FibPullbackParamsPanel,
+  FIB_PULLBACK_DEFAULTS,
+  type FibPullbackParams,
+} from '@/components/organisms/FibPullbackParamsPanel';
 import styles from './page.module.css';
 
 type ScanRowMetrics = {
@@ -28,7 +33,16 @@ type ScanRowMetrics = {
   [key: string]: number | boolean | string | null | undefined;
 };
 type ScanRow = { symbol: string; confidence: number; direction: string; metrics: ScanRowMetrics };
-type ScanMode = 'prebreakout' | 'pullback';
+type ScanMode = 'prebreakout' | 'pullback' | 'fib';
+
+type FibScanRow = {
+  symbol: string;
+  direction: string;
+  fib_level_hit: string;
+  fib_dist_pct: number | null;
+  at_level: boolean;
+  confidence: number;
+};
 
 const SECTOR_LABELS: Record<string, string> = {
   'SECTOR:XLK': 'Technology',
@@ -79,6 +93,9 @@ export default function Step4PreBreakoutPage() {
   const [symbolOverride, setSymbolOverride] = useState('');
   const [scanMode, setScanMode]             = useState<ScanMode>('prebreakout');
   const [params, setParams]                 = useState<PreBreakoutParams>({ ...PREBREAKOUT_DEFAULTS });
+  const [fibParams, setFibParams]           = useState<FibPullbackParams>({ ...FIB_PULLBACK_DEFAULTS });
+  const fibResults = useScanStore((s) => s.fibPullbackResults);
+  const setFibResults = useScanStore((s) => s.setFibPullbackResults);
   const [scanning, setScanning]             = useState(false);
   const [error, setError]                   = useState<string | null>(null);
   const [alertSymbol, setAlertSymbol]       = useState<string | null>(null);
@@ -90,10 +107,10 @@ export default function Step4PreBreakoutPage() {
       return;
     }
     setResults([]);
-  }, [params, universePick, direction, setResults]);
+    setFibResults([]);
+  }, [params, fibParams, universePick, direction, setResults, setFibResults]);
 
   const runScan = useCallback(async () => {
-    // Universe resolution mirrors RunScanButton/index.tsx lines 76–91
     const manualSymbols = parseSymbols(symbolOverride);
     let symbols: string[];
     let universe: string[] | undefined;
@@ -126,28 +143,37 @@ export default function Step4PreBreakoutPage() {
     setError(null);
     setScanning(true);
     try {
-      const paramsOverride: Record<string, unknown> = {
-        atr_compression_ratio:    params.atrCompressionRatio,
-        atr_avg_lookback:         params.atrAvgLookback,
-        range_atr_mult:           params.rangeAtrMult,
-        range_lookback_bars:      params.rangeLookbackBars,
-        vol_compression_ratio:    params.volCompressionRatio,
-        resistance_proximity_pct: params.resistanceProximityPct,
-        swing_lookback:           params.swingLookback,
-        // Fibonacci pullback
-        fib_enabled:              params.fibEnabled,
-        fib_swing_lookback:       params.fibSwingLookback,
-        fib_levels:               params.fibLevels,
-        fib_tolerance_pct:        params.fibTolerancePct,
-      };
-      const results = await api.prebreakoutScan(symbols, direction, paramsOverride, universe);
-      setResults(results);
+      if (scanMode === 'fib') {
+        const results = await api.fibPullbackScan(
+          symbols,
+          direction,
+          {
+            fib_swing_lookback: fibParams.fibSwingLookback,
+            fib_levels: fibParams.fibLevels,
+            fib_tolerance_pct: fibParams.fibTolerancePct,
+          },
+          universe,
+        );
+        setFibResults(results);
+      } else {
+        const paramsOverride: Record<string, unknown> = {
+          atr_compression_ratio:    params.atrCompressionRatio,
+          atr_avg_lookback:         params.atrAvgLookback,
+          range_atr_mult:           params.rangeAtrMult,
+          range_lookback_bars:      params.rangeLookbackBars,
+          vol_compression_ratio:    params.volCompressionRatio,
+          resistance_proximity_pct: params.resistanceProximityPct,
+          swing_lookback:           params.swingLookback,
+        };
+        const results = await api.prebreakoutScan(symbols, direction, paramsOverride, universe);
+        setResults(results);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setScanning(false);
     }
-  }, [symbolOverride, universePick, customRaw, direction, params, setResults]);
+  }, [scanMode, symbolOverride, universePick, customRaw, direction, params, fibParams, setResults, setFibResults]);
 
   const sorted: ScanRow[] = [...preResults].sort((a, b) => b.confidence - a.confidence);
 
@@ -184,6 +210,14 @@ export default function Step4PreBreakoutPage() {
         >
           Pullback to EMA
         </button>
+        <button
+          type="button"
+          aria-pressed={scanMode === 'fib'}
+          className={`${styles.modeBtn} ${scanMode === 'fib' ? styles.modeBtnActive : ''}`}
+          onClick={() => setScanMode('fib')}
+        >
+          Fib Pullback
+        </button>
       </div>
 
       {scanMode === 'pullback' ? (
@@ -195,6 +229,83 @@ export default function Step4PreBreakoutPage() {
             gate, and broker execution. Use this tab for pre-breakout consolidation setups only.
           </Text>
         </div>
+      ) : scanMode === 'fib' ? (
+        <>
+          <Text size={12} tone="dim">
+            Stocks retracing to a key Fibonacci level (38.2%, 61.8%) after a significant swing move.
+            At-level hits are sorted first. Set a regime alert to be notified when conditions align.
+          </Text>
+
+          <div className={styles.inputRow}>
+            <textarea
+              className={styles.symbolInput}
+              rows={2}
+              placeholder={`Leave blank to use universe (${universeLabel}) · or enter specific symbols to override`}
+              value={symbolOverride}
+              onChange={(e) => setSymbolOverride(e.target.value)}
+            />
+            <button
+              type="button"
+              className={styles.runBtn}
+              onClick={runScan}
+              disabled={scanning}
+            >
+              {scanning ? 'Scanning…' : 'Run Scan'}
+            </button>
+          </div>
+
+          <FibPullbackParamsPanel
+            params={fibParams}
+            setParams={setFibParams}
+            onReset={() => setFibParams({ ...FIB_PULLBACK_DEFAULTS })}
+          />
+
+          {error && <Text size={12} tone="reject">{error}</Text>}
+
+          {fibResults.length > 0 && (
+            <div className={styles.tableWrap}>
+              <div className={styles.fibTableHeader}>
+                <span />
+                <Text size={11} tone="dim" weight={500}>Symbol</Text>
+                <Text size={11} tone="dim" weight={500}>Dir</Text>
+                <Text size={11} tone="dim" weight={500}>Fib Level</Text>
+                <Text size={11} tone="dim" weight={500}>Distance</Text>
+                <Text size={11} tone="dim" weight={500}>At Level</Text>
+                <Text size={11} tone="dim" weight={500}>Confidence</Text>
+                <span />
+              </div>
+              {(fibResults as FibScanRow[]).map((row) => (
+                <div key={row.symbol} className={styles.fibTableRow}>
+                  <WatchStar symbol={row.symbol} size="sm" />
+                  <Text size={13} weight={500}>{row.symbol}</Text>
+                  <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
+                    {row.direction === 'Bullish' ? '↑' : '↓'}
+                  </Text>
+                  <Data size={12} tone="secondary">{row.fib_level_hit}%</Data>
+                  <Data size={12} tone={row.fib_dist_pct != null && row.fib_dist_pct <= 1.5 ? 'pass' : 'caution'}>
+                    {row.fib_dist_pct != null ? `${row.fib_dist_pct.toFixed(1)}%` : '—'}
+                  </Data>
+                  <Data size={12} tone={row.at_level ? 'pass' : 'dim'}>
+                    {row.at_level ? 'YES' : 'no'}
+                  </Data>
+                  <Data size={13} tone={_confidenceTone(row.confidence)}>{row.confidence}%</Data>
+                  <button
+                    type="button"
+                    className={styles.alertBtn}
+                    onClick={() => setAlertSymbol(row.symbol)}
+                    title="Set alert"
+                  >
+                    +
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {fibResults.length === 0 && !scanning && !error && (
+            <Text size={12} tone="dim">No results yet — run the scan.</Text>
+          )}
+        </>
       ) : (
         <>
           <Text size={12} tone="dim">
