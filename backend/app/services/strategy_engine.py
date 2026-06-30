@@ -166,6 +166,10 @@ def _fibonacci_pullback_signal(
     return at_level, round(best_dist_pct * 100, 2), best_label
 
 
+# Public alias so routers can import without depending on the private name
+fibonacci_pullback_signal = _fibonacci_pullback_signal
+
+
 # ── Signal dataclass ──────────────────────────────────────────────────────────
 
 @dataclass
