@@ -252,8 +252,11 @@ def pullback_ema_signal(
         # Optional reversal candle gate: close > open (bullish bar)
         if require_reversal and last["close"] <= last["open"]:
             return None
-        stop   = _swing_low(bars, lookback=10) - atr * 0.2
-        target = current + atr * rr_target_mult * atr_stop_mult
+        stop = fast_val - atr * atr_stop_mult
+        risk = current - stop
+        if risk <= 0:
+            return None
+        target = current + risk * rr_target_mult
     else:  # Bearish — mirror logic
         # Trend: price below ema_period-MA, ema_period-MA below trend_ema-MA (downtrend stack)
         if current >= fast_val:
@@ -266,8 +269,11 @@ def pullback_ema_signal(
         # Optional reversal candle gate: close < open (bearish bar)
         if require_reversal and last["close"] >= last["open"]:
             return None
-        stop   = _swing_high(bars, lookback=10) + atr * 0.2
-        target = current - atr * rr_target_mult * atr_stop_mult
+        stop = fast_val + atr * atr_stop_mult
+        risk = stop - current
+        if risk <= 0:
+            return None
+        target = current - risk * rr_target_mult
 
     ma_label = ma_type.upper()
     return StrategySignal(

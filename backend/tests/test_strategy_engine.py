@@ -270,3 +270,96 @@ def test_breakout_setup_signal_returns_setup_signal_type():
         assert isinstance(sig.confidence, int)
         assert 0 <= sig.confidence <= 100
         assert "atr_ratio" in sig.metrics
+
+
+# ── Stop placement and R/R tests (Task 1) ─────────────────────────────────────
+
+def _uptrend_pullback_bars(n=200):
+    """Steady uptrend then a shallow pullback near the 50-EMA."""
+    bars = []
+    price = 100.0
+    for i in range(n):
+        price += 0.6
+        bars.append({"open": price - 0.2, "high": price + 0.5,
+                     "low": price - 0.5, "close": price, "volume": 500_000})
+    # Last 10 bars: compress volume and pull price back within 3% of 50-EMA
+    from app.services.strategy_engine import _ema as _ema_fn
+    closes = [b["close"] for b in bars]
+    ema_val = _ema_fn(closes, 50)[-1]
+    pullback_price = ema_val * 1.02  # 2% above EMA — inside 4% tolerance
+    for j in range(-10, 0):
+        bars[j]["close"] = pullback_price
+        bars[j]["high"]  = pullback_price + 0.2
+        bars[j]["low"]   = pullback_price - 0.2
+        bars[j]["volume"] = 200_000   # low volume — passes contraction check
+    return bars
+
+
+def test_pullback_ema_stop_is_below_fast_ma():
+    """Stop must be below the fast MA (fast_val - ATR*1.5)."""
+    bars = _uptrend_pullback_bars()
+    from app.services.strategy_engine import _ema as _ema_fn, _atr
+    closes = [b["close"] for b in bars]
+    fast_val = _ema_fn(closes, 50)[-1]
+
+    signal = pullback_ema_signal(bars, tolerance=0.04)
+    if signal is None:
+        pytest.skip("setup did not fire on synthetic data")
+
+    assert signal.stop_price < fast_val, (
+        f"stop {signal.stop_price:.2f} must be below fast MA {fast_val:.2f}"
+    )
+
+
+def test_pullback_ema_rr_ratio_is_two_to_one():
+    """R/R must be exactly rr_target_mult (2.0) based on chart risk."""
+    bars = _uptrend_pullback_bars()
+    signal = pullback_ema_signal(bars, tolerance=0.04)
+    if signal is None:
+        pytest.skip("setup did not fire on synthetic data")
+
+    risk   = signal.entry_price - signal.stop_price
+    reward = signal.target_price - signal.entry_price
+    assert risk > 0, "risk must be positive (stop below entry)"
+    assert abs(reward / risk - 2.0) < 0.05, (
+        f"R/R {reward/risk:.2f} should be ~2.0"
+    )
+
+
+def test_pullback_ema_stop_never_above_entry():
+    """risk <= 0 guard: signal must be None, never have stop above entry."""
+    bars = _uptrend_pullback_bars()
+    signal = pullback_ema_signal(bars, tolerance=0.04)
+    if signal is not None:
+        assert signal.entry_price > signal.stop_price, (
+            "stop must be strictly below entry for bullish signal"
+        )
+
+
+def test_pullback_ema_bearish_stop_above_fast_ma():
+    """Bearish stop must be above the fast MA."""
+    bars = []
+    price = 150.0
+    for i in range(200):
+        price -= 0.5
+        bars.append({"open": price + 0.2, "high": price + 0.5,
+                     "low": price - 0.5, "close": price, "volume": 500_000})
+    from app.services.strategy_engine import _ema as _ema_fn
+    closes = [b["close"] for b in bars]
+    ema_val = _ema_fn(closes, 35)[-1]
+    bounce_price = ema_val * 0.98  # 2% below EMA — inside 4% tolerance from below
+    for j in range(-10, 0):
+        bars[j]["close"] = bounce_price
+        bars[j]["high"]  = bounce_price + 0.2
+        bars[j]["low"]   = bounce_price - 0.2
+        bars[j]["volume"] = 200_000
+
+    signal = pullback_ema_signal(bars, direction="Bearish", tolerance=0.04)
+    if signal is None:
+        pytest.skip("bearish setup did not fire on synthetic data")
+
+    fast_val = _ema_fn([b["close"] for b in bars], 35)[-1]
+    assert signal.stop_price > fast_val, (
+        f"bearish stop {signal.stop_price:.2f} must be above fast MA {fast_val:.2f}"
+    )
+    assert signal.stop_price > signal.entry_price, "stop above entry for bearish"
