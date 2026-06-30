@@ -47,10 +47,12 @@ from app.services.fundamentals_store import get_fundamentals as _get_fundamental
 from app.scoring.fundamentals_scorer import score_fundamentals as _score_fundamentals, FundamentalHealth
 from app.schemas import FundamentalsOut
 from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
+from app.data.universe_presets import expand_universe, PresetUnavailableError
 
 
 class PreBreakoutScanRequest(BaseModel):
-    symbols: list[str]
+    symbols: list[str] = []
+    universe: list[str] | None = None   # e.g. ["SP500"] or ["SECTOR:XLK"] or individual tickers
     direction: str = "Bullish"
     params_override: dict | None = None
 
@@ -854,16 +856,27 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
 @router.post("/scan/prebreakout")
 async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
     """Scan symbols for pre-breakout consolidation setups using breakout_setup_signal."""
-    from datetime import date, timedelta
     end = date.today()
     start = end - timedelta(days=365)
+
+    # Resolve symbol list: universe takes precedence over manual symbols list
+    if body.universe:
+        try:
+            symbols_to_scan = expand_universe(body.universe)
+        except PresetUnavailableError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    else:
+        symbols_to_scan = [s.strip().upper() for s in body.symbols if s.strip()]
+
+    if not symbols_to_scan:
+        return []
 
     base_params = get_active("breakout_setup", body.direction)
     if body.params_override:
         base_params.update(body.params_override)
 
     results: list[dict] = []
-    for sym in body.symbols:
+    for sym in symbols_to_scan:
         sym = sym.strip().upper()
         if not sym:
             continue
