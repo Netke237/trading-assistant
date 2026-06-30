@@ -229,7 +229,7 @@ export function RunScanButton() {
         type="button"
         className={styles.fab}
         onClick={onClick}
-        disabled={scanning || customEmpty}
+        disabled={scanning || (screenerMode !== 'prebreakout' && customEmpty)}
         title={customEmpty ? 'Enter at least one valid symbol' : undefined}
         aria-label={scanning ? 'Scan in progress' : screenerMode === 'stocks' ? 'Run stock scan' : screenerMode === 'prebreakout' ? 'Go to Setup Scanner' : 'Run scan'}
         aria-live="polite"
