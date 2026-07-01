@@ -12,6 +12,11 @@ export function distToSegment(px: number, py: number, x1: number, y1: number, x2
 export type Handle = 'p0' | 'p1' | 'whole' | null;
 export interface HitResult { hit: boolean; handle: Handle; }
 
+// Matches render constants in ArrowUpPrimitive / ArrowDownPrimitive
+const ARROW_S = 10;
+const ARROW_H = 16;
+const ARROW_OFFSET = 6;
+
 /** toX: time->pixel, toY: price->pixel. tol in pixels. */
 export function hitTestDrawing(
   d: Drawing, px: number, py: number,
@@ -19,6 +24,7 @@ export function hitTestDrawing(
 ): HitResult {
   const near = (x: number | null, y: number | null) => x != null && y != null && Math.hypot(px - x, py - y) <= tol;
   const p0 = d.points[0];
+
   if (d.kind === 'hline') {
     const y = toY(p0.price);
     return { hit: y != null && Math.abs(py - y) <= tol, handle: 'whole' };
@@ -27,12 +33,56 @@ export function hitTestDrawing(
     const x = toX(p0.time), y = toY(p0.price);
     return { hit: x != null && y != null && px >= x - 4 && px <= x + 120 && py >= y - 18 && py <= y + 4, handle: 'whole' };
   }
+
+  // 1-point directional markers — bounding rect matches rendered triangle area
+  if (d.kind === 'arrow_up') {
+    const x = toX(p0.time), y = toY(p0.price);
+    if (x == null || y == null) return { hit: false, handle: null };
+    const tipY  = y - ARROW_OFFSET - ARROW_H;
+    const baseY = y - ARROW_OFFSET;
+    const hit = px >= x - ARROW_S - tol && px <= x + ARROW_S + tol && py >= tipY - tol && py <= baseY + tol;
+    return { hit, handle: 'whole' };
+  }
+  if (d.kind === 'arrow_down') {
+    const x = toX(p0.time), y = toY(p0.price);
+    if (x == null || y == null) return { hit: false, handle: null };
+    const tipY  = y + ARROW_OFFSET + ARROW_H;
+    const baseY = y + ARROW_OFFSET;
+    const hit = px >= x - ARROW_S - tol && px <= x + ARROW_S + tol && py >= baseY - tol && py <= tipY + tol;
+    return { hit, handle: 'whole' };
+  }
+
+  // path: hit if near any segment
+  if (d.kind === 'path') {
+    if (d.points.length < 2) return { hit: false, handle: null };
+    for (let i = 0; i < d.points.length - 1; i++) {
+      const ax = toX(d.points[i].time), ay = toY(d.points[i].price);
+      const bx = toX(d.points[i + 1].time), by = toY(d.points[i + 1].price);
+      if (ax == null || ay == null || bx == null || by == null) continue;
+      if (distToSegment(px, py, ax, ay, bx, by) <= tol) return { hit: true, handle: 'whole' };
+    }
+    return { hit: false, handle: null };
+  }
+
+  // circle: hit if distance from centre ≈ radius (within tol)
+  if (d.kind === 'circle') {
+    const x0 = toX(p0.time), y0 = toY(p0.price);
+    const x1 = toX(d.points[1].time), y1 = toY(d.points[1].price);
+    if (x0 == null || y0 == null || x1 == null || y1 == null) return { hit: false, handle: null };
+    const radius = Math.hypot(x1 - x0, y1 - y0);
+    const dist = Math.hypot(px - x0, py - y0);
+    return { hit: Math.abs(dist - radius) <= tol, handle: 'whole' };
+  }
+
+  // 2-point kinds: arrow / trendline / rect
   const p1 = d.points[1];
   const x0 = toX(p0.time), y0 = toY(p0.price), x1 = toX(p1?.time ?? p0.time), y1 = toY(p1?.price ?? p0.price);
   if (x0 == null || y0 == null || x1 == null || y1 == null) return { hit: false, handle: null };
   if (near(x0, y0)) return { hit: true, handle: 'p0' };
   if (near(x1, y1)) return { hit: true, handle: 'p1' };
-  if (d.kind === 'trendline') return { hit: distToSegment(px, py, x0, y0, x1, y1) <= tol, handle: 'whole' };
+  if (d.kind === 'trendline' || d.kind === 'arrow') {
+    return { hit: distToSegment(px, py, x0, y0, x1, y1) <= tol, handle: 'whole' };
+  }
   // rect: near any of the 4 borders
   const onBorder =
     distToSegment(px, py, x0, y0, x1, y0) <= tol || distToSegment(px, py, x1, y0, x1, y1) <= tol ||
