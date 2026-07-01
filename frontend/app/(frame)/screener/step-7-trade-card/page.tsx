@@ -241,6 +241,7 @@ export default function Step7Page() {
       sourceLabel:   `${brokerLabel} — ${typeLabel} (ID: ${orderId})`,
       orderedAt:     nowISOLocal(),
       recId:         generateRecId(),
+      scanStockPrice: card.price,
     };
   }
 

@@ -402,6 +402,7 @@ def ma_crossover_signal(
     slow: int = 50,
     lookback: int = 10,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
+    current_price: float | None = None,  # accepted for router compat; not used (crossover uses close)
 ) -> StrategySignal | None:
     """Golden cross (Bullish) or death cross (Bearish) within the last `lookback` bars.
 
@@ -452,6 +453,7 @@ def mean_reversion_rsi_signal(
     trend_sma: int = 200,
     require_choppy_regime: bool = False,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
+    current_price: float | None = None,  # accepted for router compat; not used (mean-rev uses close)
 ) -> StrategySignal | None:
     """RSI mean-reversion signal in the direction of the trend.
 
