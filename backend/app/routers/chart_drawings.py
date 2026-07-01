@@ -7,7 +7,7 @@ import logging
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +35,22 @@ class DrawingIn(BaseModel):
     width: int = 1
     text: str | None = None
     createdAt: str
+
+    @model_validator(mode='after')
+    def validate_point_count(self) -> 'DrawingIn':
+        """Validate that point count matches the drawing kind."""
+        ONE_POINT = {'hline', 'text', 'arrow_up', 'arrow_down'}
+        TWO_POINT = {'trendline', 'rect', 'arrow', 'circle'}
+        n = len(self.points)
+
+        if self.kind in ONE_POINT and n != 1:
+            raise ValueError(f'{self.kind} requires exactly 1 point, got {n}')
+        if self.kind in TWO_POINT and n != 2:
+            raise ValueError(f'{self.kind} requires exactly 2 points, got {n}')
+        if self.kind == 'path' and n < 2:
+            raise ValueError(f'path requires at least 2 points, got {n}')
+
+        return self
 
 
 class DrawingOut(BaseModel):
