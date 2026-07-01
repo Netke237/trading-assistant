@@ -42,7 +42,13 @@ export interface MtfRow {
   changePct: number;
 }
 
-export type DrawingKind = 'trendline' | 'hline' | 'rect' | 'text';
+export type DrawingKind =
+  | 'trendline' | 'hline' | 'rect' | 'text'
+  | 'arrow'      // 2-point directed line with filled arrowhead at point[1]
+  | 'arrow_up'   // 1-point upward triangle marker
+  | 'arrow_down' // 1-point downward triangle marker
+  | 'circle'     // 2-point: point[0]=centre, point[1]=perimeter
+  | 'path';      // N-point polyline (≥2 points)
 export interface DrawingPoint { time: number; price: number; }
 export interface Drawing {
   id: string;
