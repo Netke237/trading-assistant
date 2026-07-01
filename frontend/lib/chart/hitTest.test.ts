@@ -35,6 +35,24 @@ describe('hitTestDrawing — arrow', () => {
   it('handle p1 near second point', () => {
     expect(hitTestDrawing(d, 98, 2, toX, toY, 8).handle).toBe('p1');
   });
+  it('returns { hit: false, handle: null } for degenerate arrow with only 1 point', () => {
+    const single: Drawing = { ...d, points: [{ time: 0, price: 0 }] };
+    expect(hitTestDrawing(single, 0, 0, toX, toY, 8)).toEqual({ hit: false, handle: null });
+  });
+});
+
+describe('hitTestDrawing — trendline', () => {
+  const toX = (t: number) => t as number;
+  const toY = (p: number) => p as number;
+  it('returns { hit: false, handle: null } for degenerate trendline with only 1 point', () => {
+    const single: Drawing = {
+      id: 'x', symbol: 'S', interval: '1D' as const,
+      kind: 'trendline',
+      points: [{ time: 0, price: 0 }],
+      color: '#fff', width: 1, createdAt: '',
+    };
+    expect(hitTestDrawing(single, 0, 0, toX, toY, 8)).toEqual({ hit: false, handle: null });
+  });
 });
 
 describe('hitTestDrawing — arrow_up', () => {
@@ -94,6 +112,10 @@ describe('hitTestDrawing — circle', () => {
   });
   it('misses well outside', () => {
     expect(hitTestDrawing(d, 200, 100, toX, toY, 8).hit).toBe(false);
+  });
+  it('returns { hit: false, handle: null } for degenerate circle with only 1 point', () => {
+    const single: Drawing = { ...d, points: [{ time: 100, price: 100 }] };
+    expect(hitTestDrawing(single, 100, 100, toX, toY, 8)).toEqual({ hit: false, handle: null });
   });
 });
 

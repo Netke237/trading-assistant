@@ -62,17 +62,21 @@ export function hitTestDrawing(
 
   // circle: hit if within filled area (distance from centre ≤ radius + tol)
   if (d.kind === 'circle') {
+    const p1c = d.points[1];
+    if (!p1c) return { hit: false, handle: null };
     const x0 = toX(p0.time), y0 = toY(p0.price);
-    const x1 = toX(d.points[1].time), y1 = toY(d.points[1].price);
+    const x1 = toX(p1c.time), y1 = toY(p1c.price);
     if (x0 == null || y0 == null || x1 == null || y1 == null) return { hit: false, handle: null };
     const radius = Math.hypot(x1 - x0, y1 - y0);
     const dist = Math.hypot(px - x0, py - y0);
+    // handle is always 'whole': circle has no separate endpoint handles; dragging moves the whole shape
     return { hit: dist <= radius + tol, handle: 'whole' };
   }
 
   // 2-point kinds: arrow / trendline / rect
   const p1 = d.points[1];
-  const x0 = toX(p0.time), y0 = toY(p0.price), x1 = toX(p1?.time ?? p0.time), y1 = toY(p1?.price ?? p0.price);
+  if (!p1) return { hit: false, handle: null };
+  const x0 = toX(p0.time), y0 = toY(p0.price), x1 = toX(p1.time), y1 = toY(p1.price);
   if (x0 == null || y0 == null || x1 == null || y1 == null) return { hit: false, handle: null };
   if (near(x0, y0)) return { hit: true, handle: 'p0' };
   if (near(x1, y1)) return { hit: true, handle: 'p1' };
