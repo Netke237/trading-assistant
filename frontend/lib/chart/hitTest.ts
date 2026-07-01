@@ -1,4 +1,5 @@
 import type { Drawing } from '@/types/overlays';
+import { ARROW_MARKER_S, ARROW_MARKER_H, ARROW_MARKER_OFFSET } from '@/lib/chartPrimitives/ArrowUpPrimitive';
 
 export function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
   const dx = x2 - x1, dy = y2 - y1;
@@ -11,11 +12,6 @@ export function distToSegment(px: number, py: number, x1: number, y1: number, x2
 
 export type Handle = 'p0' | 'p1' | 'whole' | null;
 export interface HitResult { hit: boolean; handle: Handle; }
-
-// Matches render constants in ArrowUpPrimitive / ArrowDownPrimitive
-const ARROW_S = 10;
-const ARROW_H = 16;
-const ARROW_OFFSET = 6;
 
 /** toX: time->pixel, toY: price->pixel. tol in pixels. */
 export function hitTestDrawing(
@@ -38,17 +34,17 @@ export function hitTestDrawing(
   if (d.kind === 'arrow_up') {
     const x = toX(p0.time), y = toY(p0.price);
     if (x == null || y == null) return { hit: false, handle: null };
-    const tipY  = y - ARROW_OFFSET - ARROW_H;
-    const baseY = y - ARROW_OFFSET;
-    const hit = px >= x - ARROW_S - tol && px <= x + ARROW_S + tol && py >= tipY - tol && py <= baseY + tol;
+    const tipY  = y - ARROW_MARKER_OFFSET - ARROW_MARKER_H;
+    const baseY = y - ARROW_MARKER_OFFSET;
+    const hit = px >= x - ARROW_MARKER_S - tol && px <= x + ARROW_MARKER_S + tol && py >= tipY - tol && py <= baseY + tol;
     return { hit, handle: 'whole' };
   }
   if (d.kind === 'arrow_down') {
     const x = toX(p0.time), y = toY(p0.price);
     if (x == null || y == null) return { hit: false, handle: null };
-    const tipY  = y + ARROW_OFFSET + ARROW_H;
-    const baseY = y + ARROW_OFFSET;
-    const hit = px >= x - ARROW_S - tol && px <= x + ARROW_S + tol && py >= baseY - tol && py <= tipY + tol;
+    const tipY  = y + ARROW_MARKER_OFFSET + ARROW_MARKER_H;
+    const baseY = y + ARROW_MARKER_OFFSET;
+    const hit = px >= x - ARROW_MARKER_S - tol && px <= x + ARROW_MARKER_S + tol && py >= baseY - tol && py <= tipY + tol;
     return { hit, handle: 'whole' };
   }
 
@@ -64,14 +60,14 @@ export function hitTestDrawing(
     return { hit: false, handle: null };
   }
 
-  // circle: hit if distance from centre ≈ radius (within tol)
+  // circle: hit if within filled area (distance from centre ≤ radius + tol)
   if (d.kind === 'circle') {
     const x0 = toX(p0.time), y0 = toY(p0.price);
     const x1 = toX(d.points[1].time), y1 = toY(d.points[1].price);
     if (x0 == null || y0 == null || x1 == null || y1 == null) return { hit: false, handle: null };
     const radius = Math.hypot(x1 - x0, y1 - y0);
     const dist = Math.hypot(px - x0, py - y0);
-    return { hit: Math.abs(dist - radius) <= tol, handle: 'whole' };
+    return { hit: dist <= radius + tol, handle: 'whole' };
   }
 
   // 2-point kinds: arrow / trendline / rect

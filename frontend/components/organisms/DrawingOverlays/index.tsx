@@ -33,7 +33,11 @@ function makePrimitive(drawing: Drawing): UpdatablePrimitive | null {
     case 'arrow_down': return new ArrowDownPrimitive(drawing);
     case 'circle':     return new CirclePrimitive(drawing);
     case 'path':       return new PathPrimitive(drawing);
-    default:           return null;
+    default: {
+      const _exhaustive: never = drawing.kind;
+      void _exhaustive;
+      return null;
+    }
   }
 }
 

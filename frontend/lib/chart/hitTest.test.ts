@@ -89,8 +89,8 @@ describe('hitTestDrawing — circle', () => {
   it('hits near circumference (right side, tol=8)', () => {
     expect(hitTestDrawing(d, 150, 100, toX, toY, 8).hit).toBe(true);
   });
-  it('misses at centre (well inside)', () => {
-    expect(hitTestDrawing(d, 100, 100, toX, toY, 8).hit).toBe(false);
+  it('hits at centre (inside filled area)', () => {
+    expect(hitTestDrawing(d, 100, 100, toX, toY, 8).hit).toBe(true);
   });
   it('misses well outside', () => {
     expect(hitTestDrawing(d, 200, 100, toX, toY, 8).hit).toBe(false);
