@@ -47,7 +47,7 @@ export default function DrawingToolbar({ active, onChange, onClear, color, onCol
         </button>
       ))}
       <div className={styles.divider} />
-      <label className={styles.colorSwatch} title="Stroke colour" style={{ backgroundColor: color }}>
+      <label className={styles.colorSwatch} title="Stroke colour" aria-label="Stroke colour" style={{ backgroundColor: color }}>
         <input
           type="color"
           value={color}
