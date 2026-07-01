@@ -20,6 +20,7 @@ class PortfolioPositionModel(Base):
     stop = Column(Float, nullable=True)
     targets = Column(JSON, nullable=True, default=list)
     dte_total = Column(Integer, nullable=True)
+    entry_stock_price = Column(Float, nullable=True)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

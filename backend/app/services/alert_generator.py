@@ -75,8 +75,12 @@ async def generate_alerts(
                     alertType="TP_HIT",
                 ))
 
-        # STOP_REACHED
-        if pos.stop is not None and price is not None and price <= pos.stop:
+        # STOP_REACHED — direction-aware: puts are invalidated when stock rises above stop
+        stop_breached = (
+            (price >= pos.stop) if is_bearish
+            else (price <= pos.stop)
+        )
+        if pos.stop is not None and price is not None and stop_breached:
             counter += 1
             alerts.append(AlertItem(
                 id=f"a{counter}",

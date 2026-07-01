@@ -108,6 +108,7 @@ def _fibonacci_pullback_signal(
     bars: list[dict],
     direction: Literal["Bullish", "Bearish"],
     *,
+    current_price: float | None = None,
     fib_swing_lookback: int = 100,
     fib_levels: list[float] | None = None,
     fib_tolerance_pct: float = 0.015,
@@ -162,7 +163,8 @@ def _fibonacci_pullback_signal(
             if swing_low > 0 and abs(recent_low - swing_low) / swing_low > 0.005:
                 return False, None, None
 
-    close = bars[-1]["close"]
+    close = (current_price if current_price is not None and current_price > 0
+             else bars[-1]["close"])
 
     if direction == "Bullish":
         # Retracement levels from swing_high downward
@@ -240,6 +242,7 @@ class SetupSignal:
 def pullback_ema_signal(
     bars: list[dict],
     *,
+    current_price: float | None = None,
     ema_period: int = 50,
     trend_ema: int = 100,
     atr_stop_mult: float = 1.5,
@@ -275,7 +278,8 @@ def pullback_ema_signal(
     slow_ma = _ma(closes, trend_ema)
     if not fast_ma or not slow_ma:
         return None
-    current  = closes[-1]
+    current  = (current_price if current_price is not None and current_price > 0
+                else closes[-1])
     fast_val = fast_ma[-1]
     slow_val = slow_ma[-1]
     last     = bars[-1]
@@ -713,6 +717,7 @@ def breakout_setup_signal(
     bars: list[dict],
     symbol: str,
     *,
+    current_price: float | None = None,
     atr_compression_ratio: float = 0.7,
     atr_avg_lookback: int = 20,
     range_atr_mult: float = 0.8,
@@ -767,7 +772,8 @@ def breakout_setup_signal(
     vol_ratio = vols[-1] / avg_vol if avg_vol > 0 else 99
 
     # Proximity to key level
-    current = bars[-1]["close"]
+    current = (current_price if current_price is not None and current_price > 0
+               else bars[-1]["close"])
     if direction == "Bullish":
         swing_level = _swing_high(bars, lookback=swing_lookback)
         prox = (swing_level - current) / swing_level if swing_level > 0 else 99

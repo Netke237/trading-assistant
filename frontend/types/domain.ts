@@ -158,6 +158,8 @@ export interface PortfolioPosition {
   orderedAt?:    string;
   /** Unique recommendation / position ID. */
   recId:         string;
+  /** Underlying stock price at scan time — used to re-anchor stop/targets to fill price. */
+  scanStockPrice?: number;
 }
 
 export interface AlertItem {

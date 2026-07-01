@@ -68,7 +68,7 @@ interface PortfolioStoreState {
   closePositionRemote: (
     recId: string,
     opts: { qtyToClose?: number | null; exitPrice?: number | null; exitDate?: string | null; sendToBroker?: boolean },
-  ) => Promise<boolean>;
+  ) => Promise<{ ok: boolean; detail?: string }>;
   syncFromBackend: () => Promise<void>;
   syncToBackend:  () => Promise<void>;
 }
@@ -77,17 +77,18 @@ const _BASE_URL = () => process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:800
 
 function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
   return {
-    recId:         p.recId,
-    symbol:        p.symbol,
-    contract:      p.contract,
-    direction:     p.direction,
-    entryPrice:    p.entryPrice,
-    qty:           p.contracts ?? 1,
-    entryDate:     p.entryDate ?? new Date().toISOString().slice(0, 10),
-    stop:          p.stop > 0 ? p.stop : null,
-    targets:       p.targets ?? [],
-    dteTotal:      p.dteTotal ?? null,
+    recId:          p.recId,
+    symbol:         p.symbol,
+    contract:       p.contract,
+    direction:      p.direction,
+    entryPrice:     p.entryPrice,
+    qty:            p.contracts ?? 1,
+    entryDate:      p.entryDate ?? new Date().toISOString().slice(0, 10),
+    stop:           p.stop > 0 ? p.stop : null,
+    targets:        p.targets ?? [],
+    dteTotal:       p.dteTotal ?? null,
     portfolioValue,
+    scanStockPrice: p.scanStockPrice ?? null,
   };
 }
 
@@ -237,8 +238,8 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         if (closedRecId) deletePosition(closedRecId);
       },
       closePositionRemote: async (recId, opts) => {
-        try {
-          const res = await fetch(`${_BASE_URL()}/api/portfolio/${recId}/close`, {
+        const doClose = async (): Promise<Response> =>
+          fetch(`${_BASE_URL()}/api/portfolio/${recId}/close`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -248,20 +249,41 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
               sendToBroker: opts.sendToBroker ?? false,
             }),
           });
-          if (!res.ok) return false;
+        try {
+          let res = await doClose();
+          if (res.status === 404) {
+            // Position was never persisted to the backend (e.g. the original
+            // POST failed silently) — re-persist it now, then retry the close.
+            const local = usePortfolioStore.getState().positions.find((p) => p.recId === recId);
+            if (local) {
+              const persisted = await persistPosition(local);
+              if (persisted.ok) res = await doClose();
+            }
+          }
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            return { ok: false, detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
+          }
           // Re-pull authoritative open positions (partial closes change qty)
           await usePortfolioStore.getState().syncFromBackend();
-          return true;
-        } catch {
-          return false;
+          return { ok: true };
+        } catch (e) {
+          return { ok: false, detail: e instanceof Error ? e.message : 'Network error' };
         }
       },
       syncFromBackend: async () => {
         try {
           const res = await fetch(`${_BASE_URL()}/api/portfolio`);
           if (!res.ok) return;
-          const positions: BackendPosition[] = await res.json();
-          set({ positions: positions.map(fromBackend) });
+          const remote: BackendPosition[] = await res.json();
+          const remotePositions = remote.map(fromBackend);
+          const remoteRecIds = new Set(remotePositions.map((p) => p.recId).filter(Boolean));
+          // Keep any locally-held positions that haven't landed in the backend yet
+          // (e.g. postPosition failed silently or is still in-flight).
+          const localOnly = usePortfolioStore.getState().positions.filter(
+            (p) => p.recId && !remoteRecIds.has(p.recId)
+          );
+          set({ positions: [...remotePositions, ...localOnly] });
         } catch {
           // network unavailable — keep localStorage state
         }

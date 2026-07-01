@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
 
 from app.database import get_db
+from app.data.market import fetch_price_async
 from app.models.portfolio import PortfolioPositionModel
 from app.models.closed_position import ClosedPositionModel, EquitySnapshotModel
 from app.schemas import (
@@ -139,6 +140,33 @@ async def add_position(
             detail=" ".join(risk.reasons),
         )
 
+    # Re-anchor stop and targets to the live price at fill time.
+    # scanStockPrice is the underlying price shown on the trade card (live at scan time).
+    # We fetch the live price now (at save time) and shift stop/targets by the delta.
+    adjusted_stop = body.stop
+    adjusted_targets = list(body.targets or [])
+    entry_stock_price = body.scanStockPrice
+
+    if body.scanStockPrice and body.scanStockPrice > 0:
+        try:
+            async with httpx.AsyncClient(timeout=5) as _cl:
+                live_price = await fetch_price_async(_cl, body.symbol)
+            if live_price and live_price > 0:
+                delta = live_price - body.scanStockPrice
+                if adjusted_stop is not None:
+                    adjusted_stop = round(adjusted_stop + delta, 2)
+                adjusted_targets = [
+                    {
+                        **t,
+                        "stockPrice":  round((t.get("stockPrice")  or 0) + delta, 2),
+                        "targetPrice": round((t.get("targetPrice") or 0) + delta, 2),
+                    }
+                    for t in adjusted_targets
+                ]
+                entry_stock_price = live_price
+        except Exception:
+            pass  # fallback: store scan-time values unchanged
+
     position = PortfolioPositionModel(
         rec_id=body.recId,
         symbol=body.symbol,
@@ -147,9 +175,10 @@ async def add_position(
         entry_price=body.entryPrice,
         qty=body.qty,
         entry_date=body.entryDate,
-        stop=body.stop,
-        targets=body.targets,
+        stop=adjusted_stop,
+        targets=adjusted_targets,
         dte_total=body.dteTotal,
+        entry_stock_price=entry_stock_price,
     )
     db.add(position)
     await db.commit()

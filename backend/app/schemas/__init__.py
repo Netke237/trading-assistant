@@ -512,6 +512,7 @@ class PortfolioPositionCreate(BaseModel):
     targets: list[dict] = []
     dteTotal: Optional[int] = Field(alias="dte_total", default=None)
     portfolioValue: float = Field(alias="portfolio_value", default=50000.0)
+    scanStockPrice: Optional[float] = Field(alias="scan_stock_price", default=None)
 
     def __init__(self, **data):
         # Support both camelCase and snake_case field names
@@ -522,6 +523,7 @@ class PortfolioPositionCreate(BaseModel):
             "entry_date": "entryDate",
             "dte_total": "dteTotal",
             "portfolio_value": "portfolioValue",
+            "scan_stock_price": "scanStockPrice",
         }
         for k, v in data.items():
             mapped[aliases.get(k, k)] = v

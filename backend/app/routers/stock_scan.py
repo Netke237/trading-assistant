@@ -291,8 +291,11 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
             req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req))
         _sig_bars = (_intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES
                      else bars[-120:])
+        # Pass live price so signal uses current price, not yesterday's close.
+        _live_price = price if req.strategy not in _INTRADAY_STRATEGIES else None
         try:
-            signal = signal_fn(_sig_bars, direction=req.direction, **signal_kwargs)
+            signal = signal_fn(_sig_bars, direction=req.direction,
+                               current_price=_live_price, **signal_kwargs)
         except Exception:
             signal = None
     if signal is None:
@@ -697,7 +700,9 @@ async def _process_stock(
                 )
                 # Intraday strategies use intraday bars for both signal and backtest.
                 signal_bars = intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES else bars[-120:]
-                signal = signal_fn(signal_bars, direction=req.direction, **signal_kwargs)
+                _live_price = price if req.strategy not in _INTRADAY_STRATEGIES else None
+                signal = signal_fn(signal_bars, direction=req.direction,
+                                   current_price=_live_price, **signal_kwargs)
                 if signal is None:
                     return {"symbol": symbol, "reason": f"no {req.strategy} setup"}
                 _bt_strategy = req.strategy
