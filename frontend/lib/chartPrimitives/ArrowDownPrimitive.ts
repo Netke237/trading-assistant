@@ -9,10 +9,7 @@ import type {
 import type { CanvasRenderingTarget2D } from 'fancy-canvas';
 import type { Drawing } from '@/types/overlays';
 import type { UpdatablePrimitive } from './types';
-
-const S = 10;
-const H = 16;
-const OFFSET = 6;
+import { ARROW_MARKER_S as S, ARROW_MARKER_H as H, ARROW_MARKER_OFFSET as OFFSET } from './ArrowUpPrimitive';
 
 class ArrowDownRenderer implements IPrimitivePaneRenderer {
   constructor(

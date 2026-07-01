@@ -10,9 +10,9 @@ import type { CanvasRenderingTarget2D } from 'fancy-canvas';
 import type { Drawing } from '@/types/overlays';
 import type { UpdatablePrimitive } from './types';
 
-const S = 10;     // half-base of triangle in pixels
-const H = 16;     // height of triangle in pixels
-const OFFSET = 6; // gap between price pixel and triangle base
+export const ARROW_MARKER_S = 10;     // half-base of triangle in pixels
+export const ARROW_MARKER_H = 16;     // height of triangle in pixels
+export const ARROW_MARKER_OFFSET = 6; // gap between price pixel and triangle base
 
 class ArrowUpRenderer implements IPrimitivePaneRenderer {
   constructor(
@@ -28,13 +28,13 @@ class ArrowUpRenderer implements IPrimitivePaneRenderer {
       if (x == null || y == null) return;
 
       // Triangle points upward, rendered above the price point
-      const tipY  = y - OFFSET - H;
-      const baseY = y - OFFSET;
+      const tipY  = y - ARROW_MARKER_OFFSET - ARROW_MARKER_H;
+      const baseY = y - ARROW_MARKER_OFFSET;
       ctx.fillStyle = this.d.color;
       ctx.beginPath();
       ctx.moveTo(x, tipY);
-      ctx.lineTo(x - S, baseY);
-      ctx.lineTo(x + S, baseY);
+      ctx.lineTo(x - ARROW_MARKER_S, baseY);
+      ctx.lineTo(x + ARROW_MARKER_S, baseY);
       ctx.closePath();
       ctx.fill();
     });
