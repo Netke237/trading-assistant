@@ -10,6 +10,11 @@ import { HorizontalLinePrimitive } from '@/lib/chartPrimitives/HorizontalLinePri
 import { TrendLinePrimitive } from '@/lib/chartPrimitives/TrendLinePrimitive';
 import { RectanglePrimitive } from '@/lib/chartPrimitives/RectanglePrimitive';
 import { TextPrimitive } from '@/lib/chartPrimitives/TextPrimitive';
+import { ArrowPrimitive } from '@/lib/chartPrimitives/ArrowPrimitive';
+import { ArrowUpPrimitive } from '@/lib/chartPrimitives/ArrowUpPrimitive';
+import { ArrowDownPrimitive } from '@/lib/chartPrimitives/ArrowDownPrimitive';
+import { CirclePrimitive } from '@/lib/chartPrimitives/CirclePrimitive';
+import { PathPrimitive } from '@/lib/chartPrimitives/PathPrimitive';
 
 interface Props {
   chart: IChartApi | null;
@@ -19,22 +24,22 @@ interface Props {
 
 function makePrimitive(drawing: Drawing): UpdatablePrimitive | null {
   switch (drawing.kind) {
-    case 'hline':     return new HorizontalLinePrimitive(drawing);
-    case 'trendline': return new TrendLinePrimitive(drawing);
-    case 'rect':      return new RectanglePrimitive(drawing);
-    case 'text':      return new TextPrimitive(drawing);
-    // DrawingKind is a closed union — default is unreachable but guards future additions.
-    default:          return null;
+    case 'hline':      return new HorizontalLinePrimitive(drawing);
+    case 'trendline':  return new TrendLinePrimitive(drawing);
+    case 'rect':       return new RectanglePrimitive(drawing);
+    case 'text':       return new TextPrimitive(drawing);
+    case 'arrow':      return new ArrowPrimitive(drawing);
+    case 'arrow_up':   return new ArrowUpPrimitive(drawing);
+    case 'arrow_down': return new ArrowDownPrimitive(drawing);
+    case 'circle':     return new CirclePrimitive(drawing);
+    case 'path':       return new PathPrimitive(drawing);
+    default:           return null;
   }
 }
 
 export default function DrawingOverlays({ chart, mainSeries, drawings }: Props) {
-  // Keyed by drawing.id — persists across renders
   const attachedRef = useRef<Map<string, AttachedEntry>>(new Map());
 
-  // Effect 1: diff-based update. No cleanup function here — that is handled by
-  // Effect 2 below. If cleanup lived here, React would call it on every `drawings`
-  // change (before each re-run), which would detach all primitives on every drag tick.
   useEffect(() => {
     if (!chart || !mainSeries) return;
     const attached = attachedRef.current;
@@ -51,8 +56,6 @@ export default function DrawingOverlays({ chart, mainSeries, drawings }: Props) 
 
     for (const { entry, drawing } of toUpdate) {
       entry.primitive.update(drawing);
-      // Create a new AttachedEntry object rather than mutating the existing one,
-      // so the map stays consistent under concurrent React scheduling.
       attached.set(drawing.id, { primitive: entry.primitive, drawing });
     }
 
@@ -64,13 +67,8 @@ export default function DrawingOverlays({ chart, mainSeries, drawings }: Props) 
     }
   }, [chart, mainSeries, drawings]);
 
-  // Effect 2: detach ALL primitives from the OLD series when chart/series changes.
-  // Deps are intentionally [chart, mainSeries] only — not drawings — so this
-  // cleanup never fires on a drawings update, only on series replacement or unmount.
   useEffect(() => {
     return () => {
-      // Read ref inside cleanup (not setup) so a future map swap doesn't leave a
-      // stale reference here while Effect 1 writes to the new map.
       const attached = attachedRef.current;
       for (const entry of attached.values()) {
         try {
