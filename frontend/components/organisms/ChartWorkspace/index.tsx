@@ -160,6 +160,9 @@ export default function ChartWorkspace() {
   const { symbol, interval, chartType, activeIndicators, setSymbol, setInterval } = useChartStore();
   const [candles, setCandles] = useState<Candle[]>([]);
   const [drawingTool, setDrawingTool] = useState<DrawingTool>('cursor');
+  const [drawingColor, setDrawingColor] = useState('#dddddd');
+  const drawingColorRef = useRef('#dddddd');
+  useEffect(() => { drawingColorRef.current = drawingColor; }, [drawingColor]);
   const [showIndicators, setShowIndicators] = useState(false);
   const [showStructure, setShowStructure] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
@@ -628,7 +631,7 @@ export default function ChartWorkspace() {
     const chart = chartApi;
     const series = mainSeries;
     if (!chart || !series) return;
-    if (drawingTool !== 'cursor' && drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy' && drawingTool !== 'text' && drawingTool !== 'eraser') {
+    if (drawingTool !== 'cursor' && drawingTool !== 'trendline' && drawingTool !== 'hline' && drawingTool !== 'rect' && drawingTool !== 'alert' && drawingTool !== 'buy' && drawingTool !== 'text' && drawingTool !== 'eraser' && drawingTool !== 'arrow' && drawingTool !== 'arrow_up' && drawingTool !== 'arrow_down' && drawingTool !== 'circle' && drawingTool !== 'path') {
       pendingPtsRef.current = [];
       // Clear any leftover preview when switching away from a drawing tool
       previewRef.current?.setState({ kind: null, origin: null, cursor: null });
@@ -673,28 +676,62 @@ export default function ChartWorkspace() {
       if (drawingTool === 'alert') { setClickPopover({ kind: 'alert', price, time }); return; }
       if (drawingTool === 'buy') { setClickPopover({ kind: 'buy', price, time }); return; }
       if (drawingTool === 'text') { setTextDraft({ time, price }); return; }
+      if (drawingTool === 'arrow_up') {
+        addDrawing({ id: rid(), symbol, interval, kind: 'arrow_up', points: [{ time, price }], color: drawingColorRef.current, width: 1, createdAt: new Date().toISOString() });
+        return;
+      }
+      if (drawingTool === 'arrow_down') {
+        addDrawing({ id: rid(), symbol, interval, kind: 'arrow_down', points: [{ time, price }], color: drawingColorRef.current, width: 1, createdAt: new Date().toISOString() });
+        return;
+      }
       if (drawingTool === 'hline') {
-        addDrawing({ id: rid(), symbol, interval, kind: 'hline', points: [{ time, price }], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });
+        addDrawing({ id: rid(), symbol, interval, kind: 'hline', points: [{ time, price }], color: drawingColorRef.current, width: 1, createdAt: new Date().toISOString() });
         return;
       }
       // 2-point tools: ignore clicks in chart whitespace (no time → off-screen endpoint at epoch 0)
-      if ((drawingTool === 'trendline' || drawingTool === 'rect') && param.time == null) return;
+      if ((drawingTool === 'trendline' || drawingTool === 'rect' || drawingTool === 'arrow' || drawingTool === 'circle' || drawingTool === 'path') && param.time == null) return;
       pendingPtsRef.current.push({ time, price });
       if (pendingPtsRef.current.length === 1) {
         // First point recorded — show origin marker
         previewRef.current?.setState({
-          kind: drawingTool as 'trendline' | 'rect',
+          kind: (drawingTool === 'arrow' || drawingTool === 'trendline' || drawingTool === 'circle')
+            ? drawingTool as 'trendline' | 'arrow' | 'circle'
+            : drawingTool === 'path'
+            ? 'trendline'
+            : 'rect',
           origin: { x: param.point.x, y: param.point.y },
           cursor: null,
         });
       } else if (pendingPtsRef.current.length === 2) {
-        // Second point (commit) — clear preview then finalise drawing
-        previewRef.current?.setState({ kind: null, origin: null, cursor: null });
-        addDrawing({ id: rid(), symbol, interval, kind: drawingTool, points: [...pendingPtsRef.current], color: '#dddddd', width: 1, createdAt: new Date().toISOString() });
-        pendingPtsRef.current = [];
+        if (drawingTool === 'path') {
+          previewRef.current?.setState({
+            kind: 'trendline',
+            origin: { x: param.point.x, y: param.point.y },
+            cursor: null,
+          });
+        } else {
+          previewRef.current?.setState({ kind: null, origin: null, cursor: null });
+          const kind = drawingTool as 'trendline' | 'rect' | 'arrow' | 'circle';
+          addDrawing({ id: rid(), symbol, interval, kind, points: [...pendingPtsRef.current], color: drawingColorRef.current, width: 1, createdAt: new Date().toISOString() });
+          pendingPtsRef.current = [];
+        }
+      } else if (pendingPtsRef.current.length > 2 && drawingTool === 'path') {
+        previewRef.current?.setState({
+          kind: 'trendline',
+          origin: { x: param.point.x, y: param.point.y },
+          cursor: null,
+        });
       }
     };
     chart.subscribeClick(onClick);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && drawingTool === 'path') {
+        pendingPtsRef.current = [];
+        previewRef.current?.setState({ kind: null, origin: null, cursor: null });
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
 
     // Crosshair subscription — active only while a first point is pending
     const onCrosshair = (param: MouseEventParams<Time>) => {
@@ -709,6 +746,16 @@ export default function ChartWorkspace() {
     return () => {
       chart.unsubscribeClick(onClick);
       chart.unsubscribeCrosshairMove(onCrosshair);
+      window.removeEventListener('keydown', onKeyDown);
+      if (drawingTool === 'path' && pendingPtsRef.current.length >= 2) {
+        addDrawing({
+          id: rid(), symbol, interval, kind: 'path',
+          points: [...pendingPtsRef.current],
+          color: drawingColorRef.current,
+          width: 1,
+          createdAt: new Date().toISOString(),
+        });
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawingTool, symbol, interval, chartApi, mainSeries]);
@@ -728,7 +775,7 @@ export default function ChartWorkspace() {
       />
       {showIndicators && <IndicatorPanel onClose={() => setShowIndicators(false)} />}
       <div className={styles.body}>
-        <DrawingToolbar active={drawingTool} onChange={setDrawingTool} onClear={() => { clearForSymbol(symbol, interval); }} />
+        <DrawingToolbar active={drawingTool} onChange={setDrawingTool} onClear={() => { clearForSymbol(symbol, interval); }} color={drawingColor} onColorChange={setDrawingColor} />
         <div className={styles.charts}>
           <div className={styles.mainPane}>
             <ChartPane
@@ -791,7 +838,7 @@ export default function ChartWorkspace() {
             if (textDraft.editId) {
               updateDrawing(textDraft.editId, { text });
             } else {
-              addDrawing({ id: rid(), symbol, interval, kind: 'text', points: [{ time: textDraft.time, price: textDraft.price }], color: '#dddddd', width: 1, text, createdAt: new Date().toISOString() });
+              addDrawing({ id: rid(), symbol, interval, kind: 'text', points: [{ time: textDraft.time, price: textDraft.price }], color: drawingColorRef.current, width: 1, text, createdAt: new Date().toISOString() });
             }
             setTextDraft(null);
           }}
