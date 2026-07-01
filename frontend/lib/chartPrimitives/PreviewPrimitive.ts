@@ -7,7 +7,7 @@ import type {
 import type { CanvasRenderingTarget2D } from 'fancy-canvas';
 
 export interface PreviewState {
-  kind: 'trendline' | 'rect' | null;
+  kind: 'trendline' | 'rect' | 'arrow' | 'circle' | null;
   origin: { x: number; y: number } | null; // pixels
   cursor: { x: number; y: number } | null; // pixels
 }
@@ -32,11 +32,10 @@ class PreviewRenderer implements IPrimitivePaneRenderer {
 
       if (!cursor || !kind) return;
 
-      // rubber-band feedback
       ctx.setLineDash([4, 4]);
       ctx.strokeStyle = 'rgba(255,255,255,0.6)';
 
-      if (kind === 'trendline') {
+      if (kind === 'trendline' || kind === 'arrow' || kind === 'circle') {
         ctx.beginPath();
         ctx.moveTo(origin.x, origin.y);
         ctx.lineTo(cursor.x, cursor.y);
