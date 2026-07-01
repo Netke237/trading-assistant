@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -29,7 +29,7 @@ class DrawingIn(BaseModel):
     id: str
     symbol: str
     interval: str
-    kind: str
+    kind: Literal['trendline', 'hline', 'rect', 'text', 'arrow', 'arrow_up', 'arrow_down', 'circle', 'path']
     points: list[DrawingPoint] = Field(default_factory=list)
     color: str
     width: int = 1
@@ -41,7 +41,7 @@ class DrawingOut(BaseModel):
     id: str
     symbol: str
     interval: str
-    kind: str
+    kind: Literal['trendline', 'hline', 'rect', 'text', 'arrow', 'arrow_up', 'arrow_down', 'circle', 'path']
     points: list[DrawingPoint]
     color: str
     width: int
