@@ -142,18 +142,18 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
         aria-label={`Set regime alert for ${symbol}`}
       >
         <div className={styles.header}>
-          <Text size={14} weight={500}>Set Regime Alert — {symbol}</Text>
+          <Text size={16} weight={500}>Set Regime Alert — {symbol}</Text>
           <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">✕</button>
         </div>
 
         {done ? (
           <div className={styles.doneMsg}>
-            <Text size={13} tone="pass">Alert created for {symbol}.</Text>
+            <Text size={16} tone="pass">Alert created for {symbol}.</Text>
           </div>
         ) : (
           <>
             <div className={styles.row}>
-              <Text size={12} tone="secondary">Model</Text>
+              <Text size={16} tone="secondary">Model</Text>
               <select
                 className={styles.select}
                 value={model}
@@ -168,7 +168,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
 
             {model === 'HMM_intraday' && (
               <div className={styles.row}>
-                <Text size={12} tone="secondary">Interval</Text>
+                <Text size={16} tone="secondary">Interval</Text>
                 <select className={styles.select} value={interval} onChange={(e) => setIntervalVal(e.target.value)}>
                   {['5m', '15m', '30m', '1h', '4h'].map((v) => <option key={v} value={v}>{v}</option>)}
                 </select>
@@ -177,7 +177,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
 
             {model !== 'any' && (
               <div className={styles.row}>
-                <Text size={12} tone="secondary">Target state</Text>
+                <Text size={16} tone="secondary">Target state</Text>
                 <select className={styles.select} value={toState} onChange={(e) => setToState(e.target.value)}>
                   {stateOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -187,7 +187,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
             {model !== 'any' && (
               <div className={styles.snapshotBox}>
                 {snapshot ? (
-                  <Text size={11} tone="dim">
+                  <Text size={16} tone="dim">
                     Currently: {snapshot.state}
                     {snapshot.conviction_pct !== undefined
                       ? ` · Conviction ${snapshot.conviction_pct}% (${snapshot.conviction_label})`
@@ -195,15 +195,15 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                     {' '}· P(stay) {snapshot.p_stay.toFixed(2)}
                   </Text>
                 ) : snapshotError ? (
-                  <Text size={11} tone="dim">Live regime unavailable for {symbol}</Text>
+                  <Text size={16} tone="dim">Live regime unavailable for {symbol}</Text>
                 ) : (
-                  <Text size={11} tone="dim">Loading current regime…</Text>
+                  <Text size={16} tone="dim">Loading current regime…</Text>
                 )}
               </div>
             )}
 
             <div className={styles.row}>
-              <Text size={12} tone="secondary">Conviction ≥ {convictionMin}%</Text>
+              <Text size={16} tone="secondary">Conviction ≥ {convictionMin}%</Text>
               <input
                 type="range" min={0} max={100} step={5}
                 value={convictionMin}
@@ -213,7 +213,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
             </div>
 
             <div className={styles.row}>
-              <Text size={12} tone="secondary">P(stay) ≥ {pStayMin.toFixed(2)}</Text>
+              <Text size={16} tone="secondary">P(stay) ≥ {pStayMin.toFixed(2)}</Text>
               <input
                 type="range" min={0} max={1} step={0.05}
                 value={pStayMin}
@@ -223,7 +223,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
             </div>
 
             <div className={styles.section}>
-              <Text size={12} tone="secondary" weight={500}>Structure confirmations</Text>
+              <Text size={16} tone="secondary" weight={500}>Structure confirmations</Text>
               <div className={styles.confirmList}>
                 {CONFIRMATION_OPTIONS.map((opt, i) => (
                   <label
@@ -231,13 +231,13 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                     className={`${styles.confirmItem} ${selected.has(i) ? styles.confirmItemSelected : ''}`}
                   >
                     <input type="checkbox" checked={selected.has(i)} onChange={() => toggleConfirm(i)} />
-                    <Text size={12}>{opt.label}</Text>
+                    <Text size={16}>{opt.label}</Text>
                   </label>
                 ))}
               </div>
               {selected.size > 0 && (
                 <div className={styles.row}>
-                  <Text size={12} tone="secondary">Require {Math.min(minConf, selected.size)} of {selected.size}</Text>
+                  <Text size={16} tone="secondary">Require {Math.min(minConf, selected.size)} of {selected.size}</Text>
                   <input
                     type="range" min={1} max={selected.size} step={1}
                     value={Math.min(minConf, selected.size)}
@@ -249,7 +249,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
             </div>
 
             <div className={styles.section}>
-              <Text size={12} tone="secondary" weight={500}>Mean Reversion strategies</Text>
+              <Text size={16} tone="secondary" weight={500}>Mean Reversion strategies</Text>
               <div className={styles.confirmList}>
                 {MR_STRATEGY_OPTIONS.map((opt, i) => (
                   <label
@@ -258,15 +258,15 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                   >
                     <input type="checkbox" checked={mrSelected.has(i)} onChange={() => toggleMr(i)} />
                     <span>
-                      <Text size={12}>{opt.label}</Text>
-                      <Text size={11} tone="dim"> — {opt.note}</Text>
+                      <Text size={16}>{opt.label}</Text>
+                      <Text size={16} tone="dim"> — {opt.note}</Text>
                     </span>
                   </label>
                 ))}
               </div>
               {mrSelected.size > 0 && (
                 <div className={styles.row}>
-                  <Text size={12} tone="secondary">At least {Math.min(minMrConf, mrSelected.size)} of {mrSelected.size} must fire</Text>
+                  <Text size={16} tone="secondary">At least {Math.min(minMrConf, mrSelected.size)} of {mrSelected.size} must fire</Text>
                   <input
                     type="range" min={1} max={mrSelected.size} step={1}
                     value={Math.min(minMrConf, mrSelected.size)}
@@ -277,7 +277,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
               )}
             </div>
 
-            {error && <Text size={12} tone="reject">{error}</Text>}
+            {error && <Text size={16} tone="reject">{error}</Text>}
 
             <div className={styles.actions}>
               <button type="button" className={styles.cancelBtn} onClick={onClose}>Cancel</button>

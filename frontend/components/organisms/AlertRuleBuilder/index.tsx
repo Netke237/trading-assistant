@@ -141,7 +141,7 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
   return (
     <div className={styles.panel}>
       <div className={styles.header}>
-        <Text size={13} tone="primary" weight={500}>
+        <Text size={16} tone="primary" weight={500}>
           {editRule ? 'Edit Alert' : 'New Alert'}
         </Text>
         <button className={styles.close} onClick={onClose} aria-label="Close">
@@ -151,7 +151,7 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
 
       <div className={styles.body}>
         <label className={styles.field}>
-          <Text size={11} tone="secondary">Name</Text>
+          <Text size={16} tone="secondary">Name</Text>
           <input
             className={styles.input}
             value={name}
@@ -161,12 +161,12 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
         </label>
 
         <div className={styles.meta}>
-          <Text size={11} tone="dim">Symbol: {symbol}</Text>
-          <Text size={11} tone="dim">Interval: {interval}</Text>
+          <Text size={16} tone="dim">Symbol: {symbol}</Text>
+          <Text size={16} tone="dim">Interval: {interval}</Text>
         </div>
 
         <div className={styles.logicToggle}>
-          <Text size={11} tone="secondary">When</Text>
+          <Text size={16} tone="secondary">When</Text>
           <div className={styles.logicBtns}>
             <button
               className={`${styles.logicBtn} ${logic === 'AND' ? styles.logicActive : ''}`}
@@ -196,12 +196,12 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
                 max={conditions.length}
                 value={nOfMThreshold}
                 onChange={(e) => setNOfMThreshold(Math.max(1, Math.min(conditions.length, Number(e.target.value))))}
-                style={{ width: 40 }}
+                style={{ width: 80 }}
               />
-              <Text size={11} tone="dim">of {conditions.length} conditions met</Text>
+              <Text size={16} tone="dim">of {conditions.length} conditions met</Text>
             </span>
           ) : (
-            <Text size={11} tone="dim">conditions are met</Text>
+            <Text size={16} tone="dim">conditions are met</Text>
           )}
         </div>
 
@@ -385,7 +385,7 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
         </div>
 
         <label className={styles.field}>
-          <Text size={11} tone="secondary">Cooldown (minutes)</Text>
+          <Text size={16} tone="secondary">Cooldown (minutes)</Text>
           <input
             className={styles.numInput}
             type="number"
@@ -397,7 +397,7 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
         </label>
 
         <label className={styles.field}>
-          <Text size={11} tone="secondary">Expires</Text>
+          <Text size={16} tone="secondary">Expires</Text>
           <select
             className={styles.select}
             value={expiryType}
@@ -416,7 +416,7 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
           )}
         </label>
 
-        {error && <Text size={11} tone="reject">{error}</Text>}
+        {error && <Text size={16} tone="reject">{error}</Text>}
       </div>
 
       <div className={styles.footer}>
