@@ -53,6 +53,22 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
     }).catch(() => {});
   }, []);
 
+  const [snapshot, setSnapshot] = useState<import('@/lib/api').SymbolRegimeSnapshot | null>(null);
+  const [snapshotError, setSnapshotError] = useState(false);
+
+  useEffect(() => {
+    if (model === 'any') { setSnapshot(null); return; }
+    let cancelled = false;
+    setSnapshotError(false);
+    setSnapshot(null);
+    api.getSymbolRegimeSnapshot(symbol, model, direction, interval).then((s) => {
+      if (!cancelled) setSnapshot(s);
+    }).catch(() => {
+      if (!cancelled) setSnapshotError(true);
+    });
+    return () => { cancelled = true; };
+  }, [symbol, model, direction, interval]);
+
   const stateOptions = model === 'OMM' ? OMM_STATES : HMM_STATES;
 
   const toggleConfirm = (i: number) => {
@@ -165,6 +181,24 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                 <select className={styles.select} value={toState} onChange={(e) => setToState(e.target.value)}>
                   {stateOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
+              </div>
+            )}
+
+            {model !== 'any' && (
+              <div className={styles.snapshotBox}>
+                {snapshot ? (
+                  <Text size={11} tone="dim">
+                    Currently: {snapshot.state}
+                    {snapshot.conviction_pct !== undefined
+                      ? ` · Conviction ${snapshot.conviction_pct}% (${snapshot.conviction_label})`
+                      : ''}
+                    {' '}· P(stay) {snapshot.p_stay.toFixed(2)}
+                  </Text>
+                ) : snapshotError ? (
+                  <Text size={11} tone="dim">Live regime unavailable for {symbol}</Text>
+                ) : (
+                  <Text size={11} tone="dim">Loading current regime…</Text>
+                )}
               </div>
             )}
 

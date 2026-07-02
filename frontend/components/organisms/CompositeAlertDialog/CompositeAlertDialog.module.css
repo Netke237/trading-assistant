@@ -33,3 +33,4 @@
 }
 .saveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 .doneMsg { padding: 16px; text-align: center; }
+.snapshotBox { padding: 6px 8px; background: var(--bg-surface-2); border-radius: 6px; }

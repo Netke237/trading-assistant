@@ -106,6 +106,15 @@ export interface CompositeWatchDefaults {
   min_confirmations: number;
 }
 
+export interface SymbolRegimeSnapshot {
+  model: string;
+  state: string;
+  p_stay: number;
+  conviction_pct?: number;
+  conviction_label?: string;
+  p_transition?: { to: string; prob: number }[];
+}
+
 export interface StrategyWatchSchedule {
   enabled: boolean;
   mode: 'eod' | 'poll';
@@ -497,6 +506,10 @@ export const api = {
     patch<{ id: string; enabled: boolean }>(`/api/composite-watches/${id}`, { enabled }),
   getCompositeWatchDefaults: () =>
     get<CompositeWatchDefaults>('/api/composite-watches/defaults'),
+  getSymbolRegimeSnapshot: (symbol: string, model: string, direction: string = 'Bullish', interval: string = '15m') =>
+    get<SymbolRegimeSnapshot>(
+      `/api/composite-watches/regime-snapshot?symbol=${encodeURIComponent(symbol)}&model=${model}&direction=${direction}&interval=${interval}`,
+    ),
 
   // ── Pre-breakout scan ────────────────────────────────────────────────────────
   prebreakoutScan: (
@@ -514,7 +527,7 @@ export const api = {
   fibPullbackScan: (
     symbols: string[],
     direction: string,
-    paramsOverride?: { fib_swing_lookback?: number; fib_levels?: number[]; fib_tolerance_pct?: number },
+    paramsOverride?: { fib_swing_lookback?: number; fib_levels?: number[]; fib_tolerance_pct?: number; ema_filter_period?: number },
     universe?: string[],
   ) =>
     post<Array<{
