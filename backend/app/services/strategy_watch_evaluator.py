@@ -182,7 +182,7 @@ async def evaluate_all() -> list[WatchEvent]:
             except Exception as exc:
                 logger.warning("composite-watch: intraday fetch failed for %s — %s", symbol, exc)
         try:
-            from app.services.composite_trigger_evaluator import evaluate_scheduled
+            from app.services.composite_trigger_evaluator import evaluate_scheduled, describe_match, format_composite_reason
             fired = evaluate_scheduled(symbol, trigger_def, bars, bars_intraday)
         except Exception as exc:
             logger.warning("composite-watch: evaluate_scheduled failed for %s — %s", symbol, exc)
@@ -190,12 +190,16 @@ async def evaluate_all() -> list[WatchEvent]:
         if not fired:
             continue
         close = float(bars[-1]["close"])
+        _detail = describe_match(
+            trigger_def, bars_daily=bars, bars_intraday=bars_intraday, symbol=symbol, direction=wdir,
+        )
+        _reason = format_composite_reason((trigger_def.get("primary") or {}).get("to_state"), _detail)
         event = WatchEvent(
             watch_id=w["id"], symbol=symbol, strategy_key="composite",
             event_type="entry", direction=wdir,
             entry=None, stop=None, target=None, rr_ratio=None,
             close=close,
-            reason=f"{symbol}: composite Markov trigger fired",
+            reason=_reason,
         )
         events.append(event)
 

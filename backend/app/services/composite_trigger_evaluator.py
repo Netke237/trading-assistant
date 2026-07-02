@@ -70,12 +70,10 @@ def _check_primary_hmm(trigger_def: dict, hmm_result) -> bool:
     return True
 
 
-def _count_confirmations(trigger_def: dict, structure_signals: list[dict], indicator_values: dict) -> int:
-    """Count how many confirmation conditions are met."""
+def _matched_confirmations(trigger_def: dict, structure_signals: list[dict], indicator_values: dict) -> list[str]:
+    """Return the signal_kind of each confirmation condition that is met."""
     confirmations = trigger_def.get("confirmations", [])
-    if not confirmations:
-        return 0
-    count = 0
+    matched: list[str] = []
     for conf in confirmations:
         signal_kind = conf.get("signal_kind", "")
         direction = conf.get("direction")  # 'Bullish', 'Bearish', or None
@@ -90,25 +88,30 @@ def _count_confirmations(trigger_def: dict, structure_signals: list[dict], indic
                 dir_match = direction is None or sig_dir.lower() == direction.lower()
                 conf_match = sig.get("confidence", 0) >= min_conf
                 if kind_match and dir_match and conf_match:
-                    count += 1
+                    matched.append(signal_kind)
                     break
         elif conf_type == "momentum":
             val = indicator_values.get(signal_kind)
             if val is not None and val >= min_conf:
-                count += 1
-    return count
+                matched.append(signal_kind)
+    return matched
+
+
+def _count_confirmations(trigger_def: dict, structure_signals: list[dict], indicator_values: dict) -> int:
+    """Count how many confirmation conditions are met."""
+    return len(_matched_confirmations(trigger_def, structure_signals, indicator_values))
 
 
 _MR_STRATEGY_LOOKBACK = 3   # bars scanned to detect a recent signal
 
 
-def _check_strategy_signals(
+def _matched_strategy_signals(
     strategy_keys: list[str],
     bars_daily: list[dict],
     bars_intraday: list[dict],
     direction: str = "Bullish",
-) -> int:
-    """Return how many of the given mean-reversion strategies fired within the last few bars."""
+) -> list[str]:
+    """Return which of the given mean-reversion strategies fired within the last few bars."""
     from app.services.strategy_engine import (
         mean_reversion_rsi_signal,
         mean_reversion_bb_signal,
@@ -121,7 +124,7 @@ def _check_strategy_signals(
         "mean_reversion_vwap": (mean_reversion_vwap_signal, "intraday"),
     }
 
-    count = 0
+    matched: list[str] = []
     for key in strategy_keys:
         entry = _FNS.get(key)
         if entry is None:
@@ -129,17 +132,27 @@ def _check_strategy_signals(
         fn, bar_type = entry
         bars = bars_intraday if bar_type == "intraday" else bars_daily
         if len(bars) < 60:
-            logger.debug("_check_strategy_signals: skipping %s — insufficient bars (%d)", key, len(bars))
+            logger.debug("_matched_strategy_signals: skipping %s — insufficient bars (%d)", key, len(bars))
             continue
         for i in range(len(bars) - _MR_STRATEGY_LOOKBACK, len(bars)):
             slice_bars = bars[max(0, i - 119): i + 1]
             try:
                 if fn(slice_bars, direction=direction) is not None:
-                    count += 1
+                    matched.append(key)
                     break
             except Exception:
                 pass
-    return count
+    return matched
+
+
+def _check_strategy_signals(
+    strategy_keys: list[str],
+    bars_daily: list[dict],
+    bars_intraday: list[dict],
+    direction: str = "Bullish",
+) -> int:
+    """Return how many of the given mean-reversion strategies fired within the last few bars."""
+    return len(_matched_strategy_signals(strategy_keys, bars_daily, bars_intraday, direction))
 
 
 def evaluate_from_context(
@@ -274,3 +287,56 @@ def evaluate_scheduled(
             return False
 
     return True
+
+
+def describe_match(
+    trigger_def: dict,
+    *,
+    structure_signals: list[dict] | None = None,
+    indicator_values: dict | None = None,
+    bars_daily: list[dict] | None = None,
+    bars_intraday: list[dict] | None = None,
+    symbol: str = "",
+    direction: str = "Bullish",
+) -> dict:
+    """Build a human-readable breakdown of which confirmations/strategies matched.
+
+    Call this AFTER evaluate_from_context/evaluate_scheduled has already confirmed
+    the rule fired, to build the alert notification text. Structure signals are
+    recomputed from bars_daily+symbol if not passed explicitly (watch/scheduler path).
+    """
+    td = trigger_def if isinstance(trigger_def, dict) else trigger_def.model_dump()
+
+    if structure_signals is None and bars_daily and td.get("confirmations"):
+        try:
+            from app.services.market_structure import compute_structure
+            structure_signals = compute_structure(bars_daily, "1D", symbol) or []
+        except Exception as exc:
+            logger.warning("describe_match: structure recompute failed for %s — %s", symbol, exc)
+            structure_signals = []
+
+    structure_matched = _matched_confirmations(td, structure_signals or [], indicator_values or {})
+
+    strategy_keys: list[str] = td.get("strategy_confirmations", [])
+    strategy_matched: list[str] = []
+    if strategy_keys and (bars_daily or bars_intraday):
+        strategy_matched = _matched_strategy_signals(strategy_keys, bars_daily or [], bars_intraday or [], direction)
+
+    return {
+        "structure_matched": structure_matched,
+        "structure_total": len(td.get("confirmations", [])),
+        "strategy_matched": strategy_matched,
+        "strategy_total": len(strategy_keys),
+    }
+
+
+def format_composite_reason(to_state: str | None, detail: dict) -> str:
+    """Build the alert notification reason text from a describe_match() result."""
+    parts = [f"Composite Markov trigger: {to_state or 'any'} regime"]
+    if detail["structure_total"] and detail["structure_matched"]:
+        names = ", ".join(detail["structure_matched"])
+        parts.append(f"{len(detail['structure_matched'])}/{detail['structure_total']} structures matched ({names})")
+    if detail["strategy_total"] and detail["strategy_matched"]:
+        names = ", ".join(detail["strategy_matched"])
+        parts.append(f"{len(detail['strategy_matched'])}/{detail['strategy_total']} mean-reversion strategies fired ({names})")
+    return " — ".join(parts)

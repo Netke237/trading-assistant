@@ -103,3 +103,55 @@ def test_evaluate_scheduled_returns_bool():
             for _ in range(30)]
     result = evaluate_scheduled("TEST", trigger, bars_daily=bars, bars_intraday=[])
     assert isinstance(result, bool)
+
+
+def test_describe_match_reports_matched_structure_names():
+    from app.services.composite_trigger_evaluator import describe_match, format_composite_reason
+    trigger = _make_trigger(
+        min_confirmations=2,
+        confirmations=[
+            {"type": "structure", "signal_kind": "FVG", "direction": "Bullish", "min_confidence": 60},
+            {"type": "structure", "signal_kind": "BOS", "direction": "Bullish", "min_confidence": 60},
+            {"type": "structure", "signal_kind": "CHoCH", "direction": "Bullish", "min_confidence": 60},
+        ],
+    )
+    structure_signals = [
+        {"kind": "FVG", "direction": "bullish", "confidence": 80},
+        {"kind": "BOS", "direction": "bullish", "confidence": 70},
+    ]
+    detail = describe_match(trigger, structure_signals=structure_signals)
+    assert detail["structure_matched"] == ["FVG", "BOS"]
+    assert detail["structure_total"] == 3
+    reason = format_composite_reason("Choppy", detail)
+    assert reason == "Composite Markov trigger: Choppy regime — 2/3 structures matched (FVG, BOS)"
+
+
+def test_describe_match_reports_matched_strategy_names():
+    from app.services.composite_trigger_evaluator import describe_match, format_composite_reason
+    trigger = {
+        "primary": {"model": "any"},
+        "confirmations": [],
+        "min_confirmations": 0,
+        "strategy_confirmations": ["mean_reversion_rsi", "mean_reversion_bb"],
+        "min_strategy_confirmations": 1,
+    }
+    detail = describe_match(trigger, bars_daily=[], bars_intraday=[])
+    assert detail["strategy_total"] == 2
+    assert detail["strategy_matched"] == []  # empty bars → nothing can fire
+    reason = format_composite_reason(None, detail)
+    assert reason == "Composite Markov trigger: any regime"  # no matches to report yet
+
+
+def test_format_composite_reason_combines_structure_and_strategy():
+    from app.services.composite_trigger_evaluator import format_composite_reason
+    detail = {
+        "structure_matched": ["BOS"],
+        "structure_total": 2,
+        "strategy_matched": ["mean_reversion_vwap"],
+        "strategy_total": 1,
+    }
+    reason = format_composite_reason("Bull", detail)
+    assert reason == (
+        "Composite Markov trigger: Bull regime — 1/2 structures matched (BOS) — "
+        "1/1 mean-reversion strategies fired (mean_reversion_vwap)"
+    )

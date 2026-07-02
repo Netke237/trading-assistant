@@ -450,7 +450,7 @@ async def evaluate_and_notify_for_symbol(
 
         # ── Composite rule evaluation ─────────────────────────────────────────
         if composite_rows:
-            from app.services.composite_trigger_evaluator import evaluate_from_context
+            from app.services.composite_trigger_evaluator import evaluate_from_context, describe_match, format_composite_reason
             from app.services.regime_omm import compute_omm
             _closes = [c["close"] for c in all_candles] if all_candles else []
             _omm = compute_omm(_closes) if len(_closes) >= 100 else None
@@ -463,6 +463,17 @@ async def evaluate_and_notify_for_symbol(
                     continue
                 if not _fired:
                     continue
+                # NOTE: evaluate_from_context (used to decide _fired above) does not gate on
+                # strategy_confirmations at all — only evaluate_scheduled (the watch path) does.
+                # We also have no bars_daily/bars_intraday available in this WebSocket context,
+                # so describe_match() cannot evaluate mean-reversion strategies here even if we
+                # wanted to describe them. This means the reason text for WebSocket-fired composite
+                # alerts will only ever mention structure confirmations, never mean-reversion
+                # strategies — strategy confirmations are fully supported only via the scheduled
+                # watch path (strategy_watch_evaluator.py). This is a pre-existing evaluator gap,
+                # not something this task fixes — flagged to the user as a known limitation.
+                _detail = describe_match(_td, structure_signals=signals, indicator_values=indicators, symbol=symbol)
+                _reason = format_composite_reason(_td.get('primary', {}).get('to_state'), _detail)
                 _now = datetime.now().isoformat()
                 _entry = {
                     "id": uuid.uuid4().hex,
@@ -471,8 +482,13 @@ async def evaluate_and_notify_for_symbol(
                     "interval": interval,
                     "triggered_at": _now,
                     "candle": closed_candle,
-                    "trigger_values": {"composite": True, "omm_state": _omm.state if _omm else None},
-                    "reason": f"Composite Markov trigger: {_td.get('primary', {}).get('to_state', 'any')} regime",
+                    "trigger_values": {
+                        "composite": True,
+                        "omm_state": _omm.state if _omm else None,
+                        "structure_matched": _detail["structure_matched"],
+                        "strategy_matched": _detail["strategy_matched"],
+                    },
+                    "reason": _reason,
                 }
                 _hist = AlertHistoryModel(
                     id=_entry["id"], rule_id=_entry["rule_id"], symbol=_entry["symbol"],
