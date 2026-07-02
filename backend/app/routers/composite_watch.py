@@ -49,6 +49,9 @@ async def get_regime_snapshot(
     if direction not in ("Bullish", "Bearish"):
         raise HTTPException(status_code=400, detail=f"direction must be 'Bullish' or 'Bearish', got {direction!r}")
 
+    if model not in ("OMM", "HMM_daily", "HMM_intraday"):
+        raise HTTPException(status_code=400, detail=f"unknown model {model!r}")
+
     end = date.today()
     start = end - timedelta(days=400)
     bars = await get_bars(symbol, start, end)
@@ -84,8 +87,6 @@ async def get_regime_snapshot(
             "p_stay": result_hmm.p_stay,
             "p_transition": result_hmm.p_transition,
         }
-
-    raise HTTPException(status_code=400, detail=f"unknown model {model!r}")
 
 
 @router.get("/")

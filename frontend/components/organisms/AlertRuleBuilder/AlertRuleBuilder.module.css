@@ -3,6 +3,7 @@
   top: 36px;
   right: 0;
   width: 720px;
+  max-width: 90vw;
   max-height: calc(100% - 36px);
   background: var(--bg-surface);
   border-left: 1px solid var(--border-subtle);

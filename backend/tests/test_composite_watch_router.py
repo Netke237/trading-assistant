@@ -48,12 +48,16 @@ async def test_regime_snapshot_omm_insufficient_history_returns_422():
 
 @pytest.mark.asyncio
 async def test_regime_snapshot_unknown_model_rejected():
-    async with AsyncClient(app=app, base_url="http://test") as client:
-        resp = await client.get(
-            "/api/composite-watches/regime-snapshot",
-            params={"symbol": "AAPL", "model": "GARBAGE"},
-        )
+    """model is validated before get_bars is ever called — assert the I/O is skipped
+    entirely rather than relying on the local DB happening to have AAPL history."""
+    with patch("app.services.historical_store.get_bars", new=AsyncMock()) as mock_get_bars:
+        async with AsyncClient(app=app, base_url="http://test") as client:
+            resp = await client.get(
+                "/api/composite-watches/regime-snapshot",
+                params={"symbol": "AAPL", "model": "GARBAGE"},
+            )
     assert resp.status_code == 400
+    mock_get_bars.assert_not_called()
 
 
 @pytest.mark.asyncio
