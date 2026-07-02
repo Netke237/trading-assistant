@@ -276,7 +276,17 @@ export default function Step4PreBreakoutPage() {
               </div>
               {(fibResults as FibScanRow[]).map((row) => (
                 <div key={row.symbol} className={styles.fibTableRow}>
-                  <WatchStar symbol={row.symbol} size="sm" />
+                  <div className={styles.iconCell}>
+                    <WatchStar symbol={row.symbol} size="sm" />
+                    <button
+                      type="button"
+                      className={styles.chartBtn}
+                      title="Open in Chart"
+                      onClick={() => window.open(`/chart?symbol=${row.symbol}`, '_blank')}
+                    >
+                      📈
+                    </button>
+                  </div>
                   <Text size={13} weight={500}>{row.symbol}</Text>
                   <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
                     {row.direction === 'Bullish' ? '↑' : '↓'}
@@ -357,7 +367,17 @@ export default function Step4PreBreakoutPage() {
               </div>
               {sorted.map((row) => (
                 <div key={row.symbol} className={styles.tableRow}>
-                  <WatchStar symbol={row.symbol} size="sm" />
+                  <div className={styles.iconCell}>
+                    <WatchStar symbol={row.symbol} size="sm" />
+                    <button
+                      type="button"
+                      className={styles.chartBtn}
+                      title="Open in Chart"
+                      onClick={() => window.open(`/chart?symbol=${row.symbol}`, '_blank')}
+                    >
+                      📈
+                    </button>
+                  </div>
                   <Text size={13} weight={500}>{row.symbol}</Text>
                   <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
                     {row.direction === 'Bullish' ? '↑' : '↓'}
