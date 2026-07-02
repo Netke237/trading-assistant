@@ -190,10 +190,14 @@ async def evaluate_all() -> list[WatchEvent]:
         if not fired:
             continue
         close = float(bars[-1]["close"])
-        _detail = describe_match(
-            trigger_def, bars_daily=bars, bars_intraday=bars_intraday, symbol=symbol, direction=wdir,
-        )
-        _reason = format_composite_reason((trigger_def.get("primary") or {}).get("to_state"), _detail)
+        try:
+            _detail = describe_match(
+                trigger_def, bars_daily=bars, bars_intraday=bars_intraday, symbol=symbol, direction=wdir,
+            )
+            _reason = format_composite_reason((trigger_def.get("primary") or {}).get("to_state"), _detail)
+        except Exception as exc:
+            logger.warning("composite-watch: describe_match failed for %s — %s", symbol, exc)
+            _reason = f"{symbol}: composite Markov trigger fired"
         event = WatchEvent(
             watch_id=w["id"], symbol=symbol, strategy_key="composite",
             event_type="entry", direction=wdir,

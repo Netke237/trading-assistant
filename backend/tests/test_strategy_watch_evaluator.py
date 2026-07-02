@@ -145,6 +145,36 @@ def test_format_event_builds_subject_and_bodies():
     assert "<" in html  # html body has markup
 
 
+def _composite_watch(**overrides):
+    base = {"id": "wch_comp_1", "symbol": "AAPL", "watch_type": "composite",
+            "strategy_key": "composite", "direction": "Bullish", "enabled": True,
+            "trigger_def": {"primary": {"model": "OMM", "to_state": "bull_trend"}}}
+    base.update(overrides)
+    return base
+
+
+@pytest.mark.asyncio
+async def test_composite_watch_describe_match_failure_still_fires_with_fallback_reason():
+    """describe_match/format_composite_reason failing must not suppress an
+    already-confirmed composite alert — it should fall back to a generic
+    reason string and still append the WatchEvent."""
+    store = MagicMock()
+    store.list_watches.return_value = [_composite_watch()]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch("app.services.composite_trigger_evaluator.evaluate_scheduled",
+               return_value=True), \
+         patch("app.services.composite_trigger_evaluator.describe_match",
+               side_effect=RuntimeError("boom")):
+        events = await evaluate_all()
+    assert len(events) == 1
+    assert events[0].watch_id == "wch_comp_1"
+    assert events[0].strategy_key == "composite"
+    assert events[0].reason  # some reason string, not empty
+    assert "AAPL" in events[0].reason
+
+
 @pytest.mark.asyncio
 async def test_evaluate_and_notify_dispatches_per_event():
     ev = WatchEvent(
