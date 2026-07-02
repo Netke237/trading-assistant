@@ -10,6 +10,7 @@ import styles from './AlertRuleBuilder.module.css';
 interface Props {
   onClose: () => void;
   editRule?: AlertRule | null;
+  duplicateFrom?: AlertRule | null;
   prefill?: { price: number } | null;
 }
 
@@ -54,21 +55,24 @@ function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-export default function AlertRuleBuilder({ onClose, editRule, prefill }: Props) {
-  const { symbol, interval, activeIndicators } = useChartStore();
+export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, prefill }: Props) {
+  const { symbol: chartSymbol, interval: chartInterval, activeIndicators } = useChartStore();
   const { addRule, updateRule } = useChartAlertStore();
-  const [name, setName] = useState(editRule?.name ?? '');
+  const seed = editRule ?? duplicateFrom ?? null;
+  const symbol = seed?.symbol ?? chartSymbol;
+  const interval = seed?.interval ?? chartInterval;
+  const [name, setName] = useState(seed?.name ?? '');
   const [conditions, setConditions] = useState<Condition[]>(
-    editRule?.group.conditions
+    seed?.group.conditions
     ?? (prefill ? [{ kind: 'price', operator: 'crosses_above', value: prefill.price } as PriceCondition] : [emptyPriceCondition()]),
   );
-  const [logic, setLogic] = useState<LogicOperator>(editRule?.group.logic ?? 'AND');
-  const [nOfMThreshold, setNOfMThreshold] = useState(editRule?.group.n_of_m_threshold ?? 1);
-  const [cooldown, setCooldown] = useState(editRule?.cooldown_minutes ?? 60);
+  const [logic, setLogic] = useState<LogicOperator>(seed?.group.logic ?? 'AND');
+  const [nOfMThreshold, setNOfMThreshold] = useState(seed?.group.n_of_m_threshold ?? 1);
+  const [cooldown, setCooldown] = useState(seed?.cooldown_minutes ?? 60);
   const [expiryType, setExpiryType] = useState<'never' | 'custom'>(
-    editRule?.expiry_date ? 'custom' : 'never',
+    seed?.expiry_date ? 'custom' : 'never',
   );
-  const [expiryDate, setExpiryDate] = useState(editRule?.expiry_date ?? '');
+  const [expiryDate, setExpiryDate] = useState(seed?.expiry_date ?? '');
   const [error, setError] = useState('');
 
   const indicatorOptions = activeIndicators.map((i) => ({
