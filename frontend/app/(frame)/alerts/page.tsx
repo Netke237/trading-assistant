@@ -126,7 +126,7 @@ function conditionsSummary(rule: AlertRule): string {
 
 export default function AlertsPage() {
   const { toasts, config, setConfig, clearAll, clearOldAlerts, acknowledgeAlert, testSound } = useAlertStore();
-  const { rules, updateRule, deleteRule, addRule } = useChartAlertStore();
+  const { rules, updateRule, deleteRule } = useChartAlertStore();
 
   const [tab, setTab] = useState<'alerts' | 'rules'>('alerts');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
