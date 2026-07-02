@@ -17,7 +17,7 @@ import threading
 _PAPER_BASE = "https://localhost:7499/v1/api"
 _PAPER_TIMEOUT = 8
 _auth_cache: dict | None = None
-_AUTH_TTL = 60.0
+_AUTH_TTL = 40.0
 _auth_lock = threading.Lock()
 
 

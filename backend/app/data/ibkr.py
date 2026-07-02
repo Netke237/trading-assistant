@@ -27,7 +27,7 @@ _TIMEOUT = 8
 
 # Auth status cache: {"result": bool, "expires": float}
 _auth_cache: dict | None = None
-_AUTH_TTL = 60.0  # seconds
+_AUTH_TTL = 40.0  # seconds
 
 # conid cache: symbol → int (permanent for process lifetime)
 # -1 is the failure sentinel (CONID_MISS_SENTINEL): symbol resolved but no conid found
