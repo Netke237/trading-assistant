@@ -268,7 +268,7 @@ export default function Step6Page() {
                   <button
                     className={tbl.chartBtn}
                     title="Open in Chart"
-                    onClick={(e) => { e.stopPropagation(); router.push(`/chart?symbol=${candidate.symbol}`); }}
+                    onClick={(e) => { e.stopPropagation(); window.open(`/chart?symbol=${candidate.symbol}`, '_blank'); }}
                   >
                     📈
                   </button>

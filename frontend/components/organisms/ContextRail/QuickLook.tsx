@@ -9,7 +9,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { RailSection } from '@/components/organisms/ContextRail';
 import { Text, Data } from '@/components/primitives';
 import { QuickLookRow } from '@/components/molecules/QuickLookRow';
@@ -21,7 +20,6 @@ import type { WatchlistRow } from '@/types/domain';
 import styles from './QuickLook.module.css';
 
 export function RailQuickLook() {
-  const router = useRouter();
   const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
   const [watchlistError, setWatchlistError] = useState(false);
   const portfolio       = usePortfolioStore((s) => s.positions);
@@ -70,7 +68,7 @@ export function RailQuickLook() {
               symbol={r.symbol}
               score={r.score}
               status={r.status}
-              onClick={() => router.push(`/chart?symbol=${r.symbol}`)}
+              onClick={() => window.open(`/chart?symbol=${r.symbol}`, '_blank')}
             />
           ))}
         </div>

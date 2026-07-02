@@ -259,7 +259,7 @@ export default function Step4Page() {
                   <button
                     className={styles.chartBtn}
                     title="Open in Chart"
-                    onClick={(e) => { e.stopPropagation(); router.push(`/chart?symbol=${row.symbol}`); }}
+                    onClick={(e) => { e.stopPropagation(); window.open(`/chart?symbol=${row.symbol}`, '_blank'); }}
                   >
                     📈
                   </button>

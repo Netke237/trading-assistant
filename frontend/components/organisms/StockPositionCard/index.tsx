@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
 import { Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
@@ -308,12 +307,14 @@ export function StockPositionCard({
 
       {/* Section 3 — Action buttons */}
       <div className={styles.actionRow}>
-        <Link
+        <a
           href={`/chart?symbol=${encodeURIComponent(card.symbol)}`}
+          target="_blank"
+          rel="noopener noreferrer"
           className={styles.actionBtn}
         >
           <Text size={12}>View Chart</Text>
-        </Link>
+        </a>
         <button
           type="button"
           className={styles.actionBtn}
