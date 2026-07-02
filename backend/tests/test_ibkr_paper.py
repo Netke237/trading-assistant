@@ -27,9 +27,17 @@ def test_adapter_builds_order_payload_stock():
 
 @respx.mock
 def test_adapter_place_order_success():
+    respx.get("https://localhost:7499/v1/api/iserver/auth/status").mock(
+        return_value=httpx.Response(200, json={"authenticated": True})
+    )
+    respx.post("https://localhost:7499/v1/api/tickle").mock(
+        return_value=httpx.Response(200, json={})
+    )
     respx.post("https://localhost:7499/v1/api/iserver/account/DU123456/orders").mock(
         return_value=httpx.Response(200, json=[{"order_id": "987654", "order_status": "PreSubmitted"}])
     )
+    from app.data import ibkr_paper
+    ibkr_paper._auth_cache = None  # avoid cross-test cache leakage
     adapter = _adapter()
     order = BrokerOrder(symbol="AAPL", action="BUY", quantity=5,
                         order_type="MKT", limit_price=None, tif="DAY")
@@ -41,11 +49,33 @@ def test_adapter_place_order_success():
 
 @respx.mock
 def test_adapter_place_order_failure_raises():
+    respx.get("https://localhost:7499/v1/api/iserver/auth/status").mock(
+        return_value=httpx.Response(200, json={"authenticated": True})
+    )
+    respx.post("https://localhost:7499/v1/api/tickle").mock(
+        return_value=httpx.Response(200, json={})
+    )
     respx.post("https://localhost:7499/v1/api/iserver/account/DU123456/orders").mock(
         return_value=httpx.Response(401, json={"error": "Unauthorized"})
     )
+    from app.data import ibkr_paper
+    ibkr_paper._auth_cache = None
     adapter = _adapter()
     order = BrokerOrder(symbol="AAPL", action="BUY", quantity=1,
                         order_type="MKT", limit_price=None, tif="DAY")
     with pytest.raises(RuntimeError, match="IBKR paper order failed"):
+        adapter.place_order(order)
+
+
+@respx.mock
+def test_adapter_place_order_raises_when_not_authenticated():
+    respx.get("https://localhost:7499/v1/api/iserver/auth/status").mock(
+        return_value=httpx.Response(200, json={"authenticated": False})
+    )
+    from app.data import ibkr_paper
+    ibkr_paper._auth_cache = None
+    adapter = _adapter()
+    order = BrokerOrder(symbol="AAPL", action="BUY", quantity=1,
+                        order_type="MKT", limit_price=None, tif="DAY")
+    with pytest.raises(RuntimeError, match="gateway session is not authenticated"):
         adapter.place_order(order)

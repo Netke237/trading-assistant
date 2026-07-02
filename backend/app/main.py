@@ -164,6 +164,12 @@ async def lifespan(app: FastAPI):
         await strategy_watch_scheduler.start()
     except Exception as _exc:
         logger.warning("strategy_watch_scheduler startup failed: %s", _exc)
+    # ── IBKR keep-alive scheduler ──────────────────────────────────────────
+    try:
+        from app.services import ibkr_keepalive_scheduler as _ibkr_sched
+        _ibkr_sched.start()
+    except Exception as _exc:
+        logger.warning("ibkr_keepalive_scheduler startup failed: %s", _exc)
     yield
     # ── Shutdown ─────────────────────────────────────────────────────────
     try:
@@ -189,6 +195,11 @@ async def lifespan(app: FastAPI):
     try:
         from app.services.strategy_watch_scheduler import strategy_watch_scheduler
         await strategy_watch_scheduler.stop()
+    except Exception:
+        pass
+    try:
+        from app.services import ibkr_keepalive_scheduler as _ibkr_sched
+        _ibkr_sched.shutdown()
     except Exception:
         pass
     if _scheduler._running:
