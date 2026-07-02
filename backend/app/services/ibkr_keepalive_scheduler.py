@@ -60,6 +60,12 @@ def shutdown() -> None:
     global _scheduler
     sched = _get()
     if sched.running:
+        # Unlike the AsyncIOScheduler-based schedulers elsewhere in this codebase
+        # (edgar_scheduler, sp500_scheduler, tuning_scheduler, ingestion_scheduler),
+        # BackgroundScheduler.shutdown() always joins its worker thread internally,
+        # regardless of wait=False. That means this call still briefly blocks the
+        # calling thread (FastAPI's async lifespan handler). Expected to return
+        # quickly since the tick interval is short and jobs are fast.
         sched.shutdown(wait=False)
     # Drop the cached instance so a later start() always builds a fresh scheduler
     # rather than depending on a shut-down instance's restart behavior.
