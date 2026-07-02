@@ -47,3 +47,27 @@ describe('AlertRuleBuilder edit mode', () => {
     );
   });
 });
+
+describe('AlertRuleBuilder duplicate mode', () => {
+  it('pre-fills from duplicateFrom but creates a new rule on save (not an update)', () => {
+    render(<AlertRuleBuilder onClose={() => {}} editRule={null} duplicateFrom={{ ...AAPL_RULE, name: 'AAPL breakout (copy)' }} />);
+    expect(screen.getByText('Symbol: AAPL')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('AAPL breakout (copy)')).toBeInTheDocument();
+    // Header must say "New Alert" (create path), not "Edit Alert" — duplicateFrom is not editRule.
+    expect(screen.getByText('New Alert')).toBeInTheDocument();
+  });
+
+  it('saving a duplicate calls addRule with a NEW id, not updateRule on the original', () => {
+    const addRuleSpy = jest.fn().mockReturnValue(true);
+    const updateRuleSpy = jest.fn();
+    useChartAlertStore.setState({ addRule: addRuleSpy, updateRule: updateRuleSpy } as any);
+    render(<AlertRuleBuilder onClose={() => {}} editRule={null} duplicateFrom={{ ...AAPL_RULE, name: 'AAPL breakout (copy)' }} />);
+    fireEvent.click(screen.getByText('Create Alert'));
+    expect(updateRuleSpy).not.toHaveBeenCalled();
+    expect(addRuleSpy).toHaveBeenCalledTimes(1);
+    const savedRule = addRuleSpy.mock.calls[0][0];
+    expect(savedRule.id).not.toBe('rule-1'); // must be a fresh id, not the original rule's id
+    expect(savedRule.symbol).toBe('AAPL');
+    expect(savedRule.name).toBe('AAPL breakout (copy)');
+  });
+});

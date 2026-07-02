@@ -131,6 +131,7 @@ export default function AlertsPage() {
   const [tab, setTab] = useState<'alerts' | 'rules'>('alerts');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
+  const [duplicatingRule, setDuplicatingRule] = useState<AlertRule | null>(null);
 
   const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
   const deliverySyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -207,28 +208,26 @@ export default function AlertsPage() {
 
   function handleCreate() {
     setEditingRule(null);
+    setDuplicatingRule(null);
     setShowRuleBuilder(true);
   }
 
   function handleEdit(rule: AlertRule) {
     setEditingRule(rule);
+    setDuplicatingRule(null);
     setShowRuleBuilder(true);
   }
 
   function handleDuplicate(rule: AlertRule) {
-    const duplicate: AlertRule = {
-      ...rule,
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      name: `${rule.name} (copy)`,
-      created_at: new Date().toISOString(),
-      last_triggered_at: null,
-    };
-    addRule(duplicate);
+    setEditingRule(null);
+    setDuplicatingRule({ ...rule, name: `${rule.name} (copy)` });
+    setShowRuleBuilder(true);
   }
 
   function handleCloseBuilder() {
     setShowRuleBuilder(false);
     setEditingRule(null);
+    setDuplicatingRule(null);
   }
 
   return (
@@ -491,6 +490,7 @@ export default function AlertsPage() {
         <AlertRuleBuilder
           onClose={handleCloseBuilder}
           editRule={editingRule}
+          duplicateFrom={duplicatingRule}
         />
       )}
     </div>
