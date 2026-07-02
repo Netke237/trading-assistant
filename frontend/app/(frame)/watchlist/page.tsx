@@ -9,7 +9,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
@@ -37,7 +36,6 @@ const COLUMNS          = '32px 28px 72px 1.4fr 90px 80px 80px 90px 80px 60px 90p
 const CONTRACT_COLUMNS = '28px 72px 1.3fr 120px 80px 72px 80px 80px 100px';
 
 export default function WatchlistPage() {
-  const router = useRouter();
   const [tab, setTab]         = useState<Tab>('stocks');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
