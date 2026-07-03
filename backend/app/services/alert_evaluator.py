@@ -98,28 +98,35 @@ def _evaluate_regime_condition(condition, regime_by_model: Optional[dict]) -> tu
     if not regime_by_model:
         return False, {}
     if condition.model == 'any':
-        regime = regime_by_model.get('OMM') or regime_by_model.get('HMM')
+        # Check every available model's snapshot, not just whichever happens to be
+        # present first — a rule with model='any' means "match if either model
+        # reports this state," not "match against OMM if OMM data exists, HMM only
+        # as an afterthought."
+        candidates = [r for r in (regime_by_model.get('OMM'), regime_by_model.get('HMM')) if r]
     else:
         regime = regime_by_model.get(condition.model)
-    if not regime:
+        candidates = [regime] if regime else []
+    if not candidates:
         return False, {}
-    state_match = condition.state == 'any' or regime.get('state') == condition.state
-    conviction = regime.get('conviction')
-    # build_regime_snapshot() computes OMM conviction with a fixed Bullish framing
-    # (positive = model favors Bull persisting). For a condition targeting the Bear
-    # state, flip the sign so min_conviction consistently means "how strongly does
-    # the regime favor the selected state" — otherwise a strongly-Bear regime shows
-    # up as strongly-negative conviction and can never clear a positive min_conviction
-    # threshold. Other states (Choppy/any/HMM's Trending/Mean-reverting/...) have no
-    # natural Bull/Bear opposite, so their conviction is left as computed.
-    if conviction is not None and condition.state == 'Bear':
-        conviction = -conviction
-    conviction_match = (
-        condition.min_conviction is None
-        or (conviction is not None and conviction >= condition.min_conviction)
-    )
-    met = state_match and conviction_match
-    return met, {'regime_state': 1} if met else {}
+    for regime in candidates:
+        state_match = condition.state == 'any' or regime.get('state') == condition.state
+        conviction = regime.get('conviction')
+        # build_regime_snapshot() computes OMM conviction with a fixed Bullish framing
+        # (positive = model favors Bull persisting). For a condition targeting the Bear
+        # state, flip the sign so min_conviction consistently means "how strongly does
+        # the regime favor the selected state" — otherwise a strongly-Bear regime shows
+        # up as strongly-negative conviction and can never clear a positive min_conviction
+        # threshold. Other states (Choppy/any/HMM's Trending/Mean-reverting/...) have no
+        # natural Bull/Bear opposite, so their conviction is left as computed.
+        if conviction is not None and condition.state == 'Bear':
+            conviction = -conviction
+        conviction_match = (
+            condition.min_conviction is None
+            or (conviction is not None and conviction >= condition.min_conviction)
+        )
+        if state_match and conviction_match:
+            return True, {'regime_state': 1}
+    return False, {}
 
 
 def build_regime_snapshot(candles: list[dict]) -> dict:

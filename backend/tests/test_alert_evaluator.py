@@ -223,6 +223,21 @@ class TestRegimeCondition:
         results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
         assert len(results) == 1
 
+    def test_regime_condition_any_model_checks_both_snapshots_not_just_first(self):
+        """model='any' must check EVERY available snapshot, not stop at OMM just
+        because it happens to be present — HMM reports the requested state here,
+        while OMM (checked first) reports a different one and must not short-circuit
+        the match away."""
+        condition = RegimeCondition(kind='regime', model='any', state='Trending')
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {
+            'OMM': {'state': 'Choppy', 'conviction': 10},
+            'HMM': {'state': 'Trending', 'conviction': 82.0},
+        }
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 1
+
     def test_regime_condition_bear_state_flips_conviction_sign(self):
         """OMM conviction is Bullish-framed (negative here means 'strongly favors Bear').
         A Bear-state condition must flip the sign so min_conviction=70 is satisfied by
