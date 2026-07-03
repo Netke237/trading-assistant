@@ -36,6 +36,14 @@ def _make_omm(state="Choppy", conviction_pct=75.0, p_stay=0.8):
     return omm
 
 
+def _make_hmm_result(state="Trending", p_stay=0.8, p_transition=None):
+    hmm = MagicMock()
+    hmm.state = state
+    hmm.p_stay = p_stay
+    hmm.p_transition = p_transition or []
+    return hmm
+
+
 def test_evaluate_from_context_primary_met_zero_confirmations():
     """Primary met + min_confirmations=0 → True."""
     trigger = _make_trigger(to_state="Choppy", conviction_min=50, min_confirmations=0)
@@ -221,3 +229,82 @@ def test_format_composite_reason_combines_structure_and_strategy():
         "Composite Markov trigger: Bull regime — 1/2 structures matched (BOS) — "
         "1/1 mean-reversion strategies fired (mean_reversion_vwap)"
     )
+
+
+def test_evaluate_from_context_hmm_intraday_computes_from_bars(monkeypatch):
+    """HMM_intraday primary condition must actually be evaluated when bars_intraday
+    is supplied, not unconditionally fail (the pre-fix behavior)."""
+    import app.services.regime_hmm as regime_hmm
+
+    trigger = _make_trigger(model="HMM_intraday", to_state="Trending", min_confirmations=0)
+    monkeypatch.setattr(regime_hmm, "compute_intraday_hmm", lambda bars: _make_hmm_result("Trending", 0.8))
+    bars = [{"close": 100.0 + i} for i in range(210)]
+
+    assert evaluate_from_context(trigger, None, [], {}, bars_intraday=bars) is True
+
+
+def test_evaluate_from_context_hmm_intraday_wrong_state_fails(monkeypatch):
+    import app.services.regime_hmm as regime_hmm
+
+    trigger = _make_trigger(model="HMM_intraday", to_state="Choppy", min_confirmations=0)
+    monkeypatch.setattr(regime_hmm, "compute_intraday_hmm", lambda bars: _make_hmm_result("Trending", 0.8))
+    bars = [{"close": 100.0 + i} for i in range(210)]
+
+    assert evaluate_from_context(trigger, None, [], {}, bars_intraday=bars) is False
+
+
+def test_evaluate_from_context_hmm_intraday_no_bars_fails_closed():
+    """No bars_intraday supplied (or empty) — must fail closed, not raise."""
+    trigger = _make_trigger(model="HMM_intraday", min_confirmations=0)
+    assert evaluate_from_context(trigger, None, [], {}, bars_intraday=[]) is False
+    assert evaluate_from_context(trigger, None, [], {}) is False  # kwarg omitted entirely
+
+
+def test_evaluate_from_context_hmm_daily_computes_from_daily_bars(monkeypatch):
+    """HMM_daily primary condition must be evaluated from bars_daily, mirroring
+    evaluate_scheduled()'s existing HMM_daily branch (compute_intraday_hmm on daily bars)."""
+    import app.services.regime_hmm as regime_hmm
+
+    trigger = _make_trigger(model="HMM_daily", to_state="Choppy", min_confirmations=0)
+    monkeypatch.setattr(regime_hmm, "compute_intraday_hmm", lambda bars: _make_hmm_result("Choppy", 0.9))
+    bars = [{"close": 100.0 + i} for i in range(210)]
+
+    assert evaluate_from_context(trigger, None, [], {}, bars_daily=bars) is True
+
+
+def test_evaluate_from_context_hmm_daily_no_bars_fails_closed():
+    trigger = _make_trigger(model="HMM_daily", min_confirmations=0)
+    assert evaluate_from_context(trigger, None, [], {}, bars_daily=[]) is False
+
+
+def test_evaluate_from_context_hmm_daily_p_stay_below_threshold_fails(monkeypatch):
+    """p_stay_min gate must still apply for the WS path exactly as it does for the
+    scheduled path — proves this isn't just a state-match shortcut."""
+    import app.services.regime_hmm as regime_hmm
+
+    trigger = _make_trigger(model="HMM_daily", to_state="Choppy", min_confirmations=0)
+    trigger["primary"]["p_stay_min"] = 0.9
+    monkeypatch.setattr(regime_hmm, "compute_intraday_hmm", lambda bars: _make_hmm_result("Choppy", 0.5))
+    bars = [{"close": 100.0 + i} for i in range(210)]
+
+    assert evaluate_from_context(trigger, None, [], {}, bars_daily=bars) is False
+
+
+def test_evaluate_from_context_hmm_intraday_p_transition_min_gate_applies(monkeypatch):
+    """_check_primary_hmm's p_transition_min gate (max transition probability to any
+    other state) must actually be reachable via this new code path, not just the
+    state/p_stay checks — a trigger with real p_transition data below the configured
+    p_transition_min must fail even though state and p_stay both pass."""
+    import app.services.regime_hmm as regime_hmm
+
+    trigger = _make_trigger(model="HMM_intraday", to_state="Trending", min_confirmations=0)
+    trigger["primary"]["p_transition_min"] = 0.5
+    hmm_result = _make_hmm_result(
+        "Trending", 0.8,
+        p_transition=[{"to": "Choppy", "prob": 0.2}, {"to": "Mean-reverting", "prob": 0.1}],
+    )
+    monkeypatch.setattr(regime_hmm, "compute_intraday_hmm", lambda bars: hmm_result)
+    bars = [{"close": 100.0 + i} for i in range(210)]
+
+    # Max transition prob (0.2) is below p_transition_min (0.5) → must fail.
+    assert evaluate_from_context(trigger, None, [], {}, bars_intraday=bars) is False

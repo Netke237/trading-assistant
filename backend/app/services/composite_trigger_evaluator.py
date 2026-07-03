@@ -164,17 +164,21 @@ def evaluate_from_context(
     bars_intraday: list[dict] | None = None,
 ) -> bool:
     """Alert/WebSocket path. Receives pre-computed model outputs — no I/O for the
-    primary/confirmations checks. bars_daily/bars_intraday are optional and, when
-    supplied by the caller, let this path apply the same strategy_confirmations
-    gate evaluate_scheduled() applies — keeping WS-fired and scheduled-fired
-    composite alerts behaviorally consistent.
+    OMM primary/confirmations checks. bars_daily/bars_intraday are optional and,
+    when supplied by the caller, let this path apply the same strategy_confirmations
+    gate and HMM_intraday/HMM_daily primary-condition checks evaluate_scheduled()
+    applies — keeping WS-fired and scheduled-fired composite alerts behaviorally
+    consistent.
 
     trigger_def: CompositeTriggerDef serialized as dict (or the Pydantic model)
-    omm_result: OmmResult dataclass from compute_omm() — attribute access (.state, .conviction_pct, .p_stay)
+    omm_result: OmmResult dataclass from compute_omm() — attribute access (.state, .conviction_pct, .p_stay);
+        ignored unless primary.model == "OMM"
     structure_signals: list of market structure signal dicts from market_structure.py
     indicator_values: dict of indicator name → value for momentum confirmations
-    bars_daily: OHLCV daily bars, needed only if trigger_def sets strategy_confirmations
-    bars_intraday: OHLCV intraday bars, needed only if trigger_def sets strategy_confirmations
+    bars_daily: OHLCV daily bars — needed if trigger_def sets strategy_confirmations,
+        OR if primary.model == "HMM_daily" (used to fit the HMM directly)
+    bars_intraday: OHLCV intraday bars — needed if trigger_def sets strategy_confirmations,
+        OR if primary.model == "HMM_intraday" (used to fit the HMM directly)
     """
     if isinstance(trigger_def, dict):
         td = trigger_def
@@ -188,11 +192,32 @@ def evaluate_from_context(
     if model == "OMM":
         if not _check_primary_omm(td, omm_result):
             return False
-    elif model in ("HMM_intraday", "HMM_daily"):
-        # For the alert path, hmm result is passed via omm_result slot (caller must adapt)
-        # In practice, alert path uses OMM only — HMM is for watch path
-        logger.warning("evaluate_from_context: HMM model requested but only OMM result provided; skipping")
-        return False
+    elif model == "HMM_intraday":
+        if not bars_intraday:
+            logger.warning("evaluate_from_context: HMM_intraday requested but no intraday bars supplied; skipping")
+            return False
+        try:
+            from app.services.regime_hmm import compute_intraday_hmm
+            hmm_result = compute_intraday_hmm(bars_intraday)
+            if not _check_primary_hmm(td, hmm_result):
+                return False
+        except Exception as exc:
+            logger.warning("evaluate_from_context: HMM_intraday failed — %s", exc)
+            return False
+    elif model == "HMM_daily":
+        # compute_intraday_hmm works on any list[dict] with 'close' keys; use daily
+        # bars — same model choice evaluate_scheduled()'s own HMM_daily branch makes.
+        if not bars_daily:
+            logger.warning("evaluate_from_context: HMM_daily requested but no daily bars supplied; skipping")
+            return False
+        try:
+            from app.services.regime_hmm import compute_intraday_hmm
+            hmm_result = compute_intraday_hmm(bars_daily)
+            if not _check_primary_hmm(td, hmm_result):
+                return False
+        except Exception as exc:
+            logger.warning("evaluate_from_context: HMM_daily failed — %s", exc)
+            return False
     elif model == "any":
         # 'any' means regime model doesn't matter — skip primary check
         pass
