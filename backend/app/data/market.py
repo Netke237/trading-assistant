@@ -379,7 +379,7 @@ def fetch_intraday_candles(
     # ── yfinance (always; extended range for 1h/4h/daily/weekly) ─────────────
     yf_interval = _YF_INTERVAL_MAP.get(interval, interval.replace("min", "m"))
     yf_max = _YF_MAX_DAYS.get(yf_interval, 55)
-    yf_rows = _fetch_intraday_yf(symbol, interval=yf_interval, days=yf_max)
+    yf_rows = _fetch_intraday_yf(symbol, interval=yf_interval, days=min(days, yf_max))
     if yf_rows:
         logger.info("yfinance returned %d bars for %s", len(yf_rows), symbol)
     else:

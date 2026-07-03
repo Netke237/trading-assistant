@@ -18,6 +18,7 @@ from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pandas as pd
 
 # fetch_option_chain only selects expiries at least 21 days out, so tests must
 # use a date computed relative to "today" — a hard-coded date eventually drifts
@@ -534,3 +535,73 @@ async def test_fetch_option_chain_async_yf_iv_fallback_acquires_semaphore():
         await mkt.fetch_option_chain_async(mock_client, "AAPL", option_type="C")
 
     mock_sem_getter.assert_called()
+
+
+# ── Fix: yfinance leg must respect the caller-supplied `days` param ──────────
+
+
+def test_yfinance_leg_respects_requested_days_below_cap():
+    """fetch_intraday_candles's `days` param must be honored on the yfinance leg —
+    previously it always passed the interval's max cap (yf_max), ignoring a smaller
+    caller-requested days value. 15min's cap is 55 days; request fewer."""
+    from app.data.market import fetch_intraday_candles
+
+    captured_days: list[int] = []
+
+    def _fake_yf(symbol, interval, days):
+        captured_days.append(days)
+        return [_bar(1_700_000_000)]
+
+    with (
+        patch("app.data.market.TRADIER_TOKEN", ""),
+        patch("app.data.market._fetch_intraday_yf", side_effect=_fake_yf),
+    ):
+        result = fetch_intraday_candles("SPY", interval="15min", days=10)
+
+    assert captured_days == [10], f"Expected yfinance to be asked for 10 days, got: {captured_days}"
+    assert len(result) > 0
+
+
+def test_yfinance_leg_still_caps_at_interval_max_when_days_exceeds_it():
+    """A caller requesting more days than yfinance supports for the interval must
+    still be capped at yf_max (15min's cap is 55 days), not passed through uncapped."""
+    from app.data.market import fetch_intraday_candles
+
+    captured_days: list[int] = []
+
+    def _fake_yf(symbol, interval, days):
+        captured_days.append(days)
+        return [_bar(1_700_000_000)]
+
+    with (
+        patch("app.data.market.TRADIER_TOKEN", ""),
+        patch("app.data.market._fetch_intraday_yf", side_effect=_fake_yf),
+    ):
+        result = fetch_intraday_candles("SPY", interval="15min", days=9999)
+
+    assert captured_days == [55], f"Expected cap at 55 days, got: {captured_days}"
+    assert len(result) > 0
+
+
+def test_fetch_intraday_yf_4h_recursion_caps_at_730_days():
+    """'4h' bars are fetched by a recursive _fetch_intraday_yf(interval='1h', ...)
+    call, resampled to 4h afterward (see market.py:257-259). That recursive call's
+    own min(days, 730) cap and this fix's outer fetch_intraday_candles-level cap
+    both apply for '4h' — confirm the recursion itself still caps at 730 days when
+    asked for more (period='2y' per _days_to_yf_period), independent of the outer fix."""
+    from app.data.market import _fetch_intraday_yf
+
+    captured_periods: list[str] = []
+
+    def _capture_download(*args, **kwargs):
+        captured_periods.append(kwargs.get("period"))
+        return pd.DataFrame()  # empty df → _fetch_intraday_yf returns []
+
+    with patch("yfinance.download", side_effect=_capture_download):
+        result = _fetch_intraday_yf("SPY", interval="4h", days=9999)
+
+    # Only the recursive '1h' call actually reaches yfinance.download for '4h'
+    # (the outer '4h' branch just resamples the 1h result) — its own min(days, 730)
+    # must cap 9999 down to 730 days, i.e. period='2y'.
+    assert captured_periods == ["2y"], f"Expected the 730-day cap (period='2y'), got: {captured_periods}"
+    assert result == []
