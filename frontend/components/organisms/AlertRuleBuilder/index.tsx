@@ -32,7 +32,10 @@ const DIRECTIONS = [
 ];
 
 const REGIME_STATES_OMM: RegimeState[] = ['any', 'Bull', 'Bear', 'Choppy'];
-const REGIME_STATES_HMM: RegimeState[] = ['any', 'Bull', 'Bear', 'Sideways', 'Trending', 'Choppy', 'Mean-reverting'];
+// Must match the state labels backend/app/services/regime_hmm.py::_assign_labels
+// can actually produce — offering Bull/Bear/Sideways here would let a user save a
+// condition that can never fire (the HMM model never emits those labels).
+const REGIME_STATES_HMM: RegimeState[] = ['any', 'Trending', 'Choppy', 'Mean-reverting'];
 const REGIME_MODELS: RegimeModel[] = ['any', 'OMM', 'HMM'];
 
 function emptyPriceCondition(): PriceCondition {
