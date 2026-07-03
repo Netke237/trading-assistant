@@ -119,10 +119,13 @@ def test_1D_interval_alias_calls_yf_with_1d_and_full_history():
         captured_days.append(days)
         return [_bar(1_700_000_000)]
 
+    # Note: fetch_intraday_candles imports fetch_intraday_ibkr locally inside its
+    # own body, so patching "app.data.market.fetch_intraday_ibkr" would be a no-op —
+    # left unmocked; IBKR falls back to [] on its own via ibkr_available()'s real
+    # (fast-failing when no gateway is running) health check.
     with (
         patch("app.data.market.TRADIER_TOKEN", ""),
         patch("app.data.market._fetch_intraday_yf", side_effect=_fake_yf),
-        patch("app.data.market.fetch_intraday_ibkr", return_value=[], create=True),
     ):
         result = fetch_intraday_candles("SPY", interval="1D", days=3650)
 
@@ -141,10 +144,12 @@ def test_1W_interval_alias_calls_yf_with_1wk():
         captured_intervals.append(interval)
         return [_bar(1_700_000_000)]
 
+    # Note: fetch_intraday_ibkr is imported locally inside fetch_intraday_candles,
+    # so it can't be patched via "app.data.market.fetch_intraday_ibkr" — left
+    # unmocked, same as the "1D" test above.
     with (
         patch("app.data.market.TRADIER_TOKEN", ""),
         patch("app.data.market._fetch_intraday_yf", side_effect=_fake_yf),
-        patch("app.data.market.fetch_intraday_ibkr", return_value=[], create=True),
     ):
         result = fetch_intraday_candles("SPY", interval="1W", days=3650)
 

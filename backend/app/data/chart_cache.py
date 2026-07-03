@@ -14,6 +14,7 @@ _TTL_BY_INTERVAL: dict[str, float] = {
     "1h":    30 * 60,
     "4h":     4 * 3600,
     "daily":  4 * 3600,
+    "weekly": 4 * 3600,
 }
 
 _CHART_SEM = asyncio.Semaphore(2)

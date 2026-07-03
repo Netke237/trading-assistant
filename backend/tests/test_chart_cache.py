@@ -49,16 +49,36 @@ async def test_1D_and_daily_share_one_cache_entry_and_ttl():
     both cache-key purposes and the TTL lookup — not fall back to the default
     30-min TTL meant for un-recognized intervals."""
     mock_rows = [{"time": "2024-01-02", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000}]
-    with patch("app.data.chart_cache.fetch_intraday_candles", return_value=mock_rows) as mock_fetch:
-        from app.data.chart_cache import get_intraday, _INTRADAY_CACHE, _TTL_BY_INTERVAL
+    with patch("app.data.chart_cache.fetch_intraday_candles", return_value=mock_rows):
+        from app.data.chart_cache import get_intraday, _INTRADAY_CACHE
         _INTRADAY_CACHE.clear()
+        before = time.monotonic()
         await get_intraday("AAPL", "1D", 3650)
-    # The cache key stored must use the normalized "daily" spelling, so its TTL
-    # actually resolves via _TTL_BY_INTERVAL["daily"] (4 hours) rather than the
-    # default fallback.
     matching_keys = [k for k in _INTRADAY_CACHE if k.startswith("AAPL:") and k.endswith(":3650")]
     assert matching_keys, f"Expected a normalized cache entry, got keys: {list(_INTRADAY_CACHE.keys())}"
     assert "daily" in matching_keys[0], f"Expected normalized 'daily' in cache key, got: {matching_keys[0]}"
+    # Assert the actual stored expiry reflects the 4-hour "daily" TTL, not the
+    # 30-minute default fallback — a substring match on the key alone wouldn't
+    # catch a case where normalization happened but the TTL lookup itself broke.
+    _, expiry = _INTRADAY_CACHE[matching_keys[0]]
+    assert expiry - before > 3600, f"Expected ~4h TTL, got {expiry - before:.0f}s remaining"
+
+
+@pytest.mark.asyncio
+async def test_1W_and_weekly_share_one_cache_entry_and_ttl():
+    """Same as above for '1W' → 'weekly' — closes the parallel gap where
+    _TTL_BY_INTERVAL previously had a 'daily' entry but no 'weekly' one."""
+    mock_rows = [{"time": "2024-01-02", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000}]
+    with patch("app.data.chart_cache.fetch_intraday_candles", return_value=mock_rows):
+        from app.data.chart_cache import get_intraday, _INTRADAY_CACHE
+        _INTRADAY_CACHE.clear()
+        before = time.monotonic()
+        await get_intraday("AAPL", "1W", 3650)
+    matching_keys = [k for k in _INTRADAY_CACHE if k.startswith("AAPL:") and k.endswith(":3650")]
+    assert matching_keys, f"Expected a normalized cache entry, got keys: {list(_INTRADAY_CACHE.keys())}"
+    assert "weekly" in matching_keys[0], f"Expected normalized 'weekly' in cache key, got: {matching_keys[0]}"
+    _, expiry = _INTRADAY_CACHE[matching_keys[0]]
+    assert expiry - before > 3600, f"Expected ~4h TTL, got {expiry - before:.0f}s remaining"
 
 
 @pytest.mark.asyncio
