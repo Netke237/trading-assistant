@@ -94,25 +94,74 @@ def _compare(op: str, a: float, b: float) -> bool:
     return ops.get(op, lambda x, y: False)(a, b)
 
 
-def _evaluate_regime_condition(condition, regime: Optional[dict]) -> tuple[bool, dict]:
+def _evaluate_regime_condition(condition, regime_by_model: Optional[dict]) -> tuple[bool, dict]:
+    if not regime_by_model:
+        return False, {}
+    if condition.model == 'any':
+        regime = regime_by_model.get('OMM') or regime_by_model.get('HMM')
+    else:
+        regime = regime_by_model.get(condition.model)
     if not regime:
         return False, {}
     state_match = condition.state == 'any' or regime.get('state') == condition.state
+    conviction = regime.get('conviction')
+    # build_regime_snapshot() computes OMM conviction with a fixed Bullish framing
+    # (positive = model favors Bull persisting). For a condition targeting the Bear
+    # state, flip the sign so min_conviction consistently means "how strongly does
+    # the regime favor the selected state" — otherwise a strongly-Bear regime shows
+    # up as strongly-negative conviction and can never clear a positive min_conviction
+    # threshold. Other states (Choppy/any/HMM's Trending/Mean-reverting/...) have no
+    # natural Bull/Bear opposite, so their conviction is left as computed.
+    if conviction is not None and condition.state == 'Bear':
+        conviction = -conviction
     conviction_match = (
         condition.min_conviction is None
-        or (regime.get('conviction') is not None and regime['conviction'] >= condition.min_conviction)
+        or (conviction is not None and conviction >= condition.min_conviction)
     )
     met = state_match and conviction_match
     return met, {'regime_state': 1} if met else {}
 
 
+def build_regime_snapshot(candles: list[dict]) -> dict:
+    """Compute {'OMM': {...}, 'HMM': {...}} regime data for regime-kind alert conditions.
+
+    A missing key means that model's regime could not be computed (insufficient
+    bars, or hmmlearn unavailable) — matching conditions for that model fail closed
+    rather than raising.
+
+    OMM conviction is always computed with a fixed Bullish framing (RegimeCondition
+    has no direction field to pick a framing from); _evaluate_regime_condition()
+    flips the sign for Bear-state conditions so min_conviction reads consistently
+    regardless of which state the condition targets.
+    """
+    closes = [c["close"] for c in candles] if candles else []
+    snapshot: dict = {}
+
+    if len(closes) >= 100:
+        from app.services.regime_omm import compute_omm
+        omm = compute_omm(closes)
+        if omm is not None:
+            snapshot['OMM'] = {'state': omm.state, 'conviction': omm.conviction_pct}
+
+    if len(candles) >= 200:
+        from app.services.regime_hmm import compute_intraday_hmm
+        hmm = compute_intraday_hmm(candles)
+        if hmm is not None:
+            # HmmResult has no conviction score; p_stay (probability of remaining
+            # in the detected state) is the closest available confidence metric —
+            # the regime-snapshot endpoint already surfaces P(stay) for HMM users.
+            snapshot['HMM'] = {'state': hmm.state, 'conviction': round(hmm.p_stay * 100, 1)}
+
+    return snapshot
+
+
 def _evaluate_condition(condition, closed_candle: dict, indicators: dict,
                         signals: list[dict], candle_time: str,
-                        regime: Optional[dict] = None) -> tuple[bool, dict]:
+                        regime_by_model: Optional[dict] = None) -> tuple[bool, dict]:
     trigger_values: dict = {}
 
     if condition.kind == 'regime':
-        return _evaluate_regime_condition(condition, regime)
+        return _evaluate_regime_condition(condition, regime_by_model)
 
     if condition.kind == 'price':
         trigger_values['close'] = closed_candle['close']
@@ -188,7 +237,7 @@ def _build_reason(rule: AlertRuleInput, trigger_values: dict) -> str:
 
 def evaluate_rules(rules: list[AlertRuleInput], closed_candle: dict,
                    all_candles: list[dict], indicators: dict, signals: list[dict],
-                   now: datetime, regime: Optional[dict] = None) -> list[dict]:
+                   now: datetime, regime_by_model: Optional[dict] = None) -> list[dict]:
     results = []
     for rule in rules:
         if not rule.enabled:
@@ -203,7 +252,7 @@ def evaluate_rules(rules: list[AlertRuleInput], closed_candle: dict,
         accumulated_trigger_values: dict = {}
         evaluations = []
         for c in rule.group.conditions:
-            met, tv = _evaluate_condition(c, closed_candle, indicators, signals, closed_candle['time'], regime)
+            met, tv = _evaluate_condition(c, closed_candle, indicators, signals, closed_candle['time'], regime_by_model)
             accumulated_trigger_values.update(tv)
             evaluations.append(met)
 

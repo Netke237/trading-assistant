@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from app.services.alert_evaluator import (
     AlertRuleInput, PriceCondition, IndicatorCondition, StructureCondition,
-    ConditionGroup, evaluate_rules, make_history_id,
+    RegimeCondition, ConditionGroup, evaluate_rules, make_history_id,
+    build_regime_snapshot,
 )
 
 
@@ -162,3 +163,102 @@ def test_make_history_id_generates_unique():
     id2 = make_history_id()
     assert id1 != id2
     assert len(id1) > 5
+
+
+class TestRegimeCondition:
+    def test_regime_condition_omm_state_match(self):
+        condition = RegimeCondition(kind='regime', model='OMM', state='Bull')
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'OMM': {'state': 'Bull', 'conviction': 60}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 1
+
+    def test_regime_condition_wrong_state_no_match(self):
+        condition = RegimeCondition(kind='regime', model='OMM', state='Bear')
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'OMM': {'state': 'Bull', 'conviction': 60}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 0
+
+    def test_regime_condition_model_selects_correct_snapshot(self):
+        """model='HMM' selected but only OMM data available → condition not met,
+        even though state/conviction would match if OMM data were used instead."""
+        condition = RegimeCondition(kind='regime', model='HMM', state='Bull')
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'OMM': {'state': 'Bull', 'conviction': 90}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 0
+
+    def test_regime_condition_hmm_state_match(self):
+        condition = RegimeCondition(kind='regime', model='HMM', state='Trending')
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'HMM': {'state': 'Trending', 'conviction': 82.0}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 1
+
+    def test_regime_condition_min_conviction_gate(self):
+        condition = RegimeCondition(kind='regime', model='OMM', state='any', min_conviction=70)
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'OMM': {'state': 'Bull', 'conviction': 50}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 0
+
+    def test_regime_condition_no_regime_data_no_match(self):
+        condition = RegimeCondition(kind='regime', model='OMM', state='Bull')
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), None)
+        assert len(results) == 0
+
+    def test_regime_condition_any_model_matches_whatever_is_available(self):
+        condition = RegimeCondition(kind='regime', model='any', state='Trending')
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'HMM': {'state': 'Trending', 'conviction': 82.0}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 1
+
+    def test_regime_condition_bear_state_flips_conviction_sign(self):
+        """OMM conviction is Bullish-framed (negative here means 'strongly favors Bear').
+        A Bear-state condition must flip the sign so min_conviction=70 is satisfied by
+        a regime that strongly favors Bear, not rejected by it."""
+        condition = RegimeCondition(kind='regime', model='OMM', state='Bear', min_conviction=70)
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'OMM': {'state': 'Bear', 'conviction': -85}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 1
+
+    def test_regime_condition_bear_state_weak_bear_conviction_not_met(self):
+        """Same flip, but the regime only weakly favors Bear — must not meet a 70 threshold."""
+        condition = RegimeCondition(kind='regime', model='OMM', state='Bear', min_conviction=70)
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'OMM': {'state': 'Bear', 'conviction': -20}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 0
+
+
+class TestBuildRegimeSnapshot:
+    def test_insufficient_bars_returns_empty_dict(self):
+        candles = [{'close': 100.0 + i} for i in range(10)]
+        assert build_regime_snapshot(candles) == {}
+
+    def test_omm_populated_when_enough_bars(self):
+        # Clear uptrend, 150 bars — enough for compute_omm's min_obs=100 requirement.
+        candles = [{'close': 100.0 + i * 0.5} for i in range(150)]
+        snapshot = build_regime_snapshot(candles)
+        assert 'OMM' in snapshot
+        assert snapshot['OMM']['state'] in ('Bull', 'Bear', 'Choppy')
+
+    def test_hmm_absent_below_minimum_bars(self):
+        # 50 bars is below both OMM's (100) and HMM's (200) minimums — 'HMM' must be absent
+        # regardless of whether hmmlearn is installed in this environment.
+        candles = [{'close': 100.0 + i} for i in range(50)]
+        snapshot = build_regime_snapshot(candles)
+        assert 'HMM' not in snapshot
