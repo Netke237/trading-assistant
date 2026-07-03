@@ -34,7 +34,7 @@ class StructureCondition:
 @dataclass
 class RegimeCondition:
     kind: Literal['regime']
-    model: str = 'OMM'        # 'OMM' | 'HMM' | 'any'
+    model: str = 'OMM'        # 'OMM' | 'HMM' | 'HMM_directional' | 'any'
     state: str = 'Bull'       # 'Bull' | 'Bear' | 'Choppy' | 'any'
     min_conviction: Optional[float] = None
 
