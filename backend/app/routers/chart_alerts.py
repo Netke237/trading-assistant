@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,6 +21,7 @@ from app.services.alert_evaluator import (
     AlertRuleInput, PriceCondition, IndicatorCondition, StructureCondition,
     ConditionGroup, evaluate_rules,
 )
+from app.services.historical_store import get_bars
 from app.services.indicator_compute import compute_indicators_for_conditions
 from app.services.notifications.dispatch import dispatch as _dispatch, load_notification_config as _load_notification_config
 from app.services.notifications.alert_notifier import _format_dt, _TZ_LABEL
@@ -454,25 +455,44 @@ async def evaluate_and_notify_for_symbol(
             from app.services.regime_omm import compute_omm
             _closes = [c["close"] for c in all_candles] if all_candles else []
             _omm = compute_omm(_closes) if len(_closes) >= 100 else None
+
+            # Only fetch daily bars if some composite rule actually needs them —
+            # most composite rules have no strategy_confirmations and should not
+            # pay for an extra get_bars() round-trip on every candle close.
+            _needs_daily_bars = any(_rj.get("strategy_confirmations") for _, _rj in composite_rows)
+            _bars_daily: list[dict] = []
+            if _needs_daily_bars:
+                try:
+                    _end = date.today()
+                    _start = _end - timedelta(days=730)
+                    _bars_daily = await get_bars(symbol, _start, _end)
+                except Exception as _exc:
+                    logger.warning("composite rule strategy-confirmation bars fetch failed for %s: %s", symbol, _exc)
+                    _bars_daily = []
+
             for _row, _rj in composite_rows:
                 _td = {k: v for k, v in _rj.items() if k != "__type"}
+                _direction = _td.get("direction") or "Bullish"
                 try:
-                    _fired = evaluate_from_context(_td, _omm, signals, indicators)
+                    _fired = evaluate_from_context(
+                        _td, _omm, signals, indicators,
+                        bars_daily=_bars_daily, bars_intraday=all_candles,
+                    )
                 except Exception as _exc:
                     logger.warning("composite rule eval failed for %s: %s", symbol, _exc)
                     continue
                 if not _fired:
                     continue
-                # NOTE: evaluate_from_context (used to decide _fired above) does not gate on
-                # strategy_confirmations at all — only evaluate_scheduled (the watch path) does.
-                # We also have no bars_daily/bars_intraday available in this WebSocket context,
-                # so describe_match() cannot evaluate mean-reversion strategies here even if we
-                # wanted to describe them. This means the reason text for WebSocket-fired composite
-                # alerts will only ever mention structure confirmations, never mean-reversion
-                # strategies — strategy confirmations are fully supported only via the scheduled
-                # watch path (strategy_watch_evaluator.py). This is a pre-existing evaluator gap,
-                # not something this task fixes — flagged to the user as a known limitation.
-                _detail = describe_match(_td, structure_signals=signals, indicator_values=indicators, symbol=symbol)
+                # describe_match is passed the same bars (and now the rule's own
+                # direction, matching evaluate_scheduled's call in
+                # strategy_watch_evaluator.py) so the reason text can name matched
+                # mean-reversion strategies here too — previously this path had no
+                # bars at all, so strategy names never appeared in WS-fired reasons.
+                _detail = describe_match(
+                    _td, structure_signals=signals, indicator_values=indicators,
+                    bars_daily=_bars_daily, bars_intraday=all_candles, symbol=symbol,
+                    direction=_direction,
+                )
                 _reason = format_composite_reason(_td.get('primary', {}).get('to_state'), _detail)
                 _now = datetime.now().isoformat()
                 _entry = {
