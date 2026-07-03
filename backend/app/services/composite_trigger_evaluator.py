@@ -164,7 +164,7 @@ def evaluate_from_context(
     bars_intraday: list[dict] | None = None,
 ) -> bool:
     """Alert/WebSocket path. Receives pre-computed model outputs — no I/O for the
-    OMM primary/confirmations checks. bars_daily/bars_intraday are optional and,
+    primary/confirmations checks. bars_daily/bars_intraday are optional and,
     when supplied by the caller, let this path apply the same strategy_confirmations
     gate and HMM_intraday/HMM_daily primary-condition checks evaluate_scheduled()
     applies — keeping WS-fired and scheduled-fired composite alerts behaviorally
