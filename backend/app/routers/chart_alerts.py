@@ -29,6 +29,13 @@ from app.services.notifications.alert_notifier import _format_dt, _TZ_LABEL
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/alerts', tags=['chart-alerts'])
 
+# test_rule() re-fits a 3-state GaussianHMM from scratch on every candle once the
+# causal window passes 200 bars (build_regime_snapshot() is called once per
+# iteration) — an unbounded candle list makes this endpoint pathologically slow.
+# 1500 comfortably covers a full intraday session's worth of 1-minute bars plus
+# headroom, while still bounding worst-case per-request HMM refit count.
+MAX_TEST_RULE_CANDLES = 1500
+
 
 # ── Pydantic request/response models ─────────────────────────────────────────
 
@@ -336,6 +343,14 @@ async def clear_all_history(db: AsyncSession = Depends(get_db)):
 
 @router.post('/rules/{rule_id}/test')
 async def test_rule(rule_id: str, body: AlertTestRequest, db: AsyncSession = Depends(get_db)):
+    if len(body.candles) > MAX_TEST_RULE_CANDLES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f'Too many candles for a dry-run test ({len(body.candles)} > {MAX_TEST_RULE_CANDLES}). '
+                'Trim the candle list — each candle re-fits regime models when the rule has a regime condition.'
+            ),
+        )
     result = await db.execute(
         select(AlertRuleModel).where(AlertRuleModel.id == rule_id, AlertRuleModel.user_id == 'default')
     )

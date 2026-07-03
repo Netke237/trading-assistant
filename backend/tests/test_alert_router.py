@@ -180,3 +180,57 @@ async def test_regime_condition_round_trips_through_test_endpoint():
         assert resp2.status_code == 200
         data = resp2.json()
         assert len(data['matches']) >= 1
+
+
+@pytest.mark.asyncio
+async def test_test_endpoint_rejects_too_many_candles():
+    """A dry-run request with more candles than MAX_TEST_RULE_CANDLES must be
+    rejected up front with 422, not accepted and left to run an unbounded number
+    of per-candle HMM refits."""
+    from app.routers.chart_alerts import MAX_TEST_RULE_CANDLES
+
+    app = await _make_app()
+    body = {
+        'name': 'Test Rule', 'symbol': 'AAPL', 'interval': '15min', 'enabled': True,
+        'group': {'logic': 'AND', 'conditions': [{'kind': 'price', 'operator': '>', 'value': 100}]},
+        'cooldown_minutes': 60, 'expiry_date': None,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        resp = await client.post('/alerts/rules', json=body)
+        rule_id = resp.json()['id']
+
+        candles = [
+            {'time': f't{i}', 'open': 100, 'high': 101, 'low': 99, 'close': 100, 'volume': 1000}
+            for i in range(MAX_TEST_RULE_CANDLES + 1)
+        ]
+        resp2 = await client.post(f'/alerts/rules/{rule_id}/test', json={
+            'candles': candles, 'indicators': {}, 'signals': [],
+        })
+        assert resp2.status_code == 422
+        assert str(MAX_TEST_RULE_CANDLES) in resp2.json()['detail']
+
+
+@pytest.mark.asyncio
+async def test_test_endpoint_accepts_exactly_the_cap():
+    """A request with exactly MAX_TEST_RULE_CANDLES candles must still be accepted —
+    the cap is a strict 'more than', not 'at least'."""
+    from app.routers.chart_alerts import MAX_TEST_RULE_CANDLES
+
+    app = await _make_app()
+    body = {
+        'name': 'Test Rule', 'symbol': 'AAPL', 'interval': '15min', 'enabled': True,
+        'group': {'logic': 'AND', 'conditions': [{'kind': 'price', 'operator': '>', 'value': 100}]},
+        'cooldown_minutes': 60, 'expiry_date': None,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        resp = await client.post('/alerts/rules', json=body)
+        rule_id = resp.json()['id']
+
+        candles = [
+            {'time': f't{i}', 'open': 100, 'high': 101, 'low': 99, 'close': 100, 'volume': 1000}
+            for i in range(MAX_TEST_RULE_CANDLES)
+        ]
+        resp2 = await client.post(f'/alerts/rules/{rule_id}/test', json={
+            'candles': candles, 'indicators': {}, 'signals': [],
+        })
+        assert resp2.status_code == 200
