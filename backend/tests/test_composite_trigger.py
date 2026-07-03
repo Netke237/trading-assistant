@@ -96,6 +96,72 @@ def test_evaluate_from_context_any_model_skips_primary():
     assert evaluate_from_context(trigger, None, [], {}) is True
 
 
+def test_evaluate_from_context_strategy_confirmations_missing_bars_fails_closed():
+    """strategy_confirmations configured but no bars passed → treated as not met."""
+    trigger = {
+        "primary": {"model": "any"},
+        "confirmations": [],
+        "min_confirmations": 0,
+        "strategy_confirmations": ["mean_reversion_rsi"],
+        "min_strategy_confirmations": 1,
+    }
+    assert evaluate_from_context(trigger, None, [], {}, bars_daily=[], bars_intraday=[]) is False
+    # Also cover the case where the caller omits the new kwargs entirely (defaults) —
+    # a plausible production call shape, distinct from explicitly passing empty lists.
+    assert evaluate_from_context(trigger, None, [], {}) is False
+
+
+def test_evaluate_from_context_strategy_confirmations_met_with_bars(monkeypatch):
+    """strategy_confirmations configured, bars_daily supplied, strategy fn confirms → True."""
+    from unittest.mock import MagicMock
+    import app.services.strategy_engine as strategy_engine
+    monkeypatch.setattr(
+        strategy_engine, "mean_reversion_rsi_signal",
+        lambda bars, direction="Bullish": MagicMock(),
+    )
+    trigger = {
+        "primary": {"model": "any"},
+        "confirmations": [],
+        "min_confirmations": 0,
+        "strategy_confirmations": ["mean_reversion_rsi"],
+        "min_strategy_confirmations": 1,
+        "direction": "Bullish",
+    }
+    bars_daily = [
+        {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1000}
+        for _ in range(70)
+    ]
+    assert evaluate_from_context(trigger, None, [], {}, bars_daily=bars_daily, bars_intraday=[]) is True
+
+
+def test_evaluate_from_context_strategy_confirmations_not_met_with_bars(monkeypatch):
+    """strategy_confirmations configured, bars_daily supplied, strategy fn does not confirm → False."""
+    import app.services.strategy_engine as strategy_engine
+    monkeypatch.setattr(
+        strategy_engine, "mean_reversion_rsi_signal",
+        lambda bars, direction="Bullish": None,
+    )
+    trigger = {
+        "primary": {"model": "any"},
+        "confirmations": [],
+        "min_confirmations": 0,
+        "strategy_confirmations": ["mean_reversion_rsi"],
+        "min_strategy_confirmations": 1,
+        "direction": "Bullish",
+    }
+    bars_daily = [
+        {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1000}
+        for _ in range(70)
+    ]
+    assert evaluate_from_context(trigger, None, [], {}, bars_daily=bars_daily, bars_intraday=[]) is False
+
+
+def test_evaluate_from_context_no_strategy_confirmations_configured_unaffected():
+    """No strategy_confirmations key at all — behavior identical to before this change."""
+    trigger = _make_trigger(to_state="Choppy", conviction_min=50, min_confirmations=0)
+    assert evaluate_from_context(trigger, _make_omm("Choppy", 75), [], {}) is True
+
+
 def test_evaluate_scheduled_returns_bool():
     """evaluate_scheduled returns a bool (mock bars — may return False due to insufficient data)."""
     trigger = _make_trigger(model="OMM", to_state="Choppy", min_confirmations=0)

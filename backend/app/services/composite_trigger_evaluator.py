@@ -160,13 +160,21 @@ def evaluate_from_context(
     omm_result,              # OmmResult dataclass | None
     structure_signals: list[dict],
     indicator_values: dict,
+    bars_daily: list[dict] | None = None,
+    bars_intraday: list[dict] | None = None,
 ) -> bool:
-    """Alert/WebSocket path. Receives pre-computed model outputs — no I/O.
+    """Alert/WebSocket path. Receives pre-computed model outputs — no I/O for the
+    primary/confirmations checks. bars_daily/bars_intraday are optional and, when
+    supplied by the caller, let this path apply the same strategy_confirmations
+    gate evaluate_scheduled() applies — keeping WS-fired and scheduled-fired
+    composite alerts behaviorally consistent.
 
     trigger_def: CompositeTriggerDef serialized as dict (or the Pydantic model)
     omm_result: OmmResult dataclass from compute_omm() — attribute access (.state, .conviction_pct, .p_stay)
     structure_signals: list of market structure signal dicts from market_structure.py
     indicator_values: dict of indicator name → value for momentum confirmations
+    bars_daily: OHLCV daily bars, needed only if trigger_def sets strategy_confirmations
+    bars_intraday: OHLCV intraday bars, needed only if trigger_def sets strategy_confirmations
     """
     if isinstance(trigger_def, dict):
         td = trigger_def
@@ -194,6 +202,22 @@ def evaluate_from_context(
     if min_conf > 0:
         count = _count_confirmations(td, structure_signals, indicator_values)
         if count < min_conf:
+            return False
+
+    # Strategy confirmations — same N-of-M gate as evaluate_scheduled, so a composite
+    # rule with strategy_confirmations behaves identically whether it fires via the
+    # WebSocket path or the scheduled watch path. If the gate is configured but no
+    # bars were supplied, _check_strategy_signals naturally returns 0 matches
+    # (below any min_strategy_conf >= 1), i.e. this fails closed rather than
+    # silently skipping the gate as before.
+    strategy_conf_list: list[str] = td.get("strategy_confirmations", [])
+    min_strategy_conf: int = td.get("min_strategy_confirmations", 1)
+    if strategy_conf_list:
+        direction: str = td.get("direction") or "Bullish"
+        strategy_fired = _check_strategy_signals(
+            strategy_conf_list, bars_daily or [], bars_intraday or [], direction=direction,
+        )
+        if strategy_fired < min_strategy_conf:
             return False
 
     return True
