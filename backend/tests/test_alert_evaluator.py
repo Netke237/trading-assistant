@@ -305,3 +305,54 @@ class TestBuildRegimeSnapshotDirectionalHmm:
         candles = [{'close': 100.0 + i * 0.1} for i in range(210)]
         snapshot = build_regime_snapshot(candles)
         assert 'HMM_directional' not in snapshot
+
+
+class TestDirectionalHmmRegimeCondition:
+    def test_hmm_directional_state_match(self):
+        condition = RegimeCondition(kind='regime', model='HMM_directional', state='Bull')
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'HMM_directional': {'state': 'Bull', 'conviction': 82.0}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 1
+
+    def test_hmm_directional_sideways_state_is_reachable(self):
+        """'Sideways' was previously a dead RegimeState no model could ever produce —
+        confirm HMM_directional can now actually match it."""
+        condition = RegimeCondition(kind='regime', model='HMM_directional', state='Sideways')
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'HMM_directional': {'state': 'Sideways', 'conviction': 55.0}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 1
+
+    def test_hmm_directional_bear_conviction_is_not_sign_flipped(self):
+        """Unlike OMM, HMM_directional's conviction (p_stay-based) is unsigned — a
+        Bear-state condition must NOT flip its sign, or a legitimately high p_stay
+        would be turned negative and fail min_conviction for no reason. This is the
+        bug the deferred item described as 'sign flip only covers OMM's axis' — fixed
+        here by scoping the flip to the model, not by adding a new field."""
+        condition = RegimeCondition(kind='regime', model='HMM_directional', state='Bear', min_conviction=70)
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'HMM_directional': {'state': 'Bear', 'conviction': 85.0}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 1
+
+    def test_any_model_checks_hmm_directional_too(self):
+        condition = RegimeCondition(kind='regime', model='any', state='Sideways')
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'HMM_directional': {'state': 'Sideways', 'conviction': 60.0}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 1
+
+    def test_omm_bear_sign_flip_still_works_after_scoping_fix(self):
+        """Regression guard: scoping the flip to model=='OMM' must not break the
+        original OMM Bear-conviction behavior this replaces."""
+        condition = RegimeCondition(kind='regime', model='OMM', state='Bear', min_conviction=70)
+        rule = make_rule(conditions=[condition])
+        candle = make_candle()
+        regime_by_model = {'OMM': {'state': 'Bear', 'conviction': -85}}
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
+        assert len(results) == 1
