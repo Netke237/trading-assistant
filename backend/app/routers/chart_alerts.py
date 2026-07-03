@@ -470,13 +470,19 @@ async def evaluate_and_notify_for_symbol(
                     logger.warning("composite rule strategy-confirmation bars fetch failed for %s: %s", symbol, _exc)
                     _bars_daily = []
 
+            # all_candles are only genuinely intraday when the rule's own interval is
+            # intraday — chart.py's get_intraday(symbol, interval) returns daily candles
+            # for '1D'/'1W' rules, so passing them as bars_intraday would mislabel daily
+            # data as intraday to the VWAP mean-reversion check.
+            _bars_intraday = all_candles if interval not in ("1D", "1W") else []
+
             for _row, _rj in composite_rows:
                 _td = {k: v for k, v in _rj.items() if k != "__type"}
                 _direction = _td.get("direction") or "Bullish"
                 try:
                     _fired = evaluate_from_context(
                         _td, _omm, signals, indicators,
-                        bars_daily=_bars_daily, bars_intraday=all_candles,
+                        bars_daily=_bars_daily, bars_intraday=_bars_intraday,
                     )
                 except Exception as _exc:
                     logger.warning("composite rule eval failed for %s: %s", symbol, _exc)
@@ -490,7 +496,7 @@ async def evaluate_and_notify_for_symbol(
                 # bars at all, so strategy names never appeared in WS-fired reasons.
                 _detail = describe_match(
                     _td, structure_signals=signals, indicator_values=indicators,
-                    bars_daily=_bars_daily, bars_intraday=all_candles, symbol=symbol,
+                    bars_daily=_bars_daily, bars_intraday=_bars_intraday, symbol=symbol,
                     direction=_direction,
                 )
                 _reason = format_composite_reason(_td.get('primary', {}).get('to_state'), _detail)

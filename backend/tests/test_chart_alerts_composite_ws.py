@@ -163,3 +163,40 @@ async def test_ws_composite_path_passes_rule_direction_to_describe_match(monkeyp
     # describe_match() re-runs the strategy scan to build the reason text — assert
     # every call it made to the signal fn used 'Bearish', never the 'Bullish' default.
     assert seen_directions and all(d == 'Bearish' for d in seen_directions)
+
+
+@pytest.mark.asyncio
+async def test_ws_composite_path_does_not_treat_daily_interval_candles_as_intraday(monkeypatch):
+    """A composite rule saved with interval='1D' and strategy_confirmations containing
+    'mean_reversion_vwap' must NOT have its (daily) all_candles passed as bars_intraday
+    into the VWAP mean-reversion check — that's genuinely daily data, not intraday.
+    The mocked mean_reversion_vwap_signal records the bars it receives; because the
+    rule's interval is daily, bars_intraday should be [] and _matched_strategy_signals'
+    own len(bars) < 60 guard should skip calling the signal fn entirely."""
+    from app.routers import chart_alerts
+    import app.services.strategy_engine as strategy_engine
+
+    Session = await _make_session_factory()
+    monkeypatch.setattr(chart_alerts, 'AsyncSessionLocal', Session)
+    monkeypatch.setattr(chart_alerts, 'get_bars', AsyncMock(return_value=_FLAT_BARS))
+
+    seen_bars_lengths = []
+
+    def _fake_vwap_signal(bars, direction='Bullish'):
+        seen_bars_lengths.append(len(bars))
+        return None
+
+    monkeypatch.setattr(strategy_engine, 'mean_reversion_vwap_signal', _fake_vwap_signal)
+
+    daily_trigger_def = {**_TRIGGER_DEF, "strategy_confirmations": ["mean_reversion_vwap"]}
+    async with Session() as db:
+        db.add(_make_composite_rule_row('rule-5', 'AAPL', '1D', daily_trigger_def))
+        await db.commit()
+
+    triggered = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '1D', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    assert triggered == []
+    # The VWAP signal fn must never have been called — proving bars_intraday was []
+    # (not the mislabeled daily all_candles) for a '1D' rule.
+    assert seen_bars_lengths == []
