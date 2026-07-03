@@ -71,3 +71,21 @@ describe('AlertRuleBuilder duplicate mode', () => {
     expect(savedRule.name).toBe('AAPL breakout (copy)');
   });
 });
+
+describe('AlertRuleBuilder regime condition state options', () => {
+  it('offers Bull/Bear states when model is switched to "any", not just HMM states', () => {
+    render(<AlertRuleBuilder onClose={() => {}} editRule={null} />);
+    fireEvent.click(screen.getByText('+ Regime'));
+
+    const modelSelect = screen.getByLabelText('Regime model');
+    fireEvent.change(modelSelect, { target: { value: 'any' } });
+
+    const stateSelect = screen.getByLabelText('Regime state') as HTMLSelectElement;
+    const optionValues = Array.from(stateSelect.options).map((o) => o.value);
+    expect(optionValues).toContain('Bull');
+    expect(optionValues).toContain('Bear');
+    expect(optionValues).toContain('Trending');
+    expect(optionValues).toContain('Choppy');
+    expect(optionValues).toContain('Mean-reverting');
+  });
+});

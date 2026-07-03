@@ -36,7 +36,17 @@ const REGIME_STATES_OMM: RegimeState[] = ['any', 'Bull', 'Bear', 'Choppy'];
 // can actually produce — offering Bull/Bear/Sideways here would let a user save a
 // condition that can never fire (the HMM model never emits those labels).
 const REGIME_STATES_HMM: RegimeState[] = ['any', 'Trending', 'Choppy', 'Mean-reverting'];
+// When model === 'any', the backend checks the condition against BOTH the OMM and HMM
+// snapshots (see backend/app/services/alert_evaluator.py::_evaluate_regime_condition),
+// so the state list here must be the union of both models' real states.
+const REGIME_STATES_ANY: RegimeState[] = ['any', 'Bull', 'Bear', 'Choppy', 'Trending', 'Mean-reverting'];
 const REGIME_MODELS: RegimeModel[] = ['any', 'OMM', 'HMM'];
+
+function regimeStatesFor(model: RegimeModel): RegimeState[] {
+  if (model === 'OMM') return REGIME_STATES_OMM;
+  if (model === 'HMM') return REGIME_STATES_HMM;
+  return REGIME_STATES_ANY;
+}
 
 function emptyPriceCondition(): PriceCondition {
   return { kind: 'price', operator: '>', value: 0 };
@@ -320,10 +330,11 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
                 <>
                   <select
                     className={styles.select}
+                    aria-label="Regime model"
                     value={c.model}
                     onChange={(e) => {
                       const newModel = e.target.value as RegimeModel;
-                      const validStates: readonly RegimeState[] = newModel === 'OMM' ? REGIME_STATES_OMM : REGIME_STATES_HMM;
+                      const validStates: readonly RegimeState[] = regimeStatesFor(newModel);
                       const prev = conditions[idx];
                       const prevState = prev.kind === 'regime' ? prev.state : 'any';
                       const nextState: RegimeState = (validStates as readonly string[]).includes(prevState) ? prevState as RegimeState : 'any';
@@ -336,10 +347,11 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
                   </select>
                   <select
                     className={styles.select}
+                    aria-label="Regime state"
                     value={c.state}
                     onChange={(e) => updateCondition(idx, { state: e.target.value as RegimeState })}
                   >
-                    {(c.model === 'OMM' ? REGIME_STATES_OMM : REGIME_STATES_HMM).map((s) => (
+                    {regimeStatesFor(c.model).map((s) => (
                       <option key={s} value={s}>{s === 'any' ? 'any state' : s}</option>
                     ))}
                   </select>
