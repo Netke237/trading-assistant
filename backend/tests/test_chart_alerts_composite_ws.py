@@ -52,6 +52,18 @@ _FLAT_CANDLES = [
     for i in range(120)
 ]
 
+_HMM_TRIGGER_DAILY = {
+    "primary": {"model": "HMM_daily", "to_state": "Trending", "p_stay_min": 0.5, "p_transition_min": 0.0},
+    "confirmations": [],
+    "min_confirmations": 0,
+}
+
+_HMM_TRIGGER_INTRADAY = {
+    "primary": {"model": "HMM_intraday", "to_state": "Trending", "p_stay_min": 0.5, "p_transition_min": 0.0},
+    "confirmations": [],
+    "min_confirmations": 0,
+}
+
 
 @pytest.mark.asyncio
 async def test_ws_composite_path_gates_on_strategy_confirmations(monkeypatch):
@@ -200,3 +212,82 @@ async def test_ws_composite_path_does_not_treat_daily_interval_candles_as_intrad
     # The VWAP signal fn must never have been called — proving bars_intraday was []
     # (not the mislabeled daily all_candles) for a '1D' rule.
     assert seen_bars_lengths == []
+
+
+@pytest.mark.asyncio
+async def test_ws_composite_path_evaluates_hmm_daily_using_all_candles_when_interval_is_daily(monkeypatch):
+    """A composite rule with primary.model='HMM_daily' saved on a '1D' rule must be
+    evaluated over WS using all_candles directly as bars_daily (no extra get_bars()
+    fetch needed, since all_candles already IS daily data for a '1D' rule) — instead
+    of always failing closed as it did before this fix."""
+    from app.routers import chart_alerts
+    import app.services.regime_hmm as regime_hmm
+
+    Session = await _make_session_factory()
+    monkeypatch.setattr(chart_alerts, 'AsyncSessionLocal', Session)
+    get_bars_mock = AsyncMock(return_value=_FLAT_BARS)
+    monkeypatch.setattr(chart_alerts, 'get_bars', get_bars_mock)
+
+    hmm_result = MagicMock(state="Trending", p_stay=0.8, p_transition=[])
+    monkeypatch.setattr(regime_hmm, 'compute_intraday_hmm', lambda bars: hmm_result)
+
+    async with Session() as db:
+        db.add(_make_composite_rule_row('rule-6', 'AAPL', '1D', _HMM_TRIGGER_DAILY))
+        await db.commit()
+
+    triggered = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '1D', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    assert len(triggered) == 1
+    get_bars_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ws_composite_path_evaluates_hmm_intraday_primary_condition(monkeypatch):
+    """A composite rule with primary.model='HMM_intraday' on an intraday rule must
+    actually be evaluated over WS using all_candles as bars_intraday."""
+    from app.routers import chart_alerts
+    import app.services.regime_hmm as regime_hmm
+
+    Session = await _make_session_factory()
+    monkeypatch.setattr(chart_alerts, 'AsyncSessionLocal', Session)
+    monkeypatch.setattr(chart_alerts, 'get_bars', AsyncMock(return_value=_FLAT_BARS))
+
+    hmm_result = MagicMock(state="Trending", p_stay=0.8, p_transition=[])
+    monkeypatch.setattr(regime_hmm, 'compute_intraday_hmm', lambda bars: hmm_result)
+
+    async with Session() as db:
+        db.add(_make_composite_rule_row('rule-7', 'AAPL', '15min', _HMM_TRIGGER_INTRADAY))
+        await db.commit()
+
+    triggered = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    assert len(triggered) == 1
+
+
+@pytest.mark.asyncio
+async def test_ws_composite_path_hmm_daily_fetches_bars_when_rule_interval_is_intraday(monkeypatch):
+    """When the rule's own interval is intraday but primary.model='HMM_daily', the WS
+    path must fetch real daily bars via get_bars() (all_candles is intraday data and
+    would be the wrong series to fit a daily HMM on) rather than failing closed."""
+    from app.routers import chart_alerts
+    import app.services.regime_hmm as regime_hmm
+
+    Session = await _make_session_factory()
+    monkeypatch.setattr(chart_alerts, 'AsyncSessionLocal', Session)
+    get_bars_mock = AsyncMock(return_value=_FLAT_BARS)
+    monkeypatch.setattr(chart_alerts, 'get_bars', get_bars_mock)
+
+    hmm_result = MagicMock(state="Trending", p_stay=0.8, p_transition=[])
+    monkeypatch.setattr(regime_hmm, 'compute_intraday_hmm', lambda bars: hmm_result)
+
+    async with Session() as db:
+        db.add(_make_composite_rule_row('rule-8', 'AAPL', '15min', _HMM_TRIGGER_DAILY))
+        await db.commit()
+
+    triggered = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    assert len(triggered) == 1
+    get_bars_mock.assert_called_once()

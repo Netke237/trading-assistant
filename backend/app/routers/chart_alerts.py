@@ -485,19 +485,28 @@ async def evaluate_and_notify_for_symbol(
             _closes = [c["close"] for c in all_candles] if all_candles else []
             _omm = compute_omm(_closes) if len(_closes) >= 100 else None
 
-            # Only fetch daily bars if some composite rule actually needs them —
-            # most composite rules have no strategy_confirmations and should not
-            # pay for an extra get_bars() round-trip on every candle close.
-            _needs_daily_bars = any(_rj.get("strategy_confirmations") for _, _rj in composite_rows)
+            # Only fetch daily bars if some composite rule actually needs them — either
+            # for strategy_confirmations, or because a rule's primary condition targets
+            # the HMM_daily model (which requires daily bars to fit against).
+            _needs_daily_bars = any(
+                _rj.get("strategy_confirmations") or _rj.get("primary", {}).get("model") == "HMM_daily"
+                for _, _rj in composite_rows
+            )
             _bars_daily: list[dict] = []
             if _needs_daily_bars:
-                try:
-                    _end = date.today()
-                    _start = _end - timedelta(days=730)
-                    _bars_daily = await get_bars(symbol, _start, _end)
-                except Exception as _exc:
-                    logger.warning("composite rule strategy-confirmation bars fetch failed for %s: %s", symbol, _exc)
-                    _bars_daily = []
+                if interval in ("1D", "1W"):
+                    # all_candles is already daily/weekly data for this rule's own
+                    # interval — reuse it instead of paying for an extra get_bars()
+                    # round-trip.
+                    _bars_daily = all_candles
+                else:
+                    try:
+                        _end = date.today()
+                        _start = _end - timedelta(days=730)
+                        _bars_daily = await get_bars(symbol, _start, _end)
+                    except Exception as _exc:
+                        logger.warning("composite rule strategy-confirmation bars fetch failed for %s: %s", symbol, _exc)
+                        _bars_daily = []
 
             # all_candles are only genuinely intraday when the rule's own interval is
             # intraday — chart.py's get_intraday(symbol, interval) returns daily candles
