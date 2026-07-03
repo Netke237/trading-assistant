@@ -77,10 +77,14 @@ describe('AlertRuleBuilder regime condition state options', () => {
     render(<AlertRuleBuilder onClose={() => {}} editRule={null} />);
     fireEvent.click(screen.getByText('+ Regime'));
 
-    const modelSelect = screen.getByLabelText('Regime model');
+    // The builder starts with one default price condition (idx 0); "+ Regime"
+    // appends the regime condition as the second row (idx 1), so its aria-labels
+    // are indexed "2" — labels are per-row-unique so multiple regime conditions
+    // in the same rule don't collide.
+    const modelSelect = screen.getByLabelText('Regime model 2');
     fireEvent.change(modelSelect, { target: { value: 'any' } });
 
-    const stateSelect = screen.getByLabelText('Regime state') as HTMLSelectElement;
+    const stateSelect = screen.getByLabelText('Regime state 2') as HTMLSelectElement;
     const optionValues = Array.from(stateSelect.options).map((o) => o.value);
     expect(optionValues).toContain('Bull');
     expect(optionValues).toContain('Bear');

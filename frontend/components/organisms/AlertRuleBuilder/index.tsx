@@ -38,8 +38,9 @@ const REGIME_STATES_OMM: RegimeState[] = ['any', 'Bull', 'Bear', 'Choppy'];
 const REGIME_STATES_HMM: RegimeState[] = ['any', 'Trending', 'Choppy', 'Mean-reverting'];
 // When model === 'any', the backend checks the condition against BOTH the OMM and HMM
 // snapshots (see backend/app/services/alert_evaluator.py::_evaluate_regime_condition),
-// so the state list here must be the union of both models' real states.
-const REGIME_STATES_ANY: RegimeState[] = ['any', 'Bull', 'Bear', 'Choppy', 'Trending', 'Mean-reverting'];
+// so the state list here must be the union of both models' real states. Derived (not
+// hand-maintained) so it can't silently drift if either model's own list changes.
+const REGIME_STATES_ANY: RegimeState[] = Array.from(new Set([...REGIME_STATES_OMM, ...REGIME_STATES_HMM]));
 const REGIME_MODELS: RegimeModel[] = ['any', 'OMM', 'HMM'];
 
 function regimeStatesFor(model: RegimeModel): RegimeState[] {
@@ -330,7 +331,7 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
                 <>
                   <select
                     className={styles.select}
-                    aria-label="Regime model"
+                    aria-label={`Regime model ${idx + 1}`}
                     value={c.model}
                     onChange={(e) => {
                       const newModel = e.target.value as RegimeModel;
@@ -347,7 +348,7 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
                   </select>
                   <select
                     className={styles.select}
-                    aria-label="Regime state"
+                    aria-label={`Regime state ${idx + 1}`}
                     value={c.state}
                     onChange={(e) => updateCondition(idx, { state: e.target.value as RegimeState })}
                   >
