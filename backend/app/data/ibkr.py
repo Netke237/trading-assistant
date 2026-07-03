@@ -177,7 +177,7 @@ def _map_interval(interval: str, lookback: int) -> tuple[str, str]:
     if iv in ("daily", "1d"):
         return "2y", "1d"
 
-    if iv in ("weekly", "1wk"):
+    if iv in ("weekly", "1wk", "1w"):
         return "5y", "1w"
 
     # Fallback

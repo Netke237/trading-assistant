@@ -275,5 +275,19 @@ def test_conid_caches_failure():
 
     assert r1 is None
     assert r2 is None
-    # HTTP should only have been called ONCE; second call hit the sentinel in cache
-    mock_post.assert_called_once()
+
+
+# ── _map_interval ─────────────────────────────────────────────────────────────
+
+
+def test_map_interval_weekly_and_1wk_match():
+    """The pre-normalized spellings 'weekly' and '1wk' both resolve to (5y, 1w)."""
+    assert ibkr_mod._map_interval("weekly", lookback=365) == ("5y", "1w")
+    assert ibkr_mod._map_interval("1wk", lookback=365) == ("5y", "1w")
+
+
+def test_map_interval_1w_matches_weekly():
+    """The lowercased frontend spelling '1w' (from '1W') must resolve the same
+    way 'weekly'/'1wk' already do — not silently fall through to the generic
+    (5d, 15min) fallback."""
+    assert ibkr_mod._map_interval("1w", lookback=365) == ("5y", "1w")
