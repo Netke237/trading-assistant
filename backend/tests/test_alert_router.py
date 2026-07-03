@@ -180,4 +180,3 @@ async def test_regime_condition_round_trips_through_test_endpoint():
         assert resp2.status_code == 200
         data = resp2.json()
         assert len(data['matches']) >= 1
-        assert len(data['matches']) >= 1
