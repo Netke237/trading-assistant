@@ -93,3 +93,35 @@ describe('AlertRuleBuilder regime condition state options', () => {
     expect(optionValues).toContain('Mean-reverting');
   });
 });
+
+describe('AlertRuleBuilder directional HMM regime model', () => {
+  it('offers HMM_directional as a model choice with Bull/Bear/Sideways states', () => {
+    render(<AlertRuleBuilder onClose={() => {}} editRule={null} />);
+    fireEvent.click(screen.getByText('+ Regime'));
+
+    const modelSelect = screen.getByLabelText('Regime model 2') as HTMLSelectElement;
+    const modelValues = Array.from(modelSelect.options).map((o) => o.value);
+    expect(modelValues).toContain('HMM_directional');
+
+    fireEvent.change(modelSelect, { target: { value: 'HMM_directional' } });
+    const stateSelect = screen.getByLabelText('Regime state 2') as HTMLSelectElement;
+    const stateValues = Array.from(stateSelect.options).map((o) => o.value);
+    expect(stateValues).toEqual(['any', 'Bull', 'Bear', 'Sideways']);
+  });
+
+  it('labels the conviction input P(stay)% for HMM models, Conv% for OMM', () => {
+    render(<AlertRuleBuilder onClose={() => {}} editRule={null} />);
+    fireEvent.click(screen.getByText('+ Regime'));
+
+    const modelSelect = screen.getByLabelText('Regime model 2') as HTMLSelectElement;
+
+    // Default model is OMM.
+    expect(screen.getByPlaceholderText('Conv%')).toBeInTheDocument();
+
+    fireEvent.change(modelSelect, { target: { value: 'HMM_directional' } });
+    expect(screen.getByPlaceholderText('P(stay)%')).toBeInTheDocument();
+
+    fireEvent.change(modelSelect, { target: { value: 'HMM' } });
+    expect(screen.getByPlaceholderText('P(stay)%')).toBeInTheDocument();
+  });
+});
