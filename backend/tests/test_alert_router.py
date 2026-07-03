@@ -149,4 +149,35 @@ async def test_test_endpoint_returns_matches():
         assert resp2.status_code == 200
         data = resp2.json()
         assert 'matches' in data
+
+
+@pytest.mark.asyncio
+async def test_regime_condition_round_trips_through_test_endpoint():
+    """A saved regime condition must survive deserialization (previously silently
+    dropped) and evaluate against real regime data built from the test candles."""
+    app = await _make_app()
+    body = {
+        'name': 'Regime Rule', 'symbol': 'AAPL', 'interval': '15min', 'enabled': True,
+        'group': {'logic': 'AND', 'conditions': [
+            {'kind': 'regime', 'model': 'OMM', 'state': 'any'},
+        ]},
+        'cooldown_minutes': 60, 'expiry_date': None,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        resp = await client.post('/alerts/rules', json=body)
+        rule_id = resp.json()['id']
+
+        # 150 bars of a clear uptrend — enough for build_regime_snapshot's OMM branch to populate.
+        candles = [
+            {'time': f'2024-{(i // 28) + 1:02d}-{(i % 28) + 1:02d}T09:30',
+             'open': 100 + i * 0.5, 'high': 101 + i * 0.5,
+             'low': 99 + i * 0.5, 'close': 100 + i * 0.5, 'volume': 1000}
+            for i in range(150)
+        ]
+        resp2 = await client.post(f'/alerts/rules/{rule_id}/test', json={
+            'candles': candles, 'indicators': {}, 'signals': [],
+        })
+        assert resp2.status_code == 200
+        data = resp2.json()
+        assert len(data['matches']) >= 1
         assert len(data['matches']) >= 1

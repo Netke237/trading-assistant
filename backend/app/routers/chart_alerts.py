@@ -19,7 +19,7 @@ from app.database import get_db, AsyncSessionLocal
 from app.models.alert import AlertRuleModel, AlertHistoryModel
 from app.services.alert_evaluator import (
     AlertRuleInput, PriceCondition, IndicatorCondition, StructureCondition,
-    ConditionGroup, evaluate_rules,
+    RegimeCondition, ConditionGroup, evaluate_rules, build_regime_snapshot,
 )
 from app.services.historical_store import get_bars
 from app.services.indicator_compute import compute_indicators_for_conditions
@@ -160,6 +160,8 @@ def _deserialize_rule(rule_json_str: str, row: AlertRuleModel) -> AlertRuleInput
             conditions.append(IndicatorCondition(kind='indicator', indicator=c['indicator'], operator=c['operator'], value=c['value']))
         elif kind == 'structure':
             conditions.append(StructureCondition(kind='structure', signal_kind=c['signal_kind'], direction=c.get('direction'), min_confidence=c.get('min_confidence')))
+        elif kind == 'regime':
+            conditions.append(RegimeCondition(kind='regime', model=c.get('model', 'OMM'), state=c.get('state', 'Bull'), min_conviction=c.get('min_conviction')))
     return AlertRuleInput(
         id=row.id, name=row.name, symbol=row.symbol, interval=row.interval,
         enabled=bool(row.enabled),
@@ -341,10 +343,13 @@ async def test_rule(rule_id: str, body: AlertTestRequest, db: AsyncSession = Dep
     if not row:
         raise HTTPException(status_code=404, detail='Rule not found')
     rule_input = _deserialize_rule(row.rule_json, row)
+    needs_regime = any(c.kind == 'regime' for c in rule_input.group.conditions)
     matches = []
     for i in range(len(body.candles)):
         candle = body.candles[i]
-        results = evaluate_rules([rule_input], candle, body.candles[:i + 1], body.indicators, body.signals, datetime.now())
+        window = body.candles[:i + 1]
+        regime_by_model = build_regime_snapshot(window) if needs_regime else None
+        results = evaluate_rules([rule_input], candle, window, body.indicators, body.signals, datetime.now(), regime_by_model)
         matches.extend(results)
     return {'matches': matches}
 
@@ -406,13 +411,16 @@ async def evaluate_and_notify_for_symbol(
 
         rule_inputs = [_deserialize_rule(row.rule_json, row) for row in rows]
 
+        needs_regime = any(c.kind == 'regime' for ri in rule_inputs for c in ri.group.conditions)
+        regime_by_model = build_regime_snapshot(all_candles) if needs_regime else None
+
         # Compute indicators referenced by rule conditions
         all_conditions = []
         for ri in rule_inputs:
             all_conditions.extend(ri.group.conditions)
         indicators = compute_indicators_for_conditions(all_candles, all_conditions)
 
-        triggered = evaluate_rules(rule_inputs, closed_candle, all_candles, indicators, signals, datetime.now())
+        triggered = evaluate_rules(rule_inputs, closed_candle, all_candles, indicators, signals, datetime.now(), regime_by_model)
 
         for entry in triggered:
             history = AlertHistoryModel(
