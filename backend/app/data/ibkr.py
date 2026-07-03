@@ -177,6 +177,8 @@ def _map_interval(interval: str, lookback: int) -> tuple[str, str]:
     if iv in ("daily", "1d"):
         return "2y", "1d"
 
+    # "1w" is the frontend's lowercased spelling ('1W'); "1wk" is the yfinance-style
+    # spelling used elsewhere in this codebase — both must resolve the same way.
     if iv in ("weekly", "1wk", "1w"):
         return "5y", "1w"
 
