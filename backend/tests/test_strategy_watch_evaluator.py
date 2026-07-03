@@ -176,6 +176,33 @@ async def test_composite_watch_describe_match_failure_still_fires_with_fallback_
 
 
 @pytest.mark.asyncio
+async def test_composite_watch_fetches_intraday_for_vwap_confirmation_even_when_model_not_hmm_intraday():
+    """A composite watch whose primary.model is NOT 'HMM_intraday' but whose
+    strategy_confirmations include 'mean_reversion_vwap' must still fetch intraday
+    bars — otherwise the scheduled path can never confirm VWAP (it always gets
+    bars_intraday=[]), while the WS path potentially can, breaking parity between
+    the two paths."""
+    store = MagicMock()
+    watch = _composite_watch(trigger_def={
+        "primary": {"model": "any"},
+        "strategy_confirmations": ["mean_reversion_vwap"],
+        "min_strategy_confirmations": 1,
+    })
+    store.list_watches.return_value = [watch]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch("app.data.market.fetch_intraday_candles",
+               return_value=_bars(100.0, n=120)) as fetch_intraday, \
+         patch("app.services.composite_trigger_evaluator.evaluate_scheduled",
+               return_value=True), \
+         patch("app.services.composite_trigger_evaluator.describe_match",
+               return_value={"structure_matched": [], "strategy_matched": []}):
+        await evaluate_all()
+    fetch_intraday.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_evaluate_and_notify_dispatches_per_event():
     ev = WatchEvent(
         watch_id="wch_1", symbol="AAPL", strategy_key="pullback_ema",

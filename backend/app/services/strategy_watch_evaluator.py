@@ -174,7 +174,8 @@ async def evaluate_all() -> list[WatchEvent]:
         if not bars:
             continue
         bars_intraday: list[dict] = []
-        if model == "HMM_intraday":
+        needs_intraday = model == "HMM_intraday" or "mean_reversion_vwap" in (trigger_def.get("strategy_confirmations") or [])
+        if needs_intraday:
             interval = w.get("interval", "15m")
             try:
                 from app.data.market import fetch_intraday_candles
