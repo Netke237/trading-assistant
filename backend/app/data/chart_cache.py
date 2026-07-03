@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from app.data.market import fetch_intraday_candles
+from app.data.market import fetch_intraday_candles, normalize_interval
 
 _INTRADAY_CACHE: dict[str, tuple[list[dict], float]] = {}
 
@@ -25,6 +25,7 @@ def _key(symbol: str, interval: str, days: int) -> str:
 
 async def get_intraday(symbol: str, interval: str = "15min", days: int = 55) -> list[dict]:
     """Return OHLCV bars, served from cache when fresh."""
+    interval = normalize_interval(interval)
     key = _key(symbol, interval, days)
     now = time.monotonic()
 

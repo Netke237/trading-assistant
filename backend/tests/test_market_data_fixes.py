@@ -102,6 +102,76 @@ def test_daily_interval_calls_yf_with_1d():
     assert len(result) > 0
 
 
+# ── Test: "1D" (chart-facing spelling) must resolve the same way "daily" does ──
+
+
+def test_1D_interval_alias_calls_yf_with_1d_and_full_history():
+    """fetch_intraday_candles("SPY", "1D") — the chart's actual interval spelling —
+    must resolve identically to interval="daily": pass "1d" to yfinance AND request
+    the full 3650-day window, not silently fall back to the 55-day default."""
+    from app.data.market import fetch_intraday_candles
+
+    captured_intervals: list[str] = []
+    captured_days: list[int] = []
+
+    def _fake_yf(symbol, interval, days):
+        captured_intervals.append(interval)
+        captured_days.append(days)
+        return [_bar(1_700_000_000)]
+
+    with (
+        patch("app.data.market.TRADIER_TOKEN", ""),
+        patch("app.data.market._fetch_intraday_yf", side_effect=_fake_yf),
+        patch("app.data.market.fetch_intraday_ibkr", return_value=[], create=True),
+    ):
+        result = fetch_intraday_candles("SPY", interval="1D", days=3650)
+
+    assert "1d" in captured_intervals, f"Expected '1d' in calls, got: {captured_intervals}"
+    assert 3650 in captured_days, f"Expected the full 3650-day window requested, got: {captured_days}"
+    assert len(result) > 0
+
+
+def test_1W_interval_alias_calls_yf_with_1wk():
+    """fetch_intraday_candles("SPY", "1W") must resolve the same way interval="weekly" does."""
+    from app.data.market import fetch_intraday_candles
+
+    captured_intervals: list[str] = []
+
+    def _fake_yf(symbol, interval, days):
+        captured_intervals.append(interval)
+        return [_bar(1_700_000_000)]
+
+    with (
+        patch("app.data.market.TRADIER_TOKEN", ""),
+        patch("app.data.market._fetch_intraday_yf", side_effect=_fake_yf),
+        patch("app.data.market.fetch_intraday_ibkr", return_value=[], create=True),
+    ):
+        result = fetch_intraday_candles("SPY", interval="1W", days=3650)
+
+    assert "1wk" in captured_intervals, f"Expected '1wk' in calls, got: {captured_intervals}"
+    assert len(result) > 0
+
+
+def test_ibkr_used_for_1D_interval():
+    """IBKR must be attempted for interval='1D' too, not just 'daily' — same fix as above."""
+    from app.data.market import fetch_intraday_candles
+    import app.data.ibkr as ibkr_mod
+
+    ibkr_bars = [_bar(1_700_000_000, close=200.0)]
+    original = ibkr_mod.fetch_intraday_ibkr
+    ibkr_mod.fetch_intraday_ibkr = lambda s, iv, d: ibkr_bars
+    try:
+        with (
+            patch("app.data.market.TRADIER_TOKEN", ""),
+            patch("app.data.market._fetch_intraday_yf", return_value=[]),
+        ):
+            result = fetch_intraday_candles("SPY", interval="1D", days=3650)
+    finally:
+        ibkr_mod.fetch_intraday_ibkr = original
+
+    assert any(b["close"] == 200.0 for b in result), "Expected IBKR bar in result for '1D' interval"
+
+
 # ── Test 4: IBKR source included for "1h" interval ───────────────────────────
 
 

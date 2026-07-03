@@ -188,6 +188,18 @@ _YF_MAX_DAYS: dict[str, int] = {
     "1wk": 3650,
 }
 
+# The chart-facing / frontend interval spelling ('1D', '1W') doesn't match this
+# module's own keys ('daily', 'weekly') — normalize before any lookup so both
+# spellings resolve identically (yfinance interval code, day cap, IBKR eligibility).
+_INTERVAL_ALIASES: dict[str, str] = {"1D": "daily", "1W": "weekly"}
+
+
+def normalize_interval(interval: str) -> str:
+    """Canonicalize chart-facing interval spellings to this module's internal
+    convention, so lookup tables (_YF_INTERVAL_MAP, _YF_MAX_DAYS, IBKR eligibility)
+    match regardless of which spelling the caller used."""
+    return _INTERVAL_ALIASES.get(interval, interval)
+
 
 def _resample_bars(bars: list[dict], target_minutes: int) -> list[dict]:
     """Aggregate OHLCV bars to a coarser interval via pandas resample."""
@@ -299,6 +311,7 @@ def fetch_intraday_candles(
     Tradier bars take precedence on timestamp conflicts (more accurate for recent data).
     Returns [] only when both sources fail.
     """
+    interval = normalize_interval(interval)
     logger.info("Fetching intraday %s %s days=%s", symbol, interval, days)
 
     # ── Tradier (only for supported intervals) ───────────────────────────────

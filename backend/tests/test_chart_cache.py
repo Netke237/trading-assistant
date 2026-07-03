@@ -44,6 +44,24 @@ async def test_cache_expiry_refetches():
 
 
 @pytest.mark.asyncio
+async def test_1D_and_daily_share_one_cache_entry_and_ttl():
+    """'1D' (chart-facing spelling) must be treated as equivalent to 'daily' for
+    both cache-key purposes and the TTL lookup — not fall back to the default
+    30-min TTL meant for un-recognized intervals."""
+    mock_rows = [{"time": "2024-01-02", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000}]
+    with patch("app.data.chart_cache.fetch_intraday_candles", return_value=mock_rows) as mock_fetch:
+        from app.data.chart_cache import get_intraday, _INTRADAY_CACHE, _TTL_BY_INTERVAL
+        _INTRADAY_CACHE.clear()
+        await get_intraday("AAPL", "1D", 3650)
+    # The cache key stored must use the normalized "daily" spelling, so its TTL
+    # actually resolves via _TTL_BY_INTERVAL["daily"] (4 hours) rather than the
+    # default fallback.
+    matching_keys = [k for k in _INTRADAY_CACHE if k.startswith("AAPL:") and k.endswith(":3650")]
+    assert matching_keys, f"Expected a normalized cache entry, got keys: {list(_INTRADAY_CACHE.keys())}"
+    assert "daily" in matching_keys[0], f"Expected normalized 'daily' in cache key, got: {matching_keys[0]}"
+
+
+@pytest.mark.asyncio
 async def test_at_most_2_concurrent_fetches():
     """At most 2 concurrent chart fetches run simultaneously."""
     import asyncio as _asyncio
