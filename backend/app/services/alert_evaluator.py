@@ -130,7 +130,8 @@ def _evaluate_regime_condition(condition, regime_by_model: Optional[dict]) -> tu
 
 
 def build_regime_snapshot(candles: list[dict]) -> dict:
-    """Compute {'OMM': {...}, 'HMM': {...}} regime data for regime-kind alert conditions.
+    """Compute {'OMM': {...}, 'HMM': {...}, 'HMM_directional': {...}} regime data for
+    regime-kind alert conditions.
 
     A missing key means that model's regime could not be computed (insufficient
     bars, or hmmlearn unavailable) — matching conditions for that model fail closed
@@ -138,8 +139,9 @@ def build_regime_snapshot(candles: list[dict]) -> dict:
 
     OMM conviction is always computed with a fixed Bullish framing (RegimeCondition
     has no direction field to pick a framing from); _evaluate_regime_condition()
-    flips the sign for Bear-state conditions so min_conviction reads consistently
-    regardless of which state the condition targets.
+    only flips the sign for OMM Bear-state conditions, since OMM is the only model
+    here whose conviction is Bullish-framed — 'HMM' and 'HMM_directional' report an
+    unsigned p_stay-based conviction with no directional axis to flip.
     """
     closes = [c["close"] for c in candles] if candles else []
     snapshot: dict = {}
@@ -158,6 +160,14 @@ def build_regime_snapshot(candles: list[dict]) -> dict:
             # in the detected state) is the closest available confidence metric —
             # the regime-snapshot endpoint already surfaces P(stay) for HMM users.
             snapshot['HMM'] = {'state': hmm.state, 'conviction': round(hmm.p_stay * 100, 1)}
+
+    if len(candles) >= 200:
+        from app.services.regime_hmm_daily import compute_directional_hmm
+        dhmm = compute_directional_hmm(candles)
+        if dhmm is not None:
+            # Same p_stay-as-conviction proxy as 'HMM' above — DirectionalHmmResult
+            # has no separate conviction score either.
+            snapshot['HMM_directional'] = {'state': dhmm.state, 'conviction': round(dhmm.p_stay * 100, 1)}
 
     return snapshot
 

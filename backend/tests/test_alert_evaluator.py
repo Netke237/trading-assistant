@@ -277,3 +277,31 @@ class TestBuildRegimeSnapshot:
         candles = [{'close': 100.0 + i} for i in range(50)]
         snapshot = build_regime_snapshot(candles)
         assert 'HMM' not in snapshot
+
+
+class TestBuildRegimeSnapshotDirectionalHmm:
+    def test_hmm_directional_absent_below_minimum_bars(self):
+        candles = [{'close': 100.0 + i} for i in range(50)]
+        snapshot = build_regime_snapshot(candles)
+        assert 'HMM_directional' not in snapshot
+
+    def test_hmm_directional_populated_when_enough_bars(self, monkeypatch):
+        import app.services.regime_hmm_daily as regime_hmm_daily
+        from unittest.mock import MagicMock
+
+        result = MagicMock(state='Bull', p_stay=0.75)
+        monkeypatch.setattr(regime_hmm_daily, 'compute_directional_hmm', lambda bars: result)
+
+        candles = [{'close': 100.0 + i * 0.1} for i in range(210)]
+        snapshot = build_regime_snapshot(candles)
+        assert snapshot['HMM_directional'] == {'state': 'Bull', 'conviction': 75.0}
+
+    def test_hmm_directional_absent_when_model_returns_none(self, monkeypatch):
+        """hmmlearn unavailable or fit failure → compute_directional_hmm returns None
+        → key must be absent, matching the existing 'HMM' key's fail-closed behavior."""
+        import app.services.regime_hmm_daily as regime_hmm_daily
+
+        monkeypatch.setattr(regime_hmm_daily, 'compute_directional_hmm', lambda bars: None)
+        candles = [{'close': 100.0 + i * 0.1} for i in range(210)]
+        snapshot = build_regime_snapshot(candles)
+        assert 'HMM_directional' not in snapshot
