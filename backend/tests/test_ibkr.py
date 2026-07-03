@@ -275,6 +275,8 @@ def test_conid_caches_failure():
 
     assert r1 is None
     assert r2 is None
+    # HTTP should only have been called ONCE; second call hit the sentinel in cache
+    mock_post.assert_called_once()
 
 
 # ── _map_interval ─────────────────────────────────────────────────────────────
