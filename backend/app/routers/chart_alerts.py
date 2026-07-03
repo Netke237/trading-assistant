@@ -348,6 +348,12 @@ async def test_rule(rule_id: str, body: AlertTestRequest, db: AsyncSession = Dep
     for i in range(len(body.candles)):
         candle = body.candles[i]
         window = body.candles[:i + 1]
+        # Rebuilt every iteration (not once) so each candle's regime condition is
+        # evaluated causally, matching only data available up to that point — but
+        # this means compute_intraday_hmm's iterative HMM fit re-runs once per
+        # candle once the window passes its 200-bar minimum. Acceptable for this
+        # manual dry-run endpoint's typical candle-list sizes; a very large paste
+        # would make this proportionally slower.
         regime_by_model = build_regime_snapshot(window) if needs_regime else None
         results = evaluate_rules([rule_input], candle, window, body.indicators, body.signals, datetime.now(), regime_by_model)
         matches.extend(results)
