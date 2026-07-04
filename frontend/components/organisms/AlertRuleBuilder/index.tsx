@@ -238,10 +238,15 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
                 value={c.kind}
                 onChange={(e) => {
                   const k = e.target.value as 'price' | 'indicator' | 'structure' | 'regime';
-                  if (k === 'price') updateCondition(idx, emptyPriceCondition());
-                  if (k === 'indicator') updateCondition(idx, emptyIndicatorCondition());
-                  if (k === 'structure') updateCondition(idx, emptyStructureCondition());
-                  if (k === 'regime') updateCondition(idx, emptyRegimeCondition());
+                  // Preserve the row's own id across a kind switch — regenerating it here
+                  // would change key={c.id} on the enclosing row and force React to remount
+                  // the whole row (including this very <select>), dropping its focus ring
+                  // right after the user interacted with it.
+                  const id = c.id;
+                  if (k === 'price') updateCondition(idx, { ...emptyPriceCondition(), id });
+                  if (k === 'indicator') updateCondition(idx, { ...emptyIndicatorCondition(), id });
+                  if (k === 'structure') updateCondition(idx, { ...emptyStructureCondition(), id });
+                  if (k === 'regime') updateCondition(idx, { ...emptyRegimeCondition(), id });
                 }}
               >
                 <option value="price">Price</option>

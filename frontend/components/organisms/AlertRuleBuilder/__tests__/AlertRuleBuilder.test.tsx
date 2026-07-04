@@ -158,4 +158,22 @@ describe('AlertRuleBuilder condition row keys', () => {
     expect(savedConditions[0].id).toEqual(expect.any(String));
     expect(savedConditions[0].id.length).toBeGreaterThan(0);
   });
+
+  it('does not remount the condition row when its kind is switched', () => {
+    // Regenerating the id on a kind switch would change key={c.id} on the row and
+    // force React to unmount/remount it (including the very <select> the user just
+    // used, dropping its focus). Capture the row's DOM node before the switch and
+    // confirm it's still the SAME node (not detached/replaced) afterward — a direct
+    // proof of id (and thus key) stability, not just that some id exists.
+    render(<AlertRuleBuilder onClose={() => {}} editRule={null} />);
+
+    const kindSelect = screen.getByDisplayValue('Price') as HTMLSelectElement;
+    // The kind <select> is a direct child of the condition row <div key={c.id}>.
+    const rowNode = kindSelect.parentElement as HTMLElement;
+    expect(rowNode).toBeTruthy();
+
+    fireEvent.change(kindSelect, { target: { value: 'regime' } });
+
+    expect(rowNode.isConnected).toBe(true);
+  });
 });
