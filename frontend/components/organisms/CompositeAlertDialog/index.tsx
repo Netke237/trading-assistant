@@ -122,6 +122,11 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
       strategy_confirmations: strategyConfirmations,
       min_strategy_confirmations: strategyConfirmations.length > 0 ? Math.min(minMrConf, strategyConfirmations.length) : 0,
       horizon: 'swing',
+      // Backend's strategy_confirmations gate reads direction from inside
+      // trigger_def (td.get("direction") or "Bullish") — without this, every
+      // mean-reversion confirmation would silently evaluate as Bullish regardless
+      // of the alert's real direction, for both the Watch and live Rule paths.
+      direction: direction === 'any' ? null : direction,
     };
     try {
       if (deliveryMode === 'rule') {

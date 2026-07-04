@@ -131,4 +131,23 @@ describe('CompositeAlertDialog — delivery mode', () => {
       expect.any(String), 'AAPL', expect.any(String), expect.any(Object),
     );
   });
+
+  it('includes the alert direction inside trigger_def for both Watch and Rule modes', async () => {
+    // Regression: the backend's strategy_confirmations gate reads direction from
+    // INSIDE trigger_def (td.get("direction") or "Bullish"), not from a sibling
+    // API param. Omitting it here silently forces every mean-reversion
+    // confirmation to evaluate as Bullish regardless of the alert's real direction.
+    mockApi.getSymbolRegimeSnapshot.mockResolvedValue(SNAPSHOT as any);
+    mockApi.addCompositeWatch.mockResolvedValue({} as any);
+
+    await act(async () => {
+      render(<CompositeAlertDialog symbol="TSLA" direction="Bearish" onClose={() => {}} />);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /create alert/i }));
+    await act(async () => {});
+
+    const triggerDef = mockApi.addCompositeWatch.mock.calls[0][1];
+    expect(triggerDef.direction).toBe('Bearish');
+  });
 });
