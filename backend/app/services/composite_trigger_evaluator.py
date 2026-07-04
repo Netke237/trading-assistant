@@ -254,6 +254,36 @@ def evaluate_from_context(
     return True
 
 
+def evaluate_from_context_detailed(
+    trigger_def: dict,
+    omm_result,
+    structure_signals: list[dict],
+    indicator_values: dict,
+    bars_daily: list[dict] | None = None,
+    bars_intraday: list[dict] | None = None,
+    direction: str = "Bullish",
+    symbol: str = "",
+) -> tuple[bool, dict | None]:
+    """Fire-gate + match detail in one pass. Returns (fired, detail) where detail is
+    the describe_match() dict when fired, else None. Equivalent to calling
+    evaluate_from_context() then describe_match(), but the strategy/structure scan is
+    only performed on the describe side once the gate passes — no double scan.
+
+    ``symbol`` is threaded through to describe_match so its structure-recompute branch
+    (hit only when structure_signals is None) is not silently narrowed to symbol=""."""
+    fired = evaluate_from_context(
+        trigger_def, omm_result, structure_signals, indicator_values,
+        bars_daily=bars_daily, bars_intraday=bars_intraday,
+    )
+    if not fired:
+        return False, None
+    detail = describe_match(
+        trigger_def, structure_signals=structure_signals, indicator_values=indicator_values,
+        bars_daily=bars_daily, bars_intraday=bars_intraday, symbol=symbol, direction=direction,
+    )
+    return True, detail
+
+
 def evaluate_scheduled(
     symbol: str,
     trigger_def: dict,

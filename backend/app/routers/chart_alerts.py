@@ -486,7 +486,7 @@ async def evaluate_and_notify_for_symbol(
 
         # ── Composite rule evaluation ─────────────────────────────────────────
         if composite_rows:
-            from app.services.composite_trigger_evaluator import evaluate_from_context, describe_match, format_composite_reason
+            from app.services.composite_trigger_evaluator import evaluate_from_context_detailed, format_composite_reason
             from app.services.regime_omm import compute_omm
             _model_candles = all_candles[-MAX_LIVE_MODEL_CANDLES:] if all_candles else []
             _closes = [c["close"] for c in _model_candles]
@@ -527,25 +527,16 @@ async def evaluate_and_notify_for_symbol(
                 _rule_needs_daily = bool(_rj.get("strategy_confirmations")) or _rj.get("primary", {}).get("model") == "HMM_daily"
                 _rule_daily = _bars_daily if _rule_needs_daily else []
                 try:
-                    _fired = evaluate_from_context(
+                    _fired, _detail = evaluate_from_context_detailed(
                         _td, _omm, signals, indicators,
                         bars_daily=_rule_daily, bars_intraday=_bars_intraday,
+                        direction=_direction, symbol=symbol,
                     )
                 except Exception as _exc:
                     logger.warning("composite rule eval failed for %s: %s", symbol, _exc)
                     continue
                 if not _fired:
                     continue
-                # describe_match is passed the same bars (and now the rule's own
-                # direction, matching evaluate_scheduled's call in
-                # strategy_watch_evaluator.py) so the reason text can name matched
-                # mean-reversion strategies here too — previously this path had no
-                # bars at all, so strategy names never appeared in WS-fired reasons.
-                _detail = describe_match(
-                    _td, structure_signals=signals, indicator_values=indicators,
-                    bars_daily=_rule_daily, bars_intraday=_bars_intraday, symbol=symbol,
-                    direction=_direction,
-                )
                 _reason = format_composite_reason(_td.get('primary', {}).get('to_state'), _detail)
                 _now = datetime.now().isoformat()
                 _entry = {
