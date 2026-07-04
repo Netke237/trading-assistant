@@ -83,6 +83,24 @@ describe('chartAlertStore', () => {
     expect(result.current.rules).toHaveLength(1);
   });
 
+  it('blocks duplicate rule even when conditions carry different ids', () => {
+    const { result } = renderHook(() => useChartAlertStore());
+    act(() =>
+      result.current.addRule(
+        makeRule({ id: 'r1', group: { logic: 'AND', conditions: [{ kind: 'price', id: 'cond-a', operator: '>', value: 185 } as PriceCondition] } }),
+      ),
+    );
+    act(() =>
+      result.current.addRule(
+        makeRule({ id: 'r2', group: { logic: 'AND', conditions: [{ kind: 'price', id: 'cond-b', operator: '>', value: 185 } as PriceCondition] } }),
+      ),
+    );
+    // Same symbol/interval/operator/value — only the per-condition `id` differs.
+    // Must still be treated as a duplicate, or every rule created through the UI
+    // (which now generates a fresh id per condition) would defeat this check.
+    expect(result.current.rules).toHaveLength(1);
+  });
+
   it('updates a rule', () => {
     const { result } = renderHook(() => useChartAlertStore());
     act(() => result.current.addRule(makeRule()));

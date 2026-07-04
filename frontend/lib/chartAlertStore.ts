@@ -1,8 +1,16 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { AlertRule, AlertHistory } from '@/types/alerts';
+import type { AlertRule, AlertHistory, Condition } from '@/types/alerts';
 
 export const HISTORY_LIMIT = 200;
+
+/** Compares condition arrays for the purpose of duplicate-rule detection,
+ * ignoring each condition's `id` — two conditions with identical fields but
+ * different (freshly generated) ids are still the same condition. */
+export function conditionsEqual(a: Condition[], b: Condition[]): boolean {
+  const strip = (conds: Condition[]) => conds.map(({ id: _id, ...rest }) => rest);
+  return JSON.stringify(strip(a)) === JSON.stringify(strip(b));
+}
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 export interface ChartToast {
@@ -105,7 +113,7 @@ export const useChartAlertStore = create<ChartAlertState>()(
             (r) =>
               r.symbol === rule.symbol &&
               r.interval === rule.interval &&
-              JSON.stringify(r.group.conditions) === JSON.stringify(rule.group.conditions),
+              conditionsEqual(r.group.conditions, rule.group.conditions),
           );
           if (duplicate) return s;
           added = true;
