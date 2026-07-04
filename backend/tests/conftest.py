@@ -11,6 +11,16 @@ Fixes:
 """
 from __future__ import annotations
 
+# ── Test DB safety pin (MUST run before any app import) ───────────────────────
+# The app now defaults to PostgreSQL for dev (backend/.env), and several tests
+# import the real app.main:app without overriding get_db, so they use the
+# module-level engine built from DATABASE_URL. Pin that to the local SQLite file
+# during tests so the suite can NEVER connect to or mutate the real Postgres dev
+# database. An env var takes precedence over .env in pydantic-settings; setdefault
+# lets an explicit test DATABASE_URL still win if someone sets one.
+import os
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./dev.db")
+
 import asyncio
 from typing import AsyncGenerator
 from unittest.mock import patch
