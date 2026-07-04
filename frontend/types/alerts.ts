@@ -57,6 +57,8 @@ export interface AlertRule {
   expiry_date: string | null;
   created_at: string;
   last_triggered_at: string | null;
+  rule_type?: 'standard' | 'composite';
+  composite_def?: Record<string, unknown>;
 }
 
 export interface AlertHistory {

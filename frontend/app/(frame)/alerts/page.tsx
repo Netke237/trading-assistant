@@ -121,6 +121,9 @@ function conditionText(cond: Condition): string {
 }
 
 function conditionsSummary(rule: AlertRule): string {
+  if (rule.rule_type === 'composite' && rule.composite_def) {
+    return `Composite — ${compositeWatchSummary(rule.composite_def)}`;
+  }
   return rule.group.conditions.map(conditionText).join(` ${rule.group.logic} `);
 }
 
