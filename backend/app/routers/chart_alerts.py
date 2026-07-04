@@ -260,7 +260,12 @@ async def replace_rule(rule_id: str, body: AlertRuleCreate, db: AsyncSession = D
     row.symbol = body.symbol.upper()
     row.interval = body.interval
     row.enabled = body.enabled
-    row.rule_json = json.dumps(body.group.model_dump())
+    if body.rule_type == 'composite':
+        if not body.composite_def:
+            raise HTTPException(status_code=422, detail='composite_def is required when rule_type is "composite"')
+        row.rule_json = json.dumps({"__type": "composite", **body.composite_def})
+    else:
+        row.rule_json = json.dumps(body.group.model_dump())
     row.cooldown_minutes = body.cooldown_minutes
     row.expiry_date = body.expiry_date
     await db.commit()
