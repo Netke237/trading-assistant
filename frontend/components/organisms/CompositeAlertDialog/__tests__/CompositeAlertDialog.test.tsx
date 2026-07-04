@@ -8,6 +8,7 @@ jest.mock('@/lib/api', () => ({
     getCompositeWatchDefaults: jest.fn(),
     getSymbolRegimeSnapshot: jest.fn(),
     addCompositeWatch: jest.fn(),
+    addCompositeAlertRule: jest.fn(),
   },
 }));
 
@@ -95,5 +96,39 @@ describe('CompositeAlertDialog — live regime snapshot', () => {
     expect(screen.queryByText(/Currently:/)).not.toBeInTheDocument();
     expect(screen.queryByText('Loading current regime…')).not.toBeInTheDocument();
     expect(screen.queryByText(/Live regime unavailable/)).not.toBeInTheDocument();
+  });
+});
+
+describe('CompositeAlertDialog — delivery mode', () => {
+  it('defaults to Watch mode and calls addCompositeWatch on save', async () => {
+    mockApi.getSymbolRegimeSnapshot.mockResolvedValue(SNAPSHOT as any);
+    mockApi.addCompositeWatch.mockResolvedValue({} as any);
+
+    await act(async () => {
+      render(<CompositeAlertDialog symbol="AAPL" direction="Bullish" onClose={() => {}} />);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /create alert/i }));
+    await act(async () => {});
+
+    expect(mockApi.addCompositeWatch).toHaveBeenCalled();
+    expect(mockApi.addCompositeAlertRule).not.toHaveBeenCalled();
+  });
+
+  it('in Rule mode calls addCompositeAlertRule with a name', async () => {
+    mockApi.getSymbolRegimeSnapshot.mockResolvedValue(SNAPSHOT as any);
+    mockApi.addCompositeAlertRule.mockResolvedValue({} as any);
+
+    await act(async () => {
+      render(<CompositeAlertDialog symbol="AAPL" direction="Bullish" onClose={() => {}} />);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Rule \(live\)/ }));
+    fireEvent.click(screen.getByRole('button', { name: /create alert/i }));
+    await act(async () => {});
+
+    expect(mockApi.addCompositeAlertRule).toHaveBeenCalledWith(
+      expect.any(String), 'AAPL', expect.any(String), expect.any(Object),
+    );
   });
 });

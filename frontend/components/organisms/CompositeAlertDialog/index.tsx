@@ -44,6 +44,8 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
   const [done, setDone]                     = useState(false);
   const [error, setError]                   = useState<string | null>(null);
   const [interval, setIntervalVal]          = useState('1D');
+  const [deliveryMode, setDeliveryMode]     = useState<'watch' | 'rule'>('watch');
+  const [ruleName, setRuleName]             = useState('');
 
   useEffect(() => {
     api.getCompositeWatchDefaults().then((d) => {
@@ -122,7 +124,12 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
       horizon: 'swing',
     };
     try {
-      await api.addCompositeWatch(symbol, triggerDef, direction, interval);
+      if (deliveryMode === 'rule') {
+        const name = ruleName.trim() || `${symbol} composite`;
+        await api.addCompositeAlertRule(name, symbol, interval, triggerDef);
+      } else {
+        await api.addCompositeWatch(symbol, triggerDef, direction, interval);
+      }
       setDone(true);
       setTimeout(onClose, 1200);
     } catch (e) {
@@ -152,6 +159,43 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
           </div>
         ) : (
           <>
+            <div className={styles.deliveryToggle}>
+              <button
+                type="button"
+                className={`${styles.deliveryBtn} ${deliveryMode === 'watch' ? styles.deliveryActive : ''}`}
+                onClick={() => setDeliveryMode('watch')}
+              >
+                Watch (background)
+              </button>
+              <button
+                type="button"
+                className={`${styles.deliveryBtn} ${deliveryMode === 'rule' ? styles.deliveryActive : ''}`}
+                onClick={() => setDeliveryMode('rule')}
+              >
+                Rule (live)
+              </button>
+            </div>
+
+            {deliveryMode === 'rule' && (
+              <>
+                <div className={styles.row}>
+                  <Text size={16} tone="secondary">Rule name</Text>
+                  <input
+                    className={styles.select}
+                    value={ruleName}
+                    onChange={(e) => setRuleName(e.target.value)}
+                    placeholder={`${symbol} composite`}
+                  />
+                </div>
+                <div className={styles.warnBox}>
+                  <Text size={16} tone="caution">
+                    A live Rule is only checked while this chart tab stays open. For
+                    always-on background checking, use Watch.
+                  </Text>
+                </div>
+              </>
+            )}
+
             <div className={styles.row}>
               <Text size={16} tone="secondary">Model</Text>
               <select
