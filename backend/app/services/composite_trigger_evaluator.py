@@ -202,6 +202,11 @@ def evaluate_from_context(
             if not _check_primary_hmm(td, hmm_result):
                 return False
         except Exception as exc:
+            # Deliberate fail-closed: if the HMM model errors we suppress the alert
+            # (return False) rather than surfacing an error alert, matching the OMM/
+            # regime-failure pattern. Logged at WARNING for observability. If this
+            # ever needs to become a user-visible error, that is a product decision,
+            # not a silent code change.
             logger.warning("evaluate_from_context: HMM_intraday failed — %s", exc)
             return False
     elif model == "HMM_daily":
@@ -216,6 +221,7 @@ def evaluate_from_context(
             if not _check_primary_hmm(td, hmm_result):
                 return False
         except Exception as exc:
+            # Deliberate fail-closed: see the HMM_intraday branch above for rationale.
             logger.warning("evaluate_from_context: HMM_daily failed — %s", exc)
             return False
     elif model == "any":
@@ -290,6 +296,11 @@ def evaluate_scheduled(
             hmm_result = compute_intraday_hmm(bars_intraday)
             primary_met = _check_primary_hmm(td, hmm_result)
         except Exception as exc:
+            # Deliberate fail-closed: if the HMM model errors we suppress the alert
+            # (return False) rather than surfacing an error alert, matching the OMM/
+            # regime-failure pattern. Logged at WARNING for observability. If this
+            # ever needs to become a user-visible error, that is a product decision,
+            # not a silent code change.
             logger.warning("evaluate_scheduled: HMM_intraday failed for %s — %s", symbol, exc)
             return False
     elif model == "HMM_daily":
@@ -302,6 +313,7 @@ def evaluate_scheduled(
             hmm_result = compute_intraday_hmm(bars_daily)
             primary_met = _check_primary_hmm(td, hmm_result)
         except Exception as exc:
+            # Deliberate fail-closed: see the HMM_intraday branch above for rationale.
             logger.warning("evaluate_scheduled: HMM_daily failed for %s — %s", symbol, exc)
             return False
     elif model == "any":
