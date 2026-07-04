@@ -336,6 +336,20 @@
   border-bottom: none;
 }
 
+.watchesTableRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 2fr 0.6fr 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.watchesTableRow:last-child {
+  border-bottom: none;
+}
+
 .rulesTableHeader {
   background: var(--bg-surface-2);
 }

@@ -9,6 +9,8 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
 import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
+import { api, type CompositeWatch } from '@/lib/api';
+import { compositeWatchSummary } from '@/lib/compositeWatchSummary';
 import type { AlertType, ToastItem } from '@/types/domain';
 import type { AlertRule, Condition } from '@/types/alerts';
 import styles from './page.module.css';
@@ -128,10 +130,12 @@ export default function AlertsPage() {
   const { toasts, config, setConfig, clearAll, clearOldAlerts, acknowledgeAlert, testSound } = useAlertStore();
   const { rules, updateRule, deleteRule } = useChartAlertStore();
 
-  const [tab, setTab] = useState<'alerts' | 'rules'>('alerts');
+  const [tab, setTab] = useState<'alerts' | 'rules' | 'watches'>('alerts');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
   const [duplicatingRule, setDuplicatingRule] = useState<AlertRule | null>(null);
+  const [watches, setWatches] = useState<CompositeWatch[]>([]);
+  const [watchesLoaded, setWatchesLoaded] = useState(false);
 
   const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
   const deliverySyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -178,6 +182,26 @@ export default function AlertsPage() {
       if (deliverySyncTimer.current) clearTimeout(deliverySyncTimer.current);
     };
   }, [BASE_URL, config.enabledTypes, config.dedupWindowMinutes, config.reminderIntervalHours, config.retentionDays]);
+
+  const loadWatches = useCallback(() => {
+    api.listCompositeWatches()
+      .then((w) => { setWatches(w); setWatchesLoaded(true); })
+      .catch(() => setWatchesLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'watches' && !watchesLoaded) loadWatches();
+  }, [tab, watchesLoaded, loadWatches]);
+
+  function toggleWatch(id: string, on: boolean) {
+    setWatches((prev) => prev.map((w) => (w.id === id ? { ...w, enabled: on } : w)));
+    api.setCompositeWatchEnabled(id, on).catch(() => loadWatches());
+  }
+
+  function deleteWatch(id: string) {
+    setWatches((prev) => prev.filter((w) => w.id !== id));
+    api.removeCompositeWatch(id).catch(() => loadWatches());
+  }
 
   const candidates = useScanStore((s) => s.scanResult?.candidates) ?? [];
   const portfolioPositions = usePortfolioStore((s) => s.positions);
@@ -267,6 +291,13 @@ export default function AlertsPage() {
           onClick={() => setTab('rules')}
         >
           Rules
+        </button>
+        <button
+          type="button"
+          className={[styles.pageTab, tab === 'watches' ? styles.pageTabActive : ''].join(' ')}
+          onClick={() => setTab('watches')}
+        >
+          Watches
         </button>
       </div>
 
@@ -475,6 +506,58 @@ export default function AlertsPage() {
                       type="button"
                       className={styles.btnDanger}
                       onClick={() => deleteRule(rule.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {tab === 'watches' && (
+        <section className={styles.section}>
+          <div className={styles.rulesHeader}>
+            <Text size={11} tone="secondary" weight={600}>Composite Watches</Text>
+            <Text size={11} tone="dim">
+              Background checks by the scheduler — active even when no chart tab is open.
+            </Text>
+          </div>
+          {!watchesLoaded ? (
+            <div className={styles.empty}><Text size={13} tone="secondary">Loading…</Text></div>
+          ) : watches.length === 0 ? (
+            <div className={styles.empty}>
+              <Text size={13} tone="secondary">
+                No composite watches yet. Create one from a chart&apos;s Composite Alert dialog.
+              </Text>
+            </div>
+          ) : (
+            <div className={styles.rulesTable}>
+              <div className={[styles.watchesTableRow, styles.rulesTableHeader].join(' ')}>
+                <Text size={11} tone="dim" weight={600}>Symbol</Text>
+                <Text size={11} tone="dim" weight={600}>Direction</Text>
+                <Text size={11} tone="dim" weight={600}>Interval</Text>
+                <Text size={11} tone="dim" weight={600}>Trigger</Text>
+                <Text size={11} tone="dim" weight={600}>Enabled</Text>
+                <Text size={11} tone="dim" weight={600}>Actions</Text>
+              </div>
+              {watches.map((w) => (
+                <div key={w.id} className={styles.watchesTableRow}>
+                  <Data size={12} weight={500}>{w.symbol}</Data>
+                  <Text size={12}>{w.direction}</Text>
+                  <Text size={12}>{w.interval}</Text>
+                  <Text size={12}>{compositeWatchSummary(w.trigger_def)}</Text>
+                  <Toggle
+                    on={w.enabled}
+                    onChange={(on) => toggleWatch(w.id, on)}
+                  />
+                  <div className={styles.rulesActions}>
+                    <button
+                      type="button"
+                      className={styles.btnDanger}
+                      onClick={() => deleteWatch(w.id)}
                     >
                       Delete
                     </button>
