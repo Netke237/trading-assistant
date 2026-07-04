@@ -74,7 +74,9 @@ class AlertRuleCreate(BaseModel):
     symbol: str
     interval: str
     enabled: bool = True
-    group: ConditionGroupIn
+    group: ConditionGroupIn = Field(default_factory=ConditionGroupIn)
+    rule_type: str = 'standard'
+    composite_def: Optional[dict] = None
     cooldown_minutes: int = 60
     expiry_date: Optional[str] = None
 
@@ -109,12 +111,22 @@ class NotificationTestRequest(BaseModel):
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _rule_to_dict(row: AlertRuleModel) -> dict:
-    return {
+    parsed = json.loads(row.rule_json)
+    base = {
         'id': row.id, 'name': row.name, 'symbol': row.symbol, 'interval': row.interval,
-        'enabled': row.enabled, 'group': json.loads(row.rule_json),
+        'enabled': row.enabled,
         'cooldown_minutes': row.cooldown_minutes, 'expiry_date': row.expiry_date,
         'created_at': row.created_at, 'last_triggered_at': row.last_triggered_at,
     }
+    if isinstance(parsed, dict) and parsed.get('__type') == 'composite':
+        composite_def = {k: v for k, v in parsed.items() if k != '__type'}
+        base['rule_type'] = 'composite'
+        base['composite_def'] = composite_def
+        base['group'] = {'logic': 'AND', 'conditions': []}
+    else:
+        base['rule_type'] = 'standard'
+        base['group'] = parsed
+    return base
 
 def _history_to_dict(row: AlertHistoryModel) -> dict:
     return {
@@ -197,10 +209,17 @@ async def create_rule(body: AlertRuleCreate, db: AsyncSession = Depends(get_db))
             raise HTTPException(status_code=409, detail='Rule with this id already exists')
     now = datetime.now().isoformat()
 
+    if body.rule_type == 'composite':
+        if not body.composite_def:
+            raise HTTPException(status_code=422, detail='composite_def is required when rule_type is "composite"')
+        rule_json = json.dumps({"__type": "composite", **body.composite_def})
+    else:
+        rule_json = json.dumps(body.group.model_dump())
+
     rule = AlertRuleModel(
         id=rule_id, user_id='default', name=body.name, symbol=body.symbol.upper(),
         interval=body.interval, enabled=body.enabled,
-        rule_json=json.dumps(body.group.model_dump()),
+        rule_json=rule_json,
         cooldown_minutes=body.cooldown_minutes, expiry_date=body.expiry_date,
         created_at=now, last_triggered_at=None,
     )
