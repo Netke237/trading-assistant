@@ -510,6 +510,21 @@ export const api = {
     get<SymbolRegimeSnapshot>(
       `/api/composite-watches/regime-snapshot?symbol=${encodeURIComponent(symbol)}&model=${model}&direction=${direction}&interval=${interval}`,
     ),
+  // Live composite RULE (WS-checked, only while chart tab is open) — distinct from
+  // a Composite Watch (scheduled/background). Stored as an alert_rules row.
+  addCompositeAlertRule: (
+    name: string,
+    symbol: string,
+    interval: string,
+    triggerDef: Record<string, unknown>,
+  ) =>
+    post<AlertRule>('/alerts/rules', {
+      name,
+      symbol,
+      interval,
+      rule_type: 'composite',
+      composite_def: triggerDef,
+    }),
 
   // ── Pre-breakout scan ────────────────────────────────────────────────────────
   prebreakoutScan: (
