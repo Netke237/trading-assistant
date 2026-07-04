@@ -13,11 +13,6 @@ from app.models.scan_session import ScanSessionBase
 from app.models.ohlcv_daily import OhlcvBase
 
 # Load all ORM models so both metadata registries are populated before autogenerate.
-from app.models.admin import Admin  # noqa: F401
-from app.models.child import Child  # noqa: F401
-from app.models.quest import Quest  # noqa: F401
-from app.models.time_log import TimeLog  # noqa: F401
-from app.models.override_log import OverrideLog  # noqa: F401
 from app.models.audit_event import AuditEventModel  # noqa: F401
 from app.models.portfolio import PortfolioPositionModel  # noqa: F401
 from app.models.watchlist import WatchlistSymbolModel  # noqa: F401
