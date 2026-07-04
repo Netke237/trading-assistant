@@ -9,12 +9,14 @@ export type RegimeModel = 'OMM' | 'HMM' | 'HMM_directional' | 'any';
 
 export interface PriceCondition {
   kind: 'price';
+  id?: string;
   operator: ConditionOperator;
   value: number;
 }
 
 export interface IndicatorCondition {
   kind: 'indicator';
+  id?: string;
   indicator: string;
   operator: ConditionOperator;
   value: number;
@@ -22,6 +24,7 @@ export interface IndicatorCondition {
 
 export interface StructureCondition {
   kind: 'structure';
+  id?: string;
   signal_kind: SignalKind;
   direction?: 'bullish' | 'bearish';
   min_confidence?: number;
@@ -29,6 +32,7 @@ export interface StructureCondition {
 
 export interface RegimeCondition {
   kind: 'regime';
+  id?: string;
   model: RegimeModel;
   state: RegimeState;
   min_conviction?: number;
