@@ -4,6 +4,9 @@ import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
 import { useChartStore } from '@/lib/chartStore';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
 import type { AlertRule } from '@/types/alerts';
+import {
+  REGIME_STATES_OMM, REGIME_STATES_HMM, REGIME_STATES_HMM_DIRECTIONAL, REGIME_STATES_ANY,
+} from '@/components/organisms/AlertRuleBuilder/regimeStates';
 
 const AAPL_RULE: AlertRule = {
   id: 'rule-1',
@@ -191,5 +194,26 @@ describe('AlertRuleBuilder condition row keys', () => {
     expect(kindSelectAfter).toBe(kindSelect);   // node identity (superset of the remount test)
     expect(kindSelectAfter.isConnected).toBe(true);
     expect(document.activeElement).toBe(kindSelectAfter);  // focus specifically survived
+  });
+});
+
+describe('regime dropdown fireability', () => {
+  it('each model offers exactly its real emittable states (guards the old "Sideways" phantom bug)', () => {
+    // Hard-coded expectations, independent of the consts under test — a phantom state
+    // added to any list (e.g. re-adding "Sideways" to HMM) makes the corresponding
+    // assertion fail, which a tautological self-comparison could not catch.
+    expect(REGIME_STATES_OMM).toEqual(['any', 'Bull', 'Bear', 'Choppy']);
+    expect(REGIME_STATES_HMM).toEqual(['any', 'Trending', 'Choppy', 'Mean-reverting']);
+    expect(REGIME_STATES_HMM_DIRECTIONAL).toEqual(['any', 'Bull', 'Bear', 'Sideways']);
+  });
+
+  it('the "any" state list is exactly the de-duplicated union of the three model lists', () => {
+    // Under model='any' the backend checks every model, so every union state is
+    // producible by at least one model — none are un-fireable. This asserts ANY has
+    // no extra (un-fireable) state and omits none.
+    const union = Array.from(new Set([
+      ...REGIME_STATES_OMM, ...REGIME_STATES_HMM, ...REGIME_STATES_HMM_DIRECTIONAL,
+    ]));
+    expect(REGIME_STATES_ANY).toEqual(union);
   });
 });
