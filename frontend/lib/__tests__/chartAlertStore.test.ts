@@ -108,6 +108,34 @@ describe('chartAlertStore', () => {
     expect(result.current.rules[0].name).toBe('Updated');
   });
 
+  it('updating a composite rule sends rule_type/composite_def in the PUT body, not group', async () => {
+    // Regression: a composite rule's `group` is only ever the display placeholder
+    // {logic:'AND', conditions:[]} (see _rule_to_dict on the backend). Sending that
+    // placeholder as the PUT body's `group` on a plain toggle overwrites the real
+    // composite_def on the server, silently corrupting the rule into a dead
+    // standard rule with zero conditions.
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const compositeRule = makeRule({
+      id: 'cmp1',
+      rule_type: 'composite',
+      composite_def: { primary: { model: 'OMM', to_state: 'Bull' }, confirmations: [] },
+      group: { logic: 'AND', conditions: [] },
+    });
+    act(() => useChartAlertStore.setState({ rules: [compositeRule] }));
+    act(() => useChartAlertStore.getState().updateRule('cmp1', { enabled: false }));
+
+    await act(async () => {}); // flush the fire-and-forget fetch promise
+
+    const putCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/alerts/rules/cmp1'));
+    expect(putCall).toBeDefined();
+    const body = JSON.parse(putCall![1].body as string);
+    expect(body.rule_type).toBe('composite');
+    expect(body.composite_def).toEqual({ primary: { model: 'OMM', to_state: 'Bull' }, confirmations: [] });
+    expect(body.group).toBeUndefined();
+  });
+
   it('deletes a rule and cascades to history', () => {
     const { result } = renderHook(() => useChartAlertStore());
     act(() => result.current.addRule(makeRule({ id: 'r1' })));

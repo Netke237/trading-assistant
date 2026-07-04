@@ -73,15 +73,27 @@ async function pushRuleToAPI(rule: AlertRule): Promise<void> {
 }
 
 async function putRuleToAPI(rule: AlertRule): Promise<void> {
+  // A composite rule's `group` is only ever the backend's display placeholder
+  // {logic:'AND', conditions:[]} — never the real trigger definition (see
+  // _rule_to_dict on the backend). Sending that placeholder here would overwrite
+  // the rule's real composite_def with an empty group, silently corrupting it into
+  // a dead standard rule. Composite rules must PUT rule_type/composite_def instead.
+  const body = rule.rule_type === 'composite'
+    ? {
+        name: rule.name, symbol: rule.symbol, interval: rule.interval,
+        enabled: rule.enabled, rule_type: 'composite', composite_def: rule.composite_def,
+        cooldown_minutes: rule.cooldown_minutes, expiry_date: rule.expiry_date,
+      }
+    : {
+        name: rule.name, symbol: rule.symbol, interval: rule.interval,
+        enabled: rule.enabled, group: rule.group,
+        cooldown_minutes: rule.cooldown_minutes, expiry_date: rule.expiry_date,
+      };
   try {
     await fetch(`${BASE_URL}/alerts/rules/${encodeURIComponent(rule.id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: rule.name, symbol: rule.symbol, interval: rule.interval,
-        enabled: rule.enabled, group: rule.group,
-        cooldown_minutes: rule.cooldown_minutes, expiry_date: rule.expiry_date,
-      }),
+      body: JSON.stringify(body),
     });
   } catch {}
 }
