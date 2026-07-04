@@ -8,8 +8,19 @@ export const HISTORY_LIMIT = 200;
  * ignoring each condition's `id` — two conditions with identical fields but
  * different (freshly generated) ids are still the same condition. */
 export function conditionsEqual(a: Condition[], b: Condition[]): boolean {
-  const strip = (conds: Condition[]) => conds.map(({ id: _id, ...rest }) => rest);
-  return JSON.stringify(strip(a)) === JSON.stringify(strip(b));
+  const stripDeep = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(stripDeep);
+    if (v && typeof v === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+        if (k === 'id') continue;
+        out[k] = stripDeep(val);
+      }
+      return out;
+    }
+    return v;
+  };
+  return JSON.stringify(stripDeep(a)) === JSON.stringify(stripDeep(b));
 }
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
