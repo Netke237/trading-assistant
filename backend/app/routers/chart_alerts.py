@@ -34,6 +34,8 @@ router = APIRouter(prefix='/alerts', tags=['chart-alerts'])
 # iteration) — an unbounded candle list makes this endpoint pathologically slow.
 # 1500 comfortably covers a full intraday session's worth of 1-minute bars plus
 # headroom, while still bounding worst-case per-request HMM refit count.
+# Benchmarked 2026-07-04: 1500 candles ~= 1.0s full worst-case recompute (see
+# scripts/bench_test_rule_candles.py), well within budget for a manual dry-run endpoint.
 MAX_TEST_RULE_CANDLES = 1500
 
 # The live WS path re-fits regime/HMM/OMM models on every candle close. Fitting over
