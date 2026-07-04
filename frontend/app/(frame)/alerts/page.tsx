@@ -491,20 +491,29 @@ export default function AlertsPage() {
                     {rule.last_triggered_at ? timeAgo(rule.last_triggered_at) : 'never'}
                   </Text>
                   <div className={styles.rulesActions}>
-                    <button
-                      type="button"
-                      className={styles.btnSecondary}
-                      onClick={() => handleEdit(rule)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.btnSecondary}
-                      onClick={() => handleDuplicate(rule)}
-                    >
-                      Duplicate
-                    </button>
+                    {/* AlertRuleBuilder has no composite-def editor -- it only builds flat
+                        price/indicator/structure/regime conditions. Opening Edit or Duplicate
+                        on a composite rule would save a fresh empty-condition group over it
+                        (or under a new id), corrupting or misrepresenting the rule. Composite
+                        rows can still be enabled/disabled and deleted. */}
+                    {rule.rule_type !== 'composite' && (
+                      <>
+                        <button
+                          type="button"
+                          className={styles.btnSecondary}
+                          onClick={() => handleEdit(rule)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.btnSecondary}
+                          onClick={() => handleDuplicate(rule)}
+                        >
+                          Duplicate
+                        </button>
+                      </>
+                    )}
                     <button
                       type="button"
                       className={styles.btnDanger}
