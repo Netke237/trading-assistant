@@ -517,10 +517,12 @@ async def evaluate_and_notify_for_symbol(
             for _row, _rj in composite_rows:
                 _td = {k: v for k, v in _rj.items() if k != "__type"}
                 _direction = _td.get("direction") or "Bullish"
+                _rule_needs_daily = bool(_rj.get("strategy_confirmations")) or _rj.get("primary", {}).get("model") == "HMM_daily"
+                _rule_daily = _bars_daily if _rule_needs_daily else []
                 try:
                     _fired = evaluate_from_context(
                         _td, _omm, signals, indicators,
-                        bars_daily=_bars_daily, bars_intraday=_bars_intraday,
+                        bars_daily=_rule_daily, bars_intraday=_bars_intraday,
                     )
                 except Exception as _exc:
                     logger.warning("composite rule eval failed for %s: %s", symbol, _exc)
@@ -534,7 +536,7 @@ async def evaluate_and_notify_for_symbol(
                 # bars at all, so strategy names never appeared in WS-fired reasons.
                 _detail = describe_match(
                     _td, structure_signals=signals, indicator_values=indicators,
-                    bars_daily=_bars_daily, bars_intraday=_bars_intraday, symbol=symbol,
+                    bars_daily=_rule_daily, bars_intraday=_bars_intraday, symbol=symbol,
                     direction=_direction,
                 )
                 _reason = format_composite_reason(_td.get('primary', {}).get('to_state'), _detail)
