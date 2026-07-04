@@ -36,6 +36,12 @@ router = APIRouter(prefix='/alerts', tags=['chart-alerts'])
 # headroom, while still bounding worst-case per-request HMM refit count.
 MAX_TEST_RULE_CANDLES = 1500
 
+# The live WS path re-fits regime/HMM/OMM models on every candle close. Fitting over
+# unbounded history makes each tick's cost grow with the symbol's stored history.
+# Cap the model-fit window to a bounded recent slice; 1500 bars covers a full intraday
+# session plus the models' 200-bar minimums with wide margin. Mirrors MAX_TEST_RULE_CANDLES.
+MAX_LIVE_MODEL_CANDLES = 1500
+
 
 # ── Pydantic request/response models ─────────────────────────────────────────
 
@@ -433,7 +439,7 @@ async def evaluate_and_notify_for_symbol(
         rule_inputs = [_deserialize_rule(row.rule_json, row) for row in rows]
 
         needs_regime = any(c.kind == 'regime' for ri in rule_inputs for c in ri.group.conditions)
-        regime_by_model = build_regime_snapshot(all_candles) if needs_regime else None
+        regime_by_model = build_regime_snapshot(all_candles[-MAX_LIVE_MODEL_CANDLES:]) if needs_regime else None
 
         # Compute indicators referenced by rule conditions
         all_conditions = []
@@ -482,7 +488,8 @@ async def evaluate_and_notify_for_symbol(
         if composite_rows:
             from app.services.composite_trigger_evaluator import evaluate_from_context, describe_match, format_composite_reason
             from app.services.regime_omm import compute_omm
-            _closes = [c["close"] for c in all_candles] if all_candles else []
+            _model_candles = all_candles[-MAX_LIVE_MODEL_CANDLES:] if all_candles else []
+            _closes = [c["close"] for c in _model_candles]
             _omm = compute_omm(_closes) if len(_closes) >= 100 else None
 
             # Only fetch daily bars if some composite rule actually needs them — either
@@ -498,7 +505,7 @@ async def evaluate_and_notify_for_symbol(
                     # all_candles is already daily/weekly data for this rule's own
                     # interval — reuse it instead of paying for an extra get_bars()
                     # round-trip.
-                    _bars_daily = all_candles
+                    _bars_daily = _model_candles
                 else:
                     try:
                         _end = date.today()
@@ -512,7 +519,7 @@ async def evaluate_and_notify_for_symbol(
             # intraday — chart.py's get_intraday(symbol, interval) returns daily candles
             # for '1D'/'1W' rules, so passing them as bars_intraday would mislabel daily
             # data as intraday to the VWAP mean-reversion check.
-            _bars_intraday = all_candles if interval not in ("1D", "1W") else []
+            _bars_intraday = _model_candles if interval not in ("1D", "1W") else []
 
             for _row, _rj in composite_rows:
                 _td = {k: v for k, v in _rj.items() if k != "__type"}
