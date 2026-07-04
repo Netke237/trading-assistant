@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useChartStore } from '@/lib/chartStore';
-import { useChartAlertStore } from '@/lib/chartAlertStore';
+import { useChartAlertStore, conditionsEqual } from '@/lib/chartAlertStore';
 import { Text } from '@/components/primitives';
 import type { Condition, ConditionOperator, AlertRule, LogicOperator, PriceCondition, IndicatorCondition, StructureCondition, RegimeCondition, RegimeState, RegimeModel } from '@/types/alerts';
 import type { SignalKind } from '@/types/structure';
@@ -58,24 +58,24 @@ function regimeStatesFor(model: RegimeModel): RegimeState[] {
   return REGIME_STATES_ANY;
 }
 
+function makeId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
 function emptyPriceCondition(): PriceCondition {
-  return { kind: 'price', operator: '>', value: 0 };
+  return { kind: 'price', id: makeId(), operator: '>', value: 0 };
 }
 
 function emptyIndicatorCondition(): IndicatorCondition {
-  return { kind: 'indicator', indicator: '', operator: '>', value: 0 };
+  return { kind: 'indicator', id: makeId(), indicator: '', operator: '>', value: 0 };
 }
 
 function emptyStructureCondition(): StructureCondition {
-  return { kind: 'structure', signal_kind: 'BOS' };
+  return { kind: 'structure', id: makeId(), signal_kind: 'BOS' };
 }
 
 function emptyRegimeCondition(): RegimeCondition {
-  return { kind: 'regime', model: 'OMM', state: 'Bull' };
-}
-
-function makeId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  return { kind: 'regime', id: makeId(), model: 'OMM', state: 'Bull' };
 }
 
 export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, prefill }: Props) {
@@ -86,8 +86,10 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
   const interval = seed?.interval ?? chartInterval;
   const [name, setName] = useState(seed?.name ?? '');
   const [conditions, setConditions] = useState<Condition[]>(
-    seed?.group.conditions
-    ?? (prefill ? [{ kind: 'price', operator: 'crosses_above', value: prefill.price } as PriceCondition] : [emptyPriceCondition()]),
+    (
+      seed?.group.conditions
+      ?? (prefill ? [{ kind: 'price', operator: 'crosses_above', value: prefill.price } as PriceCondition] : [emptyPriceCondition()])
+    ).map((c) => (c.id ? c : { ...c, id: makeId() })),
   );
   const [logic, setLogic] = useState<LogicOperator>(seed?.group.logic ?? 'AND');
   const [nOfMThreshold, setNOfMThreshold] = useState(seed?.group.n_of_m_threshold ?? 1);
@@ -144,7 +146,7 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
           r.id !== editRule.id &&
           r.symbol === symbol &&
           r.interval === interval &&
-          JSON.stringify(r.group.conditions) === JSON.stringify(conditions),
+          conditionsEqual(r.group.conditions, conditions),
       );
       if (collision) {
         setError('Another rule with these conditions already exists');
@@ -230,7 +232,7 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
 
         <div className={styles.conditions}>
           {conditions.map((c, idx) => (
-            <div key={idx} className={styles.conditionRow}>
+            <div key={c.id} className={styles.conditionRow}>
               <select
                 className={styles.select}
                 value={c.kind}

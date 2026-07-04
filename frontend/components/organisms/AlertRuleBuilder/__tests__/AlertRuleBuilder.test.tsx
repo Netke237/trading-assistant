@@ -125,3 +125,37 @@ describe('AlertRuleBuilder directional HMM regime model', () => {
     expect(screen.getByPlaceholderText('P(stay)%')).toBeInTheDocument();
   });
 });
+
+describe('AlertRuleBuilder condition row keys', () => {
+  it('gives every new condition a stable, generated id (not array index)', () => {
+    render(<AlertRuleBuilder onClose={() => {}} editRule={null} />);
+    fireEvent.click(screen.getByText('+ Price'));
+    fireEvent.click(screen.getByText('+ Indicator'));
+
+    const addRuleSpy = jest.fn().mockReturnValue(true);
+    useChartAlertStore.setState({ addRule: addRuleSpy } as any);
+    fireEvent.change(screen.getByPlaceholderText('e.g. AAPL breakout'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByText('Create Alert'));
+
+    const savedConditions = addRuleSpy.mock.calls[0][0].group.conditions;
+    expect(savedConditions).toHaveLength(3); // default price condition + 2 added
+    const ids = savedConditions.map((c: any) => c.id);
+    expect(new Set(ids).size).toBe(3); // all unique
+    expect(ids.every((id: string) => typeof id === 'string' && id.length > 0)).toBe(true);
+  });
+
+  it('backfills an id for legacy conditions loaded from a rule with none', () => {
+    const legacyRule = {
+      ...AAPL_RULE,
+      group: { logic: 'AND' as const, conditions: [{ kind: 'price' as const, operator: '>' as const, value: 100 }] },
+    };
+    const updateRuleSpy = jest.fn();
+    useChartAlertStore.setState({ updateRule: updateRuleSpy } as any);
+    render(<AlertRuleBuilder onClose={() => {}} editRule={legacyRule} />);
+    fireEvent.click(screen.getByText('Save'));
+
+    const savedConditions = updateRuleSpy.mock.calls[0][1].group.conditions;
+    expect(savedConditions[0].id).toEqual(expect.any(String));
+    expect(savedConditions[0].id.length).toBeGreaterThan(0);
+  });
+});
