@@ -6,6 +6,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from app.database import get_db
 from app.data.market import fetch_price_async
@@ -51,7 +52,16 @@ def _maybe_send_close_to_broker(closed: ClosedPositionModel, send: bool) -> None
 
 @router.get('/portfolio', response_model=list[PortfolioPositionSchema])
 async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPositionSchema]:
-    result = await db.execute(select(PortfolioPositionModel).order_by(PortfolioPositionModel.created_at))
+    try:
+        result = await db.execute(select(PortfolioPositionModel).order_by(PortfolioPositionModel.created_at))
+    except (OperationalError, ProgrammingError) as exc:
+        # Belt-and-suspenders: if the table is schema-drifted (a model column with no
+        # migration), degrade to empty instead of a hard 500. SQLite raises
+        # OperationalError ("no such column"); asyncpg/Postgres raises ProgrammingError
+        # (UndefinedColumnError). The real fix is the migration; this stops a FUTURE
+        # drift from taking the endpoint (and the portfolio rail) down.
+        _log.error("get_portfolio schema error, returning empty: %s", exc)
+        return []
     positions = result.scalars().all()
     schemas = [PortfolioPositionSchema.from_orm_model(p) for p in positions]
 
