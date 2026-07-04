@@ -176,4 +176,20 @@ describe('AlertRuleBuilder condition row keys', () => {
 
     expect(rowNode.isConnected).toBe(true);
   });
+
+  it('keeps keyboard focus on the kind <select> after switching kind', () => {
+    // Stronger than node-identity: proves the user's focus ring is not dropped.
+    render(<AlertRuleBuilder onClose={() => {}} editRule={null} />);
+    const kindSelect = screen.getByDisplayValue('Price') as HTMLSelectElement;
+    kindSelect.focus();
+    expect(document.activeElement).toBe(kindSelect);
+
+    fireEvent.change(kindSelect, { target: { value: 'regime' } });
+
+    // Same element instance, still connected, still focused — no remount stole focus.
+    const kindSelectAfter = screen.getByDisplayValue('Regime (OMM/HMM)') as HTMLSelectElement;
+    expect(kindSelectAfter).toBe(kindSelect);   // node identity (superset of the remount test)
+    expect(kindSelectAfter.isConnected).toBe(true);
+    expect(document.activeElement).toBe(kindSelectAfter);  // focus specifically survived
+  });
 });
