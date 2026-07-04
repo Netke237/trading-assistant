@@ -160,8 +160,8 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                 onChange={(e) => { setModel(e.target.value as MarkovModel); setToState('any'); }}
               >
                 <option value="OMM">OMM (daily)</option>
-                <option value="HMM_daily">HMM daily</option>
-                <option value="HMM_intraday">HMM intraday</option>
+                <option value="HMM_daily">HMM (daily)</option>
+                <option value="HMM_intraday">HMM (intraday)</option>
                 <option value="any">Any model</option>
               </select>
             </div>
