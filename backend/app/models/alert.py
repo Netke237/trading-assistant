@@ -19,6 +19,7 @@ class AlertRuleModel(Base):
     expiry_date = Column(Text(), nullable=True)
     created_at = Column(Text(), nullable=False)
     last_triggered_at = Column(Text(), nullable=True)
+    condition_state = Column(Text(), nullable=False, default='{}')
 
     __table_args__ = (
         Index('ix_alert_rules_symbol', 'symbol'),
