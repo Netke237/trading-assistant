@@ -79,3 +79,27 @@ def test_alert_delivery_roundtrips_retention_days(client):
     get_resp = client.get('/settings/alert-delivery')
     assert get_resp.status_code == 200
     assert get_resp.json()['retentionDays'] == 45
+
+
+def test_alert_delivery_roundtrips_check_interval_seconds(client):
+    """POST /settings/alert-delivery persists checkIntervalSeconds and GET returns it."""
+    resp = client.post('/settings/alert-delivery', json={
+        'masterEnabled': True,
+        'enabledTypes': ['STOP_REACHED'],
+        'dedupWindowMinutes': 15,
+        'reminderIntervalHours': 4,
+        'retentionDays': 30,
+        'checkIntervalSeconds': 90,
+    })
+    assert resp.status_code == 200
+    assert resp.json()['checkIntervalSeconds'] == 90
+
+    get_resp = client.get('/settings/alert-delivery')
+    assert get_resp.status_code == 200
+    assert get_resp.json()['checkIntervalSeconds'] == 90
+
+
+def test_alert_delivery_check_interval_seconds_defaults_to_60(client):
+    r = client.get('/settings/alert-delivery')
+    assert r.status_code == 200
+    assert r.json()['checkIntervalSeconds'] == 60

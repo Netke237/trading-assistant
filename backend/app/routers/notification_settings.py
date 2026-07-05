@@ -55,6 +55,9 @@ _DEFAULT_DELIVERY = {
     # While a condition stays true, how often email/Telegram reminds you.
     'reminderIntervalHours': 4,
     'retentionDays': 30,
+    # How often background monitors (portfolio + chart-drawn rules) re-check
+    # conditions. Lower = faster detection, more API/price-fetch load.
+    'checkIntervalSeconds': 60,
 }
 
 
@@ -64,6 +67,7 @@ class AlertDeliveryConfig(BaseModel):
     dedupWindowMinutes: int = 15
     reminderIntervalHours: int = 4
     retentionDays: int = 30
+    checkIntervalSeconds: int = 60
 
 
 class HistoryRetentionConfig(BaseModel):
@@ -94,6 +98,7 @@ async def get_alert_delivery() -> dict:
         'dedupWindowMinutes': int(d.get('dedupWindowMinutes', 15)),
         'reminderIntervalHours': int(d.get('reminderIntervalHours', 4)),
         'retentionDays': int(d.get('retentionDays', 30)),
+        'checkIntervalSeconds': int(d.get('checkIntervalSeconds', 60)),
     }
 
 
@@ -106,6 +111,7 @@ async def save_alert_delivery(body: AlertDeliveryConfig) -> dict:
         'dedupWindowMinutes': body.dedupWindowMinutes,
         'reminderIntervalHours': body.reminderIntervalHours,
         'retentionDays': body.retentionDays,
+        'checkIntervalSeconds': max(15, body.checkIntervalSeconds),
     }
     _save_yaml(cfg)
     return cfg['alert_delivery']
