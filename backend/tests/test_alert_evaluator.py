@@ -356,3 +356,53 @@ class TestDirectionalHmmRegimeCondition:
         regime_by_model = {'OMM': {'state': 'Bear', 'conviction': -85}}
         results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now(), regime_by_model)
         assert len(results) == 1
+
+
+class TestSustainMinutes:
+    def test_sustain_condition_not_met_on_first_true_check(self):
+        condition = PriceCondition(kind='price', operator='>', value=100, sustain_minutes=5)
+        rule = make_rule(conditions=[condition])
+        candle = make_candle(c=103)
+        now = datetime(2024, 1, 2, 9, 30)
+        results = evaluate_rules([rule], candle, [candle], {}, [], now)
+        assert len(results) == 0
+        assert rule.condition_state['0'] == now.isoformat()
+
+    def test_sustain_condition_met_after_elapsed_window(self):
+        condition = PriceCondition(kind='price', operator='>', value=100, sustain_minutes=5)
+        rule = make_rule(conditions=[condition])
+        candle = make_candle(c=103)
+        t0 = datetime(2024, 1, 2, 9, 30)
+        evaluate_rules([rule], candle, [candle], {}, [], t0)
+        t1 = t0 + timedelta(minutes=6)
+        results = evaluate_rules([rule], candle, [candle], {}, [], t1)
+        assert len(results) == 1
+
+    def test_sustain_condition_still_pending_before_window_elapses(self):
+        condition = PriceCondition(kind='price', operator='>', value=100, sustain_minutes=5)
+        rule = make_rule(conditions=[condition])
+        candle = make_candle(c=103)
+        t0 = datetime(2024, 1, 2, 9, 30)
+        evaluate_rules([rule], candle, [candle], {}, [], t0)
+        t1 = t0 + timedelta(minutes=2)
+        results = evaluate_rules([rule], candle, [candle], {}, [], t1)
+        assert len(results) == 0
+
+    def test_sustain_condition_resets_when_no_longer_met(self):
+        condition = PriceCondition(kind='price', operator='>', value=100, sustain_minutes=5)
+        rule = make_rule(conditions=[condition])
+        t0 = datetime(2024, 1, 2, 9, 30)
+        evaluate_rules([rule], make_candle(c=103), [make_candle(c=103)], {}, [], t0)
+        t1 = t0 + timedelta(minutes=2)
+        evaluate_rules([rule], make_candle(c=90), [make_candle(c=90)], {}, [], t1)
+        assert '0' not in rule.condition_state
+        t2 = t1 + timedelta(minutes=6)
+        results = evaluate_rules([rule], make_candle(c=103), [make_candle(c=103)], {}, [], t2)
+        assert len(results) == 0  # clock only just restarted at t2
+
+    def test_no_sustain_behaves_instantly_as_before(self):
+        condition = PriceCondition(kind='price', operator='>', value=100)  # sustain_minutes=None
+        rule = make_rule(conditions=[condition])
+        candle = make_candle(c=103)
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now())
+        assert len(results) == 1

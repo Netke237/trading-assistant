@@ -13,6 +13,7 @@ class PriceCondition:
     kind: Literal['price']
     operator: str
     value: float
+    sustain_minutes: Optional[int] = None
 
 
 @dataclass
@@ -21,6 +22,7 @@ class IndicatorCondition:
     indicator: str
     operator: str
     value: float
+    sustain_minutes: Optional[int] = None
 
 
 @dataclass
@@ -29,6 +31,7 @@ class StructureCondition:
     signal_kind: str
     direction: Optional[str] = None
     min_confidence: Optional[int] = None
+    sustain_minutes: Optional[int] = None
 
 
 @dataclass
@@ -37,6 +40,7 @@ class RegimeCondition:
     model: str = 'OMM'        # 'OMM' | 'HMM' | 'HMM_directional' | 'any'
     state: str = 'Bull'       # 'Bull' | 'Bear' | 'Choppy' | 'any'
     min_conviction: Optional[float] = None
+    sustain_minutes: Optional[int] = None
 
 
 @dataclass
@@ -58,6 +62,7 @@ class AlertRuleInput:
     expiry_date: Optional[str]
     created_at: str
     last_triggered_at: Optional[str]
+    condition_state: dict = field(default_factory=dict)
 
 
 def make_history_id() -> str:
@@ -276,9 +281,27 @@ def evaluate_rules(rules: list[AlertRuleInput], closed_candle: dict,
 
         accumulated_trigger_values: dict = {}
         evaluations = []
-        for c in rule.group.conditions:
+        for cond_index, c in enumerate(rule.group.conditions):
             met, tv = _evaluate_condition(c, closed_candle, indicators, signals, closed_candle['time'], regime_by_model)
             accumulated_trigger_values.update(tv)
+
+            sustain_min = getattr(c, 'sustain_minutes', None)
+            if sustain_min:
+                key = str(cond_index)
+                if met:
+                    pending_since_str = rule.condition_state.get(key)
+                    if pending_since_str is None:
+                        # First tick this condition is true — start the clock,
+                        # but it hasn't been sustained for sustain_min yet.
+                        rule.condition_state[key] = now.isoformat()
+                        met = False
+                    else:
+                        pending_since = datetime.fromisoformat(pending_since_str)
+                        elapsed_min = (now - pending_since).total_seconds() / 60.0
+                        met = elapsed_min >= sustain_min
+                else:
+                    rule.condition_state.pop(key, None)
+
             evaluations.append(met)
 
         if rule.group.logic == 'AND':
