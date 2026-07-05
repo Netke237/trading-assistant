@@ -20,7 +20,7 @@ from app.services.notifications.alert_notifier import forget_alerts, notify_aler
 logger = logging.getLogger(__name__)
 
 _SETTINGS_PATH = Path(__file__).parent.parent.parent / 'config' / 'settings.yaml'
-_CHECK_INTERVAL = 15 * 60  # seconds
+_DEFAULT_CHECK_INTERVAL = 60  # seconds — used until alert_delivery.checkIntervalSeconds overrides it
 
 # Tracks which recIds were in the portfolio last tick so we can detect closures.
 _known_rec_ids: set[str] = set()
@@ -150,12 +150,21 @@ async def _run_once() -> None:
                          alert.recId, alert.alertType, exc_info=True)
 
 
+def _check_interval_seconds() -> int:
+    try:
+        return max(15, int(_load_delivery_config().get('checkIntervalSeconds', _DEFAULT_CHECK_INTERVAL)))
+    except (TypeError, ValueError):
+        return _DEFAULT_CHECK_INTERVAL
+
+
 async def run_portfolio_alert_monitor() -> None:
-    """Long-running loop started in app lifespan. Checks every 15 min."""
-    logger.info('Portfolio alert monitor started (interval=%ds)', _CHECK_INTERVAL)
+    """Long-running loop started in app lifespan. Interval is re-read from
+    alert_delivery.checkIntervalSeconds every tick, so a settings change takes
+    effect on the next cycle without a restart."""
+    logger.info('Portfolio alert monitor started (default interval=%ds)', _DEFAULT_CHECK_INTERVAL)
     while True:
         try:
             await _run_once()
         except Exception:
             logger.error('Portfolio alert monitor tick failed', exc_info=True)
-        await asyncio.sleep(_CHECK_INTERVAL)
+        await asyncio.sleep(_check_interval_seconds())
