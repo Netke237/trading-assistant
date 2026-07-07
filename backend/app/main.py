@@ -207,7 +207,7 @@ async def lifespan(app: FastAPI):
         pass
     if _scheduler._running:
         await _scheduler.stop()
-    for task in (_notification_worker_task, _portfolio_monitor_task, _regime_monitor_task):
+    for task in (_notification_worker_task, _portfolio_monitor_task, _regime_monitor_task, _chart_alert_scheduler_task):
         if task:
             task.cancel()
             try:
