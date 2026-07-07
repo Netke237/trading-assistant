@@ -40,13 +40,21 @@ async def generate_alerts(
     db: AsyncSession,
     current_prices: dict[str, float],
     current_option_prices: Optional[dict[str, float]] = None,
+    sustain_minutes: int = 0,
 ) -> list[AlertItem]:
-    """Generate alerts for all open portfolio positions."""
+    """Generate alerts for all open portfolio positions.
+
+    sustain_minutes: if > 0, a stop/target/premium condition must stay true
+    across checks spanning at least this many minutes before it alerts (state
+    persisted per-position in PortfolioPositionModel.alert_state). 0 preserves
+    the original instant-fire behavior.
+    """
     result = await db.execute(select(PortfolioPositionModel).order_by(PortfolioPositionModel.created_at))
     positions = result.scalars().all()
 
     alerts: list[AlertItem] = []
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
     counter = 0
 
     for pos in positions:
@@ -54,6 +62,21 @@ async def generate_alerts(
         price = current_prices.get(symbol)
         opt_price = (current_option_prices or {}).get(pos.contract) if current_option_prices else None
         targets = pos.targets or []
+        alert_state = dict(pos.alert_state or {})
+
+        def _sustained(alert_type: str, met: bool) -> bool:
+            if not sustain_minutes:
+                return met
+            if not met:
+                alert_state.pop(alert_type, None)
+                return False
+            pending_since_str = alert_state.get(alert_type)
+            if pending_since_str is None:
+                alert_state[alert_type] = now_iso
+                return False
+            pending_since = datetime.fromisoformat(pending_since_str)
+            elapsed_min = (now - pending_since).total_seconds() / 60.0
+            return elapsed_min >= sustain_minutes
 
         # TP_HIT — direction-aware: bullish targets are above current price, bearish below
         is_bearish = pos.contract.split("|")[3] == "P" if len(pos.contract.split("|")) >= 4 else False
@@ -62,8 +85,8 @@ async def generate_alerts(
             target_stock_price = (
                 first_target.get("stock_price") or first_target.get("stockPrice") or 0
             )
-            hit = (price <= target_stock_price) if is_bearish else (price >= target_stock_price)
-            if hit:
+            hit_raw = (price <= target_stock_price) if is_bearish else (price >= target_stock_price)
+            if _sustained("TP_HIT", hit_raw):
                 counter += 1
                 alerts.append(AlertItem(
                     id=f"a{counter}",
@@ -76,11 +99,11 @@ async def generate_alerts(
                 ))
 
         # STOP_REACHED — direction-aware: puts are invalidated when stock rises above stop
-        stop_breached = (
+        stop_breached_raw = (
             (price >= pos.stop) if is_bearish
             else (price <= pos.stop)
-        )
-        if pos.stop is not None and price is not None and stop_breached:
+        ) if (pos.stop is not None and price is not None) else False
+        if pos.stop is not None and price is not None and _sustained("STOP_REACHED", stop_breached_raw):
             counter += 1
             alerts.append(AlertItem(
                 id=f"a{counter}",
@@ -93,7 +116,11 @@ async def generate_alerts(
             ))
 
         # PREMIUM_STOP
-        if opt_price is not None and pos.entry_price > 0 and opt_price <= pos.entry_price * _premium_stop_pct():
+        premium_hit_raw = bool(
+            opt_price is not None and pos.entry_price > 0
+            and opt_price <= pos.entry_price * _premium_stop_pct()
+        )
+        if _sustained("PREMIUM_STOP", premium_hit_raw):
             counter += 1
             alerts.append(AlertItem(
                 id=f"a{counter}",
@@ -105,7 +132,7 @@ async def generate_alerts(
                 alertType="PREMIUM_STOP",
             ))
 
-        # TIME_STOP — parse expiry from contract, check 0 <= days_to_expiry <= 3
+        # TIME_STOP — day-granularity already; sustain does not apply.
         expiry = parse_expiry_from_contract(pos.contract)
         if expiry is not None:
             days_to_expiry = (expiry - date.today()).days
@@ -121,7 +148,6 @@ async def generate_alerts(
                     alertType="TIME_STOP",
                 ))
 
-        # EVENT_RISK — TODO: wire to event calendar when available
-        # For now, skip if no event data on the position model
+        pos.alert_state = alert_state
 
     return alerts

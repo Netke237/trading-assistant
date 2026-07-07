@@ -58,6 +58,10 @@ _DEFAULT_DELIVERY = {
     # How often background monitors (portfolio + chart-drawn rules) re-check
     # conditions. Lower = faster detection, more API/price-fetch load.
     'checkIntervalSeconds': 60,
+    # 0 = fire the instant a stop/target/premium condition is crossed (original
+    # behavior). >0 = the condition must stay true for this many minutes,
+    # checked at checkIntervalSeconds granularity, before alerting.
+    'positionSustainMinutes': 0,
 }
 
 
@@ -68,6 +72,7 @@ class AlertDeliveryConfig(BaseModel):
     reminderIntervalHours: int = 4
     retentionDays: int = 30
     checkIntervalSeconds: int = 60
+    positionSustainMinutes: int = 0
 
 
 class HistoryRetentionConfig(BaseModel):
@@ -99,6 +104,7 @@ async def get_alert_delivery() -> dict:
         'reminderIntervalHours': int(d.get('reminderIntervalHours', 4)),
         'retentionDays': int(d.get('retentionDays', 30)),
         'checkIntervalSeconds': int(d.get('checkIntervalSeconds', 60)),
+        'positionSustainMinutes': int(d.get('positionSustainMinutes', 0)),
     }
 
 
@@ -112,6 +118,7 @@ async def save_alert_delivery(body: AlertDeliveryConfig) -> dict:
         'reminderIntervalHours': body.reminderIntervalHours,
         'retentionDays': body.retentionDays,
         'checkIntervalSeconds': max(15, body.checkIntervalSeconds),
+        'positionSustainMinutes': max(0, body.positionSustainMinutes),
     }
     _save_yaml(cfg)
     return cfg['alert_delivery']

@@ -21,6 +21,7 @@ class PortfolioPositionModel(Base):
     targets = Column(JSON, nullable=True, default=list)
     dte_total = Column(Integer, nullable=True)
     entry_stock_price = Column(Float, nullable=True)
+    alert_state = Column(JSON, nullable=True, default=dict)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -104,8 +104,10 @@ async def _run_once() -> None:
                         if isinstance(quote, dict) and quote.get('price') is not None:
                             option_prices[contract] = quote['price']
 
+                position_sustain_minutes = int(delivery.get('positionSustainMinutes', 0))
                 alerts.extend(await generate_alerts(
-                    db, current_prices, option_prices or None))
+                    db, current_prices, option_prices or None, position_sustain_minutes))
+                await db.commit()
     except Exception:
         logger.error('Portfolio alert generation failed', exc_info=True)
 
