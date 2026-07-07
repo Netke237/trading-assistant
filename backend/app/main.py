@@ -49,11 +49,12 @@ from app.routers.symbols         import router as symbols_router
 _notification_worker_task: asyncio.Task | None = None
 _portfolio_monitor_task: asyncio.Task | None = None
 _regime_monitor_task: asyncio.Task | None = None
+_chart_alert_scheduler_task: asyncio.Task | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _notification_worker_task, _portfolio_monitor_task, _regime_monitor_task
+    global _notification_worker_task, _portfolio_monitor_task, _regime_monitor_task, _chart_alert_scheduler_task
     # ── Startup ──────────────────────────────────────────────────────────
     _web_concurrency = int(os.getenv("WEB_CONCURRENCY", "1"))
     if _web_concurrency > 1:
@@ -86,6 +87,8 @@ async def lifespan(app: FastAPI):
     _portfolio_monitor_task = asyncio.create_task(run_portfolio_alert_monitor())
     from app.services.regime_monitor import run_regime_monitor
     _regime_monitor_task = asyncio.create_task(run_regime_monitor())
+    from app.services.chart_alert_scheduler import run_chart_alert_scheduler
+    _chart_alert_scheduler_task = asyncio.create_task(run_chart_alert_scheduler())
     # ── Nightly ingestion scheduler ──────────────────────────────────────
     try:
         from app.services.ingestion_schedule_store import ingestion_schedule_store as _sched_store
