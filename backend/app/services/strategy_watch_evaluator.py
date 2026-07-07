@@ -55,8 +55,14 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-async def evaluate_all() -> list[WatchEvent]:
-    """Evaluate every enabled watch; return one WatchEvent per fired transition."""
+async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
+    """Evaluate every enabled watch; return one WatchEvent per fired transition.
+
+    sustain_minutes: if > 0, a newly-appeared entry signal must remain present
+    for at least this many minutes (checked across scheduler ticks, tracked in
+    each watch's last_state.pending_entry_since) before the entry event fires.
+    0 preserves the original instant-fire behavior.
+    """
     events: list[WatchEvent] = []
     end = date.today()
     start = end - timedelta(days=_HISTORY_DAYS)
@@ -94,6 +100,17 @@ async def evaluate_all() -> list[WatchEvent]:
 
         if phase == "idle":
             if signal is not None:
+                if sustain_minutes:
+                    pending_since_str = state.get("pending_entry_since")
+                    if pending_since_str is None:
+                        strategy_watch_store.update_state(
+                            w["id"], {**state, "pending_entry_since": _now_iso()},
+                        )
+                        continue
+                    pending_since = datetime.fromisoformat(pending_since_str)
+                    elapsed_min = (datetime.now(timezone.utc) - pending_since).total_seconds() / 60.0
+                    if elapsed_min < sustain_minutes:
+                        continue
                 event = WatchEvent(
                     watch_id=w["id"], symbol=symbol, strategy_key=key,
                     event_type="entry", direction=signal.direction,
@@ -110,6 +127,11 @@ async def evaluate_all() -> list[WatchEvent]:
                          "entry_price": signal.entry_price, "stop_price": signal.stop_price,
                          "target_price": signal.target_price, "last_event": "entry",
                          "last_event_at": _now_iso()}
+            elif state.get("pending_entry_since"):
+                # Signal disappeared before the sustain window elapsed — reset the clock.
+                strategy_watch_store.update_state(
+                    w["id"], {k2: v for k2, v in state.items() if k2 != "pending_entry_since"},
+                )
         elif phase == "armed":
             sdir = state.get("direction", "Bullish")
             stop_price = state.get("stop_price")
@@ -242,9 +264,9 @@ def _format_event(ev: WatchEvent) -> tuple[str, str, str]:
     return subject, plain, html
 
 
-async def evaluate_and_notify() -> list[WatchEvent]:
+async def evaluate_and_notify(sustain_minutes: int = 0) -> list[WatchEvent]:
     """Evaluate all watches and dispatch a notification per fired event."""
-    events = await evaluate_all()
+    events = await evaluate_all(sustain_minutes)
     for ev in events:
         subject, plain, html = _format_event(ev)
         try:

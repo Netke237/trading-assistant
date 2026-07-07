@@ -98,6 +98,13 @@ export default function StrategyWatchPage() {
               <input className={styles.input} type="number" min={1} max={24} value={schedule.poll_hours}
                      onChange={(e) => updateSched({ poll_hours: Number(e.target.value) })} />
             )}
+            <label>
+              Sustain (min)
+              <input className={styles.input} type="number" min={0} max={1440}
+                     value={schedule.sustain_minutes}
+                     onChange={(e) => updateSched({ sustain_minutes: Number(e.target.value) })}
+                     title="Optional: an entry/exit signal must persist across this many minutes of checks before it fires." />
+            </label>
             <button className={styles.btn} onClick={onEvaluate}>Evaluate now</button>
             <span>{evalMsg}</span>
           </div>

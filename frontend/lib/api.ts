@@ -120,6 +120,7 @@ export interface StrategyWatchSchedule {
   mode: 'eod' | 'poll';
   eod_time: string;
   poll_hours: number;
+  sustain_minutes: number;
 }
 
 export interface AnalysisStrategySignal {

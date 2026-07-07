@@ -215,3 +215,63 @@ async def test_evaluate_and_notify_dispatches_per_event():
         result = await evaluate_and_notify()
     assert result == [ev]
     notify.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_sustain_delays_entry_until_window_elapses():
+    store = MagicMock()
+    store.list_watches.return_value = [_watch("idle")]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
+                    {"pullback_ema": lambda bars, **k: _signal()}):
+        events = await evaluate_all(sustain_minutes=5)
+    assert events == []
+    store.update_state.assert_called_once()
+    assert "pending_entry_since" in store.update_state.call_args[0][1]
+
+
+@pytest.mark.asyncio
+async def test_sustain_fires_entry_once_window_elapsed():
+    from datetime import datetime, timedelta, timezone
+    past = (datetime.now(timezone.utc) - timedelta(minutes=6)).isoformat()
+    store = MagicMock()
+    store.list_watches.return_value = [_watch("idle", pending_entry_since=past)]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
+                    {"pullback_ema": lambda bars, **k: _signal()}):
+        events = await evaluate_all(sustain_minutes=5)
+    assert len(events) == 1
+    assert events[0].event_type == "entry"
+
+
+@pytest.mark.asyncio
+async def test_sustain_clock_resets_when_signal_disappears():
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+    store = MagicMock()
+    store.list_watches.return_value = [_watch("idle", pending_entry_since=now_iso)]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
+                    {"pullback_ema": lambda bars, **k: None}):
+        events = await evaluate_all(sustain_minutes=5)
+    assert events == []
+    assert "pending_entry_since" not in store.update_state.call_args[0][1]
+
+
+@pytest.mark.asyncio
+async def test_zero_sustain_minutes_fires_instantly_as_before():
+    store = MagicMock()
+    store.list_watches.return_value = [_watch("idle")]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
+                    {"pullback_ema": lambda bars, **k: _signal()}):
+        events = await evaluate_all()  # sustain_minutes defaults to 0
+    assert len(events) == 1

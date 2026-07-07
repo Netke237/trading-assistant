@@ -44,6 +44,7 @@ class StrategyWatchScheduler:
         cfg = self._load_schedule()
         if not cfg.get("enabled"):
             return False
+        sustain_minutes = int(cfg.get("sustain_minutes", 0))
 
         mode = cfg.get("mode", "eod")
         if mode == "eod":
@@ -54,7 +55,7 @@ class StrategyWatchScheduler:
                 return False
             if self._last_eod_run_date == now.date():
                 return False
-            await evaluate_and_notify()
+            await evaluate_and_notify(sustain_minutes)
             self._last_run_at = now
             self._last_eod_run_date = now.date()
             return True
@@ -67,7 +68,7 @@ class StrategyWatchScheduler:
             elapsed_h = (now - self._last_run_at).total_seconds() / 3600.0
             if elapsed_h < interval_h:
                 return False
-        await evaluate_and_notify()
+        await evaluate_and_notify(sustain_minutes)
         self._last_run_at = now
         return True
 

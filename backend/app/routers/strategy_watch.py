@@ -35,6 +35,7 @@ class ScheduleIn(BaseModel):
     mode: str = Field(pattern="^(eod|poll)$")
     eod_time: str = "16:15"
     poll_hours: int = Field(default=4, ge=1, le=24)
+    sustain_minutes: int = Field(default=0, ge=0, le=1440)
 
 
 @router.get("/")

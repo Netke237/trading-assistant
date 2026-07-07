@@ -32,7 +32,7 @@ VALID_STRATEGIES = {
 
 _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "strategy_watches.yaml"
 
-_DEFAULT_SCHEDULE = {"enabled": False, "mode": "eod", "eod_time": "16:15", "poll_hours": 4}
+_DEFAULT_SCHEDULE = {"enabled": False, "mode": "eod", "eod_time": "16:15", "poll_hours": 4, "sustain_minutes": 0}
 
 
 def _fresh_state() -> dict:
