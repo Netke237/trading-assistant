@@ -32,6 +32,25 @@ def set_last_conviction(pct: float) -> None:
     _last_conviction = float(pct)
 
 
+# ── Module-level REJECT-flip sustain clock ─────────────────────────────────
+_reject_since: "datetime | None" = None
+
+
+def _load_risk_config() -> dict:
+    with open(_RISK_CONFIG_PATH) as f:
+        return yaml.safe_load(f) or {}
+
+
+async def _load_regime_flip_sustain_minutes() -> int:
+    loop = asyncio.get_running_loop()
+
+    def _read() -> int:
+        cfg = _load_risk_config()
+        return int(cfg.get("auto_trade", {}).get("regime_flip_sustain_minutes", 0))
+
+    return await loop.run_in_executor(None, _read)
+
+
 # ── Internal helpers (thin wrappers so tests can mock them easily) ─────────────
 
 async def _get_overall_regime() -> str:
@@ -174,17 +193,30 @@ async def _update_conviction_cache() -> None:
 
 async def _tick() -> None:
     """One monitoring cycle."""
+    global _reject_since
     try:
         await _update_conviction_cache()
         await _check_overnight_gaps()
 
         regime = await _get_overall_regime()
         if regime != "REJECT":
+            _reject_since = None
             return
 
         has_pos = await _has_open_positions()
         if not has_pos:
+            _reject_since = None
             return
+
+        now = datetime.now(timezone.utc)
+        if _reject_since is None:
+            _reject_since = now
+
+        sustain_minutes = await _load_regime_flip_sustain_minutes()
+        if sustain_minutes:
+            elapsed_min = (now - _reject_since).total_seconds() / 60.0
+            if elapsed_min < sustain_minutes:
+                return  # REJECT hasn't held long enough yet
 
         payload = {
             "type": "REGIME_FLIP_WARNING",
@@ -212,8 +244,7 @@ async def run_regime_monitor() -> None:
             loop = asyncio.get_running_loop()
 
             def _read_interval() -> int:
-                with open(_RISK_CONFIG_PATH) as f:
-                    cfg = yaml.safe_load(f)
+                cfg = _load_risk_config()
                 return int(cfg.get("auto_trade", {}).get("regime_monitor_interval_minutes", 15))
 
             interval = await loop.run_in_executor(None, _read_interval)

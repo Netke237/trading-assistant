@@ -240,3 +240,52 @@ async def test_gap_check_skips_position_with_no_stop(mocker):
     from app.services.regime_monitor import _check_overnight_gaps
     await _check_overnight_gaps()
     broadcast_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reject_alert_delayed_until_sustain_window_elapses(mocker):
+    """With regime_flip_sustain_minutes=5, the first REJECT+open-positions tick
+    must NOT broadcast — only once 5 minutes have elapsed across ticks."""
+    import app.services.regime_monitor as rm
+    rm._reject_since = None  # reset module state between tests
+    mocker.patch("app.services.regime_monitor._update_conviction_cache", new=AsyncMock())
+    mocker.patch("app.services.regime_monitor._check_overnight_gaps", new=AsyncMock())
+    mocker.patch("app.services.regime_monitor._get_overall_regime", new=AsyncMock(return_value="REJECT"))
+    mocker.patch("app.services.regime_monitor._has_open_positions", new=AsyncMock(return_value=True))
+    mocker.patch("app.services.regime_monitor._load_regime_flip_sustain_minutes", new=AsyncMock(return_value=5))
+    broadcast_mock = mocker.patch("app.services.regime_monitor._broadcast_alert", new=AsyncMock())
+
+    await rm._tick()
+    broadcast_mock.assert_not_called()
+    assert rm._reject_since is not None
+
+
+@pytest.mark.asyncio
+async def test_reject_alert_fires_once_sustain_window_elapses(mocker):
+    import app.services.regime_monitor as rm
+    from datetime import datetime, timedelta, timezone
+    rm._reject_since = datetime.now(timezone.utc) - timedelta(minutes=6)
+    mocker.patch("app.services.regime_monitor._update_conviction_cache", new=AsyncMock())
+    mocker.patch("app.services.regime_monitor._check_overnight_gaps", new=AsyncMock())
+    mocker.patch("app.services.regime_monitor._get_overall_regime", new=AsyncMock(return_value="REJECT"))
+    mocker.patch("app.services.regime_monitor._has_open_positions", new=AsyncMock(return_value=True))
+    mocker.patch("app.services.regime_monitor._load_regime_flip_sustain_minutes", new=AsyncMock(return_value=5))
+    broadcast_mock = mocker.patch("app.services.regime_monitor._broadcast_alert", new=AsyncMock())
+
+    await rm._tick()
+    broadcast_mock.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_reject_clock_resets_when_regime_recovers(mocker):
+    import app.services.regime_monitor as rm
+    from datetime import datetime, timezone
+    rm._reject_since = datetime.now(timezone.utc)
+    mocker.patch("app.services.regime_monitor._update_conviction_cache", new=AsyncMock())
+    mocker.patch("app.services.regime_monitor._check_overnight_gaps", new=AsyncMock())
+    mocker.patch("app.services.regime_monitor._get_overall_regime", new=AsyncMock(return_value="PASS"))
+    broadcast_mock = mocker.patch("app.services.regime_monitor._broadcast_alert", new=AsyncMock())
+
+    await rm._tick()
+    broadcast_mock.assert_not_called()
+    assert rm._reject_since is None
