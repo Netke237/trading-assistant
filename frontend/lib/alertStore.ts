@@ -24,6 +24,7 @@ interface AlertStoreState {
 export const DEFAULT_CONFIG: AlertConfig = {
   dedupWindowMinutes: 15,
   reminderIntervalHours: 4,
+  checkIntervalSeconds: 60,
   keepAlertsDays: 30,
   retentionDays: 30,
   enabledTypes: [

@@ -155,6 +155,7 @@ export default function AlertsPage() {
             enabledTypes: data.enabledTypes ?? config.enabledTypes,
             dedupWindowMinutes: data.dedupWindowMinutes ?? config.dedupWindowMinutes,
             reminderIntervalHours: data.reminderIntervalHours ?? config.reminderIntervalHours,
+            checkIntervalSeconds: data.checkIntervalSeconds ?? config.checkIntervalSeconds,
             retentionDays: data.retentionDays ?? config.retentionDays,
           });
         }
@@ -177,6 +178,7 @@ export default function AlertsPage() {
           enabledTypes: config.enabledTypes,
           dedupWindowMinutes: config.dedupWindowMinutes,
           reminderIntervalHours: config.reminderIntervalHours,
+          checkIntervalSeconds: config.checkIntervalSeconds,
           retentionDays: config.retentionDays,
         }),
       }).catch(() => {});
@@ -184,7 +186,7 @@ export default function AlertsPage() {
     return () => {
       if (deliverySyncTimer.current) clearTimeout(deliverySyncTimer.current);
     };
-  }, [BASE_URL, config.enabledTypes, config.dedupWindowMinutes, config.reminderIntervalHours, config.retentionDays]);
+  }, [BASE_URL, config.enabledTypes, config.dedupWindowMinutes, config.reminderIntervalHours, config.checkIntervalSeconds, config.retentionDays]);
 
   const loadWatches = useCallback(() => {
     api.listCompositeWatches()
@@ -339,6 +341,19 @@ export default function AlertsPage() {
                   onChange={(e) => {
                     const val = Number(e.target.value);
                     if (val >= 1 && val <= 120) setConfig({ ...config, dedupWindowMinutes: val });
+                  }}
+                />
+              </SettingsRow>
+              <SettingsRow label="Background check frequency (sec)" hint="How often the server re-checks price/portfolio/chart-rule alerts, even with the app closed. Lower = faster detection, more API calls." defaultValue="60">
+                <input
+                  type="number"
+                  className={styles.input}
+                  min={15}
+                  max={900}
+                  value={config.checkIntervalSeconds}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 15 && val <= 900) setConfig({ ...config, checkIntervalSeconds: val });
                   }}
                 />
               </SettingsRow>
