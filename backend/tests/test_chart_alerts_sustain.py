@@ -56,3 +56,13 @@ async def test_sustain_state_round_trips_through_evaluate_rules():
     # reflect the mutated state.
     row.condition_state = json.dumps(rule_input.condition_state)
     assert json.loads(row.condition_state) == {'0': '2024-01-02T09:30:00'}
+
+
+def test_parse_candle_time_handles_z_suffix_and_epoch_and_garbage():
+    from app.routers.chart_alerts import _parse_candle_time
+    from datetime import datetime
+    assert _parse_candle_time('2024-01-02T09:30:00Z') == datetime.fromisoformat('2024-01-02T09:30:00+00:00')
+    assert _parse_candle_time(1704186600) == datetime.fromtimestamp(1704186600)
+    # Garbage input must not raise — falls back to "now" (just check it returns a datetime).
+    result = _parse_candle_time('not-a-time')
+    assert isinstance(result, datetime)

@@ -135,6 +135,21 @@ def _history_to_dict(row: AlertHistoryModel) -> dict:
         'trigger_values': json.loads(row.trigger_values), 'reason': row.reason,
     }
 
+def _parse_candle_time(raw: object) -> datetime:
+    """Parse a candle's time field for use as evaluate_rules' `now` in the manual
+    dry-run endpoint. Accepts ISO strings (with or without a trailing 'Z') or
+    epoch-seconds numbers; falls back to wall-clock time on anything else so a
+    malformed pasted candle doesn't hard-crash the request."""
+    try:
+        if isinstance(raw, (int, float)):
+            return datetime.fromtimestamp(raw)
+        if isinstance(raw, str):
+            return datetime.fromisoformat(raw.replace('Z', '+00:00'))
+    except (ValueError, TypeError, OSError):
+        pass
+    logger.warning('test_rule: could not parse candle time %r, using current time', raw)
+    return datetime.now()
+
 def _build_notification_text(entry: dict, rule_name: str | None = None) -> tuple[str, str, str]:
     """Returns (subject, plain_body, html_body).
 
@@ -418,7 +433,7 @@ async def test_rule(rule_id: str, body: AlertTestRequest, db: AsyncSession = Dep
         # Use the candle's own timestamp as "now" (not wall-clock time) so
         # cooldown and sustain_minutes are evaluated against simulated time —
         # replaying history in real time would make sustain windows never elapse.
-        candle_time = datetime.fromisoformat(candle['time'])
+        candle_time = _parse_candle_time(candle.get('time'))
         results = evaluate_rules([rule_input], candle, window, body.indicators, body.signals, candle_time, regime_by_model)
         matches.extend(results)
     return {'matches': matches}
