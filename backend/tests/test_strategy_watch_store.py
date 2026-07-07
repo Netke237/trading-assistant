@@ -59,6 +59,20 @@ def test_update_state_persists_and_round_trips(tmp_path):
     assert state["entry_price"] == 100.0
 
 
+def test_update_state_reset_genuinely_removes_a_key_not_reintroduced_by_fresh_state_defaults(tmp_path):
+    path = tmp_path / "watches.yaml"
+    store = StrategyWatchStore(path=path)
+    e = store.add_watch("AAPL", "pullback_ema")
+    store.update_state(e["id"], {"phase": "idle", "pending_entry_since": "2026-06-13T18:00:00+00:00"})
+    state = store.list_watches()[0]["last_state"]
+    assert state["pending_entry_since"] == "2026-06-13T18:00:00+00:00"
+
+    reset_state = {k: v for k, v in state.items() if k != "pending_entry_since"}
+    store.update_state(e["id"], reset_state)
+    state_after = store.list_watches()[0]["last_state"]
+    assert "pending_entry_since" not in state_after
+
+
 def test_schedule_defaults_and_update(tmp_path):
     store = StrategyWatchStore(path=tmp_path / "watches.yaml")
     sched = store.get_schedule()

@@ -61,7 +61,9 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
     sustain_minutes: if > 0, a newly-appeared entry signal must remain present
     for at least this many minutes (checked across scheduler ticks, tracked in
     each watch's last_state.pending_entry_since) before the entry event fires.
-    0 preserves the original instant-fire behavior.
+    0 preserves the original instant-fire behavior. This is a single
+    schedule-level setting (not per-watch) — contrast with the standard
+    chart-alert rule builder's per-condition sustain_minutes.
     """
     events: list[WatchEvent] = []
     end = date.today()

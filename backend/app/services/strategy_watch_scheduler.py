@@ -106,6 +106,8 @@ class StrategyWatchScheduler:
 
     async def run_now(self) -> list:
         """Manual trigger — bypasses schedule gates. Returns fired events."""
+        # Manual runs bypass the sustain window by design — the user explicitly
+        # requested an immediate evaluation, so sustain_minutes is not applied here.
         events = await evaluate_and_notify()
         self._last_run_at = datetime.now()
         return events

@@ -265,6 +265,22 @@ async def test_sustain_clock_resets_when_signal_disappears():
 
 
 @pytest.mark.asyncio
+async def test_sustain_still_pending_does_not_recall_update_state():
+    from datetime import datetime, timedelta, timezone
+    recent = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+    store = MagicMock()
+    store.list_watches.return_value = [_watch("idle", pending_entry_since=recent)]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
+                    {"pullback_ema": lambda bars, **k: _signal()}):
+        events = await evaluate_all(sustain_minutes=5)
+    assert events == []
+    store.update_state.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_zero_sustain_minutes_fires_instantly_as_before():
     store = MagicMock()
     store.list_watches.return_value = [_watch("idle")]
