@@ -182,19 +182,32 @@ def _deserialize_rule(rule_json_str: str, row: AlertRuleModel) -> AlertRuleInput
     for c in group_data.get('conditions', []):
         kind = c.get('kind', '')
         if kind == 'price':
-            conditions.append(PriceCondition(kind='price', operator=c['operator'], value=c['value']))
+            conditions.append(PriceCondition(
+                kind='price', operator=c['operator'], value=c['value'],
+                sustain_minutes=c.get('sustain_minutes'),
+            ))
         elif kind == 'indicator':
-            conditions.append(IndicatorCondition(kind='indicator', indicator=c['indicator'], operator=c['operator'], value=c['value']))
+            conditions.append(IndicatorCondition(
+                kind='indicator', indicator=c['indicator'], operator=c['operator'], value=c['value'],
+                sustain_minutes=c.get('sustain_minutes'),
+            ))
         elif kind == 'structure':
-            conditions.append(StructureCondition(kind='structure', signal_kind=c['signal_kind'], direction=c.get('direction'), min_confidence=c.get('min_confidence')))
+            conditions.append(StructureCondition(
+                kind='structure', signal_kind=c['signal_kind'], direction=c.get('direction'),
+                min_confidence=c.get('min_confidence'), sustain_minutes=c.get('sustain_minutes'),
+            ))
         elif kind == 'regime':
-            conditions.append(RegimeCondition(kind='regime', model=c.get('model', 'OMM'), state=c.get('state', 'Bull'), min_conviction=c.get('min_conviction')))
+            conditions.append(RegimeCondition(
+                kind='regime', model=c.get('model', 'OMM'), state=c.get('state', 'Bull'),
+                min_conviction=c.get('min_conviction'), sustain_minutes=c.get('sustain_minutes'),
+            ))
     return AlertRuleInput(
         id=row.id, name=row.name, symbol=row.symbol, interval=row.interval,
         enabled=bool(row.enabled),
         group=ConditionGroup(logic=group_data.get('logic', 'AND'), conditions=conditions),
         cooldown_minutes=row.cooldown_minutes, expiry_date=row.expiry_date,
         created_at=row.created_at, last_triggered_at=row.last_triggered_at,
+        condition_state=json.loads(row.condition_state or '{}'),
     )
 
 
@@ -402,7 +415,11 @@ async def test_rule(rule_id: str, body: AlertTestRequest, db: AsyncSession = Dep
         # manual dry-run endpoint's typical candle-list sizes; a very large paste
         # would make this proportionally slower.
         regime_by_model = build_regime_snapshot(window) if needs_regime else None
-        results = evaluate_rules([rule_input], candle, window, body.indicators, body.signals, datetime.now(), regime_by_model)
+        # Use the candle's own timestamp as "now" (not wall-clock time) so
+        # cooldown and sustain_minutes are evaluated against simulated time —
+        # replaying history in real time would make sustain windows never elapse.
+        candle_time = datetime.fromisoformat(candle['time'])
+        results = evaluate_rules([rule_input], candle, window, body.indicators, body.signals, candle_time, regime_by_model)
         matches.extend(results)
     return {'matches': matches}
 
@@ -474,6 +491,9 @@ async def evaluate_and_notify_for_symbol(
         indicators = compute_indicators_for_conditions(all_candles, all_conditions)
 
         triggered = evaluate_rules(rule_inputs, closed_candle, all_candles, indicators, signals, datetime.now(), regime_by_model)
+
+        for _ri, _row in zip(rule_inputs, rows):
+            _row.condition_state = json.dumps(_ri.condition_state)
 
         for entry in triggered:
             history = AlertHistoryModel(
