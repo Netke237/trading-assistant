@@ -364,6 +364,21 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
                 </>
               )}
 
+              <input
+                className={styles.numInput}
+                type="number"
+                min={0}
+                max={1440}
+                placeholder="Hold (min)"
+                title="Optional: condition must stay true for this many minutes (checked at the background poll interval) before the alert fires. Leave blank to fire instantly."
+                value={c.sustain_minutes ?? ''}
+                onChange={(e) =>
+                  updateCondition(idx, {
+                    sustain_minutes: e.target.value ? Number(e.target.value) : undefined,
+                  })
+                }
+              />
+
               {conditions.length > 1 && (
                 <button
                   className={styles.removeBtn}

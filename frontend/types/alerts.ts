@@ -12,6 +12,7 @@ export interface PriceCondition {
   id?: string;
   operator: ConditionOperator;
   value: number;
+  sustain_minutes?: number;
 }
 
 export interface IndicatorCondition {
@@ -20,6 +21,7 @@ export interface IndicatorCondition {
   indicator: string;
   operator: ConditionOperator;
   value: number;
+  sustain_minutes?: number;
 }
 
 export interface StructureCondition {
@@ -28,6 +30,7 @@ export interface StructureCondition {
   signal_kind: SignalKind;
   direction?: 'bullish' | 'bearish';
   min_confidence?: number;
+  sustain_minutes?: number;
 }
 
 export interface RegimeCondition {
@@ -36,6 +39,7 @@ export interface RegimeCondition {
   model: RegimeModel;
   state: RegimeState;
   min_conviction?: number;
+  sustain_minutes?: number;
 }
 
 export type Condition = PriceCondition | IndicatorCondition | StructureCondition | RegimeCondition;
