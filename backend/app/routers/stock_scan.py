@@ -944,8 +944,9 @@ _FIB_ALLOWED_OVERRIDE_KEYS = frozenset({
     "fib_tolerance_pct",
     "impulse_min_pct",
     "retracement_recency_bars",
+    "ema_filter_period",
 })
-_FIB_INT_OVERRIDE_KEYS = frozenset({"fib_swing_lookback", "retracement_recency_bars"})
+_FIB_INT_OVERRIDE_KEYS = frozenset({"fib_swing_lookback", "retracement_recency_bars", "ema_filter_period"})
 
 _FIB_DEFAULTS = {
     "fib_swing_lookback": 100,
@@ -953,6 +954,7 @@ _FIB_DEFAULTS = {
     "fib_tolerance_pct": 0.015,
     "impulse_min_pct": 0.08,
     "retracement_recency_bars": 40,
+    "ema_filter_period": 20,
 }
 
 
@@ -1049,6 +1051,22 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
         if level_hit is None:
             # Insufficient bars or no swing found — skip
             continue
+
+        # EMA trend filter: price must be on the correct side of the EMA.
+        # Bullish: close > EMA; Bearish: close < EMA. 0 disables.
+        ema_period = int(scan_params["ema_filter_period"])
+        if ema_period > 0 and len(bars) >= ema_period:
+            closes = [b["close"] for b in bars]
+            k = 2 / (ema_period + 1)
+            ema_val = sum(closes[:ema_period]) / ema_period
+            for c in closes[ema_period:]:
+                ema_val = c * k + ema_val * (1 - k)
+            current_close = closes[-1]
+            if body.direction == "Bullish" and current_close < ema_val:
+                continue
+            if body.direction == "Bearish" and current_close > ema_val:
+                continue
+
         # Confidence: 100 if at level, scaled by proximity otherwise
         tol = scan_params["fib_tolerance_pct"] * 100  # convert to pct units
         if dist_pct is None:

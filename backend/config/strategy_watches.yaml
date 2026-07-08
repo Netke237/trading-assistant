@@ -18,6 +18,9 @@ watches:
     target_price: null
     last_event: exit_stop
     last_event_at: '2026-06-25T14:18:00.183876+00:00'
+  watch_type: strategy
+  trigger_def: null
+  interval: 1D
 - id: wch_b579a9763023
   symbol: MO
   strategy_key: pullback_ema
@@ -32,3 +35,6 @@ watches:
     target_price: 76.2
     last_event: entry
     last_event_at: '2026-06-16T21:22:29.513565+00:00'
+  watch_type: strategy
+  trigger_def: null
+  interval: 1D

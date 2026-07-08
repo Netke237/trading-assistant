@@ -7,6 +7,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { api } from '@/lib/api';
+import type { PositionCardData } from '@/types/stockDomain';
 import { CompositeAlertDialog } from '@/components/organisms/CompositeAlertDialog';
 import {
   PreBreakoutParamsPanel,
@@ -18,6 +19,7 @@ import {
   FIB_PULLBACK_DEFAULTS,
   type FibPullbackParams,
 } from '@/components/organisms/FibPullbackParamsPanel';
+import { _horizonEnum } from '@/lib/analysisStore';
 import styles from './page.module.css';
 
 type ScanRowMetrics = {
@@ -94,8 +96,10 @@ export default function Step4PreBreakoutPage() {
   const [scanMode, setScanMode]             = useState<ScanMode>('prebreakout');
   const [params, setParams]                 = useState<PreBreakoutParams>({ ...PREBREAKOUT_DEFAULTS });
   const [fibParams, setFibParams]           = useState<FibPullbackParams>({ ...FIB_PULLBACK_DEFAULTS });
+  const [pullbackEmaParams, setPullbackEmaParams] = useState({ emaPeriod: 50, trendEma: 100 });
   const fibResults = useScanStore((s) => s.fibPullbackResults);
   const setFibResults = useScanStore((s) => s.setFibPullbackResults);
+  const [pullbackResults, setPullbackResults] = useState<PositionCardData[]>([]);
   const [scanning, setScanning]             = useState(false);
   const [error, setError]                   = useState<string | null>(null);
   const [alertSymbol, setAlertSymbol]       = useState<string | null>(null);
@@ -108,6 +112,7 @@ export default function Step4PreBreakoutPage() {
     }
     setResults([]);
     setFibResults([]);
+    setPullbackResults([]);
   }, [params, fibParams, universePick, direction, setResults, setFibResults]);
 
   const runScan = useCallback(async () => {
@@ -143,7 +148,17 @@ export default function Step4PreBreakoutPage() {
     setError(null);
     setScanning(true);
     try {
-      if (scanMode === 'fib') {
+      if (scanMode === 'pullback') {
+        const result = await api.postStockScan({
+          universe: universe ?? symbols,
+          direction,
+          horizon: _horizonEnum(context?.horizon),
+          strategy: 'pullback_ema',
+          pullback_ema_period: pullbackEmaParams.emaPeriod,
+          pullback_trend_ema: pullbackEmaParams.trendEma,
+        });
+        setPullbackResults(result.candidates);
+      } else if (scanMode === 'fib') {
         const results = await api.fibPullbackScan(
           symbols,
           direction,
@@ -151,6 +166,7 @@ export default function Step4PreBreakoutPage() {
             fib_swing_lookback: fibParams.fibSwingLookback,
             fib_levels: fibParams.fibLevels,
             fib_tolerance_pct: fibParams.fibTolerancePct,
+            ema_filter_period: fibParams.emaFilterPeriod,
           },
           universe,
         );
@@ -208,7 +224,7 @@ export default function Step4PreBreakoutPage() {
           className={`${styles.modeBtn} ${scanMode === 'pullback' ? styles.modeBtnActive : ''}`}
           onClick={() => setScanMode('pullback')}
         >
-          Pullback to EMA
+          Pullback to EMA {pullbackEmaParams.emaPeriod}
         </button>
         <button
           type="button"
@@ -221,14 +237,125 @@ export default function Step4PreBreakoutPage() {
       </div>
 
       {scanMode === 'pullback' ? (
-        <div className={styles.pullbackInfo}>
-          <Text size={13} tone="secondary">
-            Trending stocks that have pulled back to their EMA are handled in the full
-            <strong> Stocks screener</strong> (Steps 1–3 → Stocks mode → Step 4 → pick
-            <em> Pullback to 20-EMA</em>). That flow includes a historical backtest, confidence
-            gate, and broker execution. Use this tab for pre-breakout consolidation setups only.
+        <>
+          <Text size={12} tone="dim">
+            Trending stocks that have pulled back to EMA {pullbackEmaParams.emaPeriod} (confirmed by EMA {pullbackEmaParams.trendEma} trend). Results are ranked by stock score.
           </Text>
-        </div>
+
+          <details className={styles.paramsPanel}>
+            <summary className={styles.paramsSummary}>
+              <Text size={12} tone="secondary">Scan parameters</Text>
+            </summary>
+            <div className={styles.pullbackParamsGrid}>
+              <label className={styles.paramLabel}>
+                <Text size={11} tone="dim">Signal MA — EMA {pullbackEmaParams.emaPeriod}</Text>
+                <Text size={10} tone="dim">
+                  Price must pull back to within 4% of this EMA from above (bullish) or bounce up to within 4% from below (bearish).
+                  ↑ Higher period → longer-term support level · ↓ Lower → faster-reacting MA
+                </Text>
+                <div className={styles.paramInput}>
+                  <input
+                    type="number"
+                    value={pullbackEmaParams.emaPeriod}
+                    min={5} max={200} step={1}
+                    onChange={(e) => setPullbackEmaParams((p) => ({ ...p, emaPeriod: Number(e.target.value) }))}
+                  />
+                  <Text size={11} tone="dim">periods</Text>
+                </div>
+              </label>
+              <label className={styles.paramLabel}>
+                <Text size={11} tone="dim">Trend MA — EMA {pullbackEmaParams.trendEma}</Text>
+                <Text size={10} tone="dim">
+                  Confirms the overall trend direction. Signal EMA must be above this for bullish, below for bearish.
+                  ↑ Higher period → filters for stronger established trends only
+                </Text>
+                <div className={styles.paramInput}>
+                  <input
+                    type="number"
+                    value={pullbackEmaParams.trendEma}
+                    min={20} max={500} step={5}
+                    onChange={(e) => setPullbackEmaParams((p) => ({ ...p, trendEma: Number(e.target.value) }))}
+                  />
+                  <Text size={11} tone="dim">periods</Text>
+                </div>
+              </label>
+              <button
+                type="button"
+                className={styles.resetBtn}
+                onClick={() => setPullbackEmaParams({ emaPeriod: 50, trendEma: 100 })}
+              >
+                Reset to defaults
+              </button>
+            </div>
+          </details>
+
+          <div className={styles.inputRow}>
+            <textarea
+              className={styles.symbolInput}
+              rows={2}
+              placeholder={`Leave blank to use universe (${universeLabel}) · or enter specific symbols to override`}
+              value={symbolOverride}
+              onChange={(e) => setSymbolOverride(e.target.value)}
+            />
+            <button
+              type="button"
+              className={styles.runBtn}
+              onClick={runScan}
+              disabled={scanning}
+            >
+              {scanning ? 'Scanning…' : 'Run Scan'}
+            </button>
+          </div>
+
+          {error && <Text size={12} tone="reject">{error}</Text>}
+
+          {pullbackResults.length > 0 && (
+            <div className={styles.tableWrap}>
+              <div className={styles.tableHeader}>
+                <span />
+                <Text size={11} tone="dim" weight={500}>Symbol</Text>
+                <Text size={11} tone="dim" weight={500}>Company</Text>
+                <Text size={11} tone="dim" weight={500}>Dir</Text>
+                <Text size={11} tone="dim" weight={500}>Score</Text>
+                <Text size={11} tone="dim" weight={500}>Price</Text>
+                <Text size={11} tone="dim" weight={500}>Confidence</Text>
+                <span />
+              </div>
+              {pullbackResults.map((row) => (
+                <div key={row.symbol} className={styles.tableRow}>
+                  <WatchStar symbol={row.symbol} size="sm" />
+                  <Text size={13} weight={500}>{row.symbol}</Text>
+                  <Text size={12} tone="secondary">{row.company}</Text>
+                  <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
+                    {row.direction === 'Bullish' ? '↑' : '↓'}
+                  </Text>
+                  <Data size={13} tone={_confidenceTone(row.stock_score)}>{row.stock_score}</Data>
+                  <Data size={12} tone="secondary">${row.price.toFixed(2)}</Data>
+                  <Data
+                    size={13}
+                    tone={row.confidence != null ? _confidenceTone(row.confidence) : 'dim'}
+                    title={row.confidence != null
+                      ? `Backtest-based signal confidence: ${row.confidence}%.\nHow it's calculated: the strategy engine ran this setup against historical data. The score reflects how often similar pullback-to-EMA setups led to a profitable move within the selected horizon. 60%+ = PASS gate.`
+                      : undefined}
+                  >
+                    {row.confidence != null ? `${row.confidence}%` : '—'}
+                  </Data>
+                  <button
+                    type="button"
+                    className={styles.alertBtn}
+                    onClick={() => setAlertSymbol(row.symbol)}
+                  >
+                    <Text size={11} weight={500}>Set Alert</Text>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {pullbackResults.length === 0 && !scanning && !error && (
+            <Text size={12} tone="dim">No results yet — run the scan.</Text>
+          )}
+        </>
       ) : scanMode === 'fib' ? (
         <>
           <Text size={12} tone="dim">
@@ -298,7 +425,13 @@ export default function Step4PreBreakoutPage() {
                   <Data size={12} tone={row.at_level ? 'pass' : 'dim'}>
                     {row.at_level ? 'YES' : 'no'}
                   </Data>
-                  <Data size={13} tone={_confidenceTone(row.confidence)}>{row.confidence}%</Data>
+                  <Data
+                    size={13}
+                    tone={_confidenceTone(row.confidence)}
+                    title={`Fib proximity confidence: ${row.confidence}%.\nHow it's calculated: 100% = exactly at the Fibonacci level. Drops toward 60% the further price is within the tolerance band (default 1.5%). Falls below 60% once price is outside that band. This score only measures distance to the fib level — it does NOT check volatility, volume, or trend.`}
+                  >
+                    {row.confidence}%
+                  </Data>
                   <button
                     type="button"
                     className={styles.alertBtn}
@@ -360,9 +493,6 @@ export default function Step4PreBreakoutPage() {
                 <Text size={11} tone="dim" weight={500}>ATR Ratio</Text>
                 <Text size={11} tone="dim" weight={500}>Vol Ratio</Text>
                 <Text size={11} tone="dim" weight={500}>Proximity %</Text>
-                {params.fibEnabled && (
-                  <Text size={11} tone="dim" weight={500}>Fib Level</Text>
-                )}
                 <span />
               </div>
               {sorted.map((row) => (
@@ -382,23 +512,40 @@ export default function Step4PreBreakoutPage() {
                   <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
                     {row.direction === 'Bullish' ? '↑' : '↓'}
                   </Text>
-                  <Data size={13} tone={_confidenceTone(row.confidence)}>{row.confidence}%</Data>
-                  <Data size={12} tone="secondary">
+                  <Data
+                    size={13}
+                    tone={_confidenceTone(row.confidence)}
+                    title={`Setup quality confidence: ${row.confidence}%.\nHow it's calculated: weighted composite of three factors — ATR compression (30%), volume quiet (25%), proximity to key level (45%). Each factor scores 0–100 based on how extreme the reading is. Example: ATR ratio 0.60 on a 0.85 threshold scores ~29/100 on that factor. All four hard gates must pass first (ATR compressed, range tight, volume quiet, price near resistance) — the score then reflects how good each factor is within the gates.`}
+                  >
+                    {row.confidence}%
+                  </Data>
+                  <Data
+                    size={12}
+                    tone="secondary"
+                    title={row.metrics.atr_ratio != null
+                      ? `ATR Ratio: ${row.metrics.atr_ratio.toFixed(3)}\nCurrent ATR ÷ 20-bar average ATR. Lower = more compressed volatility = tighter coil. Must be below ${params.atrCompressionRatio.toFixed(2)} to pass. Contributes 30% of the confidence score.`
+                      : undefined}
+                  >
                     {row.metrics.atr_ratio != null ? row.metrics.atr_ratio.toFixed(2) : '—'}
                   </Data>
-                  <Data size={12} tone="secondary">
+                  <Data
+                    size={12}
+                    tone="secondary"
+                    title={row.metrics.vol_ratio != null
+                      ? `Volume Ratio: ${row.metrics.vol_ratio.toFixed(3)}\nLast bar volume ÷ 20-bar average volume. Lower = quieter volume = stock coiling without distribution. Must be below ${params.volCompressionRatio.toFixed(2)} to pass. Contributes 25% of the confidence score.`
+                      : undefined}
+                  >
                     {row.metrics.vol_ratio != null ? row.metrics.vol_ratio.toFixed(2) : '—'}
                   </Data>
-                  <Data size={12} tone="secondary">
+                  <Data
+                    size={12}
+                    tone="secondary"
+                    title={row.metrics.proximity_pct != null
+                      ? `Proximity: ${row.metrics.proximity_pct.toFixed(2)}% from key level\nHow far price is from the ${row.direction === 'Bullish' ? 'swing high (resistance)' : 'swing low (support)'} as a percentage. Lower = closer to the level = better setup. Must be within ${(params.resistanceProximityPct * 100).toFixed(1)}% to pass. Contributes 45% of the confidence score — the heaviest weight.`
+                      : undefined}
+                  >
                     {row.metrics.proximity_pct != null ? row.metrics.proximity_pct.toFixed(1) : '—'}
                   </Data>
-                  {params.fibEnabled && (
-                    <Data size={12} tone={row.metrics.fib_at_level ? 'pass' : 'secondary'}>
-                      {row.metrics.fib_level_hit != null
-                        ? `${row.metrics.fib_level_hit}%${row.metrics.fib_at_level ? ' ✓' : ''}`
-                        : '—'}
-                    </Data>
-                  )}
                   <button
                     type="button"
                     className={styles.alertBtn}

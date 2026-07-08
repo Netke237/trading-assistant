@@ -67,6 +67,7 @@ class TestFibonacciSignal:
             range_atr_mult=10.0,
             atr_compression_ratio=1.5,   # current ATR always < 1.5× average
             vol_compression_ratio=1.5,   # last bar volume always < 1.5× average
+            require_trend=False,         # EMA may not converge in synthetic bars
         )
         without_fib = breakout_setup_signal(
             bars, "TEST",
@@ -171,6 +172,7 @@ class TestFibonacciSignal:
             range_atr_mult=10.0,
             atr_compression_ratio=1.5,
             vol_compression_ratio=1.5,
+            require_trend=False,         # EMA may not converge in synthetic bars
         )
         bars = _make_bars()
         without_fib = breakout_setup_signal(bars, "TEST", direction="Bullish",

@@ -7,12 +7,14 @@ export interface FibPullbackParams {
   fibSwingLookback: number;   // 20–200, default 100
   fibLevels: number[];        // subset of [23.6, 38.2, 50.0, 61.8, 78.6], default [38.2, 61.8]
   fibTolerancePct: number;    // stored as fraction 0.005–0.05, default 0.015
+  emaFilterPeriod: number;    // 0 = disabled, default 20
 }
 
 export const FIB_PULLBACK_DEFAULTS: FibPullbackParams = {
   fibSwingLookback: 100,
   fibLevels: [38.2, 61.8],
   fibTolerancePct: 0.015,
+  emaFilterPeriod: 20,
 };
 
 const ALL_FIB_LEVELS = [23.6, 38.2, 50.0, 61.8, 78.6];
@@ -95,6 +97,23 @@ export function FibPullbackParamsPanel({ params, setParams, onReset }: Props) {
               }
             />
             <Text size={11} tone="dim">%</Text>
+          </div>
+        </label>
+
+        <label className={styles.paramLabel}>
+          <Text size={11} tone="dim">EMA trend filter</Text>
+          <Text size={10} tone="dim">
+            Only show stocks on the correct side of this EMA (Bullish: price &gt; EMA; Bearish: price &lt; EMA).
+            Filters out counter-trend fib hits. Set to 0 to disable.
+          </Text>
+          <div className={styles.paramInput}>
+            <input
+              type="number"
+              value={params.emaFilterPeriod}
+              min={0} max={200} step={1}
+              onChange={(e) => setParams((p) => ({ ...p, emaFilterPeriod: Number(e.target.value) }))}
+            />
+            <Text size={11} tone="dim">EMA {params.emaFilterPeriod > 0 ? params.emaFilterPeriod : '(off)'}</Text>
           </div>
         </label>
 
