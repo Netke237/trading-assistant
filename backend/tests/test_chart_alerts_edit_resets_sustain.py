@@ -84,3 +84,57 @@ async def test_replace_rule_resets_condition_state():
             select(AlertRuleModel).where(AlertRuleModel.id == "rule-edit-test")
         )).scalar_one()
         assert json.loads(row.condition_state) == {}
+
+
+@pytest.mark.asyncio
+async def test_replace_rule_preserves_condition_state_when_conditions_unchanged():
+    """The frontend's enabled-toggle handler (updateRule -> putRuleToAPI) sends
+    the FULL rule via this same PUT endpoint even when only `enabled` changed --
+    it must not wipe in-progress sustain-clock state that had nothing to do
+    with the actual edit."""
+    app, Session = await _make_app()
+    conditions = [
+        {"kind": "price", "operator": ">", "value": 185, "sustain_minutes": 5},
+    ]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        create_payload = {
+            "id": "rule-toggle-test",
+            "name": "Original",
+            "symbol": "AAPL",
+            "interval": "1D",
+            "enabled": True,
+            "group": {"logic": "AND", "conditions": conditions},
+            "cooldown_minutes": 0,
+            "expiry_date": None,
+        }
+        r = await client.post("/alerts/rules", json=create_payload)
+        assert r.status_code == 201
+
+    from app.models.alert import AlertRuleModel
+    from sqlalchemy import select
+    async with Session() as db:
+        row = (await db.execute(
+            select(AlertRuleModel).where(AlertRuleModel.id == "rule-toggle-test")
+        )).scalar_one()
+        row.condition_state = json.dumps({"0": "2024-06-01T00:00:00"})  # in-progress sustain clock
+        await db.commit()
+
+    # Simulate the enabled-toggle switch: same conditions, only `enabled` flips.
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        toggle_payload = {
+            "name": "Original",
+            "symbol": "AAPL",
+            "interval": "1D",
+            "enabled": False,
+            "group": {"logic": "AND", "conditions": conditions},
+            "cooldown_minutes": 0,
+            "expiry_date": None,
+        }
+        r = await client.put("/alerts/rules/rule-toggle-test", json=toggle_payload)
+        assert r.status_code == 200
+
+    async with Session() as db:
+        row = (await db.execute(
+            select(AlertRuleModel).where(AlertRuleModel.id == "rule-toggle-test")
+        )).scalar_one()
+        assert json.loads(row.condition_state) == {"0": "2024-06-01T00:00:00"}

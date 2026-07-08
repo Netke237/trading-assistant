@@ -300,6 +300,7 @@ async def replace_rule(rule_id: str, body: AlertRuleCreate, db: AsyncSession = D
     row.symbol = body.symbol.upper()
     row.interval = body.interval
     row.enabled = body.enabled
+    _old_rule_json = row.rule_json
     if body.rule_type == 'composite':
         if not body.composite_def:
             raise HTTPException(status_code=422, detail='composite_def is required when rule_type is "composite"')
@@ -309,12 +310,18 @@ async def replace_rule(rule_id: str, body: AlertRuleCreate, db: AsyncSession = D
     row.cooldown_minutes = body.cooldown_minutes
     row.expiry_date = body.expiry_date
     # condition_state is keyed by each standard condition's positional index (or
-    # the literal "composite" key) into the OLD condition list. Replacing the
-    # rule's conditions makes any existing sustain-clock entries meaningless --
-    # worse, misleading: a stale pending-since timestamp for what used to be
+    # the literal "composite" key) into the condition list. If the conditions
+    # actually changed shape, any existing sustain-clock entries are meaningless
+    # -- worse, misleading: a stale pending-since timestamp for what used to be
     # condition 0 would get inherited by whatever condition is at index 0 now,
     # letting it fire instantly instead of respecting its own sustain window.
-    row.condition_state = '{}'
+    # But the frontend also calls this same PUT endpoint for patches that don't
+    # touch conditions at all (e.g. toggling `enabled` re-sends the full rule
+    # via updateRule -> putRuleToAPI) -- comparing old vs new rule_json first
+    # means a same-conditions PUT doesn't needlessly wipe in-progress sustain
+    # state that had nothing to do with the actual edit.
+    if row.rule_json != _old_rule_json:
+        row.condition_state = '{}'
     await db.commit()
     return _rule_to_dict(row)
 
