@@ -216,21 +216,24 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
         sustain_min = trigger_def.get("sustain_minutes")
         watch_state = dict(w.get("last_state") or {})
         if sustain_min:
-            if fired:
-                pending_since_str = watch_state.get("pending_entry_since")
-                if pending_since_str is None:
+            try:
+                if fired:
+                    pending_since_str = watch_state.get("pending_entry_since")
+                    if pending_since_str is None:
+                        strategy_watch_store.update_state(
+                            w["id"], {**watch_state, "pending_entry_since": _now_iso()},
+                        )
+                        continue
+                    pending_since = datetime.fromisoformat(pending_since_str)
+                    elapsed_min = (datetime.now(timezone.utc) - pending_since).total_seconds() / 60.0
+                    if elapsed_min < sustain_min:
+                        continue
+                elif watch_state.get("pending_entry_since"):
                     strategy_watch_store.update_state(
-                        w["id"], {**watch_state, "pending_entry_since": _now_iso()},
+                        w["id"], {k: v for k, v in watch_state.items() if k != "pending_entry_since"},
                     )
-                    continue
-                pending_since = datetime.fromisoformat(pending_since_str)
-                elapsed_min = (datetime.now(timezone.utc) - pending_since).total_seconds() / 60.0
-                if elapsed_min < sustain_min:
-                    continue
-            elif watch_state.get("pending_entry_since"):
-                strategy_watch_store.update_state(
-                    w["id"], {k: v for k, v in watch_state.items() if k != "pending_entry_since"},
-                )
+            except (ValueError, TypeError) as exc:
+                logger.warning("composite-watch sustain-state parse failed for %s, treating as not-sustained: %s", symbol, exc)
 
         if not fired:
             continue
