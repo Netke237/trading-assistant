@@ -234,6 +234,7 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
                     )
             except (ValueError, TypeError) as exc:
                 logger.warning("composite-watch sustain-state parse failed for %s, treating as not-sustained: %s", symbol, exc)
+                fired = False
 
         if not fired:
             continue

@@ -616,6 +616,7 @@ async def evaluate_and_notify_for_symbol(
                             _row.condition_state = json.dumps(_composite_state)
                 except (ValueError, TypeError) as _exc:
                     logger.warning("composite sustain-state parse failed for %s, treating as not-sustained: %s", symbol, _exc)
+                    _fired = False
 
                 if not _fired:
                     continue

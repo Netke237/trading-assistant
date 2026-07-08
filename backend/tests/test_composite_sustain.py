@@ -147,3 +147,53 @@ async def test_strategy_watch_composite_fires_once_sustained():
                return_value={"structure_matched": [], "strategy_matched": []}):
         events = await evaluate_all()
     assert len(events) == 1
+
+
+@pytest.mark.asyncio
+async def test_ws_composite_path_corrupted_state_does_not_fire(monkeypatch):
+    """A corrupted condition_state must suppress the fire, not bypass sustain
+    and fire immediately — regression test for the except-block fail-open bug."""
+    from app.routers import chart_alerts
+    Session = await _make_session_factory()
+    monkeypatch.setattr(chart_alerts, 'AsyncSessionLocal', Session)
+    monkeypatch.setattr(
+        'app.services.composite_trigger_evaluator.evaluate_from_context_detailed',
+        lambda *a, **kw: (True, _DETAIL),
+    )
+
+    async with Session() as db:
+        db.add(_composite_rule_row(condition_state='not-valid-json{{{'))
+        await db.commit()
+
+    triggered = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    assert triggered == []
+
+
+@pytest.mark.asyncio
+async def test_strategy_watch_composite_corrupted_pending_since_does_not_fire():
+    """A corrupted pending_entry_since must suppress the fire, not bypass
+    sustain and fire immediately — regression test for the except-block
+    fail-open bug."""
+    from app.services.strategy_watch_evaluator import evaluate_all
+
+    def _bars(close: float, n: int = 260) -> list[dict]:
+        return [{"time": f"2024-{1 + i // 28:02d}-{1 + i % 28:02d}",
+                 "open": close, "high": close + 1, "low": close - 1,
+                 "close": close, "volume": 1_000_000} for i in range(n)]
+
+    watch = {
+        "id": "wch_comp_1", "symbol": "AAPL", "watch_type": "composite",
+        "strategy_key": "composite", "direction": "Bullish", "enabled": True,
+        "trigger_def": {"primary": {"model": "any"}, "sustain_minutes": 5},
+        "last_state": {"pending_entry_since": "not-a-valid-timestamp"},
+    }
+    store = MagicMock()
+    store.list_watches.return_value = [watch]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch("app.services.composite_trigger_evaluator.evaluate_scheduled", return_value=True):
+        events = await evaluate_all()
+    assert events == []
