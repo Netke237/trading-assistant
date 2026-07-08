@@ -596,6 +596,24 @@ async def evaluate_and_notify_for_symbol(
                 except Exception as _exc:
                     logger.warning("composite rule eval failed for %s: %s", symbol, _exc)
                     continue
+
+                _sustain_min = _td.get("sustain_minutes")
+                _composite_state = json.loads(_row.condition_state or '{}')
+                if _sustain_min:
+                    if _fired:
+                        _pending_since_str = _composite_state.get("composite")
+                        if _pending_since_str is None:
+                            _composite_state["composite"] = datetime.now().isoformat()
+                            _row.condition_state = json.dumps(_composite_state)
+                            continue
+                        _pending_since = datetime.fromisoformat(_pending_since_str)
+                        _elapsed_min = (datetime.now() - _pending_since).total_seconds() / 60.0
+                        if _elapsed_min < _sustain_min:
+                            continue
+                    elif "composite" in _composite_state:
+                        _composite_state.pop("composite", None)
+                        _row.condition_state = json.dumps(_composite_state)
+
                 if not _fired:
                     continue
                 _reason = format_composite_reason(_td.get('primary', {}).get('to_state'), _detail)

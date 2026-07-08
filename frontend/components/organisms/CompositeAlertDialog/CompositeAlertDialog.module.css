@@ -15,6 +15,10 @@
   background: var(--bg-surface-2); color: var(--text-primary); font-size: 16px;
 }
 .range { width: 100%; accent-color: var(--accent); }
+.numInput {
+  padding: 10px 16px; border: 1px solid var(--border-subtle); border-radius: 12px;
+  background: var(--bg-surface-2); color: var(--text-primary); font-size: 16px;
+}
 .section { display: flex; flex-direction: column; gap: 16px; }
 .confirmList { display: flex; flex-direction: column; gap: 8px; }
 .confirmItem {

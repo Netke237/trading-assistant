@@ -44,6 +44,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
   const [done, setDone]                     = useState(false);
   const [error, setError]                   = useState<string | null>(null);
   const [interval, setIntervalVal]          = useState('1D');
+  const [sustainMinutes, setSustainMinutes] = useState(0);
   const [deliveryMode, setDeliveryMode]     = useState<'watch' | 'rule'>('watch');
   const [ruleName, setRuleName]             = useState('');
 
@@ -127,6 +128,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
       // mean-reversion confirmation would silently evaluate as Bullish regardless
       // of the alert's real direction, for both the Watch and live Rule paths.
       direction: direction === 'any' ? null : direction,
+      sustain_minutes: sustainMinutes,
     };
     try {
       if (deliveryMode === 'rule') {
@@ -223,6 +225,19 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                 </select>
               </div>
             )}
+
+            <div className={styles.row}>
+              <Text size={16} tone="secondary">Sustain (min)</Text>
+              <input
+                className={styles.numInput}
+                type="number"
+                min={0}
+                max={1440}
+                value={sustainMinutes}
+                onChange={(e) => setSustainMinutes(Number(e.target.value))}
+                title="Optional: the composite condition must stay true for this many minutes before it fires."
+              />
+            </div>
 
             {model !== 'any' && (
               <div className={styles.row}>
