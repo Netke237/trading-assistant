@@ -139,12 +139,24 @@ def _parse_candle_time(raw: object) -> datetime:
     """Parse a candle's time field for use as evaluate_rules' `now` in the manual
     dry-run endpoint. Accepts ISO strings (with or without a trailing 'Z') or
     epoch-seconds numbers; falls back to wall-clock time on anything else so a
-    malformed pasted candle doesn't hard-crash the request."""
+    malformed pasted candle doesn't hard-crash the request.
+
+    Always returns a naive datetime (tzinfo stripped from any offset-aware
+    parse) -- evaluate_rules' cooldown/sustain math does now - pending_since,
+    and pending_since is always the naive isoformat() of a previous call's
+    return value. A dry-run candle list that mixes 'Z'-suffixed and bare ISO
+    timestamps would otherwise alternate between aware and naive `now` values
+    across the loop, raising TypeError on the subtraction and permanently
+    resetting the sustain clock every tick instead of ever letting it elapse.
+    """
     try:
         if isinstance(raw, (int, float)):
             return datetime.fromtimestamp(raw)
         if isinstance(raw, str):
-            return datetime.fromisoformat(raw.replace('Z', '+00:00'))
+            parsed = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+            if parsed.tzinfo is not None:
+                parsed = parsed.replace(tzinfo=None)
+            return parsed
     except (ValueError, TypeError, OSError):
         pass
     logger.warning('test_rule: could not parse candle time %r, using current time', raw)
@@ -296,6 +308,13 @@ async def replace_rule(rule_id: str, body: AlertRuleCreate, db: AsyncSession = D
         row.rule_json = json.dumps(body.group.model_dump())
     row.cooldown_minutes = body.cooldown_minutes
     row.expiry_date = body.expiry_date
+    # condition_state is keyed by each standard condition's positional index (or
+    # the literal "composite" key) into the OLD condition list. Replacing the
+    # rule's conditions makes any existing sustain-clock entries meaningless --
+    # worse, misleading: a stale pending-since timestamp for what used to be
+    # condition 0 would get inherited by whatever condition is at index 0 now,
+    # letting it fire instantly instead of respecting its own sustain window.
+    row.condition_state = '{}'
     await db.commit()
     return _rule_to_dict(row)
 

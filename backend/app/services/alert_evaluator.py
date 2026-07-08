@@ -279,8 +279,13 @@ def evaluate_rules(rules: list[AlertRuleInput], closed_candle: dict,
             continue
         if _is_expired(rule, now):
             continue
-        if not _is_cooldown_passed(rule, now):
-            continue
+        # NOTE: cooldown is intentionally checked AFTER sustain-clock bookkeeping
+        # below (not here) -- if it gated the whole rule this early, a condition
+        # that flips false-then-true-again WHILE the rule is in cooldown would
+        # never get its sustain clock cleared/restarted (the per-condition loop
+        # would simply never run), so the stale pending-since timestamp survives
+        # the cooldown window and lets the condition fire instantly once
+        # cooldown ends, instead of respecting a fresh sustain window.
 
         accumulated_trigger_values: dict = {}
         evaluations = []
@@ -331,6 +336,11 @@ def evaluate_rules(rules: list[AlertRuleInput], closed_candle: dict,
         else:  # N_OF_M
             threshold = rule.group.n_of_m_threshold or 1
             triggered = sum(evaluations) >= threshold
+
+        # Cooldown suppresses firing, but must not skip the sustain-clock
+        # bookkeeping above -- see the NOTE at the top of this loop.
+        if triggered and not _is_cooldown_passed(rule, now):
+            triggered = False
 
         if triggered:
             entry_id = make_history_id()

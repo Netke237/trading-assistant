@@ -432,3 +432,30 @@ class TestSustainMinutes:
         candle = make_candle(c=103)
         results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now())
         assert len(results) == 1
+
+
+    def test_sustain_clock_still_clears_while_rule_is_in_cooldown(self):
+        """A condition flipping false must clear its sustain clock even while
+        the rule is in cooldown from a previous fire -- otherwise the stale
+        pending-since timestamp survives the cooldown window and lets the
+        condition fire instantly (with no fresh sustain wait) once cooldown
+        ends, instead of genuinely re-arming."""
+        condition = PriceCondition(kind='price', operator='>', value=100, sustain_minutes=5)
+        rule = make_rule(conditions=[condition], cooldown_minutes=60)
+        t0 = datetime(2024, 1, 2, 9, 0)
+        evaluate_rules([rule], make_candle(c=103), [make_candle(c=103)], {}, [], t0)
+        t1 = t0 + timedelta(minutes=6)
+        fired = evaluate_rules([rule], make_candle(c=103), [make_candle(c=103)], {}, [], t1)
+        assert len(fired) == 1
+        rule.last_triggered_at = t1.isoformat()
+
+        # Condition goes false while still inside the cooldown window.
+        t2 = t1 + timedelta(minutes=1)
+        evaluate_rules([rule], make_candle(c=90), [make_candle(c=90)], {}, [], t2)
+        assert '0' not in rule.condition_state
+
+        # Condition true again, past cooldown -- must need a FRESH sustain
+        # window, not fire immediately off the old (now-cleared) clock.
+        t3 = t2 + timedelta(minutes=2)
+        results = evaluate_rules([rule], make_candle(c=103), [make_candle(c=103)], {}, [], t3)
+        assert len(results) == 0

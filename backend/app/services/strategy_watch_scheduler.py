@@ -44,7 +44,10 @@ class StrategyWatchScheduler:
         cfg = self._load_schedule()
         if not cfg.get("enabled"):
             return False
-        sustain_minutes = int(cfg.get("sustain_minutes", 0))
+        # max(0, ...) defends against a manually-edited strategy_watches.yaml
+        # (this schedule dict is loaded straight from YAML on startup, bypassing
+        # the /schedule PUT endpoint's Pydantic ge=0 validation).
+        sustain_minutes = max(0, int(cfg.get("sustain_minutes", 0)))
 
         mode = cfg.get("mode", "eod")
         if mode == "eod":

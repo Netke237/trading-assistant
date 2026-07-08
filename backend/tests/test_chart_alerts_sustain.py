@@ -61,8 +61,26 @@ async def test_sustain_state_round_trips_through_evaluate_rules():
 def test_parse_candle_time_handles_z_suffix_and_epoch_and_garbage():
     from app.routers.chart_alerts import _parse_candle_time
     from datetime import datetime
-    assert _parse_candle_time('2024-01-02T09:30:00Z') == datetime.fromisoformat('2024-01-02T09:30:00+00:00')
+    # Always naive (tzinfo stripped), regardless of whether the input carried an
+    # offset -- evaluate_rules' now - pending_since subtraction requires every
+    # `now` value across a dry-run candle list to be consistently naive or it
+    # raises TypeError on offset-naive vs offset-aware subtraction.
+    z_result = _parse_candle_time('2024-01-02T09:30:00Z')
+    assert z_result == datetime.fromisoformat('2024-01-02T09:30:00')
+    assert z_result.tzinfo is None
     assert _parse_candle_time(1704186600) == datetime.fromtimestamp(1704186600)
     # Garbage input must not raise — falls back to "now" (just check it returns a datetime).
     result = _parse_candle_time('not-a-time')
     assert isinstance(result, datetime)
+
+
+def test_parse_candle_time_naive_and_aware_inputs_are_mutually_subtractable():
+    """Regression test: a dry-run candle list that mixes 'Z'-suffixed and bare
+    ISO timestamps must not raise TypeError when evaluate_rules subtracts
+    consecutive `now` values (via the sustain-minutes pending_since check)."""
+    from app.routers.chart_alerts import _parse_candle_time
+    aware_input = _parse_candle_time('2024-01-02T09:30:00Z')
+    naive_input = _parse_candle_time('2024-01-02T09:40:00')
+    # Must not raise TypeError: can't subtract offset-naive and offset-aware datetimes
+    delta = (naive_input - aware_input).total_seconds()
+    assert delta == 600.0

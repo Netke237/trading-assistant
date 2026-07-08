@@ -46,7 +46,9 @@ async def _load_regime_flip_sustain_minutes() -> int:
 
     def _read() -> int:
         cfg = _load_risk_config()
-        return int(cfg.get("auto_trade", {}).get("regime_flip_sustain_minutes", 0))
+        # max(0, ...) defends against a manually-edited risk_rules.yaml -- this
+        # value has no API endpoint/Pydantic validation gate at all.
+        return max(0, int(cfg.get("auto_trade", {}).get("regime_flip_sustain_minutes", 0)))
 
     return await loop.run_in_executor(None, _read)
 
