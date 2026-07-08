@@ -58,6 +58,7 @@ Thumbs.db
 .opencode/
 .playwright-mcp/
 backend/audit.log
+backend/*.log
 backend/config/settings.yaml
 backend/config/local_credentials.yaml
 
