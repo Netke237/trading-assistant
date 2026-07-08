@@ -380,6 +380,10 @@ export interface AlertConfig {
   soundEnabled: boolean;
   keepAlertsDays: number;          // default 10 — auto-purge after N days
   retentionDays: number;           // default 30 — backend sent-message log retention (days)
+  // default 0 — portfolio position (TP/stop/premium) sustain-minutes filter.
+  // No dedicated UI control yet (deferred) — round-tripped here so saving any
+  // other Alerts-page setting doesn't silently reset it back to 0 on the backend.
+  positionSustainMinutes: number;
 }
 
 export type AlertType =

@@ -109,9 +109,23 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
                             w["id"], {**state, "pending_entry_since": _now_iso()},
                         )
                         continue
-                    pending_since = datetime.fromisoformat(pending_since_str)
-                    elapsed_min = (datetime.now(timezone.utc) - pending_since).total_seconds() / 60.0
-                    if elapsed_min < sustain_minutes:
+                    try:
+                        pending_since = datetime.fromisoformat(pending_since_str)
+                        elapsed_min = (datetime.now(timezone.utc) - pending_since).total_seconds() / 60.0
+                        sustained = elapsed_min >= sustain_minutes
+                    except (ValueError, TypeError):
+                        # Corrupted pending_entry_since -- treat as not-yet-sustained
+                        # (restart the clock) rather than raising, which would abort
+                        # evaluation for every remaining watch in this tick.
+                        logger.warning(
+                            "strategy-watch: corrupted pending_entry_since for %s, "
+                            "restarting sustain clock", w["id"],
+                        )
+                        strategy_watch_store.update_state(
+                            w["id"], {**state, "pending_entry_since": _now_iso()},
+                        )
+                        continue
+                    if not sustained:
                         continue
                 event = WatchEvent(
                     watch_id=w["id"], symbol=symbol, strategy_key=key,
@@ -214,6 +228,8 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
             continue
 
         sustain_min = trigger_def.get("sustain_minutes")
+        if isinstance(sustain_min, (int, float)) and sustain_min < 0:
+            sustain_min = 0
         watch_state = dict(w.get("last_state") or {})
         if sustain_min:
             try:

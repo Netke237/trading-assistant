@@ -2,10 +2,13 @@
 """Python mirror of frontend/lib/chartAlertEngine.ts — server-side alert rule evaluation."""
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Literal
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -285,7 +288,13 @@ def evaluate_rules(rules: list[AlertRuleInput], closed_candle: dict,
             met, tv = _evaluate_condition(c, closed_candle, indicators, signals, closed_candle['time'], regime_by_model)
             accumulated_trigger_values.update(tv)
 
+            # Defensive floor: negative sustain_minutes (e.g. from a raw API call
+            # that bypasses the frontend's own clamp) would otherwise make a
+            # condition satisfy the elapsed-time check on the very next tick
+            # after first becoming true instead of behaving as "instant" (0).
             sustain_min = getattr(c, 'sustain_minutes', None)
+            if sustain_min is not None and sustain_min < 0:
+                sustain_min = 0
             if sustain_min:
                 key = str(cond_index)
                 if met:
@@ -296,9 +305,20 @@ def evaluate_rules(rules: list[AlertRuleInput], closed_candle: dict,
                         rule.condition_state[key] = now.isoformat()
                         met = False
                     else:
-                        pending_since = datetime.fromisoformat(pending_since_str)
-                        elapsed_min = (now - pending_since).total_seconds() / 60.0
-                        met = elapsed_min >= sustain_min
+                        try:
+                            pending_since = datetime.fromisoformat(pending_since_str)
+                            elapsed_min = (now - pending_since).total_seconds() / 60.0
+                            met = elapsed_min >= sustain_min
+                        except (ValueError, TypeError):
+                            # Corrupted condition_state -- treat as not-yet-sustained
+                            # rather than raising (which would abort evaluation for
+                            # every rule in this batch) or firing immediately.
+                            logger.warning(
+                                'sustain-state parse failed for rule %s condition %s, '
+                                'treating as not-sustained', rule.id, key,
+                            )
+                            rule.condition_state[key] = now.isoformat()
+                            met = False
                 else:
                     rule.condition_state.pop(key, None)
 

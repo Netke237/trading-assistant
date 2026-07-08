@@ -157,6 +157,9 @@ export default function AlertsPage() {
             reminderIntervalHours: data.reminderIntervalHours ?? config.reminderIntervalHours,
             checkIntervalSeconds: data.checkIntervalSeconds ?? config.checkIntervalSeconds,
             retentionDays: data.retentionDays ?? config.retentionDays,
+            // No UI control yet (deferred) — still round-tripped so this page's
+            // save effect doesn't clobber a value set through another path.
+            positionSustainMinutes: data.positionSustainMinutes ?? config.positionSustainMinutes,
           });
         }
         deliveryLoaded.current = true;
@@ -180,13 +183,14 @@ export default function AlertsPage() {
           reminderIntervalHours: config.reminderIntervalHours,
           checkIntervalSeconds: config.checkIntervalSeconds,
           retentionDays: config.retentionDays,
+          positionSustainMinutes: config.positionSustainMinutes,
         }),
       }).catch(() => {});
     }, 800);
     return () => {
       if (deliverySyncTimer.current) clearTimeout(deliverySyncTimer.current);
     };
-  }, [BASE_URL, config.enabledTypes, config.dedupWindowMinutes, config.reminderIntervalHours, config.checkIntervalSeconds, config.retentionDays]);
+  }, [BASE_URL, config.enabledTypes, config.dedupWindowMinutes, config.reminderIntervalHours, config.checkIntervalSeconds, config.retentionDays, config.positionSustainMinutes]);
 
   const loadWatches = useCallback(() => {
     api.listCompositeWatches()

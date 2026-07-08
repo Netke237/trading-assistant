@@ -74,9 +74,16 @@ async def generate_alerts(
             if pending_since_str is None:
                 alert_state[alert_type] = now_iso
                 return False
-            pending_since = datetime.fromisoformat(pending_since_str)
-            elapsed_min = (now - pending_since).total_seconds() / 60.0
-            return elapsed_min >= sustain_minutes
+            try:
+                pending_since = datetime.fromisoformat(pending_since_str)
+                elapsed_min = (now - pending_since).total_seconds() / 60.0
+                return elapsed_min >= sustain_minutes
+            except (ValueError, TypeError):
+                # Corrupted alert_state entry -- restart the clock instead of
+                # raising, which would abort alert generation for every
+                # remaining position in this tick.
+                alert_state[alert_type] = now_iso
+                return False
 
         # TP_HIT — direction-aware: bullish targets are above current price, bearish below
         is_bearish = pos.contract.split("|")[3] == "P" if len(pos.contract.split("|")) >= 4 else False

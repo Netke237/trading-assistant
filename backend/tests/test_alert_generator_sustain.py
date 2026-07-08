@@ -76,3 +76,23 @@ async def test_zero_sustain_minutes_fires_instantly_as_before():
         await db.commit()
         alerts = await generate_alerts(db, {'AAPL': 130.0})  # sustain_minutes defaults to 0
     assert any(a.alertType == 'STOP_REACHED' for a in alerts)
+
+
+@pytest.mark.asyncio
+async def test_stop_reached_corrupted_alert_state_does_not_raise_or_fire():
+    """A corrupted alert_state entry must restart the clock and suppress the
+    fire, not raise -- an unhandled ValueError here would abort alert
+    generation for every remaining position in this tick, not just this one.
+    Regression test mirroring the composite-path fail-open fix, applied to
+    the portfolio position sustain path."""
+    Session = await _make_session_factory()
+    async with Session() as db:
+        db.add(_position(alert_state={'STOP_REACHED': 'not-a-valid-timestamp'}))
+        await db.commit()
+        alerts = await generate_alerts(db, {'AAPL': 130.0}, sustain_minutes=5)
+        await db.commit()
+        from sqlalchemy import select
+        refreshed = (await db.execute(select(PortfolioPositionModel))).scalar_one()
+    assert not any(a.alertType == 'STOP_REACHED' for a in alerts)
+    # Clock was restarted (a fresh ISO timestamp), not left corrupted.
+    datetime.fromisoformat(refreshed.alert_state['STOP_REACHED'])

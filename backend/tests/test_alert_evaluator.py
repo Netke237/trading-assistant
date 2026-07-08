@@ -406,3 +406,29 @@ class TestSustainMinutes:
         candle = make_candle(c=103)
         results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now())
         assert len(results) == 1
+
+    def test_corrupted_condition_state_does_not_fire_and_does_not_raise(self):
+        """A corrupted condition_state entry must suppress the fire (and restart
+        the sustain clock), not raise -- an unhandled ValueError here would abort
+        evaluation for every rule in the batch, not just this one. Regression test
+        mirroring the composite-path fail-open fix, applied to the standard
+        per-condition sustain path."""
+        condition = PriceCondition(kind='price', operator='>', value=100, sustain_minutes=5)
+        rule = make_rule(conditions=[condition])
+        rule.condition_state['0'] = 'not-a-valid-timestamp'
+        candle = make_candle(c=103)
+        now = datetime(2024, 1, 2, 9, 30)
+        results = evaluate_rules([rule], candle, [candle], {}, [], now)
+        assert len(results) == 0
+        # Clock was restarted rather than left corrupted or raising.
+        assert rule.condition_state['0'] == now.isoformat()
+
+    def test_negative_sustain_minutes_treated_as_zero(self):
+        """A negative sustain_minutes (e.g. from a raw API call bypassing the
+        frontend's clamp) must behave like instant-fire (0), not like a
+        near-instant-but-still-delayed window."""
+        condition = PriceCondition(kind='price', operator='>', value=100, sustain_minutes=-5)
+        rule = make_rule(conditions=[condition])
+        candle = make_candle(c=103)
+        results = evaluate_rules([rule], candle, [candle], {}, [], datetime.now())
+        assert len(results) == 1

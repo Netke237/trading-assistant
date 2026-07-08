@@ -598,6 +598,8 @@ async def evaluate_and_notify_for_symbol(
                     continue
 
                 _sustain_min = _td.get("sustain_minutes")
+                if isinstance(_sustain_min, (int, float)) and _sustain_min < 0:
+                    _sustain_min = 0
                 try:
                     _composite_state = json.loads(_row.condition_state or '{}')
                     if _sustain_min:

@@ -291,3 +291,24 @@ async def test_zero_sustain_minutes_fires_instantly_as_before():
                     {"pullback_ema": lambda bars, **k: _signal()}):
         events = await evaluate_all()  # sustain_minutes defaults to 0
     assert len(events) == 1
+
+
+@pytest.mark.asyncio
+async def test_regular_watch_corrupted_pending_since_does_not_raise_or_fire():
+    """A corrupted pending_entry_since on a REGULAR (non-composite) watch must
+    restart the clock and suppress the fire, not raise -- an unhandled
+    ValueError here would abort evaluate_all() for every remaining watch in
+    the same tick, not just this one. Regression test mirroring the composite
+    path's existing fail-open fix, applied to the regular-watch idle-phase
+    sustain path."""
+    store = MagicMock()
+    store.list_watches.return_value = [_watch("idle", pending_entry_since="not-a-valid-timestamp")]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(100.0)), \
+         patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
+                    {"pullback_ema": lambda bars, **k: _signal()}):
+        events = await evaluate_all(sustain_minutes=5)
+    assert events == []
+    store.update_state.assert_called_once()
+    assert "pending_entry_since" in store.update_state.call_args[0][1]

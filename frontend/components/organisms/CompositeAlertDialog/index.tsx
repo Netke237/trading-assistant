@@ -234,7 +234,7 @@ export function CompositeAlertDialog({ symbol, direction, onClose }: Props) {
                 min={0}
                 max={1440}
                 value={sustainMinutes}
-                onChange={(e) => setSustainMinutes(Number(e.target.value))}
+                onChange={(e) => setSustainMinutes(Math.max(0, Math.min(1440, Number(e.target.value))))}
                 title="Optional: the composite condition must stay true for this many minutes before it fires."
               />
             </div>
