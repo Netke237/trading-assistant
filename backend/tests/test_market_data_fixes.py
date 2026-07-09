@@ -158,6 +158,35 @@ def test_1W_interval_alias_calls_yf_with_1wk():
     assert len(result) > 0
 
 
+@pytest.mark.asyncio
+async def test_get_intraday_widens_daily_weekly_at_production_default():
+    """The chart's real entry points (WS stream + /chart/history) pass days=55.
+    get_intraday must widen daily/weekly to a multi-year window *at the caching
+    layer* — so the cache key reflects the real window — while leaving intraday
+    (and non-chart callers of fetch_intraday_candles) untouched at 55."""
+    from app.data import chart_cache
+
+    captured: list[tuple[str, int]] = []
+
+    def _fake_fetch(symbol, interval, days):
+        captured.append((interval, days))
+        return [_bar(1_700_000_000)]
+
+    chart_cache._INTRADAY_CACHE.clear()
+    with patch("app.data.chart_cache.fetch_intraday_candles", side_effect=_fake_fetch):
+        await chart_cache.get_intraday("SPY", "1D", days=55)
+        await chart_cache.get_intraday("SPY", "1W", days=55)
+        await chart_cache.get_intraday("SPY", "15min", days=55)
+
+    # daily/weekly widened; intraday left alone
+    assert ("daily", chart_cache._CHART_DAILY_DAYS) in captured, captured
+    assert ("weekly", chart_cache._CHART_WEEKLY_DAYS) in captured, captured
+    assert ("15min", 55) in captured, captured
+    # the cache key must reflect the widened window, not the caller's 55
+    assert f"SPY:daily:{chart_cache._CHART_DAILY_DAYS}" in chart_cache._INTRADAY_CACHE
+    assert "SPY:daily:55" not in chart_cache._INTRADAY_CACHE
+
+
 def test_ibkr_used_for_1D_interval():
     """IBKR must be attempted for interval='1D' too, not just 'daily' — same fix as above."""
     from app.data.market import fetch_intraday_candles
