@@ -1430,6 +1430,10 @@ def test_get_contracts_applies_hold_day_dte_window(monkeypatch):
             [far_contract] if dte_bounds == (330, 400) else [near_contract, far_contract]
         ),
     )
+    # get_contracts() also calls fetch_price() unconditionally (contracts.py:46), which
+    # otherwise makes a real Tradier/yfinance network call in a test run — the same reason
+    # backend/tests/conftest.py's `client` fixture patches both together (conftest.py:243-246).
+    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
     client = TestClient(app)
     resp = client.get("/api/contracts", params={
         "symbol": "AAPL", "right": "C", "hold_min_days": 165, "hold_max_days": 200,
@@ -1447,6 +1451,7 @@ def test_get_contracts_without_hold_days_keeps_legacy_behaviour(monkeypatch):
         calls.append(dte_bounds)
         return []
     monkeypatch.setattr("app.routers.contracts.fetch_option_chain", _fake_fetch)
+    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
     client = TestClient(app)
     client.get("/api/contracts", params={"symbol": "AAPL", "right": "C"})
     assert calls == [None]
@@ -1688,8 +1693,7 @@ Expected: no output. The backend now owns the window.
 - [ ] **Step 6: Run the tests**
 
 Run: `cd frontend && npm run test -- --testPathPattern=RunScanButton`
-Expected: PASS. If `regimeGate.test.tsx` (which sets `context: { direction, horizon: 'Swing (5–15d)' }` per the existing fixture) fails to typecheck because it's missing the new required `ScanContext` fields, update that fixture to the full structured shape:
-`{ universe: 'SP500', direction, horizon: 'Swing (5–15d)', horizonPreset: 'Swing', holdMin: 5, holdMax: 15 }`.
+Expected: PASS, including `regimeGate.test.tsx` unmodified. That file has two bare `context: { direction, horizon: 'Swing (5–15d)' }` fixtures (lines 19 and 69), but both are wrapped in `useScanStore.setState({ ... } as any)` (lines 26 and 76), so neither trips `npm run typecheck` despite lacking the new required fields. At runtime they're also safe: Step 3's `??` fallbacks (`context?.holdMin ?? presetByKey('Swing').holdMin`, etc.) supply `Swing`'s defaults when `horizonPreset`/`holdMin`/`holdMax` are absent, and this test file never asserts on `postScan`'s horizon/hold arguments — it only checks the regime-confirmation dialog. No fixture changes needed here.
 
 - [ ] **Step 7: Commit**
 
