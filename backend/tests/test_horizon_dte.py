@@ -53,3 +53,67 @@ def test_preferred_dte_override_does_not_affect_hard_reject_alone():
     contract = _make_contract(days=10)  # below default hard min_dte=21
     card = validate_contract(contract, 70, overrides={"preferred_dte_min": 5, "preferred_dte_max": 15})
     assert "dte_too_short" in card.reject_reasons
+
+
+import pytest
+from pydantic import ValidationError
+
+from app.schemas import DteWindow, ScanRequest, ScanResult
+
+
+def test_scan_request_accepts_hold_days():
+    req = ScanRequest.model_validate({
+        "universe": ["AAPL"],
+        "direction": "Bullish",
+        "horizon": "Position",
+        "hold_min_days": 15,
+        "hold_max_days": 45,
+    })
+    assert req.hold_min_days == 15
+    assert req.hold_max_days == 45
+
+
+def test_scan_request_hold_days_default_none():
+    req = ScanRequest.model_validate({
+        "universe": ["AAPL"],
+        "direction": "Bullish",
+        "horizon": "Position",
+    })
+    assert req.hold_min_days is None
+    assert req.hold_max_days is None
+
+
+def test_scan_request_rejects_inverted_hold_range():
+    """D9: an inverted range must be a clean validation error, not a 500 later
+    when dte_window() raises."""
+    with pytest.raises(ValidationError):
+        ScanRequest.model_validate({
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Position",
+            "hold_min_days": 100, "hold_max_days": 15,
+        })
+
+
+def test_scan_request_rejects_negative_hold_days():
+    with pytest.raises(ValidationError):
+        ScanRequest.model_validate({
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Position",
+            "hold_min_days": -5, "hold_max_days": 15,
+        })
+
+
+def test_scan_result_carries_dte_window():
+    result = ScanResult(
+        scan_id="REC-1",
+        timestamp="2026-07-10T00:00:00Z",
+        candidates=[],
+        rejected=[],
+        dte_window=DteWindow(min_dte=30, max_dte=90, multiplier=2.0),
+    )
+    assert result.dte_window.min_dte == 30
+    assert result.dte_window.max_dte == 90
+    assert result.dte_window.multiplier == 2.0
+
+
+def test_scan_result_dte_window_defaults_none():
+    result = ScanResult(scan_id="REC-1", timestamp="t", candidates=[], rejected=[])
+    assert result.dte_window is None
