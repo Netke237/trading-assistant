@@ -174,3 +174,47 @@ Swing and Intraday genuinely change. Existing Swing scans will surface shorter-d
 - Per-horizon parameter sets for the three new presets (D1 defers this).
 - Tuning the multiplier per preset. `k` is one global constant.
 - Any change to stock-mode (`screenerMode === 'stocks'`) — DTE is options-only.
+
+## Addendum — findings from adversarial review (2026-07-10)
+
+A BMAD adversarial audit of the first plan draft surfaced defects severe enough to change the architecture. Recorded here rather than silently folded into the plan, per the project's documentation norms.
+
+### D6 — `ScanContext.horizon` is kept, not removed
+
+The first plan draft deleted the string `horizon` field from `ScanContext` in favour of the structured `{ horizonPreset, holdMin, holdMax }`. Audit found **19 read sites** across TopBar, dashboard, settings, ScanLog, and — critically — stock-mode files (`lib/stockScan.ts`, `step-5-strategy/page.tsx`, `step-4-prebreakout/page.tsx`) that the "options-only, stock-mode untouched" scope explicitly promised not to touch.
+
+Worse: Step 1–3 are shared between the Options and Stocks screener paths (see CLAUDE.md). If a user picks a new preset (Quarterly/Semi-annual/Annual) while in Stocks mode, `stockScan.ts` sends it as a raw `Horizon` value to a backend endpoint whose schema only accepts `'Intraday' | 'Swing' | 'Position'` — a guaranteed 422.
+
+**Fix:** `ScanContext` keeps `horizon: string`, now *derived* rather than hand-typed:
+
+```
+horizon = `${scoringHorizon} (${holdMin}–${holdMax}d)`
+```
+
+`scoringHorizon` is always one of the three words every existing consumer already knows how to parse (`'Intraday' | 'Swing' | 'Position'`) — for the four Position-scored presets (Position/Quarterly/Semi-annual/Annual) this word is always `"Position"`. This is a deliberate, accepted trade-off: a handful of purely cosmetic breadcrumb strings (TopBar, dashboard summary, `ScanLog` header) will read "Position (90–105d)" rather than "Semi-annual (90–105d)" when a new preset is active. The structured fields drive Step 3's own UI, where the real preset name is shown. No stock-mode file changes.
+
+### D7 — the soft-rank preferred-DTE band must move with the hard band
+
+`contract_validator.py`'s `_score_dte()` reads a **separate**, still-fixed `soft_rank.preferred_dte_min/max` (21–60) that D3/D4's hard `min_dte`/`max_dte` override does not touch. Any contract outside 21–60 scores a flat 25 and gets a `dte_outside_preferred` soft flag. With `max_soft_fail_count: 3`, three soft flags becomes a hard reject.
+
+Left unfixed, every Intraday (1–4 DTE) and every long-dated (90–400 DTE) contract — i.e. the entire feature this plan exists to ship — would be systematically penalised and risk rejection via soft-fail accumulation, while only Position (30–90) would score cleanly by coincidence.
+
+**Fix:** `validate_contract()` gains `preferred_dte_min`/`preferred_dte_max` override keys, alongside the existing `min_dte`/`max_dte`. The caller sets both pairs to the same `(min_dte, max_dte)` derived from the holding window — the soft "sweet spot" becomes the same window as the hard gate, centred scoring intact.
+
+### D8 — the option-chain fetch layer must also respect the window (this is the real root cause)
+
+This is the most consequential finding. `backend/app/data/market.py` — both `fetch_option_chain()` (sync) and `fetch_option_chain_async()` (async, the one `scan.py` actually calls) — does not fetch a *range* of expiries at all. It fetches the list of available expiration dates from Tradier, then picks exactly **one**: the first date that is `>= 21 days` out, hardcoded. Every scan, for every horizon, today, fetches that single nearest-to-21-days expiration and nothing else.
+
+This is the precise mechanism behind the reported bug: 31.07.2026 is simply the nearest available expiration ≥ 21 days from 2026-07-09, not a coincidence of the `21–90` config band. It also means the `min_dte`/`max_dte` override on `validate_contract()` (D3/D4's original fix) is necessary but **not sufficient** — it can only filter contracts within whatever single expiration was already fetched. For any preset whose window doesn't happen to contain "nearest ≥21 days" (Intraday, Quarterly, Semi-annual, Annual — four of the seven presets), the fetch layer hands `validate_contract()` a chain that is *guaranteed* to fail the DTE gate, and the scan returns zero candidates for every symbol.
+
+**Fix:** thread the derived `(min_dte, max_dte)` window into `fetch_option_chain_async()` (and `fetch_option_chain()` for parity) as an optional `dte_bounds` parameter. When present, select the expiration from the available dates closest to the *centre* of the window, filtered to dates that actually fall within it; fall back to `None` (empty chain) if nothing qualifies. When absent (existing callers that predate this feature), behaviour is unchanged — the old `>= 21 days` default is preserved. `_build_spreads()` (bearish spread construction, `scan.py:182-220`), which independently calls `fetch_option_chain_async()` for puts/calls, must receive the same `dte_bounds` so its re-fetched chain lands on the same expiration as the primary contract.
+
+### D9 — hold-day input must be validated, not left to crash
+
+`dte_window()` raises `ValueError` on `hold_max < hold_min` or negative input. Nothing upstream prevented an invalid pair from reaching it: the frontend's `handleMinChange` (Step 3 Custom range) did not clamp against the current max, so typing a min above the max produced an inverted pair, and `ScanRequest` had no ordering constraint — the result would have been an unhandled 500.
+
+**Fix:** `ScanRequest` gets a Pydantic v2 `model_validator` enforcing `0 <= hold_min_days <= hold_max_days` when both are present, returning a clean validation error instead of a 500. `handleMinChange` on the frontend clamps its value to never exceed the current max (mirroring the existing `handleMaxChange` clamp against the min).
+
+### Correction to "override isolation" framing
+
+The original spec (and the first plan draft) claimed `min_dte`/`max_dte` overrides "must not leak into `score_stock()`" as a correctness requirement. This was checked against `stock_scorer.py`'s override handling: it is a strict allow-list `elif` chain with no `min_dte`/`max_dte` branch, so those keys are already silently ignored there today and always have been. Keeping the derived DTE keys in a separate `contract_overrides` dict (not merged into the shared `overrides` used by `score_stock()`) remains good practice for clarity, but it is defensive hygiene, not a bug fix — no observable defect results either way.
