@@ -94,18 +94,29 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
 
 async function postPosition(p: PortfolioPosition, portfolioValue = 100_000): Promise<void> {
   try {
-    await fetch(`${_BASE_URL()}/api/portfolio`, {
+    const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(toBackendPayload(p, portfolioValue)),
     });
-    // 409 = already exists → fine. Other errors silently ignored (backend may be offline).
+    // 409 is expected here: Step 7's order paths persistPosition() first, so this
+    // fire-and-forget POST re-sends a contract the backend already has. Any other
+    // refusal (422 risk check) leaves the local store ahead of the backend until
+    // the next syncFromBackend reverts it — say so.
+    if (!res.ok && res.status !== 409) {
+      // eslint-disable-next-line no-console
+      console.warn('[portfolioStore] backend rejected position', p.contract, `HTTP ${res.status}`);
+    }
   } catch { /* network unavailable */ }
 }
 
 /** POST to the backend and return whether it was accepted.
  *  Used by the single-order buttons in Step 7 so rejections (risk check, duplicate
- *  symbol) surface to the user instead of being silently dropped. */
+ *  contract) surface to the user instead of being silently dropped.
+ *
+ *  A 409 is *not* success: the backend keeps one open position per contract and
+ *  has no scale-in path, so it recorded nothing. Reporting it as ok would let the
+ *  caller add quantity that only ever existed in local state. */
 export async function persistPosition(
   p: PortfolioPosition,
   portfolioValue = 100_000,
@@ -116,7 +127,7 @@ export async function persistPosition(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(toBackendPayload(p, portfolioValue)),
     });
-    if (res.ok || res.status === 409) return { ok: true };
+    if (res.ok) return { ok: true };
     const body = await res.json().catch(() => ({}));
     return { ok: false, detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
   } catch {
@@ -134,17 +145,20 @@ function generateRecId(): string {
   return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
 }
 
+/* The backend enforces one open position per contract (409 on a second POST),
+ * so `contract` — not `recId` — is a position's identity. Dedupe on it, keeping
+ * the earliest record, which is the one the backend accepted. */
 function dedupePositions(positions: PortfolioPosition[]): PortfolioPosition[] {
   const map = new Map<string, PortfolioPosition>();
   for (const p of positions) {
-    const existing = map.get(p.recId);
+    const existing = map.get(p.contract);
     if (!existing) {
-      map.set(p.recId, p);
+      map.set(p.contract, p);
     } else {
       const existingTime = existing.orderedAt ?? existing.entryDate ?? '';
       const incomingTime = p.orderedAt ?? p.entryDate ?? '';
-      if (incomingTime >= existingTime) {
-        map.set(p.recId, p);
+      if (incomingTime < existingTime) {
+        map.set(p.contract, p);
       }
     }
   }
@@ -197,10 +211,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           }
 
           const idxByKey = s.positions.findIndex(
-            (x) =>
-              x.symbol === incoming.symbol &&
-              x.contract === incoming.contract &&
-              x.entryDate === incoming.entryDate
+            (x) => x.symbol === incoming.symbol && x.contract === incoming.contract
           );
           if (idxByKey >= 0) {
             // eslint-disable-next-line no-console
@@ -209,6 +220,10 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
               incoming.symbol,
               incoming.contract
             );
+            // Only the count merges. entryPrice/entryDate stay at the original
+            // fill because the backend refuses the second POST (409) and keeps
+            // the first — averaging them here would diverge from the authoritative
+            // cost basis that syncFromBackend pulls back.
             const next = [...s.positions];
             const existing = next[idxByKey]!;
             next[idxByKey] = {
@@ -278,12 +293,18 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           const remote: BackendPosition[] = await res.json();
           const remotePositions = remote.map(fromBackend);
           const remoteRecIds = new Set(remotePositions.map((p) => p.recId).filter(Boolean));
+          const remoteContracts = new Set(remotePositions.map((p) => p.contract));
           // Keep any locally-held positions that haven't landed in the backend yet
-          // (e.g. postPosition failed silently or is still in-flight).
+          // (e.g. postPosition failed silently or is still in-flight). A local
+          // position whose contract is already open remotely under a different
+          // recId was rejected by the backend's 409 — drop it rather than render
+          // a phantom clone of the remote row.
           const localOnly = usePortfolioStore.getState().positions.filter(
-            (p) => p.recId && !remoteRecIds.has(p.recId)
+            (p) => p.recId && !remoteRecIds.has(p.recId) && !remoteContracts.has(p.contract)
           );
-          set({ positions: [...remotePositions, ...localOnly] });
+          // dedupePositions is a backstop: two local rows can share a contract if
+          // both were refused by the backend and neither reached remoteContracts.
+          set({ positions: dedupePositions([...remotePositions, ...localOnly]) });
         } catch {
           // network unavailable — keep localStorage state
         }

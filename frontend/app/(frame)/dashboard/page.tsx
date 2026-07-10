@@ -248,7 +248,7 @@ export default function DashboardPage() {
           <div className={styles.divider} />
           <div className={styles.positions}>
             {portfolio.slice(0, 3).map((p) => (
-              <div key={p.contract} className={styles.posRow}>
+              <div key={p.recId} className={styles.posRow}>
                 <Data size={12} weight={500}>{p.symbol}</Data>
                 <Text size={11} tone="secondary">{p.contract}</Text>
                 <Data size={12} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
@@ -318,7 +318,7 @@ export default function DashboardPage() {
         >
           <div className={styles.contractsList}>
             {portfolio.map((p) => (
-              <div key={p.contract} className={styles.contractRow}>
+              <div key={p.recId} className={styles.contractRow}>
                 <div className={styles.contractCell}>
                   <Data size={12} weight={500}>{p.symbol}</Data>
                   <Text size={10} tone="dim">{p.dteRemaining}d · Δ{p.delta?.toFixed(2) ?? '—'}</Text>

@@ -264,7 +264,7 @@ export default function PortfolioPage() {
 
           <div className={styles.tableBody}>
             {positions.map((p) => (
-              <div key={p.contract} className={styles.rowWrap}>
+              <div key={p.recId} className={styles.rowWrap}>
                 <TableRow status={p.status} columns={COLUMNS}>
                   <Data size={13} weight={500}>{p.symbol}</Data>
                   <span className={styles.contractCell}>
