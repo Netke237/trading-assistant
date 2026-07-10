@@ -439,10 +439,26 @@ def fetch_price(symbol: str) -> Optional[float]:
         return None
 
 
+def _nearest_expiration_in_window(
+    dates: list[str], bounds: tuple[int, int], today: date,
+) -> Optional[str]:
+    """Return the expiration date closest to the centre of [min_dte, max_dte].
+
+    Returns None if no available expiration falls inside the window.
+    """
+    lo, hi = bounds
+    centre = (lo + hi) / 2
+    in_window = [d for d in dates if lo <= (date.fromisoformat(d) - today).days <= hi]
+    if not in_window:
+        return None
+    return min(in_window, key=lambda d: abs((date.fromisoformat(d) - today).days - centre))
+
+
 def fetch_option_chain(
     symbol: str,
     expiry: Optional[str] = None,
     option_type: Literal["C", "P"] = "C",
+    dte_bounds: Optional[tuple[int, int]] = None,
 ) -> list[dict]:
     try:
         exp_resp = httpx.get(
@@ -464,6 +480,10 @@ def fetch_option_chain(
         _today = date.today()
         if expiry and expiry in dates:
             target_exp = expiry
+        elif dte_bounds is not None:
+            target_exp = _nearest_expiration_in_window(dates, dte_bounds, _today)
+            if target_exp is None:
+                return []
         else:
             target_exp = next(
                 (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
@@ -1072,6 +1092,7 @@ async def fetch_option_chain_async(
     symbol: str,
     expiry: Optional[str] = None,
     option_type: Literal["C", "P"] = "C",
+    dte_bounds: Optional[tuple[int, int]] = None,
 ) -> list[dict]:
     """Async variant."""
     try:
@@ -1093,6 +1114,10 @@ async def fetch_option_chain_async(
         _today = date.today()
         if expiry and expiry in dates:
             target_exp = expiry
+        elif dte_bounds is not None:
+            target_exp = _nearest_expiration_in_window(dates, dte_bounds, _today)
+            if target_exp is None:
+                return []
         else:
             target_exp = next(
                 (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
