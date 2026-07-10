@@ -45,6 +45,11 @@ def _load_config() -> dict:
         return yaml.safe_load(f)
 
 
+def dte_holding_multiplier() -> float:
+    """DTE-to-holding-period ratio from contract_rules.yaml."""
+    return float(_load_config().get("dte_holding_multiplier", 2.0))
+
+
 def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     """Return list of hard-reject reason strings. Empty = no hard reject."""
     hr = cfg["hard_reject"]

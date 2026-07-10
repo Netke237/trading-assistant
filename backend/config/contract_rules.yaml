@@ -4,6 +4,10 @@ score_thresholds:
   pass: 65
   caution: 45
 
+# DTE is derived from the selected holding horizon: dte = holding_days * multiplier.
+# Never hold an option to expiry — this buffer leaves time value at exit.
+dte_holding_multiplier: 2.0
+
 # Hard-reject rules (FR-24) — any one triggers REJECT, score = 0
 hard_reject:
   min_volume: 50                # contracts per day — below this = illiquid
