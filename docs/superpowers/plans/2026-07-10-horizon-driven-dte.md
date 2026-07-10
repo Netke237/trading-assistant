@@ -10,7 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-10-horizon-driven-dte-design.md` (see the "Addendum — findings from adversarial review" section for the D6–D9 decisions this plan implements)
 
-**Revision note:** This plan was rewritten after a BMAD adversarial audit of the first draft found it would not work. The audit's most important finding: `backend/app/data/market.py`'s option-chain fetch does not fetch a range of expiries — it always picks the single nearest expiration ≥21 days, hardcoded, regardless of any override passed to `validate_contract()`. Filtering candidates after the fact (the first draft's entire approach) cannot fix this; the fetch itself must be corrected. That is now Task 4, and it is the load-bearing task in this plan.
+**Revision note:** This plan has been through two rounds of BMAD adversarial audit.
+
+Round 1 found the first draft would not work at all: `backend/app/data/market.py`'s option-chain fetch does not fetch a range of expiries — it always picks the single nearest expiration ≥21 days, hardcoded, regardless of any override passed to `validate_contract()`. Filtering candidates after the fact (the first draft's entire approach) cannot fix this; the fetch itself must be corrected. That is Task 4, and it is the load-bearing task in this plan.
+
+Round 2, run against the round-1 rewrite, found the same class of bug recurring one screen downstream: `backend/app/routers/contracts.py`'s `/api/contracts` endpoint — the actual data source for the Step 6 contracts table where the user picks a contract — is a second, independent caller of the chain-fetch function that Task 4/6 never touched. Fixing `scan.py` alone makes the Step 4/5 candidate list DTE-correct but leaves Step 6 showing the old ~21–90-day contracts regardless of the selected horizon. That gap is now Task 10. Round 2 also caught a bug in the persist-migration logic that silently reintroduced the exact stock-mode-breaking defect D6 exists to prevent, self-concealed by a test that asserted the buggy output as correct — both are fixed in Task 9 below.
 
 ---
 
@@ -28,6 +32,7 @@
 | `backend/app/data/market.py` | Adds a shared `_nearest_expiration_in_window()` helper; adds `dte_bounds` to `fetch_option_chain()` and `fetch_option_chain_async()` (D8). |
 | `backend/app/schemas/__init__.py` | `DteWindow` model; `ScanRequest` hold days + ordering validator (D9); `ScanResult.dte_window`. |
 | `backend/app/routers/scan.py` | Computes the window once; threads it through the chain fetch, `_build_spreads()`, and `validate_contract()`; attaches it to the result. |
+| `backend/app/routers/contracts.py` | `get_contracts()` — the Step 6 table's data source — computes and applies the same window independently (D8's fetch fix reaches this second caller too). |
 
 **Frontend**
 
@@ -36,10 +41,11 @@
 | `frontend/lib/horizonPresets.ts` | **New.** Single source of truth for the 7 presets + legacy migration + display-only DTE preview. |
 | `frontend/lib/__tests__/horizonPresets.test.ts` | **New.** Preset table + migration tests. |
 | `frontend/types/domain.ts` | `DteWindow` type (shared, imported by `scanStore.ts`). |
-| `frontend/lib/api.ts` | `postScan` accepts hold days; return type includes `dte_window`. |
+| `frontend/lib/api.ts` | `postScan` and `getContracts` accept hold days; `postScan` return type includes `dte_window`. |
 | `frontend/lib/scanStore.ts` | `ScanContext` gains structured fields alongside the existing `horizon` string (D6 — `horizon` is kept, derived, not removed); `ScanResult` gains `dte_window`; persist v9 → v10 migration. |
 | `frontend/components/organisms/RunScanButton/index.tsx` | Sends hold days; deletes the regex string parsing that caused the original bug. |
 | `frontend/app/(frame)/screener/step-3-direction/page.tsx` | 7 preset buttons; read-only DTE rows; log renders returned window; min-range input clamp (D9). |
+| `frontend/app/(frame)/screener/step-6-contracts/page.tsx` | `loadContracts()` sends hold days to `getContracts()` — closes the gap D8 left in the round-1 rewrite. |
 
 `horizonPresets.ts` exists so `page.tsx` and `RunScanButton` share one preset table instead of duplicating it — that duplication is what let the UI and the request diverge in the original bug.
 
@@ -657,7 +663,7 @@ Inside `class ScanRequest` (starts line 442), add after the `max_cap_usd` line (
     hold_max_days: Optional[int] = None
 ```
 
-At the end of the `ScanRequest` class body (after its last field, before the blank line that precedes `class OptionsPipeline`), add:
+At the end of the `ScanRequest` class body — after its last field, immediately before `class RejectedCandidate` (the next class declared in the file) — add:
 
 ```python
 
@@ -756,7 +762,7 @@ def test_annual_hold_accepts_a_365_dte_contract_and_scores_it_cleanly():
     assert "dte_outside_preferred" not in card.soft_flags
 ```
 
-This test exercises exactly the combined override dict `scan.py` will build in Step 3 below — it is a unit-level stand-in for the full `run_scan` integration, which requires live Tradier data and is exercised manually in Task 12.
+This test exercises exactly the combined override dict `scan.py` will build in Step 3 below — it is a unit-level stand-in for the full `run_scan` integration, which requires live Tradier data and is exercised manually in Task 13.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1190,12 +1196,12 @@ Find the function's return type (the generic argument to whatever `post<...>()` 
 - [ ] **Step 3: Locate every existing `postScan` call and mock**
 
 Run: `cd frontend && grep -rln "postScan" --include=*.ts --include=*.tsx .`
-Expected output includes at minimum: `lib/api.ts`, `components/organisms/RunScanButton/index.tsx`, and the test files under `components/organisms/RunScanButton/__tests__/`. There is no `frontend/__mocks__/api.ts` — `postScan` is mocked inline via `jest.mock('@/lib/api', …)` inside the test files themselves; update the mock signatures there (Task 10 updates the call site; this step is just reconnaissance so Task 10 doesn't get surprised).
+Expected output includes at minimum: `lib/api.ts`, `components/organisms/RunScanButton/index.tsx`, and the test files under `components/organisms/RunScanButton/__tests__/`. There is no `frontend/__mocks__/api.ts` — `postScan` is mocked inline via `jest.mock('@/lib/api', …)` inside the test files themselves; update the mock signatures there (Task 11 updates the call site; this step is just reconnaissance so Task 11 doesn't get surprised).
 
 - [ ] **Step 4: Typecheck**
 
 Run: `cd frontend && npm run typecheck`
-Expected: errors ONLY at the `api.postScan(...)` call site in `RunScanButton/index.tsx` (fixed in Task 10).
+Expected: errors ONLY at the `api.postScan(...)` call site in `RunScanButton/index.tsx` (fixed in Task 11).
 
 - [ ] **Step 5: Commit**
 
@@ -1210,6 +1216,7 @@ git commit -m "feat(api): postScan sends hold days; DteWindow type"
 
 **Files:**
 - Modify: `frontend/lib/scanStore.ts:12-16` (interface), `:34-41` (`ScanResult`), `:194-206` (migrate)
+- Modify: `frontend/lib/__tests__/scanStore.test.ts:46,55` — two existing `setContext(...)` calls construct a bare `ScanContext` literal with no `as any` (unlike `regimeGate.test.tsx` and `stockScan.test.ts`, which already cast). Once `horizonPreset`/`holdMin`/`holdMax` become required fields, these two calls fail `npm run typecheck` with "missing properties." This is a genuine write site the D6 audit's read-site survey didn't cover.
 
 - [ ] **Step 1: Extend `ScanContext` — add fields, keep `horizon`**
 
@@ -1272,21 +1279,29 @@ Add this branch after the `if (version < 9)` line (line 206):
           s = {
             ...s,
             context: ctx
-              ? {
-                  universe:  ctx.universe  ?? 'SP500',
-                  direction: ctx.direction ?? 'Bullish',
-                  horizon:   ctx.horizon   ?? 'Swing (5–15d)',
-                  ...migrateLegacyHorizon(ctx.horizon),
-                }
+              ? (() => {
+                  const legacy = migrateLegacyHorizon(ctx.horizon);
+                  const scoringHz = legacy.horizonPreset === 'Custom'
+                    ? scoringHorizonForHold(legacy.holdMax)
+                    : presetByKey(legacy.horizonPreset).scoringHorizon;
+                  return {
+                    universe:  ctx.universe  ?? 'SP500',
+                    direction: ctx.direction ?? 'Bullish',
+                    ...legacy,
+                    horizon: horizonDisplayString(scoringHz, legacy.holdMin, legacy.holdMax),
+                  };
+                })()
               : null,
           };
         }
 ```
 
+**Why not `horizon: ctx.horizon ?? '...', ...migrateLegacyHorizon(ctx.horizon)`:** `migrateLegacyHorizon()` returns only `{ horizonPreset, holdMin, holdMax }` — it has no `horizon` key, so a naive spread after a literal `horizon:` line never overwrites it, and the stale pre-migration string (e.g. `"Custom (60–185d)"`) survives untouched. That string does not start with `Intraday`/`Swing`/`Position`, which is the one invariant D6's entire fix depends on — `lib/stockScan.ts:74`'s `.split(' ')[0]` would send the literal word `"Custom"` to a backend schema that rejects it, reproducing the exact stock-mode 422 D6 exists to prevent, but only for users migrating from a persisted Custom selection. The `horizon` field must be *recomputed* from the migrated structured fields, not preserved from the old blob.
+
 Add the import at the top of the file:
 
 ```ts
-import { migrateLegacyHorizon } from './horizonPresets';
+import { migrateLegacyHorizon, scoringHorizonForHold, presetByKey, horizonDisplayString } from './horizonPresets';
 ```
 
 - [ ] **Step 4: Write a test that exercises the real `migrate` callback**
@@ -1303,7 +1318,7 @@ const migrate = (useScanStore as unknown as {
 }).persist.getOptions().migrate;
 
 describe('scanStore persisted migrate(): v9 -> v10', () => {
-  it('preserves the typed custom range that v9 discarded', () => {
+  it('preserves the typed custom range that v9 discarded, and recomputes horizon', () => {
     const v9State = {
       context: { universe: 'SP500', direction: 'Bullish', horizon: 'Custom (60–185d)' },
     };
@@ -1311,7 +1326,10 @@ describe('scanStore persisted migrate(): v9 -> v10', () => {
     expect(migrated.context).toEqual({
       universe: 'SP500',
       direction: 'Bullish',
-      horizon: 'Custom (60–185d)',
+      // NOT the stale 'Custom (60–185d)' — recomputed from the migrated fields via
+      // scoringHorizonForHold(185) === 'Position'. A stale 'Custom (...)' string
+      // would break lib/stockScan.ts's `.split(' ')[0]` (see Task 9 Step 3 note).
+      horizon: 'Position (60–185d)',
       horizonPreset: 'Custom',
       holdMin: 60,
       holdMax: 185,
@@ -1338,21 +1356,227 @@ If `useScanStore.persist.getOptions()` is not the correct accessor for this proj
 Run: `cd frontend && npm run test -- --testPathPattern=scanStoreHorizonMigration`
 Expected: PASS — 3 passed
 
-- [ ] **Step 6: Typecheck**
+- [ ] **Step 6: Fix the pre-existing `scanStore.test.ts` write sites**
+
+In `frontend/lib/__tests__/scanStore.test.ts`, the two `setContext(...)` calls (lines 46 and 55) construct a bare `ScanContext` literal missing the new required fields. Update both the call and its paired `toEqual` assertion:
+
+```ts
+result.current.setContext({
+  universe: 'SP500', direction: 'Bullish',
+  horizon: 'Swing (5–15d)', horizonPreset: 'Swing', holdMin: 5, holdMax: 15,
+});
+```
+
+and correspondingly for the second call (`NAS100` / `Bearish` / `'Position (30–90d)'` / `horizonPreset: 'Position'` / `holdMin: 15` / `holdMax: 45`). Update both `toEqual({...})` blocks that follow each call to match.
+
+- [ ] **Step 7: Typecheck**
 
 Run: `cd frontend && npm run typecheck`
-Expected: clean. Because `horizon` was kept (not removed), none of the ~19 external read sites should produce new errors. If any do appear, they are a signal that some other part of the store shape changed unexpectedly — investigate before proceeding, do not silently patch call sites.
+Expected: clean. Because `horizon` was kept (not removed), none of the ~19 external read sites should produce new errors. If any do appear beyond the two fixed in Step 6, they are a signal that some other part of the store shape changed unexpectedly — investigate before proceeding, do not silently patch call sites.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Run the full frontend suite**
+
+Run: `cd frontend && npm run test`
+Expected: PASS.
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add frontend/lib/scanStore.ts frontend/lib/__tests__/scanStoreHorizonMigration.test.ts
+git add frontend/lib/scanStore.ts frontend/lib/__tests__/scanStoreHorizonMigration.test.ts frontend/lib/__tests__/scanStore.test.ts
 git commit -m "feat(scanStore): structured horizon fields alongside derived horizon string, persist v10"
 ```
 
 ---
 
-## Task 10: `RunScanButton` sends hold days
+## Task 10: The Step 6 contracts endpoint respects the DTE window
+
+`backend/app/routers/contracts.py`'s `GET /api/contracts` (`get_contracts()`) is a second, independent caller of the option-chain fetch — separate from `scan.py`, which Tasks 4 and 6 already fixed. It backs the **Step 6 contracts table**, the screen where the user actually picks a contract (`frontend/app/(frame)/screener/step-6-contracts/page.tsx`'s `loadContracts()`, and `watchlist/page.tsx`). Without this task, Tasks 1–9 make the Step 4/5 candidate list DTE-correct while Step 6 keeps showing the old ~21–90-day contracts regardless of the selected horizon — the same class of bug Task 4 fixed in `scan.py`, recurring one screen downstream, in the screen that matters most.
+
+`get_contracts()` today: fetches with `fetch_option_chain(symbol.upper(), option_type=opt_type)` — no `dte_bounds` (line 43) — and scores with `validate_contract(augmented, stock_score, overrides=None)` — no DTE overrides at all (line 61). It has a pre-existing, unused `horizon: str = Query(default='swing')` parameter that is never read in the function body; it cannot be repurposed to infer intent and is left as-is (out of scope — removing dead code that predates this feature is not part of this plan).
+
+**Files:**
+- Modify: `backend/app/routers/contracts.py:30-43,61` (`get_contracts`)
+- Modify: `frontend/lib/api.ts:296-309` (`getContracts`)
+- Modify: `frontend/app/(frame)/screener/step-6-contracts/page.tsx:87-93` (`loadContracts`)
+- Test: `backend/tests/test_horizon_dte.py`
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `backend/tests/test_horizon_dte.py`:
+
+```python
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+
+def test_get_contracts_applies_hold_day_dte_window(monkeypatch):
+    """A hold of 165-200 days (Annual) must restrict returned contracts to 330-400 DTE."""
+    near_contract = {
+        "id": "AAPL|185|near|C", "symbol": "AAPL", "strike": 185,
+        "expiry": _expiry_str(40), "dte": 40, "dteTotal": 40,
+        "price": 2.0, "bid": 1.9, "ask": 2.1, "delta": 0.45, "theta": -0.05,
+        "volume": 500, "open_interest": 1000, "iv_rank": 30,
+    }
+    far_contract = {
+        **near_contract, "id": "AAPL|185|far|C",
+        "expiry": _expiry_str(365), "dte": 365, "dteTotal": 365,
+    }
+    monkeypatch.setattr(
+        "app.routers.contracts.fetch_option_chain",
+        lambda symbol, option_type="C", dte_bounds=None: (
+            [far_contract] if dte_bounds == (330, 400) else [near_contract, far_contract]
+        ),
+    )
+    client = TestClient(app)
+    resp = client.get("/api/contracts", params={
+        "symbol": "AAPL", "right": "C", "hold_min_days": 165, "hold_max_days": 200,
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["dte"] == 365
+
+
+def test_get_contracts_without_hold_days_keeps_legacy_behaviour(monkeypatch):
+    """No hold days -> dte_bounds=None -> unchanged from today's behaviour."""
+    calls = []
+    def _fake_fetch(symbol, option_type="C", dte_bounds=None):
+        calls.append(dte_bounds)
+        return []
+    monkeypatch.setattr("app.routers.contracts.fetch_option_chain", _fake_fetch)
+    client = TestClient(app)
+    client.get("/api/contracts", params={"symbol": "AAPL", "right": "C"})
+    assert calls == [None]
+```
+
+Add `from datetime import date, timedelta` and the `_expiry_str` helper to the top of the test file if not already present from Task 3/4 (it is — reuse it, do not redefine).
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && pytest tests/test_horizon_dte.py -k get_contracts -v`
+Expected: FAIL — `get_contracts` has no `hold_min_days`/`hold_max_days` query params, so the monkeypatched `fetch_option_chain` never receives a matching `dte_bounds`, and both contracts are returned.
+
+- [ ] **Step 3: Wire the window into `get_contracts`**
+
+In `backend/app/routers/contracts.py`, add the imports used by the new logic:
+
+```python
+from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
+from app.scoring.dte_window import dte_window
+```
+
+(`validate_contract` is already imported at line 11 — just add the two new names to that import, and add a new import line for `dte_window`.)
+
+Change the `get_contracts` signature (lines 31-39) to add two optional query params:
+
+```python
+@router.get('/contracts', response_model=list[OptionContract])
+async def get_contracts(
+    symbol: str = Query(default='AAPL'),
+    right: str = Query(default='C'),
+    stock_score: int = Query(default=70, ge=0, le=100),
+    direction: str = Query(default='Bullish'),
+    horizon: str = Query(default='swing'),
+    limit: int = Query(default=10, ge=1, le=100),
+    max_price: float = Query(default=50.0, ge=0.5, le=500.0),
+    hold_min_days: int | None = Query(default=None, ge=0),
+    hold_max_days: int | None = Query(default=None, ge=0),
+) -> list[OptionContract]:
+    opt_type = 'C' if right.upper() == 'C' else 'P'
+
+    dte_bounds: tuple[int, int] | None = None
+    contract_overrides: dict | None = None
+    if hold_min_days is not None and hold_max_days is not None and hold_max_days >= hold_min_days:
+        dte_bounds = dte_window(hold_min_days, hold_max_days, dte_holding_multiplier())
+        contract_overrides = {
+            "min_dte": dte_bounds[0], "max_dte": dte_bounds[1],
+            "preferred_dte_min": dte_bounds[0], "preferred_dte_max": dte_bounds[1],
+        }
+
+    # 1. Fetch raw option chain
+    raw_chain = fetch_option_chain(symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds) or []
+```
+
+`hold_max_days >= hold_min_days` is checked inline here (rather than via a Pydantic model, since these are individual `Query` params, not a request body model) so a malformed pair falls back to `dte_bounds=None` — the pre-existing default behaviour — instead of raising. This mirrors D9's intent (never crash on bad input) using the pattern appropriate for query-param endpoints.
+
+Change line 61 (unchanged variable name, now passing the computed overrides):
+
+```python
+        score_card = validate_contract(augmented, stock_score, overrides=contract_overrides)
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd backend && pytest tests/test_horizon_dte.py -k get_contracts -v`
+Expected: PASS — 2 passed
+
+- [ ] **Step 5: Extend `api.getContracts`**
+
+In `frontend/lib/api.ts`, change the `ctx` parameter type and query-string builder (lines 296-309):
+
+```ts
+  getContracts: (
+    symbol: string,
+    right: 'C' | 'P' = 'C',
+    ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number;
+            hold_min_days?: number; hold_max_days?: number },
+    signal?: AbortSignal,
+  ) => get<OptionContract[]>(
+    `/api/contracts?symbol=${encodeURIComponent(symbol)}&right=${right}` +
+    (ctx?.stock_score != null ? `&stock_score=${ctx.stock_score}` : '') +
+    (ctx?.direction ? `&direction=${encodeURIComponent(ctx.direction)}` : '') +
+    (ctx?.horizon ? `&horizon=${encodeURIComponent(ctx.horizon)}` : '') +
+    (ctx?.limit != null ? `&limit=${ctx.limit}` : '') +
+    (ctx?.max_price != null ? `&max_price=${ctx.max_price}` : '') +
+    (ctx?.hold_min_days != null ? `&hold_min_days=${ctx.hold_min_days}` : '') +
+    (ctx?.hold_max_days != null ? `&hold_max_days=${ctx.hold_max_days}` : ''),
+    signal,
+  ),
+```
+
+- [ ] **Step 6: Send hold days from `loadContracts`**
+
+In `frontend/app/(frame)/screener/step-6-contracts/page.tsx`, in `loadContracts` (lines 87-93), add the two new fields to the `getContracts` call:
+
+```ts
+        const results = await Promise.all(
+          candidates.map((c) => api.getContracts(c.symbol, right, {
+            stock_score:   stockScoreBySymbol[c.symbol] ?? 70,
+            direction:     context?.direction ?? 'Bullish',
+            horizon:       context?.horizon ?? 'swing',
+            limit:         maxContractsPerChain,
+            max_price:     maxContractPrice,
+            hold_min_days: context?.holdMin,
+            hold_max_days: context?.holdMax,
+          }, signal))
+        );
+```
+
+`context?.holdMin` / `context?.holdMax` exist as of Task 9. If `context` is `null` (no scan run yet), both are `undefined`, and `api.getContracts` omits the query params entirely — `get_contracts` then falls back to `dte_bounds=None`, its pre-existing behaviour. Also add `context?.holdMin` and `context?.holdMax` to the `useCallback` dependency array on the line following (currently `}, [rawCandidates, candidates, context, stockScoreBySymbol, maxContractsPerChain, maxContractPrice, pickedContracts]);`) — `context` is already in that array as a whole object, so no change is needed there, but confirm it after editing.
+
+- [ ] **Step 7: Verify `watchlist/page.tsx`'s use of `getContracts` is unaffected**
+
+Run: `cd frontend && grep -n "getContracts" app/\(frame\)/watchlist/page.tsx`
+Expected: a call that does not pass `hold_min_days`/`hold_max_days` — leave it as-is. Watchlist contracts are not tied to the active scan's horizon; this is an intentional scope boundary, not an oversight. `get_contracts` without hold days falls back to the pre-existing "nearest ≥21 days" behaviour, unchanged from today.
+
+- [ ] **Step 8: Run the backend and frontend suites**
+
+Run: `cd backend && pytest -q` and `cd frontend && npm run typecheck && npm run test`
+Expected: both clean.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add backend/app/routers/contracts.py frontend/lib/api.ts "frontend/app/(frame)/screener/step-6-contracts/page.tsx" backend/tests/test_horizon_dte.py
+git commit -m "fix(contracts): Step 6 contract table respects the holding-horizon DTE window"
+```
+
+---
+
+## Task 11: `RunScanButton` sends hold days
 
 This deletes the regex string-parsing that is the root cause of the original bug.
 
@@ -1362,18 +1586,38 @@ This deletes the regex string-parsing that is the root cause of the original bug
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `frontend/components/organisms/RunScanButton/__tests__/RunScanButton.test.tsx`, following the existing inline `jest.mock('@/lib/api', …)` pattern already used in that file for `api.postScan`:
+Append to `frontend/components/organisms/RunScanButton/__tests__/RunScanButton.test.tsx`, inside the existing `describe('RunScanButton — conflict suppression wiring', …)` block (or a new adjacent `describe`), reusing this file's existing `resetStores()` helper and the module-level `mockPostScan` (both already defined at the top of the file, lines 15-28):
 
 ```ts
-it('sends hold days and the scoring horizon, never min_dte/max_dte overrides', async () => {
-  // arrange: scanStore context = { universe: 'SP500', direction: 'Bullish',
-  //   horizon: 'Position (120–370d)', horizonPreset: 'Custom', holdMin: 60, holdMax: 185 }
-  // act: click Run Scan
-  const [, , horizon, hold, , overrides] = (api.postScan as jest.Mock).mock.calls[0];
-  expect(horizon).toBe('Position');                    // scoringHorizonForHold(185) === 'Position'
-  expect(hold).toEqual({ hold_min_days: 60, hold_max_days: 185 });
-  expect(overrides).not.toHaveProperty('min_dte');
-  expect(overrides).not.toHaveProperty('max_dte');
+describe('RunScanButton — hold days', () => {
+  beforeEach(() => {
+    resetStores();
+    jest.clearAllMocks();
+  });
+
+  it('sends hold days and the derived scoring horizon, never min_dte/max_dte overrides', async () => {
+    useScanStore.setState({
+      context: {
+        universe: 'SP500', direction: 'Bullish',
+        horizon: 'Position (120–370d)', horizonPreset: 'Custom', holdMin: 60, holdMax: 185,
+      },
+    } as any);
+    mockPostScan.mockResolvedValue({
+      scan_id: 'SCAN-1', timestamp: '2026-07-10T10:00:00', candidates: [], rejected: [],
+    });
+
+    render(<RunScanButton />);
+    const button = screen.getByRole('button', { name: /run scan/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    const [, , horizon, hold, , overrides] = mockPostScan.mock.calls[0];
+    expect(horizon).toBe('Position');   // scoringHorizonForHold(185) === 'Position'
+    expect(hold).toEqual({ hold_min_days: 60, hold_max_days: 185 });
+    expect(overrides).not.toHaveProperty('min_dte');
+    expect(overrides).not.toHaveProperty('max_dte');
+  });
 });
 ```
 
@@ -1456,7 +1700,7 @@ git commit -m "fix(screener): send hold days, drop display-string regex parsing"
 
 ---
 
-## Task 11: Step 3 page — 7 buttons, read-only DTE, real log, clamped range input
+## Task 12: Step 3 page — 7 buttons, read-only DTE, real log, clamped range input
 
 **Files:**
 - Modify: `frontend/app/(frame)/screener/step-3-direction/page.tsx`
@@ -1629,7 +1873,7 @@ and pass `horizonKey={weightsKey}` where `ScanLogSection` is rendered.
 
 - [ ] **Step 7: Render all 7 buttons**
 
-The existing `HORIZON_PRESETS.map((h) => …)` button-rendering block (lines 900-912) requires no structural change — it already maps over `HORIZON_PRESETS`, which now has 7 entries via Task 7's shared module. Verify visually in Task 12 that all 7 render and wrap sensibly at 1200px min-width.
+The existing `HORIZON_PRESETS.map((h) => …)` button-rendering block (lines 900-912) requires no structural change — it already maps over `HORIZON_PRESETS`, which now has 7 entries via Task 7's shared module. Verify visually in Task 13 that all 7 render and wrap sensibly at 1200px min-width.
 
 - [ ] **Step 8: Typecheck and test**
 
@@ -1645,7 +1889,7 @@ git commit -m "feat(screener): 7 holding-horizon presets, derived read-only DTE,
 
 ---
 
-## Task 12: End-to-end verification
+## Task 13: End-to-end verification
 
 - [ ] **Step 1: Backend suite**
 
@@ -1672,6 +1916,11 @@ Expected: log shows `120–370d`; every contract expires in that window. This is
 Select **Annual**. Run a scan on a liquid, widely-optioned symbol (e.g. SPY or AAPL) known to list LEAPS.
 Expected: log shows `330–400d`; at least some candidates are returned with contracts in that window. If zero candidates return for every symbol, check backend logs for `SCAN … dte_window: 330-400d` to confirm the window was computed, then check whether `_nearest_expiration_in_window` found no date in range — this would mean the tested symbol's chain genuinely has no LEAPS that far out; retry with a different symbol before treating it as a defect.
 
+- [ ] **Step 5b: Confirm Step 6's contract table matches — this is the Task 10 fix, check it separately**
+
+From the Annual scan in Step 5, proceed to **Step 6 (Contracts)**. Inspect the DTE column for the listed contracts.
+Expected: every contract's DTE falls in **330–400 days**, matching the scan log from Step 5. This is a distinct code path from Step 5's check (`/api/contracts` via `get_contracts()`, not `/api/scan` via `run_scan()`) — do not skip it on the assumption that Step 5 passing implies this passes too. Before Task 10, this step would show contracts around 21–90 days regardless of the Annual selection.
+
 - [ ] **Step 6: Confirm the read-only DTE fields**
 
 Open Execution Parameters → OPTIONS → Contract. `Min DTE` / `Max DTE` must be read-only (no input box) and show the numbers matching the scan log.
@@ -1684,10 +1933,15 @@ In Custom, attempt to type a minimum above the current maximum. The minimum inpu
 
 With a v9 store in `localStorage` (key prefix `bamendjou:`) containing a `Custom (60–185d)` context, reload the app. Step 3 must show **Custom** selected with **60** and **185** in the range inputs — not silently reset to Swing's 5–15.
 
-- [ ] **Step 9: Confirm stock-mode is unaffected**
+- [ ] **Step 8b: Confirm the migrated store also works in stock-mode — this is the exact scenario Task 9's migration bug hid**
 
-Switch to the Stocks tab (still on Step 3). Select **Position**, then **Custom** with a typed range. Proceed to Step 4 (stocks) and run a stock scan.
-Expected: no 422 or console error from `stockScan.ts` — this validates D6's fix (the derived `horizon` string always starts with a valid `Intraday`/`Swing`/`Position` word).
+Immediately after Step 8's reload (store still in its migrated state, `horizonPreset: 'Custom'`), switch to the **Stocks** tab without changing the horizon selection. Proceed to Step 4 (stocks) and run a stock scan.
+Expected: no 422 or console error from `stockScan.ts`. Do not perform this check with a freshly-selected Custom range instead of a migrated one — the migration path's `horizon` string is computed differently (Task 9 Step 3) from the live UI path (Task 12 Step 4's `syncToStore`), and only this exact sequence (migrated store → stock-mode scan) exercises the migration branch's own derivation.
+
+- [ ] **Step 9: Confirm stock-mode is unaffected on a fresh selection**
+
+Separately from Step 8b, on a clean store (or after clearing `localStorage`), select **Position**, then **Custom** with a typed range, directly in the UI. Proceed to Step 4 (stocks) and run a stock scan.
+Expected: no 422 or console error from `stockScan.ts` — this validates D6's fix on the live-selection path (the derived `horizon` string always starts with a valid `Intraday`/`Swing`/`Position` word).
 
 - [ ] **Step 10: Commit any fixes**
 
@@ -1700,10 +1954,12 @@ git commit -m "test: verify horizon-driven DTE end to end, including stock-mode 
 
 ## Self-Review Notes
 
-**Spec coverage.** D1 → Task 11 Step 2. D2 → Task 7 (7 presets) + Task 11 Step 7. D3 → Task 1 (`dte_window`). D4 → Task 1 `test_custom_range_is_doubled` + Task 10. D5 → Task 1 `test_intraday_clamps_zero_to_one`. D6 (kept `horizon` string) → Task 9 Step 1, Task 11 Step 4, Task 12 Step 9. D7 (soft-rank band) → Task 3. D8 (chain-fetch selection — the load-bearing fix) → Task 4, wired in Task 6. D9 (input validation) → Task 5 Step 4 (backend), Task 11 Step 5 (frontend), Task 12 Step 7. Backend-as-source-of-truth → Tasks 5, 6. Override isolation reframed as hygiene, not correctness → Task 6 intro. Log shows enforced window → Task 11 Step 6. Unwire DTE params → Task 11 Step 3.
+**Spec coverage.** D1 → Task 12 Step 2. D2 → Task 7 (7 presets) + Task 12 Step 7. D3 → Task 1 (`dte_window`). D4 → Task 1 `test_custom_range_is_doubled` + Task 11. D5 → Task 1 `test_intraday_clamps_zero_to_one`. D6 (kept `horizon` string) → Task 9 Steps 1 & 3, Task 10 (contracts endpoint — a second consumer D6's derivation must also satisfy), Task 12 Step 4. D7 (soft-rank band) → Task 3, reused by Task 10's `contract_overrides`. D8 (chain-fetch selection — the load-bearing fix) → Task 4, wired into `scan.py` in Task 6 and into the Step 6 contracts endpoint in Task 10. D9 (input validation) → Task 5 Step 4 (backend `ScanRequest`), Task 10 Step 3 (backend `get_contracts`, inline bounds check appropriate for `Query` params), Task 12 Step 5 (frontend clamp), Task 13 Step 7. Backend-as-source-of-truth → Tasks 5, 6, 10. Override isolation reframed as hygiene, not correctness → Task 6 intro. Log shows enforced window → Task 12 Step 6. Unwire DTE params → Task 12 Step 3.
 
-**Type consistency.** `dte_window(hold_min, hold_max, multiplier) -> tuple[int, int]` is used identically in Tasks 1 and 6. `DteWindow` fields `min_dte` / `max_dte` / `multiplier` are identical in Task 5 (Pydantic), Task 8 (TS, in `domain.ts`), and Task 9 (imported into `scanStore.ts`'s `ScanResult`) — corrected from the first draft, which pointed at `domain.ts` for a type that actually lives in `scanStore.ts`. `previewDteWindow` mirrors `dte_window` and is asserted against the same seven bands in both suites. `_nearest_expiration_in_window(dates, bounds, today) -> Optional[str]` is defined once in `market.py` and used identically by both the sync and async chain-fetch functions.
+**Type consistency.** `dte_window(hold_min, hold_max, multiplier) -> tuple[int, int]` is used identically in Tasks 1, 6, and 10. `DteWindow` fields `min_dte` / `max_dte` / `multiplier` are identical in Task 5 (Pydantic), Task 8 (TS, in `domain.ts`), and Task 9 (imported into `scanStore.ts`'s `ScanResult`). `previewDteWindow` mirrors `dte_window` and is asserted against the same seven bands in both suites. `_nearest_expiration_in_window(dates, bounds, today) -> Optional[str]` is defined once in `market.py` (Task 4) and used identically by `fetch_option_chain`, `fetch_option_chain_async` (both call sites in `scan.py`'s `_process_symbol` and `_build_spreads`), and `contracts.py`'s `get_contracts` (Task 10).
 
 **Corrections applied after the first adversarial audit pass:** kept `ScanContext.horizon` instead of deleting it (D6); added the soft-rank preferred-DTE override (D7); added the option-chain expiry-selection fix, which the first draft omitted entirely and without which the feature does not work (D8); added hold-day input validation on both ends (D9); corrected `DteWindow`/`ScanResult` file targeting; corrected the `__mocks__` reference to the actual inline `jest.mock` pattern; replaced the hollow migration test with one that exercises the real `migrate()` callback; re-captioned the override-isolation rationale as hygiene rather than a correctness fix.
 
-**Known behaviour changes** (accepted in the spec): Intraday 1–7 → 1–4 DTE; Swing 14–45 → 10–30 DTE. Position is unchanged (30–90 DTE) and Task 12 Step 3 verifies this explicitly as a regression gate.
+**Corrections applied after the second adversarial audit pass** (run against the round-1 rewrite): added Task 10 — `backend/app/routers/contracts.py`'s `/api/contracts` endpoint is a second, independent option-chain-fetch caller behind the Step 6 contracts table that Task 4/6 never reached; without it the round-1 rewrite would have shipped a scan log that reports the correct window while the screen the user actually picks a contract on keeps showing the old ~21–90-day range. Fixed a bug in Task 9's own migrate branch where `...migrateLegacyHorizon(ctx.horizon)` (which has no `horizon` key) never overwrote a stale pre-migration `horizon` string, silently reintroducing D6's exact stock-mode defect for any user who had "Custom" selected before upgrading — and fixed the accompanying test, which had asserted the buggy output as correct. Added the pre-existing `scanStore.test.ts` write sites (missed by the D6 read-site survey, since it's a write not a read) to Task 9's scope. Added Task 13 Steps 5b and 8b to separately verify the Step 6 table and the migrated-store-into-stock-mode path — both are the specific blind spots that let the two bugs above go undetected in round 1's own verification task.
+
+**Known behaviour changes** (accepted in the spec): Intraday 1–7 → 1–4 DTE; Swing 14–45 → 10–30 DTE. Position is unchanged (30–90 DTE) and Task 13 Step 3 verifies this explicitly as a regression gate.
