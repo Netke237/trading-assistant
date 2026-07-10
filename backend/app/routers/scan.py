@@ -36,7 +36,7 @@ from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
     ScanDelta, ContinuousScanConfig, ScanState, OptionsPipeline,
-    AlternativeContract,
+    AlternativeContract, DteWindow,
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
     SentimentData, FundamentalsOut,
 )
@@ -61,6 +61,8 @@ from app.scoring.stock_scorer import score_stock, StockScoreCard
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
+from app.scoring.contract_validator import dte_holding_multiplier
+from app.scoring.dte_window import dte_window
 from app.scoring.entry_quality import assess_entry
 from app.scoring.reward_risk import estimate_rr, estimate_targets
 from app.services.audit import new_rec_id, log_event
@@ -187,6 +189,7 @@ async def _build_spreads(
     client: httpx.AsyncClient,
     sem: asyncio.Semaphore,
     *,
+    dte_bounds: tuple[int, int] | None = None,
     spread_width: float = 5.0,
     short_leg_delta: float = 0.30,
     iv_rank_threshold: float = 50.0,
@@ -204,8 +207,8 @@ async def _build_spreads(
     try:
         async with sem:
             _puts_chain, _calls_chain = await asyncio.gather(
-                fetch_option_chain_async(client, symbol, option_type="P"),
-                fetch_option_chain_async(client, symbol, option_type="C"),
+                fetch_option_chain_async(client, symbol, option_type="P", dte_bounds=dte_bounds),
+                fetch_option_chain_async(client, symbol, option_type="C", dte_bounds=dte_bounds),
             )
     except Exception as exc:
         _log.debug("Spread: chain fetch failed for %s: %s", symbol, exc)
@@ -272,6 +275,7 @@ async def _process_symbol(
     min_cap_usd: float | None = None,
     max_cap_usd: float | None = None,
     overrides: dict | None = None,
+    dte_bounds: tuple[int, int] | None = None,
     gate: dict | None = None,
     atr_mult: float | None = None,
     price_map: dict | None = None,
@@ -414,7 +418,7 @@ async def _process_symbol(
 
     # ── Pass 2: fetch option chain only for survivors ─────────────────────────
     async with sem:
-        chain = await fetch_option_chain_async(client, symbol, option_type=option_type)
+        chain = await fetch_option_chain_async(client, symbol, option_type=option_type, dte_bounds=dte_bounds)
 
     if not chain:
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
@@ -477,7 +481,19 @@ async def _process_symbol(
         return RejectedCandidate(symbol=symbol, reason=f"Score gate: score {card.score} rejected", breakdown=bd)
 
     augmented = [_augment(c, stock_price=price) for c in chain]
-    scored = [(validate_contract(c, card.score, overrides=overrides), c) for c in augmented]
+    # DTE bounds are derived from the holding horizon and apply to contracts only,
+    # via a separate dict — kept apart from `overrides` for clarity, not because
+    # score_stock() would misinterpret these keys (its override handling is an
+    # allow-list that already ignores unrecognised keys).
+    contract_overrides = dict(overrides or {})
+    if dte_bounds is not None:
+        lo, hi = dte_bounds
+        contract_overrides["min_dte"] = lo
+        contract_overrides["max_dte"] = hi
+        contract_overrides["preferred_dte_min"] = lo
+        contract_overrides["preferred_dte_max"] = hi
+    scored = [(validate_contract(c, card.score, overrides=contract_overrides or None), c)
+              for c in augmented]
 
     valid_scores = [(s, c) for s, c in scored if s.status != "REJECT"]
     if not valid_scores:
@@ -636,6 +652,7 @@ async def _process_symbol(
     # ── Bearish spread attachment (Pass 2 survivors only) ────────────────────────
     _primary_sp, _alt_sp = await _build_spreads(
         symbol, direction, contract, iv_rank, client, sem,
+        dte_bounds=dte_bounds,
         spread_width=spread_width,
         short_leg_delta=short_leg_delta,
         iv_rank_threshold=iv_rank_threshold,
@@ -859,6 +876,18 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             else:
                 fund_map[sym] = score_fundamentals(snap, req.direction, fund_gate) if snap else None
 
+    # ── DTE window from the holding horizon ───────────────────────────────────
+    # Absent hold days (e.g. an older client), the fetch/validator defaults apply.
+    _dte_bounds: tuple[int, int] | None = None
+    _dte_win: DteWindow | None = None
+    if req.hold_min_days is not None and req.hold_max_days is not None:
+        _mult = dte_holding_multiplier()
+        _dte_bounds = dte_window(req.hold_min_days, req.hold_max_days, _mult)
+        _dte_win = DteWindow(min_dte=_dte_bounds[0], max_dte=_dte_bounds[1], multiplier=_mult)
+        _log.info("SCAN %s dte_window: %d-%dd (hold %d-%dd x %.1f)",
+                  scan_id, _dte_bounds[0], _dte_bounds[1],
+                  req.hold_min_days, req.hold_max_days, _mult)
+
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
     _tradier_tok, _tradier_base = get_tradier_creds()
     async with httpx.AsyncClient(
@@ -877,6 +906,7 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 min_cap_usd=req.min_cap_usd,
                 max_cap_usd=req.max_cap_usd,
                 overrides=dict(req.overrides) if req.overrides else None,
+                dte_bounds=_dte_bounds,
                 gate=gate,
                 atr_mult=atr_mult,
                 price_map=price_map,
@@ -1006,6 +1036,7 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             original_count=original_count,
             pipeline=_pipeline,
             direction_banner=_direction_banner,
+            dte_window=_dte_win,
         )
         _last_result = result
         _last_request = req

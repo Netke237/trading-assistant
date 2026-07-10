@@ -117,3 +117,34 @@ def test_scan_result_carries_dte_window():
 def test_scan_result_dte_window_defaults_none():
     result = ScanResult(scan_id="REC-1", timestamp="t", candidates=[], rejected=[])
     assert result.dte_window is None
+
+
+from app.scoring.dte_window import dte_window
+
+
+def test_position_hold_rejects_the_reported_22_dte_contract():
+    """The 31.07.2026 case: a 22-DTE contract must not survive a 15-45 day hold."""
+    min_dte, max_dte = dte_window(15, 45, 2.0)
+    card = validate_contract(_make_contract(days=22), 70,
+                             overrides={"min_dte": min_dte, "max_dte": max_dte,
+                                        "preferred_dte_min": min_dte, "preferred_dte_max": max_dte})
+    assert "dte_too_short" in card.reject_reasons
+
+
+def test_position_hold_accepts_a_60_dte_contract():
+    min_dte, max_dte = dte_window(15, 45, 2.0)
+    card = validate_contract(_make_contract(days=60), 70,
+                             overrides={"min_dte": min_dte, "max_dte": max_dte,
+                                        "preferred_dte_min": min_dte, "preferred_dte_max": max_dte})
+    assert "dte_too_short" not in card.reject_reasons
+    assert "dte_too_long" not in card.reject_reasons
+
+
+def test_annual_hold_accepts_a_365_dte_contract_and_scores_it_cleanly():
+    min_dte, max_dte = dte_window(165, 200, 2.0)
+    card = validate_contract(_make_contract(days=365), 70,
+                             overrides={"min_dte": min_dte, "max_dte": max_dte,
+                                        "preferred_dte_min": min_dte, "preferred_dte_max": max_dte})
+    assert "dte_too_short" not in card.reject_reasons
+    assert "dte_too_long" not in card.reject_reasons
+    assert "dte_outside_preferred" not in card.soft_flags
