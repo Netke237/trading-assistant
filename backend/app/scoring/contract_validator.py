@@ -213,6 +213,7 @@ def validate_contract(
     ov = overrides or {}
     if ov:
         hr = cfg["hard_reject"]
+        sr = cfg["soft_rank"]
         for key, val in ov.items():
             if key == "max_bid_ask_spread_pct": hr["max_bid_ask_spread_pct"] = float(val)
             elif key == "max_delta":            hr["max_delta"]              = float(val)
@@ -222,6 +223,8 @@ def validate_contract(
             elif key == "min_dte":              hr["min_dte"]                = int(val)
             elif key == "max_dte":              hr["max_dte"]                = int(val)
             elif key == "max_iv_rank":          hr["max_iv_rank"]            = float(val)
+            elif key == "preferred_dte_min":    sr["preferred_dte_min"]      = int(val)
+            elif key == "preferred_dte_max":    sr["preferred_dte_max"]      = int(val)
     contract_id = _contract_id(contract)
 
     reject_reasons = _hard_reject_reasons(contract, cfg)
