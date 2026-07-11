@@ -878,15 +878,24 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
 
     # ── DTE window from the holding horizon ───────────────────────────────────
     # Absent hold days (e.g. an older client), the fetch/validator defaults apply.
+    # ScanRequest's own validator guarantees well-ordered, non-negative hold days,
+    # so dte_window() can't raise on user input here — but a misconfigured
+    # dte_holding_multiplier (e.g. 0 or negative in contract_rules.yaml) would
+    # still raise ValueError, and this runs before the per-symbol task loop, so
+    # an unguarded raise here would 500 the whole scan instead of degrading one
+    # symbol. Fall back to the fetch/validator defaults rather than crash.
     _dte_bounds: tuple[int, int] | None = None
     _dte_win: DteWindow | None = None
     if req.hold_min_days is not None and req.hold_max_days is not None:
-        _mult = dte_holding_multiplier()
-        _dte_bounds = dte_window(req.hold_min_days, req.hold_max_days, _mult)
-        _dte_win = DteWindow(min_dte=_dte_bounds[0], max_dte=_dte_bounds[1], multiplier=_mult)
-        _log.info("SCAN %s dte_window: %d-%dd (hold %d-%dd x %.1f)",
-                  scan_id, _dte_bounds[0], _dte_bounds[1],
-                  req.hold_min_days, req.hold_max_days, _mult)
+        try:
+            _mult = dte_holding_multiplier()
+            _dte_bounds = dte_window(req.hold_min_days, req.hold_max_days, _mult)
+            _dte_win = DteWindow(min_dte=_dte_bounds[0], max_dte=_dte_bounds[1], multiplier=_mult)
+            _log.info("SCAN %s dte_window: %d-%dd (hold %d-%dd x %.1f)",
+                      scan_id, _dte_bounds[0], _dte_bounds[1],
+                      req.hold_min_days, req.hold_max_days, _mult)
+        except ValueError as exc:
+            _log.error("SCAN %s dte_window computation failed, falling back to config defaults: %s", scan_id, exc)
 
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
     _tradier_tok, _tradier_base = get_tradier_creds()

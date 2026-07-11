@@ -140,7 +140,9 @@ def _score_delta(contract: dict, cfg: dict) -> tuple[int, list[str]]:
         # Linear score peaking at 0.50
         centre = (d_min + d_max) / 2
         half_range = (d_max - d_min) / 2
-        score = int(100 * (1 - abs(delta - centre) / half_range))
+        # half_range is 0 only when min==max (a collapsed override); delta sits
+        # exactly on centre in that case, so it's a perfect score, not a divide by zero.
+        score = 100 if half_range == 0 else int(100 * (1 - abs(delta - centre) / half_range))
     else:
         score = 20
         flags.append("delta_outside_preferred")
@@ -162,7 +164,10 @@ def _score_dte(contract: dict, cfg: dict) -> tuple[int, list[str]]:
     if d_min <= dte <= d_max:
         centre = (d_min + d_max) / 2
         half_range = (d_max - d_min) / 2
-        score = int(100 * (1 - abs(dte - centre) / half_range))
+        # half_range is 0 when a hold-derived override collapses min==max (e.g. a
+        # Custom range typed as the same day twice) — dte sits exactly on centre
+        # in that case, so it's a perfect score, not a divide by zero.
+        score = 100 if half_range == 0 else int(100 * (1 - abs(dte - centre) / half_range))
     else:
         score = 25
         flags.append("dte_outside_preferred")

@@ -200,3 +200,30 @@ def test_get_contracts_without_hold_days_keeps_legacy_behaviour(monkeypatch):
     client = TestClient(app)
     client.get("/api/contracts", params={"symbol": "AAPL", "right": "C"})
     assert calls == [None]
+
+
+def test_equal_min_max_dte_override_does_not_divide_by_zero():
+    """Found by adversarial audit: a Custom range typed as the same day twice
+    (e.g. hold_min_days == hold_max_days) makes dte_window() legitimately return
+    min_dte == max_dte. The preferred-band soft score's half_range = (max-min)/2
+    then collapses to 0, and a contract landing exactly on that DTE (guaranteed,
+    since _nearest_expiration_in_window only returns expiries strictly inside the
+    window) triggered a ZeroDivisionError. Must score cleanly instead of crashing."""
+    contract = _make_contract(days=30)
+    card = validate_contract(
+        contract, 70,
+        overrides={"min_dte": 30, "max_dte": 30, "preferred_dte_min": 30, "preferred_dte_max": 30},
+    )
+    assert "dte_outside_preferred" not in card.soft_flags
+    assert card.breakdown.dte_score == 100
+
+
+def test_equal_min_max_delta_override_does_not_divide_by_zero():
+    """Same collapse hazard in _score_delta(), fixed defensively even though no
+    current caller overrides min_delta/max_delta to equal values."""
+    from app.scoring.contract_validator import _score_delta
+
+    cfg = {"soft_rank": {"preferred_delta_min": 0.45, "preferred_delta_max": 0.45}}
+    score, flags = _score_delta({"delta": 0.45}, cfg)
+    assert score == 100
+    assert flags == []
