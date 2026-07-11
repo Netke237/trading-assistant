@@ -12,6 +12,8 @@ jest.mock('@/lib/api', () => ({
 
 jest.mock('@/lib/stockScan', () => ({ runStockScan: jest.fn().mockResolvedValue(null) }));
 
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+
 const mockPostScan = api.postScan as jest.MockedFunction<typeof api.postScan>;
 
 function resetStores() {
@@ -126,5 +128,36 @@ describe('RunScanButton — conflict suppression wiring', () => {
 
     const conflicted = useScanStore.getState().conflictedSymbols;
     expect(conflicted).toHaveLength(0);
+  });
+});
+
+describe('RunScanButton — hold days', () => {
+  beforeEach(() => {
+    resetStores();
+    jest.clearAllMocks();
+  });
+
+  it('sends hold days and the derived scoring horizon, never min_dte/max_dte overrides', async () => {
+    useScanStore.setState({
+      context: {
+        universe: 'SP500', direction: 'Bullish',
+        horizon: 'Position (120–370d)', horizonPreset: 'Custom', holdMin: 60, holdMax: 185,
+      },
+    } as any);
+    mockPostScan.mockResolvedValue({
+      scan_id: 'SCAN-1', timestamp: '2026-07-10T10:00:00', candidates: [], rejected: [],
+    });
+
+    render(<RunScanButton />);
+    const button = screen.getByRole('button', { name: /run scan/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    const [, , horizon, hold, , overrides] = mockPostScan.mock.calls[0];
+    expect(horizon).toBe('Position');   // scoringHorizonForHold(185) === 'Position'
+    expect(hold).toEqual({ hold_min_days: 60, hold_max_days: 185 });
+    expect(overrides).not.toHaveProperty('min_dte');
+    expect(overrides).not.toHaveProperty('max_dte');
   });
 });
