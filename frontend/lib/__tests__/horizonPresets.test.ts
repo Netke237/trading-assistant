@@ -4,6 +4,7 @@ import {
   previewDteWindow,
   scoringHorizonForHold,
   migrateLegacyHorizon,
+  sanitizeHoldDays,
 } from '../horizonPresets';
 
 describe('HORIZON_PRESETS', () => {
@@ -72,5 +73,23 @@ describe('migrateLegacyHorizon', () => {
     expect(migrateLegacyHorizon(undefined)).toEqual({
       horizonPreset: 'Swing', holdMin: 5, holdMax: 15,
     });
+  });
+});
+
+describe('sanitizeHoldDays', () => {
+  it('passes whole-day values through unchanged', () => {
+    expect(sanitizeHoldDays(60, 185)).toEqual({ hold_min_days: 60, hold_max_days: 185 });
+  });
+
+  it('rounds a decimal value that bypassed the input-level rounding (e.g. a stale persisted store)', () => {
+    expect(sanitizeHoldDays(15.5, 45.4)).toEqual({ hold_min_days: 16, hold_max_days: 45 });
+  });
+
+  it('clamps a negative value up to 0', () => {
+    expect(sanitizeHoldDays(-5, 15)).toEqual({ hold_min_days: 0, hold_max_days: 15 });
+  });
+
+  it('clamps an inverted range so max never falls below min', () => {
+    expect(sanitizeHoldDays(100, 15)).toEqual({ hold_min_days: 100, hold_max_days: 100 });
   });
 });

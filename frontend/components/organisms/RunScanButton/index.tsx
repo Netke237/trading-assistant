@@ -21,7 +21,7 @@ import { useAlertStore } from '@/lib/alertStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import { runStockScan } from '@/lib/stockScan';
-import { presetByKey, scoringHorizonForHold } from '@/lib/horizonPresets';
+import { presetByKey, scoringHorizonForHold, sanitizeHoldDays } from '@/lib/horizonPresets';
 import styles from './index.module.css';
 
 function nowLocalISO(): string {
@@ -166,7 +166,7 @@ export function RunScanButton() {
     useScanStore.getState().setRejectedLog([]);
     const spreads = useSettingsStore.getState().spreads;
     api.postScan(universe, direction, horizon,
-      { hold_min_days: holdMin, hold_max_days: holdMax },
+      sanitizeHoldDays(holdMin, holdMax),
       filters, effectiveOverrides, {
       spread_width:       spreads.widthPoints,
       short_leg_delta:    spreads.shortLegDelta,

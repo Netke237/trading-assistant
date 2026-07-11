@@ -89,3 +89,17 @@ export function migrateLegacyHorizon(horizon: string | undefined): {
   const swing = presetByKey('Swing');
   return { horizonPreset: 'Swing', holdMin: swing.holdMin, holdMax: swing.holdMax };
 }
+
+/**
+ * Round and order-clamp hold days right before they leave the browser (postScan /
+ * getContracts). The Step 3 range inputs already round on every keystroke, but a
+ * value read straight from a persisted store (e.g. a stale entry written before
+ * that input-level rounding existed) could still carry a non-integer or inverted
+ * pair — hold_min_days/hold_max_days are strict ints on both backend endpoints,
+ * so an unrounded value here would 422 instead of just displaying wrong.
+ */
+export function sanitizeHoldDays(holdMin: number, holdMax: number): { hold_min_days: number; hold_max_days: number } {
+  const lo = Math.max(0, Math.round(holdMin));
+  const hi = Math.max(lo, Math.round(holdMax));
+  return { hold_min_days: lo, hold_max_days: hi };
+}

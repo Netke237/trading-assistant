@@ -737,8 +737,8 @@ export default function Step3Page() {
 
   const [dir,     setDir]     = useState<Direction>(() => context?.direction ?? 'Bullish');
   const [hz,      setHz]      = useState<HorizonKey>(() => context?.horizonPreset ?? 'Swing');
-  const [holdMin, setHoldMin] = useState<number>(() => context?.holdMin ?? presetByKey('Swing').holdMin);
-  const [holdMax, setHoldMax] = useState<number>(() => context?.holdMax ?? presetByKey('Swing').holdMax);
+  const [holdMin, setHoldMin] = useState<number>(() => Math.round(context?.holdMin ?? presetByKey('Swing').holdMin));
+  const [holdMax, setHoldMax] = useState<number>(() => Math.round(context?.holdMax ?? presetByKey('Swing').holdMax));
   const [isExpanded,  setIsExpanded]  = useState(false);
   const [stocksOpen,  setStocksOpen]  = useState(true);
   const [optionsOpen, setOptionsOpen] = useState(true);
