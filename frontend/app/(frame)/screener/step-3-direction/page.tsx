@@ -808,12 +808,15 @@ export default function Step3Page() {
     });
   };
   const handleMinChange = (v: number) => {
-    const clamped = Math.min(v, holdMax);
+    // Whole days only — the backend's hold_min_days/hold_max_days are strict
+    // ints (Pydantic/FastAPI Query), and a free-typed decimal like "3.5" would
+    // otherwise reach postScan/getContracts and 422.
+    const clamped = Math.min(Math.round(v), holdMax);
     setHoldMin(clamped);
     syncToStore(dir, hz, clamped, holdMax);
   };
   const handleMaxChange = (v: number) => {
-    const clamped = Math.max(holdMin, v);
+    const clamped = Math.max(holdMin, Math.round(v));
     setHoldMax(clamped);
     syncToStore(dir, hz, holdMin, clamped);
   };

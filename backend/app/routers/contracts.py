@@ -45,11 +45,17 @@ async def get_contracts(
     dte_bounds: tuple[int, int] | None = None
     contract_overrides: dict | None = None
     if hold_min_days is not None and hold_max_days is not None and hold_max_days >= hold_min_days:
-        dte_bounds = dte_window(hold_min_days, hold_max_days, dte_holding_multiplier())
-        contract_overrides = {
-            "min_dte": dte_bounds[0], "max_dte": dte_bounds[1],
-            "preferred_dte_min": dte_bounds[0], "preferred_dte_max": dte_bounds[1],
-        }
+        try:
+            dte_bounds = dte_window(hold_min_days, hold_max_days, dte_holding_multiplier())
+            contract_overrides = {
+                "min_dte": dte_bounds[0], "max_dte": dte_bounds[1],
+                "preferred_dte_min": dte_bounds[0], "preferred_dte_max": dte_bounds[1],
+            }
+        except ValueError:
+            # A misconfigured dte_holding_multiplier (0 or negative in contract_rules.yaml)
+            # would otherwise 500 this endpoint. Fall back to the fetch/validator defaults.
+            dte_bounds = None
+            contract_overrides = None
 
     # 1. Fetch raw option chain
     raw_chain = fetch_option_chain(symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds) or []

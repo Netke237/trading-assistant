@@ -227,3 +227,19 @@ def test_equal_min_max_delta_override_does_not_divide_by_zero():
     score, flags = _score_delta({"delta": 0.45}, cfg)
     assert score == 100
     assert flags == []
+
+
+def test_get_contracts_falls_back_gracefully_on_misconfigured_multiplier(monkeypatch):
+    """Round-2 audit finding: contracts.py had the same unguarded dte_window()
+    call as scan.py's round-1 fix addressed, just on the sibling endpoint. A
+    misconfigured dte_holding_multiplier (0 here) must not 500 /api/contracts."""
+    monkeypatch.setattr("app.routers.contracts.dte_holding_multiplier", lambda: 0.0)
+    monkeypatch.setattr("app.routers.contracts.fetch_option_chain",
+                         lambda symbol, option_type="C", dte_bounds=None: [])
+    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
+    client = TestClient(app)
+    resp = client.get("/api/contracts", params={
+        "symbol": "AAPL", "right": "C", "hold_min_days": 15, "hold_max_days": 45,
+    })
+    assert resp.status_code == 200
+    assert resp.json() == []
