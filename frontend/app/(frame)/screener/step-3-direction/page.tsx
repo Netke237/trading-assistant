@@ -19,6 +19,10 @@ import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
+import {
+  HORIZON_PRESETS, presetByKey, previewDteWindow, scoringHorizonForHold, horizonDisplayString,
+  type HorizonKey,
+} from '@/lib/horizonPresets';
 
 // ── Scan-log constants ────────────────────────────────────────────────────────
 
@@ -136,15 +140,6 @@ function ScanLogSection({ entries, horizonKey }: { entries: RejectedEntry[]; hor
 }
 
 const DIRECTIONS: Direction[] = ['Bullish', 'Bearish'];
-
-type HorizonKey = 'Intraday' | 'Swing' | 'Position' | 'Custom';
-
-const HORIZON_PRESETS: { key: HorizonKey; label: string; hint: string }[] = [
-  { key: 'Intraday', label: 'Intraday', hint: '0–2 days' },
-  { key: 'Swing',    label: 'Swing',    hint: '5–15 days' },
-  { key: 'Position', label: 'Position', hint: '15–45 days' },
-  { key: 'Custom',   label: 'Custom',   hint: 'Set range' },
-];
 
 // ── Execution Parameters types ────────────────────────────────────────────────
 
@@ -270,10 +265,10 @@ const PARAM_DEFS: ParamDef[] = [
     hint: 'Minimum outstanding contracts. ↑ Higher → requires an established market (fewer) · ↓ Lower → new or low-traffic strikes included (more)' },
   { key: 'min_delta',              label: 'Min delta (far OTM)',    type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01,
     hint: 'Rejects contracts too far out of the money. ↑ Higher → keeps contracts closer to the money · ↓ Lower → very cheap deep-OTM contracts included' },
-  { key: 'min_dte',                label: 'Min DTE',                type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 365,   step: 1,   unit: 'days',
-    hint: 'Earliest expiry allowed. ↑ Higher → avoids short-dated options, longer expirations only · ↓ Lower → near-expiry contracts included' },
-  { key: 'max_dte',                label: 'Max DTE',                type: 'number', section: 'options', subGroup: 'Contract', min: 1, max: 730,   step: 1,   unit: 'days',
-    hint: 'Latest expiry allowed. ↑ Higher → LEAPS-style long-dated contracts included · ↓ Lower → only contracts within the near-term horizon' },
+  { key: 'min_dte', label: 'Min DTE', type: 'display', section: 'options', subGroup: 'Contract', unit: 'days',
+    hint: 'Derived from the holding horizon (hold × 2). Change the horizon to change this.' },
+  { key: 'max_dte', label: 'Max DTE', type: 'display', section: 'options', subGroup: 'Contract', unit: 'days',
+    hint: 'Derived from the holding horizon (hold × 2). Change the horizon to change this.' },
   // ALL — Regime Gate
   { key: 'regime_headwind_caution_pct', label: 'Headwind caution %', type: 'number', section: 'all', subGroup: 'Regime Gate', min: -100, max: 0, step: 5, unit: '%',
     hint: 'Sector underperformance vs benchmark below this % → CAUTION on candidate. ↑ Higher (closer to 0) → stricter, more candidates caught (fewer pass) · ↓ Lower → only severe laggards affected (more pass). Default: -15%' },
@@ -324,6 +319,30 @@ const SECTION_DESCRIPTIONS: Record<string, string> = {
 
 type ParamDefaults = Record<string, number | boolean | string | null>;
 
+const PARAM_DEFAULTS_POSITION: ParamDefaults = {
+  confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
+  weight_trend: 30, weight_pullback: 20, weight_trigger: 20, weight_event: 20, weight_vol: 10,
+  ma_type: 'EMA', fast_ema: 50, slow_ema: 200, adx_period: 14, ema_required: true, rsi_period: 14,
+  swing_high_lookback_bars: 15, atr_caution_max: 2.5, pullback_require_reversal: false,
+  macd_fast: 12, macd_slow: 26, macd_signal: 9, rsi_floor: 48,
+  volume_lookback_bars: 20, volume_multiplier: 1.2,
+  event_reject_days: 30, event_caution_days: 60,
+  earnings_buffer_days: 14, fomc_buffer_days: 5, div_buffer_days: 5,
+  iv_rank_pass_max: 44, iv_rank_lookback: 252, hv_lookback: 60,
+  max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
+  min_volume: 50, min_open_interest: 200, min_delta: 0.20,
+  trend_method: 'additive',
+  additive_ma_period: 50, additive_ma_type: 'SMA', additive_slope_lookback: 20,
+  additive_adx_period: 14, additive_adx_pass: 20, additive_adx_caution: 15,
+  additive_price_max: 40, additive_slope_max: 30, additive_adx_max: 30,
+  rs_period: 50, rs_pass_threshold: 3.0, rs_caution_threshold: -1.5, rs_benchmark: 'SPX',
+  regime_headwind_caution_pct: -15, regime_headwind_reject_pct: -40,
+  fundamentals_caution_above: 70, fundamentals_reject_above: 80,
+  entry_spread_tolerance_pct: 0.10, entry_max_slippage_pct: 0.03, entry_min_premium: 0.10,
+  rr_bullish_target_pct: 0.10, rr_bearish_target_pct: 0.10,
+  rr_bullish_invalidation_pct: 0.05, rr_bearish_invalidation_pct: 0.05,
+};
+
 const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
   Intraday: {
     confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
@@ -336,7 +355,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     earnings_buffer_days: 1, fomc_buffer_days: 1, div_buffer_days: 1,
     iv_rank_lookback: 30, hv_lookback: 10,
     max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
-    min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 1, max_dte: 7,
+    min_volume: 50, min_open_interest: 200, min_delta: 0.20,
     trend_method: 'additive',
     additive_ma_period: 9, additive_ma_type: 'EMA', additive_slope_lookback: 3,
     additive_adx_period: 7, additive_adx_pass: 20, additive_adx_caution: 15,
@@ -359,7 +378,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     earnings_buffer_days: 7, fomc_buffer_days: 3, div_buffer_days: 3,
     iv_rank_pass_max: 34, iv_rank_lookback: 252, hv_lookback: 20,
     max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
-    min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 14, max_dte: 45,
+    min_volume: 50, min_open_interest: 200, min_delta: 0.20,
     trend_method: 'additive',
     additive_ma_period: 20, additive_ma_type: 'SMA', additive_slope_lookback: 10,
     additive_adx_period: 14, additive_adx_pass: 25, additive_adx_caution: 20,
@@ -371,29 +390,10 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     rr_bullish_target_pct: 0.10, rr_bearish_target_pct: 0.10,
     rr_bullish_invalidation_pct: 0.05, rr_bearish_invalidation_pct: 0.05,
   },
-  Position: {
-    confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
-    weight_trend: 30, weight_pullback: 20, weight_trigger: 20, weight_event: 20, weight_vol: 10,
-    ma_type: 'EMA', fast_ema: 50, slow_ema: 200, adx_period: 14, ema_required: true, rsi_period: 14,
-    swing_high_lookback_bars: 15, atr_caution_max: 2.5, pullback_require_reversal: false,
-    macd_fast: 12, macd_slow: 26, macd_signal: 9, rsi_floor: 48,
-    volume_lookback_bars: 20, volume_multiplier: 1.2,
-    event_reject_days: 30, event_caution_days: 60,
-    earnings_buffer_days: 14, fomc_buffer_days: 5, div_buffer_days: 5,
-    iv_rank_pass_max: 44, iv_rank_lookback: 252, hv_lookback: 60,
-    max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
-    min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 30, max_dte: 90,
-    trend_method: 'additive',
-    additive_ma_period: 50, additive_ma_type: 'SMA', additive_slope_lookback: 20,
-    additive_adx_period: 14, additive_adx_pass: 20, additive_adx_caution: 15,
-    additive_price_max: 40, additive_slope_max: 30, additive_adx_max: 30,
-    rs_period: 50, rs_pass_threshold: 3.0, rs_caution_threshold: -1.5, rs_benchmark: 'SPX',
-    regime_headwind_caution_pct: -15, regime_headwind_reject_pct: -40,
-    fundamentals_caution_above: 70, fundamentals_reject_above: 80,
-    entry_spread_tolerance_pct: 0.10, entry_max_slippage_pct: 0.03, entry_min_premium: 0.10,
-    rr_bullish_target_pct: 0.10, rr_bearish_target_pct: 0.10,
-    rr_bullish_invalidation_pct: 0.05, rr_bearish_invalidation_pct: 0.05,
-  },
+  Position: PARAM_DEFAULTS_POSITION,
+  Quarterly:  { ...PARAM_DEFAULTS_POSITION },
+  SemiAnnual: { ...PARAM_DEFAULTS_POSITION },
+  Annual:     { ...PARAM_DEFAULTS_POSITION },
   Custom: {
     confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
     weight_trend: 30, weight_pullback: 20, weight_trigger: 25, weight_event: 15, weight_vol: 10,
@@ -405,7 +405,7 @@ const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     earnings_buffer_days: 7, fomc_buffer_days: 3, div_buffer_days: 3,
     iv_rank_pass_max: 34, iv_rank_lookback: 252, hv_lookback: 20,
     max_delta: 0.85, max_bid_ask_spread_pct: 0.20,
-    min_volume: 50, min_open_interest: 200, min_delta: 0.20, min_dte: 14, max_dte: 90,
+    min_volume: 50, min_open_interest: 200, min_delta: 0.20,
     trend_method: 'additive',
     additive_ma_period: 20, additive_ma_type: 'SMA', additive_slope_lookback: 10,
     additive_adx_period: 14, additive_adx_pass: 25, additive_adx_caution: 20,
@@ -722,30 +722,6 @@ function SectionBlock({
   );
 }
 
-// ── Horizon helpers ───────────────────────────────────────────────────────────
-
-function horizonLabel(hz: HorizonKey, minDays: number, maxDays: number): string {
-  if (hz === 'Intraday') return 'Intraday (0–2d)';
-  if (hz === 'Swing')    return 'Swing (5–15d)';
-  if (hz === 'Position') return 'Position (15–45d)';
-  return `Custom (${minDays}–${maxDays}d)`;
-}
-
-function parseHorizonKey(h: string | undefined): HorizonKey {
-  if (!h) return 'Swing';
-  if (h.startsWith('Intraday')) return 'Intraday';
-  if (h.startsWith('Swing'))    return 'Swing';
-  if (h.startsWith('Position')) return 'Position';
-  if (h.startsWith('Custom'))   return 'Custom';
-  return 'Swing';
-}
-
-function parseCustomDays(h: string | undefined): [number, number] {
-  if (!h?.startsWith('Custom')) return [5, 15];
-  const m = h.match(/(\d+)–(\d+)/);
-  return m ? [Number(m[1]), Number(m[2])] : [5, 15];
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Step3Page() {
@@ -759,9 +735,9 @@ export default function Step3Page() {
   const regimeDirection = useScanStore((s) => s.regimeDirection);
 
   const [dir,     setDir]     = useState<Direction>(() => context?.direction ?? 'Bullish');
-  const [hz,      setHz]      = useState<HorizonKey>(() => parseHorizonKey(context?.horizon));
-  const [minDays, setMinDays] = useState<number>(() => parseCustomDays(context?.horizon)[0]);
-  const [maxDays, setMaxDays] = useState<number>(() => parseCustomDays(context?.horizon)[1]);
+  const [hz,      setHz]      = useState<HorizonKey>(() => context?.horizonPreset ?? 'Swing');
+  const [holdMin, setHoldMin] = useState<number>(() => context?.holdMin ?? presetByKey('Swing').holdMin);
+  const [holdMax, setHoldMax] = useState<number>(() => context?.holdMax ?? presetByKey('Swing').holdMax);
   const [isExpanded,  setIsExpanded]  = useState(false);
   const [stocksOpen,  setStocksOpen]  = useState(true);
   const [optionsOpen, setOptionsOpen] = useState(true);
@@ -785,21 +761,30 @@ export default function Step3Page() {
   }, []);
 
   function syncToStore(newDir: Direction, newHz: HorizonKey, newMin: number, newMax: number) {
+    const scoringHz = newHz === 'Custom' ? scoringHorizonForHold(newMax) : presetByKey(newHz).scoringHorizon;
     setContext({
-      universe:  context?.universe ?? 'SP500',
-      direction: newDir,
-      horizon:   horizonLabel(newHz, newMin, newMax),
+      universe:      context?.universe ?? 'SP500',
+      direction:     newDir,
+      horizon:       horizonDisplayString(scoringHz, newMin, newMax),
+      horizonPreset: newHz,
+      holdMin:       newMin,
+      holdMax:       newMax,
     });
   }
 
   const handleDirChange = (d: Direction) => {
     setDir(d);
     useScanStore.getState().setCombinedRegime(alignmentVerdict(d, descriptorRef.current));
-    syncToStore(d, hz, minDays, maxDays);
+    syncToStore(d, hz, holdMin, holdMax);
   };
   const handleHzChange = (h: HorizonKey) => {
+    const p = presetByKey(h);
+    const nextMin = h === 'Custom' ? holdMin : p.holdMin;
+    const nextMax = h === 'Custom' ? holdMax : p.holdMax;
     setHz(h);
-    syncToStore(dir, h, minDays, maxDays);
+    setHoldMin(nextMin);
+    setHoldMax(nextMax);
+    syncToStore(dir, h, nextMin, nextMax);
     const hd = PARAM_DEFAULTS_PER_HORIZON[h];
     useScanStore.getState().setScanOverrides({
       ma_type:                hd.ma_type                as string,
@@ -822,28 +807,28 @@ export default function Step3Page() {
     });
   };
   const handleMinChange = (v: number) => {
-    setMinDays(v);
-    syncToStore(dir, hz, v, maxDays);
+    const clamped = Math.min(v, holdMax);
+    setHoldMin(clamped);
+    syncToStore(dir, hz, clamped, holdMax);
   };
   const handleMaxChange = (v: number) => {
-    const clamped = Math.max(minDays, v);
-    setMaxDays(clamped);
-    syncToStore(dir, hz, minDays, clamped);
+    const clamped = Math.max(holdMin, v);
+    setHoldMax(clamped);
+    syncToStore(dir, hz, holdMin, clamped);
   };
 
   const custom = hz === 'Custom';
   const defaults = PARAM_DEFAULTS_PER_HORIZON[hz];
+  const [previewMinDte, previewMaxDte] = previewDteWindow(holdMin, holdMax);
+  const displayDefaults: ParamDefaults = { ...defaults, min_dte: previewMinDte, max_dte: previewMaxDte };
 
   const totalPassed   = scanResult?.candidates?.length ?? 0;
   const totalRejected = rejectedLog.length;
   const totalScanned  = totalPassed + totalRejected;
 
-  const effectiveMinDte = (scanOverrides.min_dte as number | undefined) ?? (defaults.min_dte as number);
-  const effectiveMaxDte = (scanOverrides.max_dte as number | undefined) ?? (defaults.max_dte as number);
+  const enforcedDte = scanResult?.dte_window;   // set by the backend on every scan
 
-  const horizonKey = context?.horizon?.startsWith('Intraday') ? 'Intraday'
-    : context?.horizon?.startsWith('Position') ? 'Position'
-    : 'Swing';
+  const weightsKey = hz === 'Custom' ? scoringHorizonForHold(holdMax) : presetByKey(hz).scoringHorizon;
 
   const stocksDefs  = PARAM_DEFS.filter((d) => d.section === 'stocks' || d.section === 'all');
   const optionsDefs = PARAM_DEFS.filter((d) => d.section === 'options' || d.section === 'all');
@@ -913,12 +898,12 @@ export default function Step3Page() {
         </div>
 
         <div className={formStyles.customRow}>
-          <Text size={12} tone={custom ? 'secondary' : 'dim'}>Range (days)</Text>
+          <Text size={12} tone={custom ? 'secondary' : 'dim'}>Holding period (days)</Text>
           <div className={formStyles.customInputs}>
             <input
               type="number"
               className={formStyles.numInput}
-              value={minDays}
+              value={holdMin}
               min={0}
               max={365}
               disabled={!custom}
@@ -929,7 +914,7 @@ export default function Step3Page() {
             <input
               type="number"
               className={formStyles.numInput}
-              value={maxDays}
+              value={holdMax}
               min={0}
               max={365}
               disabled={!custom}
@@ -937,6 +922,9 @@ export default function Step3Page() {
               aria-label="Maximum days"
             />
           </div>
+          <Text size={11} tone="dim">
+            Contracts will expire in {previewMinDte}–{previewMaxDte} days (hold × 2).
+          </Text>
         </div>
       </div>
 
@@ -984,7 +972,7 @@ export default function Step3Page() {
                       <ParamRow
                         key={def.key}
                         def={def}
-                        defaultVal={defaults[def.key] ?? null}
+                        defaultVal={displayDefaults[def.key] ?? null}
                         scanOverrides={scanOverrides}
                       />
                     ))}
@@ -1018,7 +1006,7 @@ export default function Step3Page() {
                       <ParamRow
                         key={def.key}
                         def={def}
-                        defaultVal={defaults[def.key] ?? null}
+                        defaultVal={displayDefaults[def.key] ?? null}
                         scanOverrides={scanOverrides}
                       />
                     ))}
@@ -1061,7 +1049,9 @@ export default function Step3Page() {
                 </span>
                 <span className={formStyles.logStat}>
                   <Text size={11} tone="dim">DTE</Text>
-                  <Text size={11} tone="secondary">{effectiveMinDte}–{effectiveMaxDte}d</Text>
+                  <Text size={11} tone="secondary">
+                    {enforcedDte ? `${enforcedDte.min_dte}–${enforcedDte.max_dte}d` : '—'}
+                  </Text>
                 </span>
               </>
             )}
@@ -1073,7 +1063,7 @@ export default function Step3Page() {
           {scanResult?.pipeline && (
             <ScanFunnel mode="options" pipeline={scanResult.pipeline} />
           )}
-          <ScanLogSection entries={rejectedLog} horizonKey={horizonKey} />
+          <ScanLogSection entries={rejectedLog} horizonKey={weightsKey} />
       </div>
       )}
 
