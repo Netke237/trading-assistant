@@ -52,3 +52,40 @@ def test_non_positive_multiplier_raises():
 def test_hold_max_below_hold_min_raises():
     with pytest.raises(ValueError):
         dte_window(20, 5, 2.0)
+
+
+def test_resolve_dte_bounds_returns_none_when_hold_days_absent():
+    from app.scoring.dte_window import resolve_dte_bounds
+    assert resolve_dte_bounds(None, None, lambda: 2.0) is None
+    assert resolve_dte_bounds(15, None, lambda: 2.0) is None
+    assert resolve_dte_bounds(None, 45, lambda: 2.0) is None
+
+
+def test_resolve_dte_bounds_returns_window_for_valid_input():
+    from app.scoring.dte_window import resolve_dte_bounds
+    assert resolve_dte_bounds(15, 45, lambda: 2.0) == (30, 90)
+
+
+def test_resolve_dte_bounds_falls_back_to_none_on_misconfigured_multiplier():
+    from app.scoring.dte_window import resolve_dte_bounds
+    assert resolve_dte_bounds(15, 45, lambda: 0.0) is None
+    assert resolve_dte_bounds(15, 45, lambda: -1.0) is None
+
+
+def test_resolve_dte_bounds_falls_back_to_none_when_multiplier_fn_raises():
+    """The multiplier source can itself fail to produce a number (e.g. a
+    non-numeric value in contract_rules.yaml makes float() raise ValueError) —
+    that must degrade the same way a bad-but-numeric multiplier does, not 500."""
+    from app.scoring.dte_window import resolve_dte_bounds
+    def _broken_multiplier():
+        raise ValueError("could not convert string to float: 'oops'")
+    assert resolve_dte_bounds(15, 45, _broken_multiplier) is None
+
+
+def test_resolve_dte_bounds_raises_on_inverted_range():
+    """A caller that skips its own ordering check (both current callers already
+    reject inverted ranges upstream — see Task 2) must get a loud failure here,
+    not a silent None that masks the bad input as 'no override requested'."""
+    from app.scoring.dte_window import resolve_dte_bounds
+    with pytest.raises(ValueError):
+        resolve_dte_bounds(100, 15, lambda: 2.0)

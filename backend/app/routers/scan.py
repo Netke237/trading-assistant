@@ -62,7 +62,7 @@ from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.contract_validator import dte_holding_multiplier
-from app.scoring.dte_window import dte_window
+from app.scoring.dte_window import resolve_dte_bounds
 from app.scoring.entry_quality import assess_entry
 from app.scoring.reward_risk import estimate_rr, estimate_targets
 from app.services.audit import new_rec_id, log_event
@@ -878,24 +878,28 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
 
     # ── DTE window from the holding horizon ───────────────────────────────────
     # Absent hold days (e.g. an older client), the fetch/validator defaults apply.
-    # ScanRequest's own validator guarantees well-ordered, non-negative hold days,
-    # so dte_window() can't raise on user input here — but a misconfigured
-    # dte_holding_multiplier (e.g. 0 or negative in contract_rules.yaml) would
-    # still raise ValueError, and this runs before the per-symbol task loop, so
-    # an unguarded raise here would 500 the whole scan instead of degrading one
-    # symbol. Fall back to the fetch/validator defaults rather than crash.
+    # ScanRequest's own validator guarantees well-ordered, non-negative hold days;
+    # resolve_dte_bounds() still falls back to None on a misconfigured
+    # dte_holding_multiplier rather than raise, since this runs before the
+    # per-symbol task loop and an unguarded raise here would 500 the whole scan.
     _dte_bounds: tuple[int, int] | None = None
     _dte_win: DteWindow | None = None
     if req.hold_min_days is not None and req.hold_max_days is not None:
-        try:
+        _dte_bounds = resolve_dte_bounds(
+            req.hold_min_days, req.hold_max_days, dte_holding_multiplier,
+            log_context=f"SCAN {scan_id}",
+        )
+        if _dte_bounds is not None:
+            # Safe to call dte_holding_multiplier() again here, unguarded: we only
+            # reach this branch if resolve_dte_bounds() already called it
+            # successfully once inside its own try/except, and _load_config()'s
+            # underlying YAML read is cached (see contract_validator.py:42-45), so
+            # this second call reads the same cached config and cannot newly fail.
             _mult = dte_holding_multiplier()
-            _dte_bounds = dte_window(req.hold_min_days, req.hold_max_days, _mult)
             _dte_win = DteWindow(min_dte=_dte_bounds[0], max_dte=_dte_bounds[1], multiplier=_mult)
             _log.info("SCAN %s dte_window: %d-%dd (hold %d-%dd x %.1f)",
                       scan_id, _dte_bounds[0], _dte_bounds[1],
                       req.hold_min_days, req.hold_max_days, _mult)
-        except ValueError as exc:
-            _log.error("SCAN %s dte_window computation failed, falling back to config defaults: %s", scan_id, exc)
 
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
     _tradier_tok, _tradier_base = get_tradier_creds()
