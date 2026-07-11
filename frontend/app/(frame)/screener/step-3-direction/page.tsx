@@ -475,6 +475,7 @@ function ParamRow({
         </div>
         <div className={formStyles.paramsValue}>
           <Data size={11}>{isNa ? 'N/A' : formatDefault(defaultVal)}</Data>
+          {!isNa && def.unit && <Text size={11} tone="dim">{def.unit}</Text>}
         </div>
         <div className={formStyles.paramsInput}>
           <Text size={11} tone="dim">display only</Text>
