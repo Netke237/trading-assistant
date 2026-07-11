@@ -44,7 +44,16 @@ async def get_contracts(
 
     dte_bounds: tuple[int, int] | None = None
     contract_overrides: dict | None = None
-    if hold_min_days is not None and hold_max_days is not None and hold_max_days >= hold_min_days:
+    if hold_min_days is not None and hold_max_days is not None:
+        if hold_max_days < hold_min_days:
+            raise HTTPException(
+                status_code=422,
+                detail=[{
+                    "loc": ["query", "hold_max_days"],
+                    "msg": "Value error, hold_max_days must be >= hold_min_days",
+                    "type": "value_error",
+                }],
+            )
         dte_bounds = resolve_dte_bounds(
             hold_min_days, hold_max_days, dte_holding_multiplier,
             log_context="GET /api/contracts",

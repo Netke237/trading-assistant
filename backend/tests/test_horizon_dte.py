@@ -243,3 +243,25 @@ def test_get_contracts_falls_back_gracefully_on_misconfigured_multiplier(monkeyp
     })
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_get_contracts_rejects_inverted_hold_range(monkeypatch):
+    """Parity with ScanRequest: an inverted range must be a clean 422, not a
+    silent fallback to default DTE bounds. Also checks the response body's
+    top-level shape matches FastAPI's own validation-error format — `detail`
+    is a list of {loc, msg, type} dicts, same as /api/scan's ScanRequest
+    model_validator — so a client that parses `detail` as a list (not a bare
+    string) works against both endpoints. The `loc` contents legitimately
+    differ (this is a query-param check, /api/scan's is a whole-body check) —
+    only the list-of-dicts envelope is asserted here, not exact loc equality."""
+    monkeypatch.setattr("app.routers.contracts.fetch_option_chain",
+                         lambda symbol, option_type="C", dte_bounds=None: [])
+    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
+    client = TestClient(app)
+    resp = client.get("/api/contracts", params={
+        "symbol": "AAPL", "right": "C", "hold_min_days": 100, "hold_max_days": 15,
+    })
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert isinstance(detail, list)
+    assert "hold_max_days" in detail[0]["msg"]
