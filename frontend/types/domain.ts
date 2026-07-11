@@ -433,3 +433,11 @@ export interface PortfolioRiskMetrics {
   largestConcentrationSymbol: string;
   status: Status;  // PASS if all within limits, CAUTION if near, REJECT if breached
 }
+
+// --- Holding-horizon DTE window ---
+
+export interface DteWindow {
+  min_dte:    number;
+  max_dte:    number;
+  multiplier: number;
+}

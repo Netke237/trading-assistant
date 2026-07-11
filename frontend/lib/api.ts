@@ -1,5 +1,5 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
-              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem } from '@/types/domain';
+              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow } from '@/types/domain';
 import type { StockScanResult } from '@/types/stockDomain';
 import type { OptionsPipeline } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -329,6 +329,7 @@ export const api = {
     universe: string[],
     direction: string,
     horizon: string,
+    hold: { hold_min_days: number; hold_max_days: number },
     filters?: {
       min_price?: number; max_price?: number; min_cap_usd?: number; max_cap_usd?: number;
       confidence_caution_below?: number; confidence_reject_below?: number;
@@ -346,9 +347,9 @@ export const api = {
       max_debit_pct?: number;
     },
   ) =>
-    post<{ scan_id: string; timestamp: string; candidates: TradeCardData[]; rejected: { symbol: string; reason: string }[]; pipeline?: OptionsPipeline }>(
+    post<{ scan_id: string; timestamp: string; candidates: TradeCardData[]; rejected: { symbol: string; reason: string }[]; pipeline?: OptionsPipeline; dte_window?: DteWindow }>(
       '/api/scan',
-      { universe, direction, horizon, overrides: overrides ?? {}, ...filters, ...spreads },
+      { universe, direction, horizon, ...hold, overrides: overrides ?? {}, ...filters, ...spreads },
     ),
 
   postStockScan: (req: {
