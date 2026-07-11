@@ -148,3 +148,55 @@ def test_annual_hold_accepts_a_365_dte_contract_and_scores_it_cleanly():
     assert "dte_too_short" not in card.reject_reasons
     assert "dte_too_long" not in card.reject_reasons
     assert "dte_outside_preferred" not in card.soft_flags
+
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+
+def test_get_contracts_applies_hold_day_dte_window(monkeypatch):
+    """A hold of 165-200 days (Annual) must restrict returned contracts to 330-400 DTE."""
+    near_contract = {
+        "id": "AAPL|185|near|C", "symbol": "AAPL", "strike": 185,
+        "expiry": _expiry_str(40), "dte": 40, "dteTotal": 40,
+        "price": 2.0, "bid": 1.9, "ask": 2.1, "delta": 0.45, "theta": -0.05,
+        "volume": 500, "open_interest": 1000, "iv_rank": 30,
+    }
+    far_contract = {
+        **near_contract, "id": "AAPL|185|far|C",
+        "expiry": _expiry_str(365), "dte": 365, "dteTotal": 365,
+    }
+    monkeypatch.setattr(
+        "app.routers.contracts.fetch_option_chain",
+        lambda symbol, option_type="C", dte_bounds=None: (
+            [far_contract] if dte_bounds == (330, 400) else [near_contract, far_contract]
+        ),
+    )
+    # get_contracts() also calls fetch_price() unconditionally (contracts.py:46), which
+    # otherwise makes a real Tradier/yfinance network call in a test run — the same reason
+    # backend/tests/conftest.py's `client` fixture patches both together.
+    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
+    client = TestClient(app)
+    resp = client.get("/api/contracts", params={
+        "symbol": "AAPL", "right": "C", "hold_min_days": 165, "hold_max_days": 200,
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["dte"] == 365
+
+
+def test_get_contracts_without_hold_days_keeps_legacy_behaviour(monkeypatch):
+    """No hold days -> dte_bounds=None -> unchanged from today's behaviour."""
+    calls = []
+    def _fake_fetch(symbol, option_type="C", dte_bounds=None):
+        calls.append(dte_bounds)
+        return []
+    monkeypatch.setattr("app.routers.contracts.fetch_option_chain", _fake_fetch)
+    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
+    client = TestClient(app)
+    client.get("/api/contracts", params={"symbol": "AAPL", "right": "C"})
+    assert calls == [None]

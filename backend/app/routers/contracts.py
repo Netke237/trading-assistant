@@ -8,7 +8,8 @@ from pydantic import BaseModel
 from app.schemas import OptionContract
 from app.data.market import fetch_option_chain, fetch_price, fetch_contract_quote_async, fetch_price_async
 from app.data.augment import _augment
-from app.scoring.contract_validator import validate_contract
+from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
+from app.scoring.dte_window import dte_window
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -36,11 +37,22 @@ async def get_contracts(
     horizon: str = Query(default='swing'),
     limit: int = Query(default=10, ge=1, le=100),
     max_price: float = Query(default=50.0, ge=0.5, le=500.0),
+    hold_min_days: int | None = Query(default=None, ge=0),
+    hold_max_days: int | None = Query(default=None, ge=0),
 ) -> list[OptionContract]:
     opt_type = 'C' if right.upper() == 'C' else 'P'
 
+    dte_bounds: tuple[int, int] | None = None
+    contract_overrides: dict | None = None
+    if hold_min_days is not None and hold_max_days is not None and hold_max_days >= hold_min_days:
+        dte_bounds = dte_window(hold_min_days, hold_max_days, dte_holding_multiplier())
+        contract_overrides = {
+            "min_dte": dte_bounds[0], "max_dte": dte_bounds[1],
+            "preferred_dte_min": dte_bounds[0], "preferred_dte_max": dte_bounds[1],
+        }
+
     # 1. Fetch raw option chain
-    raw_chain = fetch_option_chain(symbol.upper(), option_type=opt_type) or []
+    raw_chain = fetch_option_chain(symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds) or []
 
     # 2. Fetch current stock price (None if unavailable — _augment handles 0.0 gracefully)
     price: float = fetch_price(symbol.upper()) or 0.0
@@ -58,7 +70,7 @@ async def get_contracts(
             continue
 
         # 5. Score the contract
-        score_card = validate_contract(augmented, stock_score, overrides=None)
+        score_card = validate_contract(augmented, stock_score, overrides=contract_overrides)
 
         # 6. Build OptionContract response, merging scored fields
         results.append(OptionContract(

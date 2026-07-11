@@ -296,7 +296,8 @@ export const api = {
   getContracts: (
     symbol: string,
     right: 'C' | 'P' = 'C',
-    ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number },
+    ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number;
+            hold_min_days?: number; hold_max_days?: number },
     signal?: AbortSignal,
   ) => get<OptionContract[]>(
     `/api/contracts?symbol=${encodeURIComponent(symbol)}&right=${right}` +
@@ -304,7 +305,9 @@ export const api = {
     (ctx?.direction ? `&direction=${encodeURIComponent(ctx.direction)}` : '') +
     (ctx?.horizon ? `&horizon=${encodeURIComponent(ctx.horizon)}` : '') +
     (ctx?.limit != null ? `&limit=${ctx.limit}` : '') +
-    (ctx?.max_price != null ? `&max_price=${ctx.max_price}` : ''),
+    (ctx?.max_price != null ? `&max_price=${ctx.max_price}` : '') +
+    (ctx?.hold_min_days != null ? `&hold_min_days=${ctx.hold_min_days}` : '') +
+    (ctx?.hold_max_days != null ? `&hold_max_days=${ctx.hold_max_days}` : ''),
     signal,
   ),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards'),

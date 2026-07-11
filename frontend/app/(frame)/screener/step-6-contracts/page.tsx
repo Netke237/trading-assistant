@@ -85,11 +85,13 @@ export default function Step6Page() {
     try {
       const results = await Promise.all(
         candidates.map((c) => api.getContracts(c.symbol, right, {
-          stock_score: stockScoreBySymbol[c.symbol] ?? 70,
-          direction:   context?.direction ?? 'Bullish',
-          horizon:     context?.horizon ?? 'swing',
-          limit:       maxContractsPerChain,
-          max_price:   maxContractPrice,
+          stock_score:   stockScoreBySymbol[c.symbol] ?? 70,
+          direction:     context?.direction ?? 'Bullish',
+          horizon:       context?.horizon ?? 'swing',
+          limit:         maxContractsPerChain,
+          max_price:     maxContractPrice,
+          hold_min_days: context?.holdMin,
+          hold_max_days: context?.holdMax,
         }, signal))
       );
       if (signal?.aborted) return;
