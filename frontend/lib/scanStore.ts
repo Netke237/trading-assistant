@@ -4,15 +4,27 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Status } from './status';
-import type { Direction, OptionContract, TradeCardData } from '@/types/domain';
+import type { Direction, OptionContract, TradeCardData, DteWindow } from '@/types/domain';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
+import type { HorizonKey } from './horizonPresets';
+import { migrateLegacyHorizon, scoringHorizonForHold, presetByKey, horizonDisplayString } from './horizonPresets';
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
 export interface ScanContext {
-  universe:  string;       // "SP500" | "NAS100" | ...
-  direction: Direction;
-  horizon:   string;       // "Swing (5–15d)"
+  universe:      string;      // "SP500" | "NAS100" | ...
+  direction:     Direction;
+  /**
+   * Derived display string, e.g. "Position (90–105d)" — kept for the ~15
+   * existing consumers (TopBar, dashboard, ScanLog, stock-mode scan/analyze
+   * requests) that parse or display this directly. Always starts with one of
+   * 'Intraday' | 'Swing' | 'Position' (the scoring horizon), even for the
+   * Position-scored long-dated presets — see horizonDisplayString().
+   */
+  horizon:       string;
+  horizonPreset: HorizonKey;  // 'Swing' | 'Quarterly' | 'Custom' | ...
+  holdMin:       number;      // calendar days
+  holdMax:       number;      // calendar days
 }
 
 export interface RejectedEntry {
@@ -38,6 +50,7 @@ export interface ScanResult {
   rejected: RejectedEntry[];
   pipeline?: OptionsPipeline;
   direction_banner?: string;
+  dte_window?: DteWindow;
 }
 
 interface ScanStoreState {
@@ -191,7 +204,7 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 9,
+      version: 10,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -204,6 +217,26 @@ export const useScanStore = create<ScanStoreState>()(
         if (version < 7) s = { ...s, optionsScanAt: null };
         if (version < 8) s = { ...s, preBreakoutResults: [] };
         if (version < 9) s = { ...s, fibPullbackResults: [] };
+        if (version < 10) {
+          const ctx = s.context as { universe?: string; direction?: string; horizon?: string } | null | undefined;
+          s = {
+            ...s,
+            context: ctx
+              ? (() => {
+                  const legacy = migrateLegacyHorizon(ctx.horizon);
+                  const scoringHz = legacy.horizonPreset === 'Custom'
+                    ? scoringHorizonForHold(legacy.holdMax)
+                    : presetByKey(legacy.horizonPreset).scoringHorizon;
+                  return {
+                    universe:  ctx.universe  ?? 'SP500',
+                    direction: ctx.direction ?? 'Bullish',
+                    ...legacy,
+                    horizon: horizonDisplayString(scoringHz, legacy.holdMin, legacy.holdMax),
+                  };
+                })()
+              : null,
+          };
+        }
         return s;
       },
       partialize: (state) => ({

@@ -43,21 +43,33 @@ describe('scanStore', () => {
     const { result } = renderHook(() => useScanStore());
 
     act(() => {
-      result.current.setContext({ universe: 'SP500', direction: 'Bullish', horizon: 'Swing (5–15d)' });
+      result.current.setContext({
+        universe: 'SP500', direction: 'Bullish',
+        horizon: 'Swing (5–15d)', horizonPreset: 'Swing', holdMin: 5, holdMax: 15,
+      });
     });
     expect(result.current.context).toEqual({
       universe: 'SP500',
       direction: 'Bullish',
       horizon: 'Swing (5–15d)',
+      horizonPreset: 'Swing',
+      holdMin: 5,
+      holdMax: 15,
     });
 
     act(() => {
-      result.current.setContext({ universe: 'NAS100', direction: 'Bearish', horizon: 'Position (30–90d)' });
+      result.current.setContext({
+        universe: 'NAS100', direction: 'Bearish',
+        horizon: 'Position (30–90d)', horizonPreset: 'Position', holdMin: 15, holdMax: 45,
+      });
     });
     expect(result.current.context).toEqual({
       universe: 'NAS100',
       direction: 'Bearish',
       horizon: 'Position (30–90d)',
+      horizonPreset: 'Position',
+      holdMin: 15,
+      holdMax: 45,
     });
   });
 
