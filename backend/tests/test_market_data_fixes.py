@@ -634,3 +634,108 @@ def test_fetch_intraday_yf_4h_recursion_caps_at_730_days():
     # must cap 9999 down to 730 days, i.e. period='2y'.
     assert captured_periods == ["2y"], f"Expected the 730-day cap (period='2y'), got: {captured_periods}"
     assert result == []
+
+
+# ── tastytrade IV fallback tier ───────────────────────────────────────────────
+
+
+def test_fetch_option_chain_falls_back_to_tastytrade_when_ibkr_unavailable():
+    """When IBKR returns None, tastytrade's real IV Rank/Percentile should be
+    used instead of falling straight to the raw-IV proxy."""
+    from app.data.market import fetch_option_chain
+    import app.data.ibkr as ibkr_mod
+    import app.data.tastytrade_iv as tasty_mod
+
+    tasty_iv = {"AAPL": {"ivRank": 47.2, "ivPercentile": 51.9}}
+
+    original_fetch_ibkr_iv = ibkr_mod.fetch_iv_metrics_ibkr
+    ibkr_mod.fetch_iv_metrics_ibkr = lambda s: None  # IBKR unavailable
+
+    original_fetch_tasty_iv = tasty_mod.fetch_iv_metrics_tastytrade
+    tasty_mod.fetch_iv_metrics_tastytrade = lambda symbols: tasty_iv
+
+    try:
+        with patch("app.data.market.httpx.get") as mock_get:
+            exp_resp = MagicMock()
+            exp_resp.raise_for_status.return_value = None
+            exp_resp.json.return_value = {"expirations": {"date": [_FUTURE_EXPIRY]}}
+
+            chain_resp = MagicMock()
+            chain_resp.raise_for_status.return_value = None
+            chain_resp.json.return_value = {
+                "options": {
+                    "option": [{
+                        "option_type": "call",
+                        "strike": 150,
+                        "bid": 3.40,
+                        "ask": 3.60,
+                        "volume": 500,
+                        "open_interest": 1200,
+                        "implied_volatility": 0.30,
+                        "greeks": {"delta": 0.45, "theta": -0.05},
+                    }]
+                }
+            }
+
+            mock_get.side_effect = [exp_resp, chain_resp]
+
+            result = fetch_option_chain("AAPL", option_type="C")
+    finally:
+        ibkr_mod.fetch_iv_metrics_ibkr = original_fetch_ibkr_iv
+        tasty_mod.fetch_iv_metrics_tastytrade = original_fetch_tasty_iv
+
+    assert len(result) == 1
+    assert result[0]["ivRank"] == 47.2
+    assert result[0]["ivPercentile"] == 51.9
+
+
+@pytest.mark.asyncio
+async def test_fetch_option_chain_async_falls_back_to_tastytrade_when_ibkr_unavailable():
+    """Same fallback as the sync test, but through fetch_option_chain_async,
+    which takes a caller-supplied httpx.AsyncClient and wraps both the IBKR
+    and tastytrade calls in asyncio.to_thread."""
+    from app.data.market import fetch_option_chain_async
+    import app.data.ibkr as ibkr_mod
+    import app.data.tastytrade_iv as tasty_mod
+
+    tasty_iv = {"AAPL": {"ivRank": 47.2, "ivPercentile": 51.9}}
+
+    original_fetch_ibkr_iv = ibkr_mod.fetch_iv_metrics_ibkr
+    ibkr_mod.fetch_iv_metrics_ibkr = lambda s: None
+
+    original_fetch_tasty_iv = tasty_mod.fetch_iv_metrics_tastytrade
+    tasty_mod.fetch_iv_metrics_tastytrade = lambda symbols: tasty_iv
+
+    exp_resp = MagicMock()
+    exp_resp.raise_for_status.return_value = None
+    exp_resp.json.return_value = {"expirations": {"date": [_FUTURE_EXPIRY]}}
+
+    chain_resp = MagicMock()
+    chain_resp.raise_for_status.return_value = None
+    chain_resp.json.return_value = {
+        "options": {
+            "option": [{
+                "option_type": "call",
+                "strike": 150,
+                "bid": 3.40,
+                "ask": 3.60,
+                "volume": 500,
+                "open_interest": 1200,
+                "implied_volatility": 0.30,
+                "greeks": {"delta": 0.45, "theta": -0.05},
+            }]
+        }
+    }
+
+    fake_client = AsyncMock()
+    fake_client.get = AsyncMock(side_effect=[exp_resp, chain_resp])
+
+    try:
+        result = await fetch_option_chain_async(fake_client, "AAPL", option_type="C")
+    finally:
+        ibkr_mod.fetch_iv_metrics_ibkr = original_fetch_ibkr_iv
+        tasty_mod.fetch_iv_metrics_tastytrade = original_fetch_tasty_iv
+
+    assert len(result) == 1
+    assert result[0]["ivRank"] == 47.2
+    assert result[0]["ivPercentile"] == 51.9

@@ -563,6 +563,7 @@ def fetch_option_chain(
                 "score": 0,
             })
         # Enrich with IBKR IV Rank/Percentile if available
+        _ibkr_iv = None
         try:
             from .ibkr import fetch_iv_metrics_ibkr
             _ibkr_iv = fetch_iv_metrics_ibkr(symbol)
@@ -572,6 +573,19 @@ def fetch_option_chain(
                     c["ivPercentile"] = round(_ibkr_iv["ivPercentile"], 1)
         except Exception:
             pass  # keep existing fallback values
+
+        # IBKR unavailable — try tastytrade's real IV Rank/Percentile before
+        # falling back to the raw-IV-as-proxy values set above.
+        if not _ibkr_iv:
+            try:
+                from .tastytrade_iv import fetch_iv_metrics_tastytrade
+                _tasty_iv = fetch_iv_metrics_tastytrade([symbol])
+                if _tasty_iv and symbol in _tasty_iv:
+                    for c in result:
+                        c["ivRank"] = round(_tasty_iv[symbol]["ivRank"], 1)
+                        c["ivPercentile"] = round(_tasty_iv[symbol]["ivPercentile"], 1)
+            except Exception:
+                pass  # keep existing fallback values
 
         zero_iv = sum(1 for c in result if c["ivRank"] == 0)
         if zero_iv > len(result) * 0.5 and result:
@@ -1196,6 +1210,7 @@ async def fetch_option_chain_async(
                 "score": 0,
             })
         # Enrich with IBKR IV Rank/Percentile if available (async-safe via to_thread)
+        _ibkr_iv = None
         try:
             from .ibkr import fetch_iv_metrics_ibkr
             _ibkr_iv = await asyncio.to_thread(fetch_iv_metrics_ibkr, symbol)
@@ -1205,6 +1220,22 @@ async def fetch_option_chain_async(
                     c["ivPercentile"] = round(_ibkr_iv["ivPercentile"], 1)
         except Exception:
             pass
+
+        # IBKR unavailable — try tastytrade's real IV Rank/Percentile before
+        # falling back to the raw-IV-as-proxy values set above. Wrapped in
+        # asyncio.to_thread purely to avoid blocking this coroutine's event
+        # loop while fetch_iv_metrics_tastytrade's run_coro() call blocks its
+        # calling thread waiting on the shared bridge loop (Task 6).
+        if not _ibkr_iv:
+            try:
+                from .tastytrade_iv import fetch_iv_metrics_tastytrade
+                _tasty_iv = await asyncio.to_thread(fetch_iv_metrics_tastytrade, [symbol])
+                if _tasty_iv and symbol in _tasty_iv:
+                    for c in result:
+                        c["ivRank"] = round(_tasty_iv[symbol]["ivRank"], 1)
+                        c["ivPercentile"] = round(_tasty_iv[symbol]["ivPercentile"], 1)
+            except Exception:
+                pass  # keep existing fallback values
 
         zero_iv = sum(1 for c in result if c["ivRank"] == 0)
         if zero_iv > len(result) * 0.5 and result:
