@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, AsyncMock
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from app.main import app
 
 
@@ -15,7 +15,7 @@ async def test_prebreakout_accepts_universe_field():
         new_callable=AsyncMock,
         return_value=[],
     ):
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/scan/prebreakout", json={
                 "universe": ["DOW30"],
                 "direction": "Bullish",
@@ -26,7 +26,7 @@ async def test_prebreakout_accepts_universe_field():
 
 @pytest.mark.asyncio
 async def test_prebreakout_empty_symbols_and_no_universe_returns_empty():
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/api/scan/prebreakout", json={
             "symbols": [],
             "direction": "Bullish",
@@ -37,7 +37,7 @@ async def test_prebreakout_empty_symbols_and_no_universe_returns_empty():
 
 @pytest.mark.asyncio
 async def test_prebreakout_unknown_preset_returns_400():
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/api/scan/prebreakout", json={
             "universe": ["RUSSELL2000"],
             "direction": "Bullish",
@@ -55,7 +55,7 @@ async def test_prebreakout_manual_symbols_skips_expand_universe():
         new_callable=AsyncMock,
         return_value=[],
     ):
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/scan/prebreakout", json={
                 "symbols": ["AAPL", "MSFT"],
                 "direction": "Bullish",
@@ -66,7 +66,7 @@ async def test_prebreakout_manual_symbols_skips_expand_universe():
 
 @pytest.mark.asyncio
 async def test_prebreakout_unknown_override_key_returns_422():
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/api/scan/prebreakout", json={
             "symbols": ["AAPL"],
             "params_override": {"direction": "injected"},
@@ -85,7 +85,7 @@ async def test_prebreakout_valid_override_key_accepted():
         return_value=[],
     ):
         mock_expand.return_value = []
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/scan/prebreakout", json={
                 "universe": ["SP500"],
                 "params_override": {"atr_avg_lookback": 10},
@@ -101,7 +101,7 @@ async def test_prebreakout_fib_override_keys_accepted():
         new_callable=AsyncMock,
         return_value=[],
     ):
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/scan/prebreakout", json={
                 "symbols": ["AAPL"],
                 "params_override": {
@@ -117,7 +117,7 @@ async def test_prebreakout_fib_override_keys_accepted():
 @pytest.mark.asyncio
 async def test_prebreakout_fib_unknown_key_still_rejected():
     """A spurious fib key must still return 422."""
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/api/scan/prebreakout", json={
             "symbols": ["AAPL"],
             "params_override": {"fib_unknown_key": 1},

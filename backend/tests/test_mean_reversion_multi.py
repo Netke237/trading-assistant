@@ -409,9 +409,9 @@ import pytest
 @pytest.mark.asyncio
 async def test_multi_signal_rejects_empty_variants():
     """min_confirmations=2 with zero variants should return 422 from model_validator."""
-    from httpx import AsyncClient
+    from httpx import ASGITransport, AsyncClient
     from app.main import app
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/api/stock-scan", json={
             "universe": ["SP500"],
             "direction": "Bullish",
@@ -426,9 +426,9 @@ async def test_multi_signal_rejects_empty_variants():
 @pytest.mark.asyncio
 async def test_multi_signal_rejects_when_min_exceeds_variants():
     """3 confirmations with 1 variant should return 422."""
-    from httpx import AsyncClient
+    from httpx import ASGITransport, AsyncClient
     from app.main import app
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/api/stock-scan", json={
             "universe": ["SP500"],
             "direction": "Bullish",
