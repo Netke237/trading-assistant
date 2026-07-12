@@ -1,4 +1,4 @@
-import { useSettingsStore, migrateSettings, DEFAULT_CONFIDENCE_GATE, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER } from '@/lib/settingsStore';
+import { useSettingsStore, migrateSettings, DEFAULT_CONFIDENCE_GATE, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER, DEFAULT_TASTYTRADE_PAPER, DEFAULT_TASTYTRADE_LIVE } from '@/lib/settingsStore';
 
 // Reset store state before each test
 beforeEach(() => {
@@ -94,5 +94,26 @@ describe('settingsStore — broker accounts', () => {
     const s = useSettingsStore.getState();
     s.setIbkrPaper({ ...s.ibkrPaper, accountId: 'DU999' });
     expect(useSettingsStore.getState().ibkrPaper.accountId).toBe('DU999');
+  });
+});
+
+describe('settingsStore — tastytrade', () => {
+  it('has tastytradePaper and tastytradeLive defaults', () => {
+    const s = useSettingsStore.getState();
+    expect(s.tastytradePaper).toEqual(DEFAULT_TASTYTRADE_PAPER);
+    expect(s.tastytradeLive).toEqual(DEFAULT_TASTYTRADE_LIVE);
+    expect(s.tastytradeLive.enabled).toBe(false);
+  });
+
+  it('setTastytradePaper updates the config', () => {
+    const s = useSettingsStore.getState();
+    s.setTastytradePaper({ ...s.tastytradePaper, accountId: '5WX12345' });
+    expect(useSettingsStore.getState().tastytradePaper.accountId).toBe('5WX12345');
+  });
+
+  it('migrating from v19 injects tastytrade defaults', () => {
+    const result = migrateSettings({}, 19) as unknown as Record<string, unknown>;
+    expect(result.tastytradePaper).toEqual(DEFAULT_TASTYTRADE_PAPER);
+    expect(result.tastytradeLive).toEqual(DEFAULT_TASTYTRADE_LIVE);
   });
 });
