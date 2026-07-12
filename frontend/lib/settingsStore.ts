@@ -136,9 +136,9 @@ export const DEFAULT_IBKR_PAPER: IbkrPaperConfig = {
 };
 
 export interface TastytradePaperConfig {
-  clientSecret:  string;
-  refreshToken:  string;
-  accountId:     string;
+  clientSecret: string;
+  refreshToken: string;
+  accountId:    string;
 }
 
 export interface TastytradeLiveConfig {
