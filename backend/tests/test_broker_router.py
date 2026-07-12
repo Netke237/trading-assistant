@@ -51,6 +51,11 @@ from app.services.broker_router import build_router_from_credentials
 
 
 def test_tastytrade_live_is_blocked():
+    # Deliberately register a working adapter under the live key — this proves
+    # the _LIVE_BROKERS guard blocks execution unconditionally, before any
+    # adapter lookup, rather than merely relying on no live adapter existing.
+    # Do not "simplify" this to adapters={}; that would weaken the test to no
+    # longer prove the guard runs first.
     router = BrokerRouter(adapters={"tastytrade_live": MagicMock()})
     order = BrokerOrder(symbol="AAPL", action="BUY", quantity=1,
                          order_type="MKT", limit_price=None, sec_type="STK")
@@ -72,12 +77,11 @@ def test_build_router_from_credentials_includes_tastytrade_paper_when_configured
     assert "tastytrade_paper" in router._adapters
 
 
-import pytest as _pytest
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 
 
-@_pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_stock_order_accepts_tastytrade_paper_broker_key():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
