@@ -35,3 +35,24 @@ async def test_post_credentials_accepts_tastytrade_live():
     finally:
         credential_store.set("tastytrade_live", original)
         credential_store.save()
+
+
+@pytest.mark.asyncio
+async def test_post_tastytrade_credentials_clears_session_cache():
+    from app.data import tastytrade_session
+    original = credential_store.get("tastytrade_paper")
+    tastytrade_session._SESSION_CACHE["tastytrade_paper"] = object()  # fake cached session
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.post("/settings/credentials", json={
+                "key": "tastytrade_paper",
+                "values": {"client_secret": "new", "refresh_token": "new", "account_id": "z"},
+            })
+
+        assert "tastytrade_paper" not in tastytrade_session._SESSION_CACHE
+    finally:
+        credential_store.set("tastytrade_paper", original)
+        credential_store.save()
+        tastytrade_session.clear_cache()

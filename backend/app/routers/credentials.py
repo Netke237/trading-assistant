@@ -25,6 +25,9 @@ async def set_credentials(body: CredentialUpdate) -> dict:
     """Store broker credentials in memory and persist to local (gitignored) file."""
     credential_store.set(body.key, body.values)
     credential_store.save()
+    if body.key in ("tastytrade_paper", "tastytrade_live"):
+        from app.data.tastytrade_session import clear_cache
+        clear_cache()
     return {"ok": True, "key": body.key}
 
 
