@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from app.data.ibkr_paper import BrokerOrder, OrderResult
 
-_LIVE_BROKERS = {"ibkr_live", "alpaca_live"}  # Blocked until manually enabled in a future release.
+_LIVE_BROKERS = {"ibkr_live", "alpaca_live", "tastytrade_live"}  # Blocked until manually enabled in a future release.
 
 
 class BrokerRouter:
     """Routes a BrokerOrder to the correct adapter by broker key.
 
-    broker_key values: "ibkr_paper" | "tradier_paper"
-    "ibkr_live" is prepared but blocked (raises ValueError).
+    broker_key values: "ibkr_paper" | "tradier_paper" | "alpaca_paper" | "tastytrade_paper"
+    "ibkr_live" / "alpaca_live" / "tastytrade_live" are prepared but blocked (raises ValueError).
     """
 
     def __init__(self, adapters: dict) -> None:
@@ -18,7 +18,7 @@ class BrokerRouter:
     def execute(self, broker_key: str, order: BrokerOrder) -> OrderResult:
         if broker_key in _LIVE_BROKERS:
             raise ValueError(
-                f"live IBKR trading is not yet activated. "
+                f"live trading via '{broker_key}' is not yet activated. "
                 "Enable it explicitly before use."
             )
         adapter = self._adapters.get(broker_key)
@@ -37,6 +37,7 @@ def build_router_from_credentials() -> BrokerRouter:
     from app.data.ibkr_paper import IbkrPaperAdapter
     from app.data.tradier_paper import TradierPaperAdapter
     from app.data.alpaca_paper_execution import AlpacaPaperAdapter
+    from app.data.tastytrade_paper import TastytradePaperAdapter
 
     adapters = {}
     ibkr = credential_store.get("ibkr_paper")
@@ -60,4 +61,7 @@ def build_router_from_credentials() -> BrokerRouter:
             key_id=alpaca["key_id"],
             secret_key=alpaca["secret_key"],
         )
+    tastytrade = credential_store.get("tastytrade_paper")
+    if tastytrade and tastytrade.get("client_secret") and tastytrade.get("refresh_token") and tastytrade.get("account_id"):
+        adapters["tastytrade_paper"] = TastytradePaperAdapter(account_id=tastytrade["account_id"])
     return BrokerRouter(adapters=adapters)
