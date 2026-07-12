@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-export type OptionsBroker = 'ibkr_paper' | 'tradier_paper';
+export type OptionsBroker = 'ibkr_paper' | 'tradier_paper' | 'tastytrade_paper';
 export type AutoTradeMode = 'manual' | 'post_scan' | 'armed';
 
 interface AutoTradeState {

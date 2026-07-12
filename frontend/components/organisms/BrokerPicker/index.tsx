@@ -11,9 +11,10 @@ interface BrokerPickerProps {
 }
 
 export function BrokerPicker({ selected, onChange }: BrokerPickerProps) {
-  const { ibkrPaper, tradierPaper } = useSettingsStore();
+  const { ibkrPaper, tradierPaper, tastytradePaper } = useSettingsStore();
   const ibkrOk    = !!ibkrPaper.accountId;
   const tradierOk = !!tradierPaper.token && !!tradierPaper.accountId;
+  const tastyOk   = !!tastytradePaper.clientSecret && !!tastytradePaper.refreshToken && !!tastytradePaper.accountId;
 
   return (
     <div className={styles.wrap}>
@@ -22,6 +23,7 @@ export function BrokerPicker({ selected, onChange }: BrokerPickerProps) {
         {([
           { key: 'ibkr_paper' as OptionsBroker, label: 'IBKR Paper', ok: ibkrOk },
           { key: 'tradier_paper' as OptionsBroker, label: 'Tradier Paper', ok: tradierOk },
+          { key: 'tastytrade_paper' as OptionsBroker, label: 'Tastytrade Paper', ok: tastyOk },
         ] as const).map(({ key, label, ok }) => (
           <button
             key={key}

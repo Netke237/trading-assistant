@@ -13,7 +13,7 @@ router = APIRouter(prefix="/auto-trade", tags=["auto-trade"])
 
 
 class ArmRequest(BaseModel):
-    broker:          Literal["ibkr_paper", "tradier_paper"]
+    broker:          Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_paper"]
     symbol:          str
     option_symbol:   str
     action:          Literal["BUY", "SELL"]
