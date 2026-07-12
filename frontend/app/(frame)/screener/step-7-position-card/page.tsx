@@ -10,7 +10,7 @@ import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
 
-type ExecutionMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper';
+type ExecutionMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper' | 'tastytrade_paper';
 
 function ExecutionModeButton({ label, desc, active, disabled, onClick }:
   { label: string; desc: string; active: boolean; disabled?: boolean; onClick: () => void }) {
@@ -46,10 +46,12 @@ export default function Step7PositionCardPage() {
   const ibkrConfigured = !!settings.ibkrPaper.accountId && !!settings.ibkrPaper.baseUrl;
   const tradierConfigured = !!settings.tradierPaper.token && !!settings.tradierPaper.accountId;
   const [alpacaPaperConfigured, setAlpacaPaperConfigured] = useState(false);
+  const [tastytradePaperConfigured, setTastytradePaperConfigured] = useState(false);
 
   useEffect(() => {
     api.getBrokerStatus().then((s) => {
       setAlpacaPaperConfigured(s.alpaca_paper?.configured ?? false);
+      setTastytradePaperConfigured(s.tastytrade_paper?.configured ?? false);
     }).catch(() => {/* silently ignore — button stays disabled */});
   }, []);
 
@@ -163,6 +165,8 @@ export default function Step7PositionCardPage() {
             active={execMode === 'tradier_paper'} disabled={!tradierConfigured} onClick={() => setExecMode('tradier_paper')} />
           <ExecutionModeButton label="Alpaca Paper" desc="Direct stock order"
             active={execMode === 'alpaca_paper'} disabled={!alpacaPaperConfigured} onClick={() => setExecMode('alpaca_paper')} />
+          <ExecutionModeButton label="Tastytrade Paper" desc="Direct stock order via tastytrade"
+            active={execMode === 'tastytrade_paper'} disabled={!tastytradePaperConfigured} onClick={() => setExecMode('tastytrade_paper')} />
         </div>
       </div>
 

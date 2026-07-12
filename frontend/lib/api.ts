@@ -457,10 +457,12 @@ export const api = {
 
   getBrokerStatus: () =>
     get<{
-      ibkr_paper:    { configured: boolean };
-      tradier_paper: { configured: boolean };
-      ibkr_live:     { configured: boolean; enabled: boolean; note: string };
-      alpaca_paper:  { configured: boolean };
+      ibkr_paper:       { configured: boolean };
+      tradier_paper:    { configured: boolean };
+      ibkr_live:        { configured: boolean; enabled: boolean; note: string };
+      alpaca_paper:     { configured: boolean };
+      tastytrade_paper: { configured: boolean };
+      tastytrade_live:  { configured: boolean; enabled: boolean; note: string };
     }>('/broker/status'),
 
   startHistoryPrefetch: (req: {

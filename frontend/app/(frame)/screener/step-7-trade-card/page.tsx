@@ -215,7 +215,10 @@ export default function Step7Page() {
     const cd  = card.contractDetails;
     const mid = cd?.mid ?? card.entry.limit;
     const dte = cd?.dte ?? 24;
-    const brokerLabel = broker === 'tradier_paper' ? 'Tradier Paper' : 'IBKR Paper';
+    const brokerLabel =
+      broker === 'tradier_paper' ? 'Tradier Paper' :
+      broker === 'tastytrade_paper' ? 'Tastytrade Paper' :
+      'IBKR Paper';
     const typeLabel   = orderType === 'LMT' ? 'Limit' : 'Market';
     return {
       symbol:        card.symbol,

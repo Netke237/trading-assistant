@@ -105,9 +105,10 @@ function Row({ children }: { children: React.ReactNode }) {
 }
 
 const BROKER_FAMILIES = [
-  { prefix: 'alpaca',  ids: ['alpaca', 'alpaca_paper'] },
-  { prefix: 'ibkr',   ids: ['ibkr', 'ibkr_paper'] },
-  { prefix: 'tradier', ids: ['tradier', 'tradier_paper'] },
+  { prefix: 'alpaca',     ids: ['alpaca', 'alpaca_paper'] },
+  { prefix: 'ibkr',       ids: ['ibkr', 'ibkr_paper'] },
+  { prefix: 'tradier',    ids: ['tradier', 'tradier_paper'] },
+  { prefix: 'tastytrade', ids: ['tastytrade', 'tastytrade_paper'] },
 ];
 const DATA_SOURCE_IDS = ['tiingo', 'yfinance'];
 
