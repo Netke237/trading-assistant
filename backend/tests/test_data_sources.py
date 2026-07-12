@@ -5,7 +5,9 @@ from unittest.mock import patch
 
 import httpx
 import pytest
+from httpx import AsyncClient, ASGITransport
 
+from app.main import app
 from app.routers.data_sources import (
     _probe_tradier,
     _probe_alpaca,
@@ -67,3 +69,21 @@ def test_status_for_probe_prefers_governor_degraded():
         gov.return_value.health.return_value = "degraded"
         status = _status_for_probe("alpaca", probe_status="connected")
     assert status == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_data_sources_includes_tastytrade_entries():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/data-sources")
+    ids = {s["id"] for s in resp.json()}
+    assert "tastytrade" in ids
+    assert "tastytrade_paper" in ids
+
+
+@pytest.mark.asyncio
+async def test_probe_tastytrade_unconfigured_when_no_credentials():
+    from app.routers.data_sources import _probe_tastytrade
+    with patch("app.data.tastytrade_session.get_session", return_value=None):
+        status, detail = _probe_tastytrade("tastytrade_paper")
+    assert status == "unconfigured"
