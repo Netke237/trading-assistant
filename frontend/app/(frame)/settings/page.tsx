@@ -1284,6 +1284,7 @@ function BrokersForm() {
     tradierPaper, setTradierPaper,
     tradierLive, setTradierLive,
     alpacaPaper, setAlpacaPaper,
+    tastytradePaper, setTastytradePaper, tastytradeLive,
     ibkrLive, alpacaLive,
   } = useSettingsStore();
 
@@ -1295,6 +1296,9 @@ function BrokersForm() {
   const [tradierLiveAcct, setTradierLiveAcct] = useState(tradierLive.accountId);
   const [alpacaKeyId,  setAlpacaKeyId]  = useState(alpacaPaper.keyId);
   const [alpacaSecret, setAlpacaSecret] = useState(alpacaPaper.secretKey);
+  const [tastyClientSecret, setTastyClientSecret] = useState(tastytradePaper.clientSecret);
+  const [tastyRefreshToken, setTastyRefreshToken] = useState(tastytradePaper.refreshToken);
+  const [tastyAccountId,    setTastyAccountId]    = useState(tastytradePaper.accountId);
   const [saving, setSaving] = useState<string | null>(null);
 
   // Sync when store resets
@@ -1306,6 +1310,9 @@ function BrokersForm() {
   useEffect(() => { setTradierLiveAcct(tradierLive.accountId); }, [tradierLive.accountId]);
   useEffect(() => { setAlpacaKeyId(alpacaPaper.keyId); },      [alpacaPaper.keyId]);
   useEffect(() => { setAlpacaSecret(alpacaPaper.secretKey); }, [alpacaPaper.secretKey]);
+  useEffect(() => { setTastyClientSecret(tastytradePaper.clientSecret); }, [tastytradePaper.clientSecret]);
+  useEffect(() => { setTastyRefreshToken(tastytradePaper.refreshToken); }, [tastytradePaper.refreshToken]);
+  useEffect(() => { setTastyAccountId(tastytradePaper.accountId); },       [tastytradePaper.accountId]);
 
   async function saveIbkrPaper() {
     setSaving('ibkr');
@@ -1332,6 +1339,15 @@ function BrokersForm() {
     setSaving('alpaca');
     setAlpacaPaper({ keyId: alpacaKeyId, secretKey: alpacaSecret });
     await api.postCredentials('alpaca_paper', { key_id: alpacaKeyId, secret_key: alpacaSecret });
+    setSaving(null);
+  }
+
+  async function saveTastytradePaper() {
+    setSaving('tastytrade');
+    setTastytradePaper({ clientSecret: tastyClientSecret, refreshToken: tastyRefreshToken, accountId: tastyAccountId });
+    await api.postCredentials('tastytrade_paper', {
+      client_secret: tastyClientSecret, refresh_token: tastyRefreshToken, account_id: tastyAccountId,
+    });
     setSaving(null);
   }
 
@@ -1467,6 +1483,48 @@ function BrokersForm() {
       </div>
 
       <SectionIntro
+        title="Tastytrade Paper account"
+        blurb="Real IV Rank/Percentile data and paper stock/option orders via tastytrade. Create an OAuth Grant at Tastytrade → My Profile → API to get a client secret + refresh token."
+      />
+      <Row label="Client secret" hint="From your tastytrade OAuth application" defaultValue="—">
+        <input
+          className={styles.input}
+          type="password"
+          placeholder="leave blank to keep saved value"
+          value={tastyClientSecret}
+          onChange={(e) => setTastyClientSecret(e.target.value)}
+        />
+      </Row>
+      <Row label="Refresh token" hint="Never expires — generated once via Create Grant" defaultValue="—">
+        <input
+          className={styles.input}
+          type="password"
+          placeholder="leave blank to keep saved value"
+          value={tastyRefreshToken}
+          onChange={(e) => setTastyRefreshToken(e.target.value)}
+        />
+      </Row>
+      <Row label="Account ID" hint="Your tastytrade paper account number (5WX...)" defaultValue="—">
+        <input
+          className={styles.input}
+          value={tastyAccountId}
+          onChange={(e) => setTastyAccountId(e.target.value)}
+        />
+      </Row>
+      <div className={styles.row}>
+        <div className={styles.rowLabel} />
+        <div className={styles.rowControl}>
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={saveTastytradePaper}
+            disabled={saving === 'tastytrade'}
+          >
+            {saving === 'tastytrade' ? 'Saving…' : 'Save Tastytrade Paper'}
+          </button>
+        </div>
+      </div>
+
+      <SectionIntro
         title="IBKR Live (Locked)"
         blurb={ibkrLive.note}
       />
@@ -1483,6 +1541,16 @@ function BrokersForm() {
       <Row label="Live trading" hint="Requires explicit activation — not yet enabled" defaultValue="Off">
         <button className={styles.btn} disabled title="Locked until manually activated">
           Activate live Alpaca
+        </button>
+      </Row>
+
+      <SectionIntro
+        title="Tastytrade Live (Locked)"
+        blurb={tastytradeLive.note}
+      />
+      <Row label="Live trading" hint="Requires explicit activation — not yet enabled" defaultValue="Off">
+        <button className={styles.btn} disabled title="Locked until manually activated">
+          Activate live Tastytrade
         </button>
       </Row>
     </>
