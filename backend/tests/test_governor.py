@@ -148,7 +148,7 @@ async def test_governor_opens_circuit_and_reports_degraded():
 
 def test_build_default_governor_has_all_providers():
     gov = build_default_governor()
-    for name in ("alpaca", "tradier", "tiingo", "yfinance", "ibkr"):
+    for name in ("alpaca", "tradier", "tiingo", "yfinance", "ibkr", "tastytrade"):
         assert gov.health(name) == "unknown"
 
 

@@ -234,7 +234,7 @@ def build_default_governor() -> Governor:
         # 1 req/s, small burst capacity, trips the circuit after 3 failures
         # (not 5) so a real problem is caught faster before the account gets
         # flagged for abuse.
-        "tastytrade": _state("tastytrade", rate=1.0,      capacity=2, fail=3),
+        "tastytrade": _state("tastytrade", rate=1.0, capacity=2, fail=3),
     }
     return Governor(providers)
 
