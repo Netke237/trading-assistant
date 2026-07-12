@@ -26,6 +26,10 @@ async def set_credentials(body: CredentialUpdate) -> dict:
     credential_store.set(body.key, body.values)
     credential_store.save()
     if body.key in ("tastytrade_paper", "tastytrade_live"):
+        # Deferred import: tastytrade_session imports the `tastytrade` package at
+        # module scope, so importing it at router module-load time would make
+        # app startup fail hard if the SDK isn't installed. Keeping it local
+        # confines that dependency to only when a tastytrade credential is set.
         from app.data.tastytrade_session import clear_cache
         clear_cache()
     return {"ok": True, "key": body.key}
