@@ -227,6 +227,14 @@ def build_default_governor() -> Governor:
                            budget=SymbolBudget(max_symbols=50, window=3600.0)),
         "yfinance": _state("yfinance", rate=2,        capacity=2),
         "ibkr":     _state("ibkr",     rate=40,       capacity=40),
+        # No published production rate limit for market-metrics exists anywhere
+        # in tastytrade's docs. The only documented number found is the Paper
+        # API's default of 5 req/s, which is NOT confirmed to apply to
+        # production or to this specific endpoint. Deliberately conservative:
+        # 1 req/s, small burst capacity, trips the circuit after 3 failures
+        # (not 5) so a real problem is caught faster before the account gets
+        # flagged for abuse.
+        "tastytrade": _state("tastytrade", rate=1.0,      capacity=2, fail=3),
     }
     return Governor(providers)
 

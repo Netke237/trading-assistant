@@ -150,3 +150,14 @@ def test_build_default_governor_has_all_providers():
     gov = build_default_governor()
     for name in ("alpaca", "tradier", "tiingo", "yfinance", "ibkr"):
         assert gov.health(name) == "unknown"
+
+
+def test_tastytrade_provider_registered_with_conservative_rate():
+    gov = build_default_governor()
+    ps = gov._providers.get("tastytrade")
+    assert ps is not None
+    # No published production rate limit exists for market-metrics; the only
+    # documented number anywhere is the Paper API's 5 req/s default, which is
+    # NOT confirmed as the production limit. Stay well under it.
+    assert ps.bucket.rate <= 2.0
+    assert ps.breaker.fail_threshold >= 3
