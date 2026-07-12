@@ -90,12 +90,11 @@ class TastytradePaperAdapter:
                 )
             # tastytrade LimitOrder price convention: negative = debit (you
             # pay), positive = credit (you receive) — a BUY is always a debit.
-            # UNVERIFIED beyond documentation — this is a runtime value
-            # convention, not a call signature. If this is backwards, every
-            # paper order this adapter places carries an inverted price and
-            # nothing before a real live-account test would reveal it. A
-            # later manual verification task must explicitly confirm the
-            # placed order's price sign matches what was entered.
+            # Confirmed against the installed tastytrade SDK source itself
+            # (order.py's get_sign/set_sign_for), not just documentation, and
+            # locked in by test_place_order_stock_success's exact
+            # Decimal("-150.0") assertion. Still worth a real paper-account
+            # order as a final sanity check before this is trusted with size.
             price = Decimal(str(order.limit_price))
             if order.action == "BUY":
                 price = -abs(price)
