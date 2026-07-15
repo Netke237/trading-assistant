@@ -125,5 +125,5 @@ def downgrade() -> None:
         existing_type=sa.String(),
         type_=postgresql.UUID(as_uuid=True),
         postgresql_using='recommendation_id::uuid',
-        nullable=False,
+        nullable=True,
     )
