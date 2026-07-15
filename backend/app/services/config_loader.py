@@ -16,3 +16,13 @@ def load_scoring_cfg() -> dict:
     """Return the parsed scoring_rules.yaml as a dict (cached after first load)."""
     import yaml
     return yaml.safe_load((_CONFIG_DIR / "scoring_rules.yaml").read_text())
+
+
+@lru_cache(maxsize=1)
+def load_reward_risk_cfg() -> dict:
+    """Return risk_rules.yaml's reward_risk block (bullish/bearish target %,
+    premium_stop_pct). Shared by the scan pipeline and the per-contract
+    recompute endpoint — both must build a trade plan off the same numbers."""
+    import yaml
+    full = yaml.safe_load((_CONFIG_DIR / "risk_rules.yaml").read_text())
+    return full["reward_risk"]

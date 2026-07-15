@@ -9,7 +9,6 @@ _log = logging.getLogger(__name__)
 
 import httpx
 import yaml
-from functools import lru_cache as _lru_cache
 from pathlib import Path as _Path
 from fastapi import APIRouter, Depends
 
@@ -19,17 +18,11 @@ from app.database import AsyncSessionLocal, get_db
 from app.models.scan_session import ScanSession
 import json as _json
 
-_RR_CONFIG_PATH = _Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
-
-# NOTE: lru_cache caches this at first call. Restart the backend to pick up
-# changes to risk_rules.yaml (premium_stop_pct, target %, etc.).
-@_lru_cache(maxsize=1)
-def _rr_cfg() -> dict:
-    import yaml as _yaml
-    with open(_RR_CONFIG_PATH) as f:
-        return _yaml.safe_load(f)["reward_risk"]
-
-
+# NOTE: lru_cache (inside load_reward_risk_cfg) caches this at first call.
+# Restart the backend to pick up changes to risk_rules.yaml (premium_stop_pct,
+# target %, etc.). Shared with app.routers.contracts's recompute endpoint so
+# both build a trade plan off the same numbers.
+from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
 
 from app.schemas import (
@@ -63,8 +56,9 @@ from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.contract_validator import dte_holding_multiplier
 from app.scoring.dte_window import resolve_dte_bounds
-from app.scoring.entry_quality import assess_entry
-from app.scoring.reward_risk import estimate_rr, estimate_targets
+from app.scoring.reward_risk import estimate_rr
+from app.scoring.trade_plan import build_trade_plan
+from types import SimpleNamespace
 from app.services.audit import new_rec_id, log_event
 from app.services.scan_scheduler import ScanScheduler
 from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
@@ -516,49 +510,32 @@ async def _process_symbol(
     contract_card: ContractScoreCard = best_score
     runner_ups = valid_scores[1:3]
 
-    # ── Entry quality ──────────────────────────────────────────────────────────
-    bid = float(contract.get("bid", 0))
-    ask = float(contract.get("ask", 0))
-    mid = float(contract.get("price", 0))
-    entry = assess_entry(bid=bid, ask=ask, mid=mid)
-
-    # ── Reward-risk ────────────────────────────────────────────────────────────
+    # ── Entry / Exit / Reward-risk / targets (shared with the recompute endpoint) ─
     _rr = _rr_cfg()
-    _bull = direction == "Bullish"
-    target_price = price * (1 + _rr["bullish_target_pct"]) if _bull else price * (1 - _rr["bearish_target_pct"])
     strike = float(contract.get("strike", price))
-    expiry_years = contract.get("dte", 30) / 365.0
-    premium = float(contract.get("price", 0.10))
-    premium = max(premium, 0.01)
-    # Back-calculate the stock price at which the option would lose premium_stop_pct
-    # of its premium (using delta approximation). This keeps the Exit Plan's
-    # "Invalidation" field consistent with the R/R calculation's risk basis.
-    _delta_est = max(abs(float(contract.get("delta", 0.45))), 0.05)
-    _stock_stop_move = (premium * _rr["premium_stop_pct"]) / _delta_est
-    invalidation_price = max(price - _stock_stop_move, 0.01) if _bull else price + _stock_stop_move
-
-    rr = estimate_rr(
+    premium = max(float(contract.get("price", 0.10)), 0.01)
+    _plan = build_trade_plan(
+        direction=direction,
         stock_price=price,
-        target_price=target_price,
-        invalidation_price=invalidation_price,
         strike=strike,
-        expiry_years=expiry_years,
-        current_premium=premium,
-        is_call=(direction == "Bullish"),
-        heston_params=None,
-        premium_stop_pct=_rr["premium_stop_pct"],
+        dte=int(contract.get("dte", 30)),
+        premium=premium,
+        delta=float(contract.get("delta", 0.45)),
+        entry_bid=float(contract.get("bid", 0)),
+        entry_ask=float(contract.get("ask", 0)),
+        entry_mid=float(contract.get("price", 0)),
+        rr_cfg=_rr,
     )
-
-    targets = estimate_targets(
-        stock_price=price,
-        base_target_price=target_price,
-        strike=strike,
-        expiry_years=expiry_years,
-        current_premium=premium,
-        is_call=(direction == "Bullish"),
-        heston_params=None,
-        premium_stop_pct=_rr["premium_stop_pct"],
-    )
+    entry = _plan.entry
+    target_price = _plan.target_price
+    invalidation_price = _plan.invalidation_price
+    rr = SimpleNamespace(rr_ratio=_plan.rr_ratio, model_used=_plan.rr_model)
+    targets = _plan.targets
+    # Unrounded target/invalidation for the runner-up alternatives' estimate_rr
+    # (see below) — feeding the rounded values would drift their R/R vs the
+    # pre-refactor behaviour.
+    _target_raw = _plan.target_price_raw
+    _invalidation_raw = _plan.invalidation_price_raw
 
     # ── Build TradeCardData ────────────────────────────────────────────────────
     from datetime import date as _date
@@ -624,10 +601,10 @@ async def _process_symbol(
             orderType=entry.order_type,
         ),
         exit=TradeExit(
-            invalidation=round(invalidation_price, 2),
-            premiumStop=round(premium * _rr["premium_stop_pct"], 2),
-            timeStopDays=max(3, int(contract.get("dte", 30) * 0.4)),
-            target=round(target_price, 2),
+            invalidation=invalidation_price,
+            premiumStop=_plan.premium_stop,
+            timeStopDays=_plan.time_stop_days,
+            target=target_price,
             targets=targets,
         ),
         rrRatio=rr.rr_ratio,
@@ -687,8 +664,8 @@ async def _process_symbol(
         alt_premium = float(alt_c.get("price", 0.10))
         alt_rr = estimate_rr(
             stock_price=price,
-            target_price=target_price,
-            invalidation_price=invalidation_price,
+            target_price=_target_raw,
+            invalidation_price=_invalidation_raw,
             strike=alt_strike,
             expiry_years=alt_expiry_years,
             current_premium=alt_premium,

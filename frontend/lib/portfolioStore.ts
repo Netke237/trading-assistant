@@ -69,7 +69,10 @@ interface PortfolioStoreState {
     recId: string,
     opts: { qtyToClose?: number | null; exitPrice?: number | null; exitDate?: string | null; sendToBroker?: boolean },
   ) => Promise<{ ok: boolean; detail?: string }>;
-  syncFromBackend: () => Promise<void>;
+  /** Returns whether the pull actually reached the backend and updated state
+   *  (false on network failure — callers that just mutated local state around
+   *  this call may need to know so they don't assume the pull "saw" their change). */
+  syncFromBackend: () => Promise<boolean>;
   syncToBackend:  () => Promise<void>;
 }
 
@@ -253,8 +256,8 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         if (closedRecId) deletePosition(closedRecId);
       },
       closePositionRemote: async (recId, opts) => {
-        const doClose = async (): Promise<Response> =>
-          fetch(`${_BASE_URL()}/api/portfolio/${recId}/close`, {
+        const doClose = async (id: string): Promise<Response> =>
+          fetch(`${_BASE_URL()}/api/portfolio/${id}/close`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -264,23 +267,91 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
               sendToBroker: opts.sendToBroker ?? false,
             }),
           });
+        const local = usePortfolioStore.getState().positions.find((p) => p.recId === recId);
+
+        // Fetch the authoritative open positions, or null if the backend is
+        // unreachable / errors. Used to decide recId drift vs a genuinely-gone
+        // position WITHOUT guessing from a persist failure code.
+        const fetchRemote = async (): Promise<BackendPosition[] | null> => {
+          try {
+            const r = await fetch(`${_BASE_URL()}/api/portfolio`);
+            if (!r.ok) return null;
+            return (await r.json()) as BackendPosition[];
+          } catch {
+            return null;
+          }
+        };
+
+        // Tracks whichever recId the successful close actually landed under —
+        // starts as the caller's id, but drift recovery below may retry against
+        // the backend's real id instead. Anything restored to local state after
+        // a successful close must use THIS id, not the original parameter, or a
+        // drift-recovered restore would carry a recId that 404s on every
+        // subsequent action until the next sync heals it.
+        let effectiveRecId = recId;
+
         try {
-          let res = await doClose();
-          if (res.status === 404) {
-            // Position was never persisted to the backend (e.g. the original
-            // POST failed silently) — re-persist it now, then retry the close.
-            const local = usePortfolioStore.getState().positions.find((p) => p.recId === recId);
-            if (local) {
-              const persisted = await persistPosition(local);
-              if (persisted.ok) res = await doClose();
+          let res = await doClose(recId);
+
+          // A 404 means the backend has no open position under this recId:
+          // either the original POST never landed, or the backend holds the same
+          // *contract* under a different recId (drift, e.g. a DB reset while
+          // localStorage kept the old id). Recover carefully — and only drop a
+          // local row when the backend POSITIVELY confirms the contract is gone.
+          if (res.status === 404 && local) {
+            const persisted = await persistPosition(local);
+            if (persisted.ok) {
+              res = await doClose(recId);
+            } else {
+              const remote = await fetchRemote();
+              if (remote) {
+                const match = remote.find((p) => p.contract === local.contract);
+                if (match?.recId && match.recId !== recId) {
+                  effectiveRecId = match.recId;
+                  res = await doClose(match.recId);            // drift: close the real row
+                } else if (!match) {
+                  // Backend reachable AND has no such contract → genuinely gone.
+                  set((s) => ({ positions: s.positions.filter((p) => p.recId !== recId) }));
+                  return {
+                    ok: false,
+                    detail: 'This position was no longer on the server (already closed or cleared) — removed it from your list.',
+                  };
+                }
+                // match with same recId shouldn't 404 — fall through to the error below.
+              }
+              // Backend unreachable: do NOT drop a possibly-valid position.
             }
           }
+
           if (!res.ok) {
             const body = await res.json().catch(() => ({}));
             return { ok: false, detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
           }
-          // Re-pull authoritative open positions (partial closes change qty)
-          await usePortfolioStore.getState().syncFromBackend();
+
+          // Success: remove the acted-upon local row so a fully-closed position
+          // can't linger via syncFromBackend's localOnly retention (its contract
+          // is now absent from the backend). A partial close re-appears from the
+          // authoritative pull below with its reduced qty.
+          const closedRow = usePortfolioStore.getState().positions.find((p) => p.recId === recId);
+          const wasFullClose = !opts.qtyToClose || opts.qtyToClose >= (closedRow?.contracts ?? 1);
+          set((s) => ({ positions: s.positions.filter((p) => p.recId !== recId) }));
+          const synced = await usePortfolioStore.getState().syncFromBackend();
+          // The close itself succeeded server-side regardless of this GET. But if
+          // it was only a PARTIAL close and the follow-up pull failed (network),
+          // the row above is now gone from local state with no way to learn its
+          // reduced qty until the next successful sync — restore it locally
+          // (qty adjusted, price/P&L stale until next sync) rather than making a
+          // still-open position disappear from the list entirely.
+          if (!synced && !wasFullClose && closedRow) {
+            const remainingQty = Math.max(0, (closedRow.contracts ?? 1) - (opts.qtyToClose ?? 0));
+            if (remainingQty > 0) {
+              // Restore under effectiveRecId (the id the backend actually closed
+              // against) — if drift recovery kicked in above, the backend no
+              // longer recognizes the original `recId`, and restoring under the
+              // stale id would just 404 again on the next action.
+              set((s) => ({ positions: [...s.positions, { ...closedRow, recId: effectiveRecId, contracts: remainingQty }] }));
+            }
+          }
           return { ok: true };
         } catch (e) {
           return { ok: false, detail: e instanceof Error ? e.message : 'Network error' };
@@ -289,7 +360,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
       syncFromBackend: async () => {
         try {
           const res = await fetch(`${_BASE_URL()}/api/portfolio`);
-          if (!res.ok) return;
+          if (!res.ok) return false;
           const remote: BackendPosition[] = await res.json();
           const remotePositions = remote.map(fromBackend);
           const remoteRecIds = new Set(remotePositions.map((p) => p.recId).filter(Boolean));
@@ -305,8 +376,10 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           // dedupePositions is a backstop: two local rows can share a contract if
           // both were refused by the backend and neither reached remoteContracts.
           set({ positions: dedupePositions([...remotePositions, ...localOnly]) });
+          return true;
         } catch {
           // network unavailable — keep localStorage state
+          return false;
         }
       },
       syncToBackend: async () => {

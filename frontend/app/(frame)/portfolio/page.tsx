@@ -366,16 +366,43 @@ export default function PortfolioPage() {
 
       {tab === 'open' && closing && (() => {
         const p = positions.find((x) => x.contract === closing);
-        return p ? (
-          <>
-            {closeError && <Text size={12} tone="reject">{closeError}</Text>}
-            <ClosePositionDrawer
-              position={p}
-              onCancel={() => { setClosing(null); setCloseError(null); }}
-              onConfirm={(opts) => confirmClose(p, opts)}
-            />
-          </>
-        ) : null;
+        const dismiss = () => { setClosing(null); setCloseError(null); };
+
+        // A failed close can remove the position from `positions` (e.g. the
+        // "genuinely gone" case in closePositionRemote drops the phantom row
+        // before returning its error). If the drawer only rendered when `p`
+        // still exists, that exact removal made the whole modal — including
+        // the error explaining WHY — vanish along with it. Show a standalone
+        // error card in that case instead of silently closing.
+        if (!p) {
+          if (!closeError) return null;
+          return (
+            <div className={styles.closeOverlay} role="dialog" aria-modal="true" aria-label="Close position error" onClick={(e) => { if (e.target === e.currentTarget) dismiss(); }}>
+              <div className={styles.closeModal}>
+                <Text size={12} tone="reject">{closeError}</Text>
+                <button type="button" className={styles.clearConfirmBtn} onClick={dismiss}>OK</button>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div
+            className={styles.closeOverlay}
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => { if (e.target === e.currentTarget) dismiss(); }}
+          >
+            <div className={styles.closeModal}>
+              {closeError && <Text size={12} tone="reject">{closeError}</Text>}
+              <ClosePositionDrawer
+                position={p}
+                onCancel={dismiss}
+                onConfirm={(opts) => confirmClose(p, opts)}
+              />
+            </div>
+          </div>
+        );
       })()}
     </div>
   );

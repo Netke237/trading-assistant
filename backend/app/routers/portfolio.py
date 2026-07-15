@@ -120,6 +120,76 @@ async def add_position(
             detail=f"Position with contract '{body.contract}' already exists.",
         )
 
+    # Two live fetches at save time, run CONCURRENTLY (one save = one round-trip
+    # latency, not two sequential ones):
+    #   1. underlying price → re-anchor stop/targets to the fill-time price.
+    #   2. contract quote   → set entry_price to the live premium (option) or
+    #      price (stock) so PREMIUM_STOP / P&L are measured against the market
+    #      NOW, not the — possibly stale — value captured when the scan ran.
+    # Both fall back to the frontend-supplied values when a live quote is
+    # unavailable (after hours / data source down). fetch_contract_quote_async
+    # handles both SYMBOL|STRIKE|EXPIRY|C/P and SYMBOL|STOCK shapes.
+    #
+    # This MUST happen before the risk check below: the risk check's capital-at-
+    # risk / exposure math has to be evaluated against the price that actually
+    # gets persisted, not the frontend's (possibly stale) entryPrice — otherwise
+    # a position could be approved against one price and stored at a materially
+    # different one, silently bypassing the exposure gate.
+    adjusted_stop = body.stop
+    adjusted_targets = list(body.targets or [])
+    entry_stock_price = body.scanStockPrice
+    entry_price = body.entryPrice
+
+    need_reanchor = bool(body.scanStockPrice and body.scanStockPrice > 0)
+    # For a stock position (SYMBOL|STOCK), fetch_contract_quote_async's quote
+    # price IS the underlying price — fetching it separately via
+    # fetch_price_async as well would just duplicate the same call.
+    is_stock = body.contract.endswith("|STOCK")
+    try:
+        async with httpx.AsyncClient(timeout=8) as _cl:
+            _quote_task = fetch_contract_quote_async(_cl, body.contract)
+            if need_reanchor and not is_stock:
+                live_quote, live_price = await asyncio.gather(
+                    _quote_task, fetch_price_async(_cl, body.symbol),
+                )
+            else:
+                live_quote = await _quote_task
+                live_price = (
+                    (live_quote or {}).get("price") if need_reanchor and is_stock and isinstance(live_quote, dict)
+                    else None
+                )
+    except Exception:
+        live_quote, live_price = None, None
+        _log.warning(
+            "add_position: live save-time refetch failed for %s; keeping frontend values",
+            body.contract, exc_info=True,
+        )
+
+    if need_reanchor and live_price and live_price > 0:
+        delta = live_price - body.scanStockPrice
+        if adjusted_stop is not None:
+            adjusted_stop = round(adjusted_stop + delta, 2)
+        adjusted_targets = [
+            {
+                **t,
+                "stockPrice":  round((t.get("stockPrice")  or 0) + delta, 2),
+                "targetPrice": round((t.get("targetPrice") or 0) + delta, 2),
+            }
+            for t in adjusted_targets
+        ]
+        entry_stock_price = live_price
+
+    live_entry = (live_quote or {}).get("price") if isinstance(live_quote, dict) else None
+    if live_entry and float(live_entry) > 0:
+        entry_price = round(float(live_entry), 2)
+    else:
+        # %s (not %.2f) — entryPrice can legitimately be None (schema default),
+        # and "%.2f" % None raises inside the logging formatter.
+        _log.info(
+            "add_position: no live quote for %s; storing frontend entryPrice %s",
+            body.contract, body.entryPrice,
+        )
+
     # Fetch existing portfolio for risk check
     result = await db.execute(select(PortfolioPositionModel))
     db_positions = result.scalars().all()
@@ -139,8 +209,8 @@ async def add_position(
         symbol=body.symbol,
         contract_id=body.contract,
         proposed_contracts=body.qty,
-        entry_premium=body.entryPrice,
-        current_price=body.entryPrice,
+        entry_premium=entry_price,
+        current_price=entry_price,
         portfolio=portfolio,
         portfolio_value=body.portfolioValue,
     )
@@ -150,39 +220,12 @@ async def add_position(
             detail=" ".join(risk.reasons),
         )
 
-    # Re-anchor stop and targets to the live price at fill time.
-    # scanStockPrice is the underlying price shown on the trade card (live at scan time).
-    # We fetch the live price now (at save time) and shift stop/targets by the delta.
-    adjusted_stop = body.stop
-    adjusted_targets = list(body.targets or [])
-    entry_stock_price = body.scanStockPrice
-
-    if body.scanStockPrice and body.scanStockPrice > 0:
-        try:
-            async with httpx.AsyncClient(timeout=5) as _cl:
-                live_price = await fetch_price_async(_cl, body.symbol)
-            if live_price and live_price > 0:
-                delta = live_price - body.scanStockPrice
-                if adjusted_stop is not None:
-                    adjusted_stop = round(adjusted_stop + delta, 2)
-                adjusted_targets = [
-                    {
-                        **t,
-                        "stockPrice":  round((t.get("stockPrice")  or 0) + delta, 2),
-                        "targetPrice": round((t.get("targetPrice") or 0) + delta, 2),
-                    }
-                    for t in adjusted_targets
-                ]
-                entry_stock_price = live_price
-        except Exception:
-            pass  # fallback: store scan-time values unchanged
-
     position = PortfolioPositionModel(
         rec_id=body.recId,
         symbol=body.symbol,
         contract=body.contract,
         direction=body.direction,
-        entry_price=body.entryPrice,
+        entry_price=entry_price,
         qty=body.qty,
         entry_date=body.entryDate,
         stop=adjusted_stop,

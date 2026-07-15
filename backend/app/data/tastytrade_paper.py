@@ -82,6 +82,26 @@ class TastytradePaperAdapter:
             )
         try:
             account = await Account.get(session, self._account_id)
+        except Exception as acct_exc:
+            # "record_not_found / Couldn't find Account" means the configured
+            # account number doesn't belong to the logged-in tastytrade user
+            # (or is mistyped). Surface an actionable message rather than the
+            # raw SDK error — and raise it directly (not through the generic
+            # try/except below) so it isn't re-wrapped as
+            # "tastytrade paper order failed: tastytrade could not find...".
+            # A RuntimeError from anywhere else in this method (place_order,
+            # SDK internals) is NOT this case and must still get the generic
+            # wrap for consistency with every other failure path.
+            if "record_not_found" in str(acct_exc) or "find Account" in str(acct_exc):
+                raise RuntimeError(
+                    f"tastytrade could not find account '{self._account_id}'. "
+                    "Check the account number under Settings → Brokers → "
+                    "Tastytrade Paper matches an account on the logged-in "
+                    "tastytrade profile (client_secret / refresh_token)."
+                ) from acct_exc
+            raise RuntimeError(f"tastytrade paper order failed: {acct_exc}") from acct_exc
+
+        try:
             leg = await self._resolve_leg(session, order)
             if order.order_type != "LMT" or order.limit_price is None:
                 raise ValueError(

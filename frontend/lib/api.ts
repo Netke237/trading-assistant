@@ -24,11 +24,12 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   });
   if (!res.ok) return apiError(path, res);
   return res.json() as Promise<T>;
@@ -318,6 +319,23 @@ export const api = {
     ),
   getStockQuote: (symbol: string, signal?: AbortSignal) =>
     get<{ symbol: string; price: number }>(`/api/quote/stock?symbol=${encodeURIComponent(symbol)}`, signal),
+  /** Recompute Entry/Exit/RR/targets for a user-selected contract (Step 6 override). */
+  recomputePlan: (req: {
+    symbol: string;
+    direction: 'Bullish' | 'Bearish';
+    stock_price: number;
+    strike: number;
+    dte: number;
+    premium: number;
+    delta: number;
+    spread: number;
+  }, signal?: AbortSignal) =>
+    post<{
+      entry: TradeCardData['entry'];
+      exit: TradeCardData['exit'];
+      rrRatio: number;
+      rrModel: TradeCardData['rrModel'];
+    }>('/api/contracts/recompute-plan', req, signal),
   getCandles:    (symbol: string) => get<Candle[]>(`/api/candles/${encodeURIComponent(symbol)}`),
   getSymbolInfo: (symbol: string) =>
     get<{ symbol: string; name: string }>(`/api/symbol/${encodeURIComponent(symbol)}/info`),
