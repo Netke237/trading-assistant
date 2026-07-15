@@ -8,19 +8,32 @@ from app.services.portfolio_performance import (
 
 def test_realized_pnl_long_premium():
     # entry 1.00, exit 1.50, 2 contracts -> (1.50-1.00)*100*2 = 100.0, +50%
-    dollar, pct = realized_pnl(entry_price=1.00, exit_price=1.50, qty=2)
+    dollar, pct = realized_pnl(entry_price=1.00, exit_price=1.50, qty=2, contract="AAPL|185|2026-08-21|C")
     assert dollar == 100.0
     assert pct == 50.0
 
 
 def test_realized_pnl_loss_and_zero_entry_guard():
-    dollar, pct = realized_pnl(entry_price=2.00, exit_price=1.00, qty=1)
+    dollar, pct = realized_pnl(entry_price=2.00, exit_price=1.00, qty=1, contract="AAPL|185|2026-08-21|C")
     assert dollar == -100.0
     assert pct == -50.0
     # entry 0 must not divide-by-zero
-    d2, p2 = realized_pnl(entry_price=0.0, exit_price=1.0, qty=1)
+    d2, p2 = realized_pnl(entry_price=0.0, exit_price=1.0, qty=1, contract="AAPL|185|2026-08-21|C")
     assert d2 == 100.0
     assert p2 == 0.0
+
+
+def test_realized_pnl_stock_uses_multiplier_one():
+    # Stock close: no ×100 contract multiplier. entry 50, exit 55, 10 shares -> 50.0, +10%
+    dollar, pct = realized_pnl(entry_price=50.0, exit_price=55.0, qty=10, contract="AAPL|STOCK")
+    assert dollar == 50.0
+    assert pct == 10.0
+
+
+def test_realized_pnl_option_still_uses_multiplier_100():
+    dollar, pct = realized_pnl(entry_price=1.00, exit_price=1.50, qty=2, contract="AAPL|185|2026-08-21|C")
+    assert dollar == 100.0
+    assert pct == 50.0
 
 
 def test_bucket_realized_by_calendar():

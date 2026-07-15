@@ -19,7 +19,7 @@ from app.schemas import (
 )
 from app.services.portfolio_risk import check_position_risk, PortfolioPosition as RiskPosition
 from app.services.portfolio_performance import (
-    realized_pnl, bucket_realized_by_calendar, cumulative_curve,
+    realized_pnl, bucket_realized_by_calendar, cumulative_curve, _contract_multiplier,
 )
 from app.data.market import fetch_contract_quote_async
 
@@ -27,11 +27,6 @@ router = APIRouter(prefix='/api', tags=['trading'])
 
 import logging as _logging
 _log = _logging.getLogger(__name__)
-
-
-def _contract_multiplier(contract: str) -> int:
-    """Return 1 for stock positions (SYMBOL|STOCK), 100 for option contracts."""
-    return 1 if str(contract).endswith("|STOCK") else 100
 
 
 # ── Broker integration (NOT ACTIVE YET) ───────────────────────────────────────
@@ -297,7 +292,7 @@ async def close_position(
             )
 
     exit_date = body.exitDate or date.today().isoformat()
-    dollar, pct = realized_pnl(position.entry_price, float(exit_price), qty_to_close)
+    dollar, pct = realized_pnl(position.entry_price, float(exit_price), qty_to_close, position.contract)
 
     closed = ClosedPositionModel(
         id=uuid.uuid4().hex,
