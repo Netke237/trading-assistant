@@ -21,6 +21,7 @@ interface DataProps {
   weight?: DataWeight;
   tone?: DataTone;
   className?: string;
+  title?: string;
   children: React.ReactNode;
 }
 
@@ -55,6 +56,7 @@ export function Data({
   weight = 400,
   tone = 'primary',
   className,
+  title,
   children,
 }: DataProps) {
   const Tag = as;
@@ -68,5 +70,5 @@ export function Data({
     .filter(Boolean)
     .join(' ');
 
-  return <Tag className={classes}>{children}</Tag>;
+  return <Tag className={classes} title={title}>{children}</Tag>;
 }

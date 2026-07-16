@@ -4,21 +4,21 @@ import { Text } from '@/components/primitives';
 import styles from './PreBreakoutParamsPanel.module.css';
 
 export interface PreBreakoutParams {
-  atrCompressionRatio: number;    // 0.1–1.0,  default 0.7
+  atrCompressionRatio: number;    // 0.1–1.0,  default 0.85
   atrAvgLookback: number;         // 5–50,     default 20
-  rangeAtrMult: number;           // 0.1–2.0,  default 0.8
+  rangeAtrMult: number;           // 0.1–5.0,  default 3.0
   rangeLookbackBars: number;      // 3–30,     default 10
-  volCompressionRatio: number;    // 0.1–1.0,  default 0.8
+  volCompressionRatio: number;    // 0.1–1.0,  default 0.9
   resistanceProximityPct: number; // 0.01–0.20,default 0.08
   swingLookback: number;          // 10–100,   default 50
 }
 
 export const PREBREAKOUT_DEFAULTS: PreBreakoutParams = {
-  atrCompressionRatio: 0.7,
+  atrCompressionRatio: 0.85,
   atrAvgLookback: 20,
-  rangeAtrMult: 0.8,
+  rangeAtrMult: 3.0,
   rangeLookbackBars: 10,
-  volCompressionRatio: 0.8,
+  volCompressionRatio: 0.9,
   resistanceProximityPct: 0.08,
   swingLookback: 50,
 };
@@ -91,7 +91,7 @@ export function PreBreakoutParamsPanel({ params, setParams, onReset }: Props) {
             <input
               type="number"
               value={params.rangeAtrMult}
-              min={0.1} max={2.0} step={0.05}
+              min={0.1} max={5.0} step={0.1}
               onChange={(e) => setParams((p) => ({ ...p, rangeAtrMult: Number(e.target.value) }))}
             />
           </div>

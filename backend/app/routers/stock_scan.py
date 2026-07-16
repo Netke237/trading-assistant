@@ -151,11 +151,12 @@ _BACKTEST_POOL = concurrent.futures.ProcessPoolExecutor(
 )
 
 
-def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict]) -> str:
+def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], params: dict | None = None) -> str:
     bars_hash = hashlib.md5(
         str([(b["time"], b["close"]) for b in bars[-20:]]).encode()
     ).hexdigest()[:8]
-    return f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}"
+    params_hash = hashlib.md5(str(sorted((params or {}).items())).encode()).hexdigest()[:8]
+    return f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{params_hash}"
 
 
 def _get_backtest_cached(key: str):
@@ -306,22 +307,23 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     conf_val = conf_txt = None
     if signal is not None:
         _bt_bars = _intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
-        _bt_key = _backtest_key(symbol, req.strategy, req.direction, _bt_bars)
+        _bt_key = _backtest_key(symbol, req.strategy, req.direction, _bt_bars, signal_kwargs)
         bt_result = _get_backtest_cached(_bt_key)
         if bt_result is None:
             bt_result = await asyncio.get_running_loop().run_in_executor(
                 _BACKTEST_POOL,
                 functools.partial(run_strategy_backtest, _bt_bars, strategy=req.strategy,
                                   direction=req.direction, min_trades=req.bt_min_trades,
-                                  min_win_rate=req.bt_min_win_rate))
+                                  min_win_rate=req.bt_min_win_rate, params=signal_kwargs))
             _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
         if not bt_result.passes_gate:
             gate_flags.append({"gate": "backtest", "status": "CAUTION", "detail": bt_result.summary_text})
-        _ck = conf_cache_key(symbol, req.direction, req.horizon)
+        _ck = conf_cache_key(symbol, req.direction, req.horizon, req.confidence_atr_mult, scoring_mode="stock")
         _cached = get_cached(_ck)
         if _cached is None:
             _res = await asyncio.to_thread(compute_confidence, bars, direction=req.direction,
-                                           horizon=req.horizon, atr_mult=req.confidence_atr_mult)
+                                           horizon=req.horizon, atr_mult=req.confidence_atr_mult,
+                                           scoring_mode="stock")
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
             set_cached(_ck, _cached)
         conf_val = _cached["confidence"]
@@ -690,6 +692,10 @@ async def _process_stock(
                 # Use RSI as canonical backtest proxy for multi-signal — deterministic regardless of fired order
                 _bt_strategy = "mean_reversion_rsi"
                 bt_bars = bars
+                _bt_params = _merge_strategy_params(
+                    "mean_reversion_rsi", req.direction,
+                    _SIGNAL_KWARGS.get("mean_reversion_rsi", lambda r: {})(req),
+                )
             else:
                 signal_fn = _SIGNAL_FNS.get(req.strategy)
                 if not signal_fn:
@@ -707,8 +713,9 @@ async def _process_stock(
                     return {"symbol": symbol, "reason": f"no {req.strategy} setup"}
                 _bt_strategy = req.strategy
                 bt_bars = intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
+                _bt_params = signal_kwargs
 
-            _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bt_bars)
+            _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bt_bars, _bt_params)
             bt_result = _get_backtest_cached(_bt_key)
             if bt_result is None:
                 bt_result = await asyncio.get_running_loop().run_in_executor(
@@ -717,20 +724,19 @@ async def _process_stock(
                         run_strategy_backtest, bt_bars,
                         strategy=_bt_strategy, direction=req.direction,
                         min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
+                        params=_bt_params,
                     ),
                 )
                 _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
             if not bt_result.passes_gate:
                 return {"symbol": symbol, "reason": f"backtest gate: {bt_result.summary_text}"}
 
-            _ck = conf_cache_key(symbol, req.direction, req.horizon)
-            # Non-default atr_mult: bypass cache to avoid stale hits from a
-            # prior scan that used a different multiplier.
-            _cached = None if req.confidence_atr_mult is not None else get_cached(_ck)
+            _ck = conf_cache_key(symbol, req.direction, req.horizon, req.confidence_atr_mult, scoring_mode="stock")
+            _cached = get_cached(_ck)
             if _cached is None:
                 _res = await asyncio.to_thread(
                     compute_confidence, bars, direction=req.direction, horizon=req.horizon,
-                    atr_mult=req.confidence_atr_mult,
+                    atr_mult=req.confidence_atr_mult, scoring_mode="stock",
                 )
                 _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
                 set_cached(_ck, _cached)
@@ -944,8 +950,9 @@ _FIB_ALLOWED_OVERRIDE_KEYS = frozenset({
     "fib_tolerance_pct",
     "impulse_min_pct",
     "retracement_recency_bars",
+    "ema_filter_period",
 })
-_FIB_INT_OVERRIDE_KEYS = frozenset({"fib_swing_lookback", "retracement_recency_bars"})
+_FIB_INT_OVERRIDE_KEYS = frozenset({"fib_swing_lookback", "retracement_recency_bars", "ema_filter_period"})
 
 _FIB_DEFAULTS = {
     "fib_swing_lookback": 100,
@@ -953,6 +960,7 @@ _FIB_DEFAULTS = {
     "fib_tolerance_pct": 0.015,
     "impulse_min_pct": 0.08,
     "retracement_recency_bars": 40,
+    "ema_filter_period": 20,
 }
 
 
@@ -1049,6 +1057,22 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
         if level_hit is None:
             # Insufficient bars or no swing found — skip
             continue
+
+        # EMA trend filter: price must be on the correct side of the EMA.
+        # Bullish: close > EMA; Bearish: close < EMA. 0 disables.
+        ema_period = int(scan_params["ema_filter_period"])
+        if ema_period > 0 and len(bars) >= ema_period:
+            closes = [b["close"] for b in bars]
+            k = 2 / (ema_period + 1)
+            ema_val = sum(closes[:ema_period]) / ema_period
+            for c in closes[ema_period:]:
+                ema_val = c * k + ema_val * (1 - k)
+            current_close = closes[-1]
+            if body.direction == "Bullish" and current_close < ema_val:
+                continue
+            if body.direction == "Bearish" and current_close > ema_val:
+                continue
+
         # Confidence: 100 if at level, scaled by proximity otherwise
         tol = scan_params["fib_tolerance_pct"] * 100  # convert to pct units
         if dist_pct is None:

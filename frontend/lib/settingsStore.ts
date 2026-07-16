@@ -135,6 +135,28 @@ export const DEFAULT_IBKR_PAPER: IbkrPaperConfig = {
   accountId: '',
 };
 
+export interface TastytradePaperConfig {
+  clientSecret: string;
+  refreshToken: string;
+  accountId:    string;
+}
+
+export interface TastytradeLiveConfig {
+  enabled: false;   // always false until manually unlocked in a future release
+  note:    string;
+}
+
+export const DEFAULT_TASTYTRADE_PAPER: TastytradePaperConfig = {
+  clientSecret: '',
+  refreshToken: '',
+  accountId:    '',
+};
+
+export const DEFAULT_TASTYTRADE_LIVE: TastytradeLiveConfig = {
+  enabled: false,
+  note:    'Live tastytrade trading is prepared but not yet activated.',
+};
+
 export const DEFAULT_TRADIER_PAPER: TradierPaperConfig = {
   token:     '',
   accountId: '',
@@ -181,6 +203,8 @@ interface SettingsState {
   ibkrLive:                    IbkrLiveConfig;
   alpacaPaper:                 AlpacaPaperConfig;
   alpacaLive:                  AlpacaLiveConfig;
+  tastytradePaper:             TastytradePaperConfig;
+  tastytradeLive:              TastytradeLiveConfig;
   spreads:                     SpreadsConfig;
   scheduleConfig:              ScheduleConfig;
   setBroker:                    (b: BrokerConfig) => void;
@@ -198,6 +222,7 @@ interface SettingsState {
   setTradierPaper:             (c: TradierPaperConfig) => void;
   setTradierLive:              (c: TradierLiveConfig)  => void;
   setAlpacaPaper:              (c: AlpacaPaperConfig)  => void;
+  setTastytradePaper:          (c: TastytradePaperConfig) => void;
   resetToDefaults:              () => void;
 }
 
@@ -245,6 +270,10 @@ export function migrateSettings(
   if (version < 19) {
     (next as Record<string, unknown>).scheduleConfig = { ...DEFAULT_SCHEDULE_CONFIG };
   }
+  if (version < 20) {
+    next.tastytradePaper = { ...DEFAULT_TASTYTRADE_PAPER };
+    next.tastytradeLive  = { ...DEFAULT_TASTYTRADE_LIVE };
+  }
   return next as unknown as SettingsState;
 }
 
@@ -266,6 +295,8 @@ export const useSettingsStore = create<SettingsState>()(
       ibkrLive:             { ...DEFAULT_IBKR_LIVE },
       alpacaPaper:          { ...DEFAULT_ALPACA_PAPER },
       alpacaLive:           { ...DEFAULT_ALPACA_LIVE },
+      tastytradePaper:      { ...DEFAULT_TASTYTRADE_PAPER },
+      tastytradeLive:       { ...DEFAULT_TASTYTRADE_LIVE },
       spreads:              { ...DEFAULT_SPREADS },
       scheduleConfig:       { ...DEFAULT_SCHEDULE_CONFIG },
       setBroker:                    (b) => set({ broker: b }),
@@ -283,6 +314,7 @@ export const useSettingsStore = create<SettingsState>()(
       setTradierPaper: (c) => set({ tradierPaper: c }),
       setTradierLive:  (c) => set({ tradierLive: c }),
       setAlpacaPaper:  (c) => set({ alpacaPaper: c }),
+      setTastytradePaper: (c) => set({ tastytradePaper: c }),
       resetToDefaults: () => set({
         broker:                  { ...DEFAULT_BROKER },
         alertDeduplicationHours: 24,
@@ -299,6 +331,8 @@ export const useSettingsStore = create<SettingsState>()(
         ibkrLive:     { ...DEFAULT_IBKR_LIVE },
         alpacaPaper:  { ...DEFAULT_ALPACA_PAPER },
         alpacaLive:   { ...DEFAULT_ALPACA_LIVE },
+        tastytradePaper: { ...DEFAULT_TASTYTRADE_PAPER },
+        tastytradeLive:  { ...DEFAULT_TASTYTRADE_LIVE },
         spreads:        { ...DEFAULT_SPREADS },
         scheduleConfig: { ...DEFAULT_SCHEDULE_CONFIG },
       }),
@@ -310,7 +344,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 19,
+      version: 20,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
@@ -325,6 +359,7 @@ export const useSettingsStore = create<SettingsState>()(
         tradierPaper:   state.tradierPaper,
         tradierLive:    state.tradierLive,
         alpacaPaper:    state.alpacaPaper,
+        tastytradePaper: state.tastytradePaper,
         spreads:        state.spreads,
         scheduleConfig: state.scheduleConfig,
       }),

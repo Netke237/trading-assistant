@@ -1,5 +1,5 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
-              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem } from '@/types/domain';
+              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow } from '@/types/domain';
 import type { StockScanResult } from '@/types/stockDomain';
 import type { OptionsPipeline } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -24,11 +24,12 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   });
   if (!res.ok) return apiError(path, res);
   return res.json() as Promise<T>;
@@ -297,7 +298,8 @@ export const api = {
   getContracts: (
     symbol: string,
     right: 'C' | 'P' = 'C',
-    ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number },
+    ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number;
+            hold_min_days?: number; hold_max_days?: number },
     signal?: AbortSignal,
   ) => get<OptionContract[]>(
     `/api/contracts?symbol=${encodeURIComponent(symbol)}&right=${right}` +
@@ -305,7 +307,9 @@ export const api = {
     (ctx?.direction ? `&direction=${encodeURIComponent(ctx.direction)}` : '') +
     (ctx?.horizon ? `&horizon=${encodeURIComponent(ctx.horizon)}` : '') +
     (ctx?.limit != null ? `&limit=${ctx.limit}` : '') +
-    (ctx?.max_price != null ? `&max_price=${ctx.max_price}` : ''),
+    (ctx?.max_price != null ? `&max_price=${ctx.max_price}` : '') +
+    (ctx?.hold_min_days != null ? `&hold_min_days=${ctx.hold_min_days}` : '') +
+    (ctx?.hold_max_days != null ? `&hold_max_days=${ctx.hold_max_days}` : ''),
     signal,
   ),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards'),
@@ -316,6 +320,23 @@ export const api = {
     ),
   getStockQuote: (symbol: string, signal?: AbortSignal) =>
     get<{ symbol: string; price: number }>(`/api/quote/stock?symbol=${encodeURIComponent(symbol)}`, signal),
+  /** Recompute Entry/Exit/RR/targets for a user-selected contract (Step 6 override). */
+  recomputePlan: (req: {
+    symbol: string;
+    direction: 'Bullish' | 'Bearish';
+    stock_price: number;
+    strike: number;
+    dte: number;
+    premium: number;
+    delta: number;
+    spread: number;
+  }, signal?: AbortSignal) =>
+    post<{
+      entry: TradeCardData['entry'];
+      exit: TradeCardData['exit'];
+      rrRatio: number;
+      rrModel: TradeCardData['rrModel'];
+    }>('/api/contracts/recompute-plan', req, signal),
   getCandles:    (symbol: string) => get<Candle[]>(`/api/candles/${encodeURIComponent(symbol)}`),
   getSymbolInfo: (symbol: string) =>
     get<{ symbol: string; name: string }>(`/api/symbol/${encodeURIComponent(symbol)}/info`),
@@ -330,6 +351,7 @@ export const api = {
     universe: string[],
     direction: string,
     horizon: string,
+    hold: { hold_min_days: number; hold_max_days: number },
     filters?: {
       min_price?: number; max_price?: number; min_cap_usd?: number; max_cap_usd?: number;
       confidence_caution_below?: number; confidence_reject_below?: number;
@@ -347,9 +369,9 @@ export const api = {
       max_debit_pct?: number;
     },
   ) =>
-    post<{ scan_id: string; timestamp: string; candidates: TradeCardData[]; rejected: { symbol: string; reason: string }[]; pipeline?: OptionsPipeline }>(
+    post<{ scan_id: string; timestamp: string; candidates: TradeCardData[]; rejected: { symbol: string; reason: string }[]; pipeline?: OptionsPipeline; dte_window?: DteWindow }>(
       '/api/scan',
-      { universe, direction, horizon, overrides: overrides ?? {}, ...filters, ...spreads },
+      { universe, direction, horizon, ...hold, overrides: overrides ?? {}, ...filters, ...spreads },
     ),
 
   postStockScan: (req: {
@@ -454,10 +476,12 @@ export const api = {
 
   getBrokerStatus: () =>
     get<{
-      ibkr_paper:    { configured: boolean };
-      tradier_paper: { configured: boolean };
-      ibkr_live:     { configured: boolean; enabled: boolean; note: string };
-      alpaca_paper:  { configured: boolean };
+      ibkr_paper:       { configured: boolean };
+      tradier_paper:    { configured: boolean };
+      ibkr_live:        { configured: boolean; enabled: boolean; note: string };
+      alpaca_paper:     { configured: boolean };
+      tastytrade_paper: { configured: boolean };
+      tastytrade_live:  { configured: boolean; enabled: boolean; note: string };
     }>('/broker/status'),
 
   startHistoryPrefetch: (req: {

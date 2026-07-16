@@ -89,6 +89,20 @@ class TradierPaperAdapter:
             msg = f"Tradier paper order failed: connection error — {exc}"
             logger.error(msg)
             raise RuntimeError(msg) from exc
+        if resp.status_code == 401:
+            # A live (api.tradier.com) token does NOT work against the sandbox
+            # endpoint, and sandbox tokens are rotated/expire — the most common
+            # cause of this once-working path breaking. Make the fix actionable
+            # instead of surfacing a raw "Invalid Access Token".
+            msg = (
+                "Tradier paper order rejected: 401 Invalid Access Token. The "
+                "sandbox (paper) token is missing or expired. Re-generate it at "
+                "developer.tradier.com and paste it under Settings → Brokers → "
+                "Tradier Paper. Note: a live api.tradier.com token cannot place "
+                "sandbox/paper orders."
+            )
+            logger.error("%s (raw: %s)", msg, resp.text[:300])
+            raise RuntimeError(msg)
         if resp.status_code >= 400:
             msg = f"Tradier paper order failed: HTTP {resp.status_code} — {resp.text[:500]}"
             logger.error(msg)

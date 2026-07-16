@@ -8,7 +8,7 @@
  * Successful submits surface a bottom-right toast with a Portfolio link.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text } from '@/components/primitives';
 import { TradeCard } from '@/components/organisms/TradeCard';
@@ -19,14 +19,16 @@ import { useRiskStore } from '@/lib/riskStore';
 import { contractId as buildContractId } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
 import { logAudit } from '@/lib/audit';
-import { statusForScore } from '@/lib/status';
-import type { Status } from '@/lib/status';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import type { PortfolioPosition, TradeCardData } from '@/types/domain';
 import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api }               from '@/lib/api';
+import {
+  applyPickedContract, contractKeyFor, mergePlan, resolveBasketCards,
+  type OverriddenCard, type RecomputedPlanShape,
+} from '@/lib/tradeCardOverride';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
@@ -111,6 +113,19 @@ export default function Step7Page() {
   const [orderError,     setOrderError]       = useState<string | null>(null);
   const [liveQuote,      setLiveQuote]        = useState<{ price: number; delta: number; theta: number; ivRank: number; spread: number; volume: number } | null>(null);
   const [fetchingQuote,  setFetchingQuote]    = useState(false);
+  // Recomputed Entry/Exit/RR/targets, per SYMBOL, for every overridden contract —
+  // the active card AND every overridden basket item share this one cache so a
+  // basket "Send to broker" never falls back to an auto-pick's stale plan just
+  // because that symbol isn't the currently-active card. Each entry is tagged
+  // with the contract key it was computed for so a plan for contract A is never
+  // merged onto contract B while B's recompute is still in flight.
+  const [plansBySymbol, setPlansBySymbol]     = useState<Record<string, { key: string; plan: RecomputedPlanShape }>>({});
+  const [planErrors,    setPlanErrors]        = useState<Record<string, string>>({});
+  const [recomputeTick, setRecomputeTick]     = useState(0);   // bump to force a retry after a failure
+  // Tracks which (symbol -> contractKey) a recompute has already been fired for,
+  // so the effect below doesn't refire on every render — cleared per-symbol by
+  // retryPlan() to force a refetch after a failure.
+  const requestedPlanKeysRef = useRef<Record<string, string>>({});
 
   const scanResult          = useScanStore((s) => s.scanResult);
   const setSelectedSymbol   = useScanStore((s) => s.setSelectedSymbol);
@@ -145,61 +160,230 @@ export default function Step7Page() {
 
   const card = cardIndex[active] ?? cards[0];
 
-  const pickedId = pickedContracts[card?.symbol ?? ''];
-  const pickedContract = pickedId
-    ? contractsBySymbol[card?.symbol ?? '']?.find((c) => c.id === pickedId)
-    : undefined;
+  /** Resolve the picked (overridden) contract for any symbol, given the current
+   *  scanStore picks — used for the active card AND every basket item so both
+   *  paths apply the exact same override logic. */
+  function resolvePickedCard(symbol: string): OverriddenCard | undefined {
+    const raw = cardIndex[symbol];
+    if (!raw) return undefined;
+    const pid = pickedContracts[symbol];
+    const picked = pid ? contractsBySymbol[symbol]?.find((c) => c.id === pid) : undefined;
+    return applyPickedContract(raw, picked);
+  }
 
-  const effectiveCard = pickedContract && pickedContract.id !== card?.contract
-    ? {
-        ...card,
-        contract: pickedContract.id,
-        contractScore: pickedContract.score,
-        contractConfidence: statusForScore(pickedContract.score) as Status,
-        contractBreakdown: card?.contractBreakdown,
-        contractDetails: {
-          strike:       pickedContract.strike,
-          expiry:       pickedContract.expiry,
-          right:        pickedContract.right,
-          mid:          pickedContract.price,
-          delta:        pickedContract.delta,
-          theta:        pickedContract.theta,
-          ivRank:       pickedContract.ivRank,
-          ivPercentile: pickedContract.ivPercentile,
-          dte:          pickedContract.dte,
-        },
-        _userOverride: true,
-      }
-    : card;
+  // The active card with the user-selected contract's details swapped in.
+  // NOTE: this only updates the Contract Details block — Entry/Exit/RR/targets
+  // are recomputed asynchronously (see the shared per-symbol effect below) and
+  // merged into `effectiveCard`, so the whole card describes the selected contract.
+  const pickedCard = card ? resolvePickedCard(card.symbol) : undefined;
+  const isOverride = !!pickedCard?._userOverride;
 
-  const basketCards = useMemo<TradeCardData[]>(
-    () => basket.map((s) => cardIndex[s]).filter((c): c is TradeCardData => !!c),
-    [basket, cardIndex],
+  const liveQcd = pickedCard?.contractDetails;
+  const contractKey = contractKeyFor(pickedCard);
+
+  // The recompute is only valid for the contract it was computed for. This
+  // guards the 1–3 s window while navigating between two overridden contracts.
+  const activePlanEntry = pickedCard ? plansBySymbol[pickedCard.symbol] : undefined;
+  const planForThisContract = isOverride && activePlanEntry?.key === contractKey ? activePlanEntry.plan : null;
+  // For an overridden contract the plan must be loaded before Entry/Exit are
+  // trustworthy; ordering is gated on this so no order is ever placed on the
+  // auto-pick's Entry Plan for a contract the user swapped.
+  const planReady = !isOverride || !!planForThisContract;
+  const activePlanError = pickedCard ? planErrors[pickedCard.symbol] : undefined;
+
+  // Merge the recomputed Entry/Exit/RR into the overridden card once it arrives.
+  const effectiveCard = pickedCard && planForThisContract ? mergePlan(pickedCard, planForThisContract) : pickedCard;
+
+  // Every basket item, override-resolved and (if overridden) merged with its
+  // recomputed plan. `basketPlansPending` gates the whole "Send to broker" flow
+  // so a basket order can never go out carrying an overridden contract whose
+  // Entry/Exit/RR still describe the auto-pick — the exact bug this recompute
+  // machinery exists to prevent, previously reachable only via Send basket.
+  // (resolveBasketCards is the same pure logic exercised directly in
+  // lib/__tests__/tradeCardOverride.test.ts.)
+  const { cards: basketCards, pending: basketPlansPending } = useMemo(
+    () => resolveBasketCards(basket, cardIndex, pickedContracts, contractsBySymbol, plansBySymbol),
+    [basket, cardIndex, pickedContracts, contractsBySymbol, plansBySymbol],
   );
 
-  // Fetch a fresh live mid-price for the active contract (1-3 s — full chain call via Tradier).
-  // Dep key: composite of symbol+strike+expiry+right, placed after effectiveCard so TypeScript
-  // can see the declaration. Re-runs on both candidate navigation and user contract-override.
-  const liveQcd = effectiveCard?.contractDetails;
-  const contractKey = liveQcd?.strike != null && liveQcd.expiry && liveQcd.right && effectiveCard?.symbol
-    ? `${effectiveCard.symbol}|${liveQcd.strike}|${liveQcd.expiry}|${liveQcd.right}`
-    : null;
+  // Basket symbols (other than the active one, surfaced separately via
+  // activePlanError) whose override plan failed outright — each needs its own
+  // visible error + retry, or the basket stays silently stuck on "Computing…"
+  // with no way to recover short of navigating to make that symbol active.
+  const basketPlanErrors = basket
+    .filter((sym) => sym !== pickedCard?.symbol && planErrors[sym])
+    .map((sym) => ({ symbol: sym, error: planErrors[sym]! }));
 
+  /** Force a re-fetch of a symbol's plan after a failure (Retry button). */
+  function retryPlan(symbol: string) {
+    delete requestedPlanKeysRef.current[symbol];
+    setPlanErrors((prev) => { const next = { ...prev }; delete next[symbol]; return next; });
+    setRecomputeTick((t) => t + 1);
+  }
+
+  // Live quote + recompute for the ACTIVE card, CHAINED in one effect rather
+  // than two separate ones. Two independent effects both keyed on `contractKey`
+  // — one setting liveQuote, one reading it to build the recompute premium —
+  // raced: they run in the same commit and read each other's PRE-update state,
+  // so the recompute fired using a stale liveQuote (from whatever contract was
+  // previously viewed), and requestedPlanKeysRef (keyed only on contractKey,
+  // not on which premium was used) then blocked the correct request from ever
+  // firing once the real quote arrived — silently caching a plan computed with
+  // the wrong premium, or (if the stale request lost a request race) getting
+  // aborted and never retried. Chaining removes the race: the recompute is
+  // fired directly off THIS fetch's own resolution, never off separately-read
+  // liveQuote state.
   useEffect(() => {
-    if (!contractKey || !effectiveCard?.symbol || !liveQcd?.strike || !liveQcd.expiry || !liveQcd.right) {
+    if (!contractKey || !pickedCard?.symbol || !liveQcd?.strike || !liveQcd.expiry || !liveQcd.right) {
       setLiveQuote(null);
+      setFetchingQuote(false);   // an in-flight fetch from a PRIOR invocation is aborted below (or never started for this one) — don't leave "Fetching…" stuck on if this invocation never issues a request of its own.
       return;
     }
-    let cancelled = false;
+    const keyAtRequest = contractKey;
+    const symbol = pickedCard.symbol;
+    const isOverrideAtRequest = isOverride;
+
+    // Gate BEFORE issuing any request — mirrors the basket effect's own
+    // upfront ref check. `recomputeTick` is a dependency shared by every
+    // basket symbol's Retry button, so this effect can tear down and re-run
+    // for a reason that has nothing to do with the active symbol (retrying an
+    // unrelated basket item). Without this gate, that unrelated bump would
+    // spawn a fresh, redundant live-quote refetch here every time, and if
+    // THAT redundant fetch/recompute later got torn down mid-flight by yet
+    // another unrelated bump, its own (correctly-scoped) `settled` closure
+    // would still match the same ref key and delete what was actually an
+    // unrelated, already-completed claim — silently discarding/renumbering a
+    // perfectly valid cached plan. Skipping outright when this exact contract
+    // is already claimed (whether its own fetch already succeeded, or is
+    // still legitimately in flight under a DIFFERENT invocation) means no
+    // redundant invocation — and therefore no redundant settled/cleanup
+    // interaction — is ever created in the first place.
+    if (isOverrideAtRequest && requestedPlanKeysRef.current[symbol] === keyAtRequest) {
+      return;
+    }
+
+    const controller = new AbortController();
+    // Flips true the instant THIS invocation's own request settles (success,
+    // failure, or a same-key dedup skip) — read only in cleanup below, via
+    // closure, never via React state (whose read timing can't be trusted
+    // relative to when cleanup runs for an unrelated reason).
+    let settled = false;
     setLiveQuote(null);
     setFetchingQuote(true);
-    api.getContractQuote(effectiveCard.symbol, liveQcd.strike, liveQcd.expiry, liveQcd.right as 'C' | 'P')
-      .then((q) => { if (!cancelled) setLiveQuote(q); })
-      .catch(() => { /* silently ignore — scan price shown as fallback */ })
-      .finally(() => { if (!cancelled) setFetchingQuote(false); });
-    return () => { cancelled = true; };
+
+    api.getContractQuote(pickedCard.symbol, liveQcd.strike, liveQcd.expiry, liveQcd.right as 'C' | 'P', controller.signal)
+      .then((q) => { if (!controller.signal.aborted) setLiveQuote(q); return q; })
+      .catch(() => null)   // silently ignore — scan-time mid used as fallback below
+      .then((q) => {
+        if (controller.signal.aborted) { settled = true; return; }
+        setFetchingQuote(false);
+        if (!isOverrideAtRequest) { settled = true; return; }   // not overridden — no plan to recompute
+        if (requestedPlanKeysRef.current[symbol] === keyAtRequest) { settled = true; return; }   // claimed by a concurrent invocation while this quote was in flight
+        requestedPlanKeysRef.current[symbol] = keyAtRequest;
+
+        api.recomputePlan({
+          symbol,
+          direction:   pickedCard.direction,
+          stock_price: pickedCard.price,
+          strike:      liveQcd.strike,
+          dte:         liveQcd.dte,
+          premium:     q?.price ?? liveQcd.mid,
+          delta:       liveQcd.delta,
+          spread:      q?.spread ?? 0,
+        }, controller.signal)
+          .then((plan) => {
+            settled = true;
+            if (controller.signal.aborted) return;
+            setPlansBySymbol((prev) => ({ ...prev, [symbol]: { key: keyAtRequest, plan } }));
+            setPlanErrors((prev) => { const next = { ...prev }; delete next[symbol]; return next; });
+          })
+          .catch(() => {
+            settled = true;
+            if (controller.signal.aborted) return;
+            setPlanErrors((prev) => ({ ...prev, [symbol]: 'Could not compute the plan for the selected contract. Ordering stays disabled until it succeeds.' }));
+          });
+      });
+
+    return () => {
+      controller.abort();
+      // Release this invocation's claim ONLY if its own request never settled
+      // (was still genuinely in flight when the abort hit). `recomputeTick` is
+      // a dependency shared by every basket symbol's retry, so this effect can
+      // tear down for a reason that has NOTHING to do with this symbol (e.g.
+      // the user retried a different, failed basket item) — if we released the
+      // claim unconditionally in that case, this symbol's successful plan
+      // would still be cached in plansBySymbol, but the re-run below would
+      // treat it as unclaimed and fire a redundant recomputePlan for it too,
+      // and if THAT incidental call happened to fail, it would overwrite a
+      // perfectly valid plan's status with a spurious error banner. Checking
+      // `settled` keeps a genuinely-completed request's claim intact, so an
+      // unrelated tick bump correctly no-ops for this symbol.
+      if (!settled && requestedPlanKeysRef.current[symbol] === keyAtRequest) {
+        delete requestedPlanKeysRef.current[symbol];
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contractKey]);
+  }, [contractKey, isOverride, recomputeTick]);
+
+  // Recompute Entry/Exit/RR/targets for every OVERRIDDEN BASKET item other than
+  // the active symbol (which the effect above owns exclusively — see the `sym
+  // === pickedCard?.symbol` skip below). Deliberately independent of liveQuote/
+  // contractKey: basket items don't have their own live-quote fetch, so there's
+  // no equivalent race here — each uses the picked contract's scan-time mid.
+  useEffect(() => {
+    const controller = new AbortController();
+    // Per-claim `settled` flags (closure, not React state — see the
+    // active-card effect's cleanup comment for why). `recomputeTick` is one
+    // dependency shared by every basket symbol's Retry button, so retrying
+    // symbol Y forces this whole effect to tear down and re-run even though
+    // symbols X/Z's requests may have already succeeded — cleanup must only
+    // release a claim that never actually settled, or X/Z would be silently
+    // refetched (and, if that incidental refetch happened to fail, show a
+    // false error banner for a contract that was already fine).
+    const claimedThisInvocation: { symbol: string; key: string; settled: () => boolean }[] = [];
+    for (const sym of basket) {
+      if (sym === pickedCard?.symbol) continue;   // owned by the active-card effect above
+      const resolved = resolvePickedCard(sym);
+      if (!resolved?._userOverride || !resolved.contractDetails) continue;
+      const key = contractKeyFor(resolved);
+      if (!key || requestedPlanKeysRef.current[sym] === key) continue;
+      requestedPlanKeysRef.current[sym] = key;
+      let settled = false;
+      claimedThisInvocation.push({ symbol: sym, key, settled: () => settled });
+      const cd = resolved.contractDetails;
+      api.recomputePlan({
+        symbol: sym,
+        direction: resolved.direction,
+        stock_price: resolved.price,
+        strike: cd.strike,
+        dte: cd.dte,
+        premium: cd.mid,
+        delta: cd.delta,
+        spread: 0,
+      }, controller.signal)
+        .then((plan) => {
+          settled = true;
+          if (controller.signal.aborted) return;
+          setPlansBySymbol((prev) => ({ ...prev, [sym]: { key, plan } }));
+          setPlanErrors((prev) => { const next = { ...prev }; delete next[sym]; return next; });
+        })
+        .catch(() => {
+          settled = true;
+          if (!controller.signal.aborted) {
+            setPlanErrors((prev) => ({ ...prev, [sym]: 'Could not compute the plan for this basket contract.' }));
+          }
+        });
+    }
+    return () => {
+      controller.abort();
+      for (const { symbol, key, settled } of claimedThisInvocation) {
+        if (!settled() && requestedPlanKeysRef.current[symbol] === key) {
+          delete requestedPlanKeysRef.current[symbol];
+        }
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [basket, pickedContracts, contractsBySymbol, cardIndex, pickedCard?.symbol, recomputeTick]);
 
   /** Build the pipe-delimited option id the OCC converter and broker adapters expect. */
   function toOptionSymbol(card: TradeCardData): string {
@@ -210,12 +394,20 @@ export default function Step7Page() {
     return card.contract; // fallback (display label — broker may reject, best effort)
   }
 
-  /** Build a paper position object without touching the store. */
-  function buildPaperPosition(card: TradeCardData, orderType: 'LMT' | 'MKT', broker: string, orderId: string): PortfolioPosition {
+  /** Build a paper position object without touching the store.
+   *  `livePrice` (the freshly-fetched mid for the active contract) takes
+   *  precedence over the scan-time mid so the entry price reflects the market
+   *  at fill time, not when the scan ran. The backend re-fetches again at save
+   *  time as the authoritative baseline; this keeps the local view correct
+   *  until the next portfolio sync. */
+  function buildPaperPosition(card: TradeCardData, orderType: 'LMT' | 'MKT', broker: string, orderId: string, livePrice?: number): PortfolioPosition {
     const cd  = card.contractDetails;
-    const mid = cd?.mid ?? card.entry.limit;
+    const mid = livePrice ?? cd?.mid ?? card.entry.limit;
     const dte = cd?.dte ?? 24;
-    const brokerLabel = broker === 'tradier_paper' ? 'Tradier Paper' : 'IBKR Paper';
+    const brokerLabel =
+      broker === 'tradier_paper' ? 'Tradier Paper' :
+      broker === 'tastytrade_paper' ? 'Tastytrade Paper' :
+      'IBKR Paper';
     const typeLabel   = orderType === 'LMT' ? 'Limit' : 'Market';
     return {
       symbol:        card.symbol,
@@ -260,7 +452,7 @@ export default function Step7Page() {
         limit_price:   card.entry.limit,
         tif:           'DAY',
       });
-      const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id);
+      const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id, liveQuote?.price);
       const saved = await persistPosition(pos);
       if (!saved.ok) {
         setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${saved.detail}`);
@@ -290,7 +482,7 @@ export default function Step7Page() {
         limit_price:   null,
         tif:           'DAY',
       });
-      const pos = buildPaperPosition(card, 'MKT', selectedBroker, res.order_id);
+      const pos = buildPaperPosition(card, 'MKT', selectedBroker, res.order_id, liveQuote?.price);
       const saved = await persistPosition(pos);
       if (!saved.ok) {
         setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${saved.detail}`);
@@ -372,13 +564,48 @@ export default function Step7Page() {
           {(effectiveCard as any)._userOverride && (
             <StatusBadge status="PENDING" label="User-selected" />
           )}
-          <TradeCard
-            data={effectiveCard}
-            recId={recIdMap[effectiveCard.symbol]}
-            onSendToBroker={() => !basketEmpty && setDialogOpen(true)}
-            sendLabel={sendLabel}
-            sendDisabled={basketEmpty}
-          />
+          {/* For an overridden contract, don't render the card until its plan is
+              recomputed — otherwise the Exit Plan / R-R would briefly show the
+              auto-pick's numbers next to the selected contract. */}
+          {isOverride && !planReady ? (
+            <div aria-busy={!activePlanError}>
+              {activePlanError ? (
+                <>
+                  <Text size={12} tone="reject">{activePlanError}</Text>
+                  <button
+                    type="button"
+                    className={paperStyles.paperBtnMarket}
+                    onClick={() => retryPlan(effectiveCard.symbol)}
+                  >
+                    Retry
+                  </button>
+                </>
+              ) : (
+                <Text size={12} tone="secondary">Preparing the plan for your selected contract…</Text>
+              )}
+            </div>
+          ) : (
+            <TradeCard
+              data={effectiveCard}
+              recId={recIdMap[effectiveCard.symbol]}
+              onSendToBroker={() => !basketEmpty && !basketPlansPending && setDialogOpen(true)}
+              sendLabel={sendLabel}
+              sendDisabled={basketEmpty || basketPlansPending}
+            />
+          )}
+          {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (
+            <Text size={11} tone="caution">
+              Computing the plan for an overridden contract in your basket — Send basket enables once it&apos;s ready.
+            </Text>
+          )}
+          {basketPlanErrors.map(({ symbol, error }) => (
+            <div key={symbol} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <Text size={11} tone="reject">{symbol}: {error}</Text>
+              <button type="button" className={paperStyles.paperBtnMarket} onClick={() => retryPlan(symbol)}>
+                Retry {symbol}
+              </button>
+            </div>
+          ))}
           {fetchingQuote && (
             <Text size={11} tone="dim">Fetching live price…</Text>
           )}
@@ -399,22 +626,27 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnLimit}
                   onClick={placeLimitPaper}
-                  disabled={limitPlacing || marketPlacing}
+                  disabled={limitPlacing || marketPlacing || !planReady}
                 >
-                  {limitPlacing ? 'Placing…' : `Place Limit @ $${effectiveCard.entry.limit}`}
+                  {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${effectiveCard.entry.limit}` : 'Place Limit'}
                 </button>
                 <button
                   type="button"
                   className={paperStyles.paperBtnMarket}
                   onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing}
+                  disabled={limitPlacing || marketPlacing || !planReady}
                 >
                   {marketPlacing ? 'Placing…' : 'Right Now — Market'}
                 </button>
               </div>
+              {!planReady && (
+                <Text size={11} tone="caution">
+                  Recomputing the plan for your selected contract — ordering enabled once it&apos;s ready.
+                </Text>
+              )}
               {paperOrderId && <Text size={12} tone="pass">Order placed — ID: {paperOrderId}</Text>}
               {orderError   && <Text size={12} tone="reject">{orderError}</Text>}
-              <AutoTradeArm card={effectiveCard} broker={selectedBroker} />
+              {planReady && <AutoTradeArm card={effectiveCard} broker={selectedBroker} />}
             </>
           )}
         </div>

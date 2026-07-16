@@ -45,6 +45,11 @@ def _load_config() -> dict:
         return yaml.safe_load(f)
 
 
+def dte_holding_multiplier() -> float:
+    """DTE-to-holding-period ratio from contract_rules.yaml."""
+    return float(_load_config().get("dte_holding_multiplier", 2.0))
+
+
 def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     """Return list of hard-reject reason strings. Empty = no hard reject."""
     hr = cfg["hard_reject"]
@@ -135,7 +140,9 @@ def _score_delta(contract: dict, cfg: dict) -> tuple[int, list[str]]:
         # Linear score peaking at 0.50
         centre = (d_min + d_max) / 2
         half_range = (d_max - d_min) / 2
-        score = int(100 * (1 - abs(delta - centre) / half_range))
+        # half_range is 0 only when min==max (a collapsed override); delta sits
+        # exactly on centre in that case, so it's a perfect score, not a divide by zero.
+        score = 100 if half_range == 0 else int(100 * (1 - abs(delta - centre) / half_range))
     else:
         score = 20
         flags.append("delta_outside_preferred")
@@ -157,7 +164,10 @@ def _score_dte(contract: dict, cfg: dict) -> tuple[int, list[str]]:
     if d_min <= dte <= d_max:
         centre = (d_min + d_max) / 2
         half_range = (d_max - d_min) / 2
-        score = int(100 * (1 - abs(dte - centre) / half_range))
+        # half_range is 0 when a hold-derived override collapses min==max (e.g. a
+        # Custom range typed as the same day twice) — dte sits exactly on centre
+        # in that case, so it's a perfect score, not a divide by zero.
+        score = 100 if half_range == 0 else int(100 * (1 - abs(dte - centre) / half_range))
     else:
         score = 25
         flags.append("dte_outside_preferred")
@@ -208,6 +218,7 @@ def validate_contract(
     ov = overrides or {}
     if ov:
         hr = cfg["hard_reject"]
+        sr = cfg["soft_rank"]
         for key, val in ov.items():
             if key == "max_bid_ask_spread_pct": hr["max_bid_ask_spread_pct"] = float(val)
             elif key == "max_delta":            hr["max_delta"]              = float(val)
@@ -217,6 +228,8 @@ def validate_contract(
             elif key == "min_dte":              hr["min_dte"]                = int(val)
             elif key == "max_dte":              hr["max_dte"]                = int(val)
             elif key == "max_iv_rank":          hr["max_iv_rank"]            = float(val)
+            elif key == "preferred_dte_min":    sr["preferred_dte_min"]      = int(val)
+            elif key == "preferred_dte_max":    sr["preferred_dte_max"]      = int(val)
     contract_id = _contract_id(contract)
 
     reject_reasons = _hard_reject_reasons(contract, cfg)

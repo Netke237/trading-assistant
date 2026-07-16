@@ -1,7 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.scan import (
     ContinuousScanConfig,
@@ -449,6 +449,11 @@ class ScanRequest(BaseModel):
     max_price:   Optional[float] = None
     min_cap_usd: Optional[float] = None
     max_cap_usd: Optional[float] = None
+    # Holding horizon (calendar days). The backend derives the contract DTE window
+    # from these: dte = hold * dte_holding_multiplier. When absent, contract_rules.yaml
+    # hard_reject.min_dte/max_dte apply as a fallback.
+    hold_min_days: Optional[int] = None
+    hold_max_days: Optional[int] = None
     # Per-scan confidence-gate overrides (snake_case, matching this model's style)
     confidence_caution_below: Optional[int] = None
     confidence_reject_below:  Optional[int] = None
@@ -464,6 +469,15 @@ class ScanRequest(BaseModel):
     iv_rank_threshold:   float = 50.0
     min_credit:          float = 0.50
     max_debit_pct:       float = 40.0
+
+    @model_validator(mode="after")
+    def _validate_hold_days(self) -> "ScanRequest":
+        if self.hold_min_days is not None and self.hold_max_days is not None:
+            if self.hold_min_days < 0 or self.hold_max_days < 0:
+                raise ValueError("hold_min_days and hold_max_days must be non-negative")
+            if self.hold_max_days < self.hold_min_days:
+                raise ValueError("hold_max_days must be >= hold_min_days")
+        return self
 
 
 class RejectedCandidate(BaseModel):
@@ -482,6 +496,13 @@ class OptionsPipeline(BaseModel):
     candidates:        int   # made it through everything
 
 
+class DteWindow(BaseModel):
+    """The contract expiry window actually enforced for a scan."""
+    min_dte:    int
+    max_dte:    int
+    multiplier: float
+
+
 class ScanResult(BaseModel):
     scan_id: str
     timestamp: str
@@ -494,6 +515,7 @@ class ScanResult(BaseModel):
     original_count: int = 0
     pipeline: Optional[OptionsPipeline] = None
     direction_banner: Optional[str] = None
+    dte_window: Optional[DteWindow] = None
 
 
 # ── Portfolio persistence ─────────────────────────────────────────────────────
@@ -501,13 +523,13 @@ class ScanResult(BaseModel):
 class PortfolioPositionCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    recId: str = Field(alias="rec_id", default=None)
+    recId: str = Field(alias="rec_id")
     symbol: str
     contract: str       # SYMBOL|STRIKE|EXPIRY|C/P
     direction: str
-    entryPrice: float = Field(alias="entry_price", default=None)
+    entryPrice: float = Field(alias="entry_price")
     qty: int = Field(default=1)
-    entryDate: str = Field(alias="entry_date", default=None)
+    entryDate: str = Field(alias="entry_date")
     stop: Optional[float] = None
     targets: list[dict] = []
     dteTotal: Optional[int] = Field(alias="dte_total", default=None)

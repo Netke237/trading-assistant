@@ -21,7 +21,7 @@ interface RowState {
   autoSend: boolean;
 }
 
-type BrokerMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper';
+type BrokerMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper' | 'tastytrade_paper';
 
 interface Props {
   cards: PositionCardData[];
@@ -38,6 +38,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [alpacaConfigured, setAlpacaConfigured] = useState(false);
+  const [tastytradeConfigured, setTastytradeConfigured] = useState(false);
 
   const addPosition  = usePortfolioStore((s) => s.addPosition);
   const ibkrPaper    = useSettingsStore((s) => s.ibkrPaper);
@@ -49,7 +50,10 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   useEffect(() => {
     api
       .getBrokerStatus()
-      .then((s) => setAlpacaConfigured(s.alpaca_paper?.configured ?? false))
+      .then((s) => {
+        setAlpacaConfigured(s.alpaca_paper?.configured ?? false);
+        setTastytradeConfigured(s.tastytrade_paper?.configured ?? false);
+      })
       .catch(() => {});
   }, []);
 
@@ -121,6 +125,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     ['ibkr_paper',    'IBKR Paper',      ibkrConfigured],
     ['tradier_paper', 'Tradier Paper',   tradierConfigured],
     ['alpaca_paper',  'Alpaca Paper',    alpacaConfigured],
+    ['tastytrade_paper', 'Tastytrade Paper', tastytradeConfigured],
   ];
 
   return (

@@ -12,6 +12,8 @@ jest.mock('@/lib/api', () => ({
 
 jest.mock('@/lib/stockScan', () => ({ runStockScan: jest.fn().mockResolvedValue(null) }));
 
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+
 function resetStores(direction: 'Bullish' | 'Bearish' = 'Bullish') {
   useScanStore.setState({
     scanState: 'IDLE',

@@ -9,6 +9,7 @@ import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { statusForScore } from '@/lib/status';
 import { api } from '@/lib/api';
+import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { contractLabel, type OptionContract, type TradeCardData } from '@/types/domain';
@@ -82,14 +83,19 @@ export default function Step6Page() {
     setRefreshing(true);
     setOffline(false);
     const right = (context?.direction ?? 'Bullish') === 'Bullish' ? 'C' : 'P';
+    const hold = context?.holdMin != null && context?.holdMax != null
+      ? sanitizeHoldDays(context.holdMin, context.holdMax)
+      : undefined;
     try {
       const results = await Promise.all(
         candidates.map((c) => api.getContracts(c.symbol, right, {
-          stock_score: stockScoreBySymbol[c.symbol] ?? 70,
-          direction:   context?.direction ?? 'Bullish',
-          horizon:     context?.horizon ?? 'swing',
-          limit:       maxContractsPerChain,
-          max_price:   maxContractPrice,
+          stock_score:   stockScoreBySymbol[c.symbol] ?? 70,
+          direction:     context?.direction ?? 'Bullish',
+          horizon:       context?.horizon ?? 'swing',
+          limit:         maxContractsPerChain,
+          max_price:     maxContractPrice,
+          hold_min_days: hold?.hold_min_days,
+          hold_max_days: hold?.hold_max_days,
         }, signal))
       );
       if (signal?.aborted) return;

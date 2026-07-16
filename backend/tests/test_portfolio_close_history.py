@@ -8,7 +8,7 @@ so exit-price auto-fill is deterministic.
 from __future__ import annotations
 
 from typing import AsyncGenerator
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -46,9 +46,60 @@ async def _add(client, contract="AAPL|185|2026-09-18|C", qty=5, entry=1.00, rec=
     body = {"recId": rec, "symbol": "AAPL", "contract": contract, "direction": "Bullish",
             "entryPrice": entry, "qty": qty, "entryDate": "2026-05-01",
             "stop": None, "targets": [], "dteTotal": 140, "portfolioValue": 1_000_000}
-    r = await client.post("/api/portfolio", json=body)
+    # add_position now re-fetches a live premium at save time to keep entry_price
+    # fresh. Stub it to None so these tests use the supplied entryPrice
+    # deterministically (the "no live quote available" fallback path).
+    with patch("app.routers.portfolio.fetch_contract_quote_async",
+               new=AsyncMock(return_value=None)):
+        r = await client.post("/api/portfolio", json=body)
     assert r.status_code == 201, r.text
     return r.json()
+
+
+# ── add_position risk check uses the LIVE-refetched price, not the submitted
+# entryPrice — this is the actual behavior the fix set out to guarantee, so it
+# needs its own direct coverage rather than always mocking the live fetch away.
+
+@pytest.mark.asyncio
+async def test_add_position_risk_check_rejects_based_on_live_price(client):
+    """A submitted entryPrice that alone would pass the exposure gate must
+    still be rejected if the LIVE quote pushes capital-at-risk over the limit —
+    proving the risk check evaluates the price that actually gets persisted,
+    not the frontend-supplied one."""
+    body = {
+        "recId": "REC-RISK-LIVE-1", "symbol": "AAPL", "contract": "AAPL|185|2026-09-18|C",
+        "direction": "Bullish", "entryPrice": 1.00, "qty": 1, "entryDate": "2026-05-01",
+        "stop": None, "targets": [], "dteTotal": 140, "portfolioValue": 10_000.0,
+    }
+    # max_single_trade_exposure_pct=0.05 * $10,000 = $500 cap.
+    # Submitted entryPrice=1.00 -> capital_at_risk=$100 (would pass).
+    # Live quote=10.00 -> capital_at_risk=$1000 (must be rejected).
+    with patch("app.routers.portfolio.fetch_contract_quote_async",
+               new=AsyncMock(return_value={"price": 10.00, "delta": 0.5, "theta": -0.05, "ivRank": 50, "spread": 0.1, "volume": 100})):
+        r = await client.post("/api/portfolio", json=body)
+    assert r.status_code == 422, r.text
+    assert "exposure" in r.text or "reduced" in r.text
+
+
+@pytest.mark.asyncio
+async def test_add_position_persists_and_risk_checks_the_live_price_not_submitted(client):
+    """The inverse: a submitted entryPrice that WOULD be rejected must be
+    approved (and stored) using a live quote that actually fits the exposure
+    limit — proving neither the risk check nor the persisted entry_price uses
+    the stale/submitted value once a live quote is available."""
+    body = {
+        "recId": "REC-RISK-LIVE-2", "symbol": "MSFT", "contract": "MSFT|400|2026-09-18|C",
+        "direction": "Bullish", "entryPrice": 10.00, "qty": 1, "entryDate": "2026-05-01",
+        "stop": None, "targets": [], "dteTotal": 140, "portfolioValue": 10_000.0,
+    }
+    # Submitted entryPrice=10.00 -> capital_at_risk=$1000 (would be rejected).
+    # Live quote=1.00 -> capital_at_risk=$100 (fits) -> must be approved AND
+    # the live 1.00 (not the submitted 10.00) must be what's persisted.
+    with patch("app.routers.portfolio.fetch_contract_quote_async",
+               new=AsyncMock(return_value={"price": 1.00, "delta": 0.5, "theta": -0.05, "ivRank": 50, "spread": 0.1, "volume": 100})):
+        r = await client.post("/api/portfolio", json=body)
+    assert r.status_code == 201, r.text
+    assert r.json()["entryPrice"] == 1.00
 
 
 @pytest.mark.asyncio

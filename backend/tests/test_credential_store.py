@@ -109,3 +109,29 @@ def test_secret_key_is_masked(tmp_path):
     assert masked["secret_key"].endswith("CRET")
     assert masked["secret_key"].startswith("*")
     assert masked["key_id"] == "PKID"  # key_id is not sensitive
+
+
+def test_tastytrade_slots_exist_by_default(tmp_path):
+    store = CredentialStore(path=tmp_path / "creds.yaml")
+    assert store.get("tastytrade_paper") == {
+        "client_secret": "", "refresh_token": "", "account_id": "",
+    }
+    assert store.get("tastytrade_live") == {
+        "client_secret": "", "refresh_token": "", "account_id": "",
+    }
+
+
+def test_tastytrade_credentials_are_masked(tmp_path):
+    """client_secret and refresh_token must never come back in plaintext from
+    get_masked()/all_masked() — a leaked refresh token is a standing account
+    compromise since tastytrade refresh tokens never expire."""
+    store = CredentialStore(path=tmp_path / "creds.yaml")
+    store.set("tastytrade_paper", {
+        "client_secret": "super-secret-value", "refresh_token": "never-expires-token",
+        "account_id": "5WX01234",
+    })
+    masked = store.get_masked("tastytrade_paper")
+    assert masked["client_secret"] != "super-secret-value"
+    assert masked["client_secret"].endswith("alue")  # last-4 preserved, rest masked
+    assert masked["refresh_token"] != "never-expires-token"
+    assert masked["account_id"] == "5WX01234"  # not sensitive, shown as-is

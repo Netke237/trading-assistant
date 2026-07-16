@@ -9,7 +9,7 @@ import yaml
 
 _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "local_credentials.yaml"
 
-_SENSITIVE_KEYS = {"token", "apiToken", "api_token", "password", "secret", "secret_key"}
+_SENSITIVE_KEYS = {"token", "apiToken", "api_token", "password", "secret", "secret_key", "client_secret", "refresh_token"}
 
 
 def _mask(value: str) -> str:
@@ -35,6 +35,8 @@ class CredentialStore:
             "tradier_paper": {"token": "", "account_id": ""},
             "alpaca_live":   {"key_id": "", "secret_key": "", "base_url": "https://api.alpaca.markets"},
             "alpaca_paper":  {"key_id": "", "secret_key": "", "base_url": "https://paper-api.alpaca.markets"},
+            "tastytrade_live":  {"client_secret": "", "refresh_token": "", "account_id": ""},
+            "tastytrade_paper": {"client_secret": "", "refresh_token": "", "account_id": ""},
         }
         if self._path and self._path.exists():
             self.load()

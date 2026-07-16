@@ -253,12 +253,15 @@ export function contractId(symbol: string, strike: number, expiry: string, right
   return `${symbol.toUpperCase()}|${strike}|${expiry}|${right}`;
 }
 
-/** Short UI label, e.g. "AAPL 190C 05/15". */
+/** Short UI label, e.g. "AAPL 190C 05/15/27". Includes a 2-digit year so
+ *  contracts across different expiry years are never ambiguous. */
 export function contractLabel(c: Pick<OptionContract, 'symbol' | 'strike' | 'right' | 'expiry'>): string {
   const parts = (c.expiry ?? '').split('-');
+  const yyyy = parts[0] ?? '';
   const mm = parts[1] ?? '--';
   const dd = parts[2] ?? '--';
-  return `${c.symbol} ${c.strike}${c.right} ${mm}/${dd}`;
+  const yy = yyyy.length === 4 ? yyyy.slice(2) : '--';
+  return `${c.symbol} ${c.strike}${c.right} ${mm}/${dd}/${yy}`;
 }
 
 // --- Alternative contracts (FR-28) ---
@@ -437,4 +440,12 @@ export interface PortfolioRiskMetrics {
   largestConcentrationPct: number;
   largestConcentrationSymbol: string;
   status: Status;  // PASS if all within limits, CAUTION if near, REJECT if breached
+}
+
+// --- Holding-horizon DTE window ---
+
+export interface DteWindow {
+  min_dte:    number;
+  max_dte:    number;
+  multiplier: number;
 }

@@ -35,9 +35,10 @@ def test_pullback_ema_respects_wide_tolerance():
     closes = [b["close"] for b in bars]
     ema_val = _ema_fn(closes, 20)[-1]
     target = ema_val * 1.05
+    # Low volume on last 4 bars so volume contraction gate passes
     for i in range(-20, 0):
         bars[i] = {"open": target - 0.1, "high": target + 0.2,
-                   "low": target - 0.2, "close": target + 0.1, "volume": 1_000}
+                   "low": target - 0.2, "close": target + 0.1, "volume": 300}
     signal = pullback_ema_signal(bars, tolerance=0.10)
     assert signal is not None, "With tolerance=0.10, 5% above EMA must fire"
 

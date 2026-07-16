@@ -226,6 +226,21 @@ async def test_process_symbol_does_not_call_calibrate_heston():
         limit_price=2.50, max_fill=2.53, order_type="Limit", quality_status="PASS",
     )
     rr_result = RrResult(rr_ratio=2.5, model_used="Delta approximation", estimated_exit_premium=4.5)
+    # Entry/exit/RR/targets now come from the shared build_trade_plan helper —
+    # mock it wholesale so this test stays focused on the calibrate_heston assertion.
+    from app.scoring.trade_plan import TradePlan
+    fake_plan = TradePlan(
+        entry=entry_result,
+        invalidation_price=180.0,
+        premium_stop=1.5,
+        time_stop_days=12,
+        target_price=200.0,
+        targets=[],
+        rr_ratio=2.5,
+        rr_model="Delta approximation",
+        target_price_raw=200.0,
+        invalidation_price_raw=180.0,
+    )
 
     with (
         patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
@@ -236,9 +251,8 @@ async def test_process_symbol_does_not_call_calibrate_heston():
         patch("app.routers.scan.score_stock", return_value=pass_card),
         patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=_MOCK_CHAIN)),
         patch("app.routers.scan.validate_contract", return_value=contract_score),
-        patch("app.routers.scan.assess_entry", return_value=entry_result),
+        patch("app.routers.scan.build_trade_plan", return_value=fake_plan),
         patch("app.routers.scan.estimate_rr", return_value=rr_result),
-        patch("app.routers.scan.estimate_targets", return_value=[]),
         patch("app.routers.scan.log_event"),
         patch("app.routers.scan.calibrate_heston", create=True) as mock_heston,
     ):

@@ -238,8 +238,20 @@ def test_stock_scan_bearish_direction_threads_to_signal(stock_client):
     bearish_bars = _make_bearish_bars(130)
 
     # Pre-populate backtest cache so the ProcessPoolExecutor is never invoked.
-    # Key must match exactly what the router will compute for this symbol+strategy+direction.
-    bt_key = _backtest_key("TSLA", "pullback_ema", "Bearish", bearish_bars)
+    # Key must match exactly what the router will compute for this symbol+strategy+direction+params.
+    # _merge_strategy_params is patched below to return this exact fixed dict,
+    # so the router's real key computation can't drift from what we pre-compute
+    # here regardless of what get_active()'s persisted tuning state actually
+    # holds for pullback_ema/Bearish at test-run time. This dict is a synthetic,
+    # arbitrary-but-plausible params set for the fixture (tolerance=0.08 matches
+    # StockScanRequest's schema default, not the signal function's own internal
+    # fallback of 0.04) — it is NOT asserted to equal get_active()'s real
+    # config values (which can and do change independently in strategy_params.yaml).
+    _fixed_params = {
+        "ema_period": 50, "trend_ema": 100, "atr_stop_mult": 1.5, "rr_target_mult": 2.0,
+        "tolerance": 0.08, "ma_type": "EMA", "require_reversal": False,
+    }
+    bt_key = _backtest_key("TSLA", "pullback_ema", "Bearish", bearish_bars, _fixed_params)
     _BACKTEST_CACHE[bt_key] = (_pass_bt(), time.time() + _BACKTEST_TTL)
 
     try:
@@ -251,6 +263,7 @@ def test_stock_scan_bearish_direction_threads_to_signal(stock_client):
             patch("app.routers.stock_scan.fetch_company_name_async", AsyncMock(return_value="Tesla")),
             patch("app.routers.stock_scan.fetch_price_async", AsyncMock(return_value=118.0)),
             patch("app.routers.stock_scan.get_cached", return_value={"confidence": 60, "sample_size": 30}),
+            patch("app.routers.stock_scan._merge_strategy_params", return_value=_fixed_params),
         ):
             r = stock_client.post("/api/stock-scan", json={
                 "universe": ["SP500"],

@@ -34,7 +34,7 @@ interface StockPositionCardProps {
   onAfterScanToggle?: (symbol: string, armed: boolean) => void;
 }
 
-type ExecMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper';
+type ExecMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper' | 'tastytrade_paper';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -156,6 +156,7 @@ export function StockPositionCard({
   const [err, setErr]                   = useState<string | null>(null);
   const [added, setAdded]               = useState(false);
   const [alpacaConfigured, setAlpacaConfigured] = useState(false);
+  const [tastytradeConfigured, setTastytradeConfigured] = useState(false);
 
   const pinned            = stockBasket.some((c) => c.symbol === card.symbol);
   const ibkrConfigured    = !!ibkrPaper.accountId && !!ibkrPaper.baseUrl;
@@ -163,7 +164,10 @@ export function StockPositionCard({
 
   useEffect(() => {
     api.getBrokerStatus()
-      .then((s) => setAlpacaConfigured(s.alpaca_paper?.configured ?? false))
+      .then((s) => {
+        setAlpacaConfigured(s.alpaca_paper?.configured ?? false);
+        setTastytradeConfigured(s.tastytrade_paper?.configured ?? false);
+      })
       .catch(() => {});
   }, []);
 
@@ -339,6 +343,7 @@ export function StockPositionCard({
           ['ibkr_paper',    'IBKR Paper',      ibkrConfigured],
           ['tradier_paper', 'Tradier Paper',   tradierConfigured],
           ['alpaca_paper',  'Alpaca Paper',    alpacaConfigured],
+          ['tastytrade_paper', 'Tastytrade Paper', tastytradeConfigured],
         ] as Array<[ExecMode, string, boolean]>).map(([mode, label, ok]) => (
           <button
             key={mode}

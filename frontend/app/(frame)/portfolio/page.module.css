@@ -407,3 +407,25 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Close-position modal — a centered overlay so the drawer is visible
+   regardless of scroll position (previously it rendered at the page bottom,
+   making the "Close position" button appear to do nothing). */
+.closeOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--bg-base) 60%, transparent);
+}
+
+.closeModal {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}

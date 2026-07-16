@@ -9,7 +9,6 @@ _log = logging.getLogger(__name__)
 
 import httpx
 import yaml
-from functools import lru_cache as _lru_cache
 from pathlib import Path as _Path
 from fastapi import APIRouter, Depends
 
@@ -19,24 +18,18 @@ from app.database import AsyncSessionLocal, get_db
 from app.models.scan_session import ScanSession
 import json as _json
 
-_RR_CONFIG_PATH = _Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
-
-# NOTE: lru_cache caches this at first call. Restart the backend to pick up
-# changes to risk_rules.yaml (premium_stop_pct, target %, etc.).
-@_lru_cache(maxsize=1)
-def _rr_cfg() -> dict:
-    import yaml as _yaml
-    with open(_RR_CONFIG_PATH) as f:
-        return _yaml.safe_load(f)["reward_risk"]
-
-
+# NOTE: lru_cache (inside load_reward_risk_cfg) caches this at first call.
+# Restart the backend to pick up changes to risk_rules.yaml (premium_stop_pct,
+# target %, etc.). Shared with app.routers.contracts's recompute endpoint so
+# both build a trade plan off the same numbers.
+from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
 
 from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
     ScanDelta, ContinuousScanConfig, ScanState, OptionsPipeline,
-    AlternativeContract,
+    AlternativeContract, DteWindow,
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
     SentimentData, FundamentalsOut,
 )
@@ -61,8 +54,11 @@ from app.scoring.stock_scorer import score_stock, StockScoreCard
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
-from app.scoring.entry_quality import assess_entry
-from app.scoring.reward_risk import estimate_rr, estimate_targets
+from app.scoring.contract_validator import dte_holding_multiplier
+from app.scoring.dte_window import resolve_dte_bounds
+from app.scoring.reward_risk import estimate_rr
+from app.scoring.trade_plan import build_trade_plan
+from types import SimpleNamespace
 from app.services.audit import new_rec_id, log_event
 from app.services.scan_scheduler import ScanScheduler
 from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
@@ -187,6 +183,7 @@ async def _build_spreads(
     client: httpx.AsyncClient,
     sem: asyncio.Semaphore,
     *,
+    dte_bounds: tuple[int, int] | None = None,
     spread_width: float = 5.0,
     short_leg_delta: float = 0.30,
     iv_rank_threshold: float = 50.0,
@@ -204,8 +201,8 @@ async def _build_spreads(
     try:
         async with sem:
             _puts_chain, _calls_chain = await asyncio.gather(
-                fetch_option_chain_async(client, symbol, option_type="P"),
-                fetch_option_chain_async(client, symbol, option_type="C"),
+                fetch_option_chain_async(client, symbol, option_type="P", dte_bounds=dte_bounds),
+                fetch_option_chain_async(client, symbol, option_type="C", dte_bounds=dte_bounds),
             )
     except Exception as exc:
         _log.debug("Spread: chain fetch failed for %s: %s", symbol, exc)
@@ -272,6 +269,7 @@ async def _process_symbol(
     min_cap_usd: float | None = None,
     max_cap_usd: float | None = None,
     overrides: dict | None = None,
+    dte_bounds: tuple[int, int] | None = None,
     gate: dict | None = None,
     atr_mult: float | None = None,
     price_map: dict | None = None,
@@ -414,7 +412,7 @@ async def _process_symbol(
 
     # ── Pass 2: fetch option chain only for survivors ─────────────────────────
     async with sem:
-        chain = await fetch_option_chain_async(client, symbol, option_type=option_type)
+        chain = await fetch_option_chain_async(client, symbol, option_type=option_type, dte_bounds=dte_bounds)
 
     if not chain:
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
@@ -477,7 +475,19 @@ async def _process_symbol(
         return RejectedCandidate(symbol=symbol, reason=f"Score gate: score {card.score} rejected", breakdown=bd)
 
     augmented = [_augment(c, stock_price=price) for c in chain]
-    scored = [(validate_contract(c, card.score, overrides=overrides), c) for c in augmented]
+    # DTE bounds are derived from the holding horizon and apply to contracts only,
+    # via a separate dict — kept apart from `overrides` for clarity, not because
+    # score_stock() would misinterpret these keys (its override handling is an
+    # allow-list that already ignores unrecognised keys).
+    contract_overrides = dict(overrides or {})
+    if dte_bounds is not None:
+        lo, hi = dte_bounds
+        contract_overrides["min_dte"] = lo
+        contract_overrides["max_dte"] = hi
+        contract_overrides["preferred_dte_min"] = lo
+        contract_overrides["preferred_dte_max"] = hi
+    scored = [(validate_contract(c, card.score, overrides=contract_overrides or None), c)
+              for c in augmented]
 
     valid_scores = [(s, c) for s, c in scored if s.status != "REJECT"]
     if not valid_scores:
@@ -500,49 +510,32 @@ async def _process_symbol(
     contract_card: ContractScoreCard = best_score
     runner_ups = valid_scores[1:3]
 
-    # ── Entry quality ──────────────────────────────────────────────────────────
-    bid = float(contract.get("bid", 0))
-    ask = float(contract.get("ask", 0))
-    mid = float(contract.get("price", 0))
-    entry = assess_entry(bid=bid, ask=ask, mid=mid)
-
-    # ── Reward-risk ────────────────────────────────────────────────────────────
+    # ── Entry / Exit / Reward-risk / targets (shared with the recompute endpoint) ─
     _rr = _rr_cfg()
-    _bull = direction == "Bullish"
-    target_price = price * (1 + _rr["bullish_target_pct"]) if _bull else price * (1 - _rr["bearish_target_pct"])
     strike = float(contract.get("strike", price))
-    expiry_years = contract.get("dte", 30) / 365.0
-    premium = float(contract.get("price", 0.10))
-    premium = max(premium, 0.01)
-    # Back-calculate the stock price at which the option would lose premium_stop_pct
-    # of its premium (using delta approximation). This keeps the Exit Plan's
-    # "Invalidation" field consistent with the R/R calculation's risk basis.
-    _delta_est = max(abs(float(contract.get("delta", 0.45))), 0.05)
-    _stock_stop_move = (premium * _rr["premium_stop_pct"]) / _delta_est
-    invalidation_price = max(price - _stock_stop_move, 0.01) if _bull else price + _stock_stop_move
-
-    rr = estimate_rr(
+    premium = max(float(contract.get("price", 0.10)), 0.01)
+    _plan = build_trade_plan(
+        direction=direction,
         stock_price=price,
-        target_price=target_price,
-        invalidation_price=invalidation_price,
         strike=strike,
-        expiry_years=expiry_years,
-        current_premium=premium,
-        is_call=(direction == "Bullish"),
-        heston_params=None,
-        premium_stop_pct=_rr["premium_stop_pct"],
+        dte=int(contract.get("dte", 30)),
+        premium=premium,
+        delta=float(contract.get("delta", 0.45)),
+        entry_bid=float(contract.get("bid", 0)),
+        entry_ask=float(contract.get("ask", 0)),
+        entry_mid=float(contract.get("price", 0)),
+        rr_cfg=_rr,
     )
-
-    targets = estimate_targets(
-        stock_price=price,
-        base_target_price=target_price,
-        strike=strike,
-        expiry_years=expiry_years,
-        current_premium=premium,
-        is_call=(direction == "Bullish"),
-        heston_params=None,
-        premium_stop_pct=_rr["premium_stop_pct"],
-    )
+    entry = _plan.entry
+    target_price = _plan.target_price
+    invalidation_price = _plan.invalidation_price
+    rr = SimpleNamespace(rr_ratio=_plan.rr_ratio, model_used=_plan.rr_model)
+    targets = _plan.targets
+    # Unrounded target/invalidation for the runner-up alternatives' estimate_rr
+    # (see below) — feeding the rounded values would drift their R/R vs the
+    # pre-refactor behaviour.
+    _target_raw = _plan.target_price_raw
+    _invalidation_raw = _plan.invalidation_price_raw
 
     # ── Build TradeCardData ────────────────────────────────────────────────────
     from datetime import date as _date
@@ -608,10 +601,10 @@ async def _process_symbol(
             orderType=entry.order_type,
         ),
         exit=TradeExit(
-            invalidation=round(invalidation_price, 2),
-            premiumStop=round(premium * _rr["premium_stop_pct"], 2),
-            timeStopDays=max(3, int(contract.get("dte", 30) * 0.4)),
-            target=round(target_price, 2),
+            invalidation=invalidation_price,
+            premiumStop=_plan.premium_stop,
+            timeStopDays=_plan.time_stop_days,
+            target=target_price,
             targets=targets,
         ),
         rrRatio=rr.rr_ratio,
@@ -636,6 +629,7 @@ async def _process_symbol(
     # ── Bearish spread attachment (Pass 2 survivors only) ────────────────────────
     _primary_sp, _alt_sp = await _build_spreads(
         symbol, direction, contract, iv_rank, client, sem,
+        dte_bounds=dte_bounds,
         spread_width=spread_width,
         short_leg_delta=short_leg_delta,
         iv_rank_threshold=iv_rank_threshold,
@@ -670,8 +664,8 @@ async def _process_symbol(
         alt_premium = float(alt_c.get("price", 0.10))
         alt_rr = estimate_rr(
             stock_price=price,
-            target_price=target_price,
-            invalidation_price=invalidation_price,
+            target_price=_target_raw,
+            invalidation_price=_invalidation_raw,
             strike=alt_strike,
             expiry_years=alt_expiry_years,
             current_premium=alt_premium,
@@ -859,6 +853,31 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             else:
                 fund_map[sym] = score_fundamentals(snap, req.direction, fund_gate) if snap else None
 
+    # ── DTE window from the holding horizon ───────────────────────────────────
+    # Absent hold days (e.g. an older client), the fetch/validator defaults apply.
+    # ScanRequest's own validator guarantees well-ordered, non-negative hold days;
+    # resolve_dte_bounds() still falls back to None on a misconfigured
+    # dte_holding_multiplier rather than raise, since this runs before the
+    # per-symbol task loop and an unguarded raise here would 500 the whole scan.
+    _dte_bounds: tuple[int, int] | None = None
+    _dte_win: DteWindow | None = None
+    if req.hold_min_days is not None and req.hold_max_days is not None:
+        _dte_bounds = resolve_dte_bounds(
+            req.hold_min_days, req.hold_max_days, dte_holding_multiplier,
+            log_context=f"SCAN {scan_id}",
+        )
+        if _dte_bounds is not None:
+            # Safe to call dte_holding_multiplier() again here, unguarded: we only
+            # reach this branch if resolve_dte_bounds() already called it
+            # successfully once inside its own try/except, and _load_config()'s
+            # underlying YAML read is cached (see contract_validator.py:42-45), so
+            # this second call reads the same cached config and cannot newly fail.
+            _mult = dte_holding_multiplier()
+            _dte_win = DteWindow(min_dte=_dte_bounds[0], max_dte=_dte_bounds[1], multiplier=_mult)
+            _log.info("SCAN %s dte_window: %d-%dd (hold %d-%dd x %.1f)",
+                      scan_id, _dte_bounds[0], _dte_bounds[1],
+                      req.hold_min_days, req.hold_max_days, _mult)
+
     semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)
     _tradier_tok, _tradier_base = get_tradier_creds()
     async with httpx.AsyncClient(
@@ -877,6 +896,7 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 min_cap_usd=req.min_cap_usd,
                 max_cap_usd=req.max_cap_usd,
                 overrides=dict(req.overrides) if req.overrides else None,
+                dte_bounds=_dte_bounds,
                 gate=gate,
                 atr_mult=atr_mult,
                 price_map=price_map,
@@ -1006,6 +1026,7 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             original_count=original_count,
             pipeline=_pipeline,
             direction_banner=_direction_banner,
+            dte_window=_dte_win,
         )
         _last_result = result
         _last_request = req

@@ -158,6 +158,35 @@ def test_1W_interval_alias_calls_yf_with_1wk():
     assert len(result) > 0
 
 
+@pytest.mark.asyncio
+async def test_get_intraday_widens_daily_weekly_at_production_default():
+    """The chart's real entry points (WS stream + /chart/history) pass days=55.
+    get_intraday must widen daily/weekly to a multi-year window *at the caching
+    layer* — so the cache key reflects the real window — while leaving intraday
+    (and non-chart callers of fetch_intraday_candles) untouched at 55."""
+    from app.data import chart_cache
+
+    captured: list[tuple[str, int]] = []
+
+    def _fake_fetch(symbol, interval, days):
+        captured.append((interval, days))
+        return [_bar(1_700_000_000)]
+
+    chart_cache._INTRADAY_CACHE.clear()
+    with patch("app.data.chart_cache.fetch_intraday_candles", side_effect=_fake_fetch):
+        await chart_cache.get_intraday("SPY", "1D", days=55)
+        await chart_cache.get_intraday("SPY", "1W", days=55)
+        await chart_cache.get_intraday("SPY", "15min", days=55)
+
+    # daily/weekly widened; intraday left alone
+    assert ("daily", chart_cache._CHART_DAILY_DAYS) in captured, captured
+    assert ("weekly", chart_cache._CHART_WEEKLY_DAYS) in captured, captured
+    assert ("15min", 55) in captured, captured
+    # the cache key must reflect the widened window, not the caller's 55
+    assert f"SPY:daily:{chart_cache._CHART_DAILY_DAYS}" in chart_cache._INTRADAY_CACHE
+    assert "SPY:daily:55" not in chart_cache._INTRADAY_CACHE
+
+
 def test_ibkr_used_for_1D_interval():
     """IBKR must be attempted for interval='1D' too, not just 'daily' — same fix as above."""
     from app.data.market import fetch_intraday_candles
@@ -605,3 +634,108 @@ def test_fetch_intraday_yf_4h_recursion_caps_at_730_days():
     # must cap 9999 down to 730 days, i.e. period='2y'.
     assert captured_periods == ["2y"], f"Expected the 730-day cap (period='2y'), got: {captured_periods}"
     assert result == []
+
+
+# ── tastytrade IV fallback tier ───────────────────────────────────────────────
+
+
+def test_fetch_option_chain_falls_back_to_tastytrade_when_ibkr_unavailable():
+    """When IBKR returns None, tastytrade's real IV Rank/Percentile should be
+    used instead of falling straight to the raw-IV proxy."""
+    from app.data.market import fetch_option_chain
+    import app.data.ibkr as ibkr_mod
+    import app.data.tastytrade_iv as tasty_mod
+
+    tasty_iv = {"AAPL": {"ivRank": 47.2, "ivPercentile": 51.9}}
+
+    original_fetch_ibkr_iv = ibkr_mod.fetch_iv_metrics_ibkr
+    ibkr_mod.fetch_iv_metrics_ibkr = lambda s: None  # IBKR unavailable
+
+    original_fetch_tasty_iv = tasty_mod.fetch_iv_metrics_tastytrade
+    tasty_mod.fetch_iv_metrics_tastytrade = lambda symbols: tasty_iv
+
+    try:
+        with patch("app.data.market.httpx.get") as mock_get:
+            exp_resp = MagicMock()
+            exp_resp.raise_for_status.return_value = None
+            exp_resp.json.return_value = {"expirations": {"date": [_FUTURE_EXPIRY]}}
+
+            chain_resp = MagicMock()
+            chain_resp.raise_for_status.return_value = None
+            chain_resp.json.return_value = {
+                "options": {
+                    "option": [{
+                        "option_type": "call",
+                        "strike": 150,
+                        "bid": 3.40,
+                        "ask": 3.60,
+                        "volume": 500,
+                        "open_interest": 1200,
+                        "implied_volatility": 0.30,
+                        "greeks": {"delta": 0.45, "theta": -0.05},
+                    }]
+                }
+            }
+
+            mock_get.side_effect = [exp_resp, chain_resp]
+
+            result = fetch_option_chain("AAPL", option_type="C")
+    finally:
+        ibkr_mod.fetch_iv_metrics_ibkr = original_fetch_ibkr_iv
+        tasty_mod.fetch_iv_metrics_tastytrade = original_fetch_tasty_iv
+
+    assert len(result) == 1
+    assert result[0]["ivRank"] == 47.2
+    assert result[0]["ivPercentile"] == 51.9
+
+
+@pytest.mark.asyncio
+async def test_fetch_option_chain_async_falls_back_to_tastytrade_when_ibkr_unavailable():
+    """Same fallback as the sync test, but through fetch_option_chain_async,
+    which takes a caller-supplied httpx.AsyncClient and wraps both the IBKR
+    and tastytrade calls in asyncio.to_thread."""
+    from app.data.market import fetch_option_chain_async
+    import app.data.ibkr as ibkr_mod
+    import app.data.tastytrade_iv as tasty_mod
+
+    tasty_iv = {"AAPL": {"ivRank": 47.2, "ivPercentile": 51.9}}
+
+    original_fetch_ibkr_iv = ibkr_mod.fetch_iv_metrics_ibkr
+    ibkr_mod.fetch_iv_metrics_ibkr = lambda s: None
+
+    original_fetch_tasty_iv = tasty_mod.fetch_iv_metrics_tastytrade
+    tasty_mod.fetch_iv_metrics_tastytrade = lambda symbols: tasty_iv
+
+    exp_resp = MagicMock()
+    exp_resp.raise_for_status.return_value = None
+    exp_resp.json.return_value = {"expirations": {"date": [_FUTURE_EXPIRY]}}
+
+    chain_resp = MagicMock()
+    chain_resp.raise_for_status.return_value = None
+    chain_resp.json.return_value = {
+        "options": {
+            "option": [{
+                "option_type": "call",
+                "strike": 150,
+                "bid": 3.40,
+                "ask": 3.60,
+                "volume": 500,
+                "open_interest": 1200,
+                "implied_volatility": 0.30,
+                "greeks": {"delta": 0.45, "theta": -0.05},
+            }]
+        }
+    }
+
+    fake_client = AsyncMock()
+    fake_client.get = AsyncMock(side_effect=[exp_resp, chain_resp])
+
+    try:
+        result = await fetch_option_chain_async(fake_client, "AAPL", option_type="C")
+    finally:
+        ibkr_mod.fetch_iv_metrics_ibkr = original_fetch_ibkr_iv
+        tasty_mod.fetch_iv_metrics_tastytrade = original_fetch_tasty_iv
+
+    assert len(result) == 1
+    assert result[0]["ivRank"] == 47.2
+    assert result[0]["ivPercentile"] == 51.9

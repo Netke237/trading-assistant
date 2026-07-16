@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Literal
+
 import httpx
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.schemas import OptionContract
+from app.schemas import OptionContract, TradeEntry, TradeExit
 from app.data.market import fetch_option_chain, fetch_price, fetch_contract_quote_async, fetch_price_async
 from app.data.augment import _augment
-from app.scoring.contract_validator import validate_contract
+from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
+from app.scoring.dte_window import resolve_dte_bounds
+from app.scoring.trade_plan import build_trade_plan
+# Shared with app.routers.scan — both build a trade plan off the same
+# reward_risk config so the scan and the per-contract recompute endpoint agree.
+from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -36,11 +43,35 @@ async def get_contracts(
     horizon: str = Query(default='swing'),
     limit: int = Query(default=10, ge=1, le=100),
     max_price: float = Query(default=50.0, ge=0.5, le=500.0),
+    hold_min_days: int | None = Query(default=None, ge=0),
+    hold_max_days: int | None = Query(default=None, ge=0),
 ) -> list[OptionContract]:
     opt_type = 'C' if right.upper() == 'C' else 'P'
 
+    dte_bounds: tuple[int, int] | None = None
+    contract_overrides: dict | None = None
+    if hold_min_days is not None and hold_max_days is not None:
+        if hold_max_days < hold_min_days:
+            raise HTTPException(
+                status_code=422,
+                detail=[{
+                    "loc": ["query", "hold_max_days"],
+                    "msg": "Value error, hold_max_days must be >= hold_min_days",
+                    "type": "value_error",
+                }],
+            )
+        dte_bounds = resolve_dte_bounds(
+            hold_min_days, hold_max_days, dte_holding_multiplier,
+            log_context="GET /api/contracts",
+        )
+        if dte_bounds is not None:
+            contract_overrides = {
+                "min_dte": dte_bounds[0], "max_dte": dte_bounds[1],
+                "preferred_dte_min": dte_bounds[0], "preferred_dte_max": dte_bounds[1],
+            }
+
     # 1. Fetch raw option chain
-    raw_chain = fetch_option_chain(symbol.upper(), option_type=opt_type) or []
+    raw_chain = fetch_option_chain(symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds) or []
 
     # 2. Fetch current stock price (None if unavailable — _augment handles 0.0 gracefully)
     price: float = fetch_price(symbol.upper()) or 0.0
@@ -58,7 +89,7 @@ async def get_contracts(
             continue
 
         # 5. Score the contract
-        score_card = validate_contract(augmented, stock_score, overrides=None)
+        score_card = validate_contract(augmented, stock_score, overrides=contract_overrides)
 
         # 6. Build OptionContract response, merging scored fields
         results.append(OptionContract(
@@ -128,3 +159,69 @@ async def get_stock_quote(
     if price is None:
         raise HTTPException(status_code=404, detail="Price not available")
     return StockQuoteResponse(symbol=symbol.upper(), price=price)
+
+
+class RecomputePlanRequest(BaseModel):
+    symbol: str
+    direction: Literal["Bullish", "Bearish"]
+    stock_price: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    dte: int = Field(..., ge=0)
+    premium: float = Field(..., gt=0)   # selected contract mid
+    delta: float = 0.45
+    spread: float = 0.0
+
+
+class RecomputePlanResponse(BaseModel):
+    entry: TradeEntry
+    exit: TradeExit
+    rrRatio: float
+    rrModel: str
+
+
+@router.post('/contracts/recompute-plan', response_model=RecomputePlanResponse)
+async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
+    """Recompute the Entry Plan, Exit Plan, reward/risk and sell-to-close targets
+    for a user-selected contract.
+
+    Step 6 lets the user override the auto-picked contract. Without recomputing,
+    the Exit Plan (premium stop, invalidation, targets) keeps describing the
+    original contract. This endpoint runs the SAME math the scan uses
+    (build_trade_plan) off the selected contract's premium/delta so every derived
+    number matches the contract actually being traded.
+    """
+    # Derive bid/ask from the mid + spread so assess_entry sees the same
+    # spread_pct it would during the scan (spread_pct = (ask-bid)/mid).
+    half = max(req.spread, 0.0) / 2
+    entry_bid = max(0.01, req.premium - half)
+    entry_ask = req.premium + half
+
+    plan = build_trade_plan(
+        direction=req.direction,
+        stock_price=req.stock_price,
+        strike=req.strike,
+        dte=req.dte,
+        premium=req.premium,
+        delta=req.delta,
+        entry_bid=entry_bid,
+        entry_ask=entry_ask,
+        entry_mid=req.premium,
+        rr_cfg=_rr_cfg(),
+    )
+
+    return RecomputePlanResponse(
+        entry=TradeEntry(
+            limit=plan.entry.limit_price,
+            maxFill=plan.entry.max_fill,
+            orderType=plan.entry.order_type,
+        ),
+        exit=TradeExit(
+            invalidation=plan.invalidation_price,
+            premiumStop=plan.premium_stop,
+            timeStopDays=plan.time_stop_days,
+            target=plan.target_price,
+            targets=plan.targets,
+        ),
+        rrRatio=plan.rr_ratio,
+        rrModel=plan.rr_model,
+    )

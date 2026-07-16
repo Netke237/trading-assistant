@@ -439,10 +439,26 @@ def fetch_price(symbol: str) -> Optional[float]:
         return None
 
 
+def _nearest_expiration_in_window(
+    dates: list[str], bounds: tuple[int, int], today: date,
+) -> Optional[str]:
+    """Return the expiration date closest to the centre of [min_dte, max_dte].
+
+    Returns None if no available expiration falls inside the window.
+    """
+    lo, hi = bounds
+    centre = (lo + hi) / 2
+    in_window = [d for d in dates if lo <= (date.fromisoformat(d) - today).days <= hi]
+    if not in_window:
+        return None
+    return min(in_window, key=lambda d: abs((date.fromisoformat(d) - today).days - centre))
+
+
 def fetch_option_chain(
     symbol: str,
     expiry: Optional[str] = None,
     option_type: Literal["C", "P"] = "C",
+    dte_bounds: Optional[tuple[int, int]] = None,
 ) -> list[dict]:
     try:
         exp_resp = httpx.get(
@@ -464,6 +480,10 @@ def fetch_option_chain(
         _today = date.today()
         if expiry and expiry in dates:
             target_exp = expiry
+        elif dte_bounds is not None:
+            target_exp = _nearest_expiration_in_window(dates, dte_bounds, _today)
+            if target_exp is None:
+                return []
         else:
             target_exp = next(
                 (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
@@ -543,6 +563,7 @@ def fetch_option_chain(
                 "score": 0,
             })
         # Enrich with IBKR IV Rank/Percentile if available
+        _ibkr_iv = None
         try:
             from .ibkr import fetch_iv_metrics_ibkr
             _ibkr_iv = fetch_iv_metrics_ibkr(symbol)
@@ -552,6 +573,19 @@ def fetch_option_chain(
                     c["ivPercentile"] = round(_ibkr_iv["ivPercentile"], 1)
         except Exception:
             pass  # keep existing fallback values
+
+        # IBKR unavailable — try tastytrade's real IV Rank/Percentile before
+        # falling back to the raw-IV-as-proxy values set above.
+        if not _ibkr_iv:
+            try:
+                from .tastytrade_iv import fetch_iv_metrics_tastytrade
+                _tasty_iv = fetch_iv_metrics_tastytrade([symbol])
+                if _tasty_iv and symbol in _tasty_iv:
+                    for c in result:
+                        c["ivRank"] = round(_tasty_iv[symbol]["ivRank"], 1)
+                        c["ivPercentile"] = round(_tasty_iv[symbol]["ivPercentile"], 1)
+            except Exception:
+                pass  # keep existing fallback values
 
         zero_iv = sum(1 for c in result if c["ivRank"] == 0)
         if zero_iv > len(result) * 0.5 and result:
@@ -1072,6 +1106,7 @@ async def fetch_option_chain_async(
     symbol: str,
     expiry: Optional[str] = None,
     option_type: Literal["C", "P"] = "C",
+    dte_bounds: Optional[tuple[int, int]] = None,
 ) -> list[dict]:
     """Async variant."""
     try:
@@ -1093,6 +1128,10 @@ async def fetch_option_chain_async(
         _today = date.today()
         if expiry and expiry in dates:
             target_exp = expiry
+        elif dte_bounds is not None:
+            target_exp = _nearest_expiration_in_window(dates, dte_bounds, _today)
+            if target_exp is None:
+                return []
         else:
             target_exp = next(
                 (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
@@ -1171,6 +1210,7 @@ async def fetch_option_chain_async(
                 "score": 0,
             })
         # Enrich with IBKR IV Rank/Percentile if available (async-safe via to_thread)
+        _ibkr_iv = None
         try:
             from .ibkr import fetch_iv_metrics_ibkr
             _ibkr_iv = await asyncio.to_thread(fetch_iv_metrics_ibkr, symbol)
@@ -1180,6 +1220,22 @@ async def fetch_option_chain_async(
                     c["ivPercentile"] = round(_ibkr_iv["ivPercentile"], 1)
         except Exception:
             pass
+
+        # IBKR unavailable — try tastytrade's real IV Rank/Percentile before
+        # falling back to the raw-IV-as-proxy values set above. Wrapped in
+        # asyncio.to_thread purely to avoid blocking this coroutine's event
+        # loop while fetch_iv_metrics_tastytrade's run_coro() call blocks its
+        # calling thread waiting on the shared bridge loop (Task 6).
+        if not _ibkr_iv:
+            try:
+                from .tastytrade_iv import fetch_iv_metrics_tastytrade
+                _tasty_iv = await asyncio.to_thread(fetch_iv_metrics_tastytrade, [symbol])
+                if _tasty_iv and symbol in _tasty_iv:
+                    for c in result:
+                        c["ivRank"] = round(_tasty_iv[symbol]["ivRank"], 1)
+                        c["ivPercentile"] = round(_tasty_iv[symbol]["ivPercentile"], 1)
+            except Exception:
+                pass  # keep existing fallback values
 
         zero_iv = sum(1 for c in result if c["ivRank"] == 0)
         if zero_iv > len(result) * 0.5 and result:

@@ -47,6 +47,36 @@ def test_backtest_passes_gate_with_enough_trades():
     assert isinstance(result.passes_gate, bool)
 
 
+def test_expectancy_is_average_pnl_per_trade_not_cumulative_return():
+    """expectancy must be win_rate*avg_win - (1-win_rate)*avg_loss computed from
+    real per-trade PnL, not cumulative Return%/MaxDD% divided by trade counts
+    (Critical finding #6, 2026-07-15 audit)."""
+    bars = _synth_bars(500, trend=True)
+    result = run_strategy_backtest(bars, strategy="ma_crossover", direction="Bullish")
+    assert result.n_trades >= 10, "expected ma_crossover on this fixture to produce enough trades to test the real formula"
+    # Recompute what the OLD (buggy) formula would have produced from the same
+    # aggregate fields, to prove the new expectancy is NOT that.
+    wins = round(result.win_rate * result.n_trades)
+    losses = result.n_trades - wins
+    old_avg_win = abs(result.total_return_pct / wins) if wins > 0 else 0
+    old_avg_loss = abs(result.max_drawdown_pct / losses) if losses > 0 else 1
+    old_formula_expectancy = round(result.win_rate * old_avg_win - (1 - result.win_rate) * old_avg_loss, 3)
+    assert result.expectancy != old_formula_expectancy
+
+
+def test_min_expectancy_gate_is_applied():
+    """_MIN_EXPECTANCY must actually gate passes_gate, not just exist as a
+    module constant (Critical finding #6, 2026-07-15 audit)."""
+    from app.services import strategy_backtest as sb
+    bars = _synth_bars(500, trend=True)
+    # min_win_rate=0.0 isolates the expectancy gate: with the win-rate gate
+    # neutralized, passes_gate can only be blocked by n_trades or expectancy.
+    result = run_strategy_backtest(bars, strategy="ma_crossover", direction="Bullish", min_win_rate=0.0)
+    assert result.n_trades >= sb._MIN_TRADES, "expected enough trades to exercise the gate on this fixture"
+    assert result.expectancy < sb._MIN_EXPECTANCY, "expected this fixture to produce a losing (negative) expectancy"
+    assert result.passes_gate is False
+
+
 # ── S-2: Backtest result cache ────────────────────────────────────────────────
 
 def test_backtest_key_is_stable():
@@ -163,3 +193,25 @@ async def test_process_stock_uses_process_pool_for_backtest():
     assert executor_arg is _BACKTEST_POOL, (
         f"Expected _BACKTEST_POOL, got {executor_arg!r}"
     )
+
+
+def test_backtest_result_changes_with_params():
+    """run_strategy_backtest must actually use the params dict passed to it —
+    two materially different param sets on the same bars should not be
+    guaranteed to produce identical trade counts (Critical finding #7, 2026-07-15 audit).
+    This exercises run_strategy_backtest directly; the router-level fix (threading
+    live signal_kwargs into this params argument) is verified by code inspection
+    of stock_scan.py's two call sites, which have no isolated per-call unit test
+    since they require a full StockAnalysisRequest fixture."""
+    bars = _synth_bars(500, trend=True)
+    # pullback_ema_signal's real kwarg is `tolerance` (strategy_engine.py:250,
+    # default 0.04) — how close price must pull back to the EMA to count as a
+    # setup. A near-zero tolerance should fire far fewer (or differently timed)
+    # entries than a very loose one.
+    tight = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
+                                   params={"tolerance": 0.005})
+    loose = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
+                                   params={"tolerance": 0.15})
+    # They must not be silently identical, which is what happens if params is
+    # never forwarded into the signal function.
+    assert tight.n_trades != loose.n_trades or tight.summary_text != loose.summary_text

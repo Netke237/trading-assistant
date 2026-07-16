@@ -56,6 +56,7 @@ export default function PortfolioPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [tab, setTab] = useState<'open' | 'history'>('open');
   const [closing, setClosing] = useState<string | null>(null); // contract being closed
+  const [closeError, setCloseError] = useState<string | null>(null);
   const closeRemote = usePortfolioStore((s) => s.closePositionRemote);
   const history = usePerformanceStore((s) => s.history);
   const performance = usePerformanceStore((s) => s.performance);
@@ -110,8 +111,15 @@ export default function PortfolioPage() {
   const yearLabel = String(now.getFullYear());
 
   const confirmClose = async (p: PortfolioPosition, opts: { qtyToClose: number; exitPrice: number; exitDate: string }) => {
-    const ok = await closeRemote(p.recId, opts);
-    if (ok) { setClosing(null); fetchHistory(); fetchPerformance(); }
+    setCloseError(null);
+    const { ok, detail } = await closeRemote(p.recId, opts);
+    if (ok) {
+      setClosing(null);
+      fetchHistory();
+      fetchPerformance();
+    } else {
+      setCloseError(detail ?? 'Failed to close position.');
+    }
   };
 
   return (
@@ -256,7 +264,7 @@ export default function PortfolioPage() {
 
           <div className={styles.tableBody}>
             {positions.map((p) => (
-              <div key={p.contract} className={styles.rowWrap}>
+              <div key={p.recId} className={styles.rowWrap}>
                 <TableRow status={p.status} columns={COLUMNS}>
                   <Data size={13} weight={500}>{p.symbol}</Data>
                   <span className={styles.contractCell}>
@@ -358,13 +366,43 @@ export default function PortfolioPage() {
 
       {tab === 'open' && closing && (() => {
         const p = positions.find((x) => x.contract === closing);
-        return p ? (
-          <ClosePositionDrawer
-            position={p}
-            onCancel={() => setClosing(null)}
-            onConfirm={(opts) => confirmClose(p, opts)}
-          />
-        ) : null;
+        const dismiss = () => { setClosing(null); setCloseError(null); };
+
+        // A failed close can remove the position from `positions` (e.g. the
+        // "genuinely gone" case in closePositionRemote drops the phantom row
+        // before returning its error). If the drawer only rendered when `p`
+        // still exists, that exact removal made the whole modal — including
+        // the error explaining WHY — vanish along with it. Show a standalone
+        // error card in that case instead of silently closing.
+        if (!p) {
+          if (!closeError) return null;
+          return (
+            <div className={styles.closeOverlay} role="dialog" aria-modal="true" aria-label="Close position error" onClick={(e) => { if (e.target === e.currentTarget) dismiss(); }}>
+              <div className={styles.closeModal}>
+                <Text size={12} tone="reject">{closeError}</Text>
+                <button type="button" className={styles.clearConfirmBtn} onClick={dismiss}>OK</button>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div
+            className={styles.closeOverlay}
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => { if (e.target === e.currentTarget) dismiss(); }}
+          >
+            <div className={styles.closeModal}>
+              {closeError && <Text size={12} tone="reject">{closeError}</Text>}
+              <ClosePositionDrawer
+                position={p}
+                onCancel={dismiss}
+                onConfirm={(opts) => confirmClose(p, opts)}
+              />
+            </div>
+          </div>
+        );
       })()}
     </div>
   );

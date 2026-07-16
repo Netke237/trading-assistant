@@ -21,6 +21,7 @@ import { useAlertStore } from '@/lib/alertStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import { runStockScan } from '@/lib/stockScan';
+import { presetByKey, scoringHorizonForHold, sanitizeHoldDays } from '@/lib/horizonPresets';
 import styles from './index.module.css';
 
 function nowLocalISO(): string {
@@ -98,16 +99,16 @@ export function RunScanButton() {
       return;
     }
 
-    const direction   = context?.direction ?? 'Bullish';
-    const horizonRaw  = context?.horizon   ?? 'Swing (5–15d)';
-    const horizonKey  = horizonRaw.split(' ')[0];  // "Swing (5–15d)" → "Swing"
-    // "Custom" is not a valid API horizon — map to nearest preset by max-day value
-    let horizon: string = horizonKey;
-    if (horizonKey === 'Custom') {
-      const maxMatch = horizonRaw.match(/–(\d+)d/);
-      const maxDays  = maxMatch ? Number(maxMatch[1]) : 15;
-      horizon = maxDays <= 4 ? 'Intraday' : maxDays <= 20 ? 'Swing' : 'Position';
-    }
+    const direction = context?.direction ?? 'Bullish';
+    const presetKey = context?.horizonPreset ?? 'Swing';
+    const holdMin   = context?.holdMin ?? presetByKey('Swing').holdMin;
+    const holdMax   = context?.holdMax ?? presetByKey('Swing').holdMax;
+    // The backend scorer knows only Intraday/Swing/Position. Long-dated presets
+    // and Custom map onto one of those for scoring; the DTE window itself comes
+    // from the hold days, computed backend-side.
+    const horizon: string = presetKey === 'Custom'
+      ? scoringHorizonForHold(holdMax)
+      : presetByKey(presetKey).scoringHorizon;
 
     const currentRegime = useScanStore.getState().combinedRegime;
     if (currentRegime === 'REJECT' && !regimeConfirmedRef.current) {
@@ -164,7 +165,9 @@ export function RunScanButton() {
     setScanState('SCANNING', startISO);   // scanAt = START time (not end)
     useScanStore.getState().setRejectedLog([]);
     const spreads = useSettingsStore.getState().spreads;
-    api.postScan(universe, direction, horizon, filters, effectiveOverrides, {
+    api.postScan(universe, direction, horizon,
+      sanitizeHoldDays(holdMin, holdMax),
+      filters, effectiveOverrides, {
       spread_width:       spreads.widthPoints,
       short_leg_delta:    spreads.shortLegDelta,
       iv_rank_threshold:  spreads.ivRankThreshold,

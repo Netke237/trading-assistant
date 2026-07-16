@@ -9,9 +9,16 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 
-def realized_pnl(entry_price: float, exit_price: float, qty: int) -> tuple[float, float]:
-    """Long-premium realized P&L: (exit - entry) * 100 * qty. Percent guards entry==0."""
-    dollar = round((exit_price - entry_price) * 100 * qty, 2)
+def _contract_multiplier(contract: str) -> int:
+    """Return 1 for stock positions (SYMBOL|STOCK), 100 for option contracts."""
+    return 1 if str(contract).endswith("|STOCK") else 100
+
+
+def realized_pnl(entry_price: float, exit_price: float, qty: int, contract: str) -> tuple[float, float]:
+    """Realized P&L: (exit - entry) * multiplier * qty. multiplier is 1 for stocks, 100 for options.
+    Percent guards entry==0."""
+    multiplier = _contract_multiplier(contract)
+    dollar = round((exit_price - entry_price) * multiplier * qty, 2)
     pct = round((exit_price - entry_price) / entry_price * 100, 2) if entry_price else 0.0
     return dollar, pct
 

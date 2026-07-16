@@ -41,5 +41,59 @@ def test_router_raises_for_inactive_live():
     router = BrokerRouter(adapters={})
     order = BrokerOrder(symbol="X", action="BUY", quantity=1,
                         order_type="MKT", limit_price=None, tif="DAY")
-    with pytest.raises(ValueError, match="live IBKR"):
+    with pytest.raises(ValueError, match="not yet activated"):
         router.execute("ibkr_live", order)
+
+
+from unittest.mock import patch
+
+from app.services.broker_router import build_router_from_credentials
+
+
+def test_tastytrade_live_is_blocked():
+    # Deliberately register a working adapter under the live key — this proves
+    # the _LIVE_BROKERS guard blocks execution unconditionally, before any
+    # adapter lookup, rather than merely relying on no live adapter existing.
+    # Do not "simplify" this to adapters={}; that would weaken the test to no
+    # longer prove the guard runs first.
+    router = BrokerRouter(adapters={"tastytrade_live": MagicMock()})
+    order = BrokerOrder(symbol="AAPL", action="BUY", quantity=1,
+                         order_type="MKT", limit_price=None, sec_type="STK")
+    with pytest.raises(ValueError, match="not yet activated"):
+        router.execute("tastytrade_live", order)
+
+
+def test_build_router_from_credentials_includes_tastytrade_paper_when_configured():
+    fake_creds = {
+        "ibkr_paper": None,
+        "tradier_paper": {},
+        "alpaca_paper": None,
+        "tastytrade_paper": {"client_secret": "x", "refresh_token": "y", "account_id": "5WX01234"},
+    }
+    with patch("app.services.credential_store.credential_store.load"), \
+         patch("app.services.credential_store.credential_store.get",
+               side_effect=lambda k: fake_creds.get(k)):
+        router = build_router_from_credentials()
+    assert "tastytrade_paper" in router._adapters
+
+
+from httpx import AsyncClient, ASGITransport
+from app.main import app
+
+
+@pytest.mark.asyncio
+async def test_stock_order_accepts_tastytrade_paper_broker_key():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/broker/stock-order", json={
+            "broker": "tastytrade_paper", "symbol": "AAPL",
+            "action": "BUY", "quantity": 1, "order_type": "MKT",
+        })
+    # No tastytrade credentials configured in this test environment, so the
+    # expected failure is 503 (credentials unavailable) or 502 (adapter
+    # error) from inside the route — NOT 422, which would mean the Literal
+    # still rejects "tastytrade_paper" before the route body even runs.
+    assert resp.status_code != 422, (
+        f"broker.py's BrokerKey Literal still rejects 'tastytrade_paper' "
+        f"(got {resp.status_code}, body: {resp.text})"
+    )

@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -54,7 +56,17 @@ async def db_session():
 
 @pytest_asyncio.fixture
 async def client(db_session):
-    """AsyncClient with get_db overridden to use the test SQLite session."""
+    """AsyncClient with get_db overridden to use the test SQLite session.
+
+    add_position() re-fetches a live quote at save time (see portfolio.py) to
+    keep entry_price fresh — that value now also feeds the risk check. These
+    fixtures use synthetic/expired test contracts (e.g. expiry 2026-06-20 with
+    a fabricated $4.50 premium), so an unmocked live fetch would substitute a
+    real market quote for an unrelated live expiry and make the risk check
+    (and any assertion on entry_price) nondeterministic. Mock it to "no live
+    quote available" so add_position falls back to the payload's entryPrice,
+    matching these tests' intent of exercising persistence/CRUD, not live data.
+    """
     from app.main import app
     from app.database import get_db
 
@@ -62,8 +74,9 @@ async def client(db_session):
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
+    with patch("app.routers.portfolio.fetch_contract_quote_async", new=AsyncMock(return_value=None)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            yield ac
     app.dependency_overrides.clear()
 
 
@@ -98,6 +111,16 @@ async def test_portfolio_add_and_list(client):
     assert len(positions) == 1
     assert positions[0]["recId"] == _POSITION_PAYLOAD["recId"]
     assert positions[0]["contract"] == _POSITION_PAYLOAD["contract"]
+
+
+@pytest.mark.asyncio
+async def test_portfolio_create_rejects_missing_rec_id(client):
+    """recId/entryPrice/entryDate are required fields — omitting one must return
+    a 422 validation error, not silently construct with None and fail later as
+    an opaque 500 on the database write (Critical finding #11, 2026-07-15 audit)."""
+    bad_payload = {k: v for k, v in _POSITION_PAYLOAD.items() if k != "recId"}
+    resp = await client.post("/api/portfolio", json=bad_payload)
+    assert resp.status_code == 422, resp.text
 
 
 # ── Test 2: Portfolio delete ──────────────────────────────────────────────────

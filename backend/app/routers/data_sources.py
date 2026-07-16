@@ -126,6 +126,25 @@ def _probe_ibkr_gateway(port: int) -> tuple[str, str | None]:
         return "down", str(exc)
 
 
+def _probe_tastytrade(slot: str) -> tuple[str, str | None]:
+    from app.data.tastytrade_session import get_session
+    session = get_session(slot)
+    if session is None:
+        return "unconfigured", f"Add tastytrade OAuth client_secret/refresh_token in Settings → Brokers ({slot})"
+    try:
+        from tastytrade.metrics import get_market_metrics
+        from app.data.governor import get_governor
+        from app.data.tastytrade_bridge import run_coro
+
+        async def _check():
+            await get_governor().call("tastytrade", lambda: get_market_metrics(session, ["SPY"]))
+
+        run_coro(_check())
+        return "connected", None
+    except Exception as exc:
+        return "down", str(exc)
+
+
 def _probe_yfinance() -> tuple[str, str | None]:
     try:
         import yfinance as yf  # noqa: F401
@@ -161,6 +180,8 @@ def get_data_sources() -> list[DataSourceStatus]:
         ("ibkr_paper",     "IBKR (paper)",     ["paper orders"],                         lambda: _probe_ibkr_gateway(7499),     None),
         ("tradier",        "Tradier (live)",   ["quotes", "option chains", "calendar"],  _probe_tradier,                        "tradier"),
         ("tradier_paper",  "Tradier (paper)",  ["paper stock/option orders"],            _probe_tradier_paper,                  None),
+        ("tastytrade",       "Tastytrade (IV data)", ["IV rank", "IV percentile"],       lambda: _probe_tastytrade("tastytrade_paper"), "tastytrade"),
+        ("tastytrade_paper", "Tastytrade (paper)",    ["paper stock/option orders"],     lambda: _probe_tastytrade("tastytrade_paper"), None),
         ("tiingo",         "Tiingo",           ["daily OHLCV fallback"],                 _probe_tiingo,                         "tiingo"),
         ("yfinance",       "yfinance",         ["last-resort fallback"],                 _probe_yfinance,                       "yfinance"),
     ]

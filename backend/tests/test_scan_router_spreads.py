@@ -111,6 +111,24 @@ def _make_rr() -> RrResult:
     return RrResult(rr_ratio=2.0, model_used="Delta approximation", estimated_exit_premium=5.0)
 
 
+def _make_plan(entry_result: EntryAssessment, rr_result: RrResult):
+    """Fake TradePlan mirroring what build_trade_plan would return — the primary
+    card's entry/exit/RR/targets now come from that shared helper."""
+    from app.scoring.trade_plan import TradePlan
+    return TradePlan(
+        entry=entry_result,
+        invalidation_price=180.0,
+        premium_stop=1.8,
+        time_stop_days=12,
+        target_price=170.0,
+        targets=[],
+        rr_ratio=rr_result.rr_ratio,
+        rr_model=rr_result.model_used,
+        target_price_raw=170.0,
+        invalidation_price_raw=180.0,
+    )
+
+
 # ── Helper: run _process_symbol with spread mocks ────────────────────────────
 
 async def _run_bearish_process(
@@ -154,9 +172,8 @@ async def _run_bearish_process(
         patch("app.routers.scan.score_stock", return_value=pass_card),
         patch("app.routers.scan.fetch_option_chain_async", mock_chain),
         patch("app.routers.scan.validate_contract", return_value=contract_score),
-        patch("app.routers.scan.assess_entry", return_value=entry_result),
+        patch("app.routers.scan.build_trade_plan", return_value=_make_plan(entry_result, rr_result)),
         patch("app.routers.scan.estimate_rr", return_value=rr_result),
-        patch("app.routers.scan.estimate_targets", return_value=[]),
         patch("app.routers.scan.log_event"),
     ):
         result = await _process_symbol(
@@ -278,9 +295,8 @@ async def test_bullish_candidate_has_no_spread():
         patch("app.routers.scan.score_stock", return_value=pass_card),
         patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=_MOCK_CHAIN_C)),
         patch("app.routers.scan.validate_contract", return_value=bull_contract_score),
-        patch("app.routers.scan.assess_entry", return_value=entry_result),
+        patch("app.routers.scan.build_trade_plan", return_value=_make_plan(entry_result, rr_result)),
         patch("app.routers.scan.estimate_rr", return_value=rr_result),
-        patch("app.routers.scan.estimate_targets", return_value=[]),
         patch("app.routers.scan.log_event"),
     ):
         result = await _process_symbol(
