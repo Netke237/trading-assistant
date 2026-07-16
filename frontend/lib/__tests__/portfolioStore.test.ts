@@ -441,5 +441,28 @@ describe('portfolioStore', () => {
       expect(restored).toBeDefined();
       expect(restored?.contracts).toBe(3);   // 5 - 2
     });
+
+    it('does not issue a second network request for a close already in flight', async () => {
+      let resolveFirst!: (v: Response) => void;
+      const firstResponse = new Promise<Response>((res) => { resolveFirst = res; });
+      let callCount = 0;
+
+      global.fetch = jest.fn((url: string) => {
+        if (typeof url === 'string' && url.includes('/close')) {
+          callCount += 1;
+          return firstResponse;
+        }
+        return Promise.resolve({ ok: true, json: async () => [] } as Response);
+      }) as unknown as typeof fetch;
+
+      const recId = 'REC-TEST-DOUBLE-CLOSE';
+      const p1 = usePortfolioStore.getState().closePositionRemote(recId, {});
+      const p2 = usePortfolioStore.getState().closePositionRemote(recId, {});
+
+      resolveFirst({ ok: true, json: async () => ({}) } as Response);
+      await Promise.all([p1, p2]);
+
+      expect(callCount).toBe(1);
+    });
   });
 });
