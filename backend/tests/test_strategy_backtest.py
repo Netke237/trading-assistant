@@ -193,3 +193,25 @@ async def test_process_stock_uses_process_pool_for_backtest():
     assert executor_arg is _BACKTEST_POOL, (
         f"Expected _BACKTEST_POOL, got {executor_arg!r}"
     )
+
+
+def test_backtest_result_changes_with_params():
+    """run_strategy_backtest must actually use the params dict passed to it —
+    two materially different param sets on the same bars should not be
+    guaranteed to produce identical trade counts (Critical finding #7, 2026-07-15 audit).
+    This exercises run_strategy_backtest directly; the router-level fix (threading
+    live signal_kwargs into this params argument) is verified by code inspection
+    of stock_scan.py's two call sites, which have no isolated per-call unit test
+    since they require a full StockAnalysisRequest fixture."""
+    bars = _synth_bars(500, trend=True)
+    # pullback_ema_signal's real kwarg is `tolerance` (strategy_engine.py:250,
+    # default 0.04) — how close price must pull back to the EMA to count as a
+    # setup. A near-zero tolerance should fire far fewer (or differently timed)
+    # entries than a very loose one.
+    tight = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
+                                   params={"tolerance": 0.005})
+    loose = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
+                                   params={"tolerance": 0.15})
+    # They must not be silently identical, which is what happens if params is
+    # never forwarded into the signal function.
+    assert tight.n_trades != loose.n_trades or tight.summary_text != loose.summary_text

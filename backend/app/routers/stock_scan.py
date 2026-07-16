@@ -151,11 +151,12 @@ _BACKTEST_POOL = concurrent.futures.ProcessPoolExecutor(
 )
 
 
-def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict]) -> str:
+def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], params: dict | None = None) -> str:
     bars_hash = hashlib.md5(
         str([(b["time"], b["close"]) for b in bars[-20:]]).encode()
     ).hexdigest()[:8]
-    return f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}"
+    params_hash = hashlib.md5(str(sorted((params or {}).items())).encode()).hexdigest()[:8]
+    return f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{params_hash}"
 
 
 def _get_backtest_cached(key: str):
@@ -306,14 +307,14 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     conf_val = conf_txt = None
     if signal is not None:
         _bt_bars = _intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
-        _bt_key = _backtest_key(symbol, req.strategy, req.direction, _bt_bars)
+        _bt_key = _backtest_key(symbol, req.strategy, req.direction, _bt_bars, signal_kwargs)
         bt_result = _get_backtest_cached(_bt_key)
         if bt_result is None:
             bt_result = await asyncio.get_running_loop().run_in_executor(
                 _BACKTEST_POOL,
                 functools.partial(run_strategy_backtest, _bt_bars, strategy=req.strategy,
                                   direction=req.direction, min_trades=req.bt_min_trades,
-                                  min_win_rate=req.bt_min_win_rate))
+                                  min_win_rate=req.bt_min_win_rate, params=signal_kwargs))
             _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
         if not bt_result.passes_gate:
             gate_flags.append({"gate": "backtest", "status": "CAUTION", "detail": bt_result.summary_text})
@@ -691,6 +692,10 @@ async def _process_stock(
                 # Use RSI as canonical backtest proxy for multi-signal — deterministic regardless of fired order
                 _bt_strategy = "mean_reversion_rsi"
                 bt_bars = bars
+                _bt_params = _merge_strategy_params(
+                    "mean_reversion_rsi", req.direction,
+                    _SIGNAL_KWARGS.get("mean_reversion_rsi", lambda r: {})(req),
+                )
             else:
                 signal_fn = _SIGNAL_FNS.get(req.strategy)
                 if not signal_fn:
@@ -708,8 +713,9 @@ async def _process_stock(
                     return {"symbol": symbol, "reason": f"no {req.strategy} setup"}
                 _bt_strategy = req.strategy
                 bt_bars = intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
+                _bt_params = signal_kwargs
 
-            _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bt_bars)
+            _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bt_bars, _bt_params)
             bt_result = _get_backtest_cached(_bt_key)
             if bt_result is None:
                 bt_result = await asyncio.get_running_loop().run_in_executor(
@@ -718,6 +724,7 @@ async def _process_stock(
                         run_strategy_backtest, bt_bars,
                         strategy=_bt_strategy, direction=req.direction,
                         min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
+                        params=_bt_params,
                     ),
                 )
                 _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
