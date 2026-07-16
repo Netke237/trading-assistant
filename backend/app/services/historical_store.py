@@ -315,28 +315,40 @@ async def _run_prefetch(symbols: list[str], years: int, delay_secs: float) -> No
                 bars = await get_bars(symbol, fetch_start, fetch_end)
                 _prefetch_state["done"] += 1
                 if bars:
+                    # Warm both live paths' actual cache-key shapes: the options
+                    # path (routers/scan.py) reads atr_mult=1.5,scoring_mode=
+                    # "options"; the stocks path (routers/stock_scan.py) reads
+                    # atr_mult=None ("default" sentinel),scoring_mode="stock".
+                    # These are genuinely different computations — repointing
+                    # this loop entirely to one or the other silently stops
+                    # warming the path left behind.
+                    _variants = (
+                        (None, "stock"),
+                        (1.5, "options"),
+                    )
                     _combos = [
-                        (conf_cache_key(symbol, _d, _h), _d, _h)
+                        (conf_cache_key(symbol, _d, _h, _mult, scoring_mode=_mode), _d, _h, _mult, _mode)
                         for _d in ("Bullish", "Bearish")
                         for _h in ("Intraday", "Swing", "Position")
-                        if get_cached(conf_cache_key(symbol, _d, _h)) is None
+                        for _mult, _mode in _variants
+                        if get_cached(conf_cache_key(symbol, _d, _h, _mult, scoring_mode=_mode)) is None
                     ]
                     if _combos:
                         _conf_tasks = [
                             asyncio.to_thread(
                                 compute_confidence, bars,
-                                direction=_d, horizon=_h,
+                                direction=_d, horizon=_h, atr_mult=_mult, scoring_mode=_mode,
                             )
-                            for _, _d, _h in _combos
+                            for _, _d, _h, _mult, _mode in _combos
                         ]
                         _conf_results = await asyncio.gather(
                             *_conf_tasks, return_exceptions=True
                         )
-                        for (_ck, _d, _h), _res in zip(_combos, _conf_results):
+                        for (_ck, _d, _h, _mult, _mode), _res in zip(_combos, _conf_results):
                             if isinstance(_res, BaseException):
                                 logger.debug(
-                                    "prefetch: confidence pre-warm failed %s/%s/%s — %s",
-                                    symbol, _d, _h, _res,
+                                    "prefetch: confidence pre-warm failed %s/%s/%s/%s/%s — %s",
+                                    symbol, _d, _h, _mult, _mode, _res,
                                 )
                             else:
                                 set_cached(_ck, {

@@ -106,3 +106,54 @@ def test_get_prefetch_status_returns_dict():
     assert status["status"] in ("idle", "running", "completed", "error")
     assert "total" in status
     assert "done" in status
+
+
+def test_prefetch_warms_both_options_and_stock_cache_keys(monkeypatch):
+    """The Load History prefetch job must warm BOTH the live options-path's cache key
+    (atr_mult=1.5, scoring_mode='options' — the prefetch's pre-existing, correct
+    behavior) AND the live stocks-path's cache key (atr_mult=None -> 'default'
+    sentinel, scoring_mode='stock' — the bug this task fixes). Repointing the
+    prefetch entirely to scoring_mode='stock' would silently regress the
+    options path's warm-cache hit while fixing the stocks path — this test
+    guards against that regression, not just the original bug."""
+    import tempfile
+    import os
+    import app.data.confidence_cache as cc
+    from app.services import historical_store as hs
+    from unittest.mock import AsyncMock
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+    try:
+        original_db_path = cc._DB_PATH
+        cc._DB_PATH = db_path
+        cc._init_db()
+        cc.clear_cache()
+
+        seen_kwargs = []
+
+        def _fake_compute_confidence(bars, **kwargs):
+            seen_kwargs.append(kwargs)
+            return type("R", (), {"confidence": 55, "sample_size": 40})()
+
+        fake_bars = [{"time": f"2024-01-{i:02d}", "close": 100.0 + i} for i in range(1, 200)]
+
+        monkeypatch.setattr(hs, "compute_confidence", _fake_compute_confidence)
+        monkeypatch.setattr(hs, "get_bars", AsyncMock(return_value=fake_bars))
+
+        asyncio.run(hs._run_prefetch(["AAPL"], years=1, delay_secs=0))
+
+        assert seen_kwargs, "compute_confidence was never called — check the monkeypatch target"
+        stock_calls = [kw for kw in seen_kwargs if kw.get("scoring_mode") == "stock"]
+        options_calls = [kw for kw in seen_kwargs if kw.get("scoring_mode") != "stock"]
+        assert stock_calls, "prefetch never computed a scoring_mode='stock' variant"
+        assert options_calls, "prefetch stopped computing the options-path variant — regression"
+
+        # Both live paths' actual key shapes must be warmed.
+        stock_key = cc.cache_key("AAPL", "Bullish", "Swing", None, scoring_mode="stock")
+        options_key = cc.cache_key("AAPL", "Bullish", "Swing", 1.5, scoring_mode="options")
+        assert cc.get_cached(stock_key) is not None, "stocks-path key was not warmed"
+        assert cc.get_cached(options_key) is not None, "options-path key was not warmed (regression)"
+    finally:
+        cc._DB_PATH = original_db_path
+        os.unlink(db_path)
