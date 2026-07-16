@@ -1,6 +1,8 @@
 # backend/tests/test_confidence_gate_stocks.py
 import asyncio
 import dataclasses
+import os
+import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.schemas.stock_scan import StockScanRequest
@@ -156,20 +158,29 @@ def test_confidence_gate_disabled_preserves_pass_status():
     )
 
 
-def test_custom_atr_mult_does_not_collide_with_default_cache_key(monkeypatch):
+def test_custom_atr_mult_does_not_collide_with_default_cache_key():
     """A scan with a custom confidence_atr_mult must not read or overwrite the
     cache entry used by default-multiple scans (Critical finding #3, 2026-07-15 audit)."""
     import app.data.confidence_cache as cc
-    cc.clear_cache()
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+    try:
+        original = cc._DB_PATH
+        cc._DB_PATH = db_path
+        cc._init_db()
+        cc.clear_cache()
 
-    default_key = cc.cache_key("AAPL", "Bullish", "Swing", 1.5)
-    custom_key = cc.cache_key("AAPL", "Bullish", "Swing", 2.5)
-    assert default_key != custom_key
+        default_key = cc.cache_key("AAPL", "Bullish", "Swing", 1.5)
+        custom_key = cc.cache_key("AAPL", "Bullish", "Swing", 2.5)
+        assert default_key != custom_key
 
-    cc.set_cached(default_key, {"confidence": 70, "sample_size": 50})
-    cc.set_cached(custom_key, {"confidence": 30, "sample_size": 50})
+        cc.set_cached(default_key, {"confidence": 70, "sample_size": 50})
+        cc.set_cached(custom_key, {"confidence": 30, "sample_size": 50})
 
-    # The two entries must stay independent — this is what stock_scan.py's
-    # call sites rely on when they resolve atr_mult=None -> 1.5 for the key.
-    assert cc.get_cached(default_key)["confidence"] == 70
-    assert cc.get_cached(custom_key)["confidence"] == 30
+        # The two entries must stay independent — this is what stock_scan.py's
+        # call sites rely on when they resolve atr_mult=None -> 1.5 for the key.
+        assert cc.get_cached(default_key)["confidence"] == 70
+        assert cc.get_cached(custom_key)["confidence"] == 30
+    finally:
+        cc._DB_PATH = original
+        os.unlink(db_path)
