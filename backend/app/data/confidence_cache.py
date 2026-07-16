@@ -16,14 +16,23 @@ _TTL_SECONDS = 7 * 24 * 3600  # weekly
 _DB_PATH: str = str(Path(__file__).parent.parent.parent / "data" / "confidence_cache.db")
 
 
-def cache_key(symbol: str, direction: str, horizon: str, atr_mult: float | None = 1.5) -> str:
+def cache_key(
+    symbol: str,
+    direction: str,
+    horizon: str,
+    atr_mult: float | None = 1.5,
+    scoring_mode: str = "options",
+) -> str:
     # atr_mult is part of the key: changing it changes the computed confidence,
     # so cached results under a different multiple must not be reused. None means
     # "no override" (compute_confidence uses asymmetric per-horizon config values)
     # and must key differently from any explicit float, including 1.5 — those are
     # genuinely different computations, not the same thing spelled two ways.
     mult_key = "default" if atr_mult is None else f"{float(atr_mult):g}"
-    return f"{symbol.upper()}|{direction.lower()}|{horizon.lower()}|{mult_key}"
+    # scoring_mode is also part of the key: 'stock' and 'options' apply materially
+    # different scoring rules, so a value computed under one mode must never be
+    # served to a lookup under the other (Critical finding #4, 2026-07-15 audit).
+    return f"{symbol.upper()}|{direction.lower()}|{horizon.lower()}|{mult_key}|{scoring_mode.lower()}"
 
 
 # ── SQLite helpers ─────────────────────────────────────────────────────────────

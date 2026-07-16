@@ -156,6 +156,7 @@ def compute_confidence(
     direction: str,
     horizon: str,
     atr_mult: float | None = None,   # if None, uses config atr_mult_target/atr_mult_stop
+    scoring_mode: str = "options",   # must match the scoring_mode the live caller scores with
 ) -> ConfidenceResult:
     """Replay the entry signal across history and score its reliability.
 
@@ -165,6 +166,11 @@ def compute_confidence(
     `atr_mult` overrides the configured ATR multiples for the win/loss barriers
     (symmetric, both sides); when None, per-horizon atr_mult_target/atr_mult_stop
     from config are used (asymmetric, preferred).
+
+    `scoring_mode` must match the mode the live caller scores candidates with —
+    'stock' and 'options' apply materially different rules (trigger scoring,
+    volume treatment, event weighting), so a mismatch measures a setup that
+    isn't the one actually live.
     """
     from app.scoring.stock_scorer import score_stock, _atr  # reuse existing helpers
 
@@ -186,7 +192,8 @@ def compute_confidence(
     for i in range(warmup, last):
         window = bars[: i + 1]
         card = score_stock(
-            symbol="_bt", direction=direction, horizon=horizon, bars=window
+            symbol="_bt", direction=direction, horizon=horizon, bars=window,
+            scoring_mode=scoring_mode,
         )
         if card.status != "PASS":
             continue

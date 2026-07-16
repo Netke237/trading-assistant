@@ -132,3 +132,32 @@ def test_config_blocks_present_with_new_keys():
     assert bt["atr_mult_target"] == 3.0
     assert bt["atr_mult_stop"] == 1.5
     assert "atr_mult" not in bt, "old atr_mult key should be removed"
+
+
+# ── scoring_mode threading (Task 4) ────────────────────────────────────────────
+
+def test_compute_confidence_accepts_scoring_mode(monkeypatch):
+    """stock_scan.py's live callers pass scoring_mode='stock'; compute_confidence
+    must forward it to score_stock instead of silently using the 'options' default
+    (Critical finding #4, 2026-07-15 audit)."""
+    from app.scoring import signal_confidence as sc
+    import app.scoring.stock_scorer as stock_scorer_mod
+
+    seen_modes = []
+    _real_score_stock = stock_scorer_mod.score_stock  # capture before patching to avoid recursion
+
+    def _spy_score_stock(*args, **kwargs):
+        seen_modes.append(kwargs.get("scoring_mode"))
+        return _real_score_stock(*args, **kwargs)
+
+    monkeypatch.setattr(stock_scorer_mod, "score_stock", _spy_score_stock)
+
+    price = 100.0
+    bars = []
+    for i in range(80):
+        price *= 1.004
+        bars.append(_bar(price * 0.997, price * 1.01, price * 0.99, price, 1000 + i))
+
+    sc.compute_confidence(bars, direction="Bullish", horizon="Swing", atr_mult=1.5, scoring_mode="stock")
+    assert seen_modes, "score_stock was never called — check the monkeypatch target"
+    assert all(m == "stock" for m in seen_modes)

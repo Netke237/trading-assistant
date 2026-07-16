@@ -317,11 +317,12 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
             _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
         if not bt_result.passes_gate:
             gate_flags.append({"gate": "backtest", "status": "CAUTION", "detail": bt_result.summary_text})
-        _ck = conf_cache_key(symbol, req.direction, req.horizon, req.confidence_atr_mult)
+        _ck = conf_cache_key(symbol, req.direction, req.horizon, req.confidence_atr_mult, scoring_mode="stock")
         _cached = get_cached(_ck)
         if _cached is None:
             _res = await asyncio.to_thread(compute_confidence, bars, direction=req.direction,
-                                           horizon=req.horizon, atr_mult=req.confidence_atr_mult)
+                                           horizon=req.horizon, atr_mult=req.confidence_atr_mult,
+                                           scoring_mode="stock")
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
             set_cached(_ck, _cached)
         conf_val = _cached["confidence"]
@@ -723,12 +724,12 @@ async def _process_stock(
             if not bt_result.passes_gate:
                 return {"symbol": symbol, "reason": f"backtest gate: {bt_result.summary_text}"}
 
-            _ck = conf_cache_key(symbol, req.direction, req.horizon, req.confidence_atr_mult)
+            _ck = conf_cache_key(symbol, req.direction, req.horizon, req.confidence_atr_mult, scoring_mode="stock")
             _cached = get_cached(_ck)
             if _cached is None:
                 _res = await asyncio.to_thread(
                     compute_confidence, bars, direction=req.direction, horizon=req.horizon,
-                    atr_mult=req.confidence_atr_mult,
+                    atr_mult=req.confidence_atr_mult, scoring_mode="stock",
                 )
                 _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
                 set_cached(_ck, _cached)
