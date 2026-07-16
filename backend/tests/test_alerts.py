@@ -209,3 +209,21 @@ async def test_short_stock_stop_triggers_on_price_rise(db_session):
     stop_alerts = [a for a in alerts if a.alertType == "STOP_REACHED"]
     assert len(stop_alerts) == 1
     assert stop_alerts[0].symbol == "XYZ"
+
+
+@pytest.mark.asyncio
+async def test_short_stock_target_triggers_on_price_fall(db_session):
+    """A short (Bearish direction) stock position's target must trigger when price
+    falls to/below the target, not above it (same root cause as the STOP_REACHED
+    fix, Critical finding #5, 2026-07-15 audit)."""
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(
+        db_session, symbol="XYZ", contract="XYZ|STOCK", direction="Bearish",
+        stop=120.0, targets=[{"stockPrice": 95.0, "stock_price": 95.0}],
+    )
+
+    # Price fell to the short's target (95) -> must alert TP_HIT.
+    alerts = await generate_alerts(db_session, current_prices={"XYZ": 94.0})
+    tp_alerts = [a for a in alerts if a.alertType == "TP_HIT"]
+    assert len(tp_alerts) == 1
+    assert tp_alerts[0].symbol == "XYZ"

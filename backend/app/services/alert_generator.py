@@ -56,7 +56,7 @@ async def generate_alerts(
         targets = pos.targets or []
 
         # TP_HIT — direction-aware: bullish targets are above current price, bearish below
-        is_bearish = pos.direction.lower() in ("bearish", "bear", "short")
+        is_bearish = pos.direction == "Bearish"
         if targets and price is not None:
             first_target = targets[0]
             target_stock_price = (
