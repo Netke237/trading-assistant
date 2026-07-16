@@ -523,13 +523,13 @@ class ScanResult(BaseModel):
 class PortfolioPositionCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    recId: str = Field(alias="rec_id", default=None)
+    recId: str = Field(alias="rec_id")
     symbol: str
     contract: str       # SYMBOL|STRIKE|EXPIRY|C/P
     direction: str
-    entryPrice: float = Field(alias="entry_price", default=None)
+    entryPrice: float = Field(alias="entry_price")
     qty: int = Field(default=1)
-    entryDate: str = Field(alias="entry_date", default=None)
+    entryDate: str = Field(alias="entry_date")
     stop: Optional[float] = None
     targets: list[dict] = []
     dteTotal: Optional[int] = Field(alias="dte_total", default=None)

@@ -113,6 +113,16 @@ async def test_portfolio_add_and_list(client):
     assert positions[0]["contract"] == _POSITION_PAYLOAD["contract"]
 
 
+@pytest.mark.asyncio
+async def test_portfolio_create_rejects_missing_rec_id(client):
+    """recId/entryPrice/entryDate are required fields — omitting one must return
+    a 422 validation error, not silently construct with None and fail later as
+    an opaque 500 on the database write (Critical finding #11, 2026-07-15 audit)."""
+    bad_payload = {k: v for k, v in _POSITION_PAYLOAD.items() if k != "recId"}
+    resp = await client.post("/api/portfolio", json=bad_payload)
+    assert resp.status_code == 422, resp.text
+
+
 # ── Test 2: Portfolio delete ──────────────────────────────────────────────────
 
 @pytest.mark.asyncio
