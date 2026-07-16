@@ -190,3 +190,22 @@ async def test_time_stop_does_not_fire_for_distant_expiry(db_session):
     alerts = await generate_alerts(db_session, prices)
     ts_alerts = [a for a in alerts if a.alertType == "TIME_STOP"]
     assert len(ts_alerts) == 0
+
+
+# ── Test 8: Short stock STOP_REACHED fires on price rise, not fall (Critical #5) ─
+
+@pytest.mark.asyncio
+async def test_short_stock_stop_triggers_on_price_rise(db_session):
+    """A short (Bearish direction) stock position's stop must trigger when price
+    rises above the stop, not below it (Critical finding #5, 2026-07-15 audit)."""
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(
+        db_session, symbol="XYZ", contract="XYZ|STOCK", direction="Bearish",
+        stop=105.0, targets=[],
+    )
+
+    # Price rose above the short's stop (105) -> must alert STOP_REACHED.
+    alerts = await generate_alerts(db_session, current_prices={"XYZ": 106.0})
+    stop_alerts = [a for a in alerts if a.alertType == "STOP_REACHED"]
+    assert len(stop_alerts) == 1
+    assert stop_alerts[0].symbol == "XYZ"
