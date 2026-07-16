@@ -89,6 +89,11 @@ def test_cache_key_includes_atr_mult():
     assert cc.cache_key("AAPL", "Bullish", "Swing", 1.5) == cc.cache_key("AAPL", "Bullish", "Swing", 1.5)
 
 
+def test_cache_key_default_does_not_collide_with_explicit_default_value():
+    import app.data.confidence_cache as cc
+    assert cc.cache_key("AAPL", "Bullish", "Swing", None) != cc.cache_key("AAPL", "Bullish", "Swing", 1.5)
+
+
 def test_ttl_evicts_stale_entries(monkeypatch):
     import app.data.confidence_cache as cc
 
