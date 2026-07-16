@@ -52,16 +52,16 @@ def test_expectancy_is_average_pnl_per_trade_not_cumulative_return():
     real per-trade PnL, not cumulative Return%/MaxDD% divided by trade counts
     (Critical finding #6, 2026-07-15 audit)."""
     bars = _synth_bars(500, trend=True)
-    result = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish")
-    if result.n_trades == 0:
-        pytest.skip("synthetic bars didn't produce trades on this run")
-    # A sane per-trade expectancy in $ terms on $100k starting cash should be a
-    # small fraction of total_return_pct, not comparable in magnitude to it —
-    # the old (buggy) formula divided cumulative Return% by trade count, which
-    # for n_trades >= 10 makes |expectancy| << |total_return_pct| by construction
-    # only coincidentally; the real bug is structural, so assert the gate exists
-    # and is actually applied instead of asserting a numeric range.
-    assert isinstance(result.expectancy, float)
+    result = run_strategy_backtest(bars, strategy="ma_crossover", direction="Bullish")
+    assert result.n_trades >= 10, "expected ma_crossover on this fixture to produce enough trades to test the real formula"
+    # Recompute what the OLD (buggy) formula would have produced from the same
+    # aggregate fields, to prove the new expectancy is NOT that.
+    wins = round(result.win_rate * result.n_trades)
+    losses = result.n_trades - wins
+    old_avg_win = abs(result.total_return_pct / wins) if wins > 0 else 0
+    old_avg_loss = abs(result.max_drawdown_pct / losses) if losses > 0 else 1
+    old_formula_expectancy = round(result.win_rate * old_avg_win - (1 - result.win_rate) * old_avg_loss, 3)
+    assert result.expectancy != old_formula_expectancy
 
 
 def test_min_expectancy_gate_is_applied():
@@ -69,11 +69,12 @@ def test_min_expectancy_gate_is_applied():
     module constant (Critical finding #6, 2026-07-15 audit)."""
     from app.services import strategy_backtest as sb
     bars = _synth_bars(500, trend=True)
-    result = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish")
-    if result.n_trades < 10:
-        pytest.skip("not enough synthetic trades to exercise the gate")
-    if result.expectancy < sb._MIN_EXPECTANCY:
-        assert result.passes_gate is False
+    # min_win_rate=0.0 isolates the expectancy gate: with the win-rate gate
+    # neutralized, passes_gate can only be blocked by n_trades or expectancy.
+    result = run_strategy_backtest(bars, strategy="ma_crossover", direction="Bullish", min_win_rate=0.0)
+    assert result.n_trades >= sb._MIN_TRADES, "expected enough trades to exercise the gate on this fixture"
+    assert result.expectancy < sb._MIN_EXPECTANCY, "expected this fixture to produce a losing (negative) expectancy"
+    assert result.passes_gate is False
 
 
 # ── S-2: Backtest result cache ────────────────────────────────────────────────
