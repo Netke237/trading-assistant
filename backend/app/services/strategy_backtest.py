@@ -134,18 +134,20 @@ def run_strategy_backtest(
     max_dd      = float(stats.get("Max. Drawdown [%]", 0))
     sharpe      = float(stats.get("Sharpe Ratio", 0) or 0)
 
-    wins  = round(win_rate * n_trades)
-    losses = n_trades - wins
-    avg_win  = abs(total_ret / wins)  if wins  > 0 else 0
-    avg_loss = abs(max_dd   / losses) if losses > 0 else 1
+    trades_df = stats.get("_trades")
+    pnls = trades_df["PnL"].tolist() if trades_df is not None and "PnL" in trades_df else []
+    wins_pnl  = [p for p in pnls if p > 0]
+    losses_pnl = [p for p in pnls if p <= 0]
+    avg_win  = (sum(wins_pnl) / len(wins_pnl))    if wins_pnl   else 0.0
+    avg_loss = (abs(sum(losses_pnl) / len(losses_pnl))) if losses_pnl else 0.0
     expectancy = win_rate * avg_win - (1 - win_rate) * avg_loss
 
     confidence = min(100, max(0, round(win_rate * 100)))
-    passes = win_rate >= min_win_rate and n_trades >= min_trades
+    passes = win_rate >= min_win_rate and n_trades >= min_trades and expectancy >= _MIN_EXPECTANCY
 
     summary = (
         f"{n_trades} trades · Win {win_rate:.0%} · "
-        f"Return {total_ret:.1f}% · MaxDD {max_dd:.1f}% · Sharpe {sharpe:.2f}"
+        f"Return {total_ret:.1f}% · MaxDD {max_dd:.1f}% · Sharpe {sharpe:.2f} · Expectancy ${expectancy:.2f}"
     )
     return BacktestResult(
         strategy=strategy, direction=direction,
