@@ -178,7 +178,9 @@ def test_custom_atr_mult_does_not_collide_with_default_cache_key():
         cc.set_cached(custom_key, {"confidence": 30, "sample_size": 50})
 
         # The two entries must stay independent — this is what stock_scan.py's
-        # call sites rely on when they resolve atr_mult=None -> 1.5 for the key.
+        # call sites rely on when they pass req.confidence_atr_mult straight
+        # through to the cache key (None keys separately as "default" — see
+        # test_cache_key_default_does_not_collide_with_explicit_default_value).
         assert cc.get_cached(default_key)["confidence"] == 70
         assert cc.get_cached(custom_key)["confidence"] == 30
     finally:
