@@ -212,6 +212,38 @@ async def test_short_stock_stop_triggers_on_price_rise(db_session):
 
 
 @pytest.mark.asyncio
+async def test_short_stock_stop_message_says_above_not_below(db_session):
+    """A short (Bearish) position's STOP_REACHED message must say the price is
+    above the stop, not below — the hardcoded 'below' text predates the fix
+    that made short-stock stops actually fire (2026-07-15 audit pass)."""
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(
+        db_session, symbol="XYZ", contract="XYZ|STOCK", direction="Bearish",
+        stop=105.0, targets=[],
+    )
+    alerts = await generate_alerts(db_session, current_prices={"XYZ": 106.0})
+    stop_alerts = [a for a in alerts if a.alertType == "STOP_REACHED"]
+    assert len(stop_alerts) == 1
+    assert "above" in stop_alerts[0].reason
+    assert "below" not in stop_alerts[0].reason
+
+
+@pytest.mark.asyncio
+async def test_long_stock_stop_message_still_says_below(db_session):
+    """A long (Bullish) position's STOP_REACHED message must keep saying
+    'below' — this is the pre-existing, correct behavior for longs."""
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(
+        db_session, symbol="ABC", contract="ABC|STOCK", direction="Bullish",
+        stop=105.0, targets=[],
+    )
+    alerts = await generate_alerts(db_session, current_prices={"ABC": 104.0})
+    stop_alerts = [a for a in alerts if a.alertType == "STOP_REACHED"]
+    assert len(stop_alerts) == 1
+    assert "below" in stop_alerts[0].reason
+
+
+@pytest.mark.asyncio
 async def test_short_stock_target_triggers_on_price_fall(db_session):
     """A short (Bearish direction) stock position's target must trigger when price
     falls to/below the target, not above it (same root cause as the STOP_REACHED

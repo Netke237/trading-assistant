@@ -116,7 +116,7 @@ async def generate_alerts(
                 id=f"a{counter}",
                 kind="Critical",
                 symbol=symbol,
-                reason=f"Stop breached — {symbol} below ${pos.stop:.2f}",
+                reason=f"Stop breached — {symbol} {'above' if is_bearish else 'below'} ${pos.stop:.2f}",
                 timestamp=now_iso,
                 recId=pos.rec_id,
                 alertType="STOP_REACHED",
