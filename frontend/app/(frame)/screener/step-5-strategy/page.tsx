@@ -131,6 +131,40 @@ export default function Step5StrategyPage() {
 
   function resetParams() { setParams({ ...savedParams }); }
 
+  // If this page mounts before useScanParamsStore finishes rehydrating from
+  // localStorage (skipHydration: true — see StoreHydration), the useState
+  // initializer above captures the store's hardcoded module defaults instead
+  // of the persisted savedParams. Sync local state once hydration actually
+  // finishes, so a scan run shortly after a fresh load doesn't silently use
+  // stale defaults instead of the user's saved strategy params (same class of
+  // bug as a prior fix, Critical finding #8, 2026-07-15 audit).
+  useEffect(() => {
+    const syncFromHydratedStore = () => {
+      const s = useScanParamsStore.getState();
+      setParams({
+        pullbackTolerancePct: s.pullbackTolerancePct,
+        pullbackEmaPeriod:    s.pullbackEmaPeriod,
+        pullbackTrendEma:     s.pullbackTrendEma,
+        pullbackMaType:       s.pullbackMaType,
+        maCrossoverFast:      s.maCrossoverFast,
+        maCrossoverSlow:      s.maCrossoverSlow,
+        maCrossoverLookback:  s.maCrossoverLookback,
+        breakoutVolumeMult:   s.breakoutVolumeMult,
+        rsiPeriod:            s.rsiPeriod,
+        rsiOversold:          s.rsiOversold,
+        rsiTrendSma:          s.rsiTrendSma,
+        requireChoppyRegime:  s.requireChoppyRegime ?? false,
+        btMinTrades:          s.btMinTrades,
+        btMinWinRate:         s.btMinWinRate,
+        eventFilter:          s.eventFilter,
+        stockShortlistMax:    s.stockShortlistMax,
+      });
+    };
+    if (useScanParamsStore.persist.hasHydrated()) syncFromHydratedStore();
+    const unsub = useScanParamsStore.persist.onFinishHydration(syncFromHydratedStore);
+    return unsub;
+  }, []);
+
   // Dynamic card titles reflecting the current parameter values
   const strategyLabel: Record<string, string> = {
     pullback_ema:          `Pullback to ${params.pullbackEmaPeriod}-${params.pullbackMaType}`,
