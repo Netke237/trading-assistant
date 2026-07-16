@@ -317,7 +317,8 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
             _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
         if not bt_result.passes_gate:
             gate_flags.append({"gate": "backtest", "status": "CAUTION", "detail": bt_result.summary_text})
-        _ck = conf_cache_key(symbol, req.direction, req.horizon)
+        _atr_for_key = req.confidence_atr_mult if req.confidence_atr_mult is not None else 1.5
+        _ck = conf_cache_key(symbol, req.direction, req.horizon, _atr_for_key)
         _cached = get_cached(_ck)
         if _cached is None:
             _res = await asyncio.to_thread(compute_confidence, bars, direction=req.direction,
@@ -723,10 +724,9 @@ async def _process_stock(
             if not bt_result.passes_gate:
                 return {"symbol": symbol, "reason": f"backtest gate: {bt_result.summary_text}"}
 
-            _ck = conf_cache_key(symbol, req.direction, req.horizon)
-            # Non-default atr_mult: bypass cache to avoid stale hits from a
-            # prior scan that used a different multiplier.
-            _cached = None if req.confidence_atr_mult is not None else get_cached(_ck)
+            _atr_for_key = req.confidence_atr_mult if req.confidence_atr_mult is not None else 1.5
+            _ck = conf_cache_key(symbol, req.direction, req.horizon, _atr_for_key)
+            _cached = get_cached(_ck)
             if _cached is None:
                 _res = await asyncio.to_thread(
                     compute_confidence, bars, direction=req.direction, horizon=req.horizon,
