@@ -746,6 +746,30 @@ export default function Step3Page() {
     'Score Weights': true, Trend: true, Pullback: true, Trigger: true, Event: true, Volatility: true, Contract: true,
   });
 
+  // If this page mounts before useScanStore finishes rehydrating from
+  // localStorage (skipHydration: true — see StoreHydration), the useState
+  // initializers above capture the hardcoded fallback defaults instead of the
+  // persisted context. Sync local state once hydration actually finishes, so
+  // the first click on this page doesn't write those fallback defaults back
+  // into the store and silently overwrite a saved horizon/hold-days.
+  useEffect(() => {
+    const syncFromHydratedContext = () => {
+      const c = useScanStore.getState().context;
+      if (!c) return;
+      setDir(c.direction ?? 'Bullish');
+      setHz(c.horizonPreset ?? 'Swing');
+      setHoldMin(Math.round(c.holdMin ?? presetByKey('Swing').holdMin));
+      setHoldMax(Math.round(c.holdMax ?? presetByKey('Swing').holdMax));
+    };
+    // Covers the common case: hydration already finished before this effect
+    // runs (e.g. navigating from Step 2, rather than a fresh Step-3 landing).
+    if (useScanStore.persist.hasHydrated()) syncFromHydratedContext();
+    // Covers the race: hydration finishes after this component has already
+    // mounted with fallback-default local state.
+    const unsub = useScanStore.persist.onFinishHydration(syncFromHydratedContext);
+    return unsub;
+  }, []);
+
   const descriptorRef = useRef<RegimeDescriptor>('Choppy');
 
   useEffect(() => {
