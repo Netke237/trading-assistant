@@ -94,6 +94,27 @@ def _check_upgrade_preconditions() -> None:
             "cannot apply UNIQUE. Resolve the duplicates before re-running this migration."
         )
 
+    # entry_date: DateTime -> String is a lossy cast (entry_date::text on a
+    # populated timestamptz produces Postgres's native format, e.g.
+    # "2026-07-15 09:30:00+00", NOT the app's "YYYY-MM-DD" convention every
+    # write site and reader actually uses). This migration was only ever
+    # validated against an empty table — refuse to run the cast on real data
+    # instead of silently corrupting it if this migration is ever re-applied
+    # to a populated database (disaster recovery, a fresh Postgres spun up
+    # from an older snapshot, a rollback+reapply).
+    row_count = bind.execute(sa.text(
+        "SELECT count(*) FROM portfolio_positions"
+    )).scalar()
+    if row_count:
+        raise RuntimeError(
+            f"{row_count} portfolio_positions row(s) exist — the entry_date "
+            "DateTime->String cast in this migration is lossy and was only "
+            "validated against an empty table. Back up entry_date values, "
+            "convert them to the app's YYYY-MM-DD string convention out of "
+            "band, then adapt this migration's cast before re-running it "
+            "against populated data."
+        )
+
 
 def upgrade() -> None:
     _check_upgrade_preconditions()

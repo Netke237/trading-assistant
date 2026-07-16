@@ -239,14 +239,14 @@ def test_stock_scan_bearish_direction_threads_to_signal(stock_client):
 
     # Pre-populate backtest cache so the ProcessPoolExecutor is never invoked.
     # Key must match exactly what the router will compute for this symbol+strategy+direction+params.
-    # _merge_strategy_params is patched below to this exact fixed dict so the
-    # router's real key computation (which otherwise depends on get_active()'s
-    # persisted tuning state) can't drift from what we pre-compute here. This is
-    # the actual merged output of _merge_strategy_params("pullback_ema", "Bearish", ...)
-    # with request-schema defaults (tolerance=0.08 per StockScanRequest, not the
-    # signal function's own internal fallback of 0.04) layered on top of get_active()'s
-    # tuned atr_stop_mult/rr_target_mult — pinning it here removes the dependency on
-    # persisted tuning state while keeping the signal firing on this fixture.
+    # _merge_strategy_params is patched below to return this exact fixed dict,
+    # so the router's real key computation can't drift from what we pre-compute
+    # here regardless of what get_active()'s persisted tuning state actually
+    # holds for pullback_ema/Bearish at test-run time. This dict is a synthetic,
+    # arbitrary-but-plausible params set for the fixture (tolerance=0.08 matches
+    # StockScanRequest's schema default, not the signal function's own internal
+    # fallback of 0.04) — it is NOT asserted to equal get_active()'s real
+    # config values (which can and do change independently in strategy_params.yaml).
     _fixed_params = {
         "ema_period": 50, "trend_ema": 100, "atr_stop_mult": 1.5, "rr_target_mult": 2.0,
         "tolerance": 0.08, "ma_type": "EMA", "require_reversal": False,

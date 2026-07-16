@@ -178,8 +178,8 @@ async def add_position(
     if live_entry and float(live_entry) > 0:
         entry_price = round(float(live_entry), 2)
     else:
-        # %s (not %.2f) — entryPrice can legitimately be None (schema default),
-        # and "%.2f" % None raises inside the logging formatter.
+        # %s (not %.2f) — entryPrice is a required float, but keep %s here
+        # since this just logs whatever the frontend sent verbatim.
         _log.info(
             "add_position: no live quote for %s; storing frontend entryPrice %s",
             body.contract, body.entryPrice,
