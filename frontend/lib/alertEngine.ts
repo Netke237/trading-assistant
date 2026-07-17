@@ -1,4 +1,4 @@
-import type { AlertKind, AlertType, TargetLevel } from '@/types/domain';
+import type { AlertKind, AlertType, TargetLevel, Direction } from '@/types/domain';
 
 export interface AlertPosition {
   recId: string;
@@ -11,6 +11,7 @@ export interface AlertPosition {
   dteRemaining: number;
   dteTotal: number;
   pnlPct: number;
+  direction: Direction;
   nextEventDays?: number;
   nextEventLabel?: string;
 }
@@ -37,9 +38,14 @@ export function scanPortfolio(
   const out: AlertReason[] = [];
 
   for (const p of positions) {
-    // TP_HIT
+    const isBearish = p.direction === 'Bearish';
+
+    // TP_HIT — direction-aware: bullish targets are above current price, bearish below
     const firstTarget = p.targets[0];
-    if (firstTarget && p.currentPrice >= firstTarget.stockPrice) {
+    const tpHit = firstTarget
+      ? (isBearish ? p.currentPrice <= firstTarget.stockPrice : p.currentPrice >= firstTarget.stockPrice)
+      : false;
+    if (tpHit) {
       out.push({
         recId: p.recId,
         kind: 'Action',
@@ -49,14 +55,27 @@ export function scanPortfolio(
       });
     }
 
-    // STOP_REACHED
-    if (p.currentPrice <= p.stop) {
+    // STOP_REACHED — direction-aware: puts/shorts are invalidated when price rises above stop.
+    // `p.stop > 0` guards positions with no stop set: portfolioStore.ts:47 coerces a
+    // null backend stop to 0 before it reaches this function (AlertPosition.stop is
+    // non-optional), so the null/unset case is invisible here — without this guard,
+    // a Bearish position with no stop would satisfy `currentPrice >= 0` on virtually
+    // every poll (any real stock price is positive), firing a spurious Critical alert
+    // every 30 seconds. The backend's equivalent check (alert_generator.py:109-112)
+    // guards this explicitly via `pos.stop is not None`; `stop > 0` is this function's
+    // only available proxy for the same condition since the null information is
+    // already lost by the time data reaches here. (Bullish positions were already
+    // safe from this by coincidence — currentPrice <= 0 is never true for a real
+    // price — this guard makes that safety explicit for both directions instead of
+    // relying on it remaining a coincidence.)
+    const stopBreached = p.stop > 0 && (isBearish ? p.currentPrice >= p.stop : p.currentPrice <= p.stop);
+    if (stopBreached) {
       out.push({
         recId: p.recId,
         kind: 'Critical',
         symbol: p.symbol,
         alertType: 'STOP_REACHED',
-        reason: `Stop breached — ${p.symbol} below $${p.stop.toFixed(2)}`,
+        reason: `Stop breached — ${p.symbol} ${isBearish ? 'above' : 'below'} $${p.stop.toFixed(2)}`,
       });
     }
 
