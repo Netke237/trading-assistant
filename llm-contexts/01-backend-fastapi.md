@@ -18,9 +18,9 @@ This workstream owns all of `backend/`. It never touches anything under `fronten
 files, so the frontend can switch from `import MOCK_*` to `fetch('/api/...')` without
 changing any TypeScript types or component logic.
 
-The current `backend/` is a skeleton copied from a different project (child time management,
-called "Ritter Nroetschen"). It already has a working CORS middleware and a health router.
-Your task is to add trading-specific routers on top of it without breaking what is there.
+The current `backend/` is a skeleton copied from a different, abandoned project. It already
+has a working CORS middleware and a health router. Your task is to add trading-specific
+routers on top of it without breaking what is there.
 
 **No database layer for trading data.** All 9 trading routes return deterministic fixture
 data (hardcoded Python dicts that mirror the TypeScript mock files exactly). A real data
@@ -670,7 +670,7 @@ backend/
 ```
 
 The app factory in `main.py`:
-- Creates a FastAPI instance titled "Ritter Nroetschen API" — leave the title as-is.
+- Creates a FastAPI instance titled "Trading Assistant API".
 - Adds CORSMiddleware with `allow_origins=["*"]` when `DEBUG=True`, else `[]`.
 - Includes `health_router` (no prefix, so it lands at `/health`).
 

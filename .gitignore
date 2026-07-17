@@ -33,7 +33,6 @@ pnpm-lock.yaml
 *.tsbuildinfo
 build/
 dist/
-*.aab
 
 # OS files
 .DS_Store
