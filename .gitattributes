@@ -1,0 +1,7 @@
+# Files under backend/migrations/init-scripts/ are bind-mounted straight into
+# a Linux (Alpine) Postgres container. core.autocrlf=true on this Windows repo
+# would otherwise convert them to CRLF on checkout — breaking the .sh script's
+# shebang/heredoc outright, and risking future .sql scripts that use
+# COPY ... FROM STDIN or dollar-quoted blocks (today's .sql files tolerate
+# CRLF, but that's incidental, not guaranteed for scripts added later).
+backend/migrations/init-scripts/* text eol=lf

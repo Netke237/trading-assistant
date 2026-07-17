@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:15-alpine
-    container_name: ritter-postgres
+    container_name: tradingassistant-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -11,7 +11,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/migrations/init-scripts:/docker-entrypoint-initdb.d:ro
     networks:
-      - ritter-network
+      - tradingassistant-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -19,13 +19,13 @@ services:
       retries: 5
       start_period: 10s
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: ritter-backend
+    container_name: tradingassistant-backend
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL}
@@ -37,9 +37,9 @@ services:
       HOST: ${HOST}
       PORT: ${PORT}
     ports:
-      - "8000:8000"
+      - "8001:8000"
     networks:
-      - ritter-network
+      - tradingassistant-network
     depends_on:
       db:
         condition: service_healthy
@@ -54,9 +54,9 @@ services:
 
 volumes:
   postgres_data:
-    name: ritter_postgres_data
+    name: tradingassistant_postgres_data
 
 networks:
-  ritter-network:
+  tradingassistant-network:
     driver: bridge
-    name: ritter-network
+    name: tradingassistant-network

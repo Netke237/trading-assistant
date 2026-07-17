@@ -1,6 +1,6 @@
-# Ritter Nroetschen - Infrastructure Setup
+# Bamendjou (Trading Assistant) - Infrastructure Setup
 
-Complete self-hosted Docker Compose infrastructure for the Ritter Nroetschen project.
+Complete self-hosted Docker Compose infrastructure for the Bamendjou project.
 
 ## Prerequisites
 
@@ -29,8 +29,13 @@ docker compose up -d
 ```
 
 This starts:
-- PostgreSQL 15 (port 5432)
-- FastAPI backend (port 8000)
+- PostgreSQL 15 (host port 5433 → container 5432, database `TradingAssistantDB`)
+- FastAPI backend (host port 8001 → container 8000)
+
+Note: non-default host ports (5433, 8001) are intentional — they avoid colliding with
+containers from other, unrelated projects on this machine. This only affects the
+Dockerized backend; local dev via `python -m uvicorn` (see backend/.env) still uses
+port 8000 directly and is unaffected.
 
 ### 3. Verify Services
 
@@ -42,7 +47,7 @@ docker compose ps
 docker compose logs -f
 
 # Test API
-curl http://localhost:8000/
+curl http://localhost:8001/
 ```
 
 ## Running Migrations
@@ -88,7 +93,7 @@ docker compose logs --tail=100 backend
 docker compose down
 
 # Remove named volume
-docker volume rm ritter_postgres_data
+docker volume rm tradingassistant_postgres_data
 
 # Restart (init scripts will re-run)
 docker compose up -d
@@ -99,7 +104,11 @@ docker compose up -d
 - **Never commit `.env` file** - contains secrets
 - Change all default passwords in production
 - Use strong `JWT_SECRET_KEY` (32+ random characters)
-- Database runs as dedicated non-superuser (`ritter_app`)
+- A dedicated non-superuser role (`bamendjou_app`) exists with least-privilege grants
+  on `TradingAssistantDB` — but the backend currently connects as `bamendjou`
+  (the `POSTGRES_USER`, which Postgres always makes a superuser). Switching
+  `DATABASE_URL` to run as `bamendjou_app` instead is a deliberate follow-up, not
+  yet done — don't assume the app is running least-privilege today.
 - Backend runs as non-root user inside container
 - PostgreSQL only accessible via Docker network (not exposed externally in production)
 
@@ -121,9 +130,9 @@ docker compose exec backend env | grep DATABASE
 ### Port Already in Use
 
 ```bash
-# Find process using port 8000 or 5432
-sudo lsof -i :8000
-sudo lsof -i :5432
+# Find process using port 8001 or 5433
+sudo lsof -i :8001
+sudo lsof -i :5433
 
 # Use different ports in .env if needed
 ```
@@ -134,10 +143,10 @@ sudo lsof -i :5432
 
 ```bash
 # Create backup
-docker compose exec db pg_dump -U ritter_admin ritter_nroetschen > backup.sql
+docker compose exec db pg_dump -U bamendjou TradingAssistantDB > backup.sql
 
 # Restore backup
-docker compose exec -T db psql -U ritter_admin ritter_nroetschen < backup.sql
+docker compose exec -T db psql -U bamendjou TradingAssistantDB < backup.sql
 ```
 
 ### Update Images
