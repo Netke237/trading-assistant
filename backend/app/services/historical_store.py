@@ -334,10 +334,24 @@ async def _run_prefetch(symbols: list[str], years: int, delay_secs: float) -> No
                         if get_cached(conf_cache_key(symbol, _d, _h, _mult, scoring_mode=_mode)) is None
                     ]
                     if _combos:
+                        # NOTE: the value passed to compute_confidence's atr_mult=
+                        # is intentionally None for BOTH variants here — only the
+                        # CACHE KEY uses _mult (None for "stock", 1.5 for "options").
+                        # This mirrors routers/scan.py:446-451, where the live
+                        # options-scan path forces atr_mult=1.5 into the CACHE KEY
+                        # (_atr_for_key) but always calls compute_confidence with
+                        # the raw, un-forced atr_mult — which is None in the common
+                        # case (no per-request confidence_atr_mult override). If we
+                        # computed the "options" variant here with atr_mult=1.5 (the
+                        # naive, symmetric-looking choice), we'd cache a numerically
+                        # different confidence value under the exact key the live
+                        # path reads, silently poisoning the REJECT gate. Do not
+                        # "fix" this back to atr_mult=_mult without re-reading
+                        # scan.py's key/value split first.
                         _conf_tasks = [
                             asyncio.to_thread(
                                 compute_confidence, bars,
-                                direction=_d, horizon=_h, atr_mult=_mult, scoring_mode=_mode,
+                                direction=_d, horizon=_h, atr_mult=None, scoring_mode=_mode,
                             )
                             for _, _d, _h, _mult, _mode in _combos
                         ]
