@@ -33,15 +33,6 @@ pnpm-lock.yaml
 *.tsbuildinfo
 build/
 dist/
-
-# Android
-*.iml
-.gradle/
-local.properties
-/captures
-.externalNativeBuild
-.cxx/
-*.apk
 *.aab
 
 # OS files
