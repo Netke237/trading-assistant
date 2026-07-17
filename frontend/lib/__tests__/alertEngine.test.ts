@@ -79,4 +79,14 @@ describe('scanPortfolio', () => {
     const out = scanPortfolio([short]);
     expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(false);
   });
+
+  it('does NOT fire STOP_REACHED for a Bullish position with no stop set (stop=0)', () => {
+    // Symmetric to the Bearish stop=0 guard above — for a long position this was
+    // already coincidentally safe (currentPrice <= 0 is never true for a real
+    // price), but this test makes that safety explicit instead of relying on it
+    // remaining a coincidence (flagged during adversarial review of this plan).
+    const long = makePosition({ direction: 'Bullish', stop: 0, currentPrice: 150 });
+    const out = scanPortfolio([long]);
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(false);
+  });
 });
