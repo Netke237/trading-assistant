@@ -435,8 +435,14 @@ def test_iv_enrichment_skipped_when_ibkr_returns_none():
                     }]
                 }
             }
-            # Prevent yfinance fallback from making network calls
-            with patch("app.data.market._yf_iv_for_chain", return_value={}):
+            # Prevent yfinance fallback from making network calls, and make the
+            # tastytrade IV fallback explicitly unavailable too (not just
+            # accidentally unmocked) — this test's whole premise is "no IV
+            # source besides the raw Tradier value is available."
+            with (
+                patch("app.data.market._yf_iv_for_chain", return_value={}),
+                patch("app.data.tastytrade_iv.fetch_iv_metrics_tastytrade", return_value=None),
+            ):
                 mock_get.side_effect = [exp_resp, chain_resp]
                 result = fetch_option_chain("AAPL", option_type="C")
     finally:
@@ -560,6 +566,7 @@ async def test_fetch_option_chain_async_yf_iv_fallback_acquires_semaphore():
         patch("app.data.market._get_yf_sem", return_value=mock_sem) as mock_sem_getter,
         patch("app.data.market._yf_iv_for_chain", return_value={}),
         patch("app.data.ibkr.fetch_iv_metrics_ibkr", return_value=None),
+        patch("app.data.tastytrade_iv.fetch_iv_metrics_tastytrade", return_value=None),
     ):
         await mkt.fetch_option_chain_async(mock_client, "AAPL", option_type="C")
 
