@@ -836,7 +836,8 @@ export default function ChartWorkspace() {
             //  - rejected: addPosition already set portfolioStore's lastSyncError
             //    synchronously, which the Portfolio page's banner renders
             //    independently of navigation (Step 7's handleSubmit relies on
-            //    this same immediate signal).
+            //    that same synchronous-on-resolution guarantee from its own
+            //    addPosition() call, not on reading lastSyncError itself).
             //  - pending:  the row stays 'pending' in local state and is
             //    auto-retried by syncFromBackend's poll (~30s) — it either lands
             //    silently (promoted to synced) or, if THAT retry is also
