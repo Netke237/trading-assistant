@@ -31,11 +31,25 @@ class AlertNotifyRequest(BaseModel):
 
 
 @router.post('/alerts/notify')
-async def post_alert_notify(req: AlertNotifyRequest) -> dict:
+async def post_alert_notify(
+    req: AlertNotifyRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     """Dispatch a single in-app alert to email/Telegram.
 
-    Called by the browser when a NEW portfolio alert is shown, so what the user
-    sees gets delivered. Deduped server-side (shared with the headless monitor).
+    Called by the browser when a NEW portfolio alert is shown. Guarded: the
+    alert is only dispatched when its recId is a currently-open position in the
+    DB, so a stale localStorage phantom in the browser cannot email alerts for a
+    position the backend does not hold. Deduped server-side (shared with the
+    headless monitor).
     """
+    exists = (await db.execute(
+        select(PortfolioPositionModel.id).where(
+            PortfolioPositionModel.rec_id == req.recId
+        )
+    )).first()
+    if exists is None:
+        return {'sent': False, 'reason': 'position_not_found'}
+
     sent = notify_alert(req.symbol, req.alertType, req.reason, req.recId, req.timestamp)
     return {'sent': sent}
