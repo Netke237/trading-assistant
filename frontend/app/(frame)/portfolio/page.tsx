@@ -28,11 +28,23 @@ const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 28px';
 
 const REJECTION_LABELS: Record<string, string> = {
   single_trade_exposure_too_high: 'This trade is too large for your account size (over the single-trade limit). Raise your account value in Settings or reduce size.',
+  size_reduced_to_fit_exposure_limit: 'This trade is too large for your account size (over the single-trade limit). Raise your account value in Settings or reduce size.',
   total_exposure_limit_reached: 'Adding this would exceed your total portfolio exposure limit.',
   max_concurrent_positions_reached: 'You are at your maximum number of open positions.',
+  daily_recommendation_limit_reached: 'You have reached the maximum number of new positions for today.',
   duplicate_symbol_already_open: 'You already have an open position on this symbol.',
   portfolio_too_small: 'Your configured account value is below the minimum required.',
 };
+
+/** The backend returns risk reasons space-joined (portfolio.py); map each code
+ *  to friendly text, falling back to the raw string when unmapped. */
+function rejectionMessage(detail: string): string {
+  const mapped = detail
+    .split(' ')
+    .map((code) => REJECTION_LABELS[code])
+    .filter(Boolean);
+  return mapped.length ? mapped.join(' ') : detail;
+}
 
 function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | undefined {
   if (rk === undefined) return undefined;
@@ -142,7 +154,7 @@ export default function PortfolioPage() {
       {lastSyncError && (
         <div role="alert" className={styles.syncErrorBanner}>
           <Text size={13} tone="reject">
-            {lastSyncError.symbol} was not saved: {REJECTION_LABELS[lastSyncError.detail] ?? lastSyncError.detail}
+            {lastSyncError.symbol} was not saved: {rejectionMessage(lastSyncError.detail)}
           </Text>
           <button type="button" className={styles.syncErrorDismiss} onClick={clearSyncError} aria-label="Dismiss">
             ×

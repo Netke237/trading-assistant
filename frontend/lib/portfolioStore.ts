@@ -258,6 +258,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         // Capturing closures here avoids reading a nested-reassigned flag in the
         // outer scope (which TS narrows to its initializer).
         let promoteRecId = recId;
+        let didMerge = false;
         let rollback: (positions: PortfolioPosition[]) => PortfolioPosition[] =
           (positions) => positions.filter((x) => x.recId !== recId);
 
@@ -283,6 +284,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             console.warn('[portfolioStore] merging duplicate position for', incoming.symbol, incoming.contract);
             const prev = s.positions[idxByKey]!;
             promoteRecId = prev.recId;
+            didMerge = true;
             rollback = (positions) => positions.map((x) => (x.recId === prev.recId ? prev : x));
             const next = [...s.positions];
             next[idxByKey] = { ...prev, contracts: (prev.contracts ?? 0) + (incoming.contracts ?? 0) };
@@ -295,7 +297,13 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
 
         const outcome = await postPosition({ ...p, recId } as PortfolioPosition, value);
 
-        if (outcome.kind === 'ok' || outcome.kind === 'duplicate') {
+        // A 409 on a MERGE means the backend refused a scale-in (it keeps one open
+        // position per contract — no add-to-existing). Don't report the local qty
+        // bump as saved: roll it back and surface it, so the UI never shows a
+        // quantity the backend rejected (which the next sync would silently revert).
+        const scaleInRefused = outcome.kind === 'duplicate' && didMerge;
+
+        if ((outcome.kind === 'ok' || outcome.kind === 'duplicate') && !scaleInRefused) {
           set((s) => ({
             positions: s.positions.map((x) =>
               x.recId === promoteRecId
@@ -305,12 +313,15 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           }));
           return { ok: true, status: 'ok' as const };
         }
-        if (outcome.kind === 'rejected') {
+        if (outcome.kind === 'rejected' || scaleInRefused) {
+          const detail = outcome.kind === 'rejected'
+            ? outcome.detail
+            : 'A position for this contract is already open — scale-in is not supported.';
           set((s) => ({
             positions: rollback(s.positions),
-            lastSyncError: { symbol: p.symbol, contract: p.contract, detail: outcome.detail, at: Date.now() },
+            lastSyncError: { symbol: p.symbol, contract: p.contract, detail, at: Date.now() },
           }));
-          return { ok: false, status: 'rejected' as const, detail: outcome.detail };
+          return { ok: false, status: 'rejected' as const, detail };
         }
         // network — leave the row pending; the reconcile retries it. Never silently dropped.
         return { ok: false, status: 'pending' as const, detail: 'queued — will retry when the backend is reachable' };

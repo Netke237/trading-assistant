@@ -193,8 +193,13 @@ export function StockPositionCard({
     }
   }
 
-  function onAddToPortfolio() {
-    addPosition(buildPaperStockPosition(card.symbol, overlay.entry, overlay.shares));
+  async function onAddToPortfolio() {
+    setErr(null);
+    const res = await addPosition(buildPaperStockPosition(card.symbol, overlay.entry, overlay.shares));
+    if (res.status === 'rejected') {
+      setErr(res.detail ?? 'Portfolio rejected this position.');
+      return;
+    }
     setAdded(true);
   }
 

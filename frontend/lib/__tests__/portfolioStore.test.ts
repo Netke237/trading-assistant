@@ -557,6 +557,27 @@ describe('portfolioStore', () => {
       expect(rows[0]!.syncStatus).toBe('synced');
     });
 
+    it('rolls back a scale-in MERGE on a 409 (backend refuses scale-in) instead of reporting false success', async () => {
+      // Regression: the backend keeps one open position per contract with no
+      // scale-in path, so a merge's re-POST always 409s. Treating that 409 as
+      // success (like a plain duplicate-add) would report the bumped quantity
+      // as saved when the backend never recorded it — silently lost on the next sync.
+      usePortfolioStore.setState({
+        positions: [{ ...abt, recId: 'REC-EXIST', contracts: 2, syncStatus: 'synced', syncedAt: Date.now() }],
+      } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({ ok: false, status: 409, json: async () => ({ detail: 'already exists' }) });
+      const res = await usePortfolioStore.getState().addPosition({ ...abt, recId: 'REC-NEW', contracts: 3 });
+      expect(res.ok).toBe(false);
+      expect(res.status).toBe('rejected');
+      const rows = usePortfolioStore.getState().positions.filter((p) => p.contract === 'ABT|97|2027-01-15|C');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.recId).toBe('REC-EXIST');
+      expect(rows[0]!.contracts).toBe(2);          // NOT bumped to 5
+      expect(rows[0]!.syncStatus).toBe('synced');
+      expect(usePortfolioStore.getState().lastSyncError).not.toBeNull();
+    });
+
     it('rolls back a REPLACE (same recId) to the prior row when the backend rejects', async () => {
       usePortfolioStore.setState({
         positions: [{ ...abt, recId: 'REC-ABT-1', contracts: 2, entryPrice: 9.0, syncStatus: 'synced', syncedAt: Date.now() }],

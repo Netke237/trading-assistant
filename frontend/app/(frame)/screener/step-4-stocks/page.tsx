@@ -157,10 +157,15 @@ export default function Step4StocksPage() {
       return;
     }
     // Auto-execute symbols armed for after_scan — add as paper positions locally
+    const failures: string[] = [];
     for (const c of res.candidates) {
       if (afterScanArmedSymbols.has(c.symbol)) {
-        addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, c.shares));
+        const addRes = await addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, c.shares));
+        if (addRes.status === 'rejected') failures.push(`${c.symbol}: ${addRes.detail ?? 'not saved'}`);
       }
+    }
+    if (failures.length) {
+      setError(`Some auto-executed positions were not saved — ${failures.join('; ')}`);
     }
   }
 

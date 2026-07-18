@@ -523,12 +523,16 @@ export default function Step7Page() {
         failures.push(`${o.card.symbol}: ${res.detail ?? 'not saved'}`);
         continue;
       }
-      // 'ok' (saved) or 'pending' (queued, will retry) — the order is live and
-      // will land, so it counts toward the daily cap and is audited either way.
+      if (res.status === 'pending') {
+        // Optimistically added but not yet confirmed by the backend. Don't count it
+        // toward the daily cap or write an APPROVE audit entry until it lands — a
+        // premature APPROVE that a later retry rejects would be a false audit trail.
+        queued++;
+        continue;
+      }
+      // status === 'ok' — confirmed saved by the backend.
       incrementDaily();
       if (o.autoSend) auto++; else manual++;
-      if (res.status === 'pending') queued++;
-
       logAudit('APPROVE', recId, {
         symbol: o.card.symbol,
         contract: o.card.contract,
@@ -542,7 +546,7 @@ export default function Step7Page() {
     // covers hard rejections. They describe DIFFERENT orders, so both may show for
     // a mixed basket — but a network-only submit shows just the toast (no
     // contradictory red banner) with the queued count reported distinctly.
-    if (auto + manual > 0) {
+    if (auto + manual + queued > 0) {
       setToast({ auto, manual, queued });
       window.setTimeout(() => setToast(null), 6000);
     }
@@ -685,7 +689,7 @@ export default function Step7Page() {
         <div className={toastStyles.toast} role="status" aria-live="polite">
           <div>
             <Text size={13} weight={500}>
-              {toast.auto + toast.manual} order{toast.auto + toast.manual === 1 ? '' : 's'} placed
+              {toast.auto + toast.manual + toast.queued} order{toast.auto + toast.manual + toast.queued === 1 ? '' : 's'} placed
             </Text>
             <Text size={11} tone="secondary">
               {toast.auto} sent to broker · {toast.manual} added manually

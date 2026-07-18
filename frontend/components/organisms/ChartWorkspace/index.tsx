@@ -826,7 +826,9 @@ export default function ChartWorkspace() {
           onQty={setBuyQty}
           onCancel={() => setClickPopover(null)}
           onConfirm={() => {
-            usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, clickPopover.price, buyQty));
+            // Fire-and-forget: a rejection surfaces via the Portfolio page's
+            // lastSyncError banner (this popover has no dedicated error slot).
+            void usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, clickPopover.price, buyQty));
             setClickPopover(null);
           }}
         />

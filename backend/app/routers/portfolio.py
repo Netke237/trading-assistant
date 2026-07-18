@@ -6,7 +6,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
-from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 
 from app.database import get_db
 from app.data.market import fetch_price_async
@@ -229,7 +229,19 @@ async def add_position(
         entry_stock_price=entry_stock_price,
     )
     db.add(position)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Concurrent duplicate: two POSTs for the same contract (e.g. addPosition's
+        # own POST racing syncFromBackend's pending-retry) both pass the SELECT
+        # existence pre-check, then the loser trips the unique(contract) constraint.
+        # Return 409 (idempotent) — the same signal as the pre-check duplicate —
+        # so the client treats it as "already saved", not a hard rejection.
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Position with contract '{body.contract}' already exists.",
+        )
     await db.refresh(position)
     return PortfolioPositionSchema.from_orm_model(position)
 
