@@ -84,7 +84,8 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
       if (!r.autoSend) {
         // Manual → paper portfolio
-        addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares));
+        const res = await addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares));
+        if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
       } else if (broker !== 'recommendation') {
         // Auto-send → broker
         try {
@@ -102,7 +103,8 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
         }
       } else {
         // Auto-send but broker = recommendation → fall back to paper
-        addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares));
+        const res = await addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares));
+        if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
       }
     }
 

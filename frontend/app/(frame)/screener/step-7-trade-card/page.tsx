@@ -86,6 +86,7 @@ function positionFromOrder(order: DraftOrder): PortfolioPosition {
 interface ToastState {
   auto:    number;
   manual:  number;
+  queued:  number;   // subset of auto+manual that is pending a backend retry
 }
 
 export default function Step7Page() {
@@ -459,7 +460,7 @@ export default function Step7Page() {
         return;
       }
       setPaperOrderId(res.order_id);
-      addPosition(pos);
+      void addPosition(pos);
     } catch (e) {
       setOrderError(String(e));
     } finally {
@@ -489,7 +490,7 @@ export default function Step7Page() {
         return;
       }
       setPaperOrderId(res.order_id);
-      addPosition(pos);
+      void addPosition(pos);
     } catch (e) {
       setOrderError(String(e));
     } finally {
@@ -506,17 +507,27 @@ export default function Step7Page() {
     setBasket((b) => (b.includes(active) ? b.filter((s) => s !== active) : [...b, active]));
   const removePin = (sym: string) => setBasket((b) => b.filter((s) => s !== sym));
 
-  const handleSubmit = (orders: DraftOrder[], _riskOverridden: boolean) => {
-    let auto = 0, manual = 0;
+  const handleSubmit = async (orders: DraftOrder[], _riskOverridden: boolean) => {
+    usePortfolioStore.getState().clearSyncError();
+    let auto = 0, manual = 0, queued = 0;
+    const failures: string[] = [];
+
     for (const o of orders) {
       // One canonical recId per order: addPosition syncs it to the backend
       // (a single POST), so there is no second POST to conflict (409) with.
       const recId = recIdMap[o.card.symbol] ?? generateRecId();
-      addPosition({ ...positionFromOrder(o), recId });
-      incrementDaily();
+      const res = await addPosition({ ...positionFromOrder(o), recId });
 
-      if (o.autoSend) auto++;
-      else manual++;
+      if (res.status === 'rejected') {
+        // Backend refused it and the optimistic row was dropped — a real failure.
+        failures.push(`${o.card.symbol}: ${res.detail ?? 'not saved'}`);
+        continue;
+      }
+      // 'ok' (saved) or 'pending' (queued, will retry) — the order is live and
+      // will land, so it counts toward the daily cap and is audited either way.
+      incrementDaily();
+      if (o.autoSend) auto++; else manual++;
+      if (res.status === 'pending') queued++;
 
       logAudit('APPROVE', recId, {
         symbol: o.card.symbol,
@@ -526,8 +537,18 @@ export default function Step7Page() {
     }
     setDialogOpen(false);
     setBasket([]);
-    setToast({ auto, manual });
-    window.setTimeout(() => setToast(null), 6000);
+
+    // Toast covers placed orders (saved or queued-for-retry); the red error banner
+    // covers hard rejections. They describe DIFFERENT orders, so both may show for
+    // a mixed basket — but a network-only submit shows just the toast (no
+    // contradictory red banner) with the queued count reported distinctly.
+    if (auto + manual > 0) {
+      setToast({ auto, manual, queued });
+      window.setTimeout(() => setToast(null), 6000);
+    }
+    if (failures.length) {
+      setOrderError(`Some orders were not saved — ${failures.join('; ')}`);
+    }
   };
 
   const basketEmpty = basket.length === 0;
@@ -664,10 +685,11 @@ export default function Step7Page() {
         <div className={toastStyles.toast} role="status" aria-live="polite">
           <div>
             <Text size={13} weight={500}>
-              {toast.auto + toast.manual} order{toast.auto + toast.manual === 1 ? '' : 's'} queued
+              {toast.auto + toast.manual} order{toast.auto + toast.manual === 1 ? '' : 's'} placed
             </Text>
             <Text size={11} tone="secondary">
               {toast.auto} sent to broker · {toast.manual} added manually
+              {toast.queued > 0 ? ` · ${toast.queued} awaiting backend sync` : ''}
             </Text>
           </div>
           <Link href="/portfolio" className={toastStyles.link}>

@@ -429,3 +429,24 @@
   flex-direction: column;
   gap: var(--space-2);
 }
+
+/* Banner shown when the backend rejects a save (single-source-of-truth). */
+.syncErrorBanner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--reject);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--reject) 8%, var(--bg-surface));
+  margin-bottom: var(--space-3);
+}
+.syncErrorDismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1;
+}

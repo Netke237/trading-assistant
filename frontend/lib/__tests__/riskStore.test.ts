@@ -7,7 +7,7 @@ const DEFAULT_LIMITS = {
   maxTotalExposurePct: 0.25,
   maxConcurrentPositions: 10,
   maxDailyRecommendations: 5,
-  portfolioValue: 50000,
+  portfolioValue: 100000,
 };
 
 function makePosition(overrides: Partial<PortfolioPosition> = {}): PortfolioPosition {
@@ -142,7 +142,7 @@ describe('riskStore', () => {
     act(() => {
       result.current.computeMetrics([makePosition({ currentPrice: 5, contracts: 2 })]);
     });
-    expect(result.current.metrics.totalExposurePct).toBe(1000 / 50000);
+    expect(result.current.metrics.totalExposurePct).toBe(1000 / 100000);
     expect(result.current.metrics.concurrentPositions).toBe(1);
     expect(result.current.metrics.status).toBe('PASS');
   });
@@ -156,7 +156,7 @@ describe('riskStore', () => {
       ]);
     });
     expect(result.current.metrics.largestConcentrationSymbol).toBe('AAPL');
-    expect(result.current.metrics.largestConcentrationPct).toBe(5000 / 50000);
+    expect(result.current.metrics.largestConcentrationPct).toBe(5000 / 100000);
   });
 
   it('incrementDaily increases count', () => {

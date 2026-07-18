@@ -26,6 +26,14 @@ import styles from './page.module.css';
 
 const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 28px';
 
+const REJECTION_LABELS: Record<string, string> = {
+  single_trade_exposure_too_high: 'This trade is too large for your account size (over the single-trade limit). Raise your account value in Settings or reduce size.',
+  total_exposure_limit_reached: 'Adding this would exceed your total portfolio exposure limit.',
+  max_concurrent_positions_reached: 'You are at your maximum number of open positions.',
+  duplicate_symbol_already_open: 'You already have an open position on this symbol.',
+  portfolio_too_small: 'Your configured account value is below the minimum required.',
+};
+
 function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | undefined {
   if (rk === undefined) return undefined;
   if (rk >= 70) return 'reject';      // very rich
@@ -51,6 +59,8 @@ function downloadCsv(filename: string, text: string): void {
 
 export default function PortfolioPage() {
   const positions      = usePortfolioStore((s) => s.positions);
+  const lastSyncError  = usePortfolioStore((s) => s.lastSyncError);
+  const clearSyncError = usePortfolioStore((s) => s.clearSyncError);
   const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
   const updatePosition = usePortfolioStore((s) => s.updatePosition);
   const [editing, setEditing] = useState<string | null>(null);
@@ -128,6 +138,17 @@ export default function PortfolioPage() {
         <Title as="h1" size={24}>Portfolio</Title>
         <Text size={13} tone="secondary">{positions.length} open positions</Text>
       </div>
+
+      {lastSyncError && (
+        <div role="alert" className={styles.syncErrorBanner}>
+          <Text size={13} tone="reject">
+            {lastSyncError.symbol} was not saved: {REJECTION_LABELS[lastSyncError.detail] ?? lastSyncError.detail}
+          </Text>
+          <button type="button" className={styles.syncErrorDismiss} onClick={clearSyncError} aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      )}
 
       <div className={styles.tabs}>
         <button type="button" className={tab === 'open' ? styles.tabActive : styles.tab} onClick={() => setTab('open')}>

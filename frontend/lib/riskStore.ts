@@ -11,12 +11,16 @@ import type {
   PortfolioRiskMetrics,
 } from '@/types/domain';
 
+// portfolioValue is the account size the risk checks measure exposure against.
+// It is user-editable in Settings; this is only the first-run default. Exposure
+// caps (maxSingleTradeExposurePct etc.) are fractions of THIS value, so a value
+// far below the real paper balance will reject otherwise-normal option trades.
 const DEFAULT_LIMITS: RiskLimits = {
   maxSingleTradeExposurePct: 0.05,
   maxTotalExposurePct: 0.25,
   maxConcurrentPositions: 10,
   maxDailyRecommendations: 5,
-  portfolioValue: 50000,
+  portfolioValue: 100000,
 };
 
 const DEFAULT_METRICS: PortfolioRiskMetrics = {
