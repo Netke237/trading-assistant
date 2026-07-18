@@ -127,6 +127,10 @@
   background: color-mix(in srgb, var(--reject) 6%, var(--bg-surface));
 }
 
+.rowQueued {
+  background: color-mix(in srgb, var(--caution) 6%, var(--bg-surface));
+}
+
 .sharesInput {
   height: 28px;
   width: 60px;

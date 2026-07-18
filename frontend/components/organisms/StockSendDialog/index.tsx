@@ -37,6 +37,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   const [broker, setBroker] = useState<BrokerMode>('recommendation');
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [queued, setQueued] = useState<Record<string, string>>({});
   const [alpacaConfigured, setAlpacaConfigured] = useState(false);
   const [tastytradeConfigured, setTastytradeConfigured] = useState(false);
 
@@ -78,14 +79,17 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     if (submitting) return;
     setSubmitting(true);
     setErrors({});
+    setQueued({});
 
     const errs: Record<string, string> = {};
+    const q: Record<string, string> = {};
     for (const c of cards) {
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
       if (!r.autoSend) {
         // Manual → paper portfolio
         const res = await addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares));
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
+        else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
       } else if (broker !== 'recommendation') {
         // Auto-send → broker
         try {
@@ -105,15 +109,17 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
         // Auto-send but broker = recommendation → fall back to paper
         const res = await addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares));
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
+        else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
       }
     }
 
     setSubmitting(false);
+    setErrors(errs);
+    setQueued(q);
 
-    if (Object.keys(errs).length > 0) {
-      setErrors(errs);
-      return;
-    }
+    // Stay open on ANY unconfirmed row — hard rejections (red) OR queued/pending
+    // (caution). Only a fully-confirmed submit advances to onSubmit + close.
+    if (Object.keys(errs).length > 0 || Object.keys(q).length > 0) return;
 
     const orders: StockDraftOrder[] = cards.map((c) => {
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
@@ -121,6 +127,10 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     });
     onSubmit(orders);
   }
+
+  // Once any row is queued (backend unreachable), block a same-mount re-submit:
+  // a second pass would mint fresh recIds and merge/double contracts in the store.
+  const hasQueued = Object.keys(queued).length > 0;
 
   const brokerOptions: Array<[BrokerMode, string, boolean]> = [
     ['recommendation', 'Recommendation', true],
@@ -186,12 +196,13 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
         {/* Table body */}
         <div className={styles.tableBody}>
           {cards.map((c) => {
-            const r      = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
-            const risk   = (c.strategy.entry_price - c.strategy.stop_price) * r.shares;
-            const size   = c.strategy.entry_price * r.shares;
-            const hasErr = !!errors[c.symbol];
+            const r        = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
+            const risk     = (c.strategy.entry_price - c.strategy.stop_price) * r.shares;
+            const size     = c.strategy.entry_price * r.shares;
+            const hasErr   = !!errors[c.symbol];
+            const isQueued = !!queued[c.symbol];
             return (
-              <div key={c.symbol} className={`${styles.row} ${hasErr ? styles.rowErr : ''}`}>
+              <div key={c.symbol} className={`${styles.row} ${hasErr ? styles.rowErr : ''} ${isQueued ? styles.rowQueued : ''}`}>
                 <Data size={13} weight={500}>{c.symbol}</Data>
                 <Data size={12}>${c.strategy.entry_price.toFixed(2)}</Data>
                 <input
@@ -223,6 +234,11 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
                     <Text size={11} tone="reject">{errors[c.symbol]}</Text>
                   </span>
                 )}
+                {isQueued && !hasErr && (
+                  <span className={styles.errCell}>
+                    <Text size={11} tone="caution">{queued[c.symbol]}</Text>
+                  </span>
+                )}
               </div>
             );
           })}
@@ -241,12 +257,14 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={submit}
-              disabled={cards.length === 0 || submitting}
+              disabled={cards.length === 0 || submitting || hasQueued}
             >
               <Text size={13}>
                 {submitting
                   ? 'Submitting…'
-                  : `Submit ${cards.length} order${cards.length === 1 ? '' : 's'}`}
+                  : hasQueued
+                    ? 'Queued — close to continue'
+                    : `Submit ${cards.length} order${cards.length === 1 ? '' : 's'}`}
               </Text>
             </button>
           </div>

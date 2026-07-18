@@ -106,6 +106,7 @@ export default function Step4StocksPage() {
   const [params, setParams] = useState<StrategyParams>(() => ({ ...savedParams }));
   const [selected, setSelected] = useState<string | null>(activeStrategy);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
   const [afterScanArmedSymbols, setAfterScanArmedSymbols] = useState<Set<string>>(new Set());
   const [showSendDialog, setShowSendDialog] = useState(false);
@@ -151,6 +152,7 @@ export default function Step4StocksPage() {
   async function onRun() {
     if (!selected) return;
     setError(null);
+    setNotice(null);
     const res = await runStockScan(selected, params);
     if (!res) {
       setError('Scan failed — is the backend running on port 8000?');
@@ -158,14 +160,19 @@ export default function Step4StocksPage() {
     }
     // Auto-execute symbols armed for after_scan — add as paper positions locally
     const failures: string[] = [];
+    const queued: string[] = [];
     for (const c of res.candidates) {
       if (afterScanArmedSymbols.has(c.symbol)) {
         const addRes = await addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, c.shares));
         if (addRes.status === 'rejected') failures.push(`${c.symbol}: ${addRes.detail ?? 'not saved'}`);
+        else if (addRes.status === 'pending') queued.push(c.symbol);
       }
     }
     if (failures.length) {
       setError(`Some auto-executed positions were not saved — ${failures.join('; ')}`);
+    }
+    if (queued.length) {
+      setNotice(`Queued — backend unreachable, will sync automatically: ${queued.join(', ')}`);
     }
   }
 
@@ -239,6 +246,7 @@ export default function Step4StocksPage() {
       </div>
 
       {error && <Text size={12} tone="reject">{error}</Text>}
+      {notice && <Text size={12} tone="caution">{notice}</Text>}
 
       {result?.pipeline && (
         <details className={styles.logPanel}>

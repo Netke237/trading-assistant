@@ -842,8 +842,9 @@ export default function ChartWorkspace() {
             //    auto-retried by syncFromBackend's poll (~30s) — it either lands
             //    silently (promoted to synced) or, if THAT retry is also
             //    rejected, surfaces via lastSyncError at that point instead.
-            // (StockPositionCard/StockSendDialog do NOT yet check res.status ===
-            // 'pending' — a separate, pre-existing gap, not this fix's scope.)
+            // (StockPositionCard and StockSendDialog now handle res.status ===
+            // 'pending' too — StockPositionCard shows a "Queued — will sync" state,
+            // StockSendDialog keeps the dialog open with a per-row queued note.)
             void usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, price, qty)).then((res) => {
               if (res.status === 'rejected') {
                 useChartAlertStore.getState().pushToast({

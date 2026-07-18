@@ -125,9 +125,14 @@ export function StockPositionCard({
 }: StockPositionCardProps) {
   const [overlay, setOverlay] = useState<StockEditOverlay>(() => defaultOverlay(card));
 
-  // Reset overlay when the selected symbol changes
+  // Reset overlay and per-symbol outcome state when the selected symbol changes
   useEffect(() => {
     setOverlay(defaultOverlay(card));
+    setAdded(false);
+    setErr(null);
+    setQueued(false);
+    setAdding(false);
+    setOrderId(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.symbol]);
 
@@ -155,6 +160,7 @@ export function StockPositionCard({
   const [orderId, setOrderId]           = useState<string | null>(null);
   const [err, setErr]                   = useState<string | null>(null);
   const [added, setAdded]               = useState(false);
+  const [queued, setQueued]             = useState(false);
   const [adding, setAdding]             = useState(false);
   const [alpacaConfigured, setAlpacaConfigured] = useState(false);
   const [tastytradeConfigured, setTastytradeConfigured] = useState(false);
@@ -195,13 +201,20 @@ export function StockPositionCard({
   }
 
   async function onAddToPortfolio() {
-    if (adding || added) return; // guards against a double-click firing two adds
+    if (adding || added || queued) return; // guards against a double-click firing two adds
     setAdding(true);
     setErr(null);
     try {
       const res = await addPosition(buildPaperStockPosition(card.symbol, overlay.entry, overlay.shares));
       if (res.status === 'rejected') {
         setErr(res.detail ?? 'Portfolio rejected this position.');
+        return;
+      }
+      if (res.status === 'pending') {
+        // Optimistically added but not confirmed by the backend — syncFromBackend's
+        // poll will retry. Show it as queued, NOT as saved, and block re-clicks
+        // (the row is already in the store; another add would merge/duplicate).
+        setQueued(true);
         return;
       }
       setAdded(true);
@@ -342,9 +355,11 @@ export function StockPositionCard({
           type="button"
           className={styles.actionBtn}
           onClick={onAddToPortfolio}
-          disabled={added || adding}
+          disabled={added || adding || queued}
         >
-          <Text size={12}>{added ? 'Added to Portfolio' : adding ? 'Adding…' : 'Add to Portfolio'}</Text>
+          <Text size={12}>
+            {added ? 'Added to Portfolio' : queued ? 'Queued — will sync' : adding ? 'Adding…' : 'Add to Portfolio'}
+          </Text>
         </button>
       </div>
 
@@ -395,6 +410,7 @@ export function StockPositionCard({
       {/* Section 6 — Order result / error */}
       {orderId && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
       {err      && <Text size={12} tone="reject">{err}</Text>}
+      {queued   && <Text size={12} tone="caution">Queued — backend unreachable, will sync automatically.</Text>}
 
       {/* Section 7 — Auto-trade arm */}
       <StockAutoTradeArm
