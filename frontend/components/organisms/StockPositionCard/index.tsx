@@ -155,6 +155,7 @@ export function StockPositionCard({
   const [orderId, setOrderId]           = useState<string | null>(null);
   const [err, setErr]                   = useState<string | null>(null);
   const [added, setAdded]               = useState(false);
+  const [adding, setAdding]             = useState(false);
   const [alpacaConfigured, setAlpacaConfigured] = useState(false);
   const [tastytradeConfigured, setTastytradeConfigured] = useState(false);
 
@@ -194,13 +195,19 @@ export function StockPositionCard({
   }
 
   async function onAddToPortfolio() {
+    if (adding || added) return; // guards against a double-click firing two adds
+    setAdding(true);
     setErr(null);
-    const res = await addPosition(buildPaperStockPosition(card.symbol, overlay.entry, overlay.shares));
-    if (res.status === 'rejected') {
-      setErr(res.detail ?? 'Portfolio rejected this position.');
-      return;
+    try {
+      const res = await addPosition(buildPaperStockPosition(card.symbol, overlay.entry, overlay.shares));
+      if (res.status === 'rejected') {
+        setErr(res.detail ?? 'Portfolio rejected this position.');
+        return;
+      }
+      setAdded(true);
+    } finally {
+      setAdding(false);
     }
-    setAdded(true);
   }
 
   const rrT1 = rrAt(overlay.t1);
@@ -335,9 +342,9 @@ export function StockPositionCard({
           type="button"
           className={styles.actionBtn}
           onClick={onAddToPortfolio}
-          disabled={added}
+          disabled={added || adding}
         >
-          <Text size={12}>{added ? 'Added to Portfolio' : 'Add to Portfolio'}</Text>
+          <Text size={12}>{added ? 'Added to Portfolio' : adding ? 'Adding…' : 'Add to Portfolio'}</Text>
         </button>
       </div>
 

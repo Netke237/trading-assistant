@@ -234,13 +234,30 @@ async def add_position(
     except IntegrityError:
         # Concurrent duplicate: two POSTs for the same contract (e.g. addPosition's
         # own POST racing syncFromBackend's pending-retry) both pass the SELECT
-        # existence pre-check, then the loser trips the unique(contract) constraint.
-        # Return 409 (idempotent) — the same signal as the pre-check duplicate —
-        # so the client treats it as "already saved", not a hard rejection.
+        # existence pre-check above, then the loser trips a unique constraint.
+        # `contract` and `rec_id` are BOTH unique — re-check which one actually
+        # collided before answering, so a rec_id collision (this row genuinely
+        # never persisted) is never reported the same way as a contract collision
+        # (the row IS safely saved under the other request). The client treats
+        # any 409 here as "already saved" and promotes its local row to synced —
+        # doing that for an unpersisted rec_id collision would silently lose data.
         await db.rollback()
+        contract_exists = (await db.execute(
+            select(PortfolioPositionModel.id).where(
+                PortfolioPositionModel.contract == body.contract
+            )
+        )).first()
+        if contract_exists is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Position with contract '{body.contract}' already exists.",
+            )
+        # The contract collision above didn't happen — this was a rec_id
+        # collision instead, and the position was NOT persisted. A 500 correctly
+        # tells the client this is a hard failure to retry, not a safe duplicate.
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Position with contract '{body.contract}' already exists.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not save position: duplicate rec_id '{body.recId}'.",
         )
     await db.refresh(position)
     return PortfolioPositionSchema.from_orm_model(position)
