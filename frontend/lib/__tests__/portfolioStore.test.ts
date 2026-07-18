@@ -1,5 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
-import { usePortfolioStore, persistPosition } from '@/lib/portfolioStore';
+import { usePortfolioStore, persistPosition, migratePortfolioPersist } from '@/lib/portfolioStore';
+import { useRiskStore } from '@/lib/riskStore';
 import type { PortfolioPosition } from '@/types/domain';
 
 const makeBackendPosition = () => ({
@@ -46,8 +47,19 @@ describe('portfolioStore', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
+    // Async addPosition now POSTs to the backend; give every test a benign mock
+    // so no real network call fires. Tests that assert on the response set their
+    // own fetch mock inside the test body (which overrides this).
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+      .mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+    useRiskStore.setState({
+      limits: {
+        maxSingleTradeExposurePct: 0.05, maxTotalExposurePct: 0.25,
+        maxConcurrentPositions: 10, maxDailyRecommendations: 5, portfolioValue: 50000,
+      },
+    } as never);
     act(() => {
-      usePortfolioStore.setState({ positions: [] });
+      usePortfolioStore.setState({ positions: [], lastSyncError: null });
     });
   });
 
@@ -71,51 +83,51 @@ describe('portfolioStore', () => {
     expect(result.current.positions).toHaveLength(2);
   });
 
-  it('adds a new position', () => {
+  it('adds a new position', async () => {
     const { result } = renderHook(() => usePortfolioStore());
 
-    act(() => {
-      result.current.addPosition(makePosition());
+    await act(async () => {
+      await result.current.addPosition(makePosition());
     });
     expect(result.current.positions).toHaveLength(1);
     expect(result.current.positions[0].symbol).toBe('AAPL');
   });
 
-  it('merges duplicate contracts by adding contract counts', () => {
+  it('merges duplicate contracts by adding contract counts', async () => {
     const { result } = renderHook(() => usePortfolioStore());
 
-    act(() => {
-      result.current.addPosition(makePosition({ contracts: 2 }));
+    await act(async () => {
+      await result.current.addPosition(makePosition({ contracts: 2 }));
     });
     expect(result.current.positions[0].contracts).toBe(2);
 
-    act(() => {
-      result.current.addPosition(makePosition({ contracts: 3 }));
+    await act(async () => {
+      await result.current.addPosition(makePosition({ contracts: 3 }));
     });
     expect(result.current.positions).toHaveLength(1);
     expect(result.current.positions[0].contracts).toBe(5);
   });
 
-  it('keeps earlier entry data when merging duplicates', () => {
+  it('keeps earlier entry data when merging duplicates', async () => {
     const { result } = renderHook(() => usePortfolioStore());
 
-    act(() => {
-      result.current.addPosition(makePosition({ entryPrice: 4.15, currentPrice: 5.02 }));
+    await act(async () => {
+      await result.current.addPosition(makePosition({ entryPrice: 4.15, currentPrice: 5.02 }));
     });
 
-    act(() => {
-      result.current.addPosition(makePosition({ entryPrice: 4.50, currentPrice: 5.50 }));
+    await act(async () => {
+      await result.current.addPosition(makePosition({ entryPrice: 4.50, currentPrice: 5.50 }));
     });
 
     expect(result.current.positions[0].entryPrice).toBe(4.15);
     expect(result.current.positions[0].currentPrice).toBe(5.02);
   });
 
-  it('updates a position by contract', () => {
+  it('updates a position by contract', async () => {
     const { result } = renderHook(() => usePortfolioStore());
 
-    act(() => {
-      result.current.addPosition(makePosition());
+    await act(async () => {
+      await result.current.addPosition(makePosition());
     });
 
     act(() => {
@@ -127,12 +139,12 @@ describe('portfolioStore', () => {
     expect(result.current.positions[0].symbol).toBe('AAPL');
   });
 
-  it('closes a position by contract', () => {
+  it('closes a position by contract', async () => {
     const { result } = renderHook(() => usePortfolioStore());
 
-    act(() => {
-      result.current.addPosition(makePosition());
-      result.current.addPosition(makePosition({ symbol: 'MSFT', contract: 'MSFT 420C 06/20' }));
+    await act(async () => {
+      await result.current.addPosition(makePosition());
+      await result.current.addPosition(makePosition({ symbol: 'MSFT', contract: 'MSFT 420C 06/20' }));
     });
     expect(result.current.positions).toHaveLength(2);
 
@@ -146,14 +158,14 @@ describe('portfolioStore', () => {
   // The backend rejects a second position on the same contract with a 409, so
   // `contract` is the identity of a position. These guard that invariant against
   // the three paths that used to break it.
-  it('merges a re-add of the same contract even when entryDate differs', () => {
+  it('merges a re-add of the same contract even when entryDate differs', async () => {
     const { result } = renderHook(() => usePortfolioStore());
 
-    act(() => {
-      result.current.addPosition(makePosition({ entryDate: '2026-04-08', entryPrice: 4.15, contracts: 2 }));
+    await act(async () => {
+      await result.current.addPosition(makePosition({ entryDate: '2026-04-08', entryPrice: 4.15, contracts: 2 }));
     });
-    act(() => {
-      result.current.addPosition(makePosition({ entryDate: '2026-04-09', entryPrice: 6.0, contracts: 3 }));
+    await act(async () => {
+      await result.current.addPosition(makePosition({ entryDate: '2026-04-09', entryPrice: 6.0, contracts: 3 }));
     });
 
     expect(result.current.positions).toHaveLength(1);
@@ -164,12 +176,12 @@ describe('portfolioStore', () => {
     expect(result.current.positions[0].entryDate).toBe('2026-04-08');
   });
 
-  it('does not merge different contracts on the same symbol', () => {
+  it('does not merge different contracts on the same symbol', async () => {
     const { result } = renderHook(() => usePortfolioStore());
 
-    act(() => {
-      result.current.addPosition(makePosition({ contract: 'AAPL 190C 05/16' }));
-      result.current.addPosition(makePosition({ contract: 'AAPL 200C 05/16' }));
+    await act(async () => {
+      await result.current.addPosition(makePosition({ contract: 'AAPL 190C 05/16' }));
+      await result.current.addPosition(makePosition({ contract: 'AAPL 200C 05/16' }));
     });
 
     expect(result.current.positions).toHaveLength(2);
@@ -202,7 +214,9 @@ describe('portfolioStore', () => {
     expect(usePortfolioStore.getState().positions[0].recId).toBe('REC-BACKEND');
   });
 
-  it('keeps an in-flight local position for a contract the backend has not seen', async () => {
+  it('keeps an in-flight (pending) local position for a contract the backend has not seen', async () => {
+    // The retry POST inside syncFromBackend and the GET both hit this mock; ok:true
+    // makes the retry "succeed", so the pending row is promoted to synced and kept.
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => [makeBackendPosition()],
@@ -210,7 +224,10 @@ describe('portfolioStore', () => {
 
     act(() => {
       usePortfolioStore.setState({
-        positions: [makePosition({ symbol: 'MSFT', contract: 'MSFT 420C 06/20', recId: 'REC-INFLIGHT' })],
+        positions: [makePosition({
+          symbol: 'MSFT', contract: 'MSFT 420C 06/20', recId: 'REC-INFLIGHT',
+          syncStatus: 'pending', syncPendingSince: Date.now(),
+        })],
       });
     });
 
@@ -463,6 +480,147 @@ describe('portfolioStore', () => {
       await Promise.all([p1, p2]);
 
       expect(callCount).toBe(1);
+    });
+  });
+
+  // ── Single-source-of-truth: verified writes + authoritative reconcile ────────
+
+  const abt = {
+    symbol: 'ABT', contract: 'ABT|97|2027-01-15|C', direction: 'Bullish',
+    entryDate: '2026-07-17', expiry: '2027-01-15', dteRemaining: 547, dteTotal: 547,
+    entryPrice: 10.45, currentPrice: 10.45, pnlDollar: 0, pnlPct: 0, stop: 89.89,
+    targets: [], status: 'PENDING', contracts: 1, recId: 'REC-ABT-1',
+  } as unknown as PortfolioPosition;
+
+  describe('persist migration for legacy rows', () => {
+    it('tags legacy persisted rows (no syncStatus) as synced with syncedAt=0', () => {
+      const migrated = migratePortfolioPersist(
+        { positions: [{ recId: 'LEGACY-1', symbol: 'ABT', contract: 'ABT|97|2027-01-15|C' }] },
+        0,
+      ) as { positions: Array<Record<string, unknown>> };
+      expect(migrated.positions[0]!.syncStatus).toBe('synced');
+      expect(migrated.positions[0]!.syncedAt).toBe(0);
+    });
+  });
+
+  describe('account value for backend POSTs', () => {
+    it('persistPosition sends the configured account value, not the sum of premiums', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      await persistPosition({ ...abt, recId: 'REC-AV-1' });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.portfolioValue).toBe(50000);
+    });
+  });
+
+  describe('addPosition verified write', () => {
+    it('marks the row synced and returns ok when the backend accepts it', async () => {
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      const res = await usePortfolioStore.getState().addPosition(abt);
+      expect(res.ok).toBe(true);
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-ABT-1')?.syncStatus).toBe('synced');
+      expect(usePortfolioStore.getState().lastSyncError).toBeNull();
+    });
+
+    it('drops the row and records the reason when the backend rejects it (422)', async () => {
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({ ok: false, status: 422, json: async () => ({ detail: 'single_trade_exposure_too_high' }) });
+      const res = await usePortfolioStore.getState().addPosition(abt);
+      expect(res.ok).toBe(false);
+      expect(res.status).toBe('rejected');
+      expect(res.detail).toBe('single_trade_exposure_too_high');
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-ABT-1')).toBeUndefined();
+      expect(usePortfolioStore.getState().lastSyncError?.detail).toBe('single_trade_exposure_too_high');
+    });
+
+    it('keeps the row pending (status=pending) when the backend is unreachable', async () => {
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockRejectedValue(new Error('network'));
+      const res = await usePortfolioStore.getState().addPosition(abt);
+      expect(res.ok).toBe(false);
+      expect(res.status).toBe('pending');
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-ABT-1')?.syncStatus).toBe('pending');
+      expect(usePortfolioStore.getState().lastSyncError).toBeNull();
+    });
+
+    it('rolls back a scale-in MERGE (different recId, same contract) when the backend rejects', async () => {
+      usePortfolioStore.setState({
+        positions: [{ ...abt, recId: 'REC-EXIST', contracts: 2, syncStatus: 'synced', syncedAt: Date.now() }],
+      } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({ ok: false, status: 422, json: async () => ({ detail: 'x' }) });
+      await usePortfolioStore.getState().addPosition({ ...abt, recId: 'REC-NEW', contracts: 3 });
+      const rows = usePortfolioStore.getState().positions.filter((p) => p.contract === 'ABT|97|2027-01-15|C');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.recId).toBe('REC-EXIST');
+      expect(rows[0]!.contracts).toBe(2);
+      expect(rows[0]!.syncStatus).toBe('synced');
+    });
+
+    it('rolls back a REPLACE (same recId) to the prior row when the backend rejects', async () => {
+      usePortfolioStore.setState({
+        positions: [{ ...abt, recId: 'REC-ABT-1', contracts: 2, entryPrice: 9.0, syncStatus: 'synced', syncedAt: Date.now() }],
+      } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({ ok: false, status: 422, json: async () => ({ detail: 'x' }) });
+      await usePortfolioStore.getState().addPosition({ ...abt, recId: 'REC-ABT-1', contracts: 3, entryPrice: 11.0 });
+      const pos = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-ABT-1');
+      expect(pos?.contracts).toBe(2);
+      expect(pos?.entryPrice).toBe(9.0);
+      expect(pos?.syncStatus).toBe('synced');
+    });
+  });
+
+  describe('syncFromBackend authoritative reconcile', () => {
+    const mkLocal = (recId: string, over: Record<string, unknown> = {}) => ({
+      symbol: 'ABT', contract: `ABT|${recId}|2027-01-15|C`, direction: 'Bullish',
+      entryDate: '2026-07-17', expiry: '2027-01-15', dteRemaining: 1, dteTotal: 1,
+      entryPrice: 10, currentPrice: 10, pnlDollar: 0, pnlPct: 0, stop: 5, targets: [],
+      status: 'PENDING', contracts: 1, recId, ...over,
+    }) as unknown as PortfolioPosition;
+
+    it('drops a legacy/synced local row (syncedAt in the past) that the backend lacks', async () => {
+      usePortfolioStore.setState({ positions: [mkLocal('GHOST', { syncStatus: 'synced', syncedAt: 0 })] } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({ ok: true, json: async () => [] });
+      await usePortfolioStore.getState().syncFromBackend();
+      expect(usePortfolioStore.getState().positions).toHaveLength(0);
+    });
+
+    it('keeps a row synced AFTER this GET started (poll-race safe)', async () => {
+      usePortfolioStore.setState({
+        positions: [mkLocal('FRESH', { syncStatus: 'synced', syncedAt: Date.now() + 60_000 })],
+      } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({ ok: true, json: async () => [] });
+      await usePortfolioStore.getState().syncFromBackend();
+      expect(usePortfolioStore.getState().positions.map((p) => p.recId)).toContain('FRESH');
+    });
+
+    it('retries a pending local row and marks it synced when the retry POST succeeds', async () => {
+      usePortfolioStore.setState({
+        positions: [mkLocal('PEND', { syncStatus: 'pending', syncPendingSince: Date.now() })],
+      } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockImplementation((_url: string, init?: { method?: string }) => {
+          if ((init?.method ?? 'GET') === 'GET') return Promise.resolve({ ok: true, json: async () => [] });
+          return Promise.resolve({ ok: true, status: 201, json: async () => ({}) });
+        });
+      await usePortfolioStore.getState().syncFromBackend();
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'PEND')?.syncStatus).toBe('synced');
+    });
+
+    it('keeps a pending row (never silently drops it) when the retry POST also fails on network', async () => {
+      usePortfolioStore.setState({
+        positions: [mkLocal('PEND2', { syncStatus: 'pending', syncPendingSince: Date.now() - 999_999 })],
+      } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockImplementation((_url: string, init?: { method?: string }) => {
+          if ((init?.method ?? 'GET') === 'GET') return Promise.resolve({ ok: true, json: async () => [] });
+          return Promise.reject(new Error('still down'));
+        });
+      await usePortfolioStore.getState().syncFromBackend();
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'PEND2')?.syncStatus).toBe('pending');
     });
   });
 });

@@ -160,6 +160,15 @@ export interface PortfolioPosition {
   recId:         string;
   /** Underlying stock price at scan time — used to re-anchor stop/targets to fill price. */
   scanStockPrice?: number;
+  /** Local-only sync state vs the backend. Never sent to the backend.
+   *  'pending'  — optimistically added, POST in flight or retrying.
+   *  'synced'   — confirmed present on the backend. */
+  syncStatus?: 'pending' | 'synced';
+  /** Epoch ms when this row entered 'pending' (for an "unsynced since" hint). */
+  syncPendingSince?: number;
+  /** Epoch ms when the backend last confirmed this row. Used by the reconcile
+   *  to avoid dropping a row confirmed after the current GET's snapshot. */
+  syncedAt?: number;
 }
 
 export interface AlertItem {

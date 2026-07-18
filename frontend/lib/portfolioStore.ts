@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PortfolioPosition, TargetLevel, Direction } from '@/types/domain';
+import { useRiskStore } from '@/lib/riskStore';
 
 type BackendPosition = {
   id: string;
@@ -56,13 +57,20 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     delta:        p.delta ?? undefined,
     theta:        p.theta ?? undefined,
     ivRank:       p.ivRank ?? undefined,
+    syncStatus:   'synced',
+    syncedAt:     Date.now(),
   };
 }
 
 interface PortfolioStoreState {
   positions: PortfolioPosition[];
+  /** Last backend rejection of a save, for the UI to surface. Null when clean. */
+  lastSyncError: { symbol: string; contract: string; detail: string; at: number } | null;
+  clearSyncError: () => void;
   hydrate:        (positions: PortfolioPosition[]) => void;
-  addPosition:    (p: PortfolioPosition) => void;
+  /** status: 'ok' saved; 'rejected' backend refused (dropped); 'pending' network
+   *  error, kept locally and retried by syncFromBackend. `ok` === (status==='ok'). */
+  addPosition:    (p: PortfolioPosition) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string }>;
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   closePosition:  (contract: string) => void;
   closePositionRemote: (
@@ -71,12 +79,23 @@ interface PortfolioStoreState {
   ) => Promise<{ ok: boolean; detail?: string }>;
   /** Returns whether the pull actually reached the backend and updated state
    *  (false on network failure — callers that just mutated local state around
-   *  this call may need to know so they don't assume the pull "saw" their change). */
-  syncFromBackend: () => Promise<boolean>;
+   *  this call may need to know so they don't assume the pull "saw" their change).
+   *  force=true bypasses the concurrent-sync dedup by SERIALIZING a fresh run
+   *  after any in-flight one — used by closePositionRemote, which needs a GET
+   *  that post-dates its own write. */
+  syncFromBackend: (force?: boolean) => Promise<boolean>;
   syncToBackend:  () => Promise<void>;
 }
 
 const _BASE_URL = () => process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+
+/** The account value the backend risk check must measure exposure against —
+ *  the user's configured value, identical to the Step-7 pre-check. Using the
+ *  sum of deployed premiums here made a single option read as a huge fraction
+ *  of the account and got otherwise-valid trades rejected (the ABT 422). */
+function accountValue(): number {
+  return useRiskStore.getState().limits.portfolioValue || 100_000;
+}
 
 function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
   return {
@@ -95,22 +114,26 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
   };
 }
 
-async function postPosition(p: PortfolioPosition, portfolioValue = 100_000): Promise<void> {
+type SaveOutcome =
+  | { kind: 'ok' }
+  | { kind: 'rejected'; detail: string }   // backend 4xx (except 409) — do not keep the row
+  | { kind: 'duplicate' }                  // 409 — backend already has this contract
+  | { kind: 'network' };                   // unreachable — keep the row pending
+
+async function postPosition(p: PortfolioPosition, portfolioValue = accountValue()): Promise<SaveOutcome> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(toBackendPayload(p, portfolioValue)),
     });
-    // 409 is expected here: Step 7's order paths persistPosition() first, so this
-    // fire-and-forget POST re-sends a contract the backend already has. Any other
-    // refusal (422 risk check) leaves the local store ahead of the backend until
-    // the next syncFromBackend reverts it — say so.
-    if (!res.ok && res.status !== 409) {
-      // eslint-disable-next-line no-console
-      console.warn('[portfolioStore] backend rejected position', p.contract, `HTTP ${res.status}`);
-    }
-  } catch { /* network unavailable */ }
+    if (res.ok) return { kind: 'ok' };
+    if (res.status === 409) return { kind: 'duplicate' };
+    const body = await res.json().catch(() => ({}));
+    return { kind: 'rejected', detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
+  } catch {
+    return { kind: 'network' };
+  }
 }
 
 /** POST to the backend and return whether it was accepted.
@@ -122,7 +145,7 @@ async function postPosition(p: PortfolioPosition, portfolioValue = 100_000): Pro
  *  caller add quantity that only ever existed in local state. */
 export async function persistPosition(
   p: PortfolioPosition,
-  portfolioValue = 100_000,
+  portfolioValue = accountValue(),
 ): Promise<{ ok: boolean; detail?: string }> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
@@ -181,71 +204,116 @@ function validatePositions(positions: unknown): PortfolioPosition[] {
   });
 }
 
+/** Persist migration. Legacy rows (persisted before sync tracking existed) have
+ *  no syncStatus. Tag them synced with syncedAt=0 so the authoritative reconcile
+ *  drops them if the backend does not have them (clears old phantom rows), while
+ *  a row the backend DOES have is simply confirmed on the next sync. */
+export function migratePortfolioPersist(state: unknown, _version: number): unknown {
+  const s = state as { positions?: unknown } | undefined;
+  if (!s || !Array.isArray(s.positions)) return state;
+  return {
+    ...s,
+    positions: s.positions.map((p) => {
+      const po = p as Record<string, unknown>;
+      return po.syncStatus
+        ? po
+        : { ...po, syncStatus: 'synced', syncedAt: 0 };
+    }),
+  };
+}
+
 // Dedupes concurrent closePositionRemote calls for the same recId — without
 // this, a double-click or slow-network retry can send two overlapping close
 // requests; the second one's 404-drift-recovery branch can then re-persist
 // the position the first call just closed.
 const _inFlightCloses = new Map<string, Promise<{ ok: boolean; detail?: string }>>();
 
+// Dedupes overlapping syncFromBackend calls. The reconcile now awaits POST
+// retries for pending rows, so two concurrent syncs (portfolio + dashboard 30s
+// intervals, or two tabs) could each read the same snapshot and clobber each
+// other's final write. A single shared in-flight promise serializes them.
+let _syncInFlight: Promise<boolean> | null = null;
+
 export const usePortfolioStore = create<PortfolioStoreState>()(
   persist(
     (set) => ({
       positions: [],
+      lastSyncError: null,
+      clearSyncError: () => set({ lastSyncError: null }),
       hydrate: (positions) =>
         set({
           positions: positions.map((p) =>
             (p as PortfolioPosition).recId ? p : { ...p, recId: generateRecId() }
           ),
         }),
-      addPosition: (p) => {
-        let resolvedPosition: PortfolioPosition | null = null;
-        let computedPortfolioValue = 100_000;
+      addPosition: async (p) => {
+        const recId = (p as PortfolioPosition & { recId?: string }).recId || generateRecId();
+        const value = accountValue();
+
+        // Capture — inside the optimistic set — which row to promote on success
+        // and exactly how to undo the mutation on a hard rejection:
+        //  - insert  → remove the new row (identified by recId)
+        //  - replace → restore the prior row that shared this recId
+        //  - merge   → restore the prior same-contract row (undoes the count bump)
+        // Capturing closures here avoids reading a nested-reassigned flag in the
+        // outer scope (which TS narrows to its initializer).
+        let promoteRecId = recId;
+        let rollback: (positions: PortfolioPosition[]) => PortfolioPosition[] =
+          (positions) => positions.filter((x) => x.recId !== recId);
+
         set((s) => {
-          const recId = (p as PortfolioPosition & { recId?: string }).recId || generateRecId();
-          const incoming = { ...p, recId } as PortfolioPosition;
-          resolvedPosition = incoming;
+          const incoming: PortfolioPosition = {
+            ...p, recId, syncStatus: 'pending', syncPendingSince: Date.now(),
+          };
 
-          // Compute portfolio value from existing positions so the backend risk
-          // check is calibrated against real capital, not the 100k default.
-          computedPortfolioValue = s.positions.reduce((sum, pos) => {
-            const multiplier = pos.contract?.endsWith('|STOCK') ? 1 : 100;
-            return sum + pos.entryPrice * (pos.contracts ?? 1) * multiplier;
-          }, 0) || 100_000;
-
-          const idxByRecId = s.positions.findIndex((x) => x.recId === incoming.recId);
+          const idxByRecId = s.positions.findIndex((x) => x.recId === recId);
           if (idxByRecId >= 0) {
+            const prev = s.positions[idxByRecId]!;
+            promoteRecId = recId;
+            rollback = (positions) => positions.map((x) => (x.recId === prev.recId ? prev : x));
             const next = [...s.positions];
-            next[idxByRecId] = { ...next[idxByRecId]!, ...incoming };
+            next[idxByRecId] = { ...prev, ...incoming };
             return { positions: next };
           }
-
           const idxByKey = s.positions.findIndex(
-            (x) => x.symbol === incoming.symbol && x.contract === incoming.contract
+            (x) => x.symbol === incoming.symbol && x.contract === incoming.contract,
           );
           if (idxByKey >= 0) {
             // eslint-disable-next-line no-console
-            console.warn(
-              '[portfolioStore] merging duplicate position for',
-              incoming.symbol,
-              incoming.contract
-            );
-            // Only the count merges. entryPrice/entryDate stay at the original
-            // fill because the backend refuses the second POST (409) and keeps
-            // the first — averaging them here would diverge from the authoritative
-            // cost basis that syncFromBackend pulls back.
+            console.warn('[portfolioStore] merging duplicate position for', incoming.symbol, incoming.contract);
+            const prev = s.positions[idxByKey]!;
+            promoteRecId = prev.recId;
+            rollback = (positions) => positions.map((x) => (x.recId === prev.recId ? prev : x));
             const next = [...s.positions];
-            const existing = next[idxByKey]!;
-            next[idxByKey] = {
-              ...existing,
-              contracts: (existing.contracts ?? 0) + (incoming.contracts ?? 0),
-            };
+            next[idxByKey] = { ...prev, contracts: (prev.contracts ?? 0) + (incoming.contracts ?? 0) };
             return { positions: next };
           }
-
+          promoteRecId = recId;
+          rollback = (positions) => positions.filter((x) => x.recId !== recId);
           return { positions: [...s.positions, incoming] };
         });
-        // Fire-and-forget sync to backend so the monitor sees new positions
-        if (resolvedPosition) postPosition(resolvedPosition, computedPortfolioValue);
+
+        const outcome = await postPosition({ ...p, recId } as PortfolioPosition, value);
+
+        if (outcome.kind === 'ok' || outcome.kind === 'duplicate') {
+          set((s) => ({
+            positions: s.positions.map((x) =>
+              x.recId === promoteRecId
+                ? { ...x, syncStatus: 'synced', syncedAt: Date.now(), syncPendingSince: undefined }
+                : x,
+            ),
+          }));
+          return { ok: true, status: 'ok' as const };
+        }
+        if (outcome.kind === 'rejected') {
+          set((s) => ({
+            positions: rollback(s.positions),
+            lastSyncError: { symbol: p.symbol, contract: p.contract, detail: outcome.detail, at: Date.now() },
+          }));
+          return { ok: false, status: 'rejected' as const, detail: outcome.detail };
+        }
+        // network — leave the row pending; the reconcile retries it. Never silently dropped.
+        return { ok: false, status: 'pending' as const, detail: 'queued — will retry when the backend is reachable' };
       },
       updatePosition: (contract, patch) =>
         set((s) => ({
@@ -345,7 +413,9 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             const closedRow = usePortfolioStore.getState().positions.find((p) => p.recId === recId);
             const wasFullClose = !opts.qtyToClose || opts.qtyToClose >= (closedRow?.contracts ?? 1);
             set((s) => ({ positions: s.positions.filter((p) => p.recId !== recId) }));
-            const synced = await usePortfolioStore.getState().syncFromBackend();
+            // Force a fresh GET that post-dates this close — must not be satisfied
+            // by an in-flight sync whose GET predates it (would resurrect the row).
+            const synced = await usePortfolioStore.getState().syncFromBackend(true);
             // The close itself succeeded server-side regardless of this GET. But if
             // it was only a PARTIAL close and the follow-up pull failed (network),
             // the row above is now gone from local state with no way to learn its
@@ -372,44 +442,92 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         _inFlightCloses.set(recId, promise);
         return promise;
       },
-      syncFromBackend: async () => {
-        try {
-          const res = await fetch(`${_BASE_URL()}/api/portfolio`);
-          if (!res.ok) return false;
-          const remote: BackendPosition[] = await res.json();
-          const remotePositions = remote.map(fromBackend);
-          const remoteRecIds = new Set(remotePositions.map((p) => p.recId).filter(Boolean));
-          const remoteContracts = new Set(remotePositions.map((p) => p.contract));
-          // Keep any locally-held positions that haven't landed in the backend yet
-          // (e.g. postPosition failed silently or is still in-flight). A local
-          // position whose contract is already open remotely under a different
-          // recId was rejected by the backend's 409 — drop it rather than render
-          // a phantom clone of the remote row.
-          const localOnly = usePortfolioStore.getState().positions.filter(
-            (p) => p.recId && !remoteRecIds.has(p.recId) && !remoteContracts.has(p.contract)
-          );
-          // dedupePositions is a backstop: two local rows can share a contract if
-          // both were refused by the backend and neither reached remoteContracts.
-          set({ positions: dedupePositions([...remotePositions, ...localOnly]) });
-          return true;
-        } catch {
-          // network unavailable — keep localStorage state
-          return false;
-        }
+      syncFromBackend: async (force = false) => {
+        const run = async (): Promise<boolean> => {
+          const fetchStartedAt = Date.now();
+          try {
+            const res = await fetch(`${_BASE_URL()}/api/portfolio`);
+            if (!res.ok) return false;
+            const remote: BackendPosition[] = await res.json();
+            const remotePositions = remote.map(fromBackend);
+            const remoteContracts = new Set(remotePositions.map((p) => p.contract));
+
+            const snapshot = usePortfolioStore.getState().positions;
+            const snapshotRecIds = new Set(snapshot.map((p) => p.recId));
+            const localAbsent = snapshot.filter(
+              (p) => p.recId && !remoteContracts.has(p.contract),
+            );
+
+            const keep: PortfolioPosition[] = [];
+            for (const p of localAbsent) {
+              if (p.syncStatus === 'pending') {
+                // Retry the save. Never silently drop a pending row: on success
+                // promote it, on a hard rejection surface it, on network keep it.
+                const outcome = await postPosition(p, accountValue());
+                if (outcome.kind === 'ok' || outcome.kind === 'duplicate') {
+                  keep.push({ ...p, syncStatus: 'synced', syncedAt: Date.now(), syncPendingSince: undefined });
+                } else if (outcome.kind === 'rejected') {
+                  set({ lastSyncError: { symbol: p.symbol, contract: p.contract, detail: outcome.detail, at: Date.now() } });
+                  // dropped — do not push
+                } else {
+                  keep.push(p); // network — stays pending, retried next cycle
+                }
+              } else if (typeof p.syncedAt === 'number' && p.syncedAt >= fetchStartedAt) {
+                // Confirmed after this GET's snapshot could have been taken — keep
+                // (the GET simply predates it); avoids the 30s-poll race dropping it.
+                keep.push(p);
+              }
+              // else: a synced row confirmed before this snapshot but absent from the
+              // backend is a genuine phantom (e.g. legacy row, DB reset) — drop it.
+            }
+
+            // Preserve any row inserted into the store DURING the awaited retry
+            // loop above so a concurrent addPosition is not clobbered by our final
+            // write. Key on recId (NOT contract): a legitimate re-add of a contract
+            // that was a phantom in this run's snapshot has a NEW recId, so it must
+            // survive even though its contract was in the snapshot.
+            const accountedRecIds = new Set([...remotePositions, ...keep].map((x) => x.recId));
+            set((s) => {
+              const addedDuringSync = s.positions.filter(
+                (x) => x.recId && !snapshotRecIds.has(x.recId) && !accountedRecIds.has(x.recId),
+              );
+              return { positions: dedupePositions([...remotePositions, ...keep, ...addedDuringSync]) };
+            });
+            return true;
+          } catch {
+            // network unavailable — keep localStorage state untouched
+            return false;
+          }
+        };
+
+        // Concurrent-sync dedup. A non-forced caller (the 30s interval pollers)
+        // shares any in-flight run. A forced caller (closePositionRemote, which
+        // must observe a GET that post-dates its own write) SERIALIZES a fresh
+        // run after the in-flight one rather than reusing its stale result.
+        // NOTE: `_syncInFlight` must hold the SAME promise the finally callback
+        // compares against, so attach `.finally` as a side-effect and store/return
+        // the original promise — do not store the value `.finally()` returns.
+        if (_syncInFlight && !force) return _syncInFlight;
+
+        const started: Promise<boolean> = _syncInFlight
+          ? _syncInFlight.catch(() => false).then(() => run()) // forced: chain after in-flight
+          : run();
+        _syncInFlight = started;
+        started.finally(() => { if (_syncInFlight === started) _syncInFlight = null; });
+        return started;
       },
       syncToBackend: async () => {
         // Push all local positions to the backend (409 = already there, safe to ignore).
         const { positions } = usePortfolioStore.getState();
-        const totalValue = positions.reduce((sum, pos) => {
-          const multiplier = pos.contract?.endsWith('|STOCK') ? 1 : 100;
-          return sum + pos.entryPrice * (pos.contracts ?? 1) * multiplier;
-        }, 0) || 100_000;
-        await Promise.all(positions.map((p) => postPosition(p, totalValue)));
+        const value = accountValue();
+        await Promise.all(positions.map((p) => postPosition(p, value)));
       },
     }),
     {
       name: 'bamendjou-portfolio-v1',
+      version: 2,
       skipHydration: true,
+      migrate: migratePortfolioPersist,
       partialize: (state) => ({ positions: state.positions }),
       merge: (persistedState, currentState) => {
         const ps = persistedState as Partial<PortfolioStoreState> | undefined;
