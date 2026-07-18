@@ -20,7 +20,7 @@ from app.models.alert import AlertRuleModel, AlertHistoryModel
 from app.services.alert_evaluator import (
     AlertRuleInput, PriceCondition, IndicatorCondition, StructureCondition,
     RegimeCondition, ConditionGroup, evaluate_rules, build_regime_snapshot,
-    _is_cooldown_passed,
+    is_cooldown_passed,
 )
 from app.services.historical_store import get_bars
 from app.services.indicator_compute import compute_indicators_for_conditions
@@ -651,7 +651,7 @@ async def evaluate_and_notify_for_symbol(
                     continue
 
                 # Composite rules had NO cooldown gate at all — unlike standard
-                # rules (evaluate_rules() -> _is_cooldown_passed internally), which
+                # rules (evaluate_rules() -> is_cooldown_passed internally), which
                 # meant a composite rule ALWAYS fired and emailed TWICE whenever the
                 # live WS path (an open chart tab) and the background scheduler
                 # (chart_alert_scheduler.py) both evaluated the same closed candle.
@@ -664,8 +664,8 @@ async def evaluate_and_notify_for_symbol(
                 # it only removes the "every double-evaluation duplicates" guarantee.
                 # Reuses the exact function the standard-rule path already relies on
                 # — AlertRuleModel exposes the same cooldown_minutes/last_triggered_at
-                # attributes _is_cooldown_passed expects, so _row can be passed directly.
-                if not _is_cooldown_passed(_row, datetime.now()):
+                # attributes is_cooldown_passed expects, so _row can be passed directly.
+                if not is_cooldown_passed(_row, datetime.now()):
                     # Log at debug level: without this, a cooldown-suppressed fire
                     # is indistinguishable in the logs from "the rule never fired,"
                     # which would make "why didn't I get an email" undiagnosable.

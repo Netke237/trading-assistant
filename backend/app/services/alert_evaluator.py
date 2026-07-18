@@ -72,7 +72,7 @@ def make_history_id() -> str:
     return uuid.uuid4().hex[:10]
 
 
-def _is_cooldown_passed(rule: AlertRuleInput, now: datetime) -> bool:
+def is_cooldown_passed(rule: AlertRuleInput, now: datetime) -> bool:
     # Only reads .last_triggered_at and .cooldown_minutes — kept intentionally
     # duck-typed so chart_alerts.py's composite-rule path can call this with a
     # raw AlertRuleModel ORM row (which exposes the same two attribute names)
@@ -345,7 +345,7 @@ def evaluate_rules(rules: list[AlertRuleInput], closed_candle: dict,
 
         # Cooldown suppresses firing, but must not skip the sustain-clock
         # bookkeeping above -- see the NOTE at the top of this loop.
-        if triggered and not _is_cooldown_passed(rule, now):
+        if triggered and not is_cooldown_passed(rule, now):
             triggered = False
 
         if triggered:
