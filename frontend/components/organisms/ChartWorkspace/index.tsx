@@ -828,11 +828,26 @@ export default function ChartWorkspace() {
           onConfirm={() => {
             const price = clickPopover.price;
             const qty = buyQty;
+            // This toast is the FAST path — it only renders if the user is still
+            // on a page mounting ChartWorkspace (this toast lives in AlertToast,
+            // mounted here) when the POST resolves. If they navigate away first,
+            // the toast never shows, but nothing is lost: addPosition already set
+            // portfolioStore's lastSyncError, which the Portfolio page's banner
+            // renders independently of navigation — the same two-layer pattern
+            // (local feedback + persistent backstop) every other addPosition
+            // caller in the app already relies on (Step 7, StockPositionCard,
+            // StockSendDialog).
             void usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, price, qty)).then((res) => {
               if (res.status === 'rejected') {
                 useChartAlertStore.getState().pushToast({
                   id: `add-position-rejected-${rid()}`,
                   message: `${symbol} was not saved: ${res.detail ?? 'rejected by the backend'}`,
+                  timestamp: Date.now(),
+                });
+              } else if (res.status === 'pending') {
+                useChartAlertStore.getState().pushToast({
+                  id: `add-position-pending-${rid()}`,
+                  message: `${symbol} queued — backend unreachable, will sync automatically.`,
                   timestamp: Date.now(),
                 });
               }
