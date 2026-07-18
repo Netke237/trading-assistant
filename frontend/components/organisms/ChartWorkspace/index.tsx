@@ -826,9 +826,17 @@ export default function ChartWorkspace() {
           onQty={setBuyQty}
           onCancel={() => setClickPopover(null)}
           onConfirm={() => {
-            // Fire-and-forget: a rejection surfaces via the Portfolio page's
-            // lastSyncError banner (this popover has no dedicated error slot).
-            void usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, clickPopover.price, buyQty));
+            const price = clickPopover.price;
+            const qty = buyQty;
+            void usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, price, qty)).then((res) => {
+              if (res.status === 'rejected') {
+                useChartAlertStore.getState().pushToast({
+                  id: `add-position-rejected-${rid()}`,
+                  message: `${symbol} was not saved: ${res.detail ?? 'rejected by the backend'}`,
+                  timestamp: Date.now(),
+                });
+              }
+            });
             setClickPopover(null);
           }}
         />
