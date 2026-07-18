@@ -20,6 +20,7 @@ from app.models.alert import AlertRuleModel, AlertHistoryModel
 from app.services.alert_evaluator import (
     AlertRuleInput, PriceCondition, IndicatorCondition, StructureCondition,
     RegimeCondition, ConditionGroup, evaluate_rules, build_regime_snapshot,
+    _is_cooldown_passed,
 )
 from app.services.historical_store import get_bars
 from app.services.indicator_compute import compute_indicators_for_conditions
@@ -648,6 +649,26 @@ async def evaluate_and_notify_for_symbol(
 
                 if not _fired:
                     continue
+
+                # Composite rules had no cooldown gate at all — unlike standard
+                # rules (evaluate_rules() -> _is_cooldown_passed internally), which
+                # meant a composite rule could fire and email TWICE for the same
+                # closed candle whenever the live WS path (an open chart tab) and
+                # the background scheduler (chart_alert_scheduler.py) both evaluated
+                # it within moments of each other. Reuses the exact function the
+                # standard-rule path already relies on — AlertRuleModel exposes the
+                # same cooldown_minutes/last_triggered_at attributes
+                # _is_cooldown_passed expects, so _row can be passed directly.
+                if not _is_cooldown_passed(_row, datetime.now()):
+                    # Log at debug level: without this, a cooldown-suppressed fire
+                    # is indistinguishable in the logs from "the rule never fired,"
+                    # which would make "why didn't I get an email" undiagnosable.
+                    logger.debug(
+                        'composite rule %s (%s [%s]) suppressed by cooldown_minutes=%s',
+                        _row.id, symbol, interval, _row.cooldown_minutes,
+                    )
+                    continue
+
                 _reason = format_composite_reason(_td.get('primary', {}).get('to_state'), _detail)
                 _now = datetime.now().isoformat()
                 _entry = {

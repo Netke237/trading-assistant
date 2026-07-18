@@ -73,6 +73,12 @@ def make_history_id() -> str:
 
 
 def _is_cooldown_passed(rule: AlertRuleInput, now: datetime) -> bool:
+    # Only reads .last_triggered_at and .cooldown_minutes — kept intentionally
+    # duck-typed so chart_alerts.py's composite-rule path can call this with a
+    # raw AlertRuleModel ORM row (which exposes the same two attribute names)
+    # instead of constructing an AlertRuleInput. If either attribute is ever
+    # renamed on ONE of these two types without the other, this silently
+    # breaks with no type-checker warning — keep the names in sync.
     if not rule.last_triggered_at:
         return True
     try:

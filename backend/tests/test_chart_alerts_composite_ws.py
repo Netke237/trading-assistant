@@ -64,6 +64,9 @@ _HMM_TRIGGER_INTRADAY = {
     "min_confirmations": 0,
 }
 
+# Minimal trigger — no strategy_confirmations, so it fires without extra mocking.
+_MINIMAL_TRIGGER_DEF = {"primary": {"model": "any"}, "confirmations": [], "min_confirmations": 0}
+
 
 @pytest.mark.asyncio
 async def test_ws_composite_path_gates_on_strategy_confirmations(monkeypatch):
@@ -130,9 +133,8 @@ async def test_ws_composite_path_skips_bars_fetch_when_not_needed(monkeypatch):
     get_bars_mock = AsyncMock(return_value=_FLAT_BARS)
     monkeypatch.setattr(chart_alerts, 'get_bars', get_bars_mock)
 
-    trigger_def = {"primary": {"model": "any"}, "confirmations": [], "min_confirmations": 0}
     async with Session() as db:
-        db.add(_make_composite_rule_row('rule-3', 'AAPL', '15min', trigger_def))
+        db.add(_make_composite_rule_row('rule-3', 'AAPL', '15min', _MINIMAL_TRIGGER_DEF))
         await db.commit()
 
     triggered = await chart_alerts.evaluate_and_notify_for_symbol(
@@ -291,3 +293,88 @@ async def test_ws_composite_path_hmm_daily_fetches_bars_when_rule_interval_is_in
     )
     assert len(triggered) == 1
     get_bars_mock.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_ws_composite_path_suppresses_duplicate_fire_within_cooldown(monkeypatch):
+    """Regression for the duplicate-email bug: the live WS path and the background
+    scheduler (chart_alert_scheduler.py) can both evaluate the SAME closed candle
+    within moments of each other. A composite rule with a cooldown must not fire
+    twice for that — the second evaluate_and_notify_for_symbol call (simulating
+    the second evaluator catching the same candle) must be suppressed."""
+    from app.routers import chart_alerts
+
+    Session = await _make_session_factory()
+    monkeypatch.setattr(chart_alerts, 'AsyncSessionLocal', Session)
+
+    async with Session() as db:
+        db.add(AlertRuleModel(
+            id='rule-cooldown-1', user_id='default', name='Composite Rule',
+            symbol='AAPL', interval='15min',
+            enabled=True, rule_json=json.dumps({**_MINIMAL_TRIGGER_DEF, '__type': 'composite'}),
+            cooldown_minutes=60, expiry_date=None,
+            created_at='2024-01-01T00:00:00Z', last_triggered_at=None,
+        ))
+        await db.commit()
+
+    first = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    assert len(first) == 1
+
+    # Simulate the second evaluator (scheduler or a second open chart tab)
+    # catching the SAME closed candle moments later.
+    second = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    assert second == [], "cooldown must suppress the duplicate fire"
+
+
+@pytest.mark.asyncio
+async def test_ws_composite_path_fires_again_once_cooldown_has_elapsed(monkeypatch):
+    """The gate must not be permanent — once cooldown_minutes has genuinely
+    elapsed since last_triggered_at, the rule must fire again."""
+    from app.routers import chart_alerts
+
+    Session = await _make_session_factory()
+    monkeypatch.setattr(chart_alerts, 'AsyncSessionLocal', Session)
+
+    async with Session() as db:
+        db.add(AlertRuleModel(
+            id='rule-cooldown-2', user_id='default', name='Composite Rule',
+            symbol='AAPL', interval='15min',
+            enabled=True, rule_json=json.dumps({**_MINIMAL_TRIGGER_DEF, '__type': 'composite'}),
+            cooldown_minutes=60, expiry_date=None,
+            created_at='2024-01-01T00:00:00Z',
+            last_triggered_at='2020-01-01T00:00:00',  # far beyond any cooldown
+        ))
+        await db.commit()
+
+    triggered = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    assert len(triggered) == 1
+
+
+@pytest.mark.asyncio
+async def test_ws_composite_path_zero_cooldown_still_fires_every_time(monkeypatch):
+    """cooldown_minutes=0 (the value every other test in this file already uses via
+    _make_composite_rule_row) must keep meaning 'no cooldown' — this locks in that
+    the new gate doesn't change existing zero-cooldown rule behavior."""
+    from app.routers import chart_alerts
+
+    Session = await _make_session_factory()
+    monkeypatch.setattr(chart_alerts, 'AsyncSessionLocal', Session)
+
+    async with Session() as db:
+        db.add(_make_composite_rule_row('rule-cooldown-3', 'AAPL', '15min', _MINIMAL_TRIGGER_DEF))
+        await db.commit()
+
+    first = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    second = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    assert len(first) == 1
+    assert len(second) == 1
