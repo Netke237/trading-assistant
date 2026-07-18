@@ -831,12 +831,18 @@ export default function ChartWorkspace() {
             // This toast is the FAST path — it only renders if the user is still
             // on a page mounting ChartWorkspace (this toast lives in AlertToast,
             // mounted here) when the POST resolves. If they navigate away first,
-            // the toast never shows, but nothing is lost: addPosition already set
-            // portfolioStore's lastSyncError, which the Portfolio page's banner
-            // renders independently of navigation — the same two-layer pattern
-            // (local feedback + persistent backstop) every other addPosition
-            // caller in the app already relies on (Step 7, StockPositionCard,
-            // StockSendDialog).
+            // the toast never shows, but nothing is lost, for either outcome —
+            // just via two DIFFERENT backstops:
+            //  - rejected: addPosition already set portfolioStore's lastSyncError
+            //    synchronously, which the Portfolio page's banner renders
+            //    independently of navigation (Step 7's handleSubmit relies on
+            //    this same immediate signal).
+            //  - pending:  the row stays 'pending' in local state and is
+            //    auto-retried by syncFromBackend's poll (~30s) — it either lands
+            //    silently (promoted to synced) or, if THAT retry is also
+            //    rejected, surfaces via lastSyncError at that point instead.
+            // (StockPositionCard/StockSendDialog do NOT yet check res.status ===
+            // 'pending' — a separate, pre-existing gap, not this fix's scope.)
             void usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, price, qty)).then((res) => {
               if (res.status === 'rejected') {
                 useChartAlertStore.getState().pushToast({
