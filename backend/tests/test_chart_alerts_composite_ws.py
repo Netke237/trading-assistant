@@ -378,3 +378,52 @@ async def test_ws_composite_path_zero_cooldown_still_fires_every_time(monkeypatc
     )
     assert len(first) == 1
     assert len(second) == 1
+
+
+@pytest.mark.asyncio
+async def test_ws_composite_path_cooldown_suppression_does_not_disturb_sustain_state(monkeypatch):
+    """A rule can have BOTH sustain_minutes and cooldown_minutes set. Once the
+    sustain window has already elapsed and the rule fires, a cooldown-suppressed
+    second evaluation must leave the sustain clock's condition_state untouched —
+    not reset it, which would force the rule to re-accumulate sustain time from
+    scratch the next time conditions are met."""
+    from app.routers import chart_alerts
+    from sqlalchemy import select
+
+    Session = await _make_session_factory()
+    monkeypatch.setattr(chart_alerts, 'AsyncSessionLocal', Session)
+
+    # Pre-seed condition_state with a "pending since" timestamp already older than
+    # sustain_minutes, so the FIRST call fires immediately (sustain already met)
+    # instead of needing a second call just to build up the sustain window.
+    _pending_since = '2020-01-01T00:00:00'
+    trigger_def = {**_MINIMAL_TRIGGER_DEF, 'sustain_minutes': 5}
+    async with Session() as db:
+        db.add(AlertRuleModel(
+            id='rule-sustain-cooldown-1', user_id='default', name='Composite Rule',
+            symbol='AAPL', interval='15min',
+            enabled=True, rule_json=json.dumps({**trigger_def, '__type': 'composite'}),
+            cooldown_minutes=60, expiry_date=None,
+            created_at='2024-01-01T00:00:00Z', last_triggered_at=None,
+            condition_state=json.dumps({'composite': _pending_since}),
+        ))
+        await db.commit()
+
+    first = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    assert len(first) == 1, "sustain window already elapsed — must fire on the first call"
+
+    second = await chart_alerts.evaluate_and_notify_for_symbol(
+        'AAPL', '15min', _FLAT_CANDLES[-1], _FLAT_CANDLES, [],
+    )
+    assert second == [], "cooldown must suppress the immediate second fire"
+
+    async with Session() as db:
+        row = (await db.execute(
+            select(AlertRuleModel).where(AlertRuleModel.id == 'rule-sustain-cooldown-1')
+        )).scalar_one()
+        state = json.loads(row.condition_state)
+        assert state.get('composite') == _pending_since, (
+            "the cooldown-suppressed cycle must not reset the sustain clock"
+        )

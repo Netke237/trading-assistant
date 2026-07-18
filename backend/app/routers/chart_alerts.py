@@ -650,15 +650,21 @@ async def evaluate_and_notify_for_symbol(
                 if not _fired:
                     continue
 
-                # Composite rules had no cooldown gate at all — unlike standard
+                # Composite rules had NO cooldown gate at all — unlike standard
                 # rules (evaluate_rules() -> _is_cooldown_passed internally), which
-                # meant a composite rule could fire and email TWICE for the same
-                # closed candle whenever the live WS path (an open chart tab) and
-                # the background scheduler (chart_alert_scheduler.py) both evaluated
-                # it within moments of each other. Reuses the exact function the
-                # standard-rule path already relies on — AlertRuleModel exposes the
-                # same cooldown_minutes/last_triggered_at attributes
-                # _is_cooldown_passed expects, so _row can be passed directly.
+                # meant a composite rule ALWAYS fired and emailed TWICE whenever the
+                # live WS path (an open chart tab) and the background scheduler
+                # (chart_alert_scheduler.py) both evaluated the same closed candle.
+                # This narrows that to the same residual race standard rules already
+                # accept (chart_alert_scheduler.py:78-81's documented "known
+                # limitation"): `_row.last_triggered_at` is read once at the top of
+                # this function and only written back at the final db.commit(), so
+                # two calls that are ALREADY in flight concurrently at the moment
+                # this check runs can still both pass it — this does not add locking,
+                # it only removes the "every double-evaluation duplicates" guarantee.
+                # Reuses the exact function the standard-rule path already relies on
+                # — AlertRuleModel exposes the same cooldown_minutes/last_triggered_at
+                # attributes _is_cooldown_passed expects, so _row can be passed directly.
                 if not _is_cooldown_passed(_row, datetime.now()):
                     # Log at debug level: without this, a cooldown-suppressed fire
                     # is indistinguishable in the logs from "the rule never fired,"
