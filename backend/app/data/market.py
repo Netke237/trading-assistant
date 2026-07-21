@@ -14,6 +14,8 @@ from typing import Literal, Optional
 import httpx
 import pandas as pd
 
+from app.scoring.dte_window import DTE_WINDOW_TOLERANCE_DAYS
+
 TRADIER_BASE_URL = os.getenv("TRADIER_BASE_URL", "https://api.tradier.com")
 TRADIER_TOKEN = os.getenv("TRADIER_API_TOKEN", "")
 
@@ -441,17 +443,34 @@ def fetch_price(symbol: str) -> Optional[float]:
 
 def _nearest_expiration_in_window(
     dates: list[str], bounds: tuple[int, int], today: date,
+    *, tolerance_days: int = DTE_WINDOW_TOLERANCE_DAYS,
 ) -> Optional[str]:
     """Return the expiration date closest to the centre of [min_dte, max_dte].
 
-    Returns None if no available expiration falls inside the window.
+    Monthly option cycles are spaced ~30-35 days apart; a fixed-width window
+    derived from a holding period can straddle a real expiration by a handful
+    of days (e.g. a 180-210d window missing a listed 179d and 214d expiry on
+    either side) even though either would serve the intended hold just as
+    well. If nothing falls strictly inside the window, retry against
+    [lo - tolerance_days, hi + tolerance_days] before giving up.
+
+    Returns None if no available expiration falls inside the window or its
+    tolerance margin.
     """
     lo, hi = bounds
     centre = (lo + hi) / 2
-    in_window = [d for d in dates if lo <= (date.fromisoformat(d) - today).days <= hi]
-    if not in_window:
+
+    def _dte(d: str) -> int:
+        return (date.fromisoformat(d) - today).days
+
+    in_window = [d for d in dates if lo <= _dte(d) <= hi]
+    if in_window:
+        return min(in_window, key=lambda d: abs(_dte(d) - centre))
+
+    near = [d for d in dates if (lo - tolerance_days) <= _dte(d) <= (hi + tolerance_days)]
+    if not near:
         return None
-    return min(in_window, key=lambda d: abs((date.fromisoformat(d) - today).days - centre))
+    return min(near, key=lambda d: abs(_dte(d) - centre))
 
 
 def fetch_option_chain(

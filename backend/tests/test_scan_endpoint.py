@@ -158,6 +158,75 @@ def test_scan_multiple_symbols_all_accounted_for(client):
     assert processed == set(universe)
 
 
+# ── Horizon-driven DTE window: hard-reject floor must respect hold_max_days ──
+
+def _dte_expiry(days_from_today: int) -> str:
+    from datetime import date, timedelta
+    return (date.today() + timedelta(days=days_from_today)).isoformat()
+
+
+def _force_passing_stock_score():
+    """Patches app.routers.scan.score_stock so the pre-screen/score gates
+    always pass — isolates the DTE hard-reject gate under test from the
+    unrelated stock-scoring pipeline, which the synthetic _MOCK_CANDLES series
+    doesn't reliably clear on its own."""
+    from app.scoring.stock_scorer import StockScoreCard
+    return patch(
+        "app.routers.scan.score_stock",
+        MagicMock(return_value=StockScoreCard(
+            symbol="AAPL", direction="Bullish", horizon="Swing", score=80, status="PASS",
+        )),
+    )
+
+
+def test_scan_swing_hold_rejects_a_contract_expiring_before_the_hold_ends(client):
+    """Adversarial-audit finding on the DTE-tolerance fix: a flat 10-day
+    hard-reject tolerance would let a Swing (5-15d hold) scan accept a 12-DTE
+    contract — expiring before the 15-day hold is even over. This exercises
+    the actual _process_symbol code path (via POST /api/scan), not just
+    validate_contract() directly — the unit-level tests in test_horizon_dte.py
+    proved the math; this proves scan.py actually wires hold_max_days through."""
+    too_short_chain = [{
+        "strike": 190, "expiry": _dte_expiry(12), "price": 2.50, "spread": 0.20,
+        "delta": 0.45, "theta": -0.05, "ivRank": 55, "dte": 12,
+        "right": "C", "volume": 500, "open_interest": 1000,
+    }]
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=too_short_chain,
+                             company="Apple Inc."), _force_passing_stock_score():
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
+            "hold_min_days": 5, "hold_max_days": 15,
+        })
+    data = r.json()
+    assert all(c["symbol"] != "AAPL" for c in data["candidates"])
+    rejected = next(rej for rej in data["rejected"] if rej["symbol"] == "AAPL")
+    assert "contracts rejected" in rejected["reason"]
+    assert "dte_too_short" in rejected["reason"]
+
+
+def test_scan_swing_hold_accepts_a_contract_within_the_widened_window(client):
+    """Same Swing hold, but a 20-DTE contract — inside the widened-but-floored
+    window (16-40d after the hold_max_days=15 floor) — must be allowed through
+    to scoring and produce a real candidate, not blocked by the DTE gate."""
+    ok_chain = [{
+        "strike": 190, "expiry": _dte_expiry(20), "price": 2.50, "spread": 0.20,
+        "delta": 0.45, "theta": -0.05, "ivRank": 55, "dte": 20,
+        "right": "C", "volume": 500, "open_interest": 1000,
+    }]
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=ok_chain,
+                             company="Apple Inc."), _force_passing_stock_score():
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
+            "hold_min_days": 5, "hold_max_days": 15,
+        })
+    data = r.json()
+    candidate_symbols = [c["symbol"] for c in data["candidates"]]
+    rejected = next((rej for rej in data["rejected"] if rej["symbol"] == "AAPL"), None)
+    assert "AAPL" in candidate_symbols or rejected is None or (
+        "dte_too_short" not in rejected["reason"] and "dte_too_long" not in rejected["reason"]
+    )
+
+
 # ── O-4: Raise scan concurrency 3 → 5 ────────────────────────────────────────
 
 def test_scan_concurrency_is_five():

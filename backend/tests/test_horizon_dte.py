@@ -55,6 +55,87 @@ def test_preferred_dte_override_does_not_affect_hard_reject_alone():
     assert "dte_too_short" in card.reject_reasons
 
 
+def test_tolerance_widened_hard_reject_accepts_a_chain_fetch_fallback_contract():
+    """Reproduces the Semi-annual (180-210d) pipeline bug: the chain-fetch
+    fallback (_nearest_expiration_in_window's tolerance) can hand back a 179d
+    contract for a 180-210d window. Without widening the validator's own
+    min_dte/max_dte by the same DTE_WINDOW_TOLERANCE_DAYS margin (as
+    scan.py's contract_overrides now does), that contract would be
+    hard-rejected as dte_too_short immediately after the fetch accepted it —
+    the fix must apply on both sides of the fetch/validate boundary."""
+    from app.scoring.dte_window import DTE_WINDOW_TOLERANCE_DAYS, widened_min_dte
+
+    contract = _make_contract(days=179)
+    lo, hi = 180, 210
+
+    card_raw = validate_contract(
+        contract, 70,
+        overrides={"min_dte": lo, "max_dte": hi, "preferred_dte_min": lo, "preferred_dte_max": hi},
+    )
+    assert "dte_too_short" in card_raw.reject_reasons
+
+    card_widened = validate_contract(
+        contract, 70,
+        overrides={
+            "min_dte": widened_min_dte(lo, hold_max_days=105),  # Semi-annual hold_max
+            "max_dte": hi + DTE_WINDOW_TOLERANCE_DAYS,
+            "preferred_dte_min": lo,
+            "preferred_dte_max": hi,
+        },
+    )
+    assert "dte_too_short" not in card_widened.reject_reasons
+
+
+def test_widened_min_dte_floors_at_hold_max_for_narrow_horizons():
+    """Adversarial-audit finding: a flat 10-day tolerance subtraction is safe
+    for wide windows but not narrow ones. Swing (hold 5-15d -> lo=10) minus a
+    flat 10 days would drop the floor to 1 — letting through a contract that
+    expires before a 15-day hold is even over, which directly contradicts this
+    module's "dte must exceed the intended hold" rule. The floor must never
+    drop below hold_max_days + 1."""
+    from app.scoring.dte_window import widened_min_dte
+
+    assert widened_min_dte(10, hold_max_days=15) == 16  # Swing
+    assert widened_min_dte(30, hold_max_days=45) == 46   # Position
+
+
+def test_widened_min_dte_matches_flat_tolerance_for_wide_horizons():
+    """Semi-annual/Annual: hold_max_days is already far below lo - tolerance,
+    so the hold_max floor is a no-op and the original AAPL 179d fix (full
+    10-day tolerance) is unaffected by the narrow-horizon guard."""
+    from app.scoring.dte_window import widened_min_dte
+
+    assert widened_min_dte(90, hold_max_days=60) == 80    # Quarterly
+    assert widened_min_dte(180, hold_max_days=105) == 170  # Semi-annual
+    assert widened_min_dte(330, hold_max_days=200) == 320  # Annual
+
+
+def test_widened_min_dte_without_hold_max_skips_the_clamp():
+    """No holding-horizon override in play (hold_max_days=None) -> no intended
+    hold to protect, so only the flat tolerance applies."""
+    from app.scoring.dte_window import widened_min_dte
+
+    assert widened_min_dte(180, hold_max_days=None) == 170
+    assert widened_min_dte(10, hold_max_days=None) == 1
+
+
+def test_swing_hard_reject_still_blocks_a_contract_expiring_before_the_hold_ends():
+    """A 12-DTE contract for a Swing 5-15d hold would (under a flat, unclamped
+    10-day tolerance) have been wrongly accepted — the option would expire
+    before the 15-day hold is over. With the hold_max floor it must still be
+    hard-rejected."""
+    from app.scoring.dte_window import widened_min_dte
+
+    contract = _make_contract(days=12)
+    lo, hi, hold_max = 10, 30, 15
+    card = validate_contract(contract, 70, overrides={
+        "min_dte": widened_min_dte(lo, hold_max),
+        "max_dte": hi + 10,
+        "preferred_dte_min": lo, "preferred_dte_max": hi,
+    })
+    assert "dte_too_short" in card.reject_reasons
+
+
 import pytest
 from pydantic import ValidationError
 
@@ -200,6 +281,66 @@ def test_get_contracts_without_hold_days_keeps_legacy_behaviour(monkeypatch):
     client = TestClient(app)
     client.get("/api/contracts", params={"symbol": "AAPL", "right": "C"})
     assert calls == [None]
+
+
+def test_get_contracts_does_not_hard_reject_a_tolerance_fallback_expiry(monkeypatch):
+    """Reproduces the Step 6 Contracts "everything shows REJECT" bug: for a
+    180-210d window, fetch_option_chain's tolerance fallback can hand back a
+    179d contract (see test_falls_back_to_nearest_expiry_within_tolerance_when_
+    window_is_empty in test_option_chain_expiry_selection.py). Without widening
+    /api/contracts' own min_dte/max_dte override by the same tolerance, that
+    179d contract was hard-rejected here as dte_too_short — forcing score=0
+    (contract_validator.py:256) — so every contract the frontend's
+    statusForScore() saw came back REJECT, even though the fetch had already
+    accepted the expiry as a reasonable stand-in."""
+    contract_179d = {
+        "id": "AAPL|330|179d|C", "symbol": "AAPL", "strike": 330,
+        "expiry": _expiry_str(179), "dte": 179, "dteTotal": 179,
+        "price": 27.1, "bid": 26.85, "ask": 27.4, "delta": 0.558, "theta": -0.02,
+        "volume": 224, "open_interest": 19059, "iv_rank": 30,
+    }
+    monkeypatch.setattr(
+        "app.routers.contracts.fetch_option_chain",
+        lambda symbol, option_type="C", dte_bounds=None: [contract_179d],
+    )
+    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 326.59)
+    client = TestClient(app)
+    resp = client.get("/api/contracts", params={
+        "symbol": "AAPL", "right": "C", "hold_min_days": 90, "hold_max_days": 105,
+        "max_price": 50.0,
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["score"] > 0   # score=0 is the hard-reject sentinel
+
+
+def test_get_contracts_still_rejects_a_too_short_contract_for_a_narrow_horizon(monkeypatch):
+    """The tolerance widening must not let a Swing (5-15d hold) scan accept a
+    12-DTE contract, which would expire before the 15-day hold is over. This
+    is the /api/contracts-endpoint counterpart of
+    test_swing_hard_reject_still_blocks_a_contract_expiring_before_the_hold_ends
+    in test_horizon_dte.py — same guard, different call site."""
+    contract_12d = {
+        "id": "AAPL|185|12d|C", "symbol": "AAPL", "strike": 185,
+        "expiry": _expiry_str(12), "dte": 12, "dteTotal": 12,
+        "price": 2.0, "bid": 1.9, "ask": 2.1, "delta": 0.45, "theta": -0.05,
+        "volume": 500, "open_interest": 1000, "iv_rank": 30,
+    }
+    monkeypatch.setattr(
+        "app.routers.contracts.fetch_option_chain",
+        lambda symbol, option_type="C", dte_bounds=None: [contract_12d],
+    )
+    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
+    client = TestClient(app)
+    resp = client.get("/api/contracts", params={
+        "symbol": "AAPL", "right": "C", "hold_min_days": 5, "hold_max_days": 15,
+        "max_price": 50.0,
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["score"] == 0   # still hard-rejected — expires before the hold ends
 
 
 def test_equal_min_max_dte_override_does_not_divide_by_zero():

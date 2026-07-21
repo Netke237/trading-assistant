@@ -15,6 +15,36 @@ would otherwise produce an untradeable 0-DTE contract.
 
 import logging
 
+# Monthly option cycles are spaced ~30-35 days apart; a fixed-width DTE window
+# can straddle a real expiration by a handful of days on either side (e.g. the
+# Semi-annual preset's 180-210d window missing listed 179d/214d expiries).
+# Shared by the chain-fetch fallback (market.py's _nearest_expiration_in_window)
+# and the contract hard-reject bounds (scan.py's contract_overrides) so a
+# contract the fetch accepted as "close enough" isn't then hard-rejected by a
+# stricter min_dte/max_dte than the one the fetch actually used.
+DTE_WINDOW_TOLERANCE_DAYS = 10
+
+
+def widened_min_dte(lo: int, hold_max_days: int | None) -> int:
+    """Lower hard-reject bound after applying DTE_WINDOW_TOLERANCE_DAYS, floored
+    so it can never drop below the holding period itself.
+
+    A flat tolerance subtraction is safe for wide windows (Semi-annual: lo=180,
+    hold_max_days=105 — lo-10=170 stays far above hold_max) but not for narrow
+    ones (Swing: lo=10, hold_max_days=15 — lo-10=0 would accept a contract that
+    expires before the intended hold is even over, violating this module's own
+    "dte must exceed the intended hold" rule). Clamping to hold_max_days+1
+    guarantees the contract always outlives the hold, regardless of how far the
+    flat tolerance would otherwise pull the floor down.
+
+    hold_max_days=None (no holding-horizon override in play) skips the clamp —
+    there is no intended hold to protect.
+    """
+    floor = max(1, lo - DTE_WINDOW_TOLERANCE_DAYS)
+    if hold_max_days is not None:
+        floor = max(floor, hold_max_days + 1)
+    return floor
+
 
 def dte_window(hold_min: int, hold_max: int, multiplier: float) -> tuple[int, int]:
     """Return the (min_dte, max_dte) contract window for a holding period.
