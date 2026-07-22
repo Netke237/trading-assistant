@@ -5,7 +5,11 @@ import type { PositionCardData } from '@/types/stockDomain';
 
 // api + heavy children are modules (not stores) — mocking them is correct.
 jest.mock('@/lib/api', () => ({ api: { getBrokerStatus: jest.fn().mockResolvedValue({}) } }));
-jest.mock('@/components/organisms/StockAutoTradeArm', () => ({ StockAutoTradeArm: () => null }));
+// Records the props it was called with so tests can assert on the derived `direction` prop.
+const mockStockAutoTradeArm = jest.fn((_props: unknown) => null);
+jest.mock('@/components/organisms/StockAutoTradeArm', () => ({
+  StockAutoTradeArm: (props: unknown) => mockStockAutoTradeArm(props),
+}));
 jest.mock('@/components/molecules/MarketSentiment', () => ({ MarketSentiment: () => null }));
 jest.mock('@/components/molecules/FundamentalHealthCard', () => ({ FundamentalHealthCard: () => null }));
 
@@ -83,5 +87,19 @@ describe('StockPositionCard — Add to Portfolio outcome states', () => {
     const btn = screen.getByRole('button', { name: /add to portfolio/i });
     expect(btn).not.toBeDisabled();
     expect(screen.queryByText(/will sync/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('StockPositionCard — direction forwarded to StockAutoTradeArm', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('forwards direction="Bearish" for a Bearish card', () => {
+    render(<StockPositionCard card={{ ...makeCard(), direction: 'Bearish' }} strategyKey="pullback_ema" />);
+
+    expect(mockStockAutoTradeArm).toHaveBeenCalled();
+    const props = mockStockAutoTradeArm.mock.calls[0]?.[0] as { direction: string } | undefined;
+    expect(props?.direction).toBe('Bearish');
   });
 });
