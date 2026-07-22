@@ -99,8 +99,9 @@ class StrategyWatchStore:
             raise ValueError(f"unknown strategy: {strategy_key}")
         with self._lock:
             for w in self._watches:
-                if w["symbol"] == symbol and w["strategy_key"] == strategy_key:
-                    raise ValueError(f"{symbol}/{strategy_key} already watched")
+                if (w["symbol"] == symbol and w["strategy_key"] == strategy_key
+                        and w.get("direction", "Bullish") == direction):
+                    raise ValueError(f"{symbol}/{strategy_key}/{direction} already watched")
             entry = {
                 "id": f"wch_{uuid.uuid4().hex[:12]}",
                 "symbol": symbol,

@@ -53,6 +53,18 @@ async def test_add_duplicate_returns_409(app):
 
 
 @pytest.mark.asyncio
+async def test_add_same_symbol_strategy_different_direction_returns_201(app):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        bullish = await ac.post("/api/strategy-watch/",
+                            json={"symbol": "AAPL", "strategy_key": "ma_crossover", "direction": "Bullish"})
+        bearish = await ac.post("/api/strategy-watch/",
+                            json={"symbol": "AAPL", "strategy_key": "ma_crossover", "direction": "Bearish"})
+    assert bullish.status_code == 201
+    assert bearish.status_code == 201
+    assert bullish.json()["id"] != bearish.json()["id"]
+
+
+@pytest.mark.asyncio
 async def test_bulk_add(app):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
         resp = await ac.post("/api/strategy-watch/bulk",
