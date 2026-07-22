@@ -9,8 +9,8 @@ interface StrategyWatchStore {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  add: (symbol: string, strategyKey: string) => Promise<void>;
-  addBulk: (symbols: string[], strategyKey: string) => Promise<void>;
+  add: (symbol: string, strategyKey: string, direction?: 'Bullish' | 'Bearish') => Promise<void>;
+  addBulk: (symbols: string[], strategyKey: string, direction?: 'Bullish' | 'Bearish') => Promise<void>;
   remove: (id: string) => Promise<void>;
   setEnabled: (id: string, enabled: boolean) => Promise<void>;
   saveSchedule: (cfg: StrategyWatchSchedule) => Promise<void>;
@@ -36,18 +36,18 @@ export const useStrategyWatchStore = create<StrategyWatchStore>((set, get) => ({
     }
   },
 
-  add: async (symbol, strategyKey) => {
+  add: async (symbol, strategyKey, direction = 'Bullish') => {
     try {
-      await api.addStrategyWatch(symbol, strategyKey);
+      await api.addStrategyWatch(symbol, strategyKey, direction);
       await get().refresh();
     } catch (e) {
       set({ error: (e as Error).message });
     }
   },
 
-  addBulk: async (symbols, strategyKey) => {
+  addBulk: async (symbols, strategyKey, direction = 'Bullish') => {
     try {
-      await api.addStrategyWatchesBulk(symbols, strategyKey);
+      await api.addStrategyWatchesBulk(symbols, strategyKey, direction);
       await get().refresh();
     } catch (e) {
       set({ error: (e as Error).message });
