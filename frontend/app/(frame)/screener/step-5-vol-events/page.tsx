@@ -3,7 +3,7 @@
 /*
  * Screener Step 5 — Volatility + Events gate.
  * Per-symbol table: IV rank (with mini bar), IV percentile, next event proximity.
- * CAUTION when earnings ≤ 7d; REJECT when ≤ 3d.
+ * Event proximity thresholds are horizon-specific (EVENT_WINDOWS below).
  * Gate = worst of (IV status, event proximity status).
  */
 
@@ -16,7 +16,6 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
-import { eventProximity } from '@/lib/date';
 import { worstStatus, type Status } from '@/lib/status';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
@@ -103,10 +102,17 @@ export default function Step5Page() {
           const pctl = c?.contractDetails?.ivPercentile;
           const hasIv = rank != null && rank > 0;
           const ivSt = hasIv ? ivStatus(rank) : 'NO_DATA';
-          const prox = r.nextEventDays != null ? eventProximity(r.nextEventDays) : 'distant';
+          // Gate must use THIS scan's horizon-specific window (evCaution/evReject,
+          // already computed above from EVENT_WINDOWS) — not a fixed cutoff. The
+          // generic eventProximity() helper (frontend/lib/date.ts) is intentionally
+          // NOT used here: it backs the EventFlag badge's fixed 3d/7d "how soon"
+          // color and has no notion of scan horizon, which previously caused this
+          // gate to silently ignore the Position/Swing/Intraday window shown in
+          // this page's own header sentence above.
           const proxStatus: Status =
-            prox === 'imminent' ? 'REJECT'
-            : prox === 'near'   ? 'CAUTION'
+            r.nextEventDays == null        ? 'PASS'
+            : r.nextEventDays <= evReject  ? 'REJECT'
+            : r.nextEventDays <= evCaution ? 'CAUTION'
             : 'PASS';
           const gate: Status = worstStatus(ivSt, proxStatus);
 
