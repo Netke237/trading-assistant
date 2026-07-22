@@ -3,8 +3,10 @@
 
 The state machine (per watch) is the dedup mechanism: it only returns events on a
 genuine transition (idle→entry, armed→exit_stop/exit_target, armed→reversal), so a
-standing setup never re-alerts. Reversal is wired but dormant — the four current
-strategy functions emit Bullish-only signals.
+standing setup never re-alerts. Reversal is wired but still dormant in practice:
+each watch's direction (Bullish/Bearish) is fixed at creation and there is no
+endpoint to change it later, so the signal function is evaluated with the same
+direction every tick and can never disagree with the armed state's direction.
 """
 from __future__ import annotations
 
