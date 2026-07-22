@@ -73,6 +73,27 @@ def test_update_state_reset_genuinely_removes_a_key_not_reintroduced_by_fresh_st
     assert "pending_entry_since" not in state_after
 
 
+def test_load_migrates_legacy_entries_missing_direction(tmp_path):
+    path = tmp_path / "watches.yaml"
+    path.write_text(
+        "schedule: {enabled: false, mode: eod, eod_time: '16:15', poll_hours: 4, sustain_minutes: 0}\n"
+        "watches:\n"
+        "- id: wch_legacy001\n"
+        "  symbol: AAPL\n"
+        "  strategy_key: pullback_ema\n"
+        "  params_override: {}\n"
+        "  enabled: true\n"
+        "  created_at: '2026-06-13T20:48:29.893224+00:00'\n"
+        "  last_state: {phase: idle, direction: null, entry_price: null, stop_price: null,\n"
+        "               target_price: null, last_event: null, last_event_at: null}\n"
+        "  watch_type: strategy\n"
+        "  trigger_def: null\n"
+        "  interval: 1D\n"
+    )
+    store = StrategyWatchStore(path=path)
+    assert store.list_watches()[0]["direction"] == "Bullish"
+
+
 def test_schedule_defaults_and_update(tmp_path):
     store = StrategyWatchStore(path=tmp_path / "watches.yaml")
     sched = store.get_schedule()

@@ -72,6 +72,7 @@ class StrategyWatchStore:
                 w.setdefault("interval", "1D")
                 w.setdefault("last_state", _fresh_state())
                 w.setdefault("enabled", True)
+                w.setdefault("direction", "Bullish")
             self._schedule = {**_DEFAULT_SCHEDULE, **(raw.get("schedule") or {})}
 
     def save(self) -> None:
