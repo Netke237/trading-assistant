@@ -82,6 +82,7 @@ export interface StrategyWatch {
   id: string;
   symbol: string;
   strategy_key: string;
+  direction: 'Bullish' | 'Bearish';
   params_override: Record<string, unknown>;
   enabled: boolean;
   created_at: string;
@@ -503,10 +504,10 @@ export const api = {
 
   getStrategyWatches: () =>
     get<StrategyWatch[]>('/api/strategy-watch/'),
-  addStrategyWatch: (symbol: string, strategy_key: string) =>
-    post<StrategyWatch>('/api/strategy-watch/', { symbol, strategy_key }),
-  addStrategyWatchesBulk: (symbols: string[], strategy_key: string) =>
-    post<{ added: number; watches: StrategyWatch[] }>('/api/strategy-watch/bulk', { symbols, strategy_key }),
+  addStrategyWatch: (symbol: string, strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish') =>
+    post<StrategyWatch>('/api/strategy-watch/', { symbol, strategy_key, direction }),
+  addStrategyWatchesBulk: (symbols: string[], strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish') =>
+    post<{ added: number; watches: StrategyWatch[] }>('/api/strategy-watch/bulk', { symbols, strategy_key, direction }),
   removeStrategyWatch: (id: string) =>
     del(`/api/strategy-watch/${id}`),
   setStrategyWatchEnabled: (id: string, enabled: boolean) =>
