@@ -16,6 +16,7 @@ const MODE_LABELS: Record<StockArmMode, string> = {
 interface StockAutoTradeArmProps {
   symbol: string;
   strategyKey: string;
+  direction: 'Bullish' | 'Bearish';
   afterScanArmed: boolean;
   onAfterScanToggle: (symbol: string, armed: boolean) => void;
 }
@@ -23,6 +24,7 @@ interface StockAutoTradeArmProps {
 export function StockAutoTradeArm({
   symbol,
   strategyKey,
+  direction,
   afterScanArmed,
   onAfterScanToggle,
 }: StockAutoTradeArmProps) {
@@ -35,7 +37,7 @@ export function StockAutoTradeArm({
     setWorking(true);
     setError(null);
     try {
-      const res = await api.addStrategyWatch(symbol, strategyKey);
+      const res = await api.addStrategyWatch(symbol, strategyKey, direction);
       setWatchId(res.id);
     } catch (e) {
       setError(String(e));

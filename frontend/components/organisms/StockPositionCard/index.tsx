@@ -416,6 +416,7 @@ export function StockPositionCard({
       <StockAutoTradeArm
         symbol={card.symbol}
         strategyKey={strategyKey}
+        direction={card.direction === 'Bearish' ? 'Bearish' : 'Bullish'}
         afterScanArmed={afterScanArmed ?? false}
         onAfterScanToggle={onAfterScanToggle ?? (() => {})}
       />
