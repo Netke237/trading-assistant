@@ -128,3 +128,19 @@ def test_dte_collapsed_window_out_of_range_does_not_divide_by_zero():
     )
     assert 0 <= card.breakdown.dte_score <= 25
     assert "dte_outside_preferred" in card.soft_flags
+
+
+def test_dal_style_near_miss_scores_in_window_once_preferred_band_is_widened():
+    """Reproduces Kenneth's reported DAL case directly: Position horizon
+    (90-105d hold -> ideal window 180-210), contract at 177 DTE (3 days short
+    of the ideal floor). Once preferred_dte_min/max are widened by the same
+    10-day tolerance as the hard-reject bounds, 177 falls INSIDE the widened
+    170-220 preferred band (in-window taper), not in the out-of-window decay
+    branch -- so it must no longer carry the dte_outside_preferred flag."""
+    from app.scoring.dte_window import widen_contract_overrides_for_dte
+
+    overrides = widen_contract_overrides_for_dte({}, lo=180, hi=210, hold_max_days=105)
+    card = validate_contract(_contract_with_expiry(177), stock_score=70, overrides=overrides)
+    assert "dte_outside_preferred" not in card.soft_flags
+    # centre=(170+220)/2=195, half_range=25 -> 100*(1-|177-195|/25) = 100*(1-18/25) = 28
+    assert card.breakdown.dte_score == 28

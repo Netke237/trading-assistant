@@ -55,7 +55,7 @@ from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.contract_validator import dte_holding_multiplier
-from app.scoring.dte_window import resolve_dte_bounds, DTE_WINDOW_TOLERANCE_DAYS, widened_min_dte
+from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.reward_risk import estimate_rr
 from app.scoring.trade_plan import build_trade_plan
 from types import SimpleNamespace
@@ -483,20 +483,10 @@ async def _process_symbol(
     contract_overrides = dict(overrides or {})
     if dte_bounds is not None:
         lo, hi = dte_bounds
-        # Hard-reject bounds are widened by the same tolerance the chain fetch
-        # uses (_nearest_expiration_in_window) — otherwise a contract the fetch
-        # accepted as "close enough" (e.g. 179d for a 180-210d window) would be
-        # hard-rejected here as dte_too_short. widened_min_dte floors the widened
-        # min at hold_max_days+1 so short horizons (Swing, Position) can't accept
-        # a contract that expires before the intended hold is even over — a flat
-        # tolerance is safe for wide windows (Semi-annual/Annual) but would gut
-        # that safety margin for narrow ones. Soft-scoring still favours the true
-        # window via preferred_dte_min/max, so contracts inside [lo, hi] keep
-        # ranking above the tolerance-band ones.
-        contract_overrides["min_dte"] = widened_min_dte(lo, hold_max_days)
-        contract_overrides["max_dte"] = hi + DTE_WINDOW_TOLERANCE_DAYS
-        contract_overrides["preferred_dte_min"] = lo
-        contract_overrides["preferred_dte_max"] = hi
+        # Hard-reject AND soft-score preferred-band bounds are both widened by
+        # the same DTE_WINDOW_TOLERANCE_DAYS -- see widen_contract_overrides_for_dte's
+        # docstring for why the two must move together, not just the hard bound.
+        contract_overrides = widen_contract_overrides_for_dte(contract_overrides, lo, hi, hold_max_days)
     scored = [(validate_contract(c, card.score, overrides=contract_overrides or None), c)
               for c in augmented]
 

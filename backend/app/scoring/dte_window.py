@@ -46,6 +46,40 @@ def widened_min_dte(lo: int, hold_max_days: int | None) -> int:
     return floor
 
 
+def widen_contract_overrides_for_dte(
+    overrides: dict, lo: int, hi: int, hold_max_days: int | None,
+) -> dict:
+    """Merge DTE hard-reject and soft-score preferred-band overrides into
+    `overrides` (mutated in place and returned), both widened by the same
+    DTE_WINDOW_TOLERANCE_DAYS.
+
+    Both bounds get IDENTICAL widened values: min_dte/max_dte (hard-reject)
+    already forgive a contract landing a few days short/over the ideal [lo, hi]
+    window, because listed option expirations rarely land exactly on it (see
+    DTE_WINDOW_TOLERANCE_DAYS's docstring). Previously preferred_dte_min/max
+    (which drive the soft DTE-fit SCORE, not the hard reject/accept decision)
+    stayed at the raw lo/hi, so a contract already forgiven by the hard-reject
+    check (e.g. 177 DTE against a 180-210 window) still took a real scoring
+    penalty for being "outside" a boundary the hard-reject logic had already
+    decided was close enough. Widening both identically removes that
+    inconsistency — a contract that isn't hard-rejected for being close to the
+    window is no longer penalized as if it were far outside it either.
+
+    Single source of truth for both callers of this logic (scan.py's scan
+    pipeline and contracts.py's /api/contracts recompute endpoint) — kept here
+    specifically so the two don't drift out of sync the way they already had
+    (identical duplicated blocks, only one of which would get patched by a
+    caller applying this fix inline instead of through one shared function).
+    """
+    widened_min = widened_min_dte(lo, hold_max_days)
+    widened_max = hi + DTE_WINDOW_TOLERANCE_DAYS
+    overrides["min_dte"] = widened_min
+    overrides["max_dte"] = widened_max
+    overrides["preferred_dte_min"] = widened_min
+    overrides["preferred_dte_max"] = widened_max
+    return overrides
+
+
 def dte_window(hold_min: int, hold_max: int, multiplier: float) -> tuple[int, int]:
     """Return the (min_dte, max_dte) contract window for a holding period.
 

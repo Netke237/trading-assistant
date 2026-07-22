@@ -11,7 +11,7 @@ from app.schemas import OptionContract, TradeEntry, TradeExit
 from app.data.market import fetch_option_chain, fetch_price, fetch_contract_quote_async, fetch_price_async
 from app.data.augment import _augment
 from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
-from app.scoring.dte_window import resolve_dte_bounds, DTE_WINDOW_TOLERANCE_DAYS, widened_min_dte
+from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.trade_plan import build_trade_plan
 # Shared with app.routers.scan — both build a trade plan off the same
 # reward_risk config so the scan and the per-contract recompute endpoint agree.
@@ -65,20 +65,11 @@ async def get_contracts(
             log_context="GET /api/contracts",
         )
         if dte_bounds is not None:
-            # Hard-reject bounds are widened by the same tolerance the chain
-            # fetch uses (fetch_option_chain's _nearest_expiration_in_window) —
-            # otherwise a contract the fetch accepted as "close enough" (e.g.
-            # 179d for a 180-210d window) gets hard-rejected here as
-            # dte_too_short. widened_min_dte floors the widened min at
-            # hold_max_days+1 so short horizons can't accept a contract that
-            # expires before the intended hold is even over. preferred_dte_min/max
-            # stay at the true window so scoring still favours contracts closer
-            # to the intended hold.
-            contract_overrides = {
-                "min_dte": widened_min_dte(dte_bounds[0], hold_max_days),
-                "max_dte": dte_bounds[1] + DTE_WINDOW_TOLERANCE_DAYS,
-                "preferred_dte_min": dte_bounds[0], "preferred_dte_max": dte_bounds[1],
-            }
+            # Hard-reject AND soft-score preferred-band bounds are both widened
+            # by the same DTE_WINDOW_TOLERANCE_DAYS -- see
+            # widen_contract_overrides_for_dte's docstring for why the two must
+            # move together, not just the hard bound.
+            contract_overrides = widen_contract_overrides_for_dte({}, dte_bounds[0], dte_bounds[1], hold_max_days)
 
     # 1. Fetch raw option chain
     raw_chain = fetch_option_chain(symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds) or []

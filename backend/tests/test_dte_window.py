@@ -89,3 +89,43 @@ def test_resolve_dte_bounds_raises_on_inverted_range():
     from app.scoring.dte_window import resolve_dte_bounds
     with pytest.raises(ValueError):
         resolve_dte_bounds(100, 15, lambda: 2.0)
+
+
+def test_widen_contract_overrides_widens_both_hard_and_preferred_bounds_identically():
+    """Position horizon: 90-105 day hold -> dte_window gives lo=180, hi=210.
+    Both min_dte/max_dte (hard) and preferred_dte_min/max (soft score) must get
+    the identical +/-10 day tolerance -- this is the core of the fix."""
+    from app.scoring.dte_window import widen_contract_overrides_for_dte
+    overrides = widen_contract_overrides_for_dte({}, lo=180, hi=210, hold_max_days=105)
+    assert overrides["min_dte"] == overrides["preferred_dte_min"] == 170
+    assert overrides["max_dte"] == overrides["preferred_dte_max"] == 220
+
+
+def test_widen_contract_overrides_applies_the_same_narrow_horizon_floor_clamp():
+    """Swing-like narrow horizon: lo=10, hold_max_days=15. widened_min_dte's
+    floor clamp (hold_max_days+1=16) must apply to preferred_dte_min the exact
+    same way it already applies to min_dte -- a contract can't be scored as
+    'ideal' at a DTE that would expire before the hold is even over."""
+    from app.scoring.dte_window import widen_contract_overrides_for_dte
+    overrides = widen_contract_overrides_for_dte({}, lo=10, hi=30, hold_max_days=15)
+    assert overrides["min_dte"] == overrides["preferred_dte_min"] == 16
+    assert overrides["max_dte"] == overrides["preferred_dte_max"] == 40
+
+
+def test_widen_contract_overrides_preserves_unrelated_keys():
+    """Must merge into (not replace) whatever overrides dict is already in
+    progress -- e.g. an unrelated max_price key from a prior step."""
+    from app.scoring.dte_window import widen_contract_overrides_for_dte
+    overrides = widen_contract_overrides_for_dte({"max_price": 50.0}, lo=180, hi=210, hold_max_days=105)
+    assert overrides["max_price"] == 50.0
+    assert overrides["min_dte"] == 170
+
+
+def test_widen_contract_overrides_matches_the_existing_widened_min_dte_helper():
+    """Direct equivalence check against the already-tested widened_min_dte() /
+    DTE_WINDOW_TOLERANCE_DAYS building blocks, so this test fails if the new
+    helper's arithmetic ever drifts from the primitives it's built on."""
+    from app.scoring.dte_window import widen_contract_overrides_for_dte, widened_min_dte, DTE_WINDOW_TOLERANCE_DAYS
+    overrides = widen_contract_overrides_for_dte({}, lo=180, hi=210, hold_max_days=105)
+    assert overrides["min_dte"] == widened_min_dte(180, 105)
+    assert overrides["max_dte"] == 210 + DTE_WINDOW_TOLERANCE_DAYS
