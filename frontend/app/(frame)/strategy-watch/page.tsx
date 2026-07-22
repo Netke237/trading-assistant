@@ -26,19 +26,21 @@ export default function StrategyWatchPage() {
   const [bulkSymbols, setBulkSymbols] = useState('');
   const [bulkStrategy, setBulkStrategy] = useState(STRATEGIES[0].key);
   const [evalMsg, setEvalMsg] = useState('');
+  const [direction, setDirection] = useState<'Bullish' | 'Bearish'>('Bullish');
+  const [bulkDirection, setBulkDirection] = useState<'Bullish' | 'Bearish'>('Bullish');
 
   useEffect(() => { refresh(); }, [refresh]);
 
   const onAdd = async () => {
     if (!symbol.trim()) return;
-    await add(symbol.trim(), strategyKey);
+    await add(symbol.trim(), strategyKey, direction);
     setSymbol('');
   };
 
   const onBulkAdd = async () => {
     const syms = bulkSymbols.split(',').map((s) => s.trim()).filter(Boolean);
     if (syms.length === 0) return;
-    await addBulk(syms, bulkStrategy);
+    await addBulk(syms, bulkStrategy, bulkDirection);
     setBulkSymbols('');
   };
 
@@ -67,6 +69,11 @@ export default function StrategyWatchPage() {
                   onChange={(e) => setStrategyKey(e.target.value as typeof strategyKey)}>
             {STRATEGIES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
+          <select className={styles.select} value={direction}
+                  onChange={(e) => setDirection(e.target.value as 'Bullish' | 'Bearish')}>
+            <option value="Bullish">Bullish</option>
+            <option value="Bearish">Bearish</option>
+          </select>
           <button className={styles.btn} onClick={onAdd}>Add</button>
         </div>
         <div className={styles.row}>
@@ -75,6 +82,11 @@ export default function StrategyWatchPage() {
           <select className={styles.select} value={bulkStrategy}
                   onChange={(e) => setBulkStrategy(e.target.value as typeof bulkStrategy)}>
             {STRATEGIES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+          <select className={styles.select} value={bulkDirection}
+                  onChange={(e) => setBulkDirection(e.target.value as 'Bullish' | 'Bearish')}>
+            <option value="Bullish">Bullish</option>
+            <option value="Bearish">Bearish</option>
           </select>
           <button className={styles.btn} onClick={onBulkAdd}>Bulk add</button>
         </div>
@@ -114,12 +126,17 @@ export default function StrategyWatchPage() {
       <div className={styles.section}>
         <strong>Watched ({watches.length})</strong>
         <table className={styles.table}>
-          <thead><tr><th>Symbol</th><th>Strategy</th><th>State</th><th>Enabled</th><th></th></tr></thead>
+          <thead><tr><th>Symbol</th><th>Strategy</th><th>Direction</th><th>State</th><th>Enabled</th><th></th></tr></thead>
           <tbody>
             {watches.map((w) => (
               <tr key={w.id}>
                 <td>{w.symbol}</td>
                 <td>{STRATEGIES.find((s) => s.key === w.strategy_key)?.label ?? w.strategy_key}</td>
+                <td>
+                  <span className={`${styles.pill} ${w.direction === 'Bearish' ? styles.pillBearish : styles.pillBullish}`}>
+                    {w.direction === 'Bearish' ? 'Bearish' : 'Bullish'}
+                  </span>
+                </td>
                 <td>{phasePill(w.last_state.phase)}</td>
                 <td><input type="checkbox" checked={w.enabled}
                            onChange={(e) => setEnabled(w.id, e.target.checked)} /></td>

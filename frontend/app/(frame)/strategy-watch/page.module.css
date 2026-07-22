@@ -16,4 +16,6 @@
 .pill { display: inline-flex; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 500; }
 .pillIdle    { background: color-mix(in srgb, var(--text-dim) 14%, var(--bg-surface)); color: var(--text-dim); }
 .pillArmed   { background: color-mix(in srgb, var(--pass) 14%, var(--bg-surface)); color: var(--pass); }
+.pillBullish { background: color-mix(in srgb, var(--pass) 14%, var(--bg-surface)); color: var(--pass); }
+.pillBearish { background: color-mix(in srgb, var(--reject) 14%, var(--bg-surface)); color: var(--reject); }
 .error { color: var(--reject); font-size: 12px; }
