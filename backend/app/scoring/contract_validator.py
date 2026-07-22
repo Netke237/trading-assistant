@@ -160,16 +160,22 @@ def _score_dte(contract: dict, cfg: dict) -> tuple[int, list[str]]:
 
     d_min = sr["preferred_dte_min"]
     d_max = sr["preferred_dte_max"]
+    half_range = (d_max - d_min) / 2
 
     if d_min <= dte <= d_max:
         centre = (d_min + d_max) / 2
-        half_range = (d_max - d_min) / 2
         # half_range is 0 when a hold-derived override collapses min==max (e.g. a
         # Custom range typed as the same day twice) — dte sits exactly on centre
         # in that case, so it's a perfect score, not a divide by zero.
         score = 100 if half_range == 0 else int(100 * (1 - abs(dte - centre) / half_range))
     else:
-        score = 25
+        # A flat score here previously scored a 1-day miss identically to a
+        # 100-day miss (and higher than sitting exactly on the boundary, which
+        # scores 0 above) — decay linearly from 25 at the boundary to 0 over a
+        # span equal to half_range, so misses are graded by how far off they are.
+        distance = d_min - dte if dte < d_min else dte - d_max
+        decay_span = half_range if half_range > 0 else 1
+        score = max(0, int(25 * (1 - distance / decay_span)))
         flags.append("dte_outside_preferred")
     return score, flags
 
