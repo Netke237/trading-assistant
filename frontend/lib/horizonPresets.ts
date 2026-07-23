@@ -54,6 +54,18 @@ export function scoringHorizonForHold(holdMax: number): ScoringHorizon {
 }
 
 /**
+ * Which row of PARAM_DEFAULTS_PER_HORIZON (frontend/lib/executionParamDefaults.ts)
+ * to read for a given horizon selection. Custom has no fixed row of its own — it
+ * must resolve to whichever scoring horizon the current hold-days range actually
+ * falls into, same boundaries as scoringHorizonForHold. Every other key passes
+ * through unchanged, preserving its own distinct table row (e.g. Quarterly stays
+ * Quarterly, even though it happens to share values with Position today).
+ */
+export function resolveParamsHorizon(hz: HorizonKey, holdMax: number): HorizonKey {
+  return hz === 'Custom' ? scoringHorizonForHold(holdMax) : hz;
+}
+
+/**
  * Display-only preview of the window the backend will enforce.
  * Mirrors backend/app/scoring/dte_window.py exactly.
  */

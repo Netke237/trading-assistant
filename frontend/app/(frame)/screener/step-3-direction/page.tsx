@@ -20,8 +20,8 @@ import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
 import {
-  HORIZON_PRESETS, presetByKey, previewDteWindow, scoringHorizonForHold, horizonDisplayString,
-  type HorizonKey,
+  HORIZON_PRESETS, presetByKey, previewDteWindow, horizonDisplayString,
+  resolveParamsHorizon, type HorizonKey, type ScoringHorizon,
 } from '@/lib/horizonPresets';
 import { PARAM_DEFAULTS_PER_HORIZON, type ParamDefaults } from '@/lib/executionParamDefaults';
 
@@ -685,7 +685,9 @@ export default function Step3Page() {
   }, []);
 
   function syncToStore(newDir: Direction, newHz: HorizonKey, newMin: number, newMax: number) {
-    const scoringHz = newHz === 'Custom' ? scoringHorizonForHold(newMax) : presetByKey(newHz).scoringHorizon;
+    // Equivalent to the old ternary for every newHz value: resolveParamsHorizon
+    // resolves Custom dynamically and passes every other key through unchanged.
+    const scoringHz = presetByKey(resolveParamsHorizon(newHz, newMax)).scoringHorizon;
     setContext({
       universe:      context?.universe ?? 'SP500',
       direction:     newDir,
@@ -709,7 +711,9 @@ export default function Step3Page() {
     setHoldMin(nextMin);
     setHoldMax(nextMax);
     syncToStore(dir, h, nextMin, nextMax);
-    const hd = PARAM_DEFAULTS_PER_HORIZON[h];
+    // Same resolution as `defaults` above — both call sites now share one
+    // implementation, so they cannot drift apart from each other again.
+    const hd = PARAM_DEFAULTS_PER_HORIZON[resolveParamsHorizon(h, nextMax)];
     useScanStore.getState().setScanOverrides({
       ma_type:                hd.ma_type                as string,
       fast_ema:               hd.fast_ema               as number,
@@ -745,7 +749,7 @@ export default function Step3Page() {
   };
 
   const custom = hz === 'Custom';
-  const defaults = PARAM_DEFAULTS_PER_HORIZON[hz];
+  const defaults = PARAM_DEFAULTS_PER_HORIZON[resolveParamsHorizon(hz, holdMax)];
   const [previewMinDte, previewMaxDte] = previewDteWindow(holdMin, holdMax);
   const displayDefaults: ParamDefaults = { ...defaults, min_dte: previewMinDte, max_dte: previewMaxDte };
 
@@ -755,7 +759,10 @@ export default function Step3Page() {
 
   const enforcedDte = scanResult?.dte_window;   // set by the backend on every scan
 
-  const weightsKey = hz === 'Custom' ? scoringHorizonForHold(holdMax) : presetByKey(hz).scoringHorizon;
+  // Equivalent to the old ternary for every hz value — consolidated onto the
+  // same helper `defaults` above uses, closing this independent copy of the
+  // decision instead of leaving it to drift on its own.
+  const weightsKey: ScoringHorizon = presetByKey(resolveParamsHorizon(hz, holdMax)).scoringHorizon;
 
   const stocksDefs  = PARAM_DEFS.filter((d) => d.section === 'stocks' || d.section === 'all');
   const optionsDefs = PARAM_DEFS.filter((d) => d.section === 'options' || d.section === 'all');

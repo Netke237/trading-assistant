@@ -3,6 +3,7 @@ import {
   presetByKey,
   previewDteWindow,
   scoringHorizonForHold,
+  resolveParamsHorizon,
   migrateLegacyHorizon,
   sanitizeHoldDays,
 } from '../horizonPresets';
@@ -53,6 +54,23 @@ describe('scoringHorizonForHold', () => {
     expect(scoringHorizonForHold(20)).toBe('Swing');
     expect(scoringHorizonForHold(21)).toBe('Position');
     expect(scoringHorizonForHold(185)).toBe('Position');
+  });
+});
+
+describe('resolveParamsHorizon', () => {
+  it('resolves Custom to the scoring horizon derived from holdMax, at the same boundaries as scoringHorizonForHold', () => {
+    expect(resolveParamsHorizon('Custom', 2)).toBe('Intraday');
+    expect(resolveParamsHorizon('Custom', 4)).toBe('Intraday');
+    expect(resolveParamsHorizon('Custom', 5)).toBe('Swing');
+    expect(resolveParamsHorizon('Custom', 20)).toBe('Swing');
+    expect(resolveParamsHorizon('Custom', 21)).toBe('Position');
+    expect(resolveParamsHorizon('Custom', 200)).toBe('Position');
+  });
+
+  it('passes every non-Custom key through unchanged, preserving its own defaults-table row', () => {
+    for (const key of ['Intraday', 'Swing', 'Position', 'Quarterly', 'SemiAnnual', 'Annual'] as const) {
+      expect(resolveParamsHorizon(key, 999)).toBe(key);
+    }
   });
 });
 

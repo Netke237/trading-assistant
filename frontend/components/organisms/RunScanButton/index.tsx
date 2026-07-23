@@ -21,7 +21,7 @@ import { useAlertStore } from '@/lib/alertStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import { runStockScan } from '@/lib/stockScan';
-import { presetByKey, scoringHorizonForHold, sanitizeHoldDays } from '@/lib/horizonPresets';
+import { presetByKey, resolveParamsHorizon, sanitizeHoldDays } from '@/lib/horizonPresets';
 import styles from './index.module.css';
 
 function nowLocalISO(): string {
@@ -106,9 +106,9 @@ export function RunScanButton() {
     // The backend scorer knows only Intraday/Swing/Position. Long-dated presets
     // and Custom map onto one of those for scoring; the DTE window itself comes
     // from the hold days, computed backend-side.
-    const horizon: string = presetKey === 'Custom'
-      ? scoringHorizonForHold(holdMax)
-      : presetByKey(presetKey).scoringHorizon;
+    // Equivalent to the old ternary for every presetKey value (same reasoning
+    // as page.tsx's weightsKey/scoringHz).
+    const horizon: string = presetByKey(resolveParamsHorizon(presetKey, holdMax)).scoringHorizon;
 
     const currentRegime = useScanStore.getState().combinedRegime;
     if (currentRegime === 'REJECT' && !regimeConfirmedRef.current) {

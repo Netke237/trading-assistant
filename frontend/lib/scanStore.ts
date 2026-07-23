@@ -7,7 +7,7 @@ import type { Status } from './status';
 import type { Direction, OptionContract, TradeCardData, DteWindow } from '@/types/domain';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 import type { HorizonKey } from './horizonPresets';
-import { migrateLegacyHorizon, scoringHorizonForHold, presetByKey, horizonDisplayString } from './horizonPresets';
+import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsHorizon } from './horizonPresets';
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
@@ -224,9 +224,9 @@ export const useScanStore = create<ScanStoreState>()(
             context: ctx
               ? (() => {
                   const legacy = migrateLegacyHorizon(ctx.horizon);
-                  const scoringHz = legacy.horizonPreset === 'Custom'
-                    ? scoringHorizonForHold(legacy.holdMax)
-                    : presetByKey(legacy.horizonPreset).scoringHorizon;
+                  // Equivalent to the old ternary for every horizonPreset value (same
+                  // reasoning as page.tsx's weightsKey/scoringHz and RunScanButton's horizon).
+                  const scoringHz = presetByKey(resolveParamsHorizon(legacy.horizonPreset, legacy.holdMax)).scoringHorizon;
                   return {
                     universe:  ctx.universe  ?? 'SP500',
                     direction: ctx.direction ?? 'Bullish',
