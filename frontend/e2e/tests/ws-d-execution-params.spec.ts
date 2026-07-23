@@ -32,7 +32,8 @@ test.describe('WS-D: Execution Parameters Panel (CR-02)', () => {
     await page.getByRole('button', { name: /Swing/ }).click();
     await page.getByText('Execution Parameters').click();
     await expect(page.getByText('34')).toBeVisible();
-    await expect(page.getByText('44')).toBeVisible();
+    await expect(page.getByText('38')).toBeVisible();
+    await expect(page.locator('[data-param-key="volume_multiplier"]').getByText('1.5')).toBeVisible();
   });
 
   test('overrides are sent in scan request when user edits a value', async ({ page }) => {
