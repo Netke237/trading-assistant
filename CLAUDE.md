@@ -146,7 +146,7 @@ Steps 1–3 are shared; steps 4–7 diverge per mode.
 | Step | Slug | Description |
 |---|---|---|
 | 4 | `step-4-ranking` | Sortable ranked candidates table (Δrank, Δscore), right-panel candlestick chart, per-component score cards |
-| 5 | `step-5-vol-events` | IV rank mini bar, IV percentile column, event proximity gate (CAUTION ≤7d, REJECT ≤3d) |
+| 5 | `step-5-vol-events` | IV rank mini bar, IV percentile column, event proximity gate (per-horizon reject/caution window fetched from `/api/config/event-thresholds`, e.g. Swing reject <21d / caution <45d) |
 | 6 | `step-6-contracts` | 12-col sortable contracts table, ContractStar |
 | 7 | `step-7-trade-card` | CandidateNav (Prev/Next/Pin), basket, SendToBrokerDialog, AlternativeContractRow |
 

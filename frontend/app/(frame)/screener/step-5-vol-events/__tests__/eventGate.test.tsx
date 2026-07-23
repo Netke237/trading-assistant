@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import Step5Page from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore } from '@/lib/ivThresholdsStore';
+import { useEventThresholdsStore, FALLBACK as EVENT_FALLBACK, type HorizonEventThresholds } from '@/lib/eventThresholdsStore';
 import type { TradeCardData } from '@/types/domain';
 
 function makeCandidate(overrides: Partial<TradeCardData> = {}): TradeCardData {
@@ -27,12 +28,17 @@ function makeCandidate(overrides: Partial<TradeCardData> = {}): TradeCardData {
   } as TradeCardData;
 }
 
-function setup(nextEventDays: number, horizon: string) {
+function setup(
+  nextEventDays: number,
+  horizon: string,
+  thresholds: Record<string, HorizonEventThresholds> = EVENT_FALLBACK,
+) {
   useScanStore.setState({
     scanResult: { candidates: [makeCandidate({ nextEventDays })], rejected: [], scan_id: 'x', timestamp: '' } as any,
     context: { direction: 'Bullish', horizon } as any,
   } as any);
   useIvThresholdsStore.setState({ thresholds: {}, loaded: true } as any);
+  useEventThresholdsStore.setState({ thresholds, loaded: true } as any);
 }
 
 describe('Step 5 Volatility+Events — event proximity gate follows the scan horizon', () => {
@@ -54,9 +60,72 @@ describe('Step 5 Volatility+Events — event proximity gate follows the scan hor
     expect(screen.getByText('PASS')).toBeInTheDocument();
   });
 
-  it("Swing horizon: an event 8 days out is outside Swing's 7-day REJECT window but inside its 21-day CAUTION window", () => {
+  it("Swing horizon: an event 8 days out is well inside the 21-day REJECT window, not a CAUTION", () => {
+    // Regression test for the Step 5 gate silently using a looser (7d reject / 21d
+    // caution) window than the one score_stock() actually applied when it scored
+    // this candidate (21d reject / 45d caution, from scoring_rules.yaml). Both
+    // numbers now come from the same backend endpoint (/api/config/event-thresholds),
+    // so this can no longer drift out of sync.
     setup(8, 'Swing (5-15d)');
     render(<Step5Page />);
+    expect(screen.getByText('REJECT')).toBeInTheDocument();
+  });
+
+  it('Swing horizon: an event 30 days out is inside the 45-day CAUTION window but outside the 21-day REJECT window', () => {
+    setup(30, 'Swing (5-15d)');
+    render(<Step5Page />);
     expect(screen.getByText('CAUTION')).toBeInTheDocument();
+  });
+
+  it('Swing horizon: an event 50 days out is outside both windows -> PASS', () => {
+    setup(50, 'Swing (5-15d)');
+    render(<Step5Page />);
+    expect(screen.getByText('PASS')).toBeInTheDocument();
+  });
+
+  it('Intraday horizon: an event 0 days out is inside the 1-day REJECT window', () => {
+    setup(0, 'Intraday (0-2d)');
+    render(<Step5Page />);
+    expect(screen.getByText('REJECT')).toBeInTheDocument();
+  });
+
+  it('Intraday horizon: an event 2 days out is inside the 3-day CAUTION window but outside the 1-day REJECT window', () => {
+    setup(2, 'Intraday (0-2d)');
+    render(<Step5Page />);
+    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+  });
+
+  it('Intraday horizon: an event 5 days out is outside both windows -> PASS', () => {
+    setup(5, 'Intraday (0-2d)');
+    render(<Step5Page />);
+    expect(screen.getByText('PASS')).toBeInTheDocument();
+  });
+
+  // Boundary semantics: backend stock_scorer.py's _rule_event uses strict `<`
+  // (worst_days < reject_days / < caution_days), so an event landing exactly on
+  // the boundary day is graded by the LOOSER band, not the stricter one.
+  it('Swing horizon: an event exactly 21 days out (== reject_days) is CAUTION, not REJECT', () => {
+    setup(21, 'Swing (5-15d)');
+    render(<Step5Page />);
+    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+  });
+
+  it('Swing horizon: an event exactly 45 days out (== caution_days) is PASS, not CAUTION', () => {
+    setup(45, 'Swing (5-15d)');
+    render(<Step5Page />);
+    expect(screen.getByText('PASS')).toBeInTheDocument();
+  });
+
+  it('gate reacts to live-fetched thresholds, not just the hardcoded FALLBACK', () => {
+    // A regression here (e.g. the page silently ignoring useEventThresholdsStore
+    // and reading a local constant instead) would still pass every test above,
+    // since they all seed the store with values equal to FALLBACK. Seeding a
+    // deliberately different window and asserting the gate follows it is what
+    // actually proves the store is wired in, not just present.
+    setup(7, 'Swing (5-15d)', { Swing: { reject_days: 5, caution_days: 10 } });
+    render(<Step5Page />);
+    // Under FALLBACK (21/45) day 7 would be REJECT; under this seeded window it's CAUTION.
+    expect(screen.getByText('CAUTION')).toBeInTheDocument();
+    expect(screen.queryByText('REJECT')).not.toBeInTheDocument();
   });
 });

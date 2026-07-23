@@ -598,6 +598,11 @@ export const api = {
       '/api/config/iv-thresholds'
     ),
 
+  getEventThresholds: () =>
+    get<Record<string, { reject_days: number; caution_days: number }>>(
+      '/api/config/event-thresholds'
+    ),
+
   getSchedule: async (): Promise<ScheduleConfig> => {
     const raw = await get<Record<string, unknown>>('/settings/schedule');
     return {

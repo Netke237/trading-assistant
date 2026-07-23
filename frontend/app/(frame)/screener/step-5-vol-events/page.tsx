@@ -3,7 +3,9 @@
 /*
  * Screener Step 5 — Volatility + Events gate.
  * Per-symbol table: IV rank (with mini bar), IV percentile, next event proximity.
- * Event proximity thresholds are horizon-specific (EVENT_WINDOWS below).
+ * Event proximity thresholds are horizon-specific, fetched from the backend
+ * (/api/config/event-thresholds) via useEventThresholdsStore — see that store's
+ * header comment for why this can't be a locally hardcoded constant.
  * Gate = worst of (IV status, event proximity status).
  */
 
@@ -15,6 +17,7 @@ import { EventFlag } from '@/components/atoms/EventFlag';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
+import { useEventThresholdsStore, getEventWindow } from '@/lib/eventThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import { worstStatus, type Status } from '@/lib/status';
 import styles from '../screener.module.css';
@@ -39,17 +42,12 @@ function cardToRow(c: TradeCardData): WatchlistRow {
   };
 }
 
-const EVENT_WINDOWS: Record<string, { caution: number; reject: number }> = {
-  Intraday: { caution: 3,  reject: 1  },
-  Swing:    { caution: 21, reject: 7  },
-  Position: { caution: 60, reject: 30 },
-};
-
 export default function Step5Page() {
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
   const context              = useScanStore((s) => s.context);
   const candidates           = scanResultCandidates ?? [];
   const ivThresholds = useIvThresholdsStore((s) => s.thresholds);
+  const eventThresholds = useEventThresholdsStore((s) => s.thresholds);
   const watchlist = useMemo(() => candidates.map(cardToRow), [candidates]);
   const candidateMap = useMemo(
     () => Object.fromEntries(candidates.map((c) => [c.symbol, c])),
@@ -59,7 +57,10 @@ export default function Step5Page() {
   const horizonKey = context?.horizon?.startsWith('Intraday') ? 'Intraday'
     : context?.horizon?.startsWith('Position') ? 'Position'
     : 'Swing';
-  const { caution: evCaution, reject: evReject } = EVENT_WINDOWS[horizonKey];
+  // Fetched from the backend (/api/config/event-thresholds), which reads the same
+  // scoring_rules.yaml block score_stock()'s _rule_event uses — so this gate always
+  // matches the reject/caution window that already shaped the candidate's score.
+  const { reject_days: evReject, caution_days: evCaution } = getEventWindow(horizonKey, eventThresholds);
 
   const ivPassThreshold    = getIvPassMax(horizonKey, ivThresholds);
   const ivCautionThreshold = getIvCautionMax(horizonKey, ivThresholds);
@@ -103,16 +104,19 @@ export default function Step5Page() {
           const hasIv = rank != null && rank > 0;
           const ivSt = hasIv ? ivStatus(rank) : 'NO_DATA';
           // Gate must use THIS scan's horizon-specific window (evCaution/evReject,
-          // already computed above from EVENT_WINDOWS) — not a fixed cutoff. The
+          // already fetched above via useEventThresholdsStore) — not a fixed cutoff. The
           // generic eventProximity() helper (frontend/lib/date.ts) is intentionally
           // NOT used here: it backs the EventFlag badge's fixed 3d/7d "how soon"
           // color and has no notion of scan horizon, which previously caused this
           // gate to silently ignore the Position/Swing/Intraday window shown in
           // this page's own header sentence above.
+          // Strict `<` (not `<=`) matches backend stock_scorer.py's _rule_event exactly
+          // (`worst_days < ec["reject_days"]` / `< ec["caution_days"]`) — an event landing
+          // exactly on the boundary day scores CAUTION/PASS server-side, not REJECT/CAUTION.
           const proxStatus: Status =
-            r.nextEventDays == null        ? 'PASS'
-            : r.nextEventDays <= evReject  ? 'REJECT'
-            : r.nextEventDays <= evCaution ? 'CAUTION'
+            r.nextEventDays == null       ? 'PASS'
+            : r.nextEventDays < evReject  ? 'REJECT'
+            : r.nextEventDays < evCaution ? 'CAUTION'
             : 'PASS';
           const gate: Status = worstStatus(ivSt, proxStatus);
 

@@ -76,10 +76,10 @@ test.describe('WS-D: Execution Parameters Panel (CR-02)', () => {
     await page.getByRole('button', { name: /Swing/ }).click();
     await page.getByText('Execution Parameters').click();
     const eventRejectRow = page.locator('[data-param-key="event_reject_days"]');
-    await expect(eventRejectRow.getByText('7', { exact: true })).toBeVisible();
+    await expect(eventRejectRow.getByText('21', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: /Position/ }).click();
     await expect(eventRejectRow.getByText('30', { exact: true })).toBeVisible();
-    await expect(eventRejectRow.getByText('7', { exact: true })).not.toBeVisible();
+    await expect(eventRejectRow.getByText('21', { exact: true })).not.toBeVisible();
   });
 
 });
