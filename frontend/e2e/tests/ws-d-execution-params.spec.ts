@@ -31,8 +31,8 @@ test.describe('WS-D: Execution Parameters Panel (CR-02)', () => {
     await page.goto('/screener/step-3-direction');
     await page.getByRole('button', { name: /Swing/ }).click();
     await page.getByText('Execution Parameters').click();
-    await expect(page.getByText('34')).toBeVisible();
-    await expect(page.getByText('38')).toBeVisible();
+    await expect(page.locator('[data-param-key="iv_rank_pass_max"]').getByText('34')).toBeVisible();
+    await expect(page.locator('[data-param-key="rsi_floor"]').getByText('38')).toBeVisible();
     await expect(page.locator('[data-param-key="volume_multiplier"]').getByText('1.5')).toBeVisible();
   });
 

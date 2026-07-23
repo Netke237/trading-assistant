@@ -35,4 +35,13 @@ describe('Step 3 Execution Parameters defaults — rsi_floor/volume_multiplier m
     expect(custom.rsi_floor).toBe(EXPECTED_FROM_YAML.Swing.rsi_floor);
     expect(custom.volume_multiplier).toBe(EXPECTED_FROM_YAML.Swing.volume_multiplier);
   });
+
+  it.each(['Quarterly', 'SemiAnnual', 'Annual'] as const)(
+    '%s mirrors the Position trigger tuning (all three spread PARAM_DEFAULTS_POSITION)',
+    (horizon) => {
+      const defaults = PARAM_DEFAULTS_PER_HORIZON[horizon];
+      expect(defaults.rsi_floor).toBe(EXPECTED_FROM_YAML.Position.rsi_floor);
+      expect(defaults.volume_multiplier).toBe(EXPECTED_FROM_YAML.Position.volume_multiplier);
+    },
+  );
 });
