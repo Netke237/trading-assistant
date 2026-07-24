@@ -37,6 +37,7 @@ class ContractScoreCard:
     breakdown: ContractScoreBreakdown = field(
         default_factory=lambda: ContractScoreBreakdown(0, 0, 0, 0, 0, 0)
     )
+    detail: dict = field(default_factory=dict)
 
 
 @lru_cache(maxsize=1)
@@ -112,7 +113,7 @@ def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, int, list[str]]:
     return score, oi_score, flags
 
 
-def _score_spread(contract: dict, cfg: dict) -> tuple[int, list[str]]:
+def _score_spread(contract: dict, cfg: dict) -> tuple[int, float, list[str]]:
     sr = cfg["soft_rank"]
     bid = contract.get("bid") or 0
     ask = contract.get("ask") or 0
@@ -126,7 +127,7 @@ def _score_spread(contract: dict, cfg: dict) -> tuple[int, list[str]]:
 
     if spread_pct > max_pct:
         flags.append("spread_elevated")
-    return score, flags
+    return score, spread_pct, flags
 
 
 def _score_delta(contract: dict, cfg: dict) -> tuple[int, list[str]]:
@@ -149,14 +150,14 @@ def _score_delta(contract: dict, cfg: dict) -> tuple[int, list[str]]:
     return score, flags
 
 
-def _score_dte(contract: dict, cfg: dict) -> tuple[int, list[str]]:
+def _score_dte(contract: dict, cfg: dict) -> tuple[int, int, list[str]]:
     sr = cfg["soft_rank"]
     expiry_str = contract.get("expiry", "")
     flags = []
     try:
         dte = (date.fromisoformat(expiry_str) - date.today()).days
     except (ValueError, TypeError):
-        return 0, ["dte_parse_error"]
+        return 0, 0, ["dte_parse_error"]
 
     d_min = sr["preferred_dte_min"]
     d_max = sr["preferred_dte_max"]
@@ -177,7 +178,7 @@ def _score_dte(contract: dict, cfg: dict) -> tuple[int, list[str]]:
         decay_span = half_range if half_range > 0 else 1
         score = max(0, int(25 * (1 - distance / decay_span)))
         flags.append("dte_outside_preferred")
-    return score, flags
+    return score, dte, flags
 
 
 def _score_iv_rank(contract: dict, cfg: dict) -> tuple[int, list[str]]:
@@ -241,10 +242,38 @@ def validate_contract(
     reject_reasons = _hard_reject_reasons(contract, cfg)
 
     liq_score, oi_score_val, liq_flags = _score_liquidity(contract, cfg)
-    spread_score, spread_flags = _score_spread(contract, cfg)
+    spread_score, spread_pct, spread_flags = _score_spread(contract, cfg)
     delta_score, delta_flags = _score_delta(contract, cfg)
-    dte_score, dte_flags = _score_dte(contract, cfg)
+    dte_score, dte, dte_flags = _score_dte(contract, cfg)
     iv_score, iv_flags = _score_iv_rank(contract, cfg)
+
+    sr = cfg["soft_rank"]
+    detail = {
+        "dte": {
+            "dte": dte,
+            "preferred_min": sr["preferred_dte_min"],
+            "preferred_max": sr["preferred_dte_max"],
+        },
+        "delta": {
+            "delta": abs(contract.get("delta") or 0),
+            "preferred_min": sr["preferred_delta_min"],
+            "preferred_max": sr["preferred_delta_max"],
+        },
+        "iv_rank": {
+            "iv_rank": contract.get("iv_rank"),
+            "preferred_max": sr["preferred_iv_rank_max"],
+        },
+        "liquidity": {
+            "volume": contract.get("volume") or 0,
+            "open_interest": contract.get("open_interest") or 0,
+            "preferred_volume_min": sr["preferred_volume_min"],
+            "preferred_oi_min": sr["preferred_oi_min"],
+        },
+        "spread": {
+            "spread_pct": spread_pct,
+            "preferred_max_pct": sr["preferred_spread_pct_max"],
+        },
+    }
 
     soft_flags = liq_flags + spread_flags + delta_flags + dte_flags + iv_flags
     soft_fail_count = len(soft_flags)
@@ -271,6 +300,7 @@ def validate_contract(
                 iv_rank_score=iv_score,
                 oi_score=oi_score_val,
             ),
+            detail=detail,
         )
 
     weights = cfg["weights"]
@@ -309,4 +339,5 @@ def validate_contract(
             iv_rank_score=iv_score,
             oi_score=oi_score_val,
         ),
+        detail=detail,
     )

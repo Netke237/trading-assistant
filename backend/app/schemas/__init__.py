@@ -88,6 +88,35 @@ class VolDetail(BaseModel):
     reason:  str   | None = None
 
 
+class DteDetail(BaseModel):
+    dte: int
+    preferred_min: int
+    preferred_max: int
+
+
+class DeltaDetail(BaseModel):
+    delta: float
+    preferred_min: float
+    preferred_max: float
+
+
+class IvRankDetail(BaseModel):
+    iv_rank: float | None = None
+    preferred_max: float
+
+
+class LiquidityDetail(BaseModel):
+    volume: int
+    open_interest: int
+    preferred_volume_min: int
+    preferred_oi_min: int
+
+
+class SpreadDetail(BaseModel):
+    spread_pct: float
+    preferred_max_pct: float
+
+
 class ScoreBreakdown(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     trend: int
@@ -111,6 +140,11 @@ class ContractScoreBreakdown(BaseModel):
     ivAttractiveness: int
     liquidity: int
     spread: int
+    dteDetail: DteDetail | None = None
+    deltaDetail: DeltaDetail | None = None
+    ivDetail: IvRankDetail | None = None
+    liquidityDetail: LiquidityDetail | None = None
+    spreadDetail: SpreadDetail | None = None
 
 
 # ── Watchlist ────────────────────────────────────────────────────────────────

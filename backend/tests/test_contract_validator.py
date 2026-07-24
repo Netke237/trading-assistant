@@ -144,3 +144,26 @@ def test_dal_style_near_miss_scores_in_window_once_preferred_band_is_widened():
     assert "dte_outside_preferred" not in card.soft_flags
     # centre=(170+220)/2=195, half_range=25 -> 100*(1-|177-195|/25) = 100*(1-18/25) = 28
     assert card.breakdown.dte_score == 28
+
+
+def test_score_card_detail_has_all_five_metrics():
+    contract = _contract_with_expiry(
+        35, bid=2.40, ask=2.50, delta=0.45, volume=500, open_interest=2000, iv_rank=40,
+    )
+    card = validate_contract(contract, stock_score=70)
+    assert set(card.detail.keys()) == {"dte", "delta", "iv_rank", "liquidity", "spread"}
+    assert card.detail["dte"]["dte"] == 35
+    assert card.detail["delta"]["delta"] == pytest.approx(0.45)
+    assert card.detail["iv_rank"]["iv_rank"] == 40
+    assert card.detail["liquidity"]["volume"] == 500
+    assert card.detail["liquidity"]["open_interest"] == 2000
+    assert card.detail["spread"]["spread_pct"] == pytest.approx((2.50 - 2.40) / 2.45, rel=1e-3)
+
+
+def test_score_card_detail_present_even_on_hard_reject():
+    contract = _contract_with_expiry(
+        1, bid=2.40, ask=2.50, delta=0.45, volume=500, open_interest=2000, iv_rank=40,
+    )
+    card = validate_contract(contract, stock_score=70)
+    assert card.status == "REJECT"
+    assert "dte" in card.detail  # detail is computed before the reject branch, not skipped
