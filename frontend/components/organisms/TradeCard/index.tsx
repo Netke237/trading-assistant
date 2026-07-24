@@ -11,7 +11,7 @@ import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk } from '@/lib/risk';
-import type { TradeCardData, TargetLevel, TriggerDetail, PullbackDetail, TrendDetail, EventDetail, VolDetail } from '@/types/domain';
+import type { TradeCardData, TargetLevel, TriggerDetail, PullbackDetail, TrendDetail, EventDetail, VolDetail, DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail } from '@/types/domain';
 import styles from './TradeCard.module.css';
 
 interface EditOverlay {
@@ -146,6 +146,32 @@ function volDetailText(d?: VolDetail): string | undefined {
   return parts.join(' · ') || undefined;
 }
 
+function dteDetailText(d?: DteDetail): string | undefined {
+  if (!d) return undefined;
+  return `${d.dte}d · target ${d.preferred_min}-${d.preferred_max}d`;
+}
+
+function deltaDetailText(d?: DeltaDetail): string | undefined {
+  if (!d) return undefined;
+  return `Δ${d.delta.toFixed(2)} · target ${d.preferred_min.toFixed(2)}-${d.preferred_max.toFixed(2)}`;
+}
+
+function ivDetailText(d?: IvRankDetail): string | undefined {
+  if (!d) return undefined;
+  if (d.iv_rank == null) return 'No IV rank data';
+  return `IV Rank ${d.iv_rank.toFixed(0)} · pref ≤${d.preferred_max.toFixed(0)}`;
+}
+
+function liquidityDetailText(d?: LiquidityDetail): string | undefined {
+  if (!d) return undefined;
+  return `Vol ${d.volume.toLocaleString()} · OI ${d.open_interest.toLocaleString()} · pref ≥${d.preferred_volume_min.toLocaleString()}/${d.preferred_oi_min.toLocaleString()}`;
+}
+
+function spreadDetailText(d?: SpreadDetail): string | undefined {
+  if (!d) return undefined;
+  return `Spread ${(d.spread_pct * 100).toFixed(1)}% · pref ≤${(d.preferred_max_pct * 100).toFixed(0)}%`;
+}
+
 interface TradeCardProps {
   data: TradeCardData;
   recId?: string;
@@ -223,11 +249,11 @@ export function TradeCard({
   ];
 
   const contractBars = [
-    { label: 'DTE fit', value: data.contractBreakdown.dteFit },
-    { label: 'Delta', value: data.contractBreakdown.delta },
-    { label: 'IV', value: data.contractBreakdown.ivAttractiveness },
-    { label: 'Liquidity', value: data.contractBreakdown.liquidity },
-    { label: 'Spread', value: data.contractBreakdown.spread },
+    { label: 'DTE fit', value: data.contractBreakdown.dteFit, detailText: dteDetailText(data.contractBreakdown.dteDetail) },
+    { label: 'Delta', value: data.contractBreakdown.delta, detailText: deltaDetailText(data.contractBreakdown.deltaDetail) },
+    { label: 'IV', value: data.contractBreakdown.ivAttractiveness, detailText: ivDetailText(data.contractBreakdown.ivDetail) },
+    { label: 'Liquidity', value: data.contractBreakdown.liquidity, detailText: liquidityDetailText(data.contractBreakdown.liquidityDetail) },
+    { label: 'Spread', value: data.contractBreakdown.spread, detailText: spreadDetailText(data.contractBreakdown.spreadDetail) },
   ];
 
   return (

@@ -52,6 +52,31 @@ export interface VolDetail {
   reason?:  string;
 }
 
+export interface DteDetail {
+  dte:           number;
+  preferred_min: number;
+  preferred_max: number;
+}
+export interface DeltaDetail {
+  delta:         number;
+  preferred_min: number;
+  preferred_max: number;
+}
+export interface IvRankDetail {
+  iv_rank:       number | null;
+  preferred_max: number;
+}
+export interface LiquidityDetail {
+  volume:               number;
+  open_interest:        number;
+  preferred_volume_min: number;
+  preferred_oi_min:     number;
+}
+export interface SpreadDetail {
+  spread_pct:       number;
+  preferred_max_pct: number;
+}
+
 export interface FundamentalsOut {
   score: number;
   quality_label: 'Strong' | 'Neutral' | 'Weak';
@@ -99,6 +124,11 @@ export interface ContractScoreBreakdown {
   ivAttractiveness: number;
   liquidity:        number;
   spread:           number;
+  dteDetail?:       DteDetail;
+  deltaDetail?:     DeltaDetail;
+  ivDetail?:        IvRankDetail;
+  liquidityDetail?: LiquidityDetail;
+  spreadDetail?:    SpreadDetail;
 }
 
 export interface WatchlistRow {
