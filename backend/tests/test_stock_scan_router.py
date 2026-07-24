@@ -7,8 +7,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.database import get_db
 from app.schemas.stock_scan import StockScanRequest
 from app.routers.stock_scan import router as stock_scan_router
+from tests.conftest import _override_get_db
 
 
 # ── Schema tests ──────────────────────────────────────────────────────────────
@@ -41,6 +43,7 @@ def stock_client():
     """Minimal TestClient wiring only the stock-scan router."""
     app = FastAPI()
     app.include_router(stock_scan_router)
+    app.dependency_overrides[get_db] = _override_get_db
     return TestClient(app)
 
 

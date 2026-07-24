@@ -15,8 +15,13 @@ from typing import Any, Literal
 
 import httpx
 import yaml as _yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import AsyncSessionLocal, get_db
+from app.models.scan_session import ScanSession
 
 from app.services.audit import new_rec_id
 from app.schemas.stock_scan import (
@@ -149,6 +154,40 @@ _BACKTEST_CACHE: dict[str, tuple] = {}  # key → (BacktestResult, expires_at)
 _BACKTEST_POOL = concurrent.futures.ProcessPoolExecutor(
     max_workers=max(1, (os.cpu_count() or 2) // 2)
 )
+
+_last_stock_request: StockScanRequest | None = None
+_last_stock_result: StockScanResult | None = None
+
+
+async def _upsert_stock_session(db: AsyncSession, req: StockScanRequest | None, result: StockScanResult | None) -> None:
+    """Persist the last stocks-mode scan to the same scan_sessions table the
+    options-mode scan uses, under a distinct id so the two never collide."""
+    await db.merge(
+        ScanSession(
+            id="stock-current",
+            status="complete",
+            last_result_json=result.model_dump_json() if result else None,
+            last_request_json=req.model_dump_json() if req else None,
+        )
+    )
+    await db.commit()
+
+
+async def restore_stock_from_db() -> None:
+    """Restore _last_stock_result from DB on startup — mirrors scan.py's restore_from_db()."""
+    global _last_stock_request, _last_stock_result
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(select(ScanSession).where(ScanSession.id == "stock-current"))
+        except Exception:
+            return
+        row = result.scalar_one_or_none()
+        if row is None:
+            return
+        if row.last_result_json:
+            _last_stock_result = StockScanResult.model_validate_json(row.last_result_json)
+        if row.last_request_json:
+            _last_stock_request = StockScanRequest.model_validate_json(row.last_request_json)
 
 
 def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], params: dict | None = None) -> str:
@@ -826,8 +865,14 @@ async def _process_stock(
             return {"symbol": symbol, "reason": str(exc)}
 
 
+@router.get('/stock-scan/last', response_model=StockScanResult | None)
+async def get_last_stock_scan() -> StockScanResult | None:
+    """Return the most recently completed stocks-mode scan, if any."""
+    return _last_stock_result
+
+
 @router.post("/stock-scan")
-async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
+async def run_stock_scan(req: StockScanRequest, db: AsyncSession = Depends(get_db)) -> StockScanResult:
     from app.data.universe_presets import expand_universe, PresetUnavailableError
 
     scan_id = new_rec_id()
@@ -936,12 +981,16 @@ async def run_stock_scan(req: StockScanRequest) -> StockScanResult:
         _pipeline.scanned, _pipeline.failed_history, _pipeline.failed_score,
         _pipeline.failed_signal, _pipeline.failed_backtest, _pipeline.failed_regime, _pipeline.other_rejected, _pipeline.candidates,
     )
-    return StockScanResult(
+    result = StockScanResult(
         scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(),
         candidates=candidates, rejected=rejected, pipeline=_pipeline,
         original_count=original_count, shortlist_truncated=shortlist_truncated,
         direction_banner=_direction_banner,
     )
+    global _last_stock_request, _last_stock_result
+    _last_stock_request, _last_stock_result = req, result
+    await _upsert_stock_session(db, req, result)
+    return result
 
 
 _FIB_ALLOWED_OVERRIDE_KEYS = frozenset({

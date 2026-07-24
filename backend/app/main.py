@@ -65,7 +65,9 @@ async def lifespan(app: FastAPI):
             _web_concurrency,
         )
     from app.routers.scan import restore_from_db, _scheduler, _scheduled_scan
+    from app.routers.stock_scan import restore_stock_from_db
     status = await restore_from_db()
+    await restore_stock_from_db()
     if status == "running":
         _scheduler.bind(_scheduled_scan)
         # Restore persisted schedule config so cadence/window/days survive restarts
