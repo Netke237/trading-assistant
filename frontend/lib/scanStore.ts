@@ -11,6 +11,19 @@ import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsH
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
+/** Local wall-clock timestamp (offset-free), matching the convention every
+ *  scanAt/stockScanAt consumer expects — mirrors RunScanButton's own
+ *  nowLocalISO() (frontend/components/organisms/RunScanButton/index.tsx:27-34).
+ *  Not imported from there since this store shouldn't depend on an organism. */
+function toLocalWallClockNow(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
 export interface ScanContext {
   universe:      string;      // "SP500" | "NAS100" | ...
   direction:     Direction;
@@ -186,7 +199,7 @@ export const useScanStore = create<ScanStoreState>()(
       setStockScanResult:  (r) => set((state) => ({
         stockScanResult: r,
         previousStockScanResult: r !== null ? state.stockScanResult : state.previousStockScanResult,
-        stockScanAt: r !== null ? new Date().toISOString().slice(0, 19) : state.stockScanAt,
+        stockScanAt: r !== null ? toLocalWallClockNow() : state.stockScanAt,
       })),
       addToStockBasket:      (card) => set((s) => ({
         stockBasket: [...s.stockBasket.filter((c) => c.symbol !== card.symbol), card],
