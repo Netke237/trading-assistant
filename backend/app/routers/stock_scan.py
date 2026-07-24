@@ -180,6 +180,7 @@ async def restore_stock_from_db() -> None:
         try:
             result = await db.execute(select(ScanSession).where(ScanSession.id == "stock-current"))
         except Exception:
+            # Table may not exist (e.g., test_app.py with no DB)
             return
         row = result.scalar_one_or_none()
         if row is None:

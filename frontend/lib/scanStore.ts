@@ -11,12 +11,15 @@ import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsH
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
-/** Local wall-clock timestamp (offset-free), matching the convention every
- *  scanAt/stockScanAt consumer expects — mirrors RunScanButton's own
- *  nowLocalISO() (frontend/components/organisms/RunScanButton/index.tsx:27-34).
- *  Not imported from there since this store shouldn't depend on an organism. */
-function toLocalWallClockNow(): string {
-  const d = new Date();
+/** Local wall-clock timestamp (offset-free) for an arbitrary date input,
+ *  matching the convention every scanAt/stockScanAt consumer expects —
+ *  mirrors RunScanButton's own nowLocalISO() (frontend/components/organisms/
+ *  RunScanButton/index.tsx:27-34). Not imported from there since this store
+ *  shouldn't depend on an organism. Exported so callers converting a real
+ *  backend UTC-offset timestamp (e.g. StoreHydration's recovery path) reuse
+ *  the same formatter instead of re-deriving it. */
+export function toLocalWallClock(input: string | Date = new Date()): string {
+  const d = typeof input === 'string' ? new Date(input) : input;
   const pad = (n: number) => String(n).padStart(2, '0');
   return (
     `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
@@ -199,7 +202,7 @@ export const useScanStore = create<ScanStoreState>()(
       setStockScanResult:  (r) => set((state) => ({
         stockScanResult: r,
         previousStockScanResult: r !== null ? state.stockScanResult : state.previousStockScanResult,
-        stockScanAt: r !== null ? toLocalWallClockNow() : state.stockScanAt,
+        stockScanAt: r !== null ? toLocalWallClock() : state.stockScanAt,
       })),
       addToStockBasket:      (card) => set((s) => ({
         stockBasket: [...s.stockBasket.filter((c) => c.symbol !== card.symbol), card],
