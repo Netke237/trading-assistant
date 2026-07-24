@@ -6,6 +6,7 @@
 import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { Tooltip } from '@/components/atoms/Tooltip';
+import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import type { Status } from '@/lib/status';
 import type { Direction } from '@/types/domain';
 import styles from './SymbolHeader.module.css';
@@ -18,6 +19,9 @@ interface SymbolHeaderProps {
   status: Status;
   /** Ticker size. 14 for tables/rails, 24 for TradeCard hero. */
   size?: 14 | 18 | 24;
+  /** Show a jump-to-chart icon button beside the ticker. Off by default so
+   *  existing call sites (step-4-ranking, analysis page) are unaffected. */
+  showChartButton?: boolean;
   className?: string;
 }
 
@@ -50,11 +54,13 @@ export function SymbolHeader({
   direction,
   status,
   size = 18,
+  showChartButton = false,
   className,
 }: SymbolHeaderProps) {
   return (
     <div className={[styles.row, className].filter(Boolean).join(' ')}>
       <div className={styles.leftGroup}>
+        {showChartButton && <OpenChartButton symbol={ticker} />}
         <Data size={size} weight={500} className={styles.ticker}>
           {ticker}
         </Data>

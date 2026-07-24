@@ -267,6 +267,7 @@ export function TradeCard({
           direction={data.direction}
           status={data.status}
           size={24}
+          showChartButton
         />
       </div>
 
