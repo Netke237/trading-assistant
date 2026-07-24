@@ -1,0 +1,13 @@
+.chartBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0.4;
+  padding: 2px 3px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.chartBtn:hover {
+  opacity: 1;
+}
