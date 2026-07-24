@@ -793,6 +793,15 @@ async def restore_from_db() -> str | None:
         return row.status
 
 
+@router.get('/scan/last', response_model=ScanResult | None)
+async def get_last_scan() -> ScanResult | None:
+    """Return the most recently completed scan, if any — survives a backend
+    restart because _last_result is repopulated from the DB in main.py's
+    lifespan startup hook (restore_from_db()). Used by the frontend as a
+    fallback when localStorage has no cached scan result."""
+    return _last_result
+
+
 @router.post('/scan', response_model=ScanResult)
 async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> ScanResult:
     global _last_request, _last_result
