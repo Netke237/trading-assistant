@@ -12,6 +12,7 @@ import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import { PnlChart } from '@/components/organisms/PnlChart';
@@ -53,7 +54,7 @@ function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | und
   return 'pass';                      // cheap
 }
 
-const COLUMNS = '72px 1.6fr 72px 1fr 110px 104px 60px 56px 60px 90px 40px';
+const COLUMNS = '28px 72px 1.6fr 72px 1fr 110px 104px 60px 56px 60px 90px 40px';
 
 function downloadCsv(filename: string, text: string): void {
   const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
@@ -282,6 +283,7 @@ export default function PortfolioPage() {
       ) : (
         <div className={styles.tableWrap}>
           <div className={styles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
+            <span aria-hidden />
             <Text size={11} tone="dim">SYMBOL</Text>
             <Text size={11} tone="dim">CONTRACT</Text>
             <Text size={11} tone="dim">DIR</Text>
@@ -299,6 +301,7 @@ export default function PortfolioPage() {
             {positions.map((p) => (
               <div key={p.recId} className={styles.rowWrap}>
                 <TableRow status={p.status} columns={COLUMNS}>
+                  <OpenChartButton symbol={p.symbol} />
                   <Data size={13} weight={500}>{p.symbol}</Data>
                   <span className={styles.contractCell}>
                     <Text size={12} tone="secondary">{p.contract}</Text>
