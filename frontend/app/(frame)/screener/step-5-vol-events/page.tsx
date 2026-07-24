@@ -15,6 +15,7 @@ import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { EventFlag } from '@/components/atoms/EventFlag';
 import { WatchStar } from '@/components/atoms/WatchStar';
+import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
 import { useEventThresholdsStore, getEventWindow } from '@/lib/eventThresholdsStore';
@@ -23,7 +24,7 @@ import { worstStatus, type Status } from '@/lib/status';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
 
-const COLUMNS = '32px 72px 1fr 120px 70px 110px 80px';
+const COLUMNS = '24px 32px 72px 1fr 120px 70px 110px 80px';
 
 function cardToRow(c: TradeCardData): WatchlistRow {
   return {
@@ -89,6 +90,7 @@ export default function Step5Page() {
       <div className={`${styles.stepBody} ${styles.stepBody_noPad}`}>
         <div className={pageStyles.tableHeader} style={{ gridTemplateColumns: COLUMNS }}>
           <span aria-hidden />
+          <span aria-hidden />
           <Text size={11} tone="dim">SYMBOL</Text>
           <Text size={11} tone="dim">NAME</Text>
           <Text size={11} tone="dim">IV RANK</Text>
@@ -122,6 +124,7 @@ export default function Step5Page() {
 
           return (
             <TableRow key={r.symbol} status={gate} columns={COLUMNS}>
+              <OpenChartButton symbol={r.symbol} />
               <WatchStar symbol={r.symbol} size="sm" />
               <Data size={13} weight={500}>{r.symbol}</Data>
               <Text size={12} tone="secondary">{r.company}</Text>
