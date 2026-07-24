@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useStrategyWatchStore } from '@/lib/strategyWatchStore';
+import { api } from '@/lib/api';
 import type { StrategyWatchSchedule } from '@/lib/api';
+import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import styles from './page.module.css';
 
 const STRATEGIES = [
@@ -28,8 +30,27 @@ export default function StrategyWatchPage() {
   const [evalMsg, setEvalMsg] = useState('');
   const [direction, setDirection] = useState<'Bullish' | 'Bearish'>('Bullish');
   const [bulkDirection, setBulkDirection] = useState<'Bullish' | 'Bearish'>('Bullish');
+  const [names, setNames] = useState<Record<string, string>>({});
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    const missing = Array.from(new Set(watches.map((w) => w.symbol))).filter((s) => !(s in names));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      missing.map((s) =>
+        api.getSymbolInfo(s).then(
+          ({ name }) => [s, name] as const,
+          () => [s, s] as const,
+        ),
+      ),
+    ).then((pairs) => {
+      if (cancelled) return;
+      setNames((cur) => ({ ...cur, ...Object.fromEntries(pairs) }));
+    });
+    return () => { cancelled = true; };
+  }, [watches, names]);
 
   const onAdd = async () => {
     if (!symbol.trim()) return;
@@ -126,11 +147,13 @@ export default function StrategyWatchPage() {
       <div className={styles.section}>
         <strong>Watched ({watches.length})</strong>
         <table className={styles.table}>
-          <thead><tr><th>Symbol</th><th>Strategy</th><th>Direction</th><th>State</th><th>Enabled</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Symbol</th><th>Name</th><th>Strategy</th><th>Direction</th><th>State</th><th>Enabled</th><th></th></tr></thead>
           <tbody>
             {watches.map((w) => (
               <tr key={w.id}>
+                <td><OpenChartButton symbol={w.symbol} /></td>
                 <td>{w.symbol}</td>
+                <td>{names[w.symbol] ?? w.symbol}</td>
                 <td>{STRATEGIES.find((s) => s.key === w.strategy_key)?.label ?? w.strategy_key}</td>
                 <td>
                   <span className={`${styles.pill} ${w.direction === 'Bearish' ? styles.pillBearish : styles.pillBullish}`}>
