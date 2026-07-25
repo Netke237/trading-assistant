@@ -618,9 +618,6 @@ async def _process_symbol(
                 for c in chain
                 if float(c.get("price", 0)) > 0
             ]
-            # asyncio.shield keeps _run_heston_calibration (and the semaphore
-            # permit it holds) running in the background even after this
-            # wait_for gives up — see _run_heston_calibration's docstring.
             calibration_task = asyncio.ensure_future(_run_heston_calibration(heston_chain, price))
             # Always consume the task's exception, even if we give up on it
             # below — otherwise an abandoned task that later raises (e.g. the
