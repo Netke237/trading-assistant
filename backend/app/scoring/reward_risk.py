@@ -140,6 +140,18 @@ def estimate_targets(
             opt_price = max(0.01, current_premium + delta * price_move)
             method = PricingMethod.DELTA_APPROX
 
+        # Hard invariant: the *displayed* ladder must be non-decreasing
+        # regardless of which pricing path produced each level. A
+        # delta-approximation fallback (either the "no usable Heston price"
+        # branch above, or the non-monotonic-Heston branch above) can itself
+        # undershoot the previous level's chosen price — clamp it up to
+        # prev_opt_price rather than leave a visibly-wrong ladder. This only
+        # ever raises a level, never lowers one, and prev_opt_price is None
+        # for T1 so T1 is never clamped against anything (including
+        # current_premium, which is intentionally never part of this chain).
+        if prev_opt_price is not None:
+            opt_price = max(opt_price, prev_opt_price)
+
         prev_opt_price = opt_price
 
         reward = opt_price - current_premium
