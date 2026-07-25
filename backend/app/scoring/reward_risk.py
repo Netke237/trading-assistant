@@ -29,10 +29,18 @@ def estimate_rr(
     premium_stop_pct: float = 0.60,   # fraction of premium at risk (stop-loss basis)
 ) -> RrResult:
     model_used: RrModel
+    heston_ok = False
 
     if heston_params is not None:
         dte_at_target = max(expiry_years * 0.5, 7 / 365)
-        exit_premium = heston_price(target_price, strike, dte_at_target, r, heston_params, is_call)
+        try:
+            heston_exit_premium = heston_price(target_price, strike, dte_at_target, r, heston_params, is_call)
+        except Exception:
+            heston_exit_premium = 0.0
+        heston_ok = heston_exit_premium > 0
+
+    if heston_ok:
+        exit_premium = heston_exit_premium
         model_used = "Heston repriced"
     else:
         if is_call:
@@ -91,6 +99,7 @@ def estimate_targets(
     ]
 
     results = []
+    prev_opt_price = None  # only meaningful once T1 has been priced — see below
     for t_price in targets_prices:
         dte_at_target = max(expiry_years * 0.5, 7 / 365)
         opt_price = None
@@ -107,11 +116,31 @@ def estimate_targets(
             opt_price = None
             method = PricingMethod.DELTA_APPROX
 
-        if opt_price is None or opt_price <= 0:
+        # T1/T2/T3 share dte_at_target and only differ in t_price, so a
+        # correctly-priced option must be monotonically increasing ACROSS
+        # THAT LADDER — a Heston price that comes out lower than the
+        # previous level's chosen price is a numerical-integration artifact
+        # (see this task's intro), not a real option value. This must NEVER
+        # be compared against current_premium: current_premium is priced at
+        # the full expiry_years, a longer tenor than dte_at_target, so a
+        # legitimate T1 price can be lower than current_premium purely from
+        # time decay — prev_opt_price starts at None so T1 is never checked
+        # against anything. Guard only the Heston case; the pure
+        # delta-approximation path is untouched.
+        non_monotonic = (
+            method == PricingMethod.HESTON
+            and opt_price is not None
+            and prev_opt_price is not None
+            and opt_price < prev_opt_price
+        )
+
+        if opt_price is None or opt_price <= 0 or non_monotonic:
             delta = 0.5 if (is_call and t_price > strike) or (not is_call and t_price < strike) else 0.3
             price_move = abs(t_price - stock_price)
             opt_price = max(0.01, current_premium + delta * price_move)
             method = PricingMethod.DELTA_APPROX
+
+        prev_opt_price = opt_price
 
         reward = opt_price - current_premium
         risk_basis = current_premium * premium_stop_pct
