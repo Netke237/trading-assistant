@@ -39,6 +39,30 @@ def test_thin_chain_returns_fallback():
     assert result.params is not None
 
 
+def test_realistic_single_expiry_chain_stays_within_call_site_timeout():
+    """Task 4 in the scan pipeline caps calibration at a 2s wait_for ceiling
+    (_HESTON_CALIBRATION_TIMEOUT_S in app/routers/scan.py). fetch_option_chain
+    (app/data/market.py) always returns strikes from a SINGLE expiration, never
+    a multi-expiry surface — model that shape here: one shared expiry_years,
+    many strikes, using the default reduced grid (HESTON_FULL_CALIBRATION
+    unset)."""
+    _run_calibration.cache_clear()
+    expiry_years = 45 / 365  # a mid-Swing-horizon single expiration
+    strikes = [70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 100.0, 105.0, 110.0, 115.0, 120.0, 125.0, 130.0]
+    chain = [
+        {"strike": k, "expiry_years": expiry_years, "mid_price": max(0.5, 100 - k + 15), "is_call": True}
+        for k in strikes
+    ]
+    start = time.perf_counter()
+    result = calibrate_heston(chain, 100.0, 0.05)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 2.0, (
+        f"Calibration on a {len(chain)}-strike single-expiry chain took {elapsed:.3f}s — "
+        "exceeds the scan pipeline's 2s wait_for ceiling"
+    )
+    assert result.params is not None
+
+
 def test_timeout_returns_fallback(monkeypatch):
     """Force a 2-second timeout by returning a never-completing Future."""
     import threading
