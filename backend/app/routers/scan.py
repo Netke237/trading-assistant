@@ -226,15 +226,31 @@ async def _run_heston_calibration(heston_chain: list[dict], price: float):
     measure of real executor occupancy, so backpressure shows up as callers
     waiting on the (cheap-to-abandon) semaphore rather than an ever-growing
     (expensive-to-abandon) thread-pool backlog. Callers that want to give up
-    early must wrap the returned coroutine's task in
-    asyncio.wait_for(asyncio.shield(task), timeout=...) — shield stops their
-    timeout from cancelling this function's own await, so it keeps running
-    (and keeps holding the semaphore) in the background until it genuinely
-    completes.
+    early must NOT cancel this task — do it via
+    `asyncio.wait({task}, timeout=...)` (which leaves an unfinished task in
+    `pending` uncancelled) rather than `wait_for`, so it keeps running (and
+    keeps holding the semaphore) in the background until it genuinely
+    completes. See the call site in _process_symbol for why plain
+    `asyncio.shield` is avoided here.
     """
     async with _HESTON_SEMAPHORE:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(_HESTON_EXECUTOR, calibrate_heston, heston_chain, price, 0.05)
+
+
+def _log_abandoned_heston_exception(task: asyncio.Task) -> None:
+    """Consumes the exception of a _run_heston_calibration task that the
+    original caller gave up on (its asyncio.wait ceiling elapsed while the
+    task was still running) — without this, an abandoned task that later
+    raises produces an unretrieved-exception ERROR log from asyncio's
+    default handler when it's garbage-collected. This is separate from (and
+    can fire even when) the caller's own 'Heston calibration failed or timed
+    out' warning already logged."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        _log.debug("Abandoned Heston calibration task raised: %s", exc)
 
 
 async def _build_spreads(
@@ -606,10 +622,29 @@ async def _process_symbol(
             # permit it holds) running in the background even after this
             # wait_for gives up — see _run_heston_calibration's docstring.
             calibration_task = asyncio.ensure_future(_run_heston_calibration(heston_chain, price))
-            heston_result = await asyncio.wait_for(
-                asyncio.shield(calibration_task), timeout=_HESTON_CALIBRATION_TIMEOUT_S,
+            # Always consume the task's exception, even if we give up on it
+            # below — otherwise an abandoned task that later raises (e.g. the
+            # dedicated executor is mid-shutdown) surfaces as an asyncio
+            # "Task exception was never retrieved" ERROR when it is GC'd.
+            calibration_task.add_done_callback(_log_abandoned_heston_exception)
+            # asyncio.wait (NOT wait_for + shield) is deliberate: on timeout it
+            # leaves the still-running task in `pending` WITHOUT cancelling it,
+            # so it keeps running and keeps holding _HESTON_SEMAPHORE in the
+            # background (the point of _run_heston_calibration — see its
+            # docstring). shield would also keep the task alive, but on Python
+            # 3.12+ asyncio.shield ITSELF ERROR-logs "exception in shielded
+            # future" (with a full traceback) whenever an abandoned shielded
+            # task later raises — precisely the production log noise this
+            # feature must not generate. asyncio.wait neither cancels nor logs.
+            _done, _pending = await asyncio.wait(
+                {calibration_task}, timeout=_HESTON_CALIBRATION_TIMEOUT_S,
             )
-            heston_params = heston_result.params
+            if calibration_task in _done:
+                # .result() re-raises if the (in-time) calibration failed —
+                # caught below, falling back to delta approximation.
+                heston_params = calibration_task.result().params
+            # else: still running past the ceiling — move on with
+            # heston_params=None; the task finishes in the background.
         except Exception as exc:
             _log.warning("Heston calibration failed or timed out for %s: %s", symbol, exc)
             heston_params = None

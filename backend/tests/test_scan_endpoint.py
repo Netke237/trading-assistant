@@ -527,7 +527,7 @@ async def test_process_symbol_reuses_heston_params_for_alt_contracts():
 async def test_heston_calibration_respects_scan_concurrency_limit():
     """Regression guard: an ungated (or per-request-gated) executor could let
     far more than _SCAN_CONCURRENCY symbols calibrate at once, starving each
-    other out via the wait_for ceiling. Calibration must be gated by the
+    other out via the timeout ceiling. Calibration must be gated by the
     module-level _HESTON_SEMAPHORE (not the `sem` parameter passed in below,
     which only gates this function's own network-fetch phases) — so peak
     concurrent calibrations across many symbols processed at once, all
@@ -586,9 +586,9 @@ async def test_heston_calibration_respects_scan_concurrency_limit():
 
 @pytest.mark.asyncio
 async def test_run_heston_calibration_holds_semaphore_until_real_completion():
-    """Precise regression guard: a caller giving up early (simulated here
-    exactly as the real call site does, via
-    asyncio.wait_for(asyncio.shield(...), timeout=...)) must NOT release
+    """Precise regression guard: a caller giving up early — here via
+    asyncio.wait with a short timeout, the same give-up-without-cancelling
+    contract the real call site relies on — must NOT release
     _HESTON_SEMAPHORE before the underlying calibrate_heston call actually
     finishes — otherwise a new attempt could be admitted while this one still
     occupies a real worker, defeating the point of gating by the semaphore
@@ -606,10 +606,9 @@ async def test_run_heston_calibration_holds_semaphore_until_real_completion():
 
     with patch("app.routers.scan.calibrate_heston", side_effect=_slow):
         task = asyncio.ensure_future(_run_heston_calibration([], 100.0))
-        try:
-            await asyncio.wait_for(asyncio.shield(task), timeout=0.05)
-        except asyncio.TimeoutError:
-            pass  # the caller "gives up" here, exactly like _process_symbol does
+        # Give up without cancelling the task — exactly how _process_symbol
+        # does it (asyncio.wait leaves an unfinished task pending-uncancelled).
+        await asyncio.wait({task}, timeout=0.05)
 
         # The caller gave up, but the real job (0.3s) is still running — its
         # semaphore permit must NOT have been released yet.
@@ -623,6 +622,64 @@ async def test_run_heston_calibration_holds_semaphore_until_real_completion():
         # capacity so this test doesn't leak state into later tests.
         await task
         assert _HESTON_SEMAPHORE._value == _SCAN_CONCURRENCY
+
+
+@pytest.mark.asyncio
+async def test_abandoned_heston_task_exception_does_not_leak_unretrieved(monkeypatch, caplog):
+    """Regression guard: a calibration that the caller gives up on (its
+    asyncio.wait ceiling elapses), and which then raises AFTER being
+    abandoned, must not produce ANY asyncio ERROR log — neither the
+    'Task exception was never retrieved' finalizer error (closed by the
+    done-callback) NOR the 'exception in shielded future' error that
+    asyncio.shield ITSELF emits on Python 3.12+ for an abandoned shielded
+    task that raises (closed by not using shield at the call site — plain
+    asyncio.wait leaves the task pending-but-uncancelled and logs nothing).
+    Distinct from the clean-timeout and immediate-raise paths: here the raise
+    happens on the worker thread only after the caller has already moved on."""
+    import gc
+    import logging
+    import time
+    import app.routers.scan as scan_module
+    from app.routers.scan import _process_symbol
+
+    monkeypatch.setattr(scan_module, "_HESTON_CALIBRATION_TIMEOUT_S", 0.05)
+
+    def _slow_then_raise(option_chain, S, r):
+        time.sleep(0.2)
+        raise RuntimeError("simulated failure after caller gave up")
+
+    pass_card, contract_score, fake_plan = _heston_wiring_fixtures()
+    sem = asyncio.Semaphore(10)
+    mock_client = MagicMock()
+
+    caplog.set_level(logging.ERROR, logger="asyncio")
+    with (
+        patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
+        patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)),
+        patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
+        patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
+        patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
+        patch("app.routers.scan.score_stock", return_value=pass_card),
+        patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=_MOCK_CHAIN)),
+        patch("app.routers.scan.validate_contract", return_value=contract_score),
+        patch("app.routers.scan.build_trade_plan", return_value=fake_plan),
+        patch("app.routers.scan.log_event"),
+        patch("app.routers.scan.calibrate_heston", side_effect=_slow_then_raise),
+    ):
+        await _process_symbol("AAPL", "Bullish", "Swing", mock_client, sem, "test-scan-id")
+        # Give the abandoned task time to actually raise and be finalized.
+        await asyncio.sleep(0.3)
+
+    # Force finalization of the now-unreferenced task so any unretrieved
+    # exception would be logged by asyncio's default finalizer handler.
+    gc.collect()
+
+    leaked = [rec.getMessage() for rec in caplog.records
+              if rec.name == "asyncio" and rec.levelno >= logging.ERROR]
+    assert not leaked, (
+        "abandoned Heston task produced asyncio ERROR log noise "
+        f"(unretrieved exception or shielded-future error): {leaked}"
+    )
 
 
 def test_default_heston_calibration_fixture_is_active():
