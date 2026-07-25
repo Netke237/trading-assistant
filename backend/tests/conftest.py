@@ -113,6 +113,26 @@ def _reset_strategy_param_cache():
     sps._CACHE = None
 
 
+@pytest.fixture(autouse=True)
+def _default_fast_heston_calibration():
+    """calibrate_heston became a real, callable name in app.routers.scan once
+    the scan pipeline started calibrating it. Default it to an instant canned
+    result for every test so pre-existing tests with 3+-contract mock chains
+    (test_alternatives.py, test_scan_router_spreads.py, test_shortlist.py)
+    don't silently start doing real scipy numerical integration. Tests that
+    specifically exercise the calibration wiring (test_scan_endpoint.py's
+    Heston tests) override this locally with their own patch(...) inside a
+    `with` block, which correctly takes precedence for its duration and
+    reverts to this default afterward."""
+    from app.models.heston import HestonParams, CalibrationResult
+    fake = CalibrationResult(
+        params=HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7),
+        rmse=0.01, method="heston_grid",
+    )
+    with patch("app.routers.scan.calibrate_heston", return_value=fake):
+        yield
+
+
 # ── Test DB ───────────────────────────────────────────────────────────────────
 
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"

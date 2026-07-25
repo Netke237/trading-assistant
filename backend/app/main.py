@@ -205,6 +205,11 @@ async def lifespan(app: FastAPI):
         _ibkr_sched.shutdown()
     except Exception:
         pass
+    try:
+        from app.routers.scan import _HESTON_EXECUTOR
+        _HESTON_EXECUTOR.shutdown(wait=False, cancel_futures=True)
+    except Exception:
+        pass
     if _scheduler._running:
         await _scheduler.stop()
     for task in (_notification_worker_task, _portfolio_monitor_task, _regime_monitor_task, _chart_alert_scheduler_task):
