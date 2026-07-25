@@ -60,6 +60,46 @@ def test_bearish_target_moves_down():
     assert p.target_price < 318.73
 
 
+def test_heston_params_flow_through_to_rr_and_targets():
+    from app.models.heston import HestonParams
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    # Override _plan()'s default fixture (stock=318.73, strike=375, dte=185) to
+    # a well-behaved, not-deep-OTM/long-dated one. The default fixture is
+    # exactly the shape that triggers Task 1's monotonicity guard for T2/T3 (a
+    # real heston_price numerical-integration artifact — verified while
+    # writing this plan: heston_price on the default fixture's T1/T2/T3 gives
+    # 12.52 / 10.09 / 14.08, non-monotonic), which would make this "everything
+    # is Heston-priced" happy-path test assert something that isn't true.
+    p = _plan(
+        heston_params=params,
+        stock_price=185.0, strike=190.0, dte=30, premium=2.50, delta=0.45,
+        entry_bid=2.45, entry_ask=2.55,
+    )
+    assert p.rr_model == "Heston repriced"
+    assert len(p.targets) == 3
+    assert all(t.pricingMethod == "Heston repriced" for t in p.targets)
+
+
+def test_heston_params_default_none_preserves_delta_approx():
+    # No heston_params passed — must behave exactly as before this change.
+    p = _plan()
+    assert p.rr_model == "Delta approximation"
+
+
+def test_heston_params_falls_back_per_target_when_non_monotonic():
+    """Using _plan()'s own default (deep-OTM, long-dated) fixture together
+    with heston_params: T1 is still Heston-priced, but T2 and T3 fall back to
+    the delta approximation via Task 1's monotonicity guard in
+    reward_risk.estimate_targets — verified directly against this exact
+    fixture while writing this plan."""
+    from app.models.heston import HestonParams
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    p = _plan(heston_params=params)  # default fixture: stock=318.73, strike=375, dte=185
+    assert [t.pricingMethod for t in p.targets] == [
+        "Heston repriced", "Delta approximation", "Delta approximation",
+    ]
+
+
 def test_recompute_endpoint_matches_helper():
     # The endpoint must equal build_trade_plan for the same inputs — otherwise
     # the "single source of truth" claim is hollow. Reconstruct the helper call
