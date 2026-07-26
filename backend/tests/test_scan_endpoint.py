@@ -524,7 +524,7 @@ async def test_process_symbol_reuses_heston_params_for_alt_contracts():
 
 
 @pytest.mark.asyncio
-async def test_heston_calibration_respects_scan_concurrency_limit():
+async def test_heston_calibration_respects_scan_concurrency_limit(monkeypatch):
     """Regression guard: an ungated (or per-request-gated) executor could let
     far more than _SCAN_CONCURRENCY symbols calibrate at once, starving each
     other out via the timeout ceiling. Calibration must be gated by the
@@ -536,11 +536,27 @@ async def test_heston_calibration_respects_scan_concurrency_limit():
     scenario: even if this test constructed a second, independent `sem` and
     ran a second batch of _process_symbol calls "concurrently" with these
     ones, they'd still share the same module-level _HESTON_SEMAPHORE and
-    _HESTON_EXECUTOR."""
+    _HESTON_EXECUTOR.
+
+    _HESTON_EXECUTOR's own max_workers happens to equal _SCAN_CONCURRENCY
+    too, so a peak <= _SCAN_CONCURRENCY result alone doesn't prove the
+    SEMAPHORE is what's enforcing the cap — the executor's worker pool would
+    enforce the same bound even with no semaphore at all. To isolate the
+    semaphore's effect, this test patches in a much wider executor
+    (max_workers = 4x _SCAN_CONCURRENCY) for its duration: if the semaphore
+    weren't doing real work, peak concurrency would be free to exceed
+    _SCAN_CONCURRENCY here."""
     import threading
     import time
+    import concurrent.futures
+    import app.routers.scan as scan_module
     from app.routers.scan import _process_symbol, _SCAN_CONCURRENCY
     from app.models.heston import HestonParams, CalibrationResult
+
+    wide_executor = concurrent.futures.ThreadPoolExecutor(
+        max_workers=_SCAN_CONCURRENCY * 4, thread_name_prefix="test-heston-wide",
+    )
+    monkeypatch.setattr(scan_module, "_HESTON_EXECUTOR", wide_executor)
 
     pass_card, contract_score, fake_plan = _heston_wiring_fixtures()
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)  # gates only this test's own network-fetch mocks
@@ -563,25 +579,32 @@ async def test_heston_calibration_respects_scan_concurrency_limit():
             rmse=0.0, method="heston_grid",
         )
 
-    with (
-        patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
-        patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)),
-        patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
-        patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
-        patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
-        patch("app.routers.scan.score_stock", return_value=pass_card),
-        patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=_MOCK_CHAIN)),
-        patch("app.routers.scan.validate_contract", return_value=contract_score),
-        patch("app.routers.scan.build_trade_plan", return_value=fake_plan),
-        patch("app.routers.scan.log_event"),
-        patch("app.routers.scan.calibrate_heston", side_effect=_tracking_calibrate),
-    ):
-        await asyncio.gather(*[
-            _process_symbol(f"SYM{i}", "Bullish", "Swing", mock_client, sem, "test-scan-id")
-            for i in range(10)
-        ])
+    try:
+        with (
+            patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
+            patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)),
+            patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
+            patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
+            patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
+            patch("app.routers.scan.score_stock", return_value=pass_card),
+            patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=_MOCK_CHAIN)),
+            patch("app.routers.scan.validate_contract", return_value=contract_score),
+            patch("app.routers.scan.build_trade_plan", return_value=fake_plan),
+            patch("app.routers.scan.log_event"),
+            patch("app.routers.scan.calibrate_heston", side_effect=_tracking_calibrate),
+        ):
+            await asyncio.gather(*[
+                _process_symbol(f"SYM{i}", "Bullish", "Swing", mock_client, sem, "test-scan-id")
+                for i in range(10)
+            ])
+    finally:
+        wide_executor.shutdown(wait=True)
 
-    assert peak <= _SCAN_CONCURRENCY, f"peak concurrent calibrations was {peak}, expected <= {_SCAN_CONCURRENCY}"
+    assert peak <= _SCAN_CONCURRENCY, (
+        f"peak concurrent calibrations was {peak}, expected <= {_SCAN_CONCURRENCY} — "
+        "even with a much wider executor available, the semaphore must be the thing "
+        "holding this bound"
+    )
 
 
 @pytest.mark.asyncio
