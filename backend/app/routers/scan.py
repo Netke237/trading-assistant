@@ -182,7 +182,54 @@ def _alt_reason(alt: dict, primary: dict, *, is_call: bool) -> str:
 # 10 concurrent × 5 calls = 50 simultaneous requests caused severe throttling (50-78s/symbol).
 # 3 concurrent × 5 calls = 15 simultaneous requests → consistent ~4-6s/symbol.
 # O-3 batch price fetch drops Pass 1 to 3 calls; 5 × 3 = 15 — same ceiling, more throughput.
+# This bounds Tradier-facing HTTP concurrency ONLY (the network fetch phase of
+# _process_symbol, gated by the per-scan `sem` parameter). It must NOT be used
+# to size anything that doesn't call Tradier — see _HESTON_CONCURRENCY below.
 _SCAN_CONCURRENCY = 5
+
+# calibrate_heston (via heston_cache.calibrate_cached) makes no network calls —
+# it's pure local CPU work (a brute-force grid search priced with SciPy) against
+# an option chain already fetched. It is therefore bound by local CPU capacity,
+# not by Tradier's rate limit, and reusing _SCAN_CONCURRENCY here would leave
+# most cores idle on any machine with more than 5 logical cores. Scale with the
+# host's core count instead, leaving a one-core margin for the event loop
+# thread and other concurrent per-request work; floor at _SCAN_CONCURRENCY so
+# this is never smaller than before on constrained hosts (or if the core count
+# is undetectable).
+def _detect_cpu_count() -> int | None:
+    """Prefer sched_getaffinity: under Docker/Kubernetes CPU pinning
+    (--cpuset-cpus, a Kubernetes cpuset-manager allocation), it reflects the
+    container's actual usable cores, whereas os.cpu_count() always reports
+    the host's total, which would oversize the pool on a constrained
+    container. Linux-only (absent on Windows and macOS), and doesn't see
+    quota-only limits (e.g. Docker --cpus with no cpuset pinning) — those
+    still fall through to cpu_count()'s host-wide figure, so this is a
+    partial mitigation, not a full one. Computed once at import time, so a
+    later live cpuset resize isn't picked up without a process restart.
+
+    Not defensive against every failure mode of the underlying syscall — a
+    sandboxed/seccomp environment could plausibly raise OSError instead of
+    just lacking the attribute; that's accepted here since this project's
+    actual deployments (bare host, plain Docker) don't do that.
+    """
+    try:
+        return len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        return os.cpu_count()
+
+
+def _compute_heston_concurrency(scan_concurrency: int, detected_cpu_count: int | None) -> int:
+    return max(scan_concurrency, (detected_cpu_count or scan_concurrency) - 1)
+
+
+# Known accepted gap: this sizes the *thread pool*, not the underlying
+# numeric work. If SciPy's BLAS/LAPACK backend is itself multi-threaded,
+# each worker thread can fan out into several more OS threads, oversubscribing
+# the CPU beyond what this constant implies. Not addressed here — pinning
+# OMP_NUM_THREADS/OPENBLAS_NUM_THREADS/MKL_NUM_THREADS would be a
+# process-wide change affecting all numeric code, not just this call site,
+# and is out of scope for this fix.
+_HESTON_CONCURRENCY = _compute_heston_concurrency(_SCAN_CONCURRENCY, _detect_cpu_count())
 
 # calibrate_heston (via heston_cache.calibrate_cached) is a synchronous call
 # that can block its calling thread far longer than its own internal 1s
@@ -191,12 +238,12 @@ _SCAN_CONCURRENCY = 5
 # shutdown(wait=True) for the real grid-search duration; see this plan's
 # architecture notes). Safeguards against that, both scoped to this new call
 # site only — heston_cache.py itself is untouched:
-#   1. A small dedicated pool, sized to _SCAN_CONCURRENCY, so a pile-up of
+#   1. A small dedicated pool, sized to _HESTON_CONCURRENCY, so a pile-up of
 #      slow calibrations can't starve asyncio's shared default executor (also
 #      used by compute_confidence and _compute_dhmm in this same function).
 #   2. Gating calibration behind a PROCESS-WIDE semaphore sized to match the
 #      executor (see the calibration call site below) — this caps concurrent
-#      calibrations at _SCAN_CONCURRENCY across the WHOLE process, not just
+#      calibrations at _HESTON_CONCURRENCY across the WHOLE process, not just
 #      within one scan. Deliberately NOT the per-request `sem` parameter
 #      _process_symbol receives: `semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)`
 #      in run_scan() is created fresh on every call, but a scheduled scan
@@ -204,21 +251,28 @@ _SCAN_CONCURRENCY = 5
 #      concurrently (nothing serializes them — _state_lock only guards a few
 #      lines of _last_request/_last_result bookkeeping, not scan execution) —
 #      two independent per-request semaphores would let up to 2x
-#      _SCAN_CONCURRENCY symbols contend for this single executor's workers.
+#      _HESTON_CONCURRENCY symbols contend for this single executor's workers.
 #   3. A hard per-symbol wait_for ceiling, so one slow calibration can't stall
 #      this symbol's scan processing — the abandoned calibration keeps running
 #      in the background in _HESTON_EXECUTOR, but this symbol moves on with
 #      heston_params=None (delta approximation) instead of waiting on it.
 _HESTON_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
-    max_workers=_SCAN_CONCURRENCY, thread_name_prefix="heston-calib",
+    max_workers=_HESTON_CONCURRENCY, thread_name_prefix="heston-calib",
 )
-_HESTON_SEMAPHORE = asyncio.Semaphore(_SCAN_CONCURRENCY)
+_HESTON_SEMAPHORE = asyncio.Semaphore(_HESTON_CONCURRENCY)
 # Note: asyncio.Semaphore binds to whichever event loop is running the first
 # time it actually blocks. Production runs a single long-lived loop, so this
 # is a non-issue there. In tests (function-scoped event loops), a semaphore
 # that blocked on one test's loop binding to a different loop on a later test
 # raises RuntimeError on Python <=3.12; this project's runtime (3.14)
 # tolerates it, but that's a version-specific relaxation, not a guarantee.
+#
+# Unchanged by the _HESTON_CONCURRENCY split above: this bounds each symbol's
+# own wait, not queueing delay. Decoupling concurrency from _SCAN_CONCURRENCY
+# removes queueing as a cause of timeouts, but whether 2.0s comfortably covers
+# a free worker's actual grid-search time hasn't been measured against a real
+# scan — still an open item (see the "Heston repriced vs. delta approximation
+# split" follow-up).
 _HESTON_CALIBRATION_TIMEOUT_S = 2.0
 
 

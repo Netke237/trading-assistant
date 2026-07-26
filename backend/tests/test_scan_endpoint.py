@@ -235,6 +235,71 @@ def test_scan_concurrency_is_five():
     assert _SCAN_CONCURRENCY == 5, f"Expected 5, got {_SCAN_CONCURRENCY}"
 
 
+def test_heston_concurrency_decoupled_from_scan_concurrency():
+    """Heston calibration makes no Tradier calls, so its executor/semaphore
+    must be sized independently of the Tradier-rate-limit-driven
+    _SCAN_CONCURRENCY, scaling with local CPU capacity instead (see scan.py's
+    _HESTON_CONCURRENCY comment) — never smaller than _SCAN_CONCURRENCY even
+    on a low-core or cpu-count-undetectable host.
+
+    This only checks that the module-level constants were wired up by calling
+    _compute_heston_concurrency/_detect_cpu_count — the formula's actual
+    edge-case behavior (None, 1, 2 cores) is covered independently by
+    test_compute_heston_concurrency_* below, without depending on this host's
+    real core count."""
+    from app.routers.scan import (
+        _SCAN_CONCURRENCY, _HESTON_CONCURRENCY, _HESTON_EXECUTOR, _HESTON_SEMAPHORE,
+        _compute_heston_concurrency, _detect_cpu_count,
+    )
+
+    assert _HESTON_CONCURRENCY == _compute_heston_concurrency(_SCAN_CONCURRENCY, _detect_cpu_count())
+    assert _HESTON_CONCURRENCY >= _SCAN_CONCURRENCY
+    assert _HESTON_EXECUTOR._max_workers == _HESTON_CONCURRENCY
+    assert _HESTON_SEMAPHORE._value == _HESTON_CONCURRENCY
+
+
+@pytest.mark.parametrize("detected_cpu_count,expected", [
+    (None, 5),   # cpu_count() undetectable — floor at _SCAN_CONCURRENCY
+    (1, 5),      # 1 core - 1 = 0, floors at _SCAN_CONCURRENCY
+    (2, 5),      # 2 cores - 1 = 1, still floors at _SCAN_CONCURRENCY
+    (5, 5),      # 5 cores - 1 = 4, still floors at _SCAN_CONCURRENCY
+    (6, 5),      # 6 cores - 1 = 5, exactly at the floor
+    (8, 7),      # 8 cores - 1 = 7, above the floor
+    (16, 15),    # 16 cores - 1 = 15, above the floor
+])
+def test_compute_heston_concurrency_edge_cases(detected_cpu_count, expected):
+    """Exercises the sizing formula directly against explicit cpu-count
+    inputs, independent of the actual host's core count — this is what
+    catches an off-by-one or a wrong floor/operator, which a test that only
+    re-derives the formula from the live os.cpu_count() value cannot."""
+    from app.routers.scan import _compute_heston_concurrency
+
+    assert _compute_heston_concurrency(5, detected_cpu_count) == expected
+
+
+def test_detect_cpu_count_falls_back_without_sched_getaffinity(monkeypatch):
+    """Windows (and some other platforms) have no os.sched_getaffinity —
+    must fall back to os.cpu_count() rather than raising."""
+    import os
+    from app.routers.scan import _detect_cpu_count
+
+    monkeypatch.delattr(os, "sched_getaffinity", raising=False)
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    assert _detect_cpu_count() == 8
+
+
+def test_detect_cpu_count_prefers_sched_getaffinity(monkeypatch):
+    """When available, sched_getaffinity reflects cpuset/cgroup pinning
+    (e.g. Docker --cpuset-cpus) that os.cpu_count() ignores — it must win
+    over the host-wide os.cpu_count() figure."""
+    import os
+    from app.routers.scan import _detect_cpu_count
+
+    monkeypatch.setattr(os, "sched_getaffinity", lambda pid: {0, 1}, raising=False)
+    monkeypatch.setattr(os, "cpu_count", lambda: 16)
+    assert _detect_cpu_count() == 2
+
+
 # ── O-3: Batch price pre-fetch ────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -526,26 +591,33 @@ async def test_process_symbol_reuses_heston_params_for_alt_contracts():
 @pytest.mark.asyncio
 async def test_heston_calibration_respects_scan_concurrency_limit(monkeypatch):
     """Regression guard: an ungated (or per-request-gated) executor could let
-    far more than _SCAN_CONCURRENCY symbols calibrate at once, starving each
+    far more than _HESTON_CONCURRENCY symbols calibrate at once, starving each
     other out via the timeout ceiling. Calibration must be gated by the
     module-level _HESTON_SEMAPHORE (not the `sem` parameter passed in below,
     which only gates this function's own network-fetch phases) — so peak
     concurrent calibrations across many symbols processed at once, all
     sharing the process-wide _HESTON_SEMAPHORE, must never exceed
-    _SCAN_CONCURRENCY. This also implicitly covers the cross-scan-overlap
+    _HESTON_CONCURRENCY. This also implicitly covers the cross-scan-overlap
     scenario: even if this test constructed a second, independent `sem` and
     ran a second batch of _process_symbol calls "concurrently" with these
     ones, they'd still share the same module-level _HESTON_SEMAPHORE and
     _HESTON_EXECUTOR.
 
-    _HESTON_EXECUTOR's own max_workers happens to equal _SCAN_CONCURRENCY
-    too, so a peak <= _SCAN_CONCURRENCY result alone doesn't prove the
+    _HESTON_EXECUTOR's own max_workers happens to equal _HESTON_CONCURRENCY
+    too, so a peak <= _HESTON_CONCURRENCY result alone doesn't prove the
     SEMAPHORE is what's enforcing the cap — the executor's worker pool would
     enforce the same bound even with no semaphore at all. To isolate the
-    semaphore's effect, this test patches in a much wider executor
-    (max_workers = 4x _SCAN_CONCURRENCY) for its duration: if the semaphore
-    weren't doing real work, peak concurrency would be free to exceed
-    _SCAN_CONCURRENCY here."""
+    semaphore's effect, this test patches in a much wider executor for its
+    duration: if the semaphore weren't doing real work, peak concurrency
+    would be free to exceed the semaphore's cap here.
+
+    Both the semaphore and the executor are monkeypatched to a small fixed
+    TEST_CONCURRENCY rather than the real (host-dependent) _HESTON_CONCURRENCY
+    — on a high-core-count machine the live value could be 60+, which would
+    spin up hundreds of OS threads and dozens of symbols just for this one
+    test. _run_heston_calibration looks up _HESTON_SEMAPHORE/_HESTON_EXECUTOR
+    as module globals at call time, so patching the module attributes is
+    sufficient to redirect it."""
     import threading
     import time
     import concurrent.futures
@@ -553,14 +625,17 @@ async def test_heston_calibration_respects_scan_concurrency_limit(monkeypatch):
     from app.routers.scan import _process_symbol, _SCAN_CONCURRENCY
     from app.models.heston import HestonParams, CalibrationResult
 
+    TEST_CONCURRENCY = 4
     wide_executor = concurrent.futures.ThreadPoolExecutor(
-        max_workers=_SCAN_CONCURRENCY * 4, thread_name_prefix="test-heston-wide",
+        max_workers=TEST_CONCURRENCY * 4, thread_name_prefix="test-heston-wide",
     )
     monkeypatch.setattr(scan_module, "_HESTON_EXECUTOR", wide_executor)
+    monkeypatch.setattr(scan_module, "_HESTON_SEMAPHORE", asyncio.Semaphore(TEST_CONCURRENCY))
 
     pass_card, contract_score, fake_plan = _heston_wiring_fixtures()
     sem = asyncio.Semaphore(_SCAN_CONCURRENCY)  # gates only this test's own network-fetch mocks
     mock_client = MagicMock()
+    symbol_count = TEST_CONCURRENCY + 10
 
     lock = threading.Lock()
     current = 0
@@ -595,13 +670,13 @@ async def test_heston_calibration_respects_scan_concurrency_limit(monkeypatch):
         ):
             await asyncio.gather(*[
                 _process_symbol(f"SYM{i}", "Bullish", "Swing", mock_client, sem, "test-scan-id")
-                for i in range(10)
+                for i in range(symbol_count)
             ])
     finally:
         wide_executor.shutdown(wait=True)
 
-    assert peak <= _SCAN_CONCURRENCY, (
-        f"peak concurrent calibrations was {peak}, expected <= {_SCAN_CONCURRENCY} — "
+    assert peak <= TEST_CONCURRENCY, (
+        f"peak concurrent calibrations was {peak}, expected <= {TEST_CONCURRENCY} — "
         "even with a much wider executor available, the semaphore must be the thing "
         "holding this bound"
     )
@@ -617,7 +692,7 @@ async def test_run_heston_calibration_holds_semaphore_until_real_completion():
     occupies a real worker, defeating the point of gating by the semaphore
     at all."""
     import time
-    from app.routers.scan import _run_heston_calibration, _HESTON_SEMAPHORE, _SCAN_CONCURRENCY
+    from app.routers.scan import _run_heston_calibration, _HESTON_SEMAPHORE, _HESTON_CONCURRENCY
     from app.models.heston import HestonParams, CalibrationResult
 
     def _slow(option_chain, S, r):
@@ -635,7 +710,7 @@ async def test_run_heston_calibration_holds_semaphore_until_real_completion():
 
         # The caller gave up, but the real job (0.3s) is still running — its
         # semaphore permit must NOT have been released yet.
-        assert _HESTON_SEMAPHORE._value == _SCAN_CONCURRENCY - 1, (
+        assert _HESTON_SEMAPHORE._value == _HESTON_CONCURRENCY - 1, (
             "semaphore permit was released before the underlying calibration "
             "actually finished — a new attempt could now be admitted while "
             "this one still occupies a real worker"
@@ -644,7 +719,7 @@ async def test_run_heston_calibration_holds_semaphore_until_real_completion():
         # Let the real job finish and release its permit, restoring full
         # capacity so this test doesn't leak state into later tests.
         await task
-        assert _HESTON_SEMAPHORE._value == _SCAN_CONCURRENCY
+        assert _HESTON_SEMAPHORE._value == _HESTON_CONCURRENCY
 
 
 @pytest.mark.asyncio
