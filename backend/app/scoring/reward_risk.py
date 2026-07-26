@@ -114,7 +114,9 @@ def estimate_targets(
         opt_price: float
         method: PricingMethod
         raw_price = None
-        heston_ok = False
+        heston_ok = False          # was the raw Heston price numerically usable?
+        use_heston_price = False   # does this level's (post-floor) Heston price also
+                                    # clear the display-consistency check below?
 
         if heston_params is not None:
             try:
@@ -151,20 +153,23 @@ def estimate_targets(
             # failed outright — this is the pre-existing behavior for every
             # case that isn't a pure numerical artifact, unchanged by this fix.
             if prev_display_price is not None and floored_price < prev_display_price:
-                heston_ok = False
+                use_heston_price = False
             else:
+                use_heston_price = True
                 opt_price = floored_price
                 method = PricingMethod.HESTON
                 prev_heston_price = opt_price
 
-        if not heston_ok:
+        if not use_heston_price:
             # Heston is unusable for this level — either genuinely (no
-            # params, raised, or returned a non-finite/non-positive price)
-            # or because its own artifact-floored price still can't clear
-            # the display check above. Either way, fall back to the delta
-            # approximation. This level does NOT update prev_heston_price:
-            # a later level's Heston price is still judged against the last
-            # real Heston reference, not this fallback.
+            # params, raised, or returned a non-finite/non-positive price;
+            # heston_ok is False) or because its own artifact-floored price
+            # still can't clear the display check above (heston_ok was True
+            # but use_heston_price was rejected). Either way, fall back to
+            # the delta approximation. This level does NOT update
+            # prev_heston_price: a later level's Heston price is still
+            # judged against the last real Heston reference, not this
+            # fallback.
             delta = 0.5 if (is_call and t_price > strike) or (not is_call and t_price < strike) else 0.3
             price_move = abs(t_price - stock_price)
             opt_price = max(0.01, current_premium + delta * price_move)
