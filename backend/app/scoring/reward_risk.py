@@ -186,7 +186,12 @@ def estimate_targets(
         # raises rrContribution below for the clamped level (reward =
         # opt_price - current_premium uses the post-clamp price) —
         # intentional: rrContribution must stay consistent with the
-        # estimatedOptionPrice actually shown on that same row.
+        # estimatedOptionPrice actually shown on that same row. For a level
+        # that was just accepted on the Heston branch above, this clamp is
+        # provably a no-op: acceptance already required
+        # floored_price >= prev_display_price, so opt_price already satisfies
+        # the invariant here — this clamp only ever does real work when the
+        # level fell back to the delta approximation.
         if prev_display_price is not None:
             opt_price = max(opt_price, prev_display_price)
 
