@@ -86,18 +86,24 @@ def test_heston_params_default_none_preserves_delta_approx():
     assert p.rr_model == "Delta approximation"
 
 
-def test_heston_params_falls_back_per_target_when_non_monotonic():
+def test_heston_params_floors_non_monotonic_target_instead_of_falling_back():
     """Using _plan()'s own default (deep-OTM, long-dated) fixture together
-    with heston_params: T1 is still Heston-priced, but T2 and T3 fall back to
-    the delta approximation via Task 1's monotonicity guard in
-    reward_risk.estimate_targets — verified directly against this exact
-    fixture while writing this plan."""
+    with heston_params: T1 is Heston-priced, T2's raw Heston price is a
+    numerical artifact (verified directly against this exact fixture:
+    12.518866931556794 / 10.086141661385824 / 14.081229812545331) and is
+    floored up to T1's price rather than switched to the delta
+    approximation, and T3's own legitimate Heston price is preserved
+    unmodified — see backend/tests/test_reward_risk.py's
+    test_estimate_targets_real_fixture_preserves_t3_after_t2_artifact for the
+    reward_risk-level version of this same regression."""
     from app.models.heston import HestonParams
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
     p = _plan(heston_params=params)  # default fixture: stock=318.73, strike=375, dte=185
     assert [t.pricingMethod for t in p.targets] == [
-        "Heston repriced", "Delta approximation", "Delta approximation",
+        "Heston repriced", "Heston repriced", "Heston repriced",
     ]
+    prices = [t.estimatedOptionPrice for t in p.targets]
+    assert prices == [12.52, 12.52, 14.08]
 
 
 def test_recompute_endpoint_matches_helper():
