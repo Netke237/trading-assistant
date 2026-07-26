@@ -100,42 +100,71 @@ def estimate_targets(
     ]
 
     results = []
-    prev_opt_price = None  # only meaningful once T1 has been priced — see below
+    prev_display_price = None  # the displayed/chosen price of the previous level — used
+                                # only for the final non-decreasing-display invariant below.
+    prev_heston_price = None   # the previous level's TRUE Heston-derived price (raw, or
+                                # floored against this same reference) — used only to decide
+                                # whether the current level's raw Heston price is a numerical
+                                # artifact. Deliberately never set from a delta-approximation
+                                # fallback value, so a fallback at one level can never distort
+                                # the artifact check for a later, independently-legitimate
+                                # Heston price (round 3 adversarial-audit finding, fixed here).
     for t_price in targets_prices:
         dte_at_target = max(expiry_years * 0.5, 7 / 365)
-        opt_price = None
+        opt_price: float
         method: PricingMethod
+        raw_price = None
+        heston_ok = False
 
         if heston_params is not None:
             try:
-                opt_price = heston_price(t_price, strike, dte_at_target, r, heston_params, is_call)
-                method = PricingMethod.HESTON
+                raw_price = heston_price(t_price, strike, dte_at_target, r, heston_params, is_call)
             except Exception:
-                opt_price = None
-                method = PricingMethod.UNAVAILABLE
-        else:
-            opt_price = None
-            method = PricingMethod.DELTA_APPROX
+                raw_price = None
+            heston_ok = raw_price is not None and math.isfinite(raw_price) and raw_price > 0
 
-        # T1/T2/T3 share dte_at_target and only differ in t_price, so a
-        # correctly-priced option must be monotonically increasing ACROSS
-        # THAT LADDER — a Heston price that comes out lower than the
-        # previous level's chosen price is a numerical-integration artifact
-        # (see this task's intro), not a real option value. This must NEVER
-        # be compared against current_premium: current_premium is priced at
-        # the full expiry_years, a longer tenor than dte_at_target, so a
-        # legitimate T1 price can be lower than current_premium purely from
-        # time decay — prev_opt_price starts at None so T1 is never checked
-        # against anything. Guard only the Heston case; the pure
-        # delta-approximation path is untouched.
-        non_monotonic = (
-            method == PricingMethod.HESTON
-            and opt_price is not None
-            and prev_opt_price is not None
-            and opt_price < prev_opt_price
-        )
+        if heston_ok:
+            floored_price = raw_price
+            # T1/T2/T3 share dte_at_target and only differ in t_price, so a
+            # correctly-priced option must be monotonically increasing ACROSS
+            # THAT LADDER — a Heston price that comes out lower than the
+            # previous level's TRUE Heston price is a numerical-integration
+            # artifact (see this plan's intro), not a real option value or a
+            # sign that Heston is unusable for this level. Floor it against
+            # the true Heston reference rather than discarding the whole
+            # Heston computation for a cruder model — this keeps the level
+            # labelled "Heston repriced" and, critically, keeps
+            # prev_heston_price anchored to real Heston output so a LATER
+            # level's own legitimate Heston price is never compared against
+            # an inflated fallback value.
+            if prev_heston_price is not None and floored_price < prev_heston_price:
+                floored_price = prev_heston_price
+            # Even after flooring against the TRUE Heston chain, this level
+            # can still be lower than what's already on display, if an
+            # earlier, unrelated level had a genuine Heston failure and its
+            # fallback was itself inflated. This level cannot honestly stay
+            # labelled "Heston repriced" in that case — the number that would
+            # end up on screen (after the invariant clamp below) would not be
+            # what Heston computed for THIS level, it would be inherited from
+            # that earlier, unrelated fallback. Fall back to the delta
+            # approximation for this level too, exactly as if Heston had
+            # failed outright — this is the pre-existing behavior for every
+            # case that isn't a pure numerical artifact, unchanged by this fix.
+            if prev_display_price is not None and floored_price < prev_display_price:
+                heston_ok = False
+            else:
+                opt_price = floored_price
+                method = PricingMethod.HESTON
+                prev_heston_price = opt_price
 
-        if opt_price is None or not math.isfinite(opt_price) or opt_price <= 0 or non_monotonic:
+        if not heston_ok:
+            # Heston is unusable for this level — either genuinely (no
+            # params, raised, or returned a non-finite/non-positive price)
+            # or because its own artifact-floored price still can't clear
+            # the display check above. Either way, fall back to the delta
+            # approximation. This level does NOT update prev_heston_price:
+            # a later level's Heston price is still judged against the last
+            # real Heston reference, not this fallback.
             delta = 0.5 if (is_call and t_price > strike) or (not is_call and t_price < strike) else 0.3
             price_move = abs(t_price - stock_price)
             opt_price = max(0.01, current_premium + delta * price_move)
@@ -143,21 +172,20 @@ def estimate_targets(
 
         # Hard invariant: the *displayed* ladder must be non-decreasing
         # regardless of which pricing path produced each level. A
-        # delta-approximation fallback (either the "no usable Heston price"
-        # branch above, or the non-monotonic-Heston branch above) can itself
-        # undershoot the previous level's chosen price — clamp it up to
-        # prev_opt_price rather than leave a visibly-wrong ladder. This only
-        # ever raises a level, never lowers one, and prev_opt_price is None
-        # for T1 so T1 is never clamped against anything (including
-        # current_premium, which is intentionally never part of this chain).
-        # Note this clamp also raises rrContribution below for the clamped
-        # level (reward = opt_price - current_premium uses the post-clamp
-        # price) — intentional: rrContribution must stay consistent with the
+        # delta-approximation fallback can itself undershoot the previous
+        # level's displayed price — clamp it up to prev_display_price rather
+        # than leave a visibly-wrong ladder. This only ever raises a level,
+        # never lowers one, and prev_display_price is None for T1 so T1 is
+        # never clamped against anything (including current_premium, which
+        # is intentionally never part of this chain). Note this clamp also
+        # raises rrContribution below for the clamped level (reward =
+        # opt_price - current_premium uses the post-clamp price) —
+        # intentional: rrContribution must stay consistent with the
         # estimatedOptionPrice actually shown on that same row.
-        if prev_opt_price is not None:
-            opt_price = max(opt_price, prev_opt_price)
+        if prev_display_price is not None:
+            opt_price = max(opt_price, prev_display_price)
 
-        prev_opt_price = opt_price
+        prev_display_price = opt_price
 
         reward = opt_price - current_premium
         risk_basis = current_premium * premium_stop_pct
