@@ -202,8 +202,10 @@ def test_estimate_targets_floors_non_monotonic_heston_price_instead_of_switching
     reference and stay labelled 'Heston repriced', NOT be switched entirely
     to the cruder delta-approximation model. Switching models was the old
     behavior and is exactly what let a LATER level's legitimate Heston price
-    get wrongly discarded too (see the next test) — this is round 3's
-    adversarial-audit finding, fixed here."""
+    get wrongly discarded too (see the next test): switching models replaces
+    prev_opt_price with an inflated fallback value, so a subsequent level's
+    genuinely correct Heston price can get judged 'non-monotonic' against
+    that inflated reference instead of the true Heston chain."""
     import app.scoring.reward_risk as rr_module
 
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
@@ -300,10 +302,11 @@ def test_estimate_targets_relabels_heston_price_still_below_inflated_prior_displ
     T3 as 'Heston repriced' would mean displaying a number (after the
     non-decreasing-display clamp) that Heston never actually produced for
     T3 — so T3 must fall back to the delta approximation too, exactly as if
-    Heston had failed outright for it. This is a regression guard for a
-    finding made while adversarially auditing this exact plan: an earlier
-    draft of this fix cleared T3's artifact-floor check but then let the
-    final display clamp silently overwrite its price while leaving the
+    Heston had failed outright for it. This is a regression guard against an
+    implementation that only floors a level's price against the true Heston
+    chain without also re-checking it against the actual displayed price:
+    such an implementation would clear T3's artifact-floor check but then let
+    the final display clamp silently overwrite its price while leaving the
     label as 'Heston repriced'."""
     import app.scoring.reward_risk as rr_module
 
@@ -348,14 +351,14 @@ def test_estimate_targets_falls_back_when_both_floor_and_display_checks_fail(mon
     """T3's raw Heston price (3.0) is BOTH an artifact relative to T1's true
     Heston price (10.0, so check 1 floors it to 10.0) AND, even after that
     flooring, still below T2's inflated genuine-failure display (13.75, so
-    check 2 also fails). This exercises both of Task 1 Step 3's checks
-    firing on the same level in the same iteration — the previous test only
-    exercises the display check alone (its T3 raw price already clears the
-    artifact floor unaided). Regression guard for a gap found while
-    adversarially auditing this exact plan a second time: without this test,
-    a future change that reorders or short-circuits the two checks could
-    silently break this specific combination while every other test in this
-    plan still passes."""
+    check 2 also fails). This exercises both the artifact-floor check and
+    the display-consistency check firing on the same level in the same
+    iteration — the previous test only exercises the display check alone
+    (its T3 raw price already clears the artifact floor unaided). Regression
+    guard against a future change that reorders or short-circuits the two
+    checks: every other test in this file exercises at most one of them per
+    level and would not catch a regression that silently breaks this
+    specific combination."""
     import app.scoring.reward_risk as rr_module
 
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
@@ -498,13 +501,13 @@ def test_estimate_rr_falls_back_on_inf_heston_price(monkeypatch):
 
 
 def test_estimate_targets_real_fixture_preserves_t3_after_t2_artifact():
-    """Reproduces round 3's adversarial-audit finding directly against the
-    real (unmocked) heston_price(): with stock_price=318.73, strike=375,
-    dte=185 (the deep-OTM/long-dated default fixture from
-    test_trade_plan.py's _plan()), heston_price() returns a non-monotonic raw
-    ladder — T1=12.518866931556794, T2=10.086141661385824 (an artifact dip),
-    T3=14.081229812545331 (legitimate, verified directly against this repo's
-    real pricer while writing this plan).
+    """Reproduces a real, deep-OTM/long-dated numerical-integration artifact
+    directly against the real (unmocked) heston_price(): with
+    stock_price=318.73, strike=375, dte=185 (the deep-OTM/long-dated default
+    fixture from test_trade_plan.py's _plan()), heston_price() returns a
+    non-monotonic raw ladder — T1=12.518866931556794,
+    T2=10.086141661385824 (an artifact dip), T3=14.081229812545331
+    (legitimate, verified directly against this repo's real pricer).
 
     Before this fix (confirmed by running the current code directly against
     this fixture): T2's dip switched it to the delta-approximation model,
@@ -534,16 +537,16 @@ def test_estimate_targets_real_fixture_preserves_t3_after_t2_artifact():
 
 
 # ── Bearish / put Heston coverage — estimate_targets and estimate_rr had zero
-# is_call=False coverage for any Heston code path (round 3 adversarial-audit
-# finding #4). ──────────────────────────────────────────────────────────────
+# is_call=False coverage for any Heston code path before this; the ladder's
+# direction/delta logic branches on is_call, so the fix above must hold for
+# puts too, not just calls. ──────────────────────────────────────────────────
 
 def test_estimate_targets_put_heston_ladder_happy_path():
     """A bearish/put ladder with no numerical artifact: all three levels
     price cleanly via Heston and the ladder is naturally non-decreasing.
     stock=185, base_target=170.2 (8% down), strike=170 -> target prices
-    170.2/162.8/155.4, verified directly against the real pricer while
-    writing this plan: 2.520609140512505 / 10.16028626218315 /
-    20.778006605067873."""
+    170.2/162.8/155.4, verified directly against the real pricer:
+    2.520609140512505 / 10.16028626218315 / 20.778006605067873."""
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
     targets = estimate_targets(
         stock_price=185, base_target_price=185 * 0.92, strike=170,
@@ -617,11 +620,17 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
     """prev_heston_price must be seeded from whichever level FIRST succeeds,
     not implicitly assumed to be T1. T1 itself fails here (raises), leaving
     prev_heston_price unset — T2 becomes the first real Heston reference.
-    T3's raw price (12.0) is chosen strictly between T1's delta-approximation
-    fallback (10.0) and T2's true Heston price (15.9), so this test can
-    actually distinguish the two: it must floor to T2's price (15.9), not
-    stay at its own raw value, confirming the artifact check is anchored to
-    the correct level."""
+
+    T3's raw price (12.0) is deliberately chosen strictly between T1's
+    delta-approximation fallback (10.0) and T2's true Heston price (15.9),
+    rather than below both, so this test can actually tell "anchored to T2"
+    apart from "still anchored to T1's stale fallback": if prev_heston_price
+    were incorrectly seeded from T1's fallback value and never properly
+    overwritten when T2 succeeds, T3's 12.0 would clear that stale 10.0 floor
+    unchecked, then fail the display-consistency check against the ladder's
+    actual displayed price (15.9, from T2) and surface as 'Delta
+    approximation' at 17.5 instead of correctly flooring to T2's true price
+    and staying 'Heston repriced' at 15.9."""
     import app.scoring.reward_risk as rr_module
 
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
@@ -659,7 +668,9 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
 
     # T3: raw 12.0 sits strictly between T1's delta-approximation fallback
     # (10.0) and T2's TRUE price (15.9) -> only a floor correctly anchored to
-    # T2 forces this to 15.9; a floor anchored to T1's fallback would leave
-    # it at its own raw value (12.0) instead. Stays Heston repriced.
+    # T2 forces this to 15.9; a floor still anchored to T1's stale fallback
+    # would let 12.0 clear that floor unchecked, then fail the
+    # display-consistency check against the ladder's actual displayed price
+    # and surface as Delta approximation at 17.5 instead.
     assert targets[2].pricingMethod == "Heston repriced"
     assert targets[2].estimatedOptionPrice == 15.9
