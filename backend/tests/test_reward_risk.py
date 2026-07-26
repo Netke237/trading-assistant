@@ -617,10 +617,11 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
     """prev_heston_price must be seeded from whichever level FIRST succeeds,
     not implicitly assumed to be T1. T1 itself fails here (raises), leaving
     prev_heston_price unset — T2 becomes the first real Heston reference.
-    T3's raw price (5.0) is an artifact relative to T2's true price (15.9,
-    not T1's delta-approximation fallback of 10.0, even though both are
-    lower than T2) and must floor to T2's price, confirming the artifact
-    check is anchored to the correct level."""
+    T3's raw price (12.0) is chosen strictly between T1's delta-approximation
+    fallback (10.0) and T2's true Heston price (15.9), so this test can
+    actually distinguish the two: it must floor to T2's price (15.9), not
+    stay at its own raw value, confirming the artifact check is anchored to
+    the correct level."""
     import app.scoring.reward_risk as rr_module
 
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
@@ -632,7 +633,10 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
             raise ValueError("integration failed")  # T1: genuinely unusable
         if call_count["n"] == 2:
             return 15.9  # T2: first level to succeed
-        return 5.0  # T3: artifact relative to T2's true price
+        # T3: artifact relative to T2's true price, chosen strictly between
+        # T1's fallback (10.0) and T2's true price (15.9) so this test can
+        # actually distinguish the two
+        return 12.0
 
     monkeypatch.setattr(rr_module, "heston_price", _fake)
     targets = estimate_targets(
@@ -653,8 +657,9 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
     assert targets[1].pricingMethod == "Heston repriced"
     assert targets[1].estimatedOptionPrice == 15.9
 
-    # T3: raw 5.0 is an artifact relative to T2's TRUE price (15.9), not
-    # T1's delta-approximation fallback (10.0) -> floored to 15.9, stays
-    # Heston repriced.
+    # T3: raw 12.0 sits strictly between T1's delta-approximation fallback
+    # (10.0) and T2's TRUE price (15.9) -> only a floor correctly anchored to
+    # T2 forces this to 15.9; a floor anchored to T1's fallback would leave
+    # it at its own raw value (12.0) instead. Stays Heston repriced.
     assert targets[2].pricingMethod == "Heston repriced"
     assert targets[2].estimatedOptionPrice == 15.9

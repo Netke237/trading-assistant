@@ -108,7 +108,7 @@ def estimate_targets(
                                 # artifact. Deliberately never set from a delta-approximation
                                 # fallback value, so a fallback at one level can never distort
                                 # the artifact check for a later, independently-legitimate
-                                # Heston price (round 3 adversarial-audit finding, fixed here).
+                                # Heston price.
     for t_price in targets_prices:
         dte_at_target = max(expiry_years * 0.5, 7 / 365)
         opt_price: float
@@ -131,9 +131,10 @@ def estimate_targets(
             # correctly-priced option must be monotonically increasing ACROSS
             # THAT LADDER — a Heston price that comes out lower than the
             # previous level's TRUE Heston price is a numerical-integration
-            # artifact (see this plan's intro), not a real option value or a
-            # sign that Heston is unusable for this level. Floor it against
-            # the true Heston reference rather than discarding the whole
+            # artifact — a real, reproducible quirk of heston_price()'s
+            # integration for deep-OTM/long-dated inputs, not a real option
+            # value or a sign that Heston is unusable for this level. Floor it
+            # against the true Heston reference rather than discarding the whole
             # Heston computation for a cruder model — this keeps the level
             # labelled "Heston repriced" and, critically, keeps
             # prev_heston_price anchored to real Heston output so a LATER
