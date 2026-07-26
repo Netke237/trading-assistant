@@ -531,3 +531,83 @@ def test_estimate_targets_real_fixture_preserves_t3_after_t2_artifact():
     prices = [t.estimatedOptionPrice for t in targets]
     assert prices == [12.52, 12.52, 14.08]
     assert prices[0] <= prices[1] <= prices[2]
+
+
+# ── Bearish / put Heston coverage — estimate_targets and estimate_rr had zero
+# is_call=False coverage for any Heston code path (round 3 adversarial-audit
+# finding #4). ──────────────────────────────────────────────────────────────
+
+def test_estimate_targets_put_heston_ladder_happy_path():
+    """A bearish/put ladder with no numerical artifact: all three levels
+    price cleanly via Heston and the ladder is naturally non-decreasing.
+    stock=185, base_target=170.2 (8% down), strike=170 -> target prices
+    170.2/162.8/155.4, verified directly against the real pricer while
+    writing this plan: 2.520609140512505 / 10.16028626218315 /
+    20.778006605067873."""
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    targets = estimate_targets(
+        stock_price=185, base_target_price=185 * 0.92, strike=170,
+        expiry_years=30 / 365, current_premium=3.00, is_call=False,
+        heston_params=params,
+    )
+    assert len(targets) == 3
+    assert [t.pricingMethod for t in targets] == [
+        "Heston repriced", "Heston repriced", "Heston repriced",
+    ]
+    prices = [t.estimatedOptionPrice for t in targets]
+    assert prices == [2.52, 10.16, 20.78]
+    assert prices[0] <= prices[1] <= prices[2]
+
+
+def test_estimate_targets_put_floors_non_monotonic_heston_price(monkeypatch):
+    """Put-side mirror of
+    test_estimate_targets_floors_non_monotonic_heston_price_instead_of_switching_models
+    — confirms the fix is symmetric for puts, not just calls. Forces T2's raw
+    Heston price down to an artifact (10.16 * 0.1 = 1.016, below T1's
+    2.5206...) and confirms it floors to T1's price and stays 'Heston
+    repriced', while T3's real price (20.78) is preserved."""
+    import app.scoring.reward_risk as rr_module
+
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    real_heston_price = rr_module.heston_price
+    call_count = {"n": 0}
+
+    def _flaky(S, K, T, r, p, is_call):
+        call_count["n"] += 1
+        price = real_heston_price(S, K, T, r, p, is_call)
+        if call_count["n"] == 2:
+            return price * 0.1
+        return price
+
+    monkeypatch.setattr(rr_module, "heston_price", _flaky)
+    targets = estimate_targets(
+        stock_price=185, base_target_price=185 * 0.92, strike=170,
+        expiry_years=30 / 365, current_premium=3.00, is_call=False,
+        heston_params=params,
+    )
+    assert len(targets) == 3
+    assert targets[0].pricingMethod == "Heston repriced"
+    assert targets[0].estimatedOptionPrice == 2.52
+
+    assert targets[1].pricingMethod == "Heston repriced"
+    assert targets[1].estimatedOptionPrice == 2.52
+
+    assert targets[2].pricingMethod == "Heston repriced"
+    assert targets[2].estimatedOptionPrice == 20.78
+
+
+def test_estimate_rr_put_heston_path_uses_correct_model_label():
+    """Put-side mirror of test_heston_path_uses_correct_model_label /
+    test_heston_path_returns_valid_ratio for estimate_rr — this function had
+    zero is_call=False + heston_params coverage. Verified directly against
+    the real pricer: exit_premium=14.18879567446055 -> reward=12.1888...,
+    risk=2.00*0.60=1.20, rr=10.16."""
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    rr = estimate_rr(
+        stock_price=185, target_price=170, invalidation_price=195,
+        strike=180, expiry_years=30 / 365, current_premium=2.00, is_call=False,
+        heston_params=params,
+    )
+    assert rr.model_used == "Heston repriced"
+    assert rr.estimated_exit_premium == 14.19
+    assert rr.rr_ratio == 10.16
