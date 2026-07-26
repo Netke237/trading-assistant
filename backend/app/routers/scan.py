@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import concurrent.futures
 from datetime import datetime, timezone
 
 _log = logging.getLogger(__name__)
@@ -59,11 +60,19 @@ from app.scoring.contract_validator import dte_holding_multiplier
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.reward_risk import estimate_rr
 from app.scoring.trade_plan import build_trade_plan
+from app.models.heston import calibrate_heston, HestonParams
 from types import SimpleNamespace
 from app.services.audit import new_rec_id, log_event
 from app.services.scan_scheduler import ScanScheduler
 from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
 from pydantic import BaseModel
+
+# Kill switch: calibrating Heston changes every trade card's headline R/R number,
+# so this can be turned off without a code deploy if it misbehaves in
+# production — set the env var and restart the process. Read once at import
+# time (same pattern as heston_cache.py's _USE_FULL_GRID), so it does NOT
+# take effect on an already-running process without a restart.
+_HESTON_PRICING_ENABLED = os.getenv("HESTON_PRICING_ENABLED", "1").strip().lower() not in ("0", "false", "no")
 
 router = APIRouter(prefix='/api', tags=['scan'])
 
@@ -174,6 +183,82 @@ def _alt_reason(alt: dict, primary: dict, *, is_call: bool) -> str:
 # 3 concurrent × 5 calls = 15 simultaneous requests → consistent ~4-6s/symbol.
 # O-3 batch price fetch drops Pass 1 to 3 calls; 5 × 3 = 15 — same ceiling, more throughput.
 _SCAN_CONCURRENCY = 5
+
+# calibrate_heston (via heston_cache.calibrate_cached) is a synchronous call
+# that can block its calling thread far longer than its own internal 1s
+# "timeout" suggests (that timeout only picks which result gets returned — the
+# ThreadPoolExecutor context manager it runs in still blocks on
+# shutdown(wait=True) for the real grid-search duration; see this plan's
+# architecture notes). Safeguards against that, both scoped to this new call
+# site only — heston_cache.py itself is untouched:
+#   1. A small dedicated pool, sized to _SCAN_CONCURRENCY, so a pile-up of
+#      slow calibrations can't starve asyncio's shared default executor (also
+#      used by compute_confidence and _compute_dhmm in this same function).
+#   2. Gating calibration behind a PROCESS-WIDE semaphore sized to match the
+#      executor (see the calibration call site below) — this caps concurrent
+#      calibrations at _SCAN_CONCURRENCY across the WHOLE process, not just
+#      within one scan. Deliberately NOT the per-request `sem` parameter
+#      _process_symbol receives: `semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)`
+#      in run_scan() is created fresh on every call, but a scheduled scan
+#      (scan_scheduler.py) and a manual POST /api/scan can run fully
+#      concurrently (nothing serializes them — _state_lock only guards a few
+#      lines of _last_request/_last_result bookkeeping, not scan execution) —
+#      two independent per-request semaphores would let up to 2x
+#      _SCAN_CONCURRENCY symbols contend for this single executor's workers.
+#   3. A hard per-symbol wait_for ceiling, so one slow calibration can't stall
+#      this symbol's scan processing — the abandoned calibration keeps running
+#      in the background in _HESTON_EXECUTOR, but this symbol moves on with
+#      heston_params=None (delta approximation) instead of waiting on it.
+_HESTON_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=_SCAN_CONCURRENCY, thread_name_prefix="heston-calib",
+)
+_HESTON_SEMAPHORE = asyncio.Semaphore(_SCAN_CONCURRENCY)
+# Note: asyncio.Semaphore binds to whichever event loop is running the first
+# time it actually blocks. Production runs a single long-lived loop, so this
+# is a non-issue there. In tests (function-scoped event loops), a semaphore
+# that blocked on one test's loop binding to a different loop on a later test
+# raises RuntimeError on Python <=3.12; this project's runtime (3.14)
+# tolerates it, but that's a version-specific relaxation, not a guarantee.
+_HESTON_CALIBRATION_TIMEOUT_S = 2.0
+
+
+async def _run_heston_calibration(heston_chain: list[dict], price: float):
+    """Runs calibrate_heston under _HESTON_SEMAPHORE, held until the executor
+    job ACTUALLY finishes — not just until a caller's wait_for gives up.
+    calibrate_heston can't be truly cancelled once a worker has picked it up
+    (concurrent.futures threads aren't interruptible), so releasing the
+    semaphore the instant a caller times out — while the abandoned job keeps
+    running — would let new calibration attempts queue behind already-busy
+    workers indefinitely, all timing out without ever getting a worker.
+    Holding the semaphore for the job's real lifetime keeps it an accurate
+    measure of real executor occupancy, so backpressure shows up as callers
+    waiting on the (cheap-to-abandon) semaphore rather than an ever-growing
+    (expensive-to-abandon) thread-pool backlog. Callers that want to give up
+    early must NOT cancel this task — do it via
+    `asyncio.wait({task}, timeout=...)` (which leaves an unfinished task in
+    `pending` uncancelled) rather than `wait_for`, so it keeps running (and
+    keeps holding the semaphore) in the background until it genuinely
+    completes. See the call site in _process_symbol for why plain
+    `asyncio.shield` is avoided here.
+    """
+    async with _HESTON_SEMAPHORE:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_HESTON_EXECUTOR, calibrate_heston, heston_chain, price, 0.05)
+
+
+def _log_abandoned_heston_exception(task: asyncio.Task) -> None:
+    """Consumes the exception of a _run_heston_calibration task that the
+    original caller gave up on (its asyncio.wait ceiling elapsed while the
+    task was still running) — without this, an abandoned task that later
+    raises produces an unretrieved-exception ERROR log from asyncio's
+    default handler when it's garbage-collected. This is separate from (and
+    can fire even when) the caller's own 'Heston calibration failed or timed
+    out' warning already logged."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        _log.debug("Abandoned Heston calibration task raised: %s", exc)
 
 
 async def _build_spreads(
@@ -516,6 +601,49 @@ async def _process_symbol(
     _rr = _rr_cfg()
     strike = float(contract.get("strike", price))
     premium = max(float(contract.get("price", 0.10)), 0.01)
+
+    # ── Heston calibration (best-effort) ───────────────────────────────────────
+    heston_params: HestonParams | None = None
+    if _HESTON_PRICING_ENABLED:
+        try:
+            heston_chain = [
+                {
+                    "strike": float(c.get("strike", 0)),
+                    "expiry_years": c.get("dte", 30) / 365.0,
+                    "mid_price": float(c.get("price", 0)),
+                    "is_call": c.get("right", "C") == "C",
+                }
+                for c in chain
+                if float(c.get("price", 0)) > 0
+            ]
+            calibration_task = asyncio.ensure_future(_run_heston_calibration(heston_chain, price))
+            # Always consume the task's exception, even if we give up on it
+            # below — otherwise an abandoned task that later raises (e.g. the
+            # dedicated executor is mid-shutdown) surfaces as an asyncio
+            # "Task exception was never retrieved" ERROR when it is GC'd.
+            calibration_task.add_done_callback(_log_abandoned_heston_exception)
+            # asyncio.wait (NOT wait_for + shield) is deliberate: on timeout it
+            # leaves the still-running task in `pending` WITHOUT cancelling it,
+            # so it keeps running and keeps holding _HESTON_SEMAPHORE in the
+            # background (the point of _run_heston_calibration — see its
+            # docstring). shield would also keep the task alive, but on Python
+            # 3.12+ asyncio.shield ITSELF ERROR-logs "exception in shielded
+            # future" (with a full traceback) whenever an abandoned shielded
+            # task later raises — precisely the production log noise this
+            # feature must not generate. asyncio.wait neither cancels nor logs.
+            _done, _pending = await asyncio.wait(
+                {calibration_task}, timeout=_HESTON_CALIBRATION_TIMEOUT_S,
+            )
+            if calibration_task in _done:
+                # .result() re-raises if the (in-time) calibration failed —
+                # caught below, falling back to delta approximation.
+                heston_params = calibration_task.result().params
+            # else: still running past the ceiling — move on with
+            # heston_params=None; the task finishes in the background.
+        except Exception as exc:
+            _log.warning("Heston calibration failed or timed out for %s: %s", symbol, exc)
+            heston_params = None
+
     _plan = build_trade_plan(
         direction=direction,
         stock_price=price,
@@ -527,6 +655,7 @@ async def _process_symbol(
         entry_ask=float(contract.get("ask", 0)),
         entry_mid=float(contract.get("price", 0)),
         rr_cfg=_rr,
+        heston_params=heston_params,
     )
     entry = _plan.entry
     target_price = _plan.target_price
@@ -677,7 +806,7 @@ async def _process_symbol(
             expiry_years=alt_expiry_years,
             current_premium=alt_premium,
             is_call=(direction == "Bullish"),
-            heston_params=None,
+            heston_params=heston_params,
             premium_stop_pct=_rr["premium_stop_pct"],
         )
         alts.append(AlternativeContract(

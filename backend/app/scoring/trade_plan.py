@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.models.heston import HestonParams
 from app.scoring.entry_quality import assess_entry, EntryAssessment
 from app.scoring.reward_risk import estimate_rr, estimate_targets
 
@@ -45,6 +46,7 @@ def build_trade_plan(
     entry_ask: float,
     entry_mid: float,
     rr_cfg: dict,
+    heston_params: HestonParams | None = None,
 ) -> TradePlan:
     """Compute the full trade plan for one contract.
 
@@ -58,6 +60,10 @@ def build_trade_plan(
         entry_bid/entry_ask/entry_mid: feed assess_entry for the Entry Plan.
         rr_cfg:      the reward_risk config block (bullish_target_pct,
                      bearish_target_pct, premium_stop_pct).
+        heston_params: optional calibrated Heston params — when provided,
+                     estimate_rr/estimate_targets reprice via Heston (with a
+                     per-target delta-approximation fallback); defaults to
+                     None (unchanged, delta-approximation-only behaviour).
     """
     is_call = direction == "Bullish"
     premium = max(float(premium), 0.01)
@@ -93,7 +99,7 @@ def build_trade_plan(
         expiry_years=expiry_years,
         current_premium=premium,
         is_call=is_call,
-        heston_params=None,
+        heston_params=heston_params,
         premium_stop_pct=premium_stop_pct,
     )
 
@@ -104,7 +110,7 @@ def build_trade_plan(
         expiry_years=expiry_years,
         current_premium=premium,
         is_call=is_call,
-        heston_params=None,
+        heston_params=heston_params,
         premium_stop_pct=premium_stop_pct,
     )
 
