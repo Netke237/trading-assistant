@@ -495,3 +495,39 @@ def test_estimate_rr_falls_back_on_inf_heston_price(monkeypatch):
     assert rr.model_used == "Delta approximation"
     assert math.isfinite(rr.estimated_exit_premium)
     assert math.isfinite(rr.rr_ratio)
+
+
+def test_estimate_targets_real_fixture_preserves_t3_after_t2_artifact():
+    """Reproduces round 3's adversarial-audit finding directly against the
+    real (unmocked) heston_price(): with stock_price=318.73, strike=375,
+    dte=185 (the deep-OTM/long-dated default fixture from
+    test_trade_plan.py's _plan()), heston_price() returns a non-monotonic raw
+    ladder — T1=12.518866931556794, T2=10.086141661385824 (an artifact dip),
+    T3=14.081229812545331 (legitimate, verified directly against this repo's
+    real pricer while writing this plan).
+
+    Before this fix (confirmed by running the current code directly against
+    this fixture): T2's dip switched it to the delta-approximation model,
+    which computed 18.94 (higher than T1) — and T3's legitimate 14.08 was
+    then compared against THAT inflated value, judged 'non-monotonic' too,
+    and also discarded to delta-approximation (22.77). The displayed ladder
+    was 12.52 / 18.94 / 22.77, with two of three levels wrongly switched off
+    Heston.
+
+    After this fix: T2 is floored to T1's true Heston price (12.52) and
+    stays labelled Heston repriced. T3's raw price (14.08) is checked
+    against T1's true Heston price (12.52), not T2's fallback — it clears
+    that check and is preserved unmodified."""
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    targets = estimate_targets(
+        stock_price=318.73, base_target_price=318.73 * 1.08, strike=375,
+        expiry_years=185 / 365, current_premium=7.47, is_call=True,
+        heston_params=params,
+    )
+    assert len(targets) == 3
+    assert [t.pricingMethod for t in targets] == [
+        "Heston repriced", "Heston repriced", "Heston repriced",
+    ]
+    prices = [t.estimatedOptionPrice for t in targets]
+    assert prices == [12.52, 12.52, 14.08]
+    assert prices[0] <= prices[1] <= prices[2]
