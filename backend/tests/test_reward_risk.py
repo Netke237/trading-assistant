@@ -315,3 +315,67 @@ def test_estimate_rr_zero_stop_pct_returns_zero():
         premium_stop_pct=0.0,
     )
     assert result.rr_ratio == 0.0
+
+
+# ── Non-finite Heston output (NaN/inf) — scipy.integrate.quad can return these
+# without raising, for the same pathological deep-OTM/long-dated integrands
+# that produce the non-monotonic artifact tested above. Regression guard for
+# an adversarial-audit finding that estimate_targets' opt_price <= 0 check is
+# not NaN-safe (nan <= 0 is False in Python) and estimate_rr's > 0 check,
+# while NaN-safe, is not inf-safe. ─────────────────────────────────────────────
+
+def test_estimate_targets_falls_back_on_nan_heston_price(monkeypatch):
+    """A NaN heston_price must fall back to delta approximation, not be
+    labeled 'Heston repriced' with a null-serializing estimatedOptionPrice."""
+    import math
+    import app.scoring.reward_risk as rr_module
+
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    monkeypatch.setattr(rr_module, "heston_price", lambda *a, **k: math.nan)
+
+    targets = estimate_targets(
+        stock_price=185, base_target_price=200, strike=190,
+        expiry_years=30 / 365, current_premium=2.50, is_call=True,
+        heston_params=params,
+    )
+    assert all(t.pricingMethod == "Delta approximation" for t in targets)
+    assert all(math.isfinite(t.estimatedOptionPrice) for t in targets)
+
+
+def test_estimate_targets_falls_back_on_inf_heston_price(monkeypatch):
+    """An +inf heston_price must also fall back — it passes the plain
+    opt_price <= 0 check just like NaN would, but is equally unusable."""
+    import math
+    import app.scoring.reward_risk as rr_module
+
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    monkeypatch.setattr(rr_module, "heston_price", lambda *a, **k: math.inf)
+
+    targets = estimate_targets(
+        stock_price=185, base_target_price=200, strike=190,
+        expiry_years=30 / 365, current_premium=2.50, is_call=True,
+        heston_params=params,
+    )
+    assert all(t.pricingMethod == "Delta approximation" for t in targets)
+    assert all(math.isfinite(t.estimatedOptionPrice) for t in targets)
+
+
+def test_estimate_rr_falls_back_on_inf_heston_price(monkeypatch):
+    """estimate_rr's heston_ok = heston_exit_premium > 0 is NaN-safe (nan > 0
+    is False) but not inf-safe (inf > 0 is True) — an +inf Heston price would
+    otherwise produce rr_ratio=inf, which round(inf, 2) preserves as inf and
+    which is not valid JSON (serializes as the bareword `Infinity`), a real
+    API-response risk. Must fall back to delta approximation instead."""
+    import math
+    import app.scoring.reward_risk as rr_module
+
+    monkeypatch.setattr(rr_module, "heston_price", lambda *a, **k: math.inf)
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    rr = estimate_rr(
+        stock_price=185, target_price=200, invalidation_price=175,
+        strike=190, expiry_years=30 / 365, current_premium=2.50, is_call=True,
+        heston_params=params,
+    )
+    assert rr.model_used == "Delta approximation"
+    assert math.isfinite(rr.estimated_exit_premium)
+    assert math.isfinite(rr.rr_ratio)

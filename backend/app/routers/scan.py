@@ -67,9 +67,10 @@ from app.scoring.spread_builder import choose_primary, build_bear_put, build_bea
 from pydantic import BaseModel
 
 # Kill switch: calibrating Heston changes every trade card's headline R/R number,
-# so this can be flipped off instantly (no redeploy) if it misbehaves in
-# production. Read once at import time, same pattern as heston_cache.py's
-# _USE_FULL_GRID.
+# so this can be turned off without a code deploy if it misbehaves in
+# production — set the env var and restart the process. Read once at import
+# time (same pattern as heston_cache.py's _USE_FULL_GRID), so it does NOT
+# take effect on an already-running process without a restart.
 _HESTON_PRICING_ENABLED = os.getenv("HESTON_PRICING_ENABLED", "1").strip().lower() not in ("0", "false", "no")
 
 router = APIRouter(prefix='/api', tags=['scan'])
@@ -211,6 +212,12 @@ _HESTON_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
     max_workers=_SCAN_CONCURRENCY, thread_name_prefix="heston-calib",
 )
 _HESTON_SEMAPHORE = asyncio.Semaphore(_SCAN_CONCURRENCY)
+# Note: asyncio.Semaphore binds to whichever event loop is running the first
+# time it actually blocks. Production runs a single long-lived loop, so this
+# is a non-issue there. In tests (function-scoped event loops), a semaphore
+# that blocked on one test's loop binding to a different loop on a later test
+# raises RuntimeError on Python <=3.12; this project's runtime (3.14)
+# tolerates it, but that's a version-specific relaxation, not a guarantee.
 _HESTON_CALIBRATION_TIMEOUT_S = 2.0
 
 

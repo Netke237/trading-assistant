@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Literal, Optional
 
@@ -37,7 +38,7 @@ def estimate_rr(
             heston_exit_premium = heston_price(target_price, strike, dte_at_target, r, heston_params, is_call)
         except Exception:
             heston_exit_premium = 0.0
-        heston_ok = heston_exit_premium > 0
+        heston_ok = math.isfinite(heston_exit_premium) and heston_exit_premium > 0
 
     if heston_ok:
         exit_premium = heston_exit_premium
@@ -134,7 +135,7 @@ def estimate_targets(
             and opt_price < prev_opt_price
         )
 
-        if opt_price is None or opt_price <= 0 or non_monotonic:
+        if opt_price is None or not math.isfinite(opt_price) or opt_price <= 0 or non_monotonic:
             delta = 0.5 if (is_call and t_price > strike) or (not is_call and t_price < strike) else 0.3
             price_move = abs(t_price - stock_price)
             opt_price = max(0.01, current_premium + delta * price_move)
@@ -149,6 +150,10 @@ def estimate_targets(
         # ever raises a level, never lowers one, and prev_opt_price is None
         # for T1 so T1 is never clamped against anything (including
         # current_premium, which is intentionally never part of this chain).
+        # Note this clamp also raises rrContribution below for the clamped
+        # level (reward = opt_price - current_premium uses the post-clamp
+        # price) — intentional: rrContribution must stay consistent with the
+        # estimatedOptionPrice actually shown on that same row.
         if prev_opt_price is not None:
             opt_price = max(opt_price, prev_opt_price)
 
