@@ -51,6 +51,13 @@ def dte_holding_multiplier() -> float:
     return float(_load_config().get("dte_holding_multiplier", 2.0))
 
 
+def hard_reject_delta_band() -> tuple[float, float]:
+    """(min_delta, max_delta) from contract_rules.yaml's hard_reject block --
+    the same values _hard_reject_reasons() uses for real contract selection."""
+    hr = _load_config()["hard_reject"]
+    return float(hr["min_delta"]), float(hr["max_delta"])
+
+
 def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     """Return list of hard-reject reason strings. Empty = no hard reject."""
     hr = cfg["hard_reject"]

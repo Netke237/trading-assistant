@@ -167,3 +167,8 @@ def test_score_card_detail_present_even_on_hard_reject():
     card = validate_contract(contract, stock_score=70)
     assert card.status == "REJECT"
     assert "dte" in card.detail  # detail is computed before the reject branch, not skipped
+
+
+def test_hard_reject_delta_band_reads_from_config():
+    from app.scoring.contract_validator import hard_reject_delta_band
+    assert hard_reject_delta_band() == (0.20, 0.85)

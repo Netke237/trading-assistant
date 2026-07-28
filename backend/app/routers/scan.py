@@ -57,6 +57,7 @@ from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.contract_validator import dte_holding_multiplier
+from app.scoring.contract_validator import hard_reject_delta_band
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.reward_risk import estimate_rr
 from app.scoring.trade_plan import build_trade_plan
@@ -274,6 +275,27 @@ _HESTON_SEMAPHORE = asyncio.Semaphore(_HESTON_CONCURRENCY)
 # scan — still an open item (see the "Heston repriced vs. delta approximation
 # split" follow-up).
 _HESTON_CALIBRATION_TIMEOUT_S = 2.0
+
+# Investigation findings #4/#5 (docs/superpowers/plans/
+# 2026-07-27-heston-long-dte-slowness-investigation.md): calibration cost
+# rises sharply for strikes far from at-the-money, and those strikes are
+# never selectable as the scored contract anyway. Two earlier approaches were
+# tried and rejected during this plan's own adversarial audit: (1) a FIXED
+# MONEYNESS RATIO -- the real delta-selectable moneyness range shifts
+# substantially with volatility/time-to-expiry, so a static ratio either
+# wrongly excludes real candidates at long DTE or is too wide to filter
+# anything useful; (2) a FIXED DELTA BAND -- contract_rules.yaml's
+# min_delta/max_delta are live, per-request overrides a user can set
+# anywhere in [0,1] via the Execution Parameters panel, so a hardcoded delta
+# band reproduces the same fixed-vs-configurable mismatch one layer down.
+# This margin is instead added on both sides of THIS REQUEST's actual
+# min_delta/max_delta (contract_overrides, the same dict validate_contract
+# uses for real contract selection -- and, when no override is present,
+# whatever contract_rules.yaml's hard_reject band currently is, read live via
+# hard_reject_delta_band() rather than a hardcoded fallback) at the call
+# site below, so the calibration band always tracks whatever selection band
+# is actually in effect, by construction.
+_HESTON_DELTA_SAFETY_MARGIN = 0.05
 
 
 async def _run_heston_calibration(heston_chain: list[dict], price: float):
@@ -660,6 +682,27 @@ async def _process_symbol(
     heston_params: HestonParams | None = None
     if _HESTON_PRICING_ENABLED:
         try:
+            _default_min_delta, _default_max_delta = hard_reject_delta_band()
+            _cfg_min_delta = float(contract_overrides.get("min_delta", _default_min_delta))
+            _cfg_max_delta = float(contract_overrides.get("max_delta", _default_max_delta))
+            # round() guards against binary float dust (e.g. 0.20 - 0.05 ==
+            # 0.15000000000000002 in IEEE 754), which would otherwise exclude
+            # a delta exactly AT the intended boundary from the inclusive
+            # comparison below.
+            _calib_delta_lo = max(0.0, round(_cfg_min_delta - _HESTON_DELTA_SAFETY_MARGIN, 6))
+            _calib_delta_hi = min(1.0, round(_cfg_max_delta + _HESTON_DELTA_SAFETY_MARGIN, 6))
+
+            def _heston_delta_ok(entry: dict) -> bool:
+                d = abs(float(entry.get("delta") or 0))
+                if d == 0.0:
+                    # Greeks missing/unavailable for this quote (market.py
+                    # defaults to 0.0, not None) -- indistinguishable from a
+                    # genuinely near-zero-delta strike using this field
+                    # alone. Fail OPEN: keep it in rather than risk wrongly
+                    # excluding a live, valid contract.
+                    return True
+                return _calib_delta_lo <= d <= _calib_delta_hi
+
             heston_chain = [
                 {
                     "strike": float(c.get("strike", 0)),
@@ -668,7 +711,7 @@ async def _process_symbol(
                     "is_call": c.get("right", "C") == "C",
                 }
                 for c in chain
-                if float(c.get("price", 0)) > 0
+                if float(c.get("price", 0)) > 0 and _heston_delta_ok(c)
             ]
             calibration_task = asyncio.ensure_future(_run_heston_calibration(heston_chain, price))
             # Always consume the task's exception, even if we give up on it

@@ -110,6 +110,23 @@ _MOCK_CHAIN = [
     }
 ]
 
+_WIDE_MOCK_CHAIN = [
+    {"strike": 25,  "expiry": "2026-06-20", "price": 460.0, "spread": 0.20,
+     "delta": 0.99, "theta": -0.01, "ivRank": 40, "dte": 30, "right": "C", "volume": 500},
+    {"strike": 100, "expiry": "2026-06-20", "price": 86.0,  "spread": 0.20,
+     "delta": 0.90, "theta": -0.02, "ivRank": 45, "dte": 30, "right": "C", "volume": 450},
+    {"strike": 130, "expiry": "2026-06-20", "price": 12.0,  "spread": 0.20,
+     "delta": 0.80, "theta": -0.03, "ivRank": 55, "dte": 30, "right": "C", "volume": 400},
+    {"strike": 190, "expiry": "2026-06-20", "price": 2.50,  "spread": 0.20,
+     "delta": 0.45, "theta": -0.05, "ivRank": 55, "dte": 30, "right": "C", "volume": 500},
+    {"strike": 280, "expiry": "2026-06-20", "price": 0.55,  "spread": 0.20,
+     "delta": 0.15, "theta": -0.01, "ivRank": 55, "dte": 30, "right": "C", "volume": 350},
+    {"strike": 300, "expiry": "2026-06-20", "price": 0.30,  "spread": 0.20,
+     "delta": 0.02, "theta": -0.01, "ivRank": 55, "dte": 30, "right": "C", "volume": 300},
+    {"strike": 340, "expiry": "2026-06-20", "price": 0.10,  "spread": 0.10,
+     "delta": 0,    "theta": 0.0,   "ivRank": 0,  "dte": 30, "right": "C", "volume": 10},
+]
+
 
 def test_scan_with_mock_data_processes_symbol(client):
     """With valid mock data the symbol appears in candidates or rejected � never missing."""
@@ -487,6 +504,122 @@ async def test_process_symbol_discards_bs_fallback_heston_calibration():
         "a bs_fallback CalibrationResult must not reach build_trade_plan as "
         "heston_params -- it would be indistinguishable from a genuine grid "
         "fit and mislabelled 'Heston repriced' downstream"
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_symbol_filters_heston_chain_to_delta_band():
+    """Option A (docs/superpowers/plans/2026-07-27-heston-long-dte-slowness-investigation.md,
+    findings #4/#5): strikes far from at-the-money dominate calibration cost.
+    Filter heston_chain using each contract's own broker-reported delta
+    (already present on every chain entry from fetch_option_chain_async,
+    app/data/market.py:1210,1222) rather than a raw strike/price moneyness
+    ratio -- a fixed moneyness band was found, during this plan's own
+    preparation, to badly mismatch the REAL delta-selectable strike range at
+    long DTE with realistic volatility. Using the real delta avoids that
+    failure mode entirely. The band itself is DERIVED from this request's own
+    contract_overrides (min_delta=0.20, max_delta=0.85 defaults here, +/-0.05
+    safety margin -> effective band 0.15-0.90) rather than a hardcoded
+    constant -- a hardcoded delta band was ALSO found, in a second audit
+    round, to reproduce the same fixed-vs-configurable mismatch one layer
+    down, since contract_rules.yaml's min_delta/max_delta are live per-request
+    overrides a user can set anywhere in [0,1] via the Execution Parameters
+    panel. A strike with delta==0 (greeks missing/unavailable -- market.py
+    defaults to 0.0 rather than None) fails OPEN -- kept in, since a missing
+    greek can't be used to judge selectability."""
+    from app.routers.scan import _process_symbol
+    from app.models.heston import HestonParams, CalibrationResult
+
+    pass_card, contract_score, fake_plan = _heston_wiring_fixtures()
+    fake_params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    fake_calibration = CalibrationResult(params=fake_params, rmse=0.01, method="heston_grid")
+
+    sem = asyncio.Semaphore(10)
+    mock_client = MagicMock()
+
+    with (
+        patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
+        patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)),
+        patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
+        patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
+        patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
+        patch("app.routers.scan.score_stock", return_value=pass_card),
+        patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=_WIDE_MOCK_CHAIN)),
+        patch("app.routers.scan.validate_contract", return_value=contract_score),
+        patch("app.routers.scan.build_trade_plan", return_value=fake_plan),
+        patch("app.routers.scan.log_event"),
+        patch("app.routers.scan.calibrate_heston", return_value=fake_calibration) as mock_heston,
+    ):
+        await _process_symbol(
+            "AAPL", "Bullish", "Swing", mock_client, sem, "test-scan-id",
+        )
+
+    mock_heston.assert_called_once()
+    called_chain = mock_heston.call_args.args[0]
+    called_strikes = sorted(c["strike"] for c in called_chain)
+    assert called_strikes == [100.0, 130.0, 190.0, 280.0, 340.0], (
+        f"expected the five in-band-or-unknown-delta strikes, got {called_strikes}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_symbol_filtered_thin_heston_chain_falls_back_honestly():
+    """Regression guard for the Task 1 + Task 2 interaction: if the delta-band
+    filter (Task 2) narrows a real chain down to fewer than 3 strikes,
+    calibrate_cached's own existing len(chain)<3 path
+    (app/models/heston_cache.py:86-92) returns method='bs_fallback' before
+    ever running the grid search. Combined with Task 1's fix, that fallback
+    must be discarded (heston_params stays None), not silently displayed as
+    'Heston repriced'. Uses the REAL (unmocked) calibrate_heston ->
+    calibrate_cached path end-to-end, overriding the autouse
+    _default_fast_heston_calibration fixture (conftest.py) for this one test
+    only, so this interaction is actually exercised rather than assumed. The
+    len(chain)<3 path returns before any scipy quad() call runs, so this test
+    stays fast despite using the real calibration function."""
+    from app.routers.scan import _process_symbol
+    from app.models.heston import calibrate_heston as _real_calibrate_heston
+
+    pass_card, contract_score, fake_plan = _heston_wiring_fixtures()
+    sem = asyncio.Semaphore(10)
+    mock_client = MagicMock()
+
+    # With the default (0.15, 0.90) effective band, only 2 of these 4 strikes
+    # clear it (0.80, 0.45); the filtered heston_chain therefore has length
+    # 2, below calibrate_cached's len(chain)<3 floor.
+    thin_after_filter_chain = [
+        {"strike": 25,  "expiry": "2026-06-20", "price": 460.0, "spread": 0.20,
+         "delta": 0.99, "theta": -0.01, "ivRank": 40, "dte": 30, "right": "C", "volume": 500},
+        {"strike": 130, "expiry": "2026-06-20", "price": 12.0, "spread": 0.20,
+         "delta": 0.80, "theta": -0.03, "ivRank": 55, "dte": 30, "right": "C", "volume": 400},
+        {"strike": 190, "expiry": "2026-06-20", "price": 2.50, "spread": 0.20,
+         "delta": 0.45, "theta": -0.05, "ivRank": 55, "dte": 30, "right": "C", "volume": 500},
+        {"strike": 300, "expiry": "2026-06-20", "price": 0.30, "spread": 0.20,
+         "delta": 0.02, "theta": -0.01, "ivRank": 55, "dte": 30, "right": "C", "volume": 300},
+    ]
+
+    with (
+        patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
+        patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)),
+        patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
+        patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
+        patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
+        patch("app.routers.scan.score_stock", return_value=pass_card),
+        patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=thin_after_filter_chain)),
+        patch("app.routers.scan.validate_contract", return_value=contract_score),
+        patch("app.routers.scan.build_trade_plan", return_value=fake_plan) as mock_build_plan,
+        patch("app.routers.scan.log_event"),
+        # Override the autouse default mock with the REAL function for this
+        # one test, so calibrate_cached's real len(chain)<3 path actually runs.
+        patch("app.routers.scan.calibrate_heston", side_effect=_real_calibrate_heston),
+    ):
+        await _process_symbol(
+            "AAPL", "Bullish", "Swing", mock_client, sem, "test-scan-id",
+        )
+
+    assert mock_build_plan.call_args.kwargs["heston_params"] is None, (
+        "a filtered chain of only 2 strikes should hit calibrate_cached's "
+        "real len(chain)<3 bs_fallback path, which Task 1's fix must then "
+        "discard rather than pass through as heston_params"
     )
 
 
