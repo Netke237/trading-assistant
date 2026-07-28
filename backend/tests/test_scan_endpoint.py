@@ -446,6 +446,51 @@ async def test_process_symbol_falls_back_when_calibrate_heston_raises():
 
 
 @pytest.mark.asyncio
+async def test_process_symbol_discards_bs_fallback_heston_calibration():
+    """Option G (docs/superpowers/plans/2026-07-27-heston-long-dte-slowness-investigation.md,
+    finding #5): a CalibrationResult with method='bs_fallback' is a crude
+    single-point IV-seed guess, not a genuine grid fit -- scan.py must NOT
+    pass its .params through to build_trade_plan, since reward_risk.py has no
+    way to tell a crude guess apart from a real fit once it receives non-None
+    HestonParams (both get labelled 'Heston repriced'). heston_params must
+    stay None, exactly as if calibration had failed outright, so the existing
+    delta-approximation fallback path is used and labelled honestly."""
+    from app.routers.scan import _process_symbol
+    from app.models.heston import HestonParams, CalibrationResult
+
+    pass_card, contract_score, fake_plan = _heston_wiring_fixtures()
+    fake_params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    fake_calibration = CalibrationResult(params=fake_params, rmse=float("inf"), method="bs_fallback")
+
+    sem = asyncio.Semaphore(10)
+    mock_client = MagicMock()
+
+    with (
+        patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
+        patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)),
+        patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
+        patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
+        patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
+        patch("app.routers.scan.score_stock", return_value=pass_card),
+        patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=_MOCK_CHAIN)),
+        patch("app.routers.scan.validate_contract", return_value=contract_score),
+        patch("app.routers.scan.build_trade_plan", return_value=fake_plan) as mock_build_plan,
+        patch("app.routers.scan.log_event"),
+        patch("app.routers.scan.calibrate_heston", return_value=fake_calibration) as mock_heston,
+    ):
+        await _process_symbol(
+            "AAPL", "Bullish", "Swing", mock_client, sem, "test-scan-id",
+        )
+
+    mock_heston.assert_called_once()
+    assert mock_build_plan.call_args.kwargs["heston_params"] is None, (
+        "a bs_fallback CalibrationResult must not reach build_trade_plan as "
+        "heston_params -- it would be indistinguishable from a genuine grid "
+        "fit and mislabelled 'Heston repriced' downstream"
+    )
+
+
+@pytest.mark.asyncio
 async def test_heston_pricing_disabled_flag_skips_calibration(monkeypatch):
     """HESTON_PRICING_ENABLED=false must be a working kill switch."""
     import app.routers.scan as scan_module

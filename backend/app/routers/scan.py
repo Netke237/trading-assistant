@@ -690,8 +690,19 @@ async def _process_symbol(
             )
             if calibration_task in _done:
                 # .result() re-raises if the (in-time) calibration failed —
-                # caught below, falling back to delta approximation.
-                heston_params = calibration_task.result().params
+                # caught below, falling back to delta approximation. Only a
+                # genuine grid-search fit ("heston_grid") is honest to label
+                # "Heston repriced" downstream. A crude single-point IV-seed
+                # guess ("bs_fallback" — calibrate_cached's own inner 1.0s
+                # timeout fired before the grid search finished, see
+                # docs/superpowers/plans/2026-07-27-heston-long-dte-slowness-investigation.md
+                # finding #5) is discarded here so this symbol falls back to
+                # the same delta-approximation path as a genuine calibration
+                # failure, instead of silently displaying the crude guess
+                # mislabelled as a real Heston fit.
+                _calibration_result = calibration_task.result()
+                if _calibration_result.method == "heston_grid":
+                    heston_params = _calibration_result.params
             # else: still running past the ceiling — move on with
             # heston_params=None; the task finishes in the background.
         except Exception as exc:
