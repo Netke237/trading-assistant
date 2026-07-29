@@ -71,6 +71,48 @@ def test_bs_fallback_put_above_strike():
         strike=180, expiry_years=30/365, current_premium=1.00, is_call=False,
     )
     assert rr.rr_ratio == 0.0
+    assert rr.estimated_exit_premium == 0.46
+
+
+# ── sigma_fallback constant (was dead code pre-fix) and the inner crude-guess
+# safety net — both are edge-of-the-formula paths with no coverage above,
+# since every test so far uses inputs where bs_iv converges and bs_price
+# succeeds. Test the two private helpers directly rather than trying to
+# reverse-engineer estimate_rr/estimate_targets inputs that happen to trigger
+# them, since both are meant to be rare/defensive paths. ───────────────────────
+
+def test_derive_fallback_sigma_uses_constant_when_bs_iv_cannot_converge():
+    """stock=100/strike=90/premium=2.567 (call) is economically impossible —
+    premium below intrinsic value (10) at those inputs — so bs_iv cannot
+    converge to ANY volatility that reproduces it and returns None (verified
+    directly: bs_iv(2.567, 100, 90, 30/365, 0.05, True) is None). This is the
+    one case in this file that reaches the sigma_fallback branch, making the
+    previously-dead sigma_fallback parameter actually load-bearing."""
+    from app.scoring.reward_risk import _derive_fallback_sigma
+
+    sigma = _derive_fallback_sigma(
+        current_premium=2.567, stock_price=100, strike=90,
+        expiry_years=30 / 365, r=0.05, is_call=True, sigma_fallback=0.25,
+    )
+    assert sigma == 0.25
+
+
+def test_bs_reprice_or_delta_approx_falls_back_to_crude_guess_when_bs_price_unusable(monkeypatch):
+    """If bs_price itself returns something unusable (non-finite or <=0 —
+    documented as expected-unreachable in practice, but still a real code
+    path this module ships), _bs_reprice_or_delta_approx must fall back to
+    the crude flat-delta guess rather than propagate a bad price. Call,
+    target(200) > strike(190) -> delta=0.5; price_move=|200-185|=15;
+    current_premium=2.50 -> 2.50 + 0.5*15 = 10.0 (matches the pre-fix crude
+    formula's own historical expected value for this exact fixture)."""
+    import app.scoring.reward_risk as rr_module
+
+    monkeypatch.setattr(rr_module, "bs_price", lambda *a, **k: 0.0)
+    price = rr_module._bs_reprice_or_delta_approx(
+        t_price=200, stock_price=185, strike=190, dte_at_target=15 / 365,
+        r=0.05, sigma=0.20, is_call=True, current_premium=2.50,
+    )
+    assert price == 10.0
 
 
 def test_zero_price_movement_returns_zero_ratio():
@@ -84,6 +126,7 @@ def test_zero_price_movement_returns_zero_ratio():
         strike=190, expiry_years=30/365, current_premium=2.50, is_call=True,
     )
     assert rr.rr_ratio == 0.0
+    assert rr.estimated_exit_premium == 1.27
 
 
 def test_zero_premium_returns_zero_ratio():

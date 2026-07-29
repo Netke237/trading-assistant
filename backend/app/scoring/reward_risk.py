@@ -46,9 +46,11 @@ def _bs_reprice_or_delta_approx(
 ) -> float:
     """Reprice at t_price via Black-Scholes using the given sigma. Falls back
     to the crude flat-delta guess (the pre-fix behavior) only if bs_price
-    itself is unusable — kept as a last-resort safety net, though expected
-    to be effectively unreachable given callers already validate T > 0 and
-    S, K > 0."""
+    itself is unusable — kept as a last-resort safety net. Expected to be
+    rare in practice (dte_at_target and strike are always positive; t_price
+    is derived from stock_price and a configured target-move percentage, not
+    independently validated here), but not proven unreachable — callers do
+    not enforce t_price > 0."""
     price = bs_price(t_price, strike, dte_at_target, r, sigma, is_call)
     if math.isfinite(price) and price > 0:
         return price
@@ -153,8 +155,9 @@ def estimate_targets(
                                  # later level that also needs it — current_premium,
                                  # stock_price, strike, expiry_years and is_call are identical
                                  # across T1/T2/T3, only t_price changes per level.
+    dte_at_target = max(expiry_years * 0.5, 7 / 365)  # invariant across T1/T2/T3 — same
+                                                        # reasoning as fallback_sigma above.
     for t_price in targets_prices:
-        dte_at_target = max(expiry_years * 0.5, 7 / 365)
         opt_price: float
         method: PricingMethod
         raw_price = None
