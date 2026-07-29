@@ -563,6 +563,62 @@ async def test_process_symbol_filters_heston_chain_to_delta_band():
 
 
 @pytest.mark.asyncio
+async def test_process_symbol_heston_delta_band_tracks_request_overrides():
+    """Regression guard added after a post-implementation adversarial audit
+    found zero test coverage for the request-derived override path -- every
+    other Heston delta-band test only exercises the default-from-YAML
+    fallback (empty contract_overrides). The whole point of this filter's
+    design (see the plan's Round 2/3 adversarial-audit history) is that the
+    calibration band must track THIS REQUEST's own min_delta/max_delta, not
+    a fixed default -- a regression that silently reverted to the config
+    default would pass every other test in this file. This test passes an
+    explicit, non-default override (min_delta=0.75, max_delta=0.95) and
+    confirms the resulting calibration band (0.70-1.00, after the +/-0.05
+    safety margin, clamped to 1.0) actually shifts which strikes reach
+    calibration, using the same _WIDE_MOCK_CHAIN fixture as the
+    default-band test above so the two tests are directly comparable:
+    default band includes [100, 130, 190, 280, 340]; this override's much
+    higher band includes only the near-ITM/deep-ITM strikes plus the
+    fail-open zero-delta strike: [25, 100, 130, 340]."""
+    from app.routers.scan import _process_symbol
+    from app.models.heston import HestonParams, CalibrationResult
+
+    pass_card, contract_score, fake_plan = _heston_wiring_fixtures()
+    fake_params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    fake_calibration = CalibrationResult(params=fake_params, rmse=0.01, method="heston_grid")
+
+    sem = asyncio.Semaphore(10)
+    mock_client = MagicMock()
+
+    with (
+        patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
+        patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)),
+        patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
+        patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
+        patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
+        patch("app.routers.scan.score_stock", return_value=pass_card),
+        patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=_WIDE_MOCK_CHAIN)),
+        patch("app.routers.scan.validate_contract", return_value=contract_score),
+        patch("app.routers.scan.build_trade_plan", return_value=fake_plan),
+        patch("app.routers.scan.log_event"),
+        patch("app.routers.scan.calibrate_heston", return_value=fake_calibration) as mock_heston,
+    ):
+        await _process_symbol(
+            "AAPL", "Bullish", "Swing", mock_client, sem, "test-scan-id",
+            overrides={"min_delta": 0.75, "max_delta": 0.95},
+        )
+
+    mock_heston.assert_called_once()
+    called_chain = mock_heston.call_args.args[0]
+    called_strikes = sorted(c["strike"] for c in called_chain)
+    assert called_strikes == [25.0, 100.0, 130.0, 340.0], (
+        f"expected the override-derived band (0.70-1.00) to admit only the "
+        f"near/deep-ITM strikes plus the fail-open zero-delta strike, "
+        f"got {called_strikes}"
+    )
+
+
+@pytest.mark.asyncio
 async def test_process_symbol_filtered_thin_heston_chain_falls_back_honestly():
     """Regression guard for the Task 1 + Task 2 interaction: if the delta-band
     filter (Task 2) narrows a real chain down to fewer than 3 strikes,
