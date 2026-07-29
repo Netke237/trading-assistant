@@ -291,13 +291,24 @@ def test_estimate_targets_floors_non_monotonic_heston_price_instead_of_switching
 
 def test_estimate_targets_clamps_delta_approx_fallback_to_prev_level(monkeypatch):
     """When Heston is genuinely unusable for a level (raises, here — not just
-    numerically low), that level falls back to the delta approximation, which
-    can itself undershoot the previous level's displayed price. The final
-    display invariant must still clamp it up so the card never shows a
-    decreasing ladder (code review finding on commit 80d8a6b, reproduced
+    numerically low), that level falls back to the BS-fallback reprice,
+    which can itself undershoot the previous level's displayed price. The
+    final display invariant must still clamp it up so the card never shows
+    a decreasing ladder (code review finding on commit 80d8a6b, reproduced
     here) — this is unchanged by this task's fix, which only changes what
     happens when Heston SUCCEEDS but comes back numerically low (see the
     previous test).
+
+    NOTE: T1/T3's mocked Heston values were raised from the pre-fix fixture
+    (15.9/20.0) to (20.0/25.0). This is deliberate, not arbitrary: T2's real
+    BS-fallback reprice for this fixture (target=207.5, strike=190,
+    stock=185, current_premium=2.50, expiry=30/365) is 17.9269986203 --
+    HIGHER than the old T1 mock (15.9), so with the old mock values the
+    fallback would no longer need clamping at all, and this test would stop
+    testing what its name says it tests. Raising T1 to 20.0 (above T2's
+    real 17.93) restores the undershoot this test exists to cover, while
+    T3's 25.0 preserves the original "own legitimate value, higher than
+    both" role.
 
     Also confirms the fix's decoupling: T2's failure (and its clamped-up
     display price) must NOT affect T3's Heston-artifact check — T3's own raw
@@ -311,10 +322,10 @@ def test_estimate_targets_clamps_delta_approx_fallback_to_prev_level(monkeypatch
     def _fake(S, K, T, r, p, is_call):
         call_count["n"] += 1
         if call_count["n"] == 1:
-            return 15.9  # T1: legitimate, high
+            return 20.0  # T1: legitimate, high
         if call_count["n"] == 2:
             raise ValueError("integration failed")  # T2: genuinely unusable
-        return 20.0  # T3: legitimate, its own value
+        return 25.0  # T3: legitimate, its own value
 
     monkeypatch.setattr(rr_module, "heston_price", _fake)
     targets = estimate_targets(
@@ -327,34 +338,36 @@ def test_estimate_targets_clamps_delta_approx_fallback_to_prev_level(monkeypatch
     assert prices[0] <= prices[1] <= prices[2], f"ladder not non-decreasing: {prices}"
 
     assert targets[0].pricingMethod == "Heston repriced"
-    assert targets[0].estimatedOptionPrice == 15.9
+    assert targets[0].estimatedOptionPrice == 20.0
 
-    # T2: Heston raised, so delta approximation is used. Target price for T2
-    # is 207.5 (> strike 190) -> delta=0.5, price_move=22.5 ->
-    # 2.50 + 0.5*22.5 = 13.75, which undershoots T1's 15.9 -> clamped to 15.9.
+    # T2: Heston raised, so BS-fallback reprice is used. sigma derived from
+    # bs_iv(2.50, 185, 190, 30/365, 0.05, True) = 0.200202 (converges).
+    # exit = bs_price(207.5, 190, 15/365, 0.05, 0.200202, True) =
+    # 17.9269986203 -> 17.93, which undershoots T1's 20.0 -> clamped to
+    # 20.0. Verified directly against the real bs_iv/bs_price.
     assert targets[1].pricingMethod == "Delta approximation"
-    assert targets[1].estimatedOptionPrice == 15.9
+    assert targets[1].estimatedOptionPrice == 20.0
 
-    # T3: Heston succeeds with its own value (20.0), checked against T1's
-    # true Heston price (15.9) — NOT T2's fallback. 20.0 >= 15.9, so it is
+    # T3: Heston succeeds with its own value (25.0), checked against T1's
+    # true Heston price (20.0) — NOT T2's fallback. 25.0 >= 20.0, so it is
     # kept as-is, not floored.
     assert targets[2].pricingMethod == "Heston repriced"
-    assert targets[2].estimatedOptionPrice == 20.0
+    assert targets[2].estimatedOptionPrice == 25.0
 
 
 def test_estimate_targets_relabels_heston_price_still_below_inflated_prior_display(monkeypatch):
     """T3's raw Heston price (12.0) clears the artifact-floor check against
     T1's true Heston price (10.0) — it is NOT a numerical artifact. But T2
-    had a genuine Heston failure and its delta-approximation fallback
-    (13.75) is itself above both T1's and T3's real Heston prices. Showing
-    T3 as 'Heston repriced' would mean displaying a number (after the
-    non-decreasing-display clamp) that Heston never actually produced for
-    T3 — so T3 must fall back to the delta approximation too, exactly as if
-    Heston had failed outright for it. This is a regression guard against an
-    implementation that only floors a level's price against the true Heston
-    chain without also re-checking it against the actual displayed price:
-    such an implementation would clear T3's artifact-floor check but then let
-    the final display clamp silently overwrite its price while leaving the
+    had a genuine Heston failure and its BS-fallback reprice (17.93, real —
+    see below) is itself above both T1's and T3's real Heston prices.
+    Showing T3 as 'Heston repriced' would mean displaying a number (after
+    the non-decreasing-display clamp) that Heston never actually produced
+    for T3 — so T3 must fall back too, exactly as if Heston had failed
+    outright for it. This is a regression guard against an implementation
+    that only floors a level's price against the true Heston chain without
+    also re-checking it against the actual displayed price: such an
+    implementation would clear T3's artifact-floor check but then let the
+    final display clamp silently overwrite its price while leaving the
     label as 'Heston repriced'."""
     import app.scoring.reward_risk as rr_module
 
@@ -382,23 +395,27 @@ def test_estimate_targets_relabels_heston_price_still_below_inflated_prior_displ
     assert targets[0].pricingMethod == "Heston repriced"
     assert targets[0].estimatedOptionPrice == 10.0
 
-    # T2: Heston raised -> delta approximation. Target price 207.5 > strike
-    # 190 -> delta=0.5, price_move=22.5 -> 2.50 + 0.5*22.5 = 13.75.
+    # T2: Heston raised -> BS-fallback reprice. sigma derived from
+    # bs_iv(2.50, 185, 190, 30/365, 0.05, True) = 0.200202 (converges,
+    # cached for reuse on any later level that also needs the fallback).
+    # exit = bs_price(207.5, 190, 15/365, 0.05, 0.200202, True) =
+    # 17.9269986203 -> 17.93.
     assert targets[1].pricingMethod == "Delta approximation"
-    assert targets[1].estimatedOptionPrice == 13.75
+    assert targets[1].estimatedOptionPrice == 17.93
 
     # T3: raw Heston 12.0 clears the floor check against T1's 10.0, but is
-    # still below T2's displayed 13.75 -> must fall back too, recomputed via
-    # delta approximation (not merely clamped): target price 215 > strike
-    # 190 -> delta=0.5, price_move=30 -> 2.50 + 0.5*30 = 17.5.
+    # still below T2's displayed 17.9269986203 (unrounded) -> must fall
+    # back too, using the SAME cached sigma (0.200202) as T2: exit =
+    # bs_price(215, 190, 15/365, 0.05, 0.200202, True) = 25.3922282437 ->
+    # 25.39. Verified directly against the real bs_iv/bs_price."""
     assert targets[2].pricingMethod == "Delta approximation"
-    assert targets[2].estimatedOptionPrice == 17.5
+    assert targets[2].estimatedOptionPrice == 25.39
 
 
 def test_estimate_targets_falls_back_when_both_floor_and_display_checks_fail(monkeypatch):
     """T3's raw Heston price (3.0) is BOTH an artifact relative to T1's true
     Heston price (10.0, so check 1 floors it to 10.0) AND, even after that
-    flooring, still below T2's inflated genuine-failure display (13.75, so
+    flooring, still below T2's inflated genuine-failure display (17.93, so
     check 2 also fails). This exercises both the artifact-floor check and
     the display-consistency check firing on the same level in the same
     iteration — the previous test only exercises the display check alone
@@ -433,15 +450,17 @@ def test_estimate_targets_falls_back_when_both_floor_and_display_checks_fail(mon
     assert targets[0].pricingMethod == "Heston repriced"
     assert targets[0].estimatedOptionPrice == 10.0
 
+    # T2: same BS-fallback reprice as the previous test's T2: 17.93.
     assert targets[1].pricingMethod == "Delta approximation"
-    assert targets[1].estimatedOptionPrice == 13.75
+    assert targets[1].estimatedOptionPrice == 17.93
 
     # T3: raw 3.0 < prev_heston_price (10.0) -> floored to 10.0 by check 1.
-    # 10.0 is still < prev_display_price (13.75) -> check 2 also fails ->
-    # falls back to delta approximation: target 215 > strike 190 -> delta=0.5,
-    # price_move=30 -> 2.50 + 0.5*30 = 17.5.
+    # 10.0 is still < prev_display_price (17.9269986203, unrounded) -> check
+    # 2 also fails -> falls back to the BS-fallback reprice using the same
+    # cached sigma: exit = bs_price(215, 190, 15/365, 0.05, 0.200202, True)
+    # = 25.3922282437 -> 25.39.
     assert targets[2].pricingMethod == "Delta approximation"
-    assert targets[2].estimatedOptionPrice == 17.5
+    assert targets[2].estimatedOptionPrice == 25.39
 
 
 def test_estimate_targets_does_not_reject_legitimate_low_t1_price():
@@ -670,15 +689,16 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
     prev_heston_price unset — T2 becomes the first real Heston reference.
 
     T3's raw price (12.0) is deliberately chosen strictly between T1's
-    delta-approximation fallback (10.0) and T2's true Heston price (15.9),
-    rather than below both, so this test can actually tell "anchored to T2"
-    apart from "still anchored to T1's stale fallback": if prev_heston_price
-    were incorrectly seeded from T1's fallback value and never properly
-    overwritten when T2 succeeds, T3's 12.0 would clear that stale 10.0 floor
-    unchecked, then fail the display-consistency check against the ladder's
-    actual displayed price (15.9, from T2) and surface as 'Delta
-    approximation' at 17.5 instead of correctly flooring to T2's true price
-    and staying 'Heston repriced' at 15.9."""
+    BS-fallback reprice (10.7388546688, real -- see below) and T2's true
+    Heston price (15.9), rather than below both, so this test can actually
+    tell "anchored to T2" apart from "still anchored to T1's stale
+    fallback": if prev_heston_price were incorrectly seeded from T1's
+    fallback value and never properly overwritten when T2 succeeds, T3's
+    12.0 would clear that stale ~10.74 floor unchecked, then fail the
+    display-consistency check against the ladder's actual displayed price
+    (15.9, from T2) and surface as 'Delta approximation' at a recomputed
+    fallback value instead of correctly flooring to T2's true price and
+    staying 'Heston repriced' at 15.9."""
     import app.scoring.reward_risk as rr_module
 
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
@@ -691,7 +711,7 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
         if call_count["n"] == 2:
             return 15.9  # T2: first level to succeed
         # T3: artifact relative to T2's true price, chosen strictly between
-        # T1's fallback (10.0) and T2's true price (15.9) so this test can
+        # T1's fallback (~10.74) and T2's true price (15.9) so this test can
         # actually distinguish the two
         return 12.0
 
@@ -705,20 +725,23 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
     prices = [t.estimatedOptionPrice for t in targets]
     assert prices[0] <= prices[1] <= prices[2], f"ladder not non-decreasing: {prices}"
 
-    # T1: Heston raised -> delta approximation. Target price 200 > strike 190
-    # -> delta=0.5, price_move=15 -> 2.50 + 0.5*15 = 10.0.
+    # T1: Heston raised -> BS-fallback reprice (first fallback in this
+    # ladder, so sigma is derived here). sigma from bs_iv(2.50, 185, 190,
+    # 30/365, 0.05, True) = 0.200202 (converges). exit = bs_price(200, 190,
+    # 15/365, 0.05, 0.200202, True) = 10.7388546688 -> 10.74. Verified
+    # directly against the real bs_iv/bs_price (matches
+    # test_bs_fallback_call_above_strike's fixture exactly).
     assert targets[0].pricingMethod == "Delta approximation"
-    assert targets[0].estimatedOptionPrice == 10.0
+    assert targets[0].estimatedOptionPrice == 10.74
 
     # T2: first level to succeed -> becomes the Heston reference.
     assert targets[1].pricingMethod == "Heston repriced"
     assert targets[1].estimatedOptionPrice == 15.9
 
-    # T3: raw 12.0 sits strictly between T1's delta-approximation fallback
-    # (10.0) and T2's TRUE price (15.9) -> only a floor correctly anchored to
-    # T2 forces this to 15.9; a floor still anchored to T1's stale fallback
+    # T3: raw 12.0 sits strictly between T1's BS-fallback reprice (10.74)
+    # and T2's TRUE price (15.9) -> only a floor correctly anchored to T2
+    # forces this to 15.9; a floor still anchored to T1's stale fallback
     # would let 12.0 clear that floor unchecked, then fail the
-    # display-consistency check against the ladder's actual displayed price
-    # and surface as Delta approximation at 17.5 instead.
+    # display-consistency check against the ladder's actual displayed price.
     assert targets[2].pricingMethod == "Heston repriced"
     assert targets[2].estimatedOptionPrice == 15.9

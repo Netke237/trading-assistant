@@ -148,6 +148,11 @@ def estimate_targets(
                                 # fallback value, so a fallback at one level can never distort
                                 # the artifact check for a later, independently-legitimate
                                 # Heston price.
+    fallback_sigma = None       # the fallback sigma, derived at most once per ladder (lazily,
+                                 # on whichever level first needs it) and reused for every
+                                 # later level that also needs it — current_premium,
+                                 # stock_price, strike, expiry_years and is_call are identical
+                                 # across T1/T2/T3, only t_price changes per level.
     for t_price in targets_prices:
         dte_at_target = max(expiry_years * 0.5, 7 / 365)
         opt_price: float
@@ -205,14 +210,18 @@ def estimate_targets(
             # params, raised, or returned a non-finite/non-positive price;
             # heston_ok is False) or because its own artifact-floored price
             # still can't clear the display check above (heston_ok was True
-            # but use_heston_price was rejected). Either way, fall back to
-            # the delta approximation. This level does NOT update
-            # prev_heston_price: a later level's Heston price is still
-            # judged against the last real Heston reference, not this
-            # fallback.
-            delta = 0.5 if (is_call and t_price > strike) or (not is_call and t_price < strike) else 0.3
-            price_move = abs(t_price - stock_price)
-            opt_price = max(0.01, current_premium + delta * price_move)
+            # but use_heston_price was rejected). Either way, fall back to a
+            # Black-Scholes reprice using the contract's own market-implied
+            # vol. This level does NOT update prev_heston_price: a later
+            # level's Heston price is still judged against the last real
+            # Heston reference, not this fallback.
+            if fallback_sigma is None:
+                fallback_sigma = _derive_fallback_sigma(
+                    current_premium, stock_price, strike, expiry_years, r, is_call, sigma_fallback,
+                )
+            opt_price = max(0.01, _bs_reprice_or_delta_approx(
+                t_price, stock_price, strike, dte_at_target, r, fallback_sigma, is_call, current_premium,
+            ))
             method = PricingMethod.DELTA_APPROX
 
         # Hard invariant: the *displayed* ladder must be non-decreasing
