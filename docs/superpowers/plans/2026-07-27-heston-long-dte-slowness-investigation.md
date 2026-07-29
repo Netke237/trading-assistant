@@ -464,7 +464,15 @@ reformulated pricer produced a bit-identical price and the identical 2
 integration warnings as the current code, both before and after. The same
 held for the DTE=185 ladder-artifact fixture from
 `docs/superpowers/plans/2026-07-26-heston-ladder-floor-fix.md` (T1/T2/T3
-identical to the last digit).
+identical to the last digit). **Scope note:** `backend/tests/test_heston_char_fn.py`
+only guards the `|g| < 1` bound stated above — the separate "bit-identical
+price / identical warnings" claim in this paragraph is not backed by any
+committed test and rests on the same uncommitted standalone script; a future
+refactor of `_heston_char_fn` or the integration path would still be caught
+by the committed test if it pushed `|g|` past 1, but would not be caught if
+it broke the bit-identical-repricing claim specifically (low practical risk
+today, since Option B's reformulation was never implemented, so there is no
+reformulated code path to regress).
 
 **Conclusion:** the branch-cut discontinuity this reformulation fixes does
 not occur anywhere in this codebase's default parameter space, so
