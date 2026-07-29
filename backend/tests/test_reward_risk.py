@@ -4,59 +4,81 @@ from app.scoring.reward_risk import estimate_rr, estimate_targets
 from app.models.heston import HestonParams
 
 
-# ── Delta approximation — call ────────────────────────────────────────────────
+# ── BS-fallback pricing (Heston unavailable) — call ───────────────────────────
+# Formerly a flat delta*move guess; now a real Black-Scholes reprice using IV
+# derived from the contract's own current quote (via bs_iv), at half the DTE
+# (dte_at_target). The "Delta approximation" label is unchanged — it still
+# means "the non-Heston tier" from the API's perspective — but these tests
+# were renamed from test_delta_approx_* because they test the fallback
+# FORMULA itself, which is no longer a delta approximation.
 
-def test_delta_approx_call_above_strike():
-    """Call, target(200) > strike(190) → delta=0.5.
-    exit=10.0, reward=7.5, risk=2.50*0.60=1.50, rr=5.0."""
+def test_bs_fallback_call_above_strike():
+    """Call, target(200) > strike(190). sigma derived from bs_iv(2.50, 185,
+    190, 30/365, 0.05, True) = 0.200202 (converges). Repriced via bs_price at
+    dte_at_target=15/365: exit=10.7388546688 -> 10.74. reward=8.238855,
+    risk=2.50*0.60=1.50, rr=5.49. Verified directly against the real
+    bs_iv/bs_price."""
     rr = estimate_rr(
         stock_price=185, target_price=200, invalidation_price=175,
         strike=190, expiry_years=30/365, current_premium=2.50, is_call=True,
     )
     assert rr.model_used == "Delta approximation"
-    assert rr.rr_ratio == 5.0
-    assert rr.estimated_exit_premium == 10.0
+    assert rr.rr_ratio == 5.49
+    assert rr.estimated_exit_premium == 10.74
 
 
-def test_delta_approx_call_below_strike():
-    """Call, target(188) < strike(190) → delta=0.3.
-    exit=1.90, reward=0.90, risk=1.00*0.60=0.60, rr=1.5."""
+def test_bs_fallback_call_below_strike():
+    """Call, target(188) < strike(190). sigma derived from bs_iv(1.00, 185,
+    190, 30/365, 0.05, True) = 0.120547 (converges). exit=1.1465734530 ->
+    1.15. reward=0.146573, risk=1.00*0.60=0.60, rr=0.24. Verified directly
+    against the real bs_iv/bs_price."""
     rr = estimate_rr(
         stock_price=185, target_price=188, invalidation_price=175,
         strike=190, expiry_years=30/365, current_premium=1.00, is_call=True,
     )
     assert rr.model_used == "Delta approximation"
-    assert rr.rr_ratio == 1.5
+    assert rr.rr_ratio == 0.24
 
 
-# ── Delta approximation — put ─────────────────────────────────────────────────
+# ── BS-fallback pricing (Heston unavailable) — put ────────────────────────────
 
-def test_delta_approx_put_below_strike():
-    """Put, target(170) < strike(180) → delta=0.5.
-    exit=9.50, reward=7.50, risk=2.00*0.60=1.20, rr=6.25."""
+def test_bs_fallback_put_below_strike():
+    """Put, target(170) < strike(180). sigma derived from bs_iv(2.00, 185,
+    180, 30/365, 0.05, False) = 0.205017 (converges). exit=9.9433742445 ->
+    9.94. reward=7.943374, risk=2.00*0.60=1.20, rr=6.62. Verified directly
+    against the real bs_iv/bs_price."""
     rr = estimate_rr(
         stock_price=185, target_price=170, invalidation_price=195,
         strike=180, expiry_years=30/365, current_premium=2.00, is_call=False,
     )
     assert rr.model_used == "Delta approximation"
-    assert rr.rr_ratio == 6.25
-    assert rr.estimated_exit_premium == 9.50
+    assert rr.rr_ratio == 6.62
+    assert rr.estimated_exit_premium == 9.94
 
 
-def test_delta_approx_put_above_strike():
-    """Put, target(185) > strike(180) → delta=0.3."""
+def test_bs_fallback_put_above_strike():
+    """Put, target(185) == stock(185), strike(180) below both (OTM put).
+    Unlike the old formula (which returned current_premium unchanged for
+    zero price movement), the BS reprice happens at dte_at_target (half of
+    expiry_years) -- a shorter time-to-expiry than the current quote's -- so
+    even zero movement shows time decay: exit=0.4565739681, which is BELOW
+    current_premium(1.00) -> reward=-0.543426 <= 0 -> rr_ratio=0.0 via the
+    early-return guard (same final ratio as before this fix, reached for a
+    different, more honest reason). Verified directly against the real
+    bs_iv/bs_price."""
     rr = estimate_rr(
         stock_price=185, target_price=185, invalidation_price=195,
         strike=180, expiry_years=30/365, current_premium=1.00, is_call=False,
     )
-    # price_move = 0 → exit = 1.00 → reward = 0 → rr_ratio = 0.0
     assert rr.rr_ratio == 0.0
 
 
-# ── Zero / degenerate cases ───────────────────────────────────────────────────
-
 def test_zero_price_movement_returns_zero_ratio():
-    """target == stock_price → price_move=0 → reward=0 → rr_ratio=0.0."""
+    """target == stock_price (185). The BS-fallback reprice at
+    dte_at_target (half of expiry_years) is time-decayed below
+    current_premium (exit=1.2685575930 < 2.50) -> reward=-1.231442 <= 0 ->
+    rr_ratio=0.0 via the early-return guard. Verified directly against the
+    real bs_iv/bs_price."""
     rr = estimate_rr(
         stock_price=185, target_price=185, invalidation_price=175,
         strike=190, expiry_years=30/365, current_premium=2.50, is_call=True,
@@ -117,7 +139,10 @@ def test_heston_path_not_used_when_params_none():
 
 
 def test_estimate_rr_uses_premium_stop_pct():
-    """risk = current_premium * premium_stop_pct, so halving premium_stop_pct doubles rr_ratio."""
+    """risk = current_premium * premium_stop_pct, so halving premium_stop_pct doubles rr_ratio.
+    premium_stop_pct only affects risk, not exit_premium, so the doubling
+    relationship holds regardless of which pricing formula produces
+    exit_premium."""
     from app.scoring.reward_risk import estimate_rr
 
     base_kwargs = dict(
@@ -139,21 +164,44 @@ def test_estimate_rr_uses_premium_stop_pct():
     # Allow floating-point tolerance
     assert abs(result_30.rr_ratio - result_60.rr_ratio * 2) < 0.05
 
-    # Also verify the 0.60 case matches expected math:
-    # exit_premium = 2.00 + 0.5*(108-100) = 6.00; reward=4.00; risk=1.20; rr=3.33
-    assert abs(result_60.rr_ratio - 3.33) < 0.01
+    # Also verify the 0.60 case matches expected math: sigma derived from
+    # bs_iv(2.00, 100, 100, 0.25, 0.05, True) = 0.064799 (converges).
+    # exit_premium = bs_price(108, 100, 0.125, 0.05, 0.064799, True) =
+    # 8.6231323590 -> 8.62; reward=6.623132; risk=1.20; rr=5.52. Verified
+    # directly against the real bs_iv/bs_price.
+    assert abs(result_60.rr_ratio - 5.52) < 0.01
 
 
 def test_estimate_exit_premium_rounded_on_zero_reward():
-    """The early-return (zero-reward) path must round estimated_exit_premium to
-    2 decimals, matching the success path."""
+    """The early-return (zero-reward) path must round estimated_exit_premium
+    to 2 decimals, matching the success path.
+
+    NOTE: this can no longer use a deep-ITM fixture (the old
+    stock=100/strike=90/premium=2.567 combo) to force the early-return path.
+    That premium is below the option's intrinsic value at those inputs (an
+    economically impossible/arbitrage quote), so bs_iv cannot converge to
+    ANY volatility that reproduces it -- it correctly falls back to
+    sigma_fallback(0.25), which reprices well ABOVE the premium
+    (exit=10.21), giving a POSITIVE reward and skipping the early-return
+    path entirely -- defeating the point of this test. Using an OTM,
+    zero-movement fixture instead (target==stock, strike above both)
+    reliably produces a real, convergent, time-decayed reprice below
+    current_premium, still exercising the early-return path -- and the
+    resulting decayed exit_premium already has enough decimal digits
+    (1.3112629983) to exercise the 2-decimal rounding on its own, without
+    needing an artificially over-precise current_premium input.
+
+    sigma derived from bs_iv(2.567, 185, 190, 30/365, 0.05, True) = 0.203581
+    (converges). exit = bs_price(185, 190, 15/365, 0.05, 0.203581, True) =
+    1.3112629983 -> 1.31, below current_premium(2.567) -> reward=-1.255737
+    <= 0 -> early return. Verified directly against the real
+    bs_iv/bs_price."""
     rr = estimate_rr(
-        stock_price=100.0, target_price=100.0, invalidation_price=90.0,
-        strike=90.0, expiry_years=30 / 365, current_premium=2.567, is_call=True,
+        stock_price=185.0, target_price=185.0, invalidation_price=175.0,
+        strike=190.0, expiry_years=30 / 365, current_premium=2.567, is_call=True,
     )
-    # target == stock → price_move 0 → reward 0 → early return.
     assert rr.rr_ratio == 0.0
-    assert rr.estimated_exit_premium == 2.57
+    assert rr.estimated_exit_premium == 1.31
 
 
 def test_heston_degenerate_price_falls_back_to_delta_approx():
@@ -168,9 +216,9 @@ def test_heston_degenerate_price_falls_back_to_delta_approx():
         heston_params=params,
     )
     assert rr.model_used == "Delta approximation"
-    # Matches test_delta_approx_call_above_strike's expected math exactly.
-    assert rr.estimated_exit_premium == 10.0
-    assert rr.rr_ratio == 5.0
+    # Matches test_bs_fallback_call_above_strike's expected math exactly.
+    assert rr.estimated_exit_premium == 10.74
+    assert rr.rr_ratio == 5.49
 
 
 def test_heston_exception_falls_back_to_delta_approx(monkeypatch):
@@ -189,7 +237,7 @@ def test_heston_exception_falls_back_to_delta_approx(monkeypatch):
         heston_params=params,
     )
     assert rr.model_used == "Delta approximation"
-    assert rr.estimated_exit_premium == 10.0
+    assert rr.estimated_exit_premium == 10.74
 
 
 def test_estimate_targets_floors_non_monotonic_heston_price_instead_of_switching_models(monkeypatch):

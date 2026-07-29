@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Literal, Optional
 
 from app.models.heston import HestonParams, heston_price
+from app.models.black_scholes import bs_iv, bs_price
 
 RrModel = Literal["Heston repriced", "Delta approximation"]
 
@@ -14,6 +15,46 @@ class RrResult:
     rr_ratio: float
     model_used: RrModel
     estimated_exit_premium: float
+
+
+def _derive_fallback_sigma(
+    current_premium: float,
+    stock_price: float,
+    strike: float,
+    expiry_years: float,
+    r: float,
+    is_call: bool,
+    sigma_fallback: float,
+) -> float:
+    """Back out the contract's own market-implied vol from its current quote
+    (at the full time-to-expiry the quote was made at, expiry_years). Falls
+    back to sigma_fallback when bs_iv can't converge (e.g. degenerate or
+    extreme-moneyness quotes)."""
+    sigma = bs_iv(current_premium, stock_price, strike, expiry_years, r, is_call)
+    return sigma if sigma is not None else sigma_fallback
+
+
+def _bs_reprice_or_delta_approx(
+    t_price: float,
+    stock_price: float,
+    strike: float,
+    dte_at_target: float,
+    r: float,
+    sigma: float,
+    is_call: bool,
+    current_premium: float,
+) -> float:
+    """Reprice at t_price via Black-Scholes using the given sigma. Falls back
+    to the crude flat-delta guess (the pre-fix behavior) only if bs_price
+    itself is unusable — kept as a last-resort safety net, though expected
+    to be effectively unreachable given callers already validate T > 0 and
+    S, K > 0."""
+    price = bs_price(t_price, strike, dte_at_target, r, sigma, is_call)
+    if math.isfinite(price) and price > 0:
+        return price
+    delta = 0.5 if (is_call and t_price > strike) or (not is_call and t_price < strike) else 0.3
+    price_move = abs(t_price - stock_price)
+    return current_premium + delta * price_move
 
 
 def estimate_rr(
@@ -31,9 +72,9 @@ def estimate_rr(
 ) -> RrResult:
     model_used: RrModel
     heston_ok = False
+    dte_at_target = max(expiry_years * 0.5, 7 / 365)
 
     if heston_params is not None:
-        dte_at_target = max(expiry_years * 0.5, 7 / 365)
         try:
             heston_exit_premium = heston_price(target_price, strike, dte_at_target, r, heston_params, is_call)
         except Exception:
@@ -44,12 +85,10 @@ def estimate_rr(
         exit_premium = heston_exit_premium
         model_used = "Heston repriced"
     else:
-        if is_call:
-            delta = 0.5 if target_price > strike else 0.3
-        else:
-            delta = 0.5 if target_price < strike else 0.3
-        price_move = abs(target_price - stock_price)
-        exit_premium = current_premium + delta * price_move
+        sigma = _derive_fallback_sigma(current_premium, stock_price, strike, expiry_years, r, is_call, sigma_fallback)
+        exit_premium = _bs_reprice_or_delta_approx(
+            target_price, stock_price, strike, dte_at_target, r, sigma, is_call, current_premium,
+        )
         model_used = "Delta approximation"
 
     exit_premium = max(exit_premium, 0.01)
