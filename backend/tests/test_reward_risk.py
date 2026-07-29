@@ -38,6 +38,7 @@ def test_bs_fallback_call_below_strike():
     )
     assert rr.model_used == "Delta approximation"
     assert rr.rr_ratio == 0.24
+    assert rr.estimated_exit_premium == 1.15
 
 
 # ── BS-fallback pricing (Heston unavailable) — put ────────────────────────────

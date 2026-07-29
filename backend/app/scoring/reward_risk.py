@@ -47,10 +47,10 @@ def _bs_reprice_or_delta_approx(
     """Reprice at t_price via Black-Scholes using the given sigma. Falls back
     to the crude flat-delta guess (the pre-fix behavior) only if bs_price
     itself is unusable — kept as a last-resort safety net. Expected to be
-    rare in practice (dte_at_target and strike are always positive; t_price
-    is derived from stock_price and a configured target-move percentage, not
-    independently validated here), but not proven unreachable — callers do
-    not enforce t_price > 0."""
+    rare in practice (dte_at_target is provably positive via its own floor;
+    t_price and strike come from caller-supplied market/config data that is
+    not independently validated here), but not proven unreachable — callers
+    do not enforce t_price > 0 or strike > 0."""
     price = bs_price(t_price, strike, dte_at_target, r, sigma, is_call)
     if math.isfinite(price) and price > 0:
         return price
