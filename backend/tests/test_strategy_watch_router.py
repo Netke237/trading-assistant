@@ -37,6 +37,22 @@ async def test_add_list_remove_roundtrip(app):
 
 
 @pytest.mark.asyncio
+async def test_add_watch_rejects_invalid_direction(app):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        resp = await ac.post("/api/strategy-watch/",
+                            json={"symbol": "AAPL", "strategy_key": "pullback_ema", "direction": "sideways"})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_bulk_add_rejects_invalid_direction(app):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        resp = await ac.post("/api/strategy-watch/bulk",
+                            json={"symbols": ["AAPL"], "strategy_key": "pullback_ema", "direction": "sideways"})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_add_unknown_strategy_returns_400(app):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
         resp = await ac.post("/api/strategy-watch/",
@@ -50,6 +66,18 @@ async def test_add_duplicate_returns_409(app):
         await ac.post("/api/strategy-watch/", json={"symbol": "AAPL", "strategy_key": "ma_crossover"})
         dup = await ac.post("/api/strategy-watch/", json={"symbol": "AAPL", "strategy_key": "ma_crossover"})
     assert dup.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_add_same_symbol_strategy_different_direction_returns_201(app):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        bullish = await ac.post("/api/strategy-watch/",
+                            json={"symbol": "AAPL", "strategy_key": "ma_crossover", "direction": "Bullish"})
+        bearish = await ac.post("/api/strategy-watch/",
+                            json={"symbol": "AAPL", "strategy_key": "ma_crossover", "direction": "Bearish"})
+    assert bullish.status_code == 201
+    assert bearish.status_code == 201
+    assert bullish.json()["id"] != bearish.json()["id"]
 
 
 @pytest.mark.asyncio

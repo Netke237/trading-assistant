@@ -22,11 +22,20 @@ def test_add_watch_rejects_unknown_strategy(tmp_path):
         store.add_watch("AAPL", "not_a_strategy")
 
 
-def test_add_watch_rejects_duplicate_pair(tmp_path):
+def test_add_watch_rejects_duplicate_pair_same_direction(tmp_path):
     store = StrategyWatchStore(path=tmp_path / "watches.yaml")
-    store.add_watch("AAPL", "pullback_ema")
+    store.add_watch("AAPL", "pullback_ema", direction="Bullish")
     with pytest.raises(ValueError, match="already watched"):
-        store.add_watch("aapl", "pullback_ema")
+        store.add_watch("aapl", "pullback_ema", direction="Bullish")
+
+
+def test_add_watch_allows_same_symbol_strategy_different_direction(tmp_path):
+    store = StrategyWatchStore(path=tmp_path / "watches.yaml")
+    bullish = store.add_watch("AAPL", "pullback_ema", direction="Bullish")
+    bearish = store.add_watch("AAPL", "pullback_ema", direction="Bearish")
+    assert bullish["id"] != bearish["id"]
+    symbols = {(w["symbol"], w["strategy_key"], w["direction"]) for w in store.list_watches()}
+    assert symbols == {("AAPL", "pullback_ema", "Bullish"), ("AAPL", "pullback_ema", "Bearish")}
 
 
 def test_bulk_add_skips_duplicates_and_returns_added(tmp_path):

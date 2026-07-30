@@ -7,6 +7,7 @@ from dataclasses import asdict, is_dataclass
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.schemas import Direction
 from app.services.strategy_watch_store import strategy_watch_store, VALID_STRATEGIES
 from app.services.strategy_watch_scheduler import strategy_watch_scheduler
 
@@ -17,13 +18,13 @@ class AddWatch(BaseModel):
     symbol: str
     strategy_key: str
     params_override: dict | None = None
-    direction: str = "Bullish"
+    direction: Direction = "Bullish"
 
 
 class BulkAdd(BaseModel):
     symbols: list[str]
     strategy_key: str
-    direction: str = "Bullish"
+    direction: Direction = "Bullish"
 
 
 class EnabledPatch(BaseModel):
