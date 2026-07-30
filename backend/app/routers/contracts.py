@@ -197,13 +197,13 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     entry_bid = max(0.01, req.premium - half)
     entry_ask = req.premium + half
 
-    # heston_params intentionally omitted (defaults to None → delta approximation).
+    # heston_params intentionally omitted (defaults to None → BS reprice fallback).
     # Unlike the scan pipeline, this endpoint only receives one contract's fields
     # in the request body — no option chain to calibrate against — and it's called
     # interactively from Step 6's contract-override UI, where adding a chain fetch
     # + a multi-second worst-case Heston calibration would be a noticeable
     # click-to-update delay. Known trade-off: this means the same contract can
-    # show "Heston repriced" on the initial scan card and "Delta approximation"
+    # show "Heston repriced" on the initial scan card and "BS repriced (IV-derived)"
     # after a Step 6 override — see docs/superpowers/plans/
     # 2026-07-25-heston-pricing-in-trade-plan.md's "Out of scope" section.
     plan = build_trade_plan(

@@ -83,7 +83,7 @@ def test_heston_params_flow_through_to_rr_and_targets():
 def test_heston_params_default_none_preserves_delta_approx():
     # No heston_params passed — must behave exactly as before this change.
     p = _plan()
-    assert p.rr_model == "Delta approximation"
+    assert p.rr_model == "BS repriced (IV-derived)"
 
 
 def test_heston_params_floors_non_monotonic_target_instead_of_falling_back():

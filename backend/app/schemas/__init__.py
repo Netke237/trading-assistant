@@ -20,7 +20,7 @@ AlertKind = Literal['Info', 'Action', 'Critical']
 OrderType = Literal['Limit', 'Market', 'Stop']
 OptionRight = Literal['C', 'P']
 TrendDir = Literal['up', 'flat', 'down']
-RrModel = Literal['Heston repriced', 'Delta approximation']
+RrModel = Literal['Heston repriced', 'BS repriced (IV-derived)']
 
 # ── Sentiment / regime ──────────────────────────────────────────────────────
 
@@ -342,7 +342,7 @@ class NewsItem(BaseModel):
 
 class PricingMethod(str, Enum):
     HESTON = "Heston repriced"
-    DELTA_APPROX = "Delta approximation"
+    DELTA_APPROX = "BS repriced (IV-derived)"
     UNAVAILABLE = "Unavailable"
 
 

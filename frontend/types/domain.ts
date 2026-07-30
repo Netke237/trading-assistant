@@ -153,7 +153,7 @@ export interface TargetLevel {
   stockPrice: number;            // underlying price at this target
   targetPrice?: number;          // new backend field name; optional for backward compat
   estimatedOptionPrice?: number; // model-based or approximation
-  pricingMethod?: 'Heston repriced' | 'Delta approximation' | 'Unavailable' | 'heston' | 'delta-approx' | 'manual';
+  pricingMethod?: 'Heston repriced' | 'BS repriced (IV-derived)' | 'Unavailable' | 'heston' | 'delta-approx' | 'manual';
   contractsToSell?: number;      // how many contracts to close here
   status?: string;               // 'PENDING' | 'HIT' | 'MISSED' or undefined
   rrContribution?: number;       // estimated reward / risk contribution
@@ -251,7 +251,7 @@ export interface TradeCardData {
   nextEventDays?:  number | null;
   nextEventLabel?: string | null;
   rrRatio:  number;
-  rrModel:  'Heston repriced' | 'Delta approximation';
+  rrModel:  'Heston repriced' | 'BS repriced (IV-derived)';
   finalStatus: Status;
   /** Signal confidence 0–100 (null when history is too thin to judge). */
   confidence?: number | null;
@@ -319,7 +319,7 @@ export interface AlternativeContract {
   contractConfidence: Status;
   contractBreakdown:  ContractScoreBreakdown;
   rrRatio:      number;
-  rrModel:      'Heston repriced' | 'Delta approximation';
+  rrModel:      'Heston repriced' | 'BS repriced (IV-derived)';
   reason:       string;
   spreadType?:     SpreadType;
   legs?:           OptionLeg[];

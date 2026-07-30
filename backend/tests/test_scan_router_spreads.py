@@ -108,7 +108,7 @@ def _make_entry() -> EntryAssessment:
 
 
 def _make_rr() -> RrResult:
-    return RrResult(rr_ratio=2.0, model_used="Delta approximation", estimated_exit_premium=5.0)
+    return RrResult(rr_ratio=2.0, model_used="BS repriced (IV-derived)", estimated_exit_premium=5.0)
 
 
 def _make_plan(entry_result: EntryAssessment, rr_result: RrResult):

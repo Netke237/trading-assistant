@@ -7,7 +7,7 @@ from typing import Literal, Optional
 from app.models.heston import HestonParams, heston_price
 from app.models.black_scholes import bs_iv, bs_price
 
-RrModel = Literal["Heston repriced", "Delta approximation"]
+RrModel = Literal["Heston repriced", "BS repriced (IV-derived)"]
 
 
 @dataclass
@@ -91,7 +91,7 @@ def estimate_rr(
         exit_premium = _bs_reprice_or_delta_approx(
             target_price, stock_price, strike, dte_at_target, r, sigma, is_call, current_premium,
         )
-        model_used = "Delta approximation"
+        model_used = "BS repriced (IV-derived)"
 
     exit_premium = max(exit_premium, 0.01)
 

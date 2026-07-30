@@ -7,10 +7,10 @@ from app.models.heston import HestonParams
 # ── BS-fallback pricing (Heston unavailable) — call ───────────────────────────
 # Formerly a flat delta*move guess; now a real Black-Scholes reprice using IV
 # derived from the contract's own current quote (via bs_iv), at half the DTE
-# (dte_at_target). The "Delta approximation" label is unchanged — it still
-# means "the non-Heston tier" from the API's perspective — but these tests
-# were renamed from test_delta_approx_* because they test the fallback
-# FORMULA itself, which is no longer a delta approximation.
+# (dte_at_target). The label was renamed from "Delta approximation" to
+# "BS repriced (IV-derived)" to match — these tests were renamed from
+# test_delta_approx_* because they test the fallback FORMULA itself, which
+# is no longer a delta approximation.
 
 def test_bs_fallback_call_above_strike():
     """Call, target(200) > strike(190). sigma derived from bs_iv(2.50, 185,
@@ -22,7 +22,7 @@ def test_bs_fallback_call_above_strike():
         stock_price=185, target_price=200, invalidation_price=175,
         strike=190, expiry_years=30/365, current_premium=2.50, is_call=True,
     )
-    assert rr.model_used == "Delta approximation"
+    assert rr.model_used == "BS repriced (IV-derived)"
     assert rr.rr_ratio == 5.49
     assert rr.estimated_exit_premium == 10.74
 
@@ -36,7 +36,7 @@ def test_bs_fallback_call_below_strike():
         stock_price=185, target_price=188, invalidation_price=175,
         strike=190, expiry_years=30/365, current_premium=1.00, is_call=True,
     )
-    assert rr.model_used == "Delta approximation"
+    assert rr.model_used == "BS repriced (IV-derived)"
     assert rr.rr_ratio == 0.24
     assert rr.estimated_exit_premium == 1.15
 
@@ -52,7 +52,7 @@ def test_bs_fallback_put_below_strike():
         stock_price=185, target_price=170, invalidation_price=195,
         strike=180, expiry_years=30/365, current_premium=2.00, is_call=False,
     )
-    assert rr.model_used == "Delta approximation"
+    assert rr.model_used == "BS repriced (IV-derived)"
     assert rr.rr_ratio == 6.62
     assert rr.estimated_exit_premium == 9.94
 
@@ -179,7 +179,7 @@ def test_heston_path_not_used_when_params_none():
         strike=190, expiry_years=30/365, current_premium=2.50, is_call=True,
         heston_params=None,
     )
-    assert rr.model_used == "Delta approximation"
+    assert rr.model_used == "BS repriced (IV-derived)"
 
 
 def test_estimate_rr_uses_premium_stop_pct():
@@ -259,7 +259,7 @@ def test_heston_degenerate_price_falls_back_to_delta_approx():
         strike=190, expiry_years=30 / 365, current_premium=2.50, is_call=True,
         heston_params=params,
     )
-    assert rr.model_used == "Delta approximation"
+    assert rr.model_used == "BS repriced (IV-derived)"
     # Matches test_bs_fallback_call_above_strike's expected math exactly.
     assert rr.estimated_exit_premium == 10.74
     assert rr.rr_ratio == 5.49
@@ -280,7 +280,7 @@ def test_heston_exception_falls_back_to_delta_approx(monkeypatch):
         strike=190, expiry_years=30 / 365, current_premium=2.50, is_call=True,
         heston_params=params,
     )
-    assert rr.model_used == "Delta approximation"
+    assert rr.model_used == "BS repriced (IV-derived)"
     assert rr.estimated_exit_premium == 10.74
 
 
@@ -389,7 +389,7 @@ def test_estimate_targets_clamps_delta_approx_fallback_to_prev_level(monkeypatch
     # exit = bs_price(207.5, 190, 15/365, 0.05, 0.200202, True) =
     # 17.9269986203 -> 17.93, which undershoots T1's 20.0 -> clamped to
     # 20.0. Verified directly against the real bs_iv/bs_price.
-    assert targets[1].pricingMethod == "Delta approximation"
+    assert targets[1].pricingMethod == "BS repriced (IV-derived)"
     assert targets[1].estimatedOptionPrice == 20.0
 
     # T3: Heston succeeds with its own value (25.0), checked against T1's
@@ -444,7 +444,7 @@ def test_estimate_targets_relabels_heston_price_still_below_inflated_prior_displ
     # cached for reuse on any later level that also needs the fallback).
     # exit = bs_price(207.5, 190, 15/365, 0.05, 0.200202, True) =
     # 17.9269986203 -> 17.93.
-    assert targets[1].pricingMethod == "Delta approximation"
+    assert targets[1].pricingMethod == "BS repriced (IV-derived)"
     assert targets[1].estimatedOptionPrice == 17.93
 
     # T3: raw Heston 12.0 clears the floor check against T1's 10.0, but is
@@ -452,7 +452,7 @@ def test_estimate_targets_relabels_heston_price_still_below_inflated_prior_displ
     # back too, using the SAME cached sigma (0.200202) as T2: exit =
     # bs_price(215, 190, 15/365, 0.05, 0.200202, True) = 25.3922282437 ->
     # 25.39. Verified directly against the real bs_iv/bs_price."""
-    assert targets[2].pricingMethod == "Delta approximation"
+    assert targets[2].pricingMethod == "BS repriced (IV-derived)"
     assert targets[2].estimatedOptionPrice == 25.39
 
 
@@ -495,7 +495,7 @@ def test_estimate_targets_falls_back_when_both_floor_and_display_checks_fail(mon
     assert targets[0].estimatedOptionPrice == 10.0
 
     # T2: same BS-fallback reprice as the previous test's T2: 17.93.
-    assert targets[1].pricingMethod == "Delta approximation"
+    assert targets[1].pricingMethod == "BS repriced (IV-derived)"
     assert targets[1].estimatedOptionPrice == 17.93
 
     # T3: raw 3.0 < prev_heston_price (10.0) -> floored to 10.0 by check 1.
@@ -503,7 +503,7 @@ def test_estimate_targets_falls_back_when_both_floor_and_display_checks_fail(mon
     # 2 also fails -> falls back to the BS-fallback reprice using the same
     # cached sigma: exit = bs_price(215, 190, 15/365, 0.05, 0.200202, True)
     # = 25.3922282437 -> 25.39.
-    assert targets[2].pricingMethod == "Delta approximation"
+    assert targets[2].pricingMethod == "BS repriced (IV-derived)"
     assert targets[2].estimatedOptionPrice == 25.39
 
 
@@ -568,7 +568,7 @@ def test_estimate_targets_falls_back_on_nan_heston_price(monkeypatch):
         expiry_years=30 / 365, current_premium=2.50, is_call=True,
         heston_params=params,
     )
-    assert all(t.pricingMethod == "Delta approximation" for t in targets)
+    assert all(t.pricingMethod == "BS repriced (IV-derived)" for t in targets)
     assert all(math.isfinite(t.estimatedOptionPrice) for t in targets)
 
 
@@ -586,7 +586,7 @@ def test_estimate_targets_falls_back_on_inf_heston_price(monkeypatch):
         expiry_years=30 / 365, current_premium=2.50, is_call=True,
         heston_params=params,
     )
-    assert all(t.pricingMethod == "Delta approximation" for t in targets)
+    assert all(t.pricingMethod == "BS repriced (IV-derived)" for t in targets)
     assert all(math.isfinite(t.estimatedOptionPrice) for t in targets)
 
 
@@ -606,7 +606,7 @@ def test_estimate_rr_falls_back_on_inf_heston_price(monkeypatch):
         strike=190, expiry_years=30 / 365, current_premium=2.50, is_call=True,
         heston_params=params,
     )
-    assert rr.model_used == "Delta approximation"
+    assert rr.model_used == "BS repriced (IV-derived)"
     assert math.isfinite(rr.estimated_exit_premium)
     assert math.isfinite(rr.rr_ratio)
 
@@ -740,7 +740,7 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
     fallback value and never properly overwritten when T2 succeeds, T3's
     12.0 would clear that stale ~10.74 floor unchecked, then fail the
     display-consistency check against the ladder's actual displayed price
-    (15.9, from T2) and surface as 'Delta approximation' at a recomputed
+    (15.9, from T2) and surface as 'BS repriced (IV-derived)' at a recomputed
     fallback value instead of correctly flooring to T2's true price and
     staying 'Heston repriced' at 15.9."""
     import app.scoring.reward_risk as rr_module
@@ -775,7 +775,7 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
     # 15/365, 0.05, 0.200202, True) = 10.7388546688 -> 10.74. Verified
     # directly against the real bs_iv/bs_price (matches
     # test_bs_fallback_call_above_strike's fixture exactly).
-    assert targets[0].pricingMethod == "Delta approximation"
+    assert targets[0].pricingMethod == "BS repriced (IV-derived)"
     assert targets[0].estimatedOptionPrice == 10.74
 
     # T2: first level to succeed -> becomes the Heston reference.

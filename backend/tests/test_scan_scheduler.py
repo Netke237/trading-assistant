@@ -155,7 +155,7 @@ def test_compute_deltas_rank_and_score():
             entry=TradeEntry(limit=1.0, maxFill=1.05, orderType="Limit"),
             exit=TradeExit(invalidation=95.0, premiumStop=0.6, timeStopDays=10, target=110.0),
             rrRatio=2.0,
-            rrModel="Delta approximation",
+            rrModel="BS repriced (IV-derived)",
             finalStatus="PASS",
         )
 

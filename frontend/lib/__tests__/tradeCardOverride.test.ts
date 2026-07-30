@@ -22,7 +22,7 @@ function makeCard(overrides: Partial<TradeCardData> = {}): TradeCardData {
     entry: { limit: 19.98, maxFill: 20.58, orderType: 'Limit' },
     exit: { invalidation: 294.47, premiumStop: 11.99, timeStopDays: 74, target: 344.23, targets: [] },
     rrRatio: 1.1,
-    rrModel: 'Delta approximation',
+    rrModel: 'BS repriced (IV-derived)',
     finalStatus: 'PASS',
     ...overrides,
   };
@@ -85,7 +85,7 @@ describe('mergePlan', () => {
       entry: { limit: 7.47, maxFill: 7.69, orderType: 'Limit' as const },
       exit: { invalidation: 300.06, premiumStop: 4.48, timeStopDays: 74, target: 344.23, targets: [] },
       rrRatio: 1.71,
-      rrModel: 'Delta approximation' as const,
+      rrModel: 'BS repriced (IV-derived)' as const,
     };
     const merged = mergePlan(card, plan);
     expect(merged.entry.limit).toBe(7.47);
@@ -114,7 +114,7 @@ describe('resolveBasketCards', () => {
       entry: { limit: 7.47, maxFill: 7.69, orderType: 'Limit' as const },
       exit: { invalidation: 300.06, premiumStop: 4.48, timeStopDays: 74, target: 344.23, targets: [] },
       rrRatio: 1.71,
-      rrModel: 'Delta approximation' as const,
+      rrModel: 'BS repriced (IV-derived)' as const,
     };
     const plansBySymbol = { AAPL: { key: 'AAPL|375|2027-01-15|C', plan } };
 
@@ -148,7 +148,7 @@ describe('resolveBasketCards', () => {
     const stalePlan = {
       entry: { limit: 1, maxFill: 1, orderType: 'Limit' as const },
       exit: { invalidation: 1, premiumStop: 1, timeStopDays: 1, target: 1, targets: [] },
-      rrRatio: 1, rrModel: 'Delta approximation' as const,
+      rrRatio: 1, rrModel: 'BS repriced (IV-derived)' as const,
     };
     const plansBySymbol = { AAPL: { key: 'AAPL|360|2027-01-15|C', plan: stalePlan } };
 
@@ -167,7 +167,7 @@ describe('resolveBasketCards', () => {
     const plan = {
       entry: { limit: 7.47, maxFill: 7.69, orderType: 'Limit' as const },
       exit: { invalidation: 300.06, premiumStop: 4.48, timeStopDays: 74, target: 344.23, targets: [] },
-      rrRatio: 1.71, rrModel: 'Delta approximation' as const,
+      rrRatio: 1.71, rrModel: 'BS repriced (IV-derived)' as const,
     };
     const plansBySymbol = { AAPL: { key: 'AAPL|375|2027-01-15|C', plan } };
 

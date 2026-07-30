@@ -15,7 +15,7 @@ const mockPreviousRun: ScanResult = {
       contractDetails: { strike: 190, expiry: '2026-06-20', right: 'C', mid: 2.50, delta: 0.45, theta: -0.05, ivRank: 55, dte: 47 },
       entry: { limit: 2.45, maxFill: 2.55, orderType: 'Limit' },
       exit: { invalidation: 179.60, premiumStop: 1.50, timeStopDays: 18, target: 200.00, targets: [{ id: 'tp1', stockPrice: 200.00, contractsToSell: 1, status: 'PENDING' }] },
-      rrRatio: 2.4, rrModel: 'Delta approximation', finalStatus: 'PASS',
+      rrRatio: 2.4, rrModel: 'BS repriced (IV-derived)', finalStatus: 'PASS',
     },
     {
       symbol: 'MSFT', company: 'Microsoft Corp.', price: 410.50, direction: 'Bullish', status: 'PASS',
@@ -26,7 +26,7 @@ const mockPreviousRun: ScanResult = {
       contractDetails: { strike: 420, expiry: '2026-06-20', right: 'C', mid: 5.20, delta: 0.42, theta: -0.08, ivRank: 48, dte: 47 },
       entry: { limit: 5.10, maxFill: 5.30, orderType: 'Limit' },
       exit: { invalidation: 398.20, premiumStop: 3.12, timeStopDays: 18, target: 443.30, targets: [{ id: 'tp1', stockPrice: 443.30, contractsToSell: 1, status: 'PENDING' }] },
-      rrRatio: 2.1, rrModel: 'Delta approximation', finalStatus: 'PASS',
+      rrRatio: 2.1, rrModel: 'BS repriced (IV-derived)', finalStatus: 'PASS',
     },
     {
       symbol: 'NVDA', company: 'NVIDIA Corp.', price: 120.30, direction: 'Bullish', status: 'CAUTION',
@@ -37,7 +37,7 @@ const mockPreviousRun: ScanResult = {
       contractDetails: { strike: 125, expiry: '2026-06-20', right: 'C', mid: 3.80, delta: 0.40, theta: -0.06, ivRank: 62, dte: 47 },
       entry: { limit: 3.70, maxFill: 3.90, orderType: 'Limit' },
       exit: { invalidation: 116.70, premiumStop: 2.28, timeStopDays: 18, target: 129.90, targets: [{ id: 'tp1', stockPrice: 129.90, contractsToSell: 1, status: 'PENDING' }] },
-      rrRatio: 1.8, rrModel: 'Delta approximation', finalStatus: 'CAUTION',
+      rrRatio: 1.8, rrModel: 'BS repriced (IV-derived)', finalStatus: 'CAUTION',
     },
   ],
 };
@@ -56,7 +56,7 @@ const mockCurrentRun: ScanResult = {
       contractDetails: { strike: 420, expiry: '2026-06-20', right: 'C', mid: 5.40, delta: 0.43, theta: -0.08, ivRank: 50, dte: 47 },
       entry: { limit: 5.30, maxFill: 5.50, orderType: 'Limit' },
       exit: { invalidation: 399.60, premiumStop: 3.24, timeStopDays: 18, target: 444.90, targets: [{ id: 'tp1', stockPrice: 444.90, contractsToSell: 1, status: 'PENDING' }] },
-      rrRatio: 2.2, rrModel: 'Delta approximation', finalStatus: 'PASS',
+      rrRatio: 2.2, rrModel: 'BS repriced (IV-derived)', finalStatus: 'PASS',
     },
     {
       symbol: 'AAPL', company: 'Apple Inc.', price: 186.50, direction: 'Bullish', status: 'PASS',
@@ -67,7 +67,7 @@ const mockCurrentRun: ScanResult = {
       contractDetails: { strike: 190, expiry: '2026-06-20', right: 'C', mid: 2.60, delta: 0.46, theta: -0.05, ivRank: 53, dte: 47 },
       entry: { limit: 2.55, maxFill: 2.65, orderType: 'Limit' },
       exit: { invalidation: 180.90, premiumStop: 1.56, timeStopDays: 18, target: 201.40, targets: [{ id: 'tp1', stockPrice: 201.40, contractsToSell: 1, status: 'PENDING' }] },
-      rrRatio: 2.3, rrModel: 'Delta approximation', finalStatus: 'PASS',
+      rrRatio: 2.3, rrModel: 'BS repriced (IV-derived)', finalStatus: 'PASS',
     },
     {
       symbol: 'AMD', company: 'Advanced Micro Devices', price: 98.40, direction: 'Bullish', status: 'PASS',
@@ -78,7 +78,7 @@ const mockCurrentRun: ScanResult = {
       contractDetails: { strike: 100, expiry: '2026-06-20', right: 'C', mid: 2.90, delta: 0.44, theta: -0.05, ivRank: 58, dte: 47 },
       entry: { limit: 2.85, maxFill: 2.95, orderType: 'Limit' },
       exit: { invalidation: 95.40, premiumStop: 1.74, timeStopDays: 18, target: 106.20, targets: [{ id: 'tp1', stockPrice: 106.20, contractsToSell: 1, status: 'PENDING' }] },
-      rrRatio: 2.0, rrModel: 'Delta approximation', finalStatus: 'PASS',
+      rrRatio: 2.0, rrModel: 'BS repriced (IV-derived)', finalStatus: 'PASS',
     },
   ],
 };

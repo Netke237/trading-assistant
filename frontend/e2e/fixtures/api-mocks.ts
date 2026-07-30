@@ -274,7 +274,7 @@ export async function setupApiMocks(page: Page): Promise<void> {
               ],
             },
             rrRatio: 2.5,
-            rrModel: 'Delta approximation',
+            rrModel: 'BS repriced (IV-derived)',
             finalStatus: 'PASS',
           },
         ],
