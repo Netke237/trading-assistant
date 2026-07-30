@@ -252,6 +252,81 @@ def _evaluate_condition(condition, closed_candle: dict, indicators: dict,
     return False, trigger_values
 
 
+_OPERATOR_PHRASES = {
+    '>': 'above', '<': 'below', '>=': 'at or above', '<=': 'at or below',
+    'crosses_above': 'crosses above', 'crosses_below': 'crosses below',
+}
+
+_STRUCTURE_LABELS = {
+    'BOS': 'Breakout structure',
+    'CHoCH': 'Reversal structure',
+    'FVG': 'Price gap',
+    'OrderBlock': 'Order block',
+    'Divergence': 'Divergence',
+}
+
+
+def _condition_label(condition, trigger_values: dict | None = None) -> str:
+    """Plain-English label for a single condition, used to build the per-condition
+    checklist shown in redesigned notification text (see chart_alerts.py's
+    _build_notification_text). Kept separate from _build_reason below, which
+    stays untouched for backward compatibility with existing callers/tests.
+
+    Includes disambiguating detail (direction, regime model, min conviction,
+    live indicator/price reading) so two conditions that differ only in one of
+    these fields don't render as identical checklist lines -- that would just
+    reintroduce the "which one actually fired" ambiguity this checklist exists
+    to eliminate.
+    """
+    tv = trigger_values or {}
+    if condition.kind == 'price':
+        # Same reachability as the regime/structure null guards above:
+        # ConditionGroupIn.conditions is an untyped list with no per-item
+        # schema, so a raw POST /rules call can send an explicit null for
+        # operator/value and it reaches here as None rather than a dataclass
+        # default (there is no default for these two fields).
+        if condition.operator is None or condition.value is None:
+            return 'Price condition'
+        phrase = _OPERATOR_PHRASES.get(condition.operator, condition.operator)
+        label = f'Price {phrase} {condition.value}'
+        close = tv.get('close')
+        if isinstance(close, (int, float)):
+            label += f' (was {close:.2f})'
+        return label
+    if condition.kind == 'indicator':
+        if not condition.indicator or condition.operator is None or condition.value is None:
+            return 'Indicator condition'
+        phrase = _OPERATOR_PHRASES.get(condition.operator, condition.operator)
+        label = f'{condition.indicator} {phrase} {condition.value}'
+        val = tv.get(condition.indicator)
+        if isinstance(val, (int, float)):
+            label += f' (was {val:.2f})'
+        return label
+    if condition.kind == 'regime':
+        # `model`/`state` default to 'OMM'/'Bull' only when the JSON key is
+        # ABSENT (see _deserialize_rule's c.get('model', 'OMM')) -- a raw API
+        # call can send an explicit null for either, which reaches here as
+        # None, not the dataclass default. Treat both null and 'any' as "any
+        # state"/no model qualifier rather than rendering the literal word
+        # "None", which would silently reintroduce the exact "which one fired"
+        # ambiguity this checklist exists to eliminate.
+        state = condition.state
+        state_label = 'any state' if not state or state == 'any' else state
+        label = f'Trend regime: {state_label}'
+        if condition.model and condition.model not in ('OMM', 'any'):
+            label += f' ({condition.model} model)'
+        if condition.min_conviction is not None:
+            label += f', conviction ≥{condition.min_conviction}%'
+        return label
+    if condition.kind == 'structure':
+        if not condition.signal_kind:
+            return 'Structure signal'
+        base = _STRUCTURE_LABELS.get(condition.signal_kind, condition.signal_kind)
+        suffix = f'{condition.signal_kind}, {condition.direction}' if condition.direction else condition.signal_kind
+        return f'{base} ({suffix})'
+    return 'Condition'
+
+
 def _build_reason(rule: AlertRuleInput, trigger_values: dict) -> str:
     if not rule.group.conditions:
         return ''
@@ -359,5 +434,9 @@ def evaluate_rules(rules: list[AlertRuleInput], closed_candle: dict,
                 'candle': dict(closed_candle),
                 'trigger_values': accumulated_trigger_values,
                 'reason': _build_reason(rule, accumulated_trigger_values),
+                'checklist': [
+                    {'label': _condition_label(c, accumulated_trigger_values), 'met': m}
+                    for c, m in zip(rule.group.conditions, evaluations)
+                ],
             })
     return results

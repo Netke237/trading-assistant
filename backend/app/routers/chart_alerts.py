@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import html as html_lib
 import json
 import logging
 import os
@@ -20,7 +21,7 @@ from app.models.alert import AlertRuleModel, AlertHistoryModel
 from app.services.alert_evaluator import (
     AlertRuleInput, PriceCondition, IndicatorCondition, StructureCondition,
     RegimeCondition, ConditionGroup, evaluate_rules, build_regime_snapshot,
-    is_cooldown_passed,
+    is_cooldown_passed, _STRUCTURE_LABELS,
 )
 from app.services.historical_store import get_bars
 from app.services.indicator_compute import compute_indicators_for_conditions
@@ -163,12 +164,126 @@ def _parse_candle_time(raw: object) -> datetime:
     logger.warning('test_rule: could not parse candle time %r, using current time', raw)
     return datetime.now()
 
-def _build_notification_text(entry: dict, rule_name: str | None = None) -> tuple[str, str, str]:
+_INTERVAL_LABELS = {
+    '1D': 'Daily chart', '1W': 'Weekly chart',
+    '1min': '1-minute chart', '5min': '5-minute chart', '15min': '15-minute chart',
+    '1h': 'Hourly chart', '4h': '4-hour chart',
+}
+
+
+def _interval_label(interval: str) -> str:
+    return _INTERVAL_LABELS.get(interval, f'{interval} chart')
+
+
+def _composite_checklist(td: dict, detail: dict) -> list[dict]:
+    """Best-effort per-condition checklist for composite (Markov + N-of-M) rules,
+    mirroring the standard-rule checklist so composite alerts get the same
+    plain-language notification treatment instead of being stuck on the old
+    format. The primary Markov gate is always shown as met (evaluate_scheduled
+    already required it to pass before any confirmation is checked).
+
+    Matching a confirmation against describe_match()'s matched-name lists can't
+    tell apart two confirmations of the SAME signal_kind with different
+    directions -- describe_match() only returns which kind names matched, not
+    which directional variant. The shipping AlertRuleBuilder/CompositeAlertDialog
+    UI can't currently create that configuration (one direction per rule, unique
+    signal_kind checkboxes), but POST /rules accepts composite_def directly with
+    no such validation, so it's reachable. Rather than silently mislabel both
+    rows as met, flag same-kind rows with a caveat so the ambiguity is visible
+    instead of hidden -- exactly the kind of thing this whole feature exists to
+    surface, not bury.
+    """
+    primary = td.get('primary', {}) or {}
+    to_state = primary.get('to_state')
+    primary_label = f"Trend regime: {'any state' if not to_state or to_state == 'any' else to_state}"
+    if primary.get('model') not in (None, 'OMM', 'any'):
+        primary_label += f" ({primary['model']} model)"
+    rows = [{'label': primary_label, 'met': True}]
+
+    structure_matched = detail.get('structure_matched', [])
+    confirmations = td.get('confirmations', [])
+    # Group by signal_kind -> set of distinct directions configured for it, not
+    # just a raw count -- two confirmations of the same kind AND same direction
+    # are redundant, not ambiguous (describe_match() can't misattribute a match
+    # between them since there's nothing to distinguish). The caveat below only
+    # makes sense when a kind has genuinely different directional variants.
+    kind_directions: dict[str, set] = {}
+    for c in confirmations:
+        k = c.get('signal_kind', '')
+        kind_directions.setdefault(k, set()).add(c.get('direction'))
+    for c in confirmations:
+        kind = c.get('signal_kind', '')
+        base = _STRUCTURE_LABELS.get(kind, kind)
+        direction = c.get('direction')
+        suffix = f'{kind}, {direction}' if direction else kind
+        label = f'{base} ({suffix})'
+        if direction and len(kind_directions.get(kind, set())) > 1:
+            label += ' [same-signal match, direction not confirmed]'
+        rows.append({'label': label, 'met': kind in structure_matched})
+
+    strategy_matched = detail.get('strategy_matched', [])
+    for key in td.get('strategy_confirmations', []):
+        rows.append({'label': f'Strategy: {key}', 'met': key in strategy_matched})
+
+    return rows
+
+
+def _composite_need_suffix(td: dict) -> str:
+    """Accurate "(only needs...)" suffix for a composite rule, for use as
+    _build_notification_text's need_suffix_override. Composite rules gate on
+    TWO independent thresholds (min_confirmations for structure signals,
+    min_strategy_confirmations for strategy signals) rather than the single
+    N_OF_M/OR/AND model standard rules use, so this can't reuse that generic
+    derivation -- without this, the composite call site left need_suffix
+    permanently blank, hiding a genuine "only 1 of 3 was ever required" gap
+    that standard N_OF_M rules do surface.
+    """
+    parts = []
+    conf_total = len(td.get('confirmations', []))
+    if conf_total:
+        min_conf = td.get('min_confirmations', 1)
+        if min_conf < conf_total:
+            parts.append(f'only needs {min_conf} of {conf_total} structure signals')
+    strat_total = len(td.get('strategy_confirmations', []))
+    if strat_total:
+        min_strat = td.get('min_strategy_confirmations', 1)
+        if min_strat < strat_total:
+            parts.append(f'only needs {min_strat} of {strat_total} strategy signals')
+    return f" ({'; '.join(parts)})" if parts else ''
+
+
+def _build_notification_text(
+    entry: dict, rule_name: str | None = None,
+    rule_logic: str | None = None, rule_threshold: int | None = None,
+    need_suffix_override: str | None = None,
+) -> tuple[str, str, str]:
     """Returns (subject, plain_body, html_body).
 
     ``rule_name`` is the human-readable name of the alert rule; it falls back to
     the rule id when the name is unavailable. The trigger time is rendered as a
     local Date/Time (no microseconds) to match the portfolio alert format.
+
+    When ``entry`` carries a 'checklist' (populated by evaluate_rules() for
+    standard rules, or _composite_checklist() for composite rules), the
+    plain-language layout is used: rule name first, chart timeframe instead of
+    raw interval code, and a per-condition ✓/✗ checklist instead of the flat
+    "(N-of-M)"-joined condition text. Entries without a checklist -- history
+    rows posted directly via POST /alerts/history without one, e.g. from the
+    frontend's own client-side chartAlertEngine.ts evaluation path -- fall back
+    to the original technical Symbol/Interval/Trigger/Values layout. That
+    frontend path does not build a checklist today, so alerts fired from an
+    open chart tab still render in the old format; giving it parity would mean
+    porting _condition_label()'s logic into TypeScript, which is out of scope
+    here.
+
+    ``need_suffix_override``, when not None, is used verbatim as the
+    "Conditions met: X of Y{suffix}" suffix instead of deriving it from
+    rule_logic/rule_threshold. Composite rules have two independent thresholds
+    (min_confirmations for structure signals, min_strategy_confirmations for
+    strategy signals) that don't fit the single N_OF_M/OR/AND model standard
+    rules use, so the composite call site computes its own accurate suffix
+    (or an empty string when nothing's worth noting) and passes it here rather
+    than being silently dropped to a blank suffix.
     """
     sym = entry.get('symbol', '?')
     ival = entry.get('interval', '?')
@@ -176,11 +291,80 @@ def _build_notification_text(entry: dict, rule_name: str | None = None) -> tuple
     triggered_at = entry.get('triggered_at', '')
     tv = entry.get('trigger_values', {})
     rule_id = entry.get('rule_id', '')
+    checklist = entry.get('checklist')
 
     date_str, time_str = _format_dt(triggered_at)
     rule_label = rule_name or rule_id or '(unnamed rule)'
 
     subject = f'Bamendjou Chart Alert - {rule_label} - {sym} [{ival}]'
+
+    if checklist:
+        close = (entry.get('candle') or {}).get('close')
+        price_line = f'Price at trigger: ${close:.2f}\n' if isinstance(close, (int, float)) else ''
+
+        matched = sum(1 for c in checklist if c['met'])
+        total = len(checklist)
+        if need_suffix_override is not None:
+            need_suffix = need_suffix_override
+        elif rule_logic == 'N_OF_M':
+            # `rule_threshold` is always None today: _deserialize_rule() never
+            # populates ConditionGroup.n_of_m_threshold from the stored rule_json
+            # (a pre-existing bug, not introduced here), so every N_OF_M rule
+            # actually runs -- and is displayed here -- as a 1-of-total OR gate.
+            # `or 1` mirrors evaluate_rules()'s own fallback so this text always
+            # matches real runtime behavior. If _deserialize_rule is ever fixed
+            # to read a real threshold, this text's meaning changes automatically
+            # -- see test_n_of_m_without_stored_threshold_shows_only_needs_one in
+            # test_chart_alerts_notification_text.py, which pins today's
+            # always-1 behavior so that fix doesn't change this silently.
+            _threshold = rule_threshold or 1
+            need_suffix = '' if _threshold >= total else f' (only needs {_threshold} to fire)'
+        elif rule_logic == 'OR':
+            need_suffix = ' (only needs 1 to fire)'
+        elif rule_logic == 'AND':
+            need_suffix = ' (all required)'
+        else:
+            need_suffix = ''
+
+        # Telegram's HTML parse_mode only recognizes a small tag allowlist
+        # (b/i/u/s/a/code/pre/blockquote) -- NOT <br> or any block tag. An
+        # unsupported tag makes the Bot API reject the whole message with a
+        # 400, which dispatch.py's error handling swallows into a log line with
+        # no user-visible signal, so this is easy to ship broken and never
+        # notice. Line breaks must be plain '\n' in both bodies -- Telegram
+        # renders literal newlines as line breaks natively in HTML mode, same
+        # as the plain-text email body.
+        check_lines = '\n'.join(
+            f"{'✓' if c['met'] else '✗'} {c['label']}" for c in checklist
+        )
+
+        plain = (
+            f'{rule_label}\n'
+            f'{sym} · {_interval_label(ival)} · {date_str}, {time_str} {_TZ_LABEL}\n'
+            f'{price_line}'
+            f'\nConditions met: {matched} of {total}{need_suffix}\n\n'
+            f'  {check_lines.replace(chr(10), chr(10) + "  ")}\n'
+        )
+        # Rule names are free text (AlertRuleCreate.name has no format
+        # constraint) and condition-group JSON is stored/read back without
+        # schema validation on string fields (indicator name, signal_kind,
+        # direction, state), so a rule built via a raw API call rather than the
+        # UI could smuggle a literal '<' or '&' into any of these. Escaping
+        # before interpolating into the HTML body prevents that from being
+        # parsed as (invalid) markup -- the exact same silent-Telegram-failure
+        # mode the <br> bug caused, just via user-controlled text instead of a
+        # hardcoded tag.
+        check_lines_html = '\n'.join(
+            f"{'✓' if c['met'] else '✗'} {html_lib.escape(c['label'])}" for c in checklist
+        )
+        html = (
+            f'<b>{html_lib.escape(rule_label)}</b>\n'
+            f'{html_lib.escape(sym)} · {html_lib.escape(_interval_label(ival))} · {date_str}, {time_str} {_TZ_LABEL}\n'
+            f'{price_line}'
+            f'\n<b>Conditions met: {matched} of {total}{need_suffix}</b>\n\n'
+            f'{check_lines_html}\n'
+        )
+        return subject, plain, html
 
     values_lines = []
     for k, v in tv.items():
@@ -196,11 +380,13 @@ def _build_notification_text(entry: dict, rule_name: str | None = None) -> tuple
 
     # Telegram mirrors the email body exactly (same fields, same order), with a
     # bold first line equal to the email subject (which carries the rule name).
-    html = (f'<b>{subject}</b>\n\n'
-            f'<b>Symbol:</b>    {sym}\n<b>Interval:</b>  {ival}\n'
+    # Escaped for the same reason as the checklist branch above: rule name and
+    # reason text are free-form and could otherwise be parsed as invalid HTML.
+    html = (f'<b>{html_lib.escape(subject)}</b>\n\n'
+            f'<b>Symbol:</b>    {html_lib.escape(sym)}\n<b>Interval:</b>  {html_lib.escape(ival)}\n'
             f'<b>Date:</b>      {date_str}\n<b>Time:</b>      {time_str} {_TZ_LABEL}\n'
-            f'<b>Trigger:</b>   {reason}\n<b>Values:</b>    {values_str}\n'
-            f'<b>Rule:</b>      {rule_label}\n')
+            f'<b>Trigger:</b>   {html_lib.escape(reason)}\n<b>Values:</b>    {html_lib.escape(values_str)}\n'
+            f'<b>Rule:</b>      {html_lib.escape(rule_label)}\n')
 
     return subject, plain, html
 
@@ -536,6 +722,7 @@ async def evaluate_and_notify_for_symbol(
 
         for _ri, _row in zip(rule_inputs, rows):
             _row.condition_state = json.dumps(_ri.condition_state)
+        _rule_input_by_id = {_ri.id: _ri for _ri in rule_inputs}
 
         for entry in triggered:
             history = AlertHistoryModel(
@@ -554,7 +741,12 @@ async def evaluate_and_notify_for_symbol(
             if rule_row:
                 rule_row.last_triggered_at = entry['triggered_at']
 
-            subject, plain_body, html_body = _build_notification_text(entry, rule_name)
+            _entry_ri = _rule_input_by_id.get(entry['rule_id'])
+            subject, plain_body, html_body = _build_notification_text(
+                entry, rule_name,
+                rule_logic=_entry_ri.group.logic if _entry_ri else None,
+                rule_threshold=_entry_ri.group.n_of_m_threshold if _entry_ri else None,
+            )
 
             _notif_cfg = _load_notification_config()
             _gmail  = _notif_cfg.get('gmail', {})
@@ -691,6 +883,7 @@ async def evaluate_and_notify_for_symbol(
                         "strategy_matched": _detail["strategy_matched"],
                     },
                     "reason": _reason,
+                    "checklist": _composite_checklist(_td, _detail),
                 }
                 _hist = AlertHistoryModel(
                     id=_entry["id"], rule_id=_entry["rule_id"], symbol=_entry["symbol"],
@@ -704,7 +897,9 @@ async def evaluate_and_notify_for_symbol(
                     _row.last_triggered_at = _now
                 _rn = (await db.execute(select(AlertRuleModel).where(AlertRuleModel.id == _row.id))).scalar_one_or_none()
                 _rname = _rn.name if _rn else None
-                _subj, _plain, _html = _build_notification_text(_entry, _rname)
+                _subj, _plain, _html = _build_notification_text(
+                    _entry, _rname, need_suffix_override=_composite_need_suffix(_td),
+                )
                 _ncfg = _load_notification_config()
                 _gm = _ncfg.get('gmail', {})
                 _tg = _ncfg.get('telegram', {})

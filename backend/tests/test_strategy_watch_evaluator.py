@@ -1,11 +1,28 @@
 # backend/tests/test_strategy_watch_evaluator.py
 from __future__ import annotations
 
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.services.strategy_watch_evaluator import WatchEvent, evaluate_all
+
+# Telegram's HTML parse_mode only recognizes this tag allowlist -- anything else
+# (h3/p/ul/li included) makes the Bot API reject the whole message with a 400
+# that dispatch.py's error handling silently swallows into a log line.
+_TELEGRAM_ALLOWED_TAGS = {
+    'b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del',
+    'span', 'a', 'code', 'pre', 'blockquote', 'tg-spoiler', 'tg-emoji',
+}
+
+
+def _assert_telegram_safe_html(html: str) -> None:
+    for tag in re.findall(r'<\s*/?\s*([a-zA-Z0-9-]+)', html):
+        assert tag.lower() in _TELEGRAM_ALLOWED_TAGS, (
+            f'<{tag}> is not in Telegram\'s HTML parse_mode allowlist -- '
+            f'sending this will make the Bot API reject the whole message'
+        )
 
 
 def _bars(close: float, n: int = 260) -> list[dict]:
@@ -143,6 +160,60 @@ def test_format_event_builds_subject_and_bodies():
     assert "AAPL" in subject and "Long setup" in subject
     assert "100.0" in plain
     assert "<" in html  # html body has markup
+
+
+def test_format_event_html_is_telegram_safe():
+    # Regression test for a real shipped bug: this html body used <h3>/<p>/
+    # <ul>/<li>, none of which Telegram's HTML parse_mode supports -- every
+    # strategy-watch Telegram alert (entry/exit/reversal) silently failed to
+    # send while the email version looked fine.
+    ev = WatchEvent(
+        watch_id="wch_1", symbol="AAPL", strategy_key="pullback_ema",
+        event_type="entry", direction="Bullish", entry=100.0, stop=95.0,
+        target=110.0, rr_ratio=2.0, close=100.0,
+        reason="AAPL: Pullback EMA long setup — entry 100.0, stop 95.0, target 110.0 (reward-to-risk 2.0)",
+    )
+    _subject, _plain, html = _format_event(ev)
+    _assert_telegram_safe_html(html)
+
+
+def test_format_event_html_is_telegram_safe_for_exit_events():
+    # exit_stop/exit_target events (a real path in evaluate_all()) always set
+    # entry=None, rr_ratio=None -- the two conditional html fragments in
+    # _format_event are omitted entirely rather than rendered empty. The
+    # "everything present" entry-event case above doesn't exercise this at
+    # all; confirm the omitted-fragment path is still well-formed and safe.
+    ev = WatchEvent(
+        watch_id="wch_1", symbol="AAPL", strategy_key="pullback_ema",
+        event_type="exit_stop", direction="Bullish", entry=None, stop=95.0,
+        target=None, rr_ratio=None, close=94.5,
+        reason="AAPL: Pullback EMA stop hit at 94.5 (stop 95.0)",
+    )
+    _subject, plain, html = _format_event(ev)
+    assert "Entry" not in plain and "Entry" not in html
+    assert "Reward-to-risk" not in plain and "Reward-to-risk" not in html
+    _assert_telegram_safe_html(html)
+
+
+def test_format_event_uses_plain_strategy_label_and_reward_risk_wording():
+    # Regression test for the plain-language rename: raw snake_case strategy
+    # keys (and the old "R:R"/"Reward:Risk" jargon) must not leak into the
+    # subject or bullet list -- both should show the human-readable label
+    # everywhere, not just in the subject line.
+    ev = WatchEvent(
+        watch_id="wch_1", symbol="AAPL", strategy_key="pullback_ema",
+        event_type="entry", direction="Bullish", entry=182.5, stop=178.0,
+        target=191.0, rr_ratio=1.9, close=182.75,
+        reason="AAPL: Pullback EMA long setup — entry 182.5, stop 178.0, "
+               "target 191.0 (reward-to-risk 1.9)",
+    )
+    subject, plain, html = _format_event(ev)
+    for text in (subject, plain, html):
+        assert "pullback_ema" not in text
+        assert "Pullback EMA" in text
+        assert "R:R" not in text
+    assert "Reward-to-risk ratio: 1.9" in plain
+    assert "Reward-to-risk ratio: 1.9" in html
 
 
 def _composite_watch(**overrides):

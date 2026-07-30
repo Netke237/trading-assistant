@@ -10,6 +10,7 @@ direction every tick and can never disagree with the armed state's direction.
 """
 from __future__ import annotations
 
+import html as html_lib
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -34,6 +35,22 @@ _SIGNAL_FNS = {
     "mean_reversion_rsi": mean_reversion_rsi_signal,
     "mean_reversion_bb":  mean_reversion_bb_signal,
 }
+
+# Human-readable strategy names for notification text — naive .title() on the
+# snake_case key produces awkward results ("Pullback Ema", "Rsi" instead of
+# "RSI"), so these are spelled out explicitly.
+_STRATEGY_LABELS = {
+    "pullback_ema":       "Pullback EMA",
+    "breakout_base":      "Breakout Base",
+    "ma_crossover":       "MA Crossover",
+    "mean_reversion_rsi": "Mean Reversion (RSI)",
+    "mean_reversion_bb":  "Mean Reversion (Bollinger Bands)",
+    "composite":          "Composite Trigger",
+}
+
+
+def _strategy_label(key: str) -> str:
+    return _STRATEGY_LABELS.get(key, key.replace("_", " ").title())
 
 _HISTORY_DAYS = 730  # ~2 calendar years — enough for the 200-SMA strategy
 
@@ -135,11 +152,11 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
                     entry=signal.entry_price, stop=signal.stop_price,
                     target=signal.target_price, rr_ratio=round(signal.rr_ratio, 2),
                     close=close,
-                    reason=(f"{symbol}: {key} "
+                    reason=(f"{symbol}: {_strategy_label(key)} "
                             f"{'short' if signal.direction == 'Bearish' else 'long'} setup — "
                             f"entry {signal.entry_price}, "
                             f"stop {signal.stop_price}, target {signal.target_price} "
-                            f"(R:R {round(signal.rr_ratio, 2)})"),
+                            f"(reward-to-risk {round(signal.rr_ratio, 2)})"),
                 )
                 state = {"phase": "armed", "direction": signal.direction,
                          "entry_price": signal.entry_price, "stop_price": signal.stop_price,
@@ -166,7 +183,7 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
                     event_type="exit_stop", direction=state.get("direction"),
                     entry=state.get("entry_price"), stop=stop_price,
                     target=target_price, rr_ratio=None, close=close,
-                    reason=f"{symbol}: {key} stop hit at {close} (stop {stop_price})",
+                    reason=f"{symbol}: {_strategy_label(key)} stop hit at {close} (stop {stop_price})",
                 )
                 state = {"phase": "idle", "last_event": "exit_stop", "last_event_at": _now_iso()}
             elif target_hit:
@@ -175,7 +192,7 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
                     event_type="exit_target", direction=state.get("direction"),
                     entry=state.get("entry_price"), stop=stop_price,
                     target=target_price, rr_ratio=None, close=close,
-                    reason=f"{symbol}: {key} target hit at {close} (target {target_price})",
+                    reason=f"{symbol}: {_strategy_label(key)} target hit at {close} (target {target_price})",
                 )
                 state = {"phase": "idle", "last_event": "exit_target", "last_event_at": _now_iso()}
             elif signal is not None and signal.direction != state.get("direction"):
@@ -185,7 +202,7 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
                     entry=signal.entry_price, stop=signal.stop_price,
                     target=signal.target_price, rr_ratio=round(signal.rr_ratio, 2),
                     close=close,
-                    reason=f"{symbol}: {key} reversal to {signal.direction} at {close}",
+                    reason=f"{symbol}: {_strategy_label(key)} reversal to {signal.direction} at {close}",
                 )
                 state = {"phase": "armed", "direction": signal.direction,
                          "entry_price": signal.entry_price, "stop_price": signal.stop_price,
@@ -291,20 +308,33 @@ def _format_event(ev: WatchEvent) -> tuple[str, str, str]:
         label = f"{'Short' if ev.direction == 'Bearish' else 'Long'} setup"
     else:
         label = _SUBJECT_PREFIX.get(ev.event_type, ev.event_type)
-    strat = ev.strategy_key.replace("_", " ").title()
+    strat = _strategy_label(ev.strategy_key)
     subject = f"{label}: {ev.symbol} — {strat}"
     lines = [ev.reason, "", f"Strategy: {strat}", f"Last close: {ev.close}"]
     if ev.entry is not None:
         lines.append(f"Entry {ev.entry} · Stop {ev.stop} · Target {ev.target}")
     if ev.rr_ratio is not None:
-        lines.append(f"Reward:Risk {ev.rr_ratio}")
+        lines.append(f"Reward-to-risk ratio: {ev.rr_ratio}")
     plain = "\n".join(lines)
-    html = (f"<h3>{subject}</h3><p>{ev.reason}</p>"
-            f"<ul><li>Strategy: {strat}</li><li>Last close: {ev.close}</li>"
-            + (f"<li>Entry {ev.entry} · Stop {ev.stop} · Target {ev.target}</li>"
-               if ev.entry is not None else "")
-            + (f"<li>Reward:Risk {ev.rr_ratio}</li>" if ev.rr_ratio is not None else "")
-            + "</ul>")
+    # Telegram's HTML parse_mode only recognizes a small tag allowlist (b/i/u/s/
+    # a/code/pre/blockquote) -- NOT h3/p/ul/li or any other block tag. This body
+    # is dispatched to Telegram via notify_enabled_channels() -> send_telegram()
+    # with parse_mode='HTML'; an unsupported tag makes the Bot API reject the
+    # whole message with a 400 that dispatch.py's error handling swallows into a
+    # log line with no user-visible signal -- so every strategy-watch Telegram
+    # alert was silently failing to send. Line breaks must be plain '\n', same
+    # as chart_alerts.py/alert_notifier.py's notification builders. Free-text
+    # values (symbol/reason are effectively internal-built today, but nothing
+    # enforces that) are escaped for the same reason those two files escape
+    # theirs -- a stray '<' or '&' would trigger the identical failure mode.
+    html = (
+        f"<b>{html_lib.escape(subject)}</b>\n"
+        f"{html_lib.escape(ev.reason)}\n\n"
+        f"Strategy: {html_lib.escape(strat)}\n"
+        f"Last close: {ev.close}\n"
+        + (f"Entry {ev.entry} · Stop {ev.stop} · Target {ev.target}\n" if ev.entry is not None else "")
+        + (f"Reward-to-risk ratio: {ev.rr_ratio}\n" if ev.rr_ratio is not None else "")
+    )
     return subject, plain, html
 
 

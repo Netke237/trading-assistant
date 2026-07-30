@@ -12,6 +12,7 @@ the other is deduped.
 """
 from __future__ import annotations
 
+import html as html_lib
 import json
 import logging
 import threading
@@ -125,38 +126,56 @@ def _format_dt(timestamp: str | None) -> tuple[str, str]:
     return local.strftime('%d.%m.%Y'), local.strftime('%H:%M:%S')
 
 
+_ALERT_TYPE_LABELS = {
+    'TP_HIT': 'Target reached',
+    'STOP_REACHED': 'Stop hit',
+    'PREMIUM_STOP': 'Option premium stop hit',
+    'TIME_STOP': 'Time stop hit',
+    'EVENT_RISK': 'Event risk warning',
+    'REGIME_CHANGE': 'Market regime changed',
+}
+
+
 def _build_notification(symbol: str, alert_type: str, reason: str,
                         timestamp: str | None,
                         is_reminder: bool = False) -> tuple[str, str, str]:
     # Date/Time always reflect the ORIGINAL trigger, even on reminders.
     date_str, time_str = _format_dt(timestamp)
+    type_label = _ALERT_TYPE_LABELS.get(alert_type, alert_type)
     tag = ' (reminder)' if is_reminder else ''
-    subject = f'Bamendjou Portfolio Alert{tag} — {symbol} [{alert_type}]'
+    subject = f'Bamendjou Portfolio Alert — {symbol}: {type_label}{tag}'
     # On a reminder, note that the condition is still active as of now, without
-    # disturbing the original Date/Time above.
+    # disturbing the original Triggered: line above.
     still_plain = ''
     still_html = ''
     if is_reminder:
         _, now_time = _format_dt(None)  # current CET time
-        still_plain = f'Status:  Still active as of {now_time} {_TZ_LABEL}\n'
-        still_html = f'<b>Status:</b> Still active as of {now_time} {_TZ_LABEL}\n'
+        still_plain = f'Still active as of {now_time} {_TZ_LABEL}\n'
+        still_html = f'Still active as of {now_time} {_TZ_LABEL}\n'
     plain = (
-        f'Symbol:  {symbol}\n'
-        f'Type:    {alert_type}\n'
-        f'Trigger: {reason}\n'
-        f'Date:    {date_str}\n'
-        f'Time:    {time_str} {_TZ_LABEL}\n'
+        f'{symbol} — {type_label}\n'
+        f'{reason}\n\n'
+        f'Triggered: {date_str}, {time_str} {_TZ_LABEL}\n'
         f'{still_plain}'
     )
-    # Telegram mirrors the email body exactly (same fields, same order), with a
-    # bold first line equal to the email subject.
+    # Telegram mirrors the email body exactly (same content, same order), with a
+    # bold first line equal to the plain-language headline. Telegram's HTML
+    # parse_mode only recognizes a small tag allowlist (b/i/u/s/a/code/pre/
+    # blockquote) -- NOT <br> or any block tag. An unsupported tag makes the Bot
+    # API reject the whole message with a 400, which dispatch.py's error
+    # handling swallows into a log line with no user-visible signal. Line breaks
+    # must be plain '\n', exactly like the plain-text body -- Telegram renders
+    # literal newlines as line breaks natively in HTML mode.
+    # `reason` is built internally from f-string templates (see
+    # alert_generator.py / portfolio_alert_monitor.py) so it's not truly
+    # free-form user input today, but `symbol` and `alert_type` are caller-
+    # supplied strings with no enforced format -- escaping all three is cheap
+    # insurance against the same silent-Telegram-failure mode the <br> bug
+    # caused, just via unexpected '<'/'&' characters instead of a hardcoded tag.
     html = (
-        f'<b>{subject}</b>\n\n'
-        f'<b>Symbol:</b>  {symbol}\n'
-        f'<b>Type:</b>    {alert_type}\n'
-        f'<b>Trigger:</b> {reason}\n'
-        f'<b>Date:</b>    {date_str}\n'
-        f'<b>Time:</b>    {time_str} {_TZ_LABEL}\n'
+        f'<b>{html_lib.escape(symbol)} — {html_lib.escape(type_label)}</b>\n'
+        f'{html_lib.escape(reason)}\n\n'
+        f'Triggered: {date_str}, {time_str} {_TZ_LABEL}\n'
         f'{still_html}'
     )
     return subject, plain, html

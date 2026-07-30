@@ -6,15 +6,33 @@ and reset on position close via forget_alerts).
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 import app.services.notifications.alert_notifier as an
+
+# Telegram's HTML parse_mode only recognizes this tag allowlist -- anything else
+# (including <br> or any block tag) makes the Bot API reject the whole message
+# with a 400 that dispatch.py's error handling silently swallows into a log line.
+_TELEGRAM_ALLOWED_TAGS = {
+    'b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del',
+    'span', 'a', 'code', 'pre', 'blockquote', 'tg-spoiler', 'tg-emoji',
+}
+
+
+def _assert_telegram_safe_html(html: str) -> None:
+    for tag in re.findall(r'<\s*/?\s*([a-zA-Z0-9-]+)', html):
+        assert tag.lower() in _TELEGRAM_ALLOWED_TAGS, (
+            f'<{tag}> is not in Telegram\'s HTML parse_mode allowlist -- '
+            f'sending this will make the Bot API reject the whole message'
+        )
 
 _TS = '2026-05-31T07:00:00+00:00'  # original trigger (UTC)
 
 
 def _time_line(plain: str) -> str:
-    return next(line for line in plain.splitlines() if line.startswith('Time:'))
+    return next(line for line in plain.splitlines() if line.startswith('Triggered:'))
 
 
 @pytest.fixture
@@ -147,15 +165,42 @@ def test_telegram_mirrors_email_and_shows_cet(captured):
     assert 'CET' in _time_line(plain)
     assert 'CET' in html
 
-    # Telegram body carries the SAME fields as the email body, in order.
-    for field in ('Symbol:', 'Type:', 'Trigger:', 'Date:', 'Time:'):
-        assert field in plain
-        assert field in html
-    # Telegram's bold first line equals the email subject.
-    assert html.startswith(f'<b>{subject}</b>')
+    # Telegram body carries the same plain-language content as the email body:
+    # symbol + human-readable type label, the reason, and a Triggered: line.
+    for text in ('CLX', 'Stop hit', 'Triggered:'):
+        assert text in plain
+        assert text in html
+    # Telegram's bold first line is the plain-language headline (symbol + type),
+    # not the raw "Bamendjou Portfolio Alert" subject line.
+    assert html.startswith('<b>CLX — Stop hit</b>')
     # Symbol and trigger text appear in the Telegram message.
     assert 'CLX' in html
+
+
+def test_telegram_html_body_is_telegram_safe(captured):
+    # Regression test for a real shipped bug: the html body once used <br> for
+    # line breaks (both here and on a reminder line), which Telegram's HTML
+    # parse_mode rejects outright -- the alert would silently fail to send over
+    # Telegram while the email looked fine.
+    assert an.notify_alert('CLX', 'STOP_REACHED', 'Stop breached — CLX below $89.79',
+                           'rec-1', _TS) is True
+    assert an.notify_alert('CLX', 'STOP_REACHED', 'Stop breached — CLX below $89.79',
+                           'rec-1', _TS) is True  # second call -> reminder line included
+    for _subject, _plain, html in captured:
+        _assert_telegram_safe_html(html)
     assert 'Stop breached — CLX below $89.79' in html
+
+
+def test_reason_with_angle_bracket_is_escaped_not_parsed_as_a_tag(captured):
+    # `reason` is built internally today, but nothing enforces that -- and the
+    # html body interpolates it raw. A stray '<' would otherwise get parsed as
+    # an (invalid) tag start and make Telegram reject the whole message, same
+    # failure mode as the <br> bug via different input.
+    assert an.notify_alert('CLX', 'STOP_REACHED', 'Stop < 90 & falling', 'rec-1', _TS) is True
+    _subject, _plain, html = captured[0]
+    assert '&lt;' in html
+    assert '&amp;' in html
+    _assert_telegram_safe_html(html)
 
 
 def test_dedup_state_persists_across_reload(monkeypatch, tmp_path):
