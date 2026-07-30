@@ -125,3 +125,159 @@ def test_scan_bearish_alternatives_have_right_P(client):
     for c in data["candidates"]:
         for alt in c["alternatives"]:
             assert alt["right"] == "P", f"Bearish alternative should have right=P, got {alt['right']}"
+
+
+async def _run_alt_scan_with_runner_ups(runner_ups: list[dict]):
+    """Shared driver for the missing-field regression tests below. Builds a
+    chain (chain[0]=full-data primary, chain[1:]=the caller-supplied
+    runner-ups) and calls _process_symbol() directly -- not through
+    client.post("/api/scan", ...) -- because the full-endpoint path is
+    unreliable for this specific bug: the shared _MOCK_CANDLES fixture in
+    this file is flat/degenerate enough that _process_symbol short-circuits
+    at the stock-score confidence gate before the option chain is ever
+    scored, and _process_symbol's db_bars prefetch path can bypass the
+    fetch_candles_async/fetch_price_async mocks entirely for symbols that
+    already have rows in the test DB (e.g. AAPL, which has seeded fixture
+    data). Patching score_stock, validate_contract, and build_trade_plan to
+    fixed, known-good results (the same pattern test_scan_router_spreads.py
+    already uses for its bearish-spread tests) sidesteps both problems.
+    Every contract gets the SAME ContractScoreCard back from the patched
+    validate_contract() below; valid_scores.sort() is a stable sort, so
+    equal scores preserve the original chain order -- chain[0] becomes the
+    primary, chain[1:] become the runner-ups, deterministically."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock, MagicMock
+    from app.routers.scan import _process_symbol
+    from app.scoring.contract_validator import ContractScoreCard, ContractScoreBreakdown
+    from app.scoring.stock_scorer import StockScoreCard
+    from app.scoring.entry_quality import EntryAssessment
+    from app.scoring.trade_plan import TradePlan
+
+    pass_card = StockScoreCard(symbol="AAPL", direction="Bullish", horizon="Swing", score=75, status="PASS", rules=[])
+    contract_score = ContractScoreCard(
+        contract_id="AAPL|185|2026-09-13|C", symbol="AAPL", strike=185.0, expiry="2026-09-13",
+        is_call=True, score=70, status="PASS",
+        breakdown=ContractScoreBreakdown(60, 60, 60, 60, 60, 60),
+    )
+    entry_result = EntryAssessment(limit_price=4.55, max_fill=4.65, order_type="Limit", quality_status="PASS")
+    plan = TradePlan(
+        entry=entry_result, invalidation_price=175.0, premium_stop=2.7, time_stop_days=12,
+        target_price=200.0, targets=[], rr_ratio=2.0, rr_model="Heston repriced",
+        target_price_raw=200.0, invalidation_price_raw=175.0,
+    )
+
+    chain = [
+        {"strike": 185, "expiry": "2026-09-13", "price": 4.50, "spread": 0.15,
+         "delta": 0.55, "theta": -0.06, "ivRank": 40, "dte": 45, "right": "C", "volume": 800},
+        *runner_ups,
+    ]
+
+    sem = asyncio.Semaphore(10)
+    mock_client = MagicMock()
+
+    with (
+        patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
+        patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)),
+        patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple Inc.")),
+        patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
+        patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
+        patch("app.routers.scan.score_stock", return_value=pass_card),
+        patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=chain)),
+        patch("app.routers.scan.validate_contract", return_value=contract_score),
+        patch("app.routers.scan.build_trade_plan", return_value=plan),
+        patch("app.routers.scan.log_event"),
+        # Isolate the BS-fallback path (what this bug is about) from Heston,
+        # which would otherwise calibrate off chain[0]'s real price and mask
+        # the fallback-pricing fabrication these tests target.
+        patch("app.routers.scan._HESTON_PRICING_ENABLED", False),
+    ):
+        return await _process_symbol(
+            "AAPL", "Bullish", "Swing", mock_client, sem, "test-scan-id",
+        )
+
+
+async def _run_alt_scan_with_runner_up(runner_up: dict):
+    return await _run_alt_scan_with_runner_ups([runner_up])
+
+
+def test_scan_alternative_with_missing_price_is_excluded():
+    """A runner-up whose quote is missing 'price' must be excluded from
+    alternatives, not fabricated into one with a fake $0.10 premium fed
+    through the real-IV reward/risk pipeline. Regression test for the bug
+    where alt_c.get("price", 0.10) silently substituted a fabricated
+    premium that estimate_rr() then treated as a genuine market quote."""
+    import asyncio
+    runner_up = {
+        # Missing "price" entirely -- simulates a runner-up quote with no
+        # real market data. Must NOT be defaulted to a fabricated premium.
+        "strike": 190, "expiry": "2026-09-13",
+        "delta": 0.68, "theta": -0.05, "ivRank": 69, "dte": 45, "right": "C", "volume": 500,
+    }
+    result = asyncio.run(_run_alt_scan_with_runner_up(runner_up))
+    assert result.alternativesCount == 0, (
+        f"Expected the missing-price runner-up to be excluded, got "
+        f"{result.alternativesCount} alternative(s): {result.alternatives}"
+    )
+    assert result.alternatives == []
+
+
+def test_scan_alternative_with_missing_strike_is_excluded():
+    """A runner-up whose quote is missing 'strike' must be excluded, not
+    fabricated with the current stock price silently substituted as its
+    strike (alt_c.get("strike", price))."""
+    import asyncio
+    runner_up = {
+        # Missing "strike" entirely.
+        "expiry": "2026-09-13", "price": 2.50, "spread": 0.20,
+        "delta": 0.45, "theta": -0.05, "ivRank": 55, "dte": 45, "right": "C", "volume": 500,
+    }
+    result = asyncio.run(_run_alt_scan_with_runner_up(runner_up))
+    assert result.alternativesCount == 0, (
+        f"Expected the missing-strike runner-up to be excluded, got "
+        f"{result.alternativesCount} alternative(s): {result.alternatives}"
+    )
+    assert result.alternatives == []
+
+
+def test_scan_alternative_with_missing_dte_is_excluded():
+    """A runner-up whose quote is missing 'dte' must be excluded, not
+    fabricated with a default 30-day expiry silently substituted
+    (alt_c.get("dte", 30))."""
+    import asyncio
+    runner_up = {
+        # Missing "dte" entirely.
+        "strike": 190, "expiry": "2026-09-13", "price": 2.50, "spread": 0.20,
+        "delta": 0.45, "theta": -0.05, "ivRank": 55, "right": "C", "volume": 500,
+    }
+    result = asyncio.run(_run_alt_scan_with_runner_up(runner_up))
+    assert result.alternativesCount == 0, (
+        f"Expected the missing-dte runner-up to be excluded, got "
+        f"{result.alternativesCount} alternative(s): {result.alternatives}"
+    )
+    assert result.alternatives == []
+
+
+def test_scan_alternative_skip_is_per_item_not_batch_wide():
+    """When one runner-up has a complete quote and the other is missing
+    'price', only the broken one is skipped -- the valid one still appears.
+    Proves the guard is a per-item `continue`, not something that discards
+    the whole runner-up batch or otherwise interacts across list entries."""
+    import asyncio
+    valid_runner_up = {
+        "strike": 190, "expiry": "2026-09-13", "price": 2.50, "spread": 0.20,
+        "delta": 0.45, "theta": -0.05, "ivRank": 55, "dte": 45, "right": "C", "volume": 500,
+    }
+    broken_runner_up = {
+        # Missing "price" entirely.
+        "strike": 195, "expiry": "2026-09-13",
+        "delta": 0.30, "theta": -0.03, "ivRank": 60, "dte": 45, "right": "C", "volume": 300,
+    }
+    result = asyncio.run(_run_alt_scan_with_runner_ups([valid_runner_up, broken_runner_up]))
+    assert result.alternativesCount == 1, (
+        f"Expected exactly the valid runner-up to survive, got "
+        f"{result.alternativesCount} alternative(s): {result.alternatives}"
+    )
+    assert result.alternatives[0].strike == 190, (
+        f"Expected the surviving alternative to be the valid strike=190 "
+        f"runner-up, got strike={result.alternatives[0].strike}"
+    )

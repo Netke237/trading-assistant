@@ -903,6 +903,13 @@ async def _process_symbol(
 
     alts: list[AlternativeContract] = []
     for alt_card, alt_c in runner_ups:
+        if alt_c.get("price") is None or alt_c.get("strike") is None or alt_c.get("dte") is None:
+            # No real quote/strike/DTE for this runner-up -- do not fabricate
+            # a value and run it through the real-IV reward/risk pipeline as
+            # if it were observed data. Skip it; alternativesCount below is
+            # len(alts), so this naturally yields a correct, consistent
+            # count with no further bookkeeping.
+            continue
         alt_strike = float(alt_c.get("strike", price))
         alt_expiry_years = alt_c.get("dte", 30) / 365.0
         alt_premium = float(alt_c.get("price", 0.10))
