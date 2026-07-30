@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.schemas import Direction
 from app.services.strategy_watch_store import strategy_watch_store
 from app.services.strategy_param_store import get_composite_trigger_defaults
 
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/api/composite-watches", tags=["composite-watch"])
 class CompositeWatchCreate(BaseModel):
     symbol: str
     trigger_def: dict
-    direction: str = "Bullish"
+    direction: Direction = "Bullish"
     interval: str = "1D"
 
 

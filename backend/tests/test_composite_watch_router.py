@@ -80,3 +80,13 @@ async def test_regime_snapshot_no_bars_returns_404():
                 params={"symbol": "NOSUCHSYM", "model": "OMM"},
             )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_add_composite_watch_rejects_invalid_direction():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/composite-watches/",
+            json={"symbol": "AAPL", "trigger_def": {}, "direction": "sideways"},
+        )
+    assert resp.status_code == 422

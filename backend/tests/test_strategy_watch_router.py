@@ -37,6 +37,22 @@ async def test_add_list_remove_roundtrip(app):
 
 
 @pytest.mark.asyncio
+async def test_add_watch_rejects_invalid_direction(app):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        resp = await ac.post("/api/strategy-watch/",
+                            json={"symbol": "AAPL", "strategy_key": "pullback_ema", "direction": "sideways"})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_bulk_add_rejects_invalid_direction(app):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        resp = await ac.post("/api/strategy-watch/bulk",
+                            json={"symbols": ["AAPL"], "strategy_key": "pullback_ema", "direction": "sideways"})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_add_unknown_strategy_returns_400(app):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
         resp = await ac.post("/api/strategy-watch/",
