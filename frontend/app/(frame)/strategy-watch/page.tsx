@@ -10,6 +10,7 @@ const STRATEGIES = [
   { key: 'breakout_base',      label: 'Breakout Base' },
   { key: 'ma_crossover',       label: 'MA Crossover' },
   { key: 'mean_reversion_rsi', label: 'Mean Reversion RSI' },
+  { key: 'mean_reversion_bb',  label: 'Mean Reversion BB' },
 ] as const;
 
 function phasePill(phase: string) {
