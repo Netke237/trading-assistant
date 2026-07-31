@@ -115,6 +115,7 @@ async function pushHistoryToAPI(entry: AlertHistory): Promise<void> {
         rule_id: entry.rule_id, symbol: entry.symbol, interval: entry.interval,
         triggered_at: entry.triggered_at, candle: entry.candle,
         trigger_values: entry.trigger_values, reason: entry.reason,
+        checklist: entry.checklist,
       }),
     });
   } catch {}

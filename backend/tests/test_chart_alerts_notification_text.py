@@ -358,3 +358,74 @@ class TestCompositeNeedSuffix:
 
     def test_blank_when_no_confirmations_configured(self):
         assert _composite_need_suffix({}) == ''
+
+
+import pytest
+from httpx import AsyncClient, ASGITransport
+
+
+async def _make_app():
+    from fastapi import FastAPI
+    from app.database import Base, get_db
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.models.alert import AlertRuleModel, AlertHistoryModel  # noqa: F401
+
+    engine = create_async_engine('sqlite+aiosqlite:///:memory:', connect_args={'check_same_thread': False})
+    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async def override_get_db():
+        async with Session() as session:
+            yield session
+
+    from app.routers.chart_alerts import router as chart_alerts_router
+
+    app = FastAPI()
+    app.include_router(chart_alerts_router)
+    app.dependency_overrides[get_db] = override_get_db
+    return app
+
+
+@pytest.mark.asyncio
+async def test_post_history_with_checklist_uses_plain_language_layout(monkeypatch):
+    """Proves the wiring all the way from POST /alerts/history's checklist
+    field through to the dispatched notification text -- this is the endpoint
+    chartAlertStore.ts's pushHistoryToAPI() calls when a chart tab evaluates
+    rules locally via chartAlertEngine.ts. Without this, that path silently
+    kept rendering the old Symbol:/Interval:/Trigger:/Values: layout forever,
+    since _build_notification_text() only takes the plain-language branch when
+    entry['checklist'] is present.
+    """
+    import app.routers.chart_alerts as chart_alerts_module
+
+    captured = []
+    monkeypatch.setattr(chart_alerts_module, '_dispatch', lambda channel, **kw: captured.append((channel, kw)))
+    monkeypatch.setattr(
+        chart_alerts_module, '_load_notification_config',
+        lambda: {'telegram': {'enabled': True, 'bot_token': 'x', 'chat_id': 'y'}},
+    )
+
+    app = await _make_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        rule_resp = await client.post('/alerts/rules', json={
+            'name': 'Client-side rule', 'symbol': 'AAPL', 'interval': '15min', 'enabled': True,
+            'group': {'logic': 'AND', 'conditions': [{'kind': 'price', 'operator': '>', 'value': 100}]},
+            'cooldown_minutes': 60, 'expiry_date': None,
+        })
+        rule_id = rule_resp.json()['id']
+
+        hist_resp = await client.post('/alerts/history', json={
+            'rule_id': rule_id, 'symbol': 'AAPL', 'interval': '15min',
+            'triggered_at': '2026-07-30T12:00:00', 'candle': {'close': 190},
+            'trigger_values': {'close': 190}, 'reason': 'Price > 100',
+            'checklist': [{'label': 'Price above 100 (was 190.00)', 'met': True}],
+        })
+        assert hist_resp.status_code == 201
+
+    assert len(captured) == 1
+    _channel, kwargs = captured[0]
+    assert 'Conditions met: 1 of 1' in kwargs['text']
+    assert 'Price above 100 (was 190.00)' in kwargs['text']
+    assert 'Trigger:' not in kwargs['text']

@@ -95,6 +95,7 @@ class AlertHistoryCreate(BaseModel):
     candle: dict
     trigger_values: dict = Field(default_factory=dict)
     reason: str
+    checklist: Optional[list[dict]] = None
 
 class AlertTestRequest(BaseModel):
     candles: list[dict]
@@ -265,17 +266,15 @@ def _build_notification_text(
     local Date/Time (no microseconds) to match the portfolio alert format.
 
     When ``entry`` carries a 'checklist' (populated by evaluate_rules() for
-    standard rules, or _composite_checklist() for composite rules), the
-    plain-language layout is used: rule name first, chart timeframe instead of
-    raw interval code, and a per-condition ✓/✗ checklist instead of the flat
-    "(N-of-M)"-joined condition text. Entries without a checklist -- history
-    rows posted directly via POST /alerts/history without one, e.g. from the
-    frontend's own client-side chartAlertEngine.ts evaluation path -- fall back
-    to the original technical Symbol/Interval/Trigger/Values layout. That
-    frontend path does not build a checklist today, so alerts fired from an
-    open chart tab still render in the old format; giving it parity would mean
-    porting _condition_label()'s logic into TypeScript, which is out of scope
-    here.
+    standard rules, _composite_checklist() for composite rules, or -- via
+    POST /alerts/history's optional checklist field -- chartAlertEngine.ts's
+    own conditionLabel()-based checklist for alerts fired locally from an open
+    chart tab), the plain-language layout is used: rule name first, chart
+    timeframe instead of raw interval code, and a per-condition ✓/✗ checklist
+    instead of the flat "(N-of-M)"-joined condition text. Entries without a
+    checklist fall back to the original technical Symbol/Interval/Trigger/
+    Values layout -- this only happens today for a raw POST /alerts/history
+    call that omits the optional field.
 
     ``need_suffix_override``, when not None, is used verbatim as the
     "Conditions met: X of Y{suffix}" suffix instead of deriving it from
@@ -558,6 +557,8 @@ async def create_history_entry(body: AlertHistoryCreate, db: AsyncSession = Depe
     await db.commit()
 
     entry_dict = _history_to_dict(entry)
+    if body.checklist:
+        entry_dict['checklist'] = body.checklist
     rule_row = (await db.execute(
         select(AlertRuleModel).where(AlertRuleModel.id == body.rule_id)
     )).scalar_one_or_none()

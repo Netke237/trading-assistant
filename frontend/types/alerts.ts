@@ -74,4 +74,5 @@ export interface AlertHistory {
   candle: Candle;
   trigger_values: Record<string, number>;
   reason: string;
+  checklist?: { label: string; met: boolean }[];
 }

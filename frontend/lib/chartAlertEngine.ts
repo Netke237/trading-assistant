@@ -35,6 +35,75 @@ function comparePrice(op: string, a: number, b: number): boolean {
   }
 }
 
+const OPERATOR_PHRASES: Record<string, string> = {
+  '>': 'above', '<': 'below', '>=': 'at or above', '<=': 'at or below',
+  crosses_above: 'crosses above', crosses_below: 'crosses below',
+};
+
+const STRUCTURE_LABELS: Record<string, string> = {
+  BOS: 'Breakout structure',
+  CHoCH: 'Reversal structure',
+  FVG: 'Price gap',
+  OrderBlock: 'Order block',
+  Divergence: 'Divergence',
+};
+
+// Mirrors backend/app/services/alert_evaluator.py's _condition_label() --
+// including its null guards -- exactly. This is the checklist label shown in
+// plain-language notification text, so the two implementations must stay
+// textually identical or the same rule firing from the backend scheduler vs.
+// this client-side engine would show different wording for the same
+// condition. The guards below are NOT dead code despite Condition's TS types
+// declaring operator/value/indicator/signal_kind/state as required: this
+// function also runs on rules fetched from the backend via
+// chartAlertStore.ts's syncRules(), which does `await res.json()` against
+// GET /alerts/rules with no runtime validation -- and that endpoint's
+// _rule_to_dict() (chart_alerts.py) returns the raw stored rule_json
+// untouched by Python's own defaulting logic. A rule created via a raw API
+// call, or edited directly in the DB, can genuinely reach this function with
+// a null/missing field at runtime despite what the type says. Without these
+// guards, such a rule would interpolate JS's stringification of null/
+// undefined directly into real notification text (e.g. "Price null 100").
+export function conditionLabel(condition: Condition, triggerValues: Record<string, number>): string {
+  if (condition.kind === 'price') {
+    if (condition.operator == null || condition.value == null) return 'Price condition';
+    const phrase = OPERATOR_PHRASES[condition.operator] ?? condition.operator;
+    // `${value}` matches Python's f'{condition.value}' for any value actually
+    // reachable here: both drop a trailing ".0" for whole numbers and print
+    // fractional values (e.g. 119.5) the same way, since neither side ever
+    // serializes a whole number with an artificial decimal point.
+    let label = `Price ${phrase} ${condition.value}`;
+    const close = triggerValues.close;
+    if (typeof close === 'number') label += ` (was ${close.toFixed(2)})`;
+    return label;
+  }
+  if (condition.kind === 'indicator') {
+    if (!condition.indicator || condition.operator == null || condition.value == null) return 'Indicator condition';
+    const phrase = OPERATOR_PHRASES[condition.operator] ?? condition.operator;
+    let label = `${condition.indicator} ${phrase} ${condition.value}`;
+    const val = triggerValues[condition.indicator];
+    if (typeof val === 'number') label += ` (was ${val.toFixed(2)})`;
+    return label;
+  }
+  if (condition.kind === 'regime') {
+    const state = condition.state;
+    const stateLabel = !state || state === 'any' ? 'any state' : state;
+    let label = `Trend regime: ${stateLabel}`;
+    if (condition.model && condition.model !== 'OMM' && condition.model !== 'any') {
+      label += ` (${condition.model} model)`;
+    }
+    if (condition.min_conviction != null) label += `, conviction ≥${condition.min_conviction}%`;
+    return label;
+  }
+  if (condition.kind === 'structure') {
+    if (!condition.signal_kind) return 'Structure signal';
+    const base = STRUCTURE_LABELS[condition.signal_kind] ?? condition.signal_kind;
+    const suffix = condition.direction ? `${condition.signal_kind}, ${condition.direction}` : condition.signal_kind;
+    return `${base} (${suffix})`;
+  }
+  return 'Condition';
+}
+
 function evaluateRegimeCondition(
   condition: RegimeCondition,
   regime: RegimeSnapshot | null,
@@ -181,6 +250,10 @@ export function evaluateRules(
         candle: { ...closedCandle },
         trigger_values: accumulatedTriggerValues,
         reason: buildReason(rule, accumulatedTriggerValues),
+        checklist: rule.group.conditions.map((c, i) => ({
+          label: conditionLabel(c, accumulatedTriggerValues),
+          met: evaluations[i],
+        })),
       });
     }
   }
