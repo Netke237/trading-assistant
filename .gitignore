@@ -60,5 +60,6 @@ backend/config/local_credentials.yaml
 test-results/
 frontend/test-results/
 frontend/e2e/screenshots/
+frontend/playwright-report/
 playwright-integration-report/
 llm-contexts/e2e-output.log
