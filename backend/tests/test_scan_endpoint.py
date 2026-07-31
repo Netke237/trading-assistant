@@ -196,6 +196,71 @@ def _force_passing_stock_score():
     )
 
 
+def _rr_test_chain(iv_rank: float = 55) -> list[dict]:
+    """A single contract that clears every contract_rules.yaml hard-reject
+    check (unlike _MOCK_CHAIN, which is missing open_interest and has a stale
+    hardcoded expiry date) -- so it reliably becomes a candidate regardless of
+    when this test runs."""
+    return [{
+        "strike": 190, "expiry": _dte_expiry(35), "price": 2.50, "spread": 0.20,
+        "delta": 0.45, "theta": -0.05, "ivRank": iv_rank, "dte": 35,
+        "right": "C", "volume": 500, "open_interest": 2000,
+    }]
+
+
+def _no_db_leak():
+    """Force the mocked candles/price fixtures to actually be used. Without
+    this, run_scan's DB-backed bars_map/price_map pre-fetch (scan.py's
+    fetch_quotes and a locally-imported historical_store.get_bars -- neither
+    covered by _enter_mock_patches) can silently return real historical data
+    for a symbol this repo's dev database already has ingested, bypassing
+    _MOCK_CANDLES/price entirely."""
+    return (
+        patch("app.routers.scan.fetch_quotes", return_value={}),
+        patch("app.services.historical_store.get_bars", AsyncMock(return_value=[])),
+    )
+
+
+def test_scan_rr_bullish_target_pct_override_changes_target_price(client):
+    """Without the override, target = price * 1.08 (risk_rules.yaml default).
+    With rr_bullish_target_pct=0.20, target = price * 1.20 instead."""
+    fetch_quotes_patch, get_bars_patch = _no_db_leak()
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
+                             company="Apple Inc."), \
+         fetch_quotes_patch, get_bars_patch, _force_passing_stock_score():
+        r_default = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
+        })
+        r_override = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": {"rr_bullish_target_pct": 0.20},
+        })
+    default_candidates = r_default.json()["candidates"]
+    override_candidates = r_override.json()["candidates"]
+    assert default_candidates, "expected AAPL to score as a candidate for this fixture"
+    assert override_candidates, "expected AAPL to score as a candidate for this fixture"
+    default_target = default_candidates[0]["exit"]["target"]
+    override_target = override_candidates[0]["exit"]["target"]
+    assert override_target > default_target
+    assert round(override_target, 2) == round(185.0 * 1.20, 2)
+
+
+def test_scan_rr_override_leaves_default_scan_unchanged(client):
+    """A scan with no rr_* overrides must still use the risk_rules.yaml default
+    (8% bullish target) -- guards against the merge helper changing the
+    no-override path's numbers."""
+    fetch_quotes_patch, get_bars_patch = _no_db_leak()
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
+                             company="Apple Inc."), \
+         fetch_quotes_patch, get_bars_patch, _force_passing_stock_score():
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
+        })
+    candidates = r.json()["candidates"]
+    assert candidates
+    assert round(candidates[0]["exit"]["target"], 2) == round(185.0 * 1.08, 2)
+
+
 def test_scan_swing_hold_rejects_a_contract_expiring_before_the_hold_ends(client):
     """Adversarial-audit finding on the DTE-tolerance fix: a flat 10-day
     hard-reject tolerance would let a Swing (5-15d hold) scan accept a 12-DTE

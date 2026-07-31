@@ -24,6 +24,7 @@ import json as _json
 # target %, etc.). Shared with app.routers.contracts's recompute endpoint so
 # both build a trade plan off the same numbers.
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
+from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
 from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
 
 from app.schemas import (
@@ -674,7 +675,7 @@ async def _process_symbol(
     runner_ups = valid_scores[1:3]
 
     # ── Entry / Exit / Reward-risk / targets (shared with the recompute endpoint) ─
-    _rr = _rr_cfg()
+    _rr = _merge_rr_cfg(overrides)
     strike = float(contract.get("strike", price))
     premium = max(float(contract.get("price", 0.10)), 0.01)
 
