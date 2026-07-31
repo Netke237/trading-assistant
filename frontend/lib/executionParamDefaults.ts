@@ -35,8 +35,8 @@ export const PARAM_DEFAULTS_POSITION: ParamDefaults = {
   regime_headwind_caution_pct: -15, regime_headwind_reject_pct: -40,
   fundamentals_caution_above: 70, fundamentals_reject_above: 80,
   entry_spread_tolerance_pct: 0.10, entry_max_slippage_pct: 0.03, entry_min_premium: 0.10,
-  rr_bullish_target_pct: 0.10, rr_bearish_target_pct: 0.10,
-  rr_bullish_invalidation_pct: 0.05, rr_bearish_invalidation_pct: 0.05,
+  rr_bullish_target_pct: 0.08, rr_bearish_target_pct: 0.08,
+  rr_bullish_invalidation_pct: 0.03, rr_bearish_invalidation_pct: 0.03,
 };
 
 export const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
@@ -60,8 +60,8 @@ export const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     regime_headwind_caution_pct: -15, regime_headwind_reject_pct: -40,
     fundamentals_caution_above: 70, fundamentals_reject_above: 80,
     entry_spread_tolerance_pct: 0.10, entry_max_slippage_pct: 0.03, entry_min_premium: 0.10,
-    rr_bullish_target_pct: 0.10, rr_bearish_target_pct: 0.10,
-    rr_bullish_invalidation_pct: 0.05, rr_bearish_invalidation_pct: 0.05,
+    rr_bullish_target_pct: 0.08, rr_bearish_target_pct: 0.08,
+    rr_bullish_invalidation_pct: 0.03, rr_bearish_invalidation_pct: 0.03,
   },
   Swing: {
     confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
@@ -83,8 +83,8 @@ export const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     regime_headwind_caution_pct: -15, regime_headwind_reject_pct: -40,
     fundamentals_caution_above: 70, fundamentals_reject_above: 80,
     entry_spread_tolerance_pct: 0.10, entry_max_slippage_pct: 0.03, entry_min_premium: 0.10,
-    rr_bullish_target_pct: 0.10, rr_bearish_target_pct: 0.10,
-    rr_bullish_invalidation_pct: 0.05, rr_bearish_invalidation_pct: 0.05,
+    rr_bullish_target_pct: 0.08, rr_bearish_target_pct: 0.08,
+    rr_bullish_invalidation_pct: 0.03, rr_bearish_invalidation_pct: 0.03,
   },
   Position: PARAM_DEFAULTS_POSITION,
   Quarterly:  { ...PARAM_DEFAULTS_POSITION },
@@ -110,7 +110,7 @@ export const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     regime_headwind_caution_pct: -15, regime_headwind_reject_pct: -40,
     fundamentals_caution_above: 70, fundamentals_reject_above: 80,
     entry_spread_tolerance_pct: 0.10, entry_max_slippage_pct: 0.03, entry_min_premium: 0.10,
-    rr_bullish_target_pct: 0.10, rr_bearish_target_pct: 0.10,
-    rr_bullish_invalidation_pct: 0.05, rr_bearish_invalidation_pct: 0.05,
+    rr_bullish_target_pct: 0.08, rr_bearish_target_pct: 0.08,
+    rr_bullish_invalidation_pct: 0.03, rr_bearish_invalidation_pct: 0.03,
   },
 };
