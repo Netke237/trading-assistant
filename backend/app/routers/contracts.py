@@ -15,7 +15,12 @@ from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_
 from app.scoring.trade_plan import build_trade_plan
 # Shared with app.routers.scan — both build a trade plan off the same
 # reward_risk config so the scan and the per-contract recompute endpoint agree.
+# _rr_cfg itself is no longer called in this module (recompute_plan now goes
+# through _merge_rr_cfg so per-request rr_* overrides are honored), but it's
+# kept imported/re-exported here because backend/tests/test_trade_plan.py
+# does `from app.routers.contracts import router, _rr_cfg`.
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
+from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -171,6 +176,14 @@ class RecomputePlanRequest(BaseModel):
     premium: float = Field(..., gt=0)   # selected contract mid
     delta: float = 0.45
     spread: float = 0.0
+    # Optional per-request reward/risk overrides — mirrors the same keys the
+    # scan endpoint accepts in ScanRequest.overrides, so a contract override
+    # recompute (Step 6/7) honors whatever R/R tuning the trader set on Step 3
+    # instead of silently reverting to risk_rules.yaml's defaults.
+    rr_bullish_target_pct: float | None = None
+    rr_bearish_target_pct: float | None = None
+    rr_bullish_invalidation_pct: float | None = None
+    rr_bearish_invalidation_pct: float | None = None
 
 
 class RecomputePlanResponse(BaseModel):
@@ -197,6 +210,15 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     entry_bid = max(0.01, req.premium - half)
     entry_ask = req.premium + half
 
+    _rr_overrides = {
+        k: v for k, v in {
+            "rr_bullish_target_pct":       req.rr_bullish_target_pct,
+            "rr_bearish_target_pct":       req.rr_bearish_target_pct,
+            "rr_bullish_invalidation_pct": req.rr_bullish_invalidation_pct,
+            "rr_bearish_invalidation_pct": req.rr_bearish_invalidation_pct,
+        }.items() if v is not None
+    }
+
     # heston_params intentionally omitted (defaults to None → BS reprice fallback).
     # Unlike the scan pipeline, this endpoint only receives one contract's fields
     # in the request body — no option chain to calibrate against — and it's called
@@ -216,7 +238,7 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
         entry_bid=entry_bid,
         entry_ask=entry_ask,
         entry_mid=req.premium,
-        rr_cfg=_rr_cfg(),
+        rr_cfg=_merge_rr_cfg(_rr_overrides),
     )
 
     return RecomputePlanResponse(
