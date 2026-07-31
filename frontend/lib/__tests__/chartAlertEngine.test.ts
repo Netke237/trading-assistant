@@ -305,7 +305,7 @@ describe('conditionLabel', () => {
     expect(conditionLabel(c, {})).toBe('Trend regime: any state');
   });
 
-  // The next five tests simulate a rule fetched from the backend whose stored
+  // The next six tests simulate a rule fetched from the backend whose stored
   // rule_json is missing a field entirely, or has it as an explicit JSON
   // null -- GET /alerts/rules returns the raw stored JSON (see _rule_to_dict
   // in chart_alerts.py), not run through Python's own c.get(key, default)

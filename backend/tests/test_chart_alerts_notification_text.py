@@ -9,6 +9,9 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
+import pytest
+from httpx import AsyncClient, ASGITransport
+
 from app.services.alert_evaluator import (
     PriceCondition, IndicatorCondition, StructureCondition, RegimeCondition,
     ConditionGroup, AlertRuleInput, evaluate_rules, _condition_label,
@@ -358,10 +361,6 @@ class TestCompositeNeedSuffix:
 
     def test_blank_when_no_confirmations_configured(self):
         assert _composite_need_suffix({}) == ''
-
-
-import pytest
-from httpx import AsyncClient, ASGITransport
 
 
 async def _make_app():
