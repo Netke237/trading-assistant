@@ -331,6 +331,10 @@ export const api = {
     premium: number;
     delta: number;
     spread: number;
+    rr_bullish_target_pct?: number;
+    rr_bearish_target_pct?: number;
+    rr_bullish_invalidation_pct?: number;
+    rr_bearish_invalidation_pct?: number;
   }, signal?: AbortSignal) =>
     post<{
       entry: TradeCardData['entry'];
