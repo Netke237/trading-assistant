@@ -340,7 +340,7 @@ def _build_notification_text(
     date_str, time_str = _format_dt(triggered_at)
     rule_label = rule_name or rule_id or '(unnamed rule)'
 
-    subject = f'Bamendjou Chart Alert - {rule_label} - {sym} [{_interval_label(ival)}]'
+    subject = f'Bamendjou Chart Alert - {rule_label} - {sym} [{ival}]'
 
     if checklist:
         close = (entry.get('candle') or {}).get('close')
@@ -414,7 +414,7 @@ def _build_notification_text(
             values_lines.append(f'{k}={v}')
     values_str = '  '.join(values_lines)
 
-    plain = (f'Symbol:    {sym}\nInterval:  {_interval_label(ival)}\n'
+    plain = (f'Symbol:    {sym}\nInterval:  {ival}\n'
              f'Date:      {date_str}\nTime:      {time_str} {_TZ_LABEL}\n'
              f'Trigger:   {reason}\nValues:    {values_str}\nRule:      {rule_label}\n')
 
@@ -423,7 +423,7 @@ def _build_notification_text(
     # Escaped for the same reason as the checklist branch above: rule name and
     # reason text are free-form and could otherwise be parsed as invalid HTML.
     html = (f'<b>{html_lib.escape(subject)}</b>\n\n'
-            f'<b>Symbol:</b>    {html_lib.escape(sym)}\n<b>Interval:</b>  {html_lib.escape(_interval_label(ival))}\n'
+            f'<b>Symbol:</b>    {html_lib.escape(sym)}\n<b>Interval:</b>  {html_lib.escape(ival)}\n'
             f'<b>Date:</b>      {date_str}\n<b>Time:</b>      {time_str} {_TZ_LABEL}\n'
             f'<b>Trigger:</b>   {html_lib.escape(reason)}\n<b>Values:</b>    {html_lib.escape(values_str)}\n'
             f'<b>Rule:</b>      {html_lib.escape(rule_label)}\n')

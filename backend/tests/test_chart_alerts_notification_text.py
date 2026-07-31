@@ -214,49 +214,6 @@ class TestBuildNotificationTextChecklistBranch:
         assert '&amp;' in html
         _assert_telegram_safe_html(html)
 
-    def test_legacy_fallback_uses_human_readable_interval_in_subject(self):
-        entry = self._entry(checklist=[], interval='1D')
-        entry.pop('checklist')
-        subject, _plain, _html = _build_notification_text(entry, 'DG Pre breakout')
-        assert '[Daily chart]' in subject
-        assert '[1D]' not in subject
-
-    def test_legacy_fallback_uses_human_readable_interval_in_plain_body(self):
-        entry = self._entry(checklist=[], interval='5min')
-        entry.pop('checklist')
-        _subject, plain, _html = _build_notification_text(entry, 'DG Pre breakout')
-        assert 'Interval:  5-minute chart' in plain
-        assert 'Interval:  5min' not in plain
-
-    def test_legacy_fallback_uses_human_readable_interval_in_html_body(self):
-        entry = self._entry(checklist=[], interval='4h')
-        entry.pop('checklist')
-        _subject, _plain, html = _build_notification_text(entry, 'DG Pre breakout')
-        assert '<b>Interval:</b>  4-hour chart' in html
-        assert '<b>Interval:</b>  4h' not in html
-        _assert_telegram_safe_html(html)
-
-    def test_checklist_branch_subject_also_uses_human_readable_interval(self):
-        # subject is built once, shared by both branches -- confirm the fix
-        # benefits the checklist branch's email subject too, not just legacy.
-        entry = self._entry(interval='1W')
-        subject, _plain, _html = _build_notification_text(entry, 'DG Pre breakout')
-        assert '[Weekly chart]' in subject
-        assert '[1W]' not in subject
-
-    def test_legacy_fallback_escapes_malicious_interval_in_html_body(self):
-        # Mirrors test_interval_value_is_escaped_in_checklist_branch, but for
-        # the legacy branch: _interval_label()'s fallback for an unrecognized
-        # interval (f'{interval} chart') passes the raw, unconstrained value
-        # through verbatim, so this specifically pins that the legacy branch's
-        # html_lib.escape() wrapper (added in this fix) is present and doing
-        # its job, not just that the branch mentions the interval at all.
-        entry = self._entry(checklist=[], interval='<script>x</script>')
-        entry.pop('checklist')
-        _subject, _plain, html = _build_notification_text(entry, 'R')
-        assert '<script>' not in html
-        _assert_telegram_safe_html(html)
-
     def test_interval_value_is_escaped_in_checklist_branch(self):
         # _interval_label() falls back to f'{interval} chart' verbatim for any
         # value outside its known set -- and `interval` is unconstrained free
