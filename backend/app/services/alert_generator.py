@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.portfolio import PortfolioPositionModel
 from app.schemas import AlertItem
+from app.services.audit import log_event
 
 _CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
@@ -95,6 +96,13 @@ async def generate_alerts(
             hit_raw = (price <= target_stock_price) if is_bearish else (price >= target_stock_price)
             if _sustained("TP_HIT", hit_raw):
                 counter += 1
+                log_event("alert_fired", pos.rec_id, {
+                    "symbol": symbol,
+                    "alertType": "TP_HIT",
+                    "price": price,
+                    "target": target_stock_price,
+                    "direction": pos.direction,
+                })
                 alerts.append(AlertItem(
                     id=f"a{counter}",
                     kind="Action",
@@ -112,11 +120,18 @@ async def generate_alerts(
         ) if (pos.stop is not None and price is not None) else False
         if pos.stop is not None and price is not None and _sustained("STOP_REACHED", stop_breached_raw):
             counter += 1
+            log_event("alert_fired", pos.rec_id, {
+                "symbol": symbol,
+                "alertType": "STOP_REACHED",
+                "price": price,
+                "stop": pos.stop,
+                "direction": pos.direction,
+            })
             alerts.append(AlertItem(
                 id=f"a{counter}",
                 kind="Critical",
                 symbol=symbol,
-                reason=f"Stop breached — {symbol} {'above' if is_bearish else 'below'} ${pos.stop:.2f}",
+                reason=f"Stop breached — {symbol} {'above' if is_bearish else 'below'} ${pos.stop:.2f} (price ${price:.2f})",
                 timestamp=now_iso,
                 recId=pos.rec_id,
                 alertType="STOP_REACHED",
@@ -129,6 +144,13 @@ async def generate_alerts(
         )
         if _sustained("PREMIUM_STOP", premium_hit_raw):
             counter += 1
+            log_event("alert_fired", pos.rec_id, {
+                "symbol": symbol,
+                "alertType": "PREMIUM_STOP",
+                "optPrice": opt_price,
+                "entryPrice": pos.entry_price,
+                "thresholdPct": _premium_stop_pct(),
+            })
             alerts.append(AlertItem(
                 id=f"a{counter}",
                 kind="Critical",

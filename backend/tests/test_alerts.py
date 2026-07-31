@@ -12,6 +12,8 @@ from datetime import date, timedelta
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from httpx import AsyncClient, ASGITransport
 
+from unittest.mock import patch
+
 from app.database import Base
 from app.models.portfolio import PortfolioPositionModel
 
@@ -259,3 +261,65 @@ async def test_short_stock_target_triggers_on_price_fall(db_session):
     tp_alerts = [a for a in alerts if a.alertType == "TP_HIT"]
     assert len(tp_alerts) == 1
     assert tp_alerts[0].symbol == "XYZ"
+
+# ── Test: STOP_REACHED message includes the triggering price, not just stop ──
+
+@pytest.mark.asyncio
+async def test_stop_reached_reason_includes_triggering_price(db_session):
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(db_session, symbol="AAPL", stop=180.0)
+    prices = {"AAPL": 175.0}
+    alerts = await generate_alerts(db_session, prices)
+    stop_alerts = [a for a in alerts if a.alertType == "STOP_REACHED"]
+    assert "$175.00" in stop_alerts[0].reason
+    assert "$180.00" in stop_alerts[0].reason
+
+
+# ── Test: STOP_REACHED writes a structured audit event with price + stop ─────
+
+@pytest.mark.asyncio
+async def test_stop_reached_writes_audit_event(db_session):
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(db_session, symbol="AAPL", stop=180.0, rec_id="REC-AUDIT-1")
+    prices = {"AAPL": 175.0}
+    with patch("app.services.alert_generator.log_event") as mock_log_event:
+        await generate_alerts(db_session, prices)
+    calls = [c for c in mock_log_event.call_args_list if c.args[0] == "alert_fired"]
+    assert len(calls) == 1
+    event_type, rec_id, payload = calls[0].args
+    assert rec_id == "REC-AUDIT-1"
+    assert payload["alertType"] == "STOP_REACHED"
+    assert payload["symbol"] == "AAPL"
+    assert payload["price"] == 175.0
+    assert payload["stop"] == 180.0
+
+
+# ── Test: TP_HIT and PREMIUM_STOP also write audit events ────────────────────
+
+@pytest.mark.asyncio
+async def test_all_alert_types_write_audit_events(db_session):
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(
+        db_session, rec_id="REC-TP", symbol="TPX", contract="TPX|1|2026-05-16|C",
+        targets=[{"stockPrice": 100.0, "stock_price": 100.0}], stop=None,
+    )
+    await _insert_position(
+        db_session, rec_id="REC-STOP", symbol="STOPX", contract="STOPX|1|2026-05-16|C",
+        stop=50.0, targets=[],
+    )
+    await _insert_position(
+        db_session, rec_id="REC-PREM", symbol="PREMX", contract="PREMX|1|2026-05-16|C",
+        entry_price=5.0, stop=None, targets=[],
+    )
+    prices = {"TPX": 105.0, "STOPX": 45.0, "PREMX": 200.0}
+    opt_prices = {"PREMX|1|2026-05-16|C": 2.0}  # 2.0 <= 5.0 * 0.60 = 3.0
+
+    with patch("app.services.alert_generator.log_event") as mock_log_event:
+        await generate_alerts(db_session, prices, opt_prices)
+
+    fired_types = {
+        c.args[2]["alertType"]
+        for c in mock_log_event.call_args_list
+        if c.args[0] == "alert_fired"
+    }
+    assert fired_types == {"TP_HIT", "STOP_REACHED", "PREMIUM_STOP"}

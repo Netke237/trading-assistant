@@ -15,6 +15,7 @@ import httpx
 import pandas as pd
 
 from app.scoring.dte_window import DTE_WINDOW_TOLERANCE_DAYS
+from app.services.audit import log_event
 
 TRADIER_BASE_URL = os.getenv("TRADIER_BASE_URL", "https://api.tradier.com")
 TRADIER_TOKEN = os.getenv("TRADIER_API_TOKEN", "")
@@ -637,8 +638,16 @@ def fetch_quotes(symbols: list[str]) -> dict[str, dict]:
         result = {}
         for q in quote_data:
             sym = q.get("symbol", "")
-            last = q.get("last") or q.get("close") or 0
+            raw_last = q.get("last")
+            raw_close = q.get("close")
+            last = raw_last or raw_close or 0
             prev = q.get("prevclose") or last
+            if sym and not raw_last and raw_close:
+                log_event("quote_fallback_to_close", sym, {
+                    "raw_last": raw_last,
+                    "raw_close": raw_close,
+                    "used_price": float(last),
+                })
             if sym and last:
                 result[sym] = {"last": float(last), "prevclose": float(prev)}
         return result

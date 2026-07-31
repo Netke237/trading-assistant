@@ -28,6 +28,15 @@ describe('scanPortfolio', () => {
     expect(out.some((a) => a.symbol === 'NVDA' && a.alertType === 'STOP_REACHED')).toBe(true);
   });
 
+  it('STOP_REACHED reason includes the triggering price, not just the stop', () => {
+    // Deliberately non-default values (makePosition defaults to currentPrice:
+    // 90, stop: 95) so this test can't pass by coincidentally matching them.
+    const out = scanPortfolio([pos({ currentPrice: 80, stop: 85 })]);
+    const stopAlert = out.find((a) => a.alertType === 'STOP_REACHED');
+    expect(stopAlert?.reason).toContain('$85.00');
+    expect(stopAlert?.reason).toContain('$80.00');
+  });
+
   it('fires PREMIUM_STOP when pnlPct crosses the 60% stop threshold', () => {
     const position = makePosition({ pnlPct: -65 });  // beyond -60% threshold
     const results = scanPortfolio([position], { premiumStopPct: 0.60 });

@@ -746,3 +746,65 @@ async def test_fetch_option_chain_async_falls_back_to_tastytrade_when_ibkr_unava
     assert len(result) == 1
     assert result[0]["ivRank"] == 47.2
     assert result[0]["ivPercentile"] == 51.9
+
+
+# ── fetch_quotes: fallback-to-close audit logging ──────────────────────────────
+
+def test_fetch_quotes_logs_fallback_to_close():
+    """When Tradier's quote has no 'last' price and we fall back to 'close',
+    that fallback must be recorded via log_event so a bad/stale price used
+    by an alert can be traced back after the fact."""
+    from app.data import market
+
+    with (
+        patch("app.data.market.TRADIER_TOKEN", "fake-token"),
+        patch("app.data.market.httpx.get") as mock_get,
+        patch("app.data.market.log_event") as mock_log_event,
+    ):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {
+            "quotes": {
+                "quote": [
+                    {"symbol": "AAPL", "last": None, "close": 283.35, "prevclose": 282.0},
+                ]
+            }
+        }
+        mock_get.return_value = mock_resp
+
+        result = market.fetch_quotes(["AAPL"])
+
+    assert result["AAPL"]["last"] == 283.35
+    mock_log_event.assert_called_once()
+    event_type, rec_id, payload = mock_log_event.call_args.args
+    assert event_type == "quote_fallback_to_close"
+    assert rec_id == "AAPL"
+    assert payload["raw_last"] is None
+    assert payload["raw_close"] == 283.35
+    assert payload["used_price"] == 283.35
+
+
+def test_fetch_quotes_does_not_log_when_last_present():
+    """A normal quote (last present) must not trigger the fallback log."""
+    from app.data import market
+
+    with (
+        patch("app.data.market.TRADIER_TOKEN", "fake-token"),
+        patch("app.data.market.httpx.get") as mock_get,
+        patch("app.data.market.log_event") as mock_log_event,
+    ):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {
+            "quotes": {
+                "quote": [
+                    {"symbol": "AAPL", "last": 301.05, "close": 300.90, "prevclose": 299.80},
+                ]
+            }
+        }
+        mock_get.return_value = mock_resp
+
+        result = market.fetch_quotes(["AAPL"])
+
+    assert result["AAPL"]["last"] == 301.05
+    mock_log_event.assert_not_called()

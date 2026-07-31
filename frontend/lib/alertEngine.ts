@@ -75,7 +75,7 @@ export function scanPortfolio(
         kind: 'Critical',
         symbol: p.symbol,
         alertType: 'STOP_REACHED',
-        reason: `Stop breached — ${p.symbol} ${isBearish ? 'above' : 'below'} $${p.stop.toFixed(2)}`,
+        reason: `Stop breached — ${p.symbol} ${isBearish ? 'above' : 'below'} $${p.stop.toFixed(2)} (price $${p.currentPrice.toFixed(2)})`,
       });
     }
 
