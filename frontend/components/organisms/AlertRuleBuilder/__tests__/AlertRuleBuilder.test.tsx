@@ -197,6 +197,52 @@ describe('AlertRuleBuilder condition row keys', () => {
   });
 });
 
+describe('AlertRuleBuilder N-of-M threshold seeding (two-sided clamp)', () => {
+  // Mirrors the component's seed-time clamp: Math.max(1, Math.min(conditions.length, seed?.group.n_of_m_threshold ?? 1)).
+  // A corrupted/legacy stored rule can have n_of_m_threshold <= 0 (lower bound) or
+  // greater than its own condition count (upper bound, now also rejected by the
+  // backend's 422 validator) -- both must be clamped when the editor is first opened,
+  // not just on the input's own onChange.
+  const twoConditionRule = (n_of_m_threshold: number): AlertRule => ({
+    ...AAPL_RULE,
+    group: {
+      logic: 'N_OF_M',
+      n_of_m_threshold,
+      conditions: [
+        { kind: 'price', operator: '>', value: 100 },
+        { kind: 'price', operator: '<', value: 200 },
+      ],
+    },
+  });
+
+  // The N-of-M number input has no unique label/placeholder, so it's located via its
+  // fixed DOM position next to the "of N conditions met" text within the same row.
+  const getThresholdInput = (): HTMLInputElement => {
+    const metLabel = screen.getByText(/conditions met/);
+    return metLabel.parentElement!.querySelector('input') as HTMLInputElement;
+  };
+
+  it('seeding with n_of_m_threshold: 0 initializes the input at 1', () => {
+    render(<AlertRuleBuilder onClose={() => {}} editRule={twoConditionRule(0)} />);
+    expect(getThresholdInput().value).toBe('1');
+  });
+
+  it('seeding with a threshold negative also clamps up to 1', () => {
+    render(<AlertRuleBuilder onClose={() => {}} editRule={twoConditionRule(-3)} />);
+    expect(getThresholdInput().value).toBe('1');
+  });
+
+  it('seeding with a threshold greater than the condition count clamps down to the count', () => {
+    render(<AlertRuleBuilder onClose={() => {}} editRule={twoConditionRule(5)} />);
+    expect(getThresholdInput().value).toBe('2');
+  });
+
+  it('seeding with a valid in-range threshold leaves it unchanged', () => {
+    render(<AlertRuleBuilder onClose={() => {}} editRule={twoConditionRule(2)} />);
+    expect(getThresholdInput().value).toBe('2');
+  });
+});
+
 describe('regime dropdown fireability', () => {
   it('each model offers exactly its real emittable states (guards the old "Sideways" phantom bug)', () => {
     // Hard-coded expectations, independent of the consts under test — a phantom state

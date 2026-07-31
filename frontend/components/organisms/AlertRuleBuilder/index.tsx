@@ -66,7 +66,19 @@ export default function AlertRuleBuilder({ onClose, editRule, duplicateFrom, pre
     ).map((c) => (c.id ? c : { ...c, id: makeId() })),
   );
   const [logic, setLogic] = useState<LogicOperator>(seed?.group.logic ?? 'AND');
-  const [nOfMThreshold, setNOfMThreshold] = useState(seed?.group.n_of_m_threshold ?? 1);
+  // Two-sided clamp mirrors the onChange handler below (min={1}/max={conditions.length}).
+  // Math.max(1, ...) guards a corrupted/legacy stored 0 (or negative) -- `??` alone only
+  // replaces null/undefined, so a stored 0 would otherwise render in the input untouched.
+  // Math.min(conditions.length, ...) guards the equally plausible corruption of a stored
+  // threshold greater than the rule's condition count, which the backend's upper-bound
+  // model validator now rejects with a 422. Both bounds must be applied at seed time --
+  // the onChange clamp only re-fires when the user actually edits the field, so opening
+  // such a rule and hitting Save without touching this input would otherwise re-PUT the
+  // corrupted value unchanged. `conditions` (declared above) is already seeded from the
+  // same rule, so its length matches what the user sees in the condition list.
+  const [nOfMThreshold, setNOfMThreshold] = useState(
+    Math.max(1, Math.min(conditions.length, seed?.group.n_of_m_threshold ?? 1)),
+  );
   const [cooldown, setCooldown] = useState(seed?.cooldown_minutes ?? 60);
   const [expiryType, setExpiryType] = useState<'never' | 'custom'>(
     seed?.expiry_date ? 'custom' : 'never',

@@ -370,4 +370,27 @@ describe('evaluateRules checklist', () => {
       { label: 'Price below 100 (was 190.00)', met: false },
     ]);
   });
+
+  it('clamps a stored n_of_m_threshold of 0 to 1 in the reason string (not "0-of-")', () => {
+    // Mirrors a corrupted/legacy stored rule (n_of_m_threshold: 0) the same way the
+    // AlertRuleBuilder seed clamp and the backend's lower-bound validator do --
+    // buildReason's `Math.max(1, rule.group.n_of_m_threshold ?? 1)` must clamp the
+    // *displayed* threshold even though the raw 0 still flows into the trigger check.
+    const rule: AlertRule = {
+      id: 'r12', name: 'N of M zero', symbol: SYM, interval: INT, enabled: true,
+      group: {
+        logic: 'N_OF_M', n_of_m_threshold: 0,
+        conditions: [
+          { kind: 'price', operator: '>', value: 185 },
+          { kind: 'price', operator: '<', value: 100 },
+        ],
+      },
+      cooldown_minutes: 60, expiry_date: null, created_at: '2024-01-01T00:00:00Z', last_triggered_at: null,
+    };
+    const result = evaluateRules([rule], closedCandle, candles(), indicators, [], now, SYM, INT);
+    expect(result).toHaveLength(1);
+    expect(result[0].reason).toContain('(1-of-2)');
+    expect(result[0].reason).not.toContain('(0-of-');
+    expect(result[0].reason).toBe('Price > 185 (1-of-2) Price < 100');
+  });
 });

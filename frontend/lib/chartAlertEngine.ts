@@ -183,7 +183,7 @@ function evaluateCondition(
 function buildReason(rule: AlertRule, triggerValues: Record<string, number>): string {
   if (rule.group.conditions.length === 0) return '';
   const sep = rule.group.logic === 'N_OF_M'
-    ? ` (${rule.group.n_of_m_threshold ?? 1}-of-${rule.group.conditions.length}) `
+    ? ` (${Math.max(1, rule.group.n_of_m_threshold ?? 1)}-of-${rule.group.conditions.length}) `
     : ` ${rule.group.logic} `;
   return rule.group.conditions
     .map((c) => {

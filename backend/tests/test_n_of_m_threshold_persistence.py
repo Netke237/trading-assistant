@@ -103,6 +103,123 @@ async def test_n_of_m_threshold_of_one_still_fires_with_one_condition_met():
         assert len(test_resp.json()['matches']) == 1
 
 
+@pytest.mark.asyncio
+async def test_n_of_m_threshold_of_zero_is_rejected_at_api_boundary():
+    """0 is semantically ambiguous: the backend's `or 1` fallback (alert_evaluator.py)
+    silently coerces a stored 0 to 1, while the frontend's `?? 1` fallback
+    (chartAlertEngine.ts) keeps 0 as-is, which downstream means "fire immediately".
+    Rather than picking one interpretation, ConditionGroupIn.n_of_m_threshold now
+    rejects 0 (and negative values) with a 422 so it can never be persisted.
+    """
+    app = await _make_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        resp = await client.post('/alerts/rules', json=_n_of_m_rule_body(threshold=0))
+        assert resp.status_code == 422
+        # Pin the 422 to the actual constraint, not just "some validation failed
+        # somewhere" -- FastAPI's 422 body for a Pydantic `ge` violation puts the
+        # field name in `detail[].loc`, e.g. ["body", "group", "n_of_m_threshold"].
+        detail = resp.json()['detail']
+        assert any('n_of_m_threshold' in err.get('loc', []) for err in detail)
+
+
+@pytest.mark.asyncio
+async def test_n_of_m_threshold_negative_is_rejected_at_api_boundary():
+    """Mirrors the zero-rejection test for a negative value -- the ge=1
+    constraint's lower bound was claimed to cover negatives too, but that was
+    never actually asserted anywhere.
+    """
+    app = await _make_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        resp = await client.post('/alerts/rules', json=_n_of_m_rule_body(threshold=-1))
+        assert resp.status_code == 422
+        detail = resp.json()['detail']
+        assert any('n_of_m_threshold' in err.get('loc', []) for err in detail)
+
+
+@pytest.mark.asyncio
+async def test_n_of_m_threshold_exceeding_condition_count_is_rejected():
+    """threshold > len(conditions) doesn't crash anything, but makes the rule's
+    sum(evaluations) >= threshold permanently False -- silently un-fireable
+    (see alert_evaluator.py's N_OF_M branch). ConditionGroupIn's model
+    validator rejects this at the API boundary with a 422.
+
+    The assertion pins the actual validator `msg` text, not just the presence
+    of the string "n_of_m_threshold" somewhere in the error. FastAPI/Pydantic
+    echoes the entire submitted `group` object back in each error's `input`
+    field regardless of which check failed, so `group` always contains the
+    literal key "n_of_m_threshold" -- asserting on that would pass for ANY
+    422 on this endpoint (e.g. a totally unrelated field failing validation),
+    not specifically this upper-bound validator. The real 422 body for a
+    `model_validator(mode='after')` ValueError in this FastAPI/Pydantic
+    version looks like:
+        {"type": "value_error", "loc": ["body", "group"],
+         "msg": "Value error, n_of_m_threshold (5) cannot exceed the number "
+                "of conditions (2)", "input": {...}, "ctx": {"error": {}}}
+    Note `loc` is `["body", "group"]` -- it does NOT include "n_of_m_threshold"
+    as a path element (that only appears inside the echoed `input` dict, which
+    is exactly the false-positive this rewrite avoids relying on). The `msg`
+    text is the actual signal that this specific validator fired.
+    """
+    app = await _make_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        # _n_of_m_rule_body() has exactly 2 conditions.
+        resp = await client.post('/alerts/rules', json=_n_of_m_rule_body(threshold=5))
+        assert resp.status_code == 422
+        detail = resp.json()['detail']
+        assert any(
+            'cannot exceed the number of conditions' in err.get('msg', '')
+            for err in detail
+        )
+
+
+@pytest.mark.asyncio
+async def test_and_logic_with_stale_n_of_m_threshold_exceeding_condition_count_still_succeeds():
+    """The upper-bound validator must only apply when logic == 'N_OF_M'.
+    n_of_m_threshold is meaningless for AND/OR logic, so a stale/irrelevant
+    value left over from switching a rule's logic away from N_OF_M (or a raw
+    API caller sending both fields) must not wrongly 422 an otherwise-valid
+    AND rule just because the leftover threshold happens to exceed the
+    condition count.
+    """
+    app = await _make_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        body = _n_of_m_rule_body(threshold=5)
+        body['group']['logic'] = 'AND'
+        # Only 2 conditions -- threshold=5 would 422 under N_OF_M logic, but
+        # must be accepted here since logic is AND and the field is unused.
+        resp = await client.post('/alerts/rules', json=body)
+        assert resp.status_code == 201
+        assert resp.json()['group']['n_of_m_threshold'] == 5
+
+
+@pytest.mark.asyncio
+async def test_n_of_m_threshold_equal_to_condition_count_still_succeeds():
+    """The boundary case: threshold == len(conditions) is valid (all conditions
+    must fire, equivalent to AND) and must not be rejected by the new upper-
+    bound check.
+    """
+    app = await _make_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        # _n_of_m_rule_body() has exactly 2 conditions.
+        resp = await client.post('/alerts/rules', json=_n_of_m_rule_body(threshold=2))
+        assert resp.status_code == 201
+        assert resp.json()['group']['n_of_m_threshold'] == 2
+
+
+@pytest.mark.asyncio
+async def test_n_of_m_threshold_of_none_still_succeeds():
+    """None must remain valid -- it means 'no threshold configured' (legacy rules,
+    or rules using AND/OR logic where n_of_m_threshold is irrelevant).
+    """
+    app = await _make_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        body = _n_of_m_rule_body()
+        body['group']['n_of_m_threshold'] = None
+        resp = await client.post('/alerts/rules', json=body)
+        assert resp.status_code == 201
+        assert resp.json()['group']['n_of_m_threshold'] is None
+
+
 def test_legacy_rule_without_stored_threshold_still_defaults_to_none():
     """Pins the required backward-compatible behavior: a rule saved before this
     fix has rule_json with no 'n_of_m_threshold' key at all (the value was

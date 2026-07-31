@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,7 +69,41 @@ class StructureConditionIn(BaseModel):
 class ConditionGroupIn(BaseModel):
     logic: str = 'AND'
     conditions: list = Field(default_factory=list)
-    n_of_m_threshold: Optional[int] = None
+    # ge=1 + the model_validator below only gate the two mutation endpoints
+    # (POST /rules, PUT /rules/{id}) that construct a ConditionGroupIn from a
+    # request body. _deserialize_rule() reads n_of_m_threshold back out of
+    # already-stored rule_json with a plain dict .get() (no Pydantic model in
+    # that path), and alert_evaluator.py's `or 1` / chartAlertEngine.ts's `?? 1`
+    # fallbacks still read that raw value -- so a legacy or corrupted row that
+    # already has a 0 or out-of-range threshold persisted is NOT retroactively
+    # fixed by this; it only stops new bad values from being written going forward.
+    n_of_m_threshold: Optional[int] = Field(default=None, ge=1)
+
+    @model_validator(mode='after')
+    def validate_threshold_within_condition_count(self) -> 'ConditionGroupIn':
+        """Reject an n_of_m_threshold that exceeds the number of conditions --
+        e.g. threshold=50 with 2 conditions doesn't crash anything, but makes
+        the rule's sum(evaluations) >= threshold permanently False (silently
+        un-fireable; see alert_evaluator.py's N_OF_M branch). Only checked when
+        conditions is non-empty -- there's nothing meaningful to validate the
+        upper bound against otherwise, and an empty-conditions group is a
+        separate, pre-existing concern this fix doesn't address. Also only
+        checked when logic == 'N_OF_M' -- the field is meaningless for AND/OR
+        logic, so a stale/irrelevant n_of_m_threshold left over from switching
+        a rule's logic away from N_OF_M must not block an otherwise-valid
+        AND/OR rule.
+        """
+        if (
+            self.logic == 'N_OF_M'
+            and self.n_of_m_threshold is not None
+            and self.conditions
+            and self.n_of_m_threshold > len(self.conditions)
+        ):
+            raise ValueError(
+                f'n_of_m_threshold ({self.n_of_m_threshold}) cannot exceed the number '
+                f'of conditions ({len(self.conditions)})'
+            )
+        return self
 
 class AlertRuleCreate(BaseModel):
     id: Optional[str] = None
