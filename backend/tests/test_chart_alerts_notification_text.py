@@ -428,3 +428,85 @@ async def test_post_history_with_checklist_uses_plain_language_layout(monkeypatc
     assert 'Conditions met: 1 of 1' in kwargs['text']
     assert 'Price above 100 (was 190.00)' in kwargs['text']
     assert 'Trigger:' not in kwargs['text']
+
+
+@pytest.mark.asyncio
+async def test_post_history_rejects_malformed_checklist_item_before_persisting(monkeypatch):
+    """checklist is validated as list[ChecklistItemIn] (label: str, met: bool),
+    not list[dict] -- a malformed item (e.g. missing 'met') must be rejected by
+    FastAPI's request validation with a 422 before create_history_entry() ever
+    runs, not raise a KeyError from _build_notification_text()'s unguarded
+    c['met']/c['label'] access after the AlertHistoryModel row is already
+    committed. Also asserts no notification was dispatched and no history row
+    was persisted for the rejected request.
+    """
+    import app.routers.chart_alerts as chart_alerts_module
+
+    captured = []
+    monkeypatch.setattr(chart_alerts_module, '_dispatch', lambda channel, **kw: captured.append((channel, kw)))
+    monkeypatch.setattr(
+        chart_alerts_module, '_load_notification_config',
+        lambda: {'telegram': {'enabled': True, 'bot_token': 'x', 'chat_id': 'y'}},
+    )
+
+    app = await _make_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        rule_resp = await client.post('/alerts/rules', json={
+            'name': 'Client-side rule', 'symbol': 'AAPL', 'interval': '15min', 'enabled': True,
+            'group': {'logic': 'AND', 'conditions': [{'kind': 'price', 'operator': '>', 'value': 100}]},
+            'cooldown_minutes': 60, 'expiry_date': None,
+        })
+        rule_id = rule_resp.json()['id']
+
+        hist_resp = await client.post('/alerts/history', json={
+            'rule_id': rule_id, 'symbol': 'AAPL', 'interval': '15min',
+            'triggered_at': '2026-07-30T12:00:00', 'candle': {'close': 190},
+            'trigger_values': {'close': 190}, 'reason': 'Price > 100',
+            'checklist': [{'label': 'Price above 100 (was 190.00)'}],  # missing 'met'
+        })
+        assert hist_resp.status_code == 422
+
+        history_resp = await client.get('/alerts/history')
+        assert history_resp.json() == []
+
+    assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_post_history_checklist_is_never_persisted_to_the_history_row(monkeypatch):
+    """checklist is merged into the in-memory entry_dict used both to build the
+    notification text AND as this endpoint's own response body -- so it's
+    expected to echo back in the immediate POST response -- but it must never
+    be written to the AlertHistoryModel row itself, so it must NOT reappear on
+    a later GET /alerts/history, which rebuilds its response from the DB row
+    via _history_to_dict(). Mirrors how the composite-rule checklist
+    (chart_alerts.py's evaluate_and_notify_for_symbol) already behaves. A
+    future change that "helpfully" starts passing checklist into the
+    AlertHistoryModel(...) constructor would silently violate that design
+    intent; this test exists so such a change fails loudly instead.
+    """
+    import app.routers.chart_alerts as chart_alerts_module
+
+    monkeypatch.setattr(chart_alerts_module, '_dispatch', lambda channel, **kw: None)
+    monkeypatch.setattr(chart_alerts_module, '_load_notification_config', lambda: {})
+
+    app = await _make_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        rule_resp = await client.post('/alerts/rules', json={
+            'name': 'Client-side rule', 'symbol': 'AAPL', 'interval': '15min', 'enabled': True,
+            'group': {'logic': 'AND', 'conditions': [{'kind': 'price', 'operator': '>', 'value': 100}]},
+            'cooldown_minutes': 60, 'expiry_date': None,
+        })
+        rule_id = rule_resp.json()['id']
+
+        create_resp = await client.post('/alerts/history', json={
+            'rule_id': rule_id, 'symbol': 'AAPL', 'interval': '15min',
+            'triggered_at': '2026-07-30T12:00:00', 'candle': {'close': 190},
+            'trigger_values': {'close': 190}, 'reason': 'Price > 100',
+            'checklist': [{'label': 'Price above 100 (was 190.00)', 'met': True}],
+        })
+        assert create_resp.json()['checklist'] == [{'label': 'Price above 100 (was 190.00)', 'met': True}]
+
+        list_resp = await client.get('/alerts/history')
+        assert len(list_resp.json()) == 1
+        assert 'checklist' not in list_resp.json()[0]

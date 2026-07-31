@@ -87,6 +87,10 @@ class AlertRulePatch(BaseModel):
     enabled: Optional[bool] = None
     last_triggered_at: Optional[str] = None
 
+class ChecklistItemIn(BaseModel):
+    label: str
+    met: bool
+
 class AlertHistoryCreate(BaseModel):
     rule_id: str
     symbol: str
@@ -95,7 +99,13 @@ class AlertHistoryCreate(BaseModel):
     candle: dict
     trigger_values: dict = Field(default_factory=dict)
     reason: str
-    checklist: Optional[list[dict]] = None
+    # Validated as a real sub-model (not list[dict]) so a malformed item (e.g.
+    # missing 'met') is rejected with a 422 here, before create_history_entry()
+    # ever reaches db.commit() -- _build_notification_text() does unguarded
+    # c['met']/c['label'] subscript access on each item, which would otherwise
+    # raise a KeyError *after* the history row was already persisted, leaving
+    # a row in the DB with no notification ever built or sent.
+    checklist: Optional[list[ChecklistItemIn]] = None
 
 class AlertTestRequest(BaseModel):
     candles: list[dict]
@@ -558,7 +568,7 @@ async def create_history_entry(body: AlertHistoryCreate, db: AsyncSession = Depe
 
     entry_dict = _history_to_dict(entry)
     if body.checklist:
-        entry_dict['checklist'] = body.checklist
+        entry_dict['checklist'] = [item.model_dump() for item in body.checklist]
     rule_row = (await db.execute(
         select(AlertRuleModel).where(AlertRuleModel.id == body.rule_id)
     )).scalar_one_or_none()
