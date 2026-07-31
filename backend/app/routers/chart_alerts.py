@@ -69,6 +69,7 @@ class StructureConditionIn(BaseModel):
 class ConditionGroupIn(BaseModel):
     logic: str = 'AND'
     conditions: list = Field(default_factory=list)
+    n_of_m_threshold: Optional[int] = None
 
 class AlertRuleCreate(BaseModel):
     id: Optional[str] = None
@@ -307,16 +308,12 @@ def _build_notification_text(
         if need_suffix_override is not None:
             need_suffix = need_suffix_override
         elif rule_logic == 'N_OF_M':
-            # `rule_threshold` is always None today: _deserialize_rule() never
-            # populates ConditionGroup.n_of_m_threshold from the stored rule_json
-            # (a pre-existing bug, not introduced here), so every N_OF_M rule
-            # actually runs -- and is displayed here -- as a 1-of-total OR gate.
-            # `or 1` mirrors evaluate_rules()'s own fallback so this text always
-            # matches real runtime behavior. If _deserialize_rule is ever fixed
-            # to read a real threshold, this text's meaning changes automatically
-            # -- see test_n_of_m_without_stored_threshold_shows_only_needs_one in
-            # test_chart_alerts_notification_text.py, which pins today's
-            # always-1 behavior so that fix doesn't change this silently.
+            # `rule_threshold` is the rule's configured n_of_m_threshold, or None
+            # for rules saved before that field existed (see
+            # test_legacy_rule_without_stored_threshold_still_defaults_to_none in
+            # test_n_of_m_threshold_persistence.py) -- `or 1` mirrors
+            # evaluate_rules()'s own fallback so this text always matches real
+            # runtime behavior for both old and new rules.
             _threshold = rule_threshold or 1
             need_suffix = '' if _threshold >= total else f' (only needs {_threshold} to fire)'
         elif rule_logic == 'OR':
@@ -418,7 +415,11 @@ def _deserialize_rule(rule_json_str: str, row: AlertRuleModel) -> AlertRuleInput
     return AlertRuleInput(
         id=row.id, name=row.name, symbol=row.symbol, interval=row.interval,
         enabled=bool(row.enabled),
-        group=ConditionGroup(logic=group_data.get('logic', 'AND'), conditions=conditions),
+        group=ConditionGroup(
+            logic=group_data.get('logic', 'AND'),
+            conditions=conditions,
+            n_of_m_threshold=group_data.get('n_of_m_threshold'),
+        ),
         cooldown_minutes=row.cooldown_minutes, expiry_date=row.expiry_date,
         created_at=row.created_at, last_triggered_at=row.last_triggered_at,
         condition_state=json.loads(row.condition_state or '{}'),

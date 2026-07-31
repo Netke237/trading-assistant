@@ -225,12 +225,13 @@ class TestBuildNotificationTextChecklistBranch:
         _assert_telegram_safe_html(html)
 
     def test_n_of_m_without_stored_threshold_shows_only_needs_one(self):
-        # Pins the CURRENT (buggy) runtime behavior: _deserialize_rule() never
-        # populates n_of_m_threshold, so evaluate_rules() always treats N_OF_M
-        # rules as threshold=1, and this text must keep matching that reality.
-        # If _deserialize_rule is ever fixed to read a real stored threshold,
-        # this test's `rule_threshold=None` call should be revisited alongside
-        # it -- that's the point of pinning it explicitly here.
+        # Pins _build_notification_text()'s own rule_threshold=None fallback in
+        # isolation from _deserialize_rule() (which, as of the N_OF_M threshold
+        # fix, does populate a real threshold when one is stored -- see
+        # test_n_of_m_threshold_persistence.py). This test still covers the
+        # genuinely-legacy case: a rule saved before that fix has no threshold
+        # in its stored rule_json at all, so _deserialize_rule() still passes
+        # through None here, and this text must keep matching that reality.
         entry = self._entry(checklist=[
             {'label': 'A', 'met': True}, {'label': 'B', 'met': False}, {'label': 'C', 'met': False},
         ])
