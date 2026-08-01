@@ -159,13 +159,20 @@ def _build_notification(symbol: str, alert_type: str, reason: str,
         f'{still_plain}'
     )
     # Telegram mirrors the email body exactly (same content, same order), with a
-    # bold first line equal to the plain-language headline. Telegram's HTML
-    # parse_mode only recognizes a small tag allowlist (b/i/u/s/a/code/pre/
-    # blockquote) -- NOT <br> or any block tag. An unsupported tag makes the Bot
-    # API reject the whole message with a 400, which dispatch.py's error
-    # handling swallows into a log line with no user-visible signal. Line breaks
-    # must be plain '\n', exactly like the plain-text body -- Telegram renders
-    # literal newlines as line breaks natively in HTML mode.
+    # bold first line equal to the plain-language headline, prefixed with a
+    # short "Portfolio:" category tag. Chart-alert and strategy-watch
+    # notifications can land in the same Telegram chat as these, and neither
+    # the plain-language headline nor the body distinguishes source once the
+    # 2026-07-30 redesign (d9733d5) dropped the old "Bamendjou Portfolio
+    # Alert" prefix -- this restores just enough context to tell them apart
+    # at a glance without reverting to that verbose subject-as-headline
+    # format. Telegram's HTML parse_mode only recognizes a small tag
+    # allowlist (b/i/u/s/a/code/pre/blockquote) -- NOT <br> or any block tag.
+    # An unsupported tag makes the Bot API reject the whole message with a
+    # 400, which dispatch.py's error handling swallows into a log line with
+    # no user-visible signal. Line breaks must be plain '\n', exactly like
+    # the plain-text body -- Telegram renders literal newlines as line breaks
+    # natively in HTML mode.
     # `reason` is built internally from f-string templates (see
     # alert_generator.py / portfolio_alert_monitor.py) so it's not truly
     # free-form user input today, but `symbol` and `alert_type` are caller-
@@ -173,7 +180,7 @@ def _build_notification(symbol: str, alert_type: str, reason: str,
     # insurance against the same silent-Telegram-failure mode the <br> bug
     # caused, just via unexpected '<'/'&' characters instead of a hardcoded tag.
     html = (
-        f'<b>{html_lib.escape(symbol)} — {html_lib.escape(type_label)}</b>\n'
+        f'<b>Portfolio: {html_lib.escape(symbol)} — {html_lib.escape(type_label)}</b>\n'
         f'{html_lib.escape(reason)}\n\n'
         f'Triggered: {date_str}, {time_str} {_TZ_LABEL}\n'
         f'{still_html}'
