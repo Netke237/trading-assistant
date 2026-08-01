@@ -2,8 +2,8 @@
 
 Both the scan pipeline (app.routers.scan) and the per-contract recompute
 endpoint (app.routers.contracts) derive a trade's Entry Plan, Exit Plan,
-reward/risk and sell-to-close targets from the *selected contract's* premium
-and delta. Keeping that arithmetic in one place is deliberate: when the user
+reward/risk and sell-to-close targets from the *selected contract's* premium.
+Keeping that arithmetic in one place is deliberate: when the user
 overrides the auto-picked contract in Step 6, the Exit Plan must be recomputed
 off the new premium — a second, drifting copy of this math is exactly what let
 the premium-stop / invalidation / targets keep describing the old contract.

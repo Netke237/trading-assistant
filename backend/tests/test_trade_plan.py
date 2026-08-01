@@ -3,7 +3,7 @@
 build_trade_plan is the single source of truth for the Entry/Exit/RR/targets
 used by BOTH the scan pipeline and the POST /api/contracts/recompute-plan
 endpoint. These tests pin its numeric behaviour so the two callers can't
-silently drift, and guard the delta-floor regression found in review.
+silently drift.
 """
 from __future__ import annotations
 
