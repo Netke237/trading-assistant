@@ -170,11 +170,23 @@ def test_telegram_mirrors_email_and_shows_cet(captured):
     for text in ('CLX', 'Stop hit', 'Triggered:'):
         assert text in plain
         assert text in html
-    # Telegram's bold first line is the plain-language headline (symbol + type),
-    # not the raw "Bamendjou Portfolio Alert" subject line.
-    assert html.startswith('<b>CLX — Stop hit</b>')
+    # Telegram's bold first line restores a short "Portfolio:" category tag so
+    # portfolio alerts stay visually distinguishable from chart-alert and
+    # strategy-watch alerts landing in the same Telegram chat, while keeping
+    # the plain-language "symbol — type" headline from the July 30 redesign
+    # (it does not revert to the old verbose "Bamendjou Portfolio Alert —
+    # SYMBOL [ALERT_TYPE]" subject line).
+    assert html.startswith('<b>Portfolio: CLX — Stop hit</b>')
     # Symbol and trigger text appear in the Telegram message.
     assert 'CLX' in html
+
+
+def test_reminder_telegram_headline_keeps_portfolio_prefix(captured):
+    an.notify_alert('CLX', 'STOP_REACHED', 'Stop breached — CLX below $89.79', 'rec-1', _TS)
+    an.notify_alert('CLX', 'STOP_REACHED', 'Stop breached — CLX below $89.79', 'rec-1', _TS)
+    _subject, _plain, html = captured[1]
+    assert html.startswith('<b>Portfolio: CLX — Stop hit</b>')
+    assert 'Still active as of' in html
 
 
 def test_telegram_html_body_is_telegram_safe(captured):
