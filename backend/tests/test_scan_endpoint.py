@@ -245,6 +245,52 @@ def test_scan_rr_bullish_target_pct_override_changes_target_price(client):
     assert round(override_target, 2) == round(185.0 * 1.20, 2)
 
 
+def test_scan_rr_bullish_invalidation_pct_override_changes_invalidation_price(client):
+    """Finding 1 fix: rr_bullish_invalidation_pct actually reaches
+    build_trade_plan now. Without the override, invalidation = price * 0.97
+    (risk_rules.yaml default 3%). With rr_bullish_invalidation_pct=0.10,
+    invalidation = price * 0.90 instead."""
+    fetch_quotes_patch, get_bars_patch = _no_db_leak()
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
+                             company="Apple Inc."), \
+         fetch_quotes_patch, get_bars_patch, _force_passing_stock_score():
+        r_default = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
+        })
+        r_override = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": {"rr_bullish_invalidation_pct": 0.10},
+        })
+    default_candidates = r_default.json()["candidates"]
+    override_candidates = r_override.json()["candidates"]
+    assert default_candidates, "expected AAPL to score as a candidate for this fixture"
+    assert override_candidates, "expected AAPL to score as a candidate for this fixture"
+    default_inval = default_candidates[0]["exit"]["invalidation"]
+    override_inval = override_candidates[0]["exit"]["invalidation"]
+    assert override_inval < default_inval
+    assert round(default_inval, 2) == round(185.0 * 0.97, 2)
+    assert round(override_inval, 2) == round(185.0 * 0.90, 2)
+
+
+def test_scan_rr_negative_target_override_rejects_symbol_not_500(client):
+    """Finding 2 fix: a malformed override (negative target %) must raise
+    ValueError inside merge_reward_risk_overrides, which asyncio.gather's
+    return_exceptions=True path turns into a RejectedCandidate with a clear
+    reason -- not an unhandled 500 for the whole scan."""
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
+                             company="Apple Inc."), _force_passing_stock_score():
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": {"rr_bullish_target_pct": -1},
+        })
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert all(c["symbol"] != "AAPL" for c in data["candidates"])
+    rejected = next(rej for rej in data["rejected"] if rej["symbol"] == "AAPL")
+    assert "rr_bullish_target_pct" in rejected["reason"]
+    assert "-1" in rejected["reason"]
+
+
 def test_scan_rr_override_leaves_default_scan_unchanged(client):
     """A scan with no rr_* overrides must still use the risk_rules.yaml default
     (8% bullish target) -- guards against the merge helper changing the

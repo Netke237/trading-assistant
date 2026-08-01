@@ -5,6 +5,7 @@ multiple modules (scan router, fundamentals_gate, etc.) need the same file.
 """
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 from pathlib import Path
 
@@ -37,6 +38,16 @@ _RR_OVERRIDE_KEY_MAP = {
     "rr_bearish_invalidation_pct": "bearish_invalidation_pct",
 }
 
+# Upper bound for each override key, mirroring the Step 3 UI's own `max` for
+# these fields (frontend/app/(frame)/screener/step-3-direction/page.tsx). All
+# four must additionally be > 0 (and finite) — see merge_reward_risk_overrides.
+_RR_OVERRIDE_CAPS = {
+    "rr_bullish_target_pct":       2.0,
+    "rr_bearish_target_pct":       2.0,
+    "rr_bullish_invalidation_pct": 1.0,
+    "rr_bearish_invalidation_pct": 1.0,
+}
+
 
 def merge_reward_risk_overrides(overrides: dict | None) -> dict:
     """Return risk_rules.yaml's reward_risk block with any per-request rr_*
@@ -45,9 +56,27 @@ def merge_reward_risk_overrides(overrides: dict | None) -> dict:
     Returns a fresh dict every call — load_reward_risk_cfg()'s cached dict is
     never mutated, so a later call with different (or no) overrides isn't
     affected by an earlier one.
+
+    A `None` override value is silently skipped (not applied) rather than
+    raising — e.g. a request that supplies some but not all rr_* keys, or a
+    frontend field the user cleared back to its default (None), must not
+    crash on float(None). A present-but-invalid value (non-finite, <= 0, or
+    above this key's cap) raises ValueError with a clear message, so a typo
+    or malformed override fails loudly instead of producing a nonsensical
+    trade plan (e.g. a negative target, or a triple-digit target %) silently.
     """
     merged = dict(load_reward_risk_cfg())
     for override_key, cfg_key in _RR_OVERRIDE_KEY_MAP.items():
-        if overrides and override_key in overrides:
-            merged[cfg_key] = float(overrides[override_key])
+        if not overrides or override_key not in overrides:
+            continue
+        val = overrides[override_key]
+        if val is None:
+            continue
+        val = float(val)
+        cap = _RR_OVERRIDE_CAPS[override_key]
+        if not math.isfinite(val) or val <= 0 or val > cap:
+            raise ValueError(
+                f"invalid {override_key}={val!r}: must be a finite number in (0, {cap}]"
+            )
+        merged[cfg_key] = val
     return merged

@@ -759,7 +759,6 @@ async def _process_symbol(
         strike=strike,
         dte=int(contract.get("dte", 30)),
         premium=premium,
-        delta=float(contract.get("delta", 0.45)),
         entry_bid=float(contract.get("bid", 0)),
         entry_ask=float(contract.get("ask", 0)),
         entry_mid=float(contract.get("price", 0)),

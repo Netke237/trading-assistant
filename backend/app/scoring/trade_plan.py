@@ -41,7 +41,6 @@ def build_trade_plan(
     strike: float,
     dte: int,
     premium: float,
-    delta: float,
     entry_bid: float,
     entry_ask: float,
     entry_mid: float,
@@ -56,10 +55,10 @@ def build_trade_plan(
         strike:      option strike.
         dte:         days to expiration.
         premium:     the contract mid used as the risk/target basis (floored by caller).
-        delta:       option delta (sign-agnostic; abs() is taken).
         entry_bid/entry_ask/entry_mid: feed assess_entry for the Entry Plan.
         rr_cfg:      the reward_risk config block (bullish_target_pct,
-                     bearish_target_pct, premium_stop_pct).
+                     bearish_target_pct, bullish_invalidation_pct,
+                     bearish_invalidation_pct, premium_stop_pct).
         heston_params: optional calibrated Heston params — when provided,
                      estimate_rr/estimate_targets reprice via Heston (with a
                      per-target delta-approximation fallback); defaults to
@@ -75,18 +74,16 @@ def build_trade_plan(
     )
     expiry_years = dte / 365.0
 
-    # Back-calculate the stock price at which the option would lose
-    # premium_stop_pct of its premium (delta approximation) — keeps the Exit
-    # Plan's Invalidation consistent with the R/R risk basis.
-    # NOTE: floor abs(delta) at 0.05 but do NOT coerce a legitimate 0.0 delta to
-    # 0.45 (that would 9× the stop distance). Callers supply the 0.45 *default*
-    # for a missing delta; a present 0.0 must floor at 0.05, matching the old
-    # inline scan math exactly.
-    delta_est = max(abs(float(delta)), 0.05)
-    stock_stop_move = (premium * premium_stop_pct) / delta_est
+    # Invalidation is a stock-price percentage move, mirroring target_price's
+    # own formula -- NOT derived from premium_stop_pct/delta (that was a
+    # pre-existing bug: bullish_invalidation_pct/bearish_invalidation_pct are
+    # documented in risk_rules.yaml as "-3% stock = invalidation" but were
+    # never actually read anywhere). premium_stop_pct remains a separate,
+    # independent concept (the dollar premium_stop field below, and the
+    # risk basis inside estimate_rr/estimate_targets) -- unaffected by this fix.
     invalidation_price = (
-        max(stock_price - stock_stop_move, 0.01) if is_call
-        else stock_price + stock_stop_move
+        max(stock_price * (1 - rr_cfg["bullish_invalidation_pct"]), 0.01) if is_call
+        else stock_price * (1 + rr_cfg["bearish_invalidation_pct"])
     )
 
     entry = assess_entry(bid=entry_bid, ask=entry_ask, mid=entry_mid)

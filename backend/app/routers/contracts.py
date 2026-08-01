@@ -13,13 +13,6 @@ from app.data.augment import _augment
 from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.trade_plan import build_trade_plan
-# Shared with app.routers.scan — both build a trade plan off the same
-# reward_risk config so the scan and the per-contract recompute endpoint agree.
-# _rr_cfg itself is no longer called in this module (recompute_plan now goes
-# through _merge_rr_cfg so per-request rr_* overrides are honored), but it's
-# kept imported/re-exported here because backend/tests/test_trade_plan.py
-# does `from app.routers.contracts import router, _rr_cfg`.
-from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -180,10 +173,10 @@ class RecomputePlanRequest(BaseModel):
     # scan endpoint accepts in ScanRequest.overrides, so a contract override
     # recompute (Step 6/7) honors whatever R/R tuning the trader set on Step 3
     # instead of silently reverting to risk_rules.yaml's defaults.
-    rr_bullish_target_pct: float | None = None
-    rr_bearish_target_pct: float | None = None
-    rr_bullish_invalidation_pct: float | None = None
-    rr_bearish_invalidation_pct: float | None = None
+    rr_bullish_target_pct: float | None = Field(default=None, gt=0, le=2.0)
+    rr_bearish_target_pct: float | None = Field(default=None, gt=0, le=2.0)
+    rr_bullish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
+    rr_bearish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
 
 
 class RecomputePlanResponse(BaseModel):
@@ -228,17 +221,21 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     # show "Heston repriced" on the initial scan card and "BS repriced (IV-derived)"
     # after a Step 6 override — see docs/superpowers/plans/
     # 2026-07-25-heston-pricing-in-trade-plan.md's "Out of scope" section.
+    try:
+        _rr_cfg_merged = _merge_rr_cfg(_rr_overrides)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
     plan = build_trade_plan(
         direction=req.direction,
         stock_price=req.stock_price,
         strike=req.strike,
         dte=req.dte,
         premium=req.premium,
-        delta=req.delta,
         entry_bid=entry_bid,
         entry_ask=entry_ask,
         entry_mid=req.premium,
-        rr_cfg=_merge_rr_cfg(_rr_overrides),
+        rr_cfg=_rr_cfg_merged,
     )
 
     return RecomputePlanResponse(
