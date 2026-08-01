@@ -167,6 +167,10 @@ class RecomputePlanRequest(BaseModel):
     strike: float = Field(..., gt=0)
     dte: int = Field(..., ge=0)
     premium: float = Field(..., gt=0)   # selected contract mid
+    # Accepted for backward compatibility with the frontend, which still sends
+    # it on every call -- no longer consumed here since invalidation is
+    # computed off the strike/stock-price relationship, not the contract's
+    # delta (build_trade_plan's signature dropped this parameter).
     delta: float = 0.45
     spread: float = 0.0
     # Optional per-request reward/risk overrides — mirrors the same keys the
@@ -194,7 +198,7 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     Step 6 lets the user override the auto-picked contract. Without recomputing,
     the Exit Plan (premium stop, invalidation, targets) keeps describing the
     original contract. This endpoint runs the SAME math the scan uses
-    (build_trade_plan) off the selected contract's premium/delta so every derived
+    (build_trade_plan) off the selected contract's premium so every derived
     number matches the contract actually being traded.
     """
     # Derive bid/ask from the mid + spread so assess_entry sees the same

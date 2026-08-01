@@ -272,23 +272,25 @@ def test_scan_rr_bullish_invalidation_pct_override_changes_invalidation_price(cl
     assert round(override_inval, 2) == round(185.0 * 0.90, 2)
 
 
-def test_scan_rr_negative_target_override_rejects_symbol_not_500(client):
-    """Finding 2 fix: a malformed override (negative target %) must raise
-    ValueError inside merge_reward_risk_overrides, which asyncio.gather's
-    return_exceptions=True path turns into a RejectedCandidate with a clear
-    reason -- not an unhandled 500 for the whole scan."""
+def test_scan_rr_negative_target_override_fails_fast_422(client):
+    """Round 2 audit finding: a malformed override (negative target %) must
+    be rejected upfront in run_scan(), BEFORE any per-symbol candle/price/
+    fundamentals fetch or option-chain scoring runs -- not after every symbol
+    in the universe has redundantly done that work and failed identically.
+    run_scan() now validates rr_* overrides once via merge_reward_risk_overrides
+    before building the per-symbol task list, returning a clean 422 (matching
+    contracts.py's recompute-plan endpoint's handling of the same error)
+    instead of the old 200-with-every-symbol-rejected behaviour."""
     with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
                              company="Apple Inc."), _force_passing_stock_score():
         r = client.post("/api/scan", json={
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
             "overrides": {"rr_bullish_target_pct": -1},
         })
-    assert r.status_code == 200, r.text
-    data = r.json()
-    assert all(c["symbol"] != "AAPL" for c in data["candidates"])
-    rejected = next(rej for rej in data["rejected"] if rej["symbol"] == "AAPL")
-    assert "rr_bullish_target_pct" in rejected["reason"]
-    assert "-1" in rejected["reason"]
+    assert r.status_code == 422, r.text
+    detail = r.json()["detail"]
+    assert "rr_bullish_target_pct" in detail
+    assert "-1" in detail
 
 
 def test_scan_rr_override_leaves_default_scan_unchanged(client):

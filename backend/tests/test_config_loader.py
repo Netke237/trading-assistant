@@ -103,3 +103,11 @@ def test_merge_accepts_valid_in_range_value_at_target_cap():
 def test_merge_accepts_valid_in_range_value_at_invalidation_cap():
     merged = merge_reward_risk_overrides({"rr_bullish_invalidation_pct": 1.0})
     assert merged["bullish_invalidation_pct"] == 1.0
+
+
+def test_merge_rejects_non_numeric_string_value_with_named_key():
+    """Round 2 audit finding: a non-numeric string (e.g. a mistyped override)
+    must raise the function's own well-messaged ValueError naming the
+    offending key -- not Python's raw float() ValueError, which doesn't."""
+    with pytest.raises(ValueError, match="rr_bullish_target_pct"):
+        merge_reward_risk_overrides({"rr_bullish_target_pct": "abc"})

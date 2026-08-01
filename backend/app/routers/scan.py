@@ -1077,6 +1077,21 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
     except PresetUnavailableError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # Validate rr_* overrides ONCE upfront, before dispatching any per-symbol
+    # work. Without this, a malformed override (e.g. a negative target %)
+    # only surfaced inside _process_symbol -- AFTER that symbol's full
+    # candle/price/fundamentals fetch and option-chain scoring had already
+    # run, and it failed identically for every symbol in the universe. Fail
+    # fast instead, matching contracts.py's recompute-plan endpoint's
+    # handling of the same error. The per-symbol _merge_rr_cfg(overrides)
+    # call inside _process_symbol is left in place as defense in depth (now
+    # effectively unreachable via this endpoint since the same overrides
+    # dict is validated here first).
+    try:
+        _merge_rr_cfg(req.overrides)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     gate = _resolve_gate(req)
     atr_mult = getattr(req, "confidence_atr_mult", None)
 

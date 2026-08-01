@@ -72,8 +72,13 @@ def merge_reward_risk_overrides(overrides: dict | None) -> dict:
         val = overrides[override_key]
         if val is None:
             continue
-        val = float(val)
         cap = _RR_OVERRIDE_CAPS[override_key]
+        try:
+            val = float(val)
+        except (ValueError, TypeError):
+            raise ValueError(
+                f"invalid {override_key}={val!r}: must be a finite number in (0, {cap}]"
+            )
         if not math.isfinite(val) or val <= 0 or val > cap:
             raise ValueError(
                 f"invalid {override_key}={val!r}: must be a finite number in (0, {cap}]"
