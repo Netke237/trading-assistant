@@ -514,12 +514,20 @@ function ParamRow({
               delete next[def.key];
               useScanStore.getState().setScanOverrides(next);
             } else {
-              let num = Number(raw);
+              const num = Number(raw);
               if (!Number.isNaN(num)) {
-                if (def.min !== undefined) num = Math.max(num, def.min);
-                if (def.max !== undefined) num = Math.min(num, def.max);
                 useScanStore.getState().setScanOverrides({ ...scanOverrides, [def.key]: num });
               }
+            }
+          }}
+          onBlur={() => {
+            const current = useScanStore.getState().scanOverrides[def.key];
+            if (typeof current !== 'number') return;
+            let clamped = current;
+            if (def.min !== undefined) clamped = Math.max(clamped, def.min);
+            if (def.max !== undefined) clamped = Math.min(clamped, def.max);
+            if (clamped !== current) {
+              useScanStore.getState().setScanOverrides({ ...useScanStore.getState().scanOverrides, [def.key]: clamped });
             }
           }}
         />
