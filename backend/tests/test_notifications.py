@@ -29,6 +29,39 @@ class TestGmail:
             await send_gmail(to='', subject='Test', body='Test', smtp_user='', smtp_password='')
             mock_smtp.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_gmail_sends_successfully_when_subject_contains_crlf(self):
+        from app.services.notifications.gmail import send_gmail
+        with patch('app.services.notifications.gmail.smtplib.SMTP_SSL') as mock_smtp:
+            mock_server = MagicMock()
+            # smtplib.SMTP.send_message() serializes the message internally
+            # (Generator.flatten() -> msg.as_string()) -- that serialization,
+            # not the header assignment, is what raises HeaderParseError on an
+            # embedded CR/LF. Mimic it here so this test actually exercises
+            # the real failure mode instead of masking it behind a mock that
+            # never touches the message content.
+            mock_server.send_message.side_effect = lambda msg: msg.as_string()
+            mock_smtp.return_value.__enter__.return_value = mock_server
+            ok = await send_gmail(
+                to='test@example.com',
+                subject='Bamendjou Chart Alert - Bad\r\nBcc: evil@example.com - DG [Daily chart]',
+                body='Body', smtp_user='user@gmail.com', smtp_password='app-pass',
+            )
+            assert ok is True
+            sent_msg = mock_server.send_message.call_args[0][0]
+            assert '\r' not in sent_msg['Subject']
+            assert '\n' not in sent_msg['Subject']
+            assert sent_msg['Subject'] == 'Bamendjou Chart Alert - Bad Bcc: evil@example.com - DG [Daily chart]'
+
+
+def test_sanitize_header_value_collapses_crlf_to_single_space():
+    from app.services.notifications.gmail import _sanitize_header_value
+    assert _sanitize_header_value('Bad\r\nBcc') == 'Bad Bcc'
+    assert _sanitize_header_value('Bad\rBcc') == 'Bad Bcc'
+    assert _sanitize_header_value('Bad\nBcc') == 'Bad Bcc'
+    assert _sanitize_header_value('Bad\r\n\r\nBcc') == 'Bad Bcc'
+    assert _sanitize_header_value('No newlines here') == 'No newlines here'
+
 
 class TestTelegram:
     @pytest.mark.asyncio
