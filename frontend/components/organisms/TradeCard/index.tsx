@@ -208,6 +208,12 @@ export function TradeCard({
   );
   const [structuralLoading, setStructuralLoading] = useState(false);
   const [structuralError, setStructuralError] = useState(false);
+  // The fresh stock price checkStructure fetched to derive structuralStop —
+  // persisted (not just used transiently) so a later R:R-vs-structural-stop
+  // calc can reuse the SAME fresh price the backend actually used, instead of
+  // falling back to data.price (the scan-time snapshot checkStructure was
+  // specifically written to avoid).
+  const [structuralStopStockPrice, setStructuralStopStockPrice] = useState<number | null>(null);
   // Tracks the in-flight "Check structure" request (if any) so a stale response
   // for a contract the user has since navigated away from (via CandidateNav
   // Prev/Next) can never overwrite the display for the new one — same class of
@@ -221,6 +227,12 @@ export function TradeCard({
   );
   const [firstPassageLoading, setFirstPassageLoading] = useState(false);
   const [firstPassageError, setFirstPassageError] = useState(false);
+  // The fresh premium/delta estimateFirstPassage fetched — optionPrice in
+  // each firstPassage.targets entry is premium*(1+pct) computed off THIS
+  // premium (see first_passage.py), not data.contractDetails.mid, which can
+  // differ once a fresh quote has been fetched. Persisted so a later R:R
+  // calc subtracts the matching baseline instead of a stale one.
+  const [firstPassageContext, setFirstPassageContext] = useState<{ premium: number; delta: number } | null>(null);
   // Same stale-response guard as structuralRequestRef above.
   const firstPassageRequestRef = useRef<AbortController | null>(null);
 
@@ -239,10 +251,12 @@ export function TradeCard({
       firstPassageRequestRef.current?.abort();
       setOverlay({ ...defaultOverlay(data), contracts: initialContracts });
       setStructuralStop(data.exit.structuralStop);
+      setStructuralStopStockPrice(null);
       setStructuralError(false);
       setStructuralLoading(false);
       setTargetPct(defaultTargetPct);
       setFirstPassage(data.exit.firstPassage);
+      setFirstPassageContext(null);
       setFirstPassageError(false);
       setFirstPassageLoading(false);
       prevSymbolRef.current = data.symbol;
@@ -261,6 +275,7 @@ export function TradeCard({
     setFirstPassageLoading(true);
     setFirstPassageError(false);
     setFirstPassage(undefined);
+    setFirstPassageContext(null);
     try {
       const cd = data.contractDetails;
       if (!cd) throw new Error('no contract selected');
@@ -273,14 +288,16 @@ export function TradeCard({
         api.getContractQuote(data.symbol, cd.strike, cd.expiry, cd.right, controller.signal).catch(() => null),
       ]);
       if (controller.signal.aborted) return;
+      const premium = contractQuote?.price ?? cd.mid;
+      const delta = contractQuote?.delta ?? cd.delta;
       const res = await api.getFirstPassageEstimate({
         symbol: data.symbol,
         direction: data.direction,
         stock_price: stockQuote?.price ?? data.price,
         strike: cd.strike,
         dte: cd.dte,
-        premium: contractQuote?.price ?? cd.mid,
-        delta: contractQuote?.delta ?? cd.delta,
+        premium,
+        delta,
         trend_score: data.stockBreakdown.trend,
         invalidation_price: data.exit.invalidation,
         t1_pct: targetPct.t1,
@@ -289,6 +306,10 @@ export function TradeCard({
       }, controller.signal);
       if (controller.signal.aborted) return;
       setFirstPassage({ targets: res.targets, invalidation: res.invalidation });
+      // optionPrice in each target is premium*(1+pct) built from THIS
+      // premium (first_passage.py) — persist it so a later R:R calc
+      // subtracts the matching baseline, not data.contractDetails.mid.
+      setFirstPassageContext({ premium, delta });
     } catch {
       if (controller.signal.aborted) return;
       setFirstPassageError(true);
@@ -297,6 +318,26 @@ export function TradeCard({
     }
   }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, targetPct]);
 
+  // R:R using the structural stop (order block / swing level) as the risk
+  // basis instead of the original fixed "premium * 60%" assumption — only
+  // computable once BOTH Check structure and Estimate have been run, and
+  // using each other's FRESH persisted values (structuralStopStockPrice,
+  // firstPassageContext), never data.price/data.contractDetails, for the
+  // same staleness reasons documented on those two handlers above.
+  const structuralRR = useMemo(() => {
+    if (!structuralStop || structuralStopStockPrice == null || !firstPassage || !firstPassageContext) {
+      return null;
+    }
+    const stockMove = Math.abs(structuralStop.price - structuralStopStockPrice);
+    const deltaEst = Math.max(Math.abs(firstPassageContext.delta), 0.05);
+    const risk = stockMove * deltaEst;
+    if (risk <= 0) return null;
+    return firstPassage.targets.map((t) => {
+      const reward = t.optionPrice - firstPassageContext.premium;
+      return { pct: t.pct, rr: reward > 0 ? reward / risk : null };
+    });
+  }, [structuralStop, structuralStopStockPrice, firstPassage, firstPassageContext]);
+
   const checkStructure = useCallback(async () => {
     structuralRequestRef.current?.abort();
     const controller = new AbortController();
@@ -304,6 +345,7 @@ export function TradeCard({
     setStructuralLoading(true);
     setStructuralError(false);
     setStructuralStop(undefined);
+    setStructuralStopStockPrice(null);
     try {
       // Fetch a fresh stock price rather than reusing data.price (a scan-time
       // snapshot that may be stale, especially for a contract the user never
@@ -311,10 +353,11 @@ export function TradeCard({
       // to data.price only if the live quote fetch itself fails.
       const stockQuote = await api.getStockQuote(data.symbol, controller.signal).catch(() => null);
       if (controller.signal.aborted) return;
+      const referenceStockPrice = stockQuote?.price ?? data.price;
       const res = await api.getStructuralStop({
         symbol: data.symbol,
         direction: data.direction,
-        stock_price: stockQuote?.price ?? data.price,
+        stock_price: referenceStockPrice,
       }, controller.signal);
       if (controller.signal.aborted) return;
       setStructuralStop(
@@ -323,6 +366,7 @@ export function TradeCard({
           ? { price: res.price, source: res.source, confidence: res.confidence, distancePct: res.distancePct }
           : null,
       );
+      setStructuralStopStockPrice(referenceStockPrice);
     } catch {
       if (controller.signal.aborted) return;
       setStructuralError(true);
@@ -658,6 +702,23 @@ export function TradeCard({
                   value={`${(firstPassage.invalidation.probability * 100).toFixed(0)}% · ${firstPassage.invalidation.expectedDays != null ? `~${Math.round(firstPassage.invalidation.expectedDays)}d` : 'unlikely'}`}
                   mono
                 />
+              </dl>
+            )}
+            {!structuralRR && (structuralStop || firstPassage) && (
+              <Text size={11} tone="dim">
+                Check structure and Estimate first to see R:R against the structural stop.
+              </Text>
+            )}
+            {structuralRR && (
+              <dl className={styles.kvList}>
+                {structuralRR.map((r) => (
+                  <KV
+                    key={r.pct}
+                    label={`T${Math.round(r.pct * 100)}% R:R vs. structural stop`}
+                    value={r.rr != null ? `${r.rr.toFixed(1)}×` : '—'}
+                    mono
+                  />
+                ))}
               </dl>
             )}
           </div>

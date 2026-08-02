@@ -352,6 +352,125 @@ describe('TradeCard', () => {
     expect(screen.queryByText(/T20% — probability of hitting before expiry/)).not.toBeInTheDocument();
   });
 
+  it('shows a hint instead of R:R vs structural stop until both checks have run', async () => {
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6,
+    });
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Check structure and Estimate first to see R:R/)).toBeInTheDocument();
+    expect(screen.queryByText(/R:R vs\. structural stop/)).not.toBeInTheDocument();
+  });
+
+  it('computes R:R vs structural stop using the FRESH quotes, not the stale scan-time values', async () => {
+    // Deliberately different from mockTradeCard.price (185.2) and
+    // contractDetails.mid/delta (2.5/0.45) — if the component fell back to
+    // those stale values instead of the fresh ones both handlers fetch, the
+    // R:R below would come out as 4.2x (stale price) or 2.5x (stale premium)
+    // instead of the correct 2.0x.
+    (api.getStockQuote as jest.Mock)
+      .mockResolvedValueOnce({ symbol: 'AAPL', price: 200.0 })   // checkStructure's fetch
+      .mockResolvedValueOnce({ symbol: 'AAPL', price: 200.0 });  // estimateFirstPassage's fetch
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 190.0, source: 'order_block', confidence: 80, distancePct: 5.0,
+    });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 50, spread: 0.1, volume: 10,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [
+        { pct: 0.20, stockPrice: 210.0, optionPrice: 15.0, probability: 0.6, expectedDays: 5 },
+        { pct: 0.35, stockPrice: 220.0, optionPrice: 18.0, probability: 0.4, expectedDays: 9 },
+        { pct: 0.50, stockPrice: 230.0, optionPrice: 21.0, probability: 0.2, expectedDays: 14 },
+      ],
+      invalidation: { probability: 0.3, expectedDays: 4 },
+    });
+
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    await waitFor(() => {
+      expect(screen.getByText('T20% R:R vs. structural stop')).toBeInTheDocument();
+    });
+
+    // stockMove = |190 - 200| = 10; deltaEst = 0.5; risk = 5.0
+    // T1: reward = 15.0 - 5.0 = 10.0 -> rr = 2.0
+    // T2: reward = 18.0 - 5.0 = 13.0 -> rr = 2.6
+    // T3: reward = 21.0 - 5.0 = 16.0 -> rr = 3.2
+    expect(screen.getByText('2.0×')).toBeInTheDocument();
+    expect(screen.getByText('2.6×')).toBeInTheDocument();
+    expect(screen.getByText('3.2×')).toBeInTheDocument();
+  });
+
+  it('shows — instead of dividing by zero when the structural stop equals the fresh stock price', async () => {
+    (api.getStockQuote as jest.Mock)
+      .mockResolvedValueOnce({ symbol: 'AAPL', price: 190.0 })
+      .mockResolvedValueOnce({ symbol: 'AAPL', price: 190.0 });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 190.0, source: 'order_block', confidence: 80, distancePct: 0.0,
+    });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 50, spread: 0.1, volume: 10,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [
+        { pct: 0.20, stockPrice: 210.0, optionPrice: 15.0, probability: 0.6, expectedDays: 5 },
+        { pct: 0.35, stockPrice: 220.0, optionPrice: 18.0, probability: 0.4, expectedDays: 9 },
+        { pct: 0.50, stockPrice: 230.0, optionPrice: 21.0, probability: 0.2, expectedDays: 14 },
+      ],
+      invalidation: { probability: 0.3, expectedDays: 4 },
+    });
+
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/T20% — probability of hitting before expiry/)).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/R:R vs\. structural stop/)).not.toBeInTheDocument();
+  });
+
+  it('does not affect the original R:R card or the sell-to-close R:R column', async () => {
+    (api.getStockQuote as jest.Mock)
+      .mockResolvedValueOnce({ symbol: 'AAPL', price: 200.0 })
+      .mockResolvedValueOnce({ symbol: 'AAPL', price: 200.0 });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 190.0, source: 'order_block', confidence: 80, distancePct: 5.0,
+    });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 50, spread: 0.1, volume: 10,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [
+        { pct: 0.20, stockPrice: 210.0, optionPrice: 15.0, probability: 0.6, expectedDays: 5 },
+        { pct: 0.35, stockPrice: 220.0, optionPrice: 18.0, probability: 0.4, expectedDays: 9 },
+        { pct: 0.50, stockPrice: 230.0, optionPrice: 21.0, probability: 0.2, expectedDays: 14 },
+      ],
+      invalidation: { probability: 0.3, expectedDays: 4 },
+    });
+
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => screen.getByText(/Structural stop — Order Block/));
+    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    await waitFor(() => screen.getByText('T20% R:R vs. structural stop'));
+
+    // The top Risk/Reward card (fixed ladder) is untouched.
+    expect(screen.getByText('2.5×')).toBeInTheDocument();
+    // The Sell-to-Close-Plan's own per-target R:R (rrContribution: 1.0 in the fixture) is untouched.
+    expect(screen.getByText('1.0x')).toBeInTheDocument();
+  });
+
   it('renders sell-to-close plan with editable target', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Sell-to-Close Plan')).toBeInTheDocument();
