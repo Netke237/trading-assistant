@@ -137,7 +137,11 @@ async def test_premium_stop_fires(db_session):
 @pytest.mark.asyncio
 async def test_premium_stop_does_not_fire_before_threshold(db_session):
     from app.services.alert_generator import generate_alerts
-    await _insert_position(db_session, symbol="MSFT", contract="MSFT|400|2026-05-16|C", entry_price=5.0)
+    await _insert_position(
+        db_session, symbol="MSFT", contract="MSFT|400|2026-05-16|C", entry_price=5.0,
+        stop=None, targets=[],  # isolate PREMIUM_STOP -- default stop/targets are AAPL-scale
+        # and would otherwise fire an unrelated, unasserted TP_HIT against prices["MSFT"].
+    )
     prices = {"MSFT": 300.0}
     # 2.5 = a 50% loss -- short of the 60% stop. Correct threshold is
     # 5.0 * (1 - 0.60) = 2.0, so 2.5 must NOT fire. The old inverted formula

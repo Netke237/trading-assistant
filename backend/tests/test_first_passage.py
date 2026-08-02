@@ -197,6 +197,37 @@ class TestEndpoint:
             r2 = client.post("/api/contracts/first-passage", json=payload)
         assert r1.json() == r2.json()
 
+    def test_seed_is_a_fixed_sha256_derivation_not_pythons_salted_hash(self):
+        """Regression guard for the hash()->hashlib.sha256() fix: two requests
+        agreeing within one test process (test_same_request_is_deterministic,
+        above) can NEVER distinguish a per-process-salted hash() from a truly
+        stable one -- hash()'s salt is fixed for the process's whole lifetime,
+        so it looks deterministic to any single-process test regardless of
+        which formula is used. The only way to prove the seed doesn't depend
+        on process-local salt is to pin it against an independently-computed,
+        salt-free value. If contracts.py ever reverts to hash(), this fails:
+        hash()'s output has no relationship to sha256's, so it would take
+        the same 1-in-2^32 luck as the pre-fix bug ever matching by accident."""
+        import hashlib
+        from app.scoring import first_passage as fp_module
+
+        payload = {
+            "symbol": "AAPL", "direction": "Bullish", "stock_price": 100.0,
+            "strike": 105.0, "dte": 45, "premium": 2.50, "delta": 0.35,
+            "trend_score": 75, "invalidation_price": 95.0,
+        }
+        # Mirrors contracts.py's own seed_key construction exactly (including
+        # falling back to the YAML target_t1/t2/t3_pct defaults, since this
+        # payload doesn't override them).
+        expected_seed_key = "AAPL|105.0|45|100.0|0.2|0.35|0.5"
+        expected_seed = int(hashlib.sha256(expected_seed_key.encode()).hexdigest(), 16) % (2 ** 32)
+
+        with patch("app.routers.contracts.fetch_candles_async", AsyncMock(return_value=_FLAT_CANDLES)), \
+             patch("app.routers.contracts.estimate_first_passage", wraps=fp_module.estimate_first_passage) as spy:
+            r = self._client().post("/api/contracts/first-passage", json=payload)
+        assert r.status_code == 200, r.text
+        assert spy.call_args.kwargs["seed"] == expected_seed
+
     def test_rejects_nonpositive_stock_price(self):
         r = self._client().post("/api/contracts/first-passage", json={
             "symbol": "AAPL", "direction": "Bullish", "stock_price": 0,
