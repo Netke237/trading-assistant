@@ -55,6 +55,18 @@ export const DEFAULT_CONFIDENCE_GATE: ConfidenceGate = {
   atrMult: 1.5,
 };
 
+export interface TargetProfitPct {
+  t1: number;   // fraction of premium (0.20 = 20%)
+  t2: number;
+  t3: number;
+}
+
+export const DEFAULT_TARGET_PROFIT_PCT: TargetProfitPct = {
+  t1: 0.20,
+  t2: 0.35,
+  t3: 0.50,
+};
+
 export interface FundamentalsGate {
   enabled:      boolean;
   cautionBelow: number;   // health score < this -> cap at CAUTION
@@ -195,6 +207,7 @@ interface SettingsState {
   maxContractsPerChain:        number;
   maxContractPrice:            number;
   premiumStopPct:              number;   // fraction of premium lost at stop (0.60 = 60%)
+  targetProfitPct:             TargetProfitPct;
   confidenceGate:              ConfidenceGate;
   fundamentalsGate:            FundamentalsGate;
   ibkrPaper:                   IbkrPaperConfig;
@@ -214,6 +227,7 @@ interface SettingsState {
   setMaxContractsPerChain:     (n: number) => void;
   setMaxContractPrice:         (n: number) => void;
   setPremiumStopPct:           (n: number) => void;
+  setTargetProfitPct:          (t: TargetProfitPct) => void;
   setConfidenceGate:           (g: ConfidenceGate) => void;
   setFundamentalsGate:         (g: FundamentalsGate) => void;
   setSpreads:                  (s: Partial<SpreadsConfig>) => void;
@@ -274,6 +288,9 @@ export function migrateSettings(
     next.tastytradePaper = { ...DEFAULT_TASTYTRADE_PAPER };
     next.tastytradeLive  = { ...DEFAULT_TASTYTRADE_LIVE };
   }
+  if (version < 21) {
+    next.targetProfitPct = { ...DEFAULT_TARGET_PROFIT_PCT };
+  }
   return next as unknown as SettingsState;
 }
 
@@ -287,6 +304,7 @@ export const useSettingsStore = create<SettingsState>()(
       maxContractsPerChain: 10,
       maxContractPrice:     50,
       premiumStopPct:       0.60,
+      targetProfitPct:      { ...DEFAULT_TARGET_PROFIT_PCT },
       confidenceGate:       { ...DEFAULT_CONFIDENCE_GATE },
       fundamentalsGate:     { ...DEFAULT_FUNDAMENTALS_GATE },
       ibkrPaper:            { ...DEFAULT_IBKR_PAPER },
@@ -306,6 +324,7 @@ export const useSettingsStore = create<SettingsState>()(
       setMaxContractsPerChain: (n) => set({ maxContractsPerChain: n }),
       setMaxContractPrice:     (n) => set({ maxContractPrice: n }),
       setPremiumStopPct:       (n) => set({ premiumStopPct: n }),
+      setTargetProfitPct:      (t) => set({ targetProfitPct: t }),
       setConfidenceGate:       (g) => set({ confidenceGate: g }),
       setFundamentalsGate:     (g) => set({ fundamentalsGate: g }),
       setSpreads:              (s) => set((state) => ({ spreads: { ...state.spreads, ...s } })),
@@ -323,6 +342,7 @@ export const useSettingsStore = create<SettingsState>()(
         maxContractsPerChain: 10,
         maxContractPrice:     50,
         premiumStopPct:       0.60,
+        targetProfitPct:      { ...DEFAULT_TARGET_PROFIT_PCT },
         confidenceGate:       { ...DEFAULT_CONFIDENCE_GATE },
         fundamentalsGate:     { ...DEFAULT_FUNDAMENTALS_GATE },
         ibkrPaper:    { ...DEFAULT_IBKR_PAPER },
@@ -344,7 +364,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 20,
+      version: 21,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,
@@ -353,6 +373,7 @@ export const useSettingsStore = create<SettingsState>()(
         maxContractsPerChain:   state.maxContractsPerChain,
         maxContractPrice:       state.maxContractPrice,
         premiumStopPct:         state.premiumStopPct,
+        targetProfitPct:        state.targetProfitPct,
         confidenceGate:         state.confidenceGate,
         fundamentalsGate:       state.fundamentalsGate,
         ibkrPaper:    state.ibkrPaper,

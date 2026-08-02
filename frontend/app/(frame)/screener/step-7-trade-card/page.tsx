@@ -113,6 +113,7 @@ export default function Step7Page() {
   const [paperOrderId,   setPaperOrderId]     = useState<string | null>(null);
   const [orderError,     setOrderError]       = useState<string | null>(null);
   const [liveQuote,      setLiveQuote]        = useState<{ price: number; delta: number; theta: number; ivRank: number; spread: number; volume: number } | null>(null);
+  const [liveStockPrice, setLiveStockPrice]   = useState<number | null>(null);
   const [fetchingQuote,  setFetchingQuote]    = useState(false);
   // Recomputed Entry/Exit/RR/targets, per SYMBOL, for every overridden contract —
   // the active card AND every overridden basket item share this one cache so a
@@ -270,12 +271,29 @@ export default function Step7Page() {
     // relative to when cleanup runs for an unrelated reason).
     let settled = false;
     setLiveQuote(null);
+    setLiveStockPrice(null);
     setFetchingQuote(true);
 
-    api.getContractQuote(pickedCard.symbol, liveQcd.strike, liveQcd.expiry, liveQcd.right as 'C' | 'P', controller.signal)
-      .then((q) => { if (!controller.signal.aborted) setLiveQuote(q); return q; })
-      .catch(() => null)   // silently ignore — scan-time mid used as fallback below
-      .then((q) => {
+    // Fetch the contract's own quote AND a fresh stock quote in parallel —
+    // independent lookups, no reason to serialize them. Without the stock
+    // fetch, recomputePlan below would silently use pickedCard.price (the
+    // scan-time snapshot) even though the contract's premium/delta/spread are
+    // live — the Exit Plan's stock-price side stays stale while its
+    // option-price side doesn't.
+    Promise.all([
+      api.getContractQuote(pickedCard.symbol, liveQcd.strike, liveQcd.expiry, liveQcd.right as 'C' | 'P', controller.signal)
+        .catch(() => null),   // silently ignore — scan-time mid used as fallback below
+      api.getStockQuote(pickedCard.symbol, controller.signal)
+        .catch(() => null),   // silently ignore — scan-time price used as fallback below
+    ])
+      .then(([q, sq]) => {
+        if (!controller.signal.aborted) {
+          setLiveQuote(q);
+          if (sq) setLiveStockPrice(sq.price);
+        }
+        return [q, sq] as const;
+      })
+      .then(([q, sq]) => {
         if (controller.signal.aborted) { settled = true; return; }
         setFetchingQuote(false);
         if (!isOverrideAtRequest) { settled = true; return; }   // not overridden — no plan to recompute
@@ -285,7 +303,7 @@ export default function Step7Page() {
         api.recomputePlan({
           symbol,
           direction:   pickedCard.direction,
-          stock_price: pickedCard.price,
+          stock_price: sq?.price ?? pickedCard.price,
           strike:      liveQcd.strike,
           dte:         liveQcd.dte,
           premium:     q?.price ?? liveQcd.mid,
@@ -636,6 +654,9 @@ export default function Step7Page() {
           )}
           {liveQuote && !fetchingQuote && (
             <Text size={11} tone="secondary">Live mid: ${liveQuote.price.toFixed(2)}</Text>
+          )}
+          {liveStockPrice != null && !fetchingQuote && (
+            <Text size={11} tone="secondary">Live stock: ${liveStockPrice.toFixed(2)}</Text>
           )}
         </>
       )}

@@ -21,8 +21,18 @@ def load_scoring_cfg() -> dict:
 @lru_cache(maxsize=1)
 def load_reward_risk_cfg() -> dict:
     """Return risk_rules.yaml's reward_risk block (bullish/bearish target %,
-    premium_stop_pct). Shared by the scan pipeline and the per-contract
-    recompute endpoint — both must build a trade plan off the same numbers."""
+    premium_stop_pct, target_t1/t2/t3_pct). Shared by the scan pipeline and the
+    per-contract recompute endpoint — both must build a trade plan off the
+    same numbers."""
     import yaml
     full = yaml.safe_load((_CONFIG_DIR / "risk_rules.yaml").read_text())
     return full["reward_risk"]
+
+
+@lru_cache(maxsize=1)
+def load_first_passage_cfg() -> dict:
+    """Return risk_rules.yaml's first_passage block (Monte Carlo simulation
+    tunables: max_drift_pct, n_paths, sigma_floor, sigma_ceiling)."""
+    import yaml
+    full = yaml.safe_load((_CONFIG_DIR / "risk_rules.yaml").read_text())
+    return full["first_passage"]

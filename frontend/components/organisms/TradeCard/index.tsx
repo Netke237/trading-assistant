@@ -11,7 +11,9 @@ import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk } from '@/lib/risk';
-import type { TradeCardData, TargetLevel, TriggerDetail, PullbackDetail, TrendDetail, EventDetail, VolDetail, DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail } from '@/types/domain';
+import { api } from '@/lib/api';
+import { useSettingsStore } from '@/lib/settingsStore';
+import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, TriggerDetail, PullbackDetail, TrendDetail, EventDetail, VolDetail, DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail } from '@/types/domain';
 import styles from './TradeCard.module.css';
 
 interface EditOverlay {
@@ -201,16 +203,177 @@ export function TradeCard({
     ...defaultOverlay(data),
     contracts: initialContracts,
   }));
+  const [structuralStop, setStructuralStop] = useState<StructuralStop | null | undefined>(
+    data.exit.structuralStop,
+  );
+  const [structuralLoading, setStructuralLoading] = useState(false);
+  const [structuralError, setStructuralError] = useState(false);
+  // The fresh stock price checkStructure fetched to derive structuralStop —
+  // persisted (not just used transiently) so a later R:R-vs-structural-stop
+  // calc can reuse the SAME fresh price the backend actually used, instead of
+  // falling back to data.price (the scan-time snapshot checkStructure was
+  // specifically written to avoid).
+  const [structuralStopStockPrice, setStructuralStopStockPrice] = useState<number | null>(null);
+  // Tracks the in-flight "Check structure" request (if any) so a stale response
+  // for a contract the user has since navigated away from (via CandidateNav
+  // Prev/Next) can never overwrite the display for the new one — same class of
+  // race step-7-trade-card/page.tsx's recomputePlan effects guard against.
+  const structuralRequestRef = useRef<AbortController | null>(null);
+
+  const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
+  const [targetPct, setTargetPct] = useState(defaultTargetPct);
+  const [firstPassage, setFirstPassage] = useState<FirstPassageEstimate | null | undefined>(
+    data.exit.firstPassage,
+  );
+  const [firstPassageLoading, setFirstPassageLoading] = useState(false);
+  const [firstPassageError, setFirstPassageError] = useState(false);
+  // The fresh premium/delta estimateFirstPassage fetched — optionPrice in
+  // each firstPassage.targets entry is premium*(1+pct) computed off THIS
+  // premium (see first_passage.py), not data.contractDetails.mid, which can
+  // differ once a fresh quote has been fetched. Persisted so a later R:R
+  // calc subtracts the matching baseline instead of a stale one.
+  const [firstPassageContext, setFirstPassageContext] = useState<{ premium: number; delta: number } | null>(null);
+  // Same stale-response guard as structuralRequestRef above.
+  const firstPassageRequestRef = useRef<AbortController | null>(null);
 
   const prevSymbolRef = useRef(data.symbol);
   const prevContractRef = useRef(data.contract);
+  // Single effect resetting BOTH structuralStop and firstPassage state on a
+  // contract change — deliberately not two separate effects each comparing
+  // against prevSymbolRef/prevContractRef: effects run in declaration order
+  // within the same commit, so a first effect that updates those refs would
+  // make a second effect's own "did it change" comparison always see "no
+  // change" (the first effect already advanced the ref). Caught by the
+  // first-passage stale-response regression test below.
   useEffect(() => {
     if (data.symbol !== prevSymbolRef.current || data.contract !== prevContractRef.current) {
+      structuralRequestRef.current?.abort();
+      firstPassageRequestRef.current?.abort();
       setOverlay({ ...defaultOverlay(data), contracts: initialContracts });
+      setStructuralStop(data.exit.structuralStop);
+      setStructuralStopStockPrice(null);
+      setStructuralError(false);
+      setStructuralLoading(false);
+      setTargetPct(defaultTargetPct);
+      setFirstPassage(data.exit.firstPassage);
+      setFirstPassageContext(null);
+      setFirstPassageError(false);
+      setFirstPassageLoading(false);
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
     }
-  }, [data.symbol, data.contract, initialContracts]);
+  }, [data.symbol, data.contract, initialContracts, defaultTargetPct]);
+
+  // Cancel any outstanding requests on unmount.
+  useEffect(() => () => structuralRequestRef.current?.abort(), []);
+  useEffect(() => () => firstPassageRequestRef.current?.abort(), []);
+
+  const estimateFirstPassage = useCallback(async () => {
+    firstPassageRequestRef.current?.abort();
+    const controller = new AbortController();
+    firstPassageRequestRef.current = controller;
+    setFirstPassageLoading(true);
+    setFirstPassageError(false);
+    setFirstPassage(undefined);
+    setFirstPassageContext(null);
+    try {
+      const cd = data.contractDetails;
+      if (!cd) throw new Error('no contract selected');
+      // Fetch fresh stock + contract quotes rather than reusing data.price /
+      // data.contractDetails (scan-time snapshots) — same reasoning as
+      // checkStructure above, and the same fix applied to the pre-existing
+      // recompute-plan flow in step-7-trade-card/page.tsx.
+      const [stockQuote, contractQuote] = await Promise.all([
+        api.getStockQuote(data.symbol, controller.signal).catch(() => null),
+        api.getContractQuote(data.symbol, cd.strike, cd.expiry, cd.right, controller.signal).catch(() => null),
+      ]);
+      if (controller.signal.aborted) return;
+      const premium = contractQuote?.price ?? cd.mid;
+      const delta = contractQuote?.delta ?? cd.delta;
+      const res = await api.getFirstPassageEstimate({
+        symbol: data.symbol,
+        direction: data.direction,
+        stock_price: stockQuote?.price ?? data.price,
+        strike: cd.strike,
+        dte: cd.dte,
+        premium,
+        delta,
+        trend_score: data.stockBreakdown.trend,
+        invalidation_price: data.exit.invalidation,
+        t1_pct: targetPct.t1,
+        t2_pct: targetPct.t2,
+        t3_pct: targetPct.t3,
+      }, controller.signal);
+      if (controller.signal.aborted) return;
+      setFirstPassage({ targets: res.targets, invalidation: res.invalidation });
+      // optionPrice in each target is premium*(1+pct) built from THIS
+      // premium (first_passage.py) — persist it so a later R:R calc
+      // subtracts the matching baseline, not data.contractDetails.mid.
+      setFirstPassageContext({ premium, delta });
+    } catch {
+      if (controller.signal.aborted) return;
+      setFirstPassageError(true);
+    } finally {
+      if (!controller.signal.aborted) setFirstPassageLoading(false);
+    }
+  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, targetPct]);
+
+  // R:R using the structural stop (order block / swing level) as the risk
+  // basis instead of the original fixed "premium * 60%" assumption — only
+  // computable once BOTH Check structure and Estimate have been run, and
+  // using each other's FRESH persisted values (structuralStopStockPrice,
+  // firstPassageContext), never data.price/data.contractDetails, for the
+  // same staleness reasons documented on those two handlers above.
+  const structuralRR = useMemo(() => {
+    if (!structuralStop || structuralStopStockPrice == null || !firstPassage || !firstPassageContext) {
+      return null;
+    }
+    const stockMove = Math.abs(structuralStop.price - structuralStopStockPrice);
+    const deltaEst = Math.max(Math.abs(firstPassageContext.delta), 0.05);
+    const risk = stockMove * deltaEst;
+    if (risk <= 0) return null;
+    return firstPassage.targets.map((t) => {
+      const reward = t.optionPrice - firstPassageContext.premium;
+      return { pct: t.pct, rr: reward > 0 ? reward / risk : null };
+    });
+  }, [structuralStop, structuralStopStockPrice, firstPassage, firstPassageContext]);
+
+  const checkStructure = useCallback(async () => {
+    structuralRequestRef.current?.abort();
+    const controller = new AbortController();
+    structuralRequestRef.current = controller;
+    setStructuralLoading(true);
+    setStructuralError(false);
+    setStructuralStop(undefined);
+    setStructuralStopStockPrice(null);
+    try {
+      // Fetch a fresh stock price rather than reusing data.price (a scan-time
+      // snapshot that may be stale, especially for a contract the user never
+      // overrode in Step 6, which has nothing else refreshing it). Falls back
+      // to data.price only if the live quote fetch itself fails.
+      const stockQuote = await api.getStockQuote(data.symbol, controller.signal).catch(() => null);
+      if (controller.signal.aborted) return;
+      const referenceStockPrice = stockQuote?.price ?? data.price;
+      const res = await api.getStructuralStop({
+        symbol: data.symbol,
+        direction: data.direction,
+        stock_price: referenceStockPrice,
+      }, controller.signal);
+      if (controller.signal.aborted) return;
+      setStructuralStop(
+        res.available && res.price != null && res.source != null
+          && res.confidence != null && res.distancePct != null
+          ? { price: res.price, source: res.source, confidence: res.confidence, distancePct: res.distancePct }
+          : null,
+      );
+      setStructuralStopStockPrice(referenceStockPrice);
+    } catch {
+      if (controller.signal.aborted) return;
+      setStructuralError(true);
+    } finally {
+      if (!controller.signal.aborted) setStructuralLoading(false);
+    }
+  }, [data.symbol, data.direction, data.price]);
 
   useEffect(() => {
     setOverlay((prev) => ({ ...prev, contracts: initialContracts }));
@@ -451,6 +614,114 @@ export function TradeCard({
               decimals={0}
             />
           </dl>
+          <div className={styles.structuralStop}>
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={checkStructure}
+              disabled={structuralLoading}
+            >
+              <Text size={12} weight={500}>
+                {structuralLoading ? 'Checking structure…' : 'Check structure'}
+              </Text>
+            </button>
+            {structuralError && (
+              <Text size={11} tone="reject">Couldn&apos;t check structure — try again.</Text>
+            )}
+            {!structuralError && structuralStop === null && (
+              <Text size={11} tone="dim">No order block or swing level found nearby.</Text>
+            )}
+            {structuralStop && (
+              <dl className={styles.kvList}>
+                <KV
+                  label={structuralStop.source === 'order_block' ? 'Structural stop — Order Block'
+                    : structuralStop.source === 'swing_low' ? 'Structural stop — Swing Low'
+                    : 'Structural stop — Swing High'}
+                  value={`$${structuralStop.price.toFixed(2)} (${structuralStop.distancePct.toFixed(1)}% away)`}
+                  mono
+                />
+              </dl>
+            )}
+          </div>
+        </section>
+
+        {/* 5c. Profit-target first-passage estimate */}
+        <section className={styles.planCard}>
+          <Text size={14} weight={600}>Profit Targets</Text>
+          <div className={styles.targetPctRow}>
+            {(['t1', 't2', 't3'] as const).map((key) => (
+              <label key={key} className={styles.targetPctInput}>
+                <Text size={11} tone="secondary">{key.toUpperCase()}</Text>
+                <input
+                  type="number"
+                  className={styles.editInput}
+                  min={1}
+                  max={500}
+                  step={1}
+                  aria-label={`${key.toUpperCase()} profit target %`}
+                  value={Math.round(targetPct[key] * 100)}
+                  onChange={(e) => {
+                    const pct = Math.max(0.01, Math.min(5.0, Number(e.target.value) / 100));
+                    setTargetPct((prev) => ({ ...prev, [key]: pct }));
+                  }}
+                />
+                <Text size={11} tone="secondary">%</Text>
+              </label>
+            ))}
+          </div>
+          <div className={styles.structuralStop}>
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={estimateFirstPassage}
+              disabled={firstPassageLoading || !data.contractDetails}
+            >
+              <Text size={12} weight={500}>
+                {firstPassageLoading ? 'Estimating…' : 'Estimate'}
+              </Text>
+            </button>
+            {firstPassageError && (
+              <Text size={11} tone="reject">Couldn&apos;t compute an estimate — try again.</Text>
+            )}
+            {firstPassage && (
+              <dl className={styles.kvList}>
+                {firstPassage.targets.map((t) => (
+                  <KV
+                    key={t.pct}
+                    label={`T${Math.round(t.pct * 100)}% — probability of hitting before expiry`}
+                    value={
+                      t.stockPrice != null
+                        ? `$${t.stockPrice.toFixed(2)} · ${(t.probability * 100).toFixed(0)}% · ${t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}`
+                        : `not reachable in this timeframe · ${(t.probability * 100).toFixed(0)}%`
+                    }
+                    mono
+                  />
+                ))}
+                <KV
+                  label="Probability of hitting invalidation before expiry"
+                  value={`${(firstPassage.invalidation.probability * 100).toFixed(0)}% · ${firstPassage.invalidation.expectedDays != null ? `~${Math.round(firstPassage.invalidation.expectedDays)}d` : 'unlikely'}`}
+                  mono
+                />
+              </dl>
+            )}
+            {!structuralRR && (structuralStop || firstPassage) && (
+              <Text size={11} tone="dim">
+                Check structure and Estimate first to see R:R against the structural stop.
+              </Text>
+            )}
+            {structuralRR && (
+              <dl className={styles.kvList}>
+                {structuralRR.map((r) => (
+                  <KV
+                    key={r.pct}
+                    label={`T${Math.round(r.pct * 100)}% R:R vs. structural stop`}
+                    value={r.rr != null ? `${r.rr.toFixed(1)}×` : '—'}
+                    mono
+                  />
+                ))}
+              </dl>
+            )}
+          </div>
         </section>
 
         {/* 5b. Sell-to-close plan */}

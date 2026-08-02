@@ -1,4 +1,4 @@
-import { useSettingsStore, migrateSettings, DEFAULT_CONFIDENCE_GATE, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER, DEFAULT_TASTYTRADE_PAPER, DEFAULT_TASTYTRADE_LIVE } from '@/lib/settingsStore';
+import { useSettingsStore, migrateSettings, DEFAULT_CONFIDENCE_GATE, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER, DEFAULT_TASTYTRADE_PAPER, DEFAULT_TASTYTRADE_LIVE, DEFAULT_TARGET_PROFIT_PCT } from '@/lib/settingsStore';
 
 // Reset store state before each test
 beforeEach(() => {
@@ -115,5 +115,21 @@ describe('settingsStore — tastytrade', () => {
     const result = migrateSettings({}, 19) as unknown as Record<string, unknown>;
     expect(result.tastytradePaper).toEqual(DEFAULT_TASTYTRADE_PAPER);
     expect(result.tastytradeLive).toEqual(DEFAULT_TASTYTRADE_LIVE);
+  });
+});
+
+describe('settingsStore — targetProfitPct', () => {
+  it('defaults to 20/35/50', () => {
+    expect(useSettingsStore.getState().targetProfitPct).toEqual(DEFAULT_TARGET_PROFIT_PCT);
+  });
+
+  it('setTargetProfitPct updates the value', () => {
+    useSettingsStore.getState().setTargetProfitPct({ t1: 0.15, t2: 0.30, t3: 0.45 });
+    expect(useSettingsStore.getState().targetProfitPct).toEqual({ t1: 0.15, t2: 0.30, t3: 0.45 });
+  });
+
+  it('migrating from v20 injects targetProfitPct defaults', () => {
+    const result = migrateSettings({}, 20) as unknown as Record<string, unknown>;
+    expect(result.targetProfitPct).toEqual(DEFAULT_TARGET_PROFIT_PCT);
   });
 });

@@ -798,9 +798,10 @@ function Toggle({ defaultOn, onChange }: { defaultOn?: boolean; onChange?: (on: 
 
 function RiskForm() {
   const { limits, setLimits } = useRiskStore();
-  const { premiumStopPct, setPremiumStopPct } = useSettingsStore();
+  const { premiumStopPct, setPremiumStopPct, targetProfitPct, setTargetProfitPct } = useSettingsStore();
   const [localLimits, setLocalLimits] = useState<RiskLimits>(limits);
   const [localStopPct, setLocalStopPct] = useState(premiumStopPct);
+  const [localTargetPct, setLocalTargetPct] = useState(targetProfitPct);
   const [saveResult, setSaveResult] = useState('');
 
   useEffect(() => {
@@ -811,12 +812,23 @@ function RiskForm() {
     setLocalStopPct(premiumStopPct);
   }, [premiumStopPct]);
 
+  useEffect(() => {
+    setLocalTargetPct(targetProfitPct);
+  }, [targetProfitPct]);
+
   // Fetch risk settings from backend on mount and hydrate all fields
   useEffect(() => {
     getRiskSettings()
       .then((s) => {
         setPremiumStopPct(s.premiumStopPct);
         setLocalStopPct(s.premiumStopPct);
+        const nextTargetPct = {
+          t1: s.targetT1Pct ?? targetProfitPct.t1,
+          t2: s.targetT2Pct ?? targetProfitPct.t2,
+          t3: s.targetT3Pct ?? targetProfitPct.t3,
+        };
+        setTargetProfitPct(nextTargetPct);
+        setLocalTargetPct(nextTargetPct);
         setLocalLimits((prev) => ({
           ...prev,
           ...(s.portfolioValue           !== undefined && { portfolioValue:             s.portfolioValue }),
@@ -827,7 +839,8 @@ function RiskForm() {
         }));
       })
       .catch(() => {});
-  }, [setPremiumStopPct]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setPremiumStopPct, setTargetProfitPct]);
 
   function updateLimit<K extends keyof RiskLimits>(key: K, value: RiskLimits[K]) {
     const next = { ...localLimits, [key]: value };
@@ -837,6 +850,14 @@ function RiskForm() {
 
   async function handleSaveRisk() {
     setSaveResult('');
+    // Profit targets must stay non-decreasing (T1 <= T2 <= T3) — the backend
+    // rejects an out-of-order ladder with a 422, so clamp locally too rather
+    // than let a confusing save failure be the first sign of the problem.
+    const orderedTargetPct = {
+      t1: localTargetPct.t1,
+      t2: Math.max(localTargetPct.t2, localTargetPct.t1),
+      t3: Math.max(localTargetPct.t3, localTargetPct.t2, localTargetPct.t1),
+    };
     try {
       await saveRiskSettings({
         premiumStopPct:          localStopPct,
@@ -845,8 +866,13 @@ function RiskForm() {
         maxTotalExposurePct:     localLimits.maxTotalExposurePct,
         maxConcurrentPositions:  localLimits.maxConcurrentPositions,
         maxDailyRecommendations: localLimits.maxDailyRecommendations,
+        targetT1Pct: orderedTargetPct.t1,
+        targetT2Pct: orderedTargetPct.t2,
+        targetT3Pct: orderedTargetPct.t3,
       });
       setPremiumStopPct(localStopPct);
+      setTargetProfitPct(orderedTargetPct);
+      setLocalTargetPct(orderedTargetPct);
       setSaveResult('Saved');
     } catch {
       setSaveResult('Save failed');
@@ -953,6 +979,54 @@ function RiskForm() {
           step={0.05}
           value={localStopPct}
           onChange={(e) => setLocalStopPct(Math.max(0.10, Math.min(1.0, Number(e.target.value))))}
+          onBlur={handleSaveRisk}
+        />
+      </Row>
+      <Row
+        label="Profit target — T1"
+        hint="First profit-target level, as a fraction of premium (0.20 = 20%). Used as the default when estimating a trade's exit plan — overridable per trade."
+        defaultValue="0.20"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={0.01}
+          max={5.0}
+          step={0.05}
+          value={localTargetPct.t1}
+          onChange={(e) => setLocalTargetPct((prev) => ({ ...prev, t1: Math.max(0.01, Math.min(5.0, Number(e.target.value))) }))}
+          onBlur={handleSaveRisk}
+        />
+      </Row>
+      <Row
+        label="Profit target — T2"
+        hint="Second profit-target level (0.35 = 35%)."
+        defaultValue="0.35"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={0.01}
+          max={5.0}
+          step={0.05}
+          value={localTargetPct.t2}
+          onChange={(e) => setLocalTargetPct((prev) => ({ ...prev, t2: Math.max(0.01, Math.min(5.0, Number(e.target.value))) }))}
+          onBlur={handleSaveRisk}
+        />
+      </Row>
+      <Row
+        label="Profit target — T3"
+        hint="Third profit-target level (0.50 = 50%)."
+        defaultValue="0.50"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={0.01}
+          max={5.0}
+          step={0.05}
+          value={localTargetPct.t3}
+          onChange={(e) => setLocalTargetPct((prev) => ({ ...prev, t3: Math.max(0.01, Math.min(5.0, Number(e.target.value))) }))}
           onBlur={handleSaveRisk}
         />
         {saveResult && <Text size={11} tone="secondary">{saveResult}</Text>}

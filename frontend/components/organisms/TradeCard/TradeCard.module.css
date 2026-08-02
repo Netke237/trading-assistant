@@ -124,6 +124,26 @@
   align-items: baseline;
 }
 
+.structuralStop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.targetPctRow {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.targetPctInput {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .rrBody {
   display: flex;
   flex-direction: column;
