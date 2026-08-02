@@ -1,7 +1,12 @@
 import '@testing-library/jest-dom';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
+import { api } from '@/lib/api';
 import type { TradeCardData } from '@/types/domain';
+
+jest.mock('@/lib/api', () => ({
+  api: { getStructuralStop: jest.fn() },
+}));
 
 jest.mock('@/components/organisms/InlineChartPanel', () => ({
   InlineChartPanel: ({ open }: { open: boolean }) => (
@@ -121,6 +126,49 @@ describe('TradeCard', () => {
     expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Time stop')).toBeInTheDocument();
+  });
+
+  it('renders a Check structure button that does not fire on its own', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    expect(screen.getByRole('button', { name: /check structure/i })).toBeInTheDocument();
+    expect(api.getStructuralStop).not.toHaveBeenCalled();
+  });
+
+  it('fetches and displays the structural stop on button click', async () => {
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6,
+    });
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    expect(api.getStructuralStop).toHaveBeenCalledWith({
+      symbol: 'AAPL', direction: 'Bullish', stock_price: 185.2,
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+    expect(screen.getByText('$178.50 (3.6% away)')).toBeInTheDocument();
+    // Purely additive: the premium-based invalidation must be untouched.
+    expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
+  });
+
+  it('shows a not-found message when no structural level is available', async () => {
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: false, price: null, source: null, confidence: null, distancePct: null,
+    });
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/No order block or swing level found/)).toBeInTheDocument();
+    });
+  });
+
+  it('shows an error message when the structural stop request fails', async () => {
+    (api.getStructuralStop as jest.Mock).mockRejectedValueOnce(new Error('network error'));
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn.t check structure/)).toBeInTheDocument();
+    });
   });
 
   it('renders sell-to-close plan with editable target', () => {

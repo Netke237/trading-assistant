@@ -338,6 +338,20 @@ export const api = {
       rrRatio: number;
       rrModel: TradeCardData['rrModel'];
     }>('/api/contracts/recompute-plan', req, signal),
+  /** On-demand structural (order block / swing) invalidation lookup — fired only by the
+   *  trade card's "Check structure" button, never automatically. */
+  getStructuralStop: (req: {
+    symbol: string;
+    direction: 'Bullish' | 'Bearish';
+    stock_price: number;
+  }, signal?: AbortSignal) =>
+    post<{
+      available: boolean;
+      price: number | null;
+      source: 'order_block' | 'swing_low' | 'swing_high' | null;
+      confidence: number | null;
+      distancePct: number | null;
+    }>('/api/contracts/structural-stop', req, signal),
   getCandles:    (symbol: string) => get<Candle[]>(`/api/candles/${encodeURIComponent(symbol)}`),
   getSymbolInfo: (symbol: string) =>
     get<{ symbol: string; name: string }>(`/api/symbol/${encodeURIComponent(symbol)}/info`),

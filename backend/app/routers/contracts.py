@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Literal
+from typing import Literal, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.schemas import OptionContract, TradeEntry, TradeExit
-from app.data.market import fetch_option_chain, fetch_price, fetch_contract_quote_async, fetch_price_async
+from app.data.market import fetch_option_chain, fetch_price, fetch_contract_quote_async, fetch_price_async, fetch_candles_async
 from app.data.augment import _augment
 from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.trade_plan import build_trade_plan
+from app.scoring.structural_stop import find_structural_stop
 # Shared with app.routers.scan — both build a trade plan off the same
 # reward_risk config so the scan and the per-contract recompute endpoint agree.
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
@@ -234,4 +235,43 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
         ),
         rrRatio=plan.rr_ratio,
         rrModel=plan.rr_model,
+    )
+
+
+class StructuralStopRequest(BaseModel):
+    symbol:      str
+    direction:   Literal["Bullish", "Bearish"]
+    stock_price: float = Field(..., gt=0)
+
+
+class StructuralStopResponse(BaseModel):
+    available:   bool
+    price:       Optional[float] = None
+    source:      Optional[Literal["order_block", "swing_low", "swing_high"]] = None
+    confidence:  Optional[int] = None
+    distancePct: Optional[float] = None
+
+
+@router.post('/contracts/structural-stop', response_model=StructuralStopResponse)
+async def structural_stop(req: StructuralStopRequest) -> StructuralStopResponse:
+    """On-demand structural (order block / swing) invalidation lookup for one symbol.
+
+    Deliberately its own endpoint, not folded into recompute-plan: this is fired
+    only by an explicit user action ("Check structure") on the trade card, never
+    on every contract swap, so it never adds latency to the scan or to Step 6
+    contract overrides.
+    """
+    async with httpx.AsyncClient(timeout=8) as client:
+        candles = await fetch_candles_async(client, req.symbol.upper())
+
+    stop = find_structural_stop(candles, req.direction, req.stock_price)
+    if stop is None:
+        return StructuralStopResponse(available=False)
+
+    return StructuralStopResponse(
+        available=True,
+        price=round(stop.price, 2),
+        source=stop.source,
+        confidence=stop.confidence,
+        distancePct=round(stop.distance_pct, 2),
     )

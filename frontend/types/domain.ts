@@ -148,6 +148,13 @@ export interface WatchlistRow {
   confidenceText?: string | null;  // plain-English interpretation
 }
 
+export interface StructuralStop {
+  price:       number;
+  source:      'order_block' | 'swing_low' | 'swing_high';
+  confidence:  number;
+  distancePct: number;
+}
+
 export interface TargetLevel {
   id?: string;                   // optional — backend doesn't always send it
   stockPrice: number;            // underlying price at this target
@@ -247,7 +254,11 @@ export interface TradeCardData {
     dte:    number;
   };
   entry:  { limit: number; maxFill: number; orderType: OrderType };
-  exit:   { invalidation: number; premiumStop: number; timeStopDays: number; target: number; targets: TargetLevel[] };
+  exit:   {
+    invalidation: number; premiumStop: number; timeStopDays: number; target: number; targets: TargetLevel[];
+    /** Populated only after the user presses "Check structure" — never set by the scan itself. */
+    structuralStop?: StructuralStop | null;
+  };
   nextEventDays?:  number | null;
   nextEventLabel?: string | null;
   rrRatio:  number;

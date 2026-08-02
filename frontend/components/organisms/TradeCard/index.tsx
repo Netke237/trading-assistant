@@ -11,7 +11,8 @@ import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk } from '@/lib/risk';
-import type { TradeCardData, TargetLevel, TriggerDetail, PullbackDetail, TrendDetail, EventDetail, VolDetail, DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail } from '@/types/domain';
+import { api } from '@/lib/api';
+import type { TradeCardData, TargetLevel, StructuralStop, TriggerDetail, PullbackDetail, TrendDetail, EventDetail, VolDetail, DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail } from '@/types/domain';
 import styles from './TradeCard.module.css';
 
 interface EditOverlay {
@@ -201,16 +202,45 @@ export function TradeCard({
     ...defaultOverlay(data),
     contracts: initialContracts,
   }));
+  const [structuralStop, setStructuralStop] = useState<StructuralStop | null | undefined>(
+    data.exit.structuralStop,
+  );
+  const [structuralLoading, setStructuralLoading] = useState(false);
+  const [structuralError, setStructuralError] = useState(false);
 
   const prevSymbolRef = useRef(data.symbol);
   const prevContractRef = useRef(data.contract);
   useEffect(() => {
     if (data.symbol !== prevSymbolRef.current || data.contract !== prevContractRef.current) {
       setOverlay({ ...defaultOverlay(data), contracts: initialContracts });
+      setStructuralStop(data.exit.structuralStop);
+      setStructuralError(false);
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
     }
   }, [data.symbol, data.contract, initialContracts]);
+
+  const checkStructure = useCallback(async () => {
+    setStructuralLoading(true);
+    setStructuralError(false);
+    try {
+      const res = await api.getStructuralStop({
+        symbol: data.symbol,
+        direction: data.direction,
+        stock_price: data.price,
+      });
+      setStructuralStop(
+        res.available && res.price != null && res.source != null
+          && res.confidence != null && res.distancePct != null
+          ? { price: res.price, source: res.source, confidence: res.confidence, distancePct: res.distancePct }
+          : null,
+      );
+    } catch {
+      setStructuralError(true);
+    } finally {
+      setStructuralLoading(false);
+    }
+  }, [data.symbol, data.direction, data.price]);
 
   useEffect(() => {
     setOverlay((prev) => ({ ...prev, contracts: initialContracts }));
@@ -451,6 +481,35 @@ export function TradeCard({
               decimals={0}
             />
           </dl>
+          <div className={styles.structuralStop}>
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={checkStructure}
+              disabled={structuralLoading}
+            >
+              <Text size={12} weight={500}>
+                {structuralLoading ? 'Checking structure…' : 'Check structure'}
+              </Text>
+            </button>
+            {structuralError && (
+              <Text size={11} tone="reject">Couldn&apos;t check structure — try again.</Text>
+            )}
+            {!structuralError && structuralStop === null && (
+              <Text size={11} tone="dim">No order block or swing level found nearby.</Text>
+            )}
+            {structuralStop && (
+              <dl className={styles.kvList}>
+                <KV
+                  label={structuralStop.source === 'order_block' ? 'Structural stop — Order Block'
+                    : structuralStop.source === 'swing_low' ? 'Structural stop — Swing Low'
+                    : 'Structural stop — Swing High'}
+                  value={`$${structuralStop.price.toFixed(2)} (${structuralStop.distancePct.toFixed(1)}% away)`}
+                  mono
+                />
+              </dl>
+            )}
+          </div>
         </section>
 
         {/* 5b. Sell-to-close plan */}
