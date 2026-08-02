@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from typing import Literal, Optional
 
 import httpx
@@ -345,8 +346,12 @@ async def first_passage(req: FirstPassageRequest) -> FirstPassageResponse:
     # different inputs (a new day, a moved price) still get an independent
     # draw. dte stands in for "expiry" here — it already changes day to day
     # for the same contract and is what the request actually carries.
-    seed_key = (req.symbol.upper(), req.strike, req.dte, round(req.stock_price, 2), t1_pct, t2_pct, t3_pct)
-    seed = hash(seed_key) % (2 ** 32)
+    # Python's built-in hash() is salted per-process (PYTHONHASHSEED) for str/tuple
+    # security reasons, so it is NOT stable across restarts/reloads/workers despite
+    # looking deterministic within a single run — use a fixed-algorithm hash instead
+    # so "identical inputs" genuinely means identical output everywhere, always.
+    seed_key = f"{req.symbol.upper()}|{req.strike}|{req.dte}|{round(req.stock_price, 2)}|{t1_pct}|{t2_pct}|{t3_pct}"
+    seed = int(hashlib.sha256(seed_key.encode()).hexdigest(), 16) % (2 ** 32)
 
     result = estimate_first_passage(
         stock_price=req.stock_price,

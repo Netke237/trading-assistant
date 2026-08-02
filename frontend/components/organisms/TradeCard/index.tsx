@@ -323,14 +323,22 @@ export function TradeCard({
   // computable once BOTH Check structure and Estimate have been run, and
   // using each other's FRESH persisted values (structuralStopStockPrice,
   // firstPassageContext), never data.price/data.contractDetails, for the
-  // same staleness reasons documented on those two handlers above.
+  // same staleness reasons documented on those two handlers above. NOTE:
+  // "fresh" does not mean "identical" — Check structure and Estimate are
+  // independent, user-triggered fetches, so if they're clicked minutes
+  // apart the two stock prices they captured can legitimately differ; this
+  // R:R is only as consistent as how close together the user ran both.
   const structuralRR = useMemo(() => {
     if (!structuralStop || structuralStopStockPrice == null || !firstPassage || !firstPassageContext) {
       return null;
     }
     const stockMove = Math.abs(structuralStop.price - structuralStopStockPrice);
     const deltaEst = Math.max(Math.abs(firstPassageContext.delta), 0.05);
-    const risk = stockMove * deltaEst;
+    // A long option's max loss is capped at the premium paid — the linear
+    // delta approximation has no such cap and can overshoot it for a distant
+    // structural stop or a low-delta contract, implying a loss bigger than
+    // the trade could ever actually produce. Clamp to premium.
+    const risk = Math.min(stockMove * deltaEst, firstPassageContext.premium);
     if (risk <= 0) return null;
     return firstPassage.targets.map((t) => {
       const reward = t.optionPrice - firstPassageContext.premium;
@@ -648,6 +656,7 @@ export function TradeCard({
         {/* 5c. Profit-target first-passage estimate */}
         <section className={styles.planCard}>
           <Text size={14} weight={600}>Profit Targets</Text>
+          <Text size={10} tone="dim">Monte Carlo estimate — independent of the Sell-to-Close Plan below; the two can disagree.</Text>
           <div className={styles.targetPctRow}>
             {(['t1', 't2', 't3'] as const).map((key) => (
               <label key={key} className={styles.targetPctInput}>
@@ -685,9 +694,9 @@ export function TradeCard({
             )}
             {firstPassage && (
               <dl className={styles.kvList}>
-                {firstPassage.targets.map((t) => (
+                {firstPassage.targets.map((t, i) => (
                   <KV
-                    key={t.pct}
+                    key={`${t.pct}-${i}`}
                     label={`T${Math.round(t.pct * 100)}% — probability of hitting before expiry`}
                     value={
                       t.stockPrice != null
@@ -711,9 +720,9 @@ export function TradeCard({
             )}
             {structuralRR && (
               <dl className={styles.kvList}>
-                {structuralRR.map((r) => (
+                {structuralRR.map((r, i) => (
                   <KV
-                    key={r.pct}
+                    key={`${r.pct}-${i}`}
                     label={`T${Math.round(r.pct * 100)}% R:R vs. structural stop`}
                     value={r.rr != null ? `${r.rr.toFixed(1)}×` : '—'}
                     mono
@@ -727,6 +736,7 @@ export function TradeCard({
         {/* 5b. Sell-to-close plan */}
         <section className={`${styles.planCard} ${styles.targetsCard}`}>
           <Text size={14} weight={600}>Sell-to-Close Plan</Text>
+          <Text size={10} tone="dim">Fixed-formula ladder — independent of the Profit Targets estimate above; the two can disagree.</Text>
           <div className={styles.targetsTable}>
             {data.exit.targets.map((t, i) => (
               <EditableTargetRow

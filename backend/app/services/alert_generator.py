@@ -140,7 +140,7 @@ async def generate_alerts(
         # PREMIUM_STOP
         premium_hit_raw = bool(
             opt_price is not None and pos.entry_price > 0
-            and opt_price <= pos.entry_price * _premium_stop_pct()
+            and opt_price <= pos.entry_price * (1 - _premium_stop_pct())
         )
         if _sustained("PREMIUM_STOP", premium_hit_raw):
             counter += 1

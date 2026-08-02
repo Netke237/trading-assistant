@@ -109,14 +109,14 @@ async def test_stop_reached_fires(db_session):
     assert "Stop breached" in stop_alerts[0].reason
 
 
-# ── Test 3: PREMIUM_STOP when option_price <= 60% of entry ─────────────────────
+# ── Test 3: PREMIUM_STOP when option has lost >= 60% of entry premium ──────────
 
 @pytest.mark.asyncio
 async def test_premium_stop_fires(db_session):
     from app.services.alert_generator import generate_alerts
     await _insert_position(db_session, symbol="AAPL", entry_price=5.0)
     prices = {"AAPL": 180.0}
-    opt_prices = {"AAPL|190|2026-05-16|C": 2.5}  # 2.5 <= 5.0 * 0.60 = 3.0
+    opt_prices = {"AAPL|190|2026-05-16|C": 1.5}  # 1.5 <= 5.0 * (1 - 0.60) = 2.0 -- lost 70%
     alerts = await generate_alerts(db_session, prices, opt_prices)
     prem_alerts = [a for a in alerts if a.alertType == "PREMIUM_STOP"]
     assert len(prem_alerts) == 1
@@ -312,7 +312,7 @@ async def test_all_alert_types_write_audit_events(db_session):
         entry_price=5.0, stop=None, targets=[],
     )
     prices = {"TPX": 105.0, "STOPX": 45.0, "PREMX": 200.0}
-    opt_prices = {"PREMX|1|2026-05-16|C": 2.0}  # 2.0 <= 5.0 * 0.60 = 3.0
+    opt_prices = {"PREMX|1|2026-05-16|C": 2.0}  # 2.0 <= 5.0 * (1 - 0.60) = 2.0 -- lost exactly 60%
 
     with patch("app.services.alert_generator.log_event") as mock_log_event:
         await generate_alerts(db_session, prices, opt_prices)

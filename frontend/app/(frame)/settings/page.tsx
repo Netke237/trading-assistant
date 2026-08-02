@@ -858,6 +858,7 @@ function RiskForm() {
       t2: Math.max(localTargetPct.t2, localTargetPct.t1),
       t3: Math.max(localTargetPct.t3, localTargetPct.t2, localTargetPct.t1),
     };
+    const wasClamped = orderedTargetPct.t2 !== localTargetPct.t2 || orderedTargetPct.t3 !== localTargetPct.t3;
     try {
       await saveRiskSettings({
         premiumStopPct:          localStopPct,
@@ -873,7 +874,7 @@ function RiskForm() {
       setPremiumStopPct(localStopPct);
       setTargetProfitPct(orderedTargetPct);
       setLocalTargetPct(orderedTargetPct);
-      setSaveResult('Saved');
+      setSaveResult(wasClamped ? 'Saved (T2/T3 raised to stay ≥ the level before them)' : 'Saved');
     } catch {
       setSaveResult('Save failed');
     } finally {
@@ -1029,8 +1030,8 @@ function RiskForm() {
           onChange={(e) => setLocalTargetPct((prev) => ({ ...prev, t3: Math.max(0.01, Math.min(5.0, Number(e.target.value))) }))}
           onBlur={handleSaveRisk}
         />
-        {saveResult && <Text size={11} tone="secondary">{saveResult}</Text>}
       </Row>
+      {saveResult && <Text size={11} tone="secondary">{saveResult}</Text>}
     </>
   );
 }
