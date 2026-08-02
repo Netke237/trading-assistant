@@ -140,9 +140,10 @@ describe('TradeCard', () => {
     });
     render(<TradeCard data={mockTradeCard} />);
     fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
-    expect(api.getStructuralStop).toHaveBeenCalledWith({
-      symbol: 'AAPL', direction: 'Bullish', stock_price: 185.2,
-    });
+    expect(api.getStructuralStop).toHaveBeenCalledWith(
+      { symbol: 'AAPL', direction: 'Bullish', stock_price: 185.2 },
+      expect.any(AbortSignal),
+    );
     await waitFor(() => {
       expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
     });
@@ -169,6 +170,31 @@ describe('TradeCard', () => {
     await waitFor(() => {
       expect(screen.getByText(/Couldn.t check structure/)).toBeInTheDocument();
     });
+  });
+
+  it('does not apply a stale structural-stop response after the contract changes', async () => {
+    let resolveFirst!: (value: unknown) => void;
+    const firstRequest = new Promise((resolve) => { resolveFirst = resolve; });
+    (api.getStructuralStop as jest.Mock).mockReturnValueOnce(firstRequest);
+
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+
+    // Simulate CandidateNav switching to a different contract before the
+    // in-flight request for the old one has resolved.
+    const nextCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+    };
+    rerender(<TradeCard data={nextCard} />);
+
+    // The stale request now settles — it must be ignored, not shown for MSFT.
+    await act(async () => {
+      resolveFirst({ available: true, price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6 });
+    });
+
+    expect(screen.queryByText(/Structural stop — Order Block/)).not.toBeInTheDocument();
   });
 
   it('renders sell-to-close plan with editable target', () => {

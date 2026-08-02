@@ -207,28 +207,43 @@ export function TradeCard({
   );
   const [structuralLoading, setStructuralLoading] = useState(false);
   const [structuralError, setStructuralError] = useState(false);
+  // Tracks the in-flight "Check structure" request (if any) so a stale response
+  // for a contract the user has since navigated away from (via CandidateNav
+  // Prev/Next) can never overwrite the display for the new one — same class of
+  // race step-7-trade-card/page.tsx's recomputePlan effects guard against.
+  const structuralRequestRef = useRef<AbortController | null>(null);
 
   const prevSymbolRef = useRef(data.symbol);
   const prevContractRef = useRef(data.contract);
   useEffect(() => {
     if (data.symbol !== prevSymbolRef.current || data.contract !== prevContractRef.current) {
+      structuralRequestRef.current?.abort();
       setOverlay({ ...defaultOverlay(data), contracts: initialContracts });
       setStructuralStop(data.exit.structuralStop);
       setStructuralError(false);
+      setStructuralLoading(false);
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
     }
   }, [data.symbol, data.contract, initialContracts]);
 
+  // Cancel any outstanding request on unmount.
+  useEffect(() => () => structuralRequestRef.current?.abort(), []);
+
   const checkStructure = useCallback(async () => {
+    structuralRequestRef.current?.abort();
+    const controller = new AbortController();
+    structuralRequestRef.current = controller;
     setStructuralLoading(true);
     setStructuralError(false);
+    setStructuralStop(undefined);
     try {
       const res = await api.getStructuralStop({
         symbol: data.symbol,
         direction: data.direction,
         stock_price: data.price,
-      });
+      }, controller.signal);
+      if (controller.signal.aborted) return;
       setStructuralStop(
         res.available && res.price != null && res.source != null
           && res.confidence != null && res.distancePct != null
@@ -236,9 +251,10 @@ export function TradeCard({
           : null,
       );
     } catch {
+      if (controller.signal.aborted) return;
       setStructuralError(true);
     } finally {
-      setStructuralLoading(false);
+      if (!controller.signal.aborted) setStructuralLoading(false);
     }
   }, [data.symbol, data.direction, data.price]);
 
