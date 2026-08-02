@@ -155,6 +155,19 @@ export interface StructuralStop {
   distancePct: number;
 }
 
+export interface FirstPassageTarget {
+  pct:          number;          // profit target as a fraction of premium (0.20 = 20%)
+  stockPrice:   number | null;   // display-only Stage-1 approximation; null if unreachable
+  optionPrice:  number;          // premium * (1 + pct)
+  probability:  number;          // 0-1, hit probability before expiry
+  expectedDays: number | null;   // median days to hit; null if probability is 0
+}
+
+export interface FirstPassageEstimate {
+  targets:      FirstPassageTarget[];
+  invalidation: { probability: number; expectedDays: number | null };
+}
+
 export interface TargetLevel {
   id?: string;                   // optional — backend doesn't always send it
   stockPrice: number;            // underlying price at this target
@@ -258,6 +271,8 @@ export interface TradeCardData {
     invalidation: number; premiumStop: number; timeStopDays: number; target: number; targets: TargetLevel[];
     /** Populated only after the user presses "Check structure" — never set by the scan itself. */
     structuralStop?: StructuralStop | null;
+    /** Populated only after the user presses "Estimate" — never set by the scan itself. */
+    firstPassage?: FirstPassageEstimate | null;
   };
   nextEventDays?:  number | null;
   nextEventLabel?: string | null;

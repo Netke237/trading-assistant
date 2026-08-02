@@ -6,7 +6,7 @@ from typing import Optional
 
 import yaml
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.services import portfolio_risk, alert_generator
 from app.routers import scan as scan_router
@@ -78,6 +78,33 @@ class RiskConfig(BaseModel):
         ge=1,
         description='Maximum scan recommendations allowed per day',
     )
+    targetT1Pct: float = Field(
+        default=0.20,
+        ge=0.01,
+        le=5.0,
+        description='First profit-target level, as a fraction of premium (0.20 = 20%)',
+    )
+    targetT2Pct: float = Field(
+        default=0.35,
+        ge=0.01,
+        le=5.0,
+        description='Second profit-target level, as a fraction of premium (0.35 = 35%)',
+    )
+    targetT3Pct: float = Field(
+        default=0.50,
+        ge=0.01,
+        le=5.0,
+        description='Third profit-target level, as a fraction of premium (0.50 = 50%)',
+    )
+
+    @model_validator(mode='after')
+    def check_target_order(self) -> 'RiskConfig':
+        if not (self.targetT1Pct <= self.targetT2Pct <= self.targetT3Pct):
+            raise ValueError(
+                f"Profit targets must be non-decreasing: T1 ({self.targetT1Pct}) <= "
+                f"T2 ({self.targetT2Pct}) <= T3 ({self.targetT3Pct})"
+            )
+        return self
 
 
 @router.get('/risk')
@@ -92,6 +119,9 @@ async def get_risk_settings() -> dict:
         'maxTotalExposurePct': float(portfolio.get('max_total_exposure_pct', 0.25)),
         'maxConcurrentPositions': int(portfolio.get('max_concurrent_positions', 10)),
         'maxDailyRecommendations': int(portfolio.get('max_daily_recommendations', 5)),
+        'targetT1Pct': float(rr.get('target_t1_pct', 0.20)),
+        'targetT2Pct': float(rr.get('target_t2_pct', 0.35)),
+        'targetT3Pct': float(rr.get('target_t3_pct', 0.50)),
     }
 
 
@@ -101,6 +131,9 @@ async def save_risk_settings(body: RiskConfig) -> dict:
     if 'reward_risk' not in cfg:
         cfg['reward_risk'] = {}
     cfg['reward_risk']['premium_stop_pct'] = body.premiumStopPct
+    cfg['reward_risk']['target_t1_pct'] = body.targetT1Pct
+    cfg['reward_risk']['target_t2_pct'] = body.targetT2Pct
+    cfg['reward_risk']['target_t3_pct'] = body.targetT3Pct
     if 'portfolio' not in cfg:
         cfg['portfolio'] = {}
     if body.portfolioValue is not None:
@@ -125,6 +158,9 @@ async def save_risk_settings(body: RiskConfig) -> dict:
         'maxTotalExposurePct': body.maxTotalExposurePct,
         'maxConcurrentPositions': body.maxConcurrentPositions,
         'maxDailyRecommendations': body.maxDailyRecommendations,
+        'targetT1Pct': body.targetT1Pct,
+        'targetT2Pct': body.targetT2Pct,
+        'targetT3Pct': body.targetT3Pct,
     }
 
 

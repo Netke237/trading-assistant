@@ -352,6 +352,26 @@ export const api = {
       confidence: number | null;
       distancePct: number | null;
     }>('/api/contracts/structural-stop', req, signal),
+  /** On-demand Monte Carlo first-passage-time estimate — fired only by the
+   *  trade card's "Estimate" button, never automatically. */
+  getFirstPassageEstimate: (req: {
+    symbol: string;
+    direction: 'Bullish' | 'Bearish';
+    stock_price: number;
+    strike: number;
+    dte: number;
+    premium: number;
+    delta: number;
+    trend_score: number;
+    invalidation_price: number;
+    t1_pct?: number;
+    t2_pct?: number;
+    t3_pct?: number;
+  }, signal?: AbortSignal) =>
+    post<{
+      targets: { pct: number; stockPrice: number | null; optionPrice: number; probability: number; expectedDays: number | null }[];
+      invalidation: { probability: number; expectedDays: number | null };
+    }>('/api/contracts/first-passage', req, signal),
   getCandles:    (symbol: string) => get<Candle[]>(`/api/candles/${encodeURIComponent(symbol)}`),
   getSymbolInfo: (symbol: string) =>
     get<{ symbol: string; name: string }>(`/api/symbol/${encodeURIComponent(symbol)}/info`),
@@ -653,6 +673,9 @@ export interface RiskSettings {
   maxTotalExposurePct?: number;
   maxConcurrentPositions?: number;
   maxDailyRecommendations?: number;
+  targetT1Pct?: number;
+  targetT2Pct?: number;
+  targetT3Pct?: number;
 }
 
 export async function getRiskSettings(): Promise<RiskSettings> {

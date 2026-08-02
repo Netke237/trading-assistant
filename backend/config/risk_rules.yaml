@@ -21,6 +21,16 @@ reward_risk:
   bullish_invalidation_pct: 0.03   # -3% stock = invalidation
   bearish_invalidation_pct: 0.03   # +3% stock = bearish invalidation
   premium_stop_pct: 0.60        # stop out if option loses 60% of premium
+  target_t1_pct: 0.20           # profit-target ladder for the first-passage estimate (% of premium)
+  target_t2_pct: 0.35
+  target_t3_pct: 0.50
+
+# Monte Carlo first-passage-time simulation tunables (profit-target estimator)
+first_passage:
+  max_drift_pct: 0.40    # annualized drift ceiling at a trend score of 100 (0 at score 50, -max at score 0)
+  n_paths: 2000          # simulated GBM paths per estimate
+  sigma_floor: 0.10      # annualized stock volatility floor (guards against degenerate ATR data)
+  sigma_ceiling: 1.50    # annualized stock volatility ceiling
 
 auto_trade:
   max_arm_age_minutes: 30   # disarm without firing if order was armed longer than this

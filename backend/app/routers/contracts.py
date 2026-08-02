@@ -14,9 +14,11 @@ from app.scoring.contract_validator import dte_holding_multiplier, validate_cont
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.trade_plan import build_trade_plan
 from app.scoring.structural_stop import find_structural_stop
+from app.scoring.first_passage import estimate_first_passage
 # Shared with app.routers.scan — both build a trade plan off the same
 # reward_risk config so the scan and the per-contract recompute endpoint agree.
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
+from app.services.config_loader import load_first_passage_cfg as _fp_cfg
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -274,4 +276,111 @@ async def structural_stop(req: StructuralStopRequest) -> StructuralStopResponse:
         source=stop.source,
         confidence=stop.confidence,
         distancePct=round(stop.distance_pct, 2),
+    )
+
+
+class FirstPassageRequest(BaseModel):
+    symbol:             str
+    direction:          Literal["Bullish", "Bearish"]
+    stock_price:        float = Field(..., gt=0)
+    strike:             float = Field(..., gt=0)
+    dte:                int = Field(..., ge=0)
+    premium:            float = Field(..., gt=0)
+    delta:              float = 0.45
+    trend_score:        float = Field(..., ge=0, le=100)
+    invalidation_price:  float = Field(..., gt=0)
+    t1_pct: Optional[float] = Field(default=None, gt=0)
+    t2_pct: Optional[float] = Field(default=None, gt=0)
+    t3_pct: Optional[float] = Field(default=None, gt=0)
+
+
+class FirstPassageTargetOut(BaseModel):
+    pct:          float
+    stockPrice:   Optional[float] = None
+    optionPrice:  float
+    probability:  float
+    expectedDays: Optional[float] = None
+
+
+class FirstPassageInvalidationOut(BaseModel):
+    probability:  float
+    expectedDays: Optional[float] = None
+
+
+class FirstPassageResponse(BaseModel):
+    targets:      list[FirstPassageTargetOut]
+    invalidation: FirstPassageInvalidationOut
+
+
+@router.post('/contracts/first-passage', response_model=FirstPassageResponse)
+async def first_passage(req: FirstPassageRequest) -> FirstPassageResponse:
+    """On-demand Monte Carlo first-passage-time estimate for one contract's
+    profit targets and invalidation price: probability and expected days to
+    hit each before expiry.
+
+    Deliberately its own endpoint, fired only by the trade card's "Estimate"
+    button — never part of the scan or Step 6 contract overrides, for the
+    same latency reasons as recompute-plan and structural-stop.
+
+    This is a decision-support estimate, not a guarantee: it depends on a
+    signal-strength-derived drift assumption and ATR-derived volatility, not
+    just market data. Laying groundwork for alerting on these levels is
+    deliberately deferred — see alert_generator.py's existing TP_HIT/
+    STOP_REACHED logic, which already fires once a trade using these targets
+    is sent to the portfolio; a pre-execution ("watch without sending to a
+    broker") alert is a separate future step, not built here.
+    """
+    rr_cfg = _rr_cfg()
+    fp_cfg = _fp_cfg()
+    t1_pct = req.t1_pct if req.t1_pct is not None else rr_cfg["target_t1_pct"]
+    t2_pct = req.t2_pct if req.t2_pct is not None else rr_cfg["target_t2_pct"]
+    t3_pct = req.t3_pct if req.t3_pct is not None else rr_cfg["target_t3_pct"]
+
+    async with httpx.AsyncClient(timeout=8) as client:
+        candles = await fetch_candles_async(client, req.symbol.upper())
+
+    # Deterministic per-request seed: identical inputs (same contract, same
+    # price, same targets) return an identical answer instead of visibly
+    # different Monte Carlo noise on repeated button presses; genuinely
+    # different inputs (a new day, a moved price) still get an independent
+    # draw. dte stands in for "expiry" here — it already changes day to day
+    # for the same contract and is what the request actually carries.
+    seed_key = (req.symbol.upper(), req.strike, req.dte, round(req.stock_price, 2), t1_pct, t2_pct, t3_pct)
+    seed = hash(seed_key) % (2 ** 32)
+
+    result = estimate_first_passage(
+        stock_price=req.stock_price,
+        strike=req.strike,
+        dte=req.dte,
+        premium=req.premium,
+        delta=req.delta,
+        is_call=(req.direction == "Bullish"),
+        trend_score=req.trend_score,
+        invalidation_price=req.invalidation_price,
+        candles=candles,
+        t1_pct=t1_pct,
+        t2_pct=t2_pct,
+        t3_pct=t3_pct,
+        max_drift_pct=fp_cfg["max_drift_pct"],
+        n_paths=fp_cfg["n_paths"],
+        sigma_floor=fp_cfg["sigma_floor"],
+        sigma_ceiling=fp_cfg["sigma_ceiling"],
+        seed=seed,
+    )
+
+    return FirstPassageResponse(
+        targets=[
+            FirstPassageTargetOut(
+                pct=t.pct,
+                stockPrice=round(t.stock_price, 2) if t.stock_price is not None else None,
+                optionPrice=round(t.option_price, 2),
+                probability=round(t.probability, 4),
+                expectedDays=t.expected_days,
+            )
+            for t in result.targets
+        ],
+        invalidation=FirstPassageInvalidationOut(
+            probability=round(result.invalidation.probability, 4),
+            expectedDays=result.invalidation.expected_days,
+        ),
     )

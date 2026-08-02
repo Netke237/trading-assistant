@@ -133,6 +133,17 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+.targetPctRow {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.targetPctInput {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .rrBody {
   display: flex;
   flex-direction: column;
