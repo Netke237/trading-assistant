@@ -408,6 +408,46 @@ describe('TradeCard', () => {
     expect(screen.getByText('3.2×')).toBeInTheDocument();
   });
 
+  it('clamps structural-stop risk to the option premium instead of the uncapped delta approximation', async () => {
+    // stockMove = |150 - 200| = 50; deltaEst = 0.5 -> uncapped risk = 25.0,
+    // which is more than a long option could ever actually lose (premium
+    // paid = 5.0). If the clamp regressed to the uncapped value, T1's R:R
+    // would read 0.4x instead of 2.0x -- these are far enough apart that a
+    // clamp regression can't hide as a rounding difference.
+    (api.getStockQuote as jest.Mock)
+      .mockResolvedValueOnce({ symbol: 'AAPL', price: 200.0 })   // checkStructure's fetch
+      .mockResolvedValueOnce({ symbol: 'AAPL', price: 200.0 });  // estimateFirstPassage's fetch
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 150.0, source: 'order_block', confidence: 80, distancePct: 25.0,
+    });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 50, spread: 0.1, volume: 10,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [
+        { pct: 0.20, stockPrice: 210.0, optionPrice: 15.0, probability: 0.6, expectedDays: 5 },
+        { pct: 0.35, stockPrice: 220.0, optionPrice: 18.0, probability: 0.4, expectedDays: 9 },
+        { pct: 0.50, stockPrice: 230.0, optionPrice: 21.0, probability: 0.2, expectedDays: 14 },
+      ],
+      invalidation: { probability: 0.3, expectedDays: 4 },
+    });
+
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    await waitFor(() => {
+      expect(screen.getByText('T20% R:R vs. structural stop')).toBeInTheDocument();
+    });
+
+    // risk = min(50 * 0.5, 5.0) = 5.0 (clamped, not 25.0)
+    // T1: reward = 15.0 - 5.0 = 10.0 -> rr = 10.0 / 5.0 = 2.0
+    expect(screen.getByText('2.0×')).toBeInTheDocument();
+    expect(screen.queryByText('0.4×')).not.toBeInTheDocument();
+  });
+
   it('shows — instead of dividing by zero when the structural stop equals the fresh stock price', async () => {
     (api.getStockQuote as jest.Mock)
       .mockResolvedValueOnce({ symbol: 'AAPL', price: 190.0 })

@@ -124,6 +124,30 @@ async def test_premium_stop_fires(db_session):
     assert "Premium stop" in prem_alerts[0].reason
 
 
+# ── Test 3b: PREMIUM_STOP does NOT fire on a 50% loss (regression guard) ───────
+# A price in (entry*(1-pct), entry*pct] -- i.e. a real loss, but short of the
+# configured premium_stop_pct -- is the only band that distinguishes the
+# correct "opt_price <= entry*(1-pct)" threshold from the inverted
+# "opt_price <= entry*pct" bug this test was written to catch: any price that
+# fires under the correct formula also fires under the buggy one (the buggy
+# threshold is always the larger of the two), so a "does it fire" test alone
+# can never prove the formula's direction -- only a "does it NOT fire yet"
+# test in this band can.
+
+@pytest.mark.asyncio
+async def test_premium_stop_does_not_fire_before_threshold(db_session):
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(db_session, symbol="MSFT", contract="MSFT|400|2026-05-16|C", entry_price=5.0)
+    prices = {"MSFT": 300.0}
+    # 2.5 = a 50% loss -- short of the 60% stop. Correct threshold is
+    # 5.0 * (1 - 0.60) = 2.0, so 2.5 must NOT fire. The old inverted formula
+    # (5.0 * 0.60 = 3.0) would have wrongly fired here.
+    opt_prices = {"MSFT|400|2026-05-16|C": 2.5}
+    alerts = await generate_alerts(db_session, prices, opt_prices)
+    prem_alerts = [a for a in alerts if a.alertType == "PREMIUM_STOP"]
+    assert len(prem_alerts) == 0
+
+
 # ── Test 4: Backend produces distinct alert types (dedup is frontend logic) ─
 
 @pytest.mark.asyncio
