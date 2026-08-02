@@ -478,7 +478,7 @@ function EditDrawer({
       <div className={styles.editGrid}>
         <EditField
           label="Stop"
-          hint="Exit if position drops below this option price."
+          hint="Exit if the underlying stock drops below this price (invalidates the trade thesis)."
           value={position.stop}
           onChange={(n) => onChange({ stop: n })}
         />
