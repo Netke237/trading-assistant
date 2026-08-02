@@ -26,7 +26,7 @@ import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api }               from '@/lib/api';
 import {
-  applyPickedContract, contractKeyFor, mergePlan, resolveBasketCards,
+  applyPickedContract, contractKeyFor, mergePlan, resolveBasketCards, rrOverridesFrom,
   type OverriddenCard, type RecomputedPlanShape,
 } from '@/lib/tradeCardOverride';
 import styles from '../screener.module.css';
@@ -309,6 +309,7 @@ export default function Step7Page() {
           premium:     q?.price ?? liveQcd.mid,
           delta:       liveQcd.delta,
           spread:      q?.spread ?? 0,
+          ...rrOverridesFrom(useScanStore.getState().scanOverrides),
         }, controller.signal)
           .then((plan) => {
             settled = true;
@@ -379,6 +380,7 @@ export default function Step7Page() {
         premium: cd.mid,
         delta: cd.delta,
         spread: 0,
+        ...rrOverridesFrom(useScanStore.getState().scanOverrides),
       }, controller.signal)
         .then((plan) => {
           settled = true;

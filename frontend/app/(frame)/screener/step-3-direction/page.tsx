@@ -289,13 +289,13 @@ const PARAM_DEFS: ParamDef[] = [
     hint: 'Minimum option premium per contract in $. ↑ Higher → rejects cheap, illiquid options (fewer) · ↓ Lower → penny options included (more, but harder to exit). Default: $0.10' },
   // ALL — Reward/Risk
   { key: 'rr_bullish_target_pct',       label: 'Bullish target %',       type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.01, max: 2.0, step: 0.01, unit: '%',
-    hint: 'Profit target as a fraction of entry for bullish trades. ↑ Higher → demands bigger moves (fewer qualify, R/R better) · ↓ Lower → takes smaller wins (more qualify). Default: 10%' },
+    hint: 'Profit target as a fraction of entry for bullish trades. ↑ Higher → demands bigger moves (fewer qualify, R/R better) · ↓ Lower → takes smaller wins (more qualify). Default: 8%' },
   { key: 'rr_bearish_target_pct',       label: 'Bearish target %',       type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.01, max: 2.0, step: 0.01, unit: '%',
-    hint: 'Profit target as a fraction of entry for bearish trades. ↑ Higher → demands bigger downside moves · ↓ Lower → takes smaller drops. Default: 10%' },
+    hint: 'Profit target as a fraction of entry for bearish trades. ↑ Higher → demands bigger downside moves · ↓ Lower → takes smaller drops. Default: 8%' },
   { key: 'rr_bullish_invalidation_pct', label: 'Bullish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.005, max: 1.0, step: 0.005, unit: '%',
-    hint: 'Stop-loss distance for bullish trades. ↑ Higher → wider stop (more room, worse R/R) · ↓ Lower → tighter stop (better R/R but more stop-outs). Default: 5%' },
+    hint: 'Stop-loss distance for bullish trades. ↑ Higher → wider stop (more room, worse R/R) · ↓ Lower → tighter stop (better R/R but more stop-outs). Default: 3%' },
   { key: 'rr_bearish_invalidation_pct', label: 'Bearish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.005, max: 1.0, step: 0.005, unit: '%',
-    hint: 'Stop-loss distance for bearish trades. ↑ Higher → wider stop · ↓ Lower → tighter stop. Default: 5%' },
+    hint: 'Stop-loss distance for bearish trades. ↑ Higher → wider stop · ↓ Lower → tighter stop. Default: 3%' },
 ];
 
 const SUBGROUP_DESCRIPTIONS: Record<string, string> = {
@@ -518,6 +518,16 @@ function ParamRow({
               if (!Number.isNaN(num)) {
                 useScanStore.getState().setScanOverrides({ ...scanOverrides, [def.key]: num });
               }
+            }
+          }}
+          onBlur={() => {
+            const current = useScanStore.getState().scanOverrides[def.key];
+            if (typeof current !== 'number') return;
+            let clamped = current;
+            if (def.min !== undefined) clamped = Math.max(clamped, def.min);
+            if (def.max !== undefined) clamped = Math.min(clamped, def.max);
+            if (clamped !== current) {
+              useScanStore.getState().setScanOverrides({ ...useScanStore.getState().scanOverrides, [def.key]: clamped });
             }
           }}
         />

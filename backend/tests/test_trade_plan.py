@@ -3,7 +3,7 @@
 build_trade_plan is the single source of truth for the Entry/Exit/RR/targets
 used by BOTH the scan pipeline and the POST /api/contracts/recompute-plan
 endpoint. These tests pin its numeric behaviour so the two callers can't
-silently drift, and guard the delta-floor regression found in review.
+silently drift.
 """
 from __future__ import annotations
 
@@ -13,13 +13,17 @@ from fastapi.testclient import TestClient
 from app.scoring.trade_plan import build_trade_plan
 
 # Fixed config so the assertions don't couple to risk_rules.yaml edits.
-CFG = {"bullish_target_pct": 0.08, "bearish_target_pct": 0.08, "premium_stop_pct": 0.60}
+CFG = {
+    "bullish_target_pct": 0.08, "bearish_target_pct": 0.08,
+    "bullish_invalidation_pct": 0.03, "bearish_invalidation_pct": 0.03,
+    "premium_stop_pct": 0.60,
+}
 
 
 def _plan(**overrides):
     base = dict(
         direction="Bullish", stock_price=318.73, strike=375, dte=185,
-        premium=7.47, delta=0.24, entry_bid=7.34, entry_ask=7.59, rr_cfg=CFG,
+        premium=7.47, entry_bid=7.34, entry_ask=7.59, rr_cfg=CFG,
     )
     base.update(overrides)
     base.setdefault("entry_mid", base["premium"])
@@ -35,29 +39,64 @@ def test_premium_stop_is_pct_of_selected_premium():
     assert len(p.targets) == 3
 
 
-def test_invalidation_matches_delta_approximation():
+def test_invalidation_is_stock_pct_move_not_delta_derived():
+    # Finding 1 fix: invalidation is a stock-price percentage move off
+    # bullish_invalidation_pct, mirroring target_price's own formula -- delta
+    # no longer plays any part in it (the old formula back-calculated a stock
+    # move from premium_stop_pct/delta; that was never what
+    # bullish_invalidation_pct/bearish_invalidation_pct in risk_rules.yaml
+    # actually documented).
     p = _plan()
-    # stock_stop_move = premium * pct / delta ; invalidation = spot - move (bullish)
-    expected = 318.73 - (7.47 * 0.60 / 0.24)
+    expected = 318.73 * (1 - 0.03)
     assert round(p.invalidation_price_raw, 2) == round(expected, 2)
 
 
-def test_zero_delta_floors_at_005_not_default_045():
-    # Regression guard: a legitimate 0.0 delta must floor at 0.05, NOT be coerced
-    # to the 0.45 missing-key default (which would 9x the stop distance).
-    p = _plan(delta=0.0)
-    expected = 318.73 - (7.47 * 0.60 / 0.05)
+def test_invalidation_uses_bearish_invalidation_pct_for_bearish():
+    p = _plan(direction="Bearish")
+    expected = 318.73 * (1 + 0.03)
     assert round(p.invalidation_price_raw, 2) == round(expected, 2)
-    # And the 0.45 *default* is the caller's job, not the helper's: the helper
-    # must NOT invent a default. Confirm 0.45 produces a different result.
-    p45 = _plan(delta=0.45)
-    assert round(p45.invalidation_price_raw, 2) == round(318.73 - (7.47 * 0.60 / 0.45), 2)
-    assert p.invalidation_price_raw != p45.invalidation_price_raw
 
 
 def test_bearish_target_moves_down():
-    p = _plan(direction="Bearish", delta=-0.24)
+    p = _plan(direction="Bearish")
     assert p.target_price < 318.73
+
+
+def test_default_rr_cfg_invalidation_matches_risk_rules_yaml():
+    # Uses the REAL load_reward_risk_cfg() (not the fixed CFG constant) so a
+    # future edit to risk_rules.yaml's bullish_invalidation_pct default is
+    # caught here rather than silently drifting from what's displayed.
+    from app.services.config_loader import load_reward_risk_cfg
+    rr_cfg = load_reward_risk_cfg()
+    p = build_trade_plan(
+        direction="Bullish", stock_price=318.73, strike=375, dte=185,
+        premium=7.47, entry_bid=7.34, entry_ask=7.59, entry_mid=7.47,
+        rr_cfg=rr_cfg,
+    )
+    expected = round(318.73 * (1 - rr_cfg["bullish_invalidation_pct"]), 2)
+    assert p.invalidation_price == expected
+
+
+def test_merge_reward_risk_overrides_bullish_invalidation_pct_changes_plan():
+    # Mirrors the existing rr_bullish_target_pct override pattern -- an
+    # override to rr_bullish_invalidation_pct must actually change the
+    # computed invalidation_price, not just the merged config dict.
+    from app.services.config_loader import merge_reward_risk_overrides
+    default_cfg = merge_reward_risk_overrides(None)
+    overridden_cfg = merge_reward_risk_overrides({"rr_bullish_invalidation_pct": 0.10})
+
+    default_plan = build_trade_plan(
+        direction="Bullish", stock_price=318.73, strike=375, dte=185,
+        premium=7.47, entry_bid=7.34, entry_ask=7.59, entry_mid=7.47,
+        rr_cfg=default_cfg,
+    )
+    overridden_plan = build_trade_plan(
+        direction="Bullish", stock_price=318.73, strike=375, dte=185,
+        premium=7.47, entry_bid=7.34, entry_ask=7.59, entry_mid=7.47,
+        rr_cfg=overridden_cfg,
+    )
+    assert overridden_plan.invalidation_price != default_plan.invalidation_price
+    assert overridden_plan.invalidation_price == round(318.73 * (1 - 0.10), 2)
 
 
 def test_heston_params_flow_through_to_rr_and_targets():
@@ -72,7 +111,7 @@ def test_heston_params_flow_through_to_rr_and_targets():
     # is Heston-priced" happy-path test assert something that isn't true.
     p = _plan(
         heston_params=params,
-        stock_price=185.0, strike=190.0, dte=30, premium=2.50, delta=0.45,
+        stock_price=185.0, strike=190.0, dte=30, premium=2.50,
         entry_bid=2.45, entry_ask=2.55,
     )
     assert p.rr_model == "Heston repriced"
@@ -111,13 +150,14 @@ def test_recompute_endpoint_matches_helper():
     # the "single source of truth" claim is hollow. Reconstruct the helper call
     # exactly as the endpoint does (real risk_rules.yaml cfg, symmetric bid/ask
     # from spread) and compare field-by-field.
-    from app.routers.contracts import router, _rr_cfg
+    from app.routers.contracts import router
+    from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 
     premium, spread = 7.47, 0.25
     half = spread / 2
     expected = build_trade_plan(
         direction="Bullish", stock_price=318.73, strike=375, dte=185,
-        premium=premium, delta=0.24,
+        premium=premium,
         entry_bid=max(0.01, premium - half), entry_ask=premium + half,
         entry_mid=premium, rr_cfg=_rr_cfg(),
     )
@@ -140,10 +180,13 @@ def test_recompute_endpoint_matches_helper():
     assert len(body["exit"]["targets"]) == len(expected.targets) == 3
 
 
-def test_recompute_endpoint_defaults_missing_delta_to_045():
-    # The 0.45 default for a missing delta lives at the endpoint boundary (pydantic
-    # default), mirroring scan's contract.get("delta", 0.45).
-    from app.routers.contracts import router, _rr_cfg
+def test_recompute_endpoint_uses_bullish_invalidation_pct_not_delta():
+    # delta no longer affects invalidation at all (see Finding 1 fix) -- the
+    # endpoint must still accept a request with no delta field (Pydantic
+    # default kicks in) and computes invalidation purely from
+    # bullish_invalidation_pct now, mirroring target_price's own formula.
+    from app.routers.contracts import router
+    from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
@@ -152,7 +195,7 @@ def test_recompute_endpoint_defaults_missing_delta_to_045():
         "strike": 375, "dte": 185, "premium": 7.47, "spread": 0.25,  # no delta
     })
     assert r.status_code == 200, r.text
-    expected_inval = round(318.73 - (7.47 * _rr_cfg()["premium_stop_pct"] / 0.45), 2)
+    expected_inval = round(318.73 * (1 - _rr_cfg()["bullish_invalidation_pct"]), 2)
     assert r.json()["exit"]["invalidation"] == expected_inval
 
 
@@ -164,5 +207,33 @@ def test_recompute_endpoint_rejects_nonpositive_premium():
     r = client.post("/api/contracts/recompute-plan", json={
         "symbol": "AAPL", "direction": "Bullish", "stock_price": 318.73,
         "strike": 375, "dte": 185, "premium": 0, "delta": 0.24, "spread": 0.25,
+    })
+    assert r.status_code == 422
+
+
+# ── Finding 2c: rr_* bounds on RecomputePlanRequest itself ────────────────────
+
+def test_recompute_endpoint_rejects_negative_rr_target_pct():
+    from app.routers.contracts import router
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    r = client.post("/api/contracts/recompute-plan", json={
+        "symbol": "AAPL", "direction": "Bullish", "stock_price": 318.73,
+        "strike": 375, "dte": 185, "premium": 7.47, "spread": 0.25,
+        "rr_bullish_target_pct": -1,
+    })
+    assert r.status_code == 422
+
+
+def test_recompute_endpoint_rejects_rr_target_pct_above_cap():
+    from app.routers.contracts import router
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    r = client.post("/api/contracts/recompute-plan", json={
+        "symbol": "AAPL", "direction": "Bullish", "stock_price": 318.73,
+        "strike": 375, "dte": 185, "premium": 7.47, "spread": 0.25,
+        "rr_bullish_target_pct": 5.0,
     })
     assert r.status_code == 422

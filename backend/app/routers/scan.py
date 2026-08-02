@@ -24,6 +24,7 @@ import json as _json
 # target %, etc.). Shared with app.routers.contracts's recompute endpoint so
 # both build a trade plan off the same numbers.
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
+from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
 from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
 
 from app.schemas import (
@@ -674,7 +675,7 @@ async def _process_symbol(
     runner_ups = valid_scores[1:3]
 
     # ── Entry / Exit / Reward-risk / targets (shared with the recompute endpoint) ─
-    _rr = _rr_cfg()
+    _rr = _merge_rr_cfg(overrides)
     strike = float(contract.get("strike", price))
     premium = max(float(contract.get("price", 0.10)), 0.01)
 
@@ -758,7 +759,6 @@ async def _process_symbol(
         strike=strike,
         dte=int(contract.get("dte", 30)),
         premium=premium,
-        delta=float(contract.get("delta", 0.45)),
         entry_bid=float(contract.get("bid", 0)),
         entry_ask=float(contract.get("ask", 0)),
         entry_mid=float(contract.get("price", 0)),
@@ -1076,6 +1076,21 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         symbols = expand_universe(req.universe)
     except PresetUnavailableError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Validate rr_* overrides ONCE upfront, before dispatching any per-symbol
+    # work. Without this, a malformed override (e.g. a negative target %)
+    # only surfaced inside _process_symbol -- AFTER that symbol's full
+    # candle/price/fundamentals fetch and option-chain scoring had already
+    # run, and it failed identically for every symbol in the universe. Fail
+    # fast instead, matching contracts.py's recompute-plan endpoint's
+    # handling of the same error. The per-symbol _merge_rr_cfg(overrides)
+    # call inside _process_symbol is left in place as defense in depth (now
+    # effectively unreachable via this endpoint since the same overrides
+    # dict is validated here first).
+    try:
+        _merge_rr_cfg(req.overrides)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     gate = _resolve_gate(req)
     atr_mult = getattr(req, "confidence_atr_mult", None)

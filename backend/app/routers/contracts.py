@@ -20,6 +20,7 @@ from app.scoring.first_passage import estimate_first_passage
 # reward_risk config so the scan and the per-contract recompute endpoint agree.
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 from app.services.config_loader import load_first_passage_cfg as _fp_cfg
+from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -173,8 +174,20 @@ class RecomputePlanRequest(BaseModel):
     strike: float = Field(..., gt=0)
     dte: int = Field(..., ge=0)
     premium: float = Field(..., gt=0)   # selected contract mid
+    # Accepted for backward compatibility with the frontend, which still sends
+    # it on every call -- no longer consumed here since invalidation is
+    # computed off the strike/stock-price relationship, not the contract's
+    # delta (build_trade_plan's signature dropped this parameter).
     delta: float = 0.45
     spread: float = 0.0
+    # Optional per-request reward/risk overrides — mirrors the same keys the
+    # scan endpoint accepts in ScanRequest.overrides, so a contract override
+    # recompute (Step 6/7) honors whatever R/R tuning the trader set on Step 3
+    # instead of silently reverting to risk_rules.yaml's defaults.
+    rr_bullish_target_pct: float | None = Field(default=None, gt=0, le=2.0)
+    rr_bearish_target_pct: float | None = Field(default=None, gt=0, le=2.0)
+    rr_bullish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
+    rr_bearish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
 
 
 class RecomputePlanResponse(BaseModel):
@@ -192,7 +205,7 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     Step 6 lets the user override the auto-picked contract. Without recomputing,
     the Exit Plan (premium stop, invalidation, targets) keeps describing the
     original contract. This endpoint runs the SAME math the scan uses
-    (build_trade_plan) off the selected contract's premium/delta so every derived
+    (build_trade_plan) off the selected contract's premium so every derived
     number matches the contract actually being traded.
     """
     # Derive bid/ask from the mid + spread so assess_entry sees the same
@@ -200,6 +213,15 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     half = max(req.spread, 0.0) / 2
     entry_bid = max(0.01, req.premium - half)
     entry_ask = req.premium + half
+
+    _rr_overrides = {
+        k: v for k, v in {
+            "rr_bullish_target_pct":       req.rr_bullish_target_pct,
+            "rr_bearish_target_pct":       req.rr_bearish_target_pct,
+            "rr_bullish_invalidation_pct": req.rr_bullish_invalidation_pct,
+            "rr_bearish_invalidation_pct": req.rr_bearish_invalidation_pct,
+        }.items() if v is not None
+    }
 
     # heston_params intentionally omitted (defaults to None → BS reprice fallback).
     # Unlike the scan pipeline, this endpoint only receives one contract's fields
@@ -210,17 +232,21 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     # show "Heston repriced" on the initial scan card and "BS repriced (IV-derived)"
     # after a Step 6 override — see docs/superpowers/plans/
     # 2026-07-25-heston-pricing-in-trade-plan.md's "Out of scope" section.
+    try:
+        _rr_cfg_merged = _merge_rr_cfg(_rr_overrides)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
     plan = build_trade_plan(
         direction=req.direction,
         stock_price=req.stock_price,
         strike=req.strike,
         dte=req.dte,
         premium=req.premium,
-        delta=req.delta,
         entry_bid=entry_bid,
         entry_ask=entry_ask,
         entry_mid=req.premium,
-        rr_cfg=_rr_cfg(),
+        rr_cfg=_rr_cfg_merged,
     )
 
     return RecomputePlanResponse(
