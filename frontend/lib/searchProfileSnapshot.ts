@@ -77,7 +77,12 @@ export function applySearchProfile(profile: SearchProfile): void {
 
   const scoringHz = presetByKey(resolveParamsHorizon(profile.horizonPreset, profile.holdMax)).scoringHorizon;
   useScanStore.getState().setContext({
-    universe:      useScanStore.getState().context?.universe ?? 'SP500',
+    // stockScan.ts and step-5-strategy/page.tsx read context.universe directly
+    // for the actual Stocks scan request (not useUniverseStore) — reusing the
+    // OLD context.universe here would silently leave a Stocks scan pointed at
+    // whatever universe was previously selected, defeating the whole point of
+    // restoring a profile. Use the profile's captured pick instead.
+    universe:      profile.universe.pick,
     direction:     profile.direction,
     horizon:       horizonDisplayString(scoringHz, profile.holdMin, profile.holdMax),
     horizonPreset: profile.horizonPreset,
@@ -86,9 +91,14 @@ export function applySearchProfile(profile: SearchProfile): void {
   });
   useScanStore.getState().setScanOverrides({ ...profile.scanOverrides });
 
-  if (profile.mode === 'stocks' && profile.strategyParams) {
-    useScanStore.getState().setActiveStrategy(profile.strategy ?? null);
-    useScanParamsStore.getState().loadParams(profile.strategyParams);
+  if (profile.mode === 'stocks') {
+    // A strategy-less profile (saved from Step 3 before ever visiting Step 5)
+    // must explicitly clear activeStrategy — otherwise a strategy left over
+    // from an earlier session survives untouched, can silently run via
+    // RunScanButton's Stocks path, and can get baked into this profile on a
+    // later "Update" as if it were intentional.
+    useScanStore.getState().setActiveStrategy(profile.strategyParams ? (profile.strategy ?? null) : null);
+    if (profile.strategyParams) useScanParamsStore.getState().loadParams(profile.strategyParams);
   }
 
   const settings = useSettingsStore.getState();

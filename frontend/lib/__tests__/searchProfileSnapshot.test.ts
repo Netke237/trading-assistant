@@ -75,6 +75,11 @@ describe('captureCurrentSnapshot / applySearchProfile — stocks mode', () => {
     expect(u.maxPriceRaw).toBe('500');
 
     const s = useScanStore.getState();
+    // context.universe is what stockScan.ts / step-5-strategy actually read
+    // for the Stocks scan request (not useUniverseStore) — must match the
+    // profile's captured pick (NDX100), not the DOW30 it was mutated to
+    // right before apply.
+    expect(s.context?.universe).toBe('NDX100');
     expect(s.context?.direction).toBe('Bearish');
     expect(s.context?.horizonPreset).toBe('Position');
     expect(s.context?.holdMin).toBe(60);
@@ -96,6 +101,23 @@ describe('captureCurrentSnapshot / applySearchProfile — stocks mode', () => {
     const captured = captureCurrentSnapshot('stocks');
     expect(captured.strategy).toBeUndefined();
     expect(captured.strategyParams).toBeUndefined();
+  });
+
+  it('clears a leftover activeStrategy when applying a strategy-less profile', () => {
+    // Profile saved from Step 3 before ever visiting Step 5 — no strategy.
+    useScanStore.setState({ activeStrategy: null });
+    const captured = captureCurrentSnapshot('stocks');
+    expect(captured.strategyParams).toBeUndefined();
+
+    // A DIFFERENT session/candidate left a real strategy active.
+    useScanStore.setState({ activeStrategy: 'breakout_base' });
+
+    applySearchProfile({ ...captured, id: 'p4', name: 'no-strategy', createdAt: '', updatedAt: '' });
+
+    // Must be reset to null, not left at the stale 'breakout_base' — a
+    // leftover strategy here would silently run via RunScanButton's Stocks
+    // path and could get baked into this profile on a later "Update".
+    expect(useScanStore.getState().activeStrategy).toBeNull();
   });
 });
 

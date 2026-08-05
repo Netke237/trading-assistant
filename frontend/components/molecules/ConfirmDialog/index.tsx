@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import { Text } from '@/components/primitives';
 import styles from './ConfirmDialog.module.css';
 
@@ -12,10 +13,21 @@ interface Props {
 }
 
 export function ConfirmDialog({ title, body, confirmLabel = 'Confirm', onCancel, onConfirm }: Props) {
+  const mouseDownOnOverlay = useRef(false);
+
   return (
-    <div className={styles.overlay} role="dialog" aria-modal aria-labelledby="confirm-dialog-title">
+    <div
+      className={styles.overlay}
+      onMouseDown={(e) => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+      onClick={(e) => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) onCancel(); }}
+      role="dialog"
+      aria-modal
+      aria-labelledby="confirm-dialog-title"
+    >
       <div className={styles.dialog}>
-        <Text size={14} weight={600}>{title}</Text>
+        <Text as="div" size={14} weight={600}>
+          <span id="confirm-dialog-title">{title}</span>
+        </Text>
         {body && <Text size={13} tone="secondary">{body}</Text>}
         <div className={styles.actions}>
           <button type="button" className={styles.cancelBtn} onClick={onCancel}>Cancel</button>

@@ -12,6 +12,7 @@ import styles from './SearchProfileBar.module.css';
 
 export function SearchProfileBar() {
   const screenerMode = useScanStore((s) => s.screenerMode);
+  const scanning      = useScanStore((s) => s.scanState === 'SCANNING');
   const profiles       = useSearchProfilesStore((s) => s.profiles);
   const updateProfile  = useSearchProfilesStore((s) => s.updateProfile);
   const renameProfile  = useSearchProfilesStore((s) => s.renameProfile);
@@ -54,6 +55,14 @@ export function SearchProfileBar() {
     if (p) applySearchProfile(p);
   }
 
+  // A scan already in flight was built from whatever universe/direction/
+  // horizon/overrides were live at the moment it was submitted — switching
+  // any of that mid-scan wouldn't affect the in-flight request, just leave a
+  // confusing mismatch between the applied profile and the scan that's about
+  // to land. Block changes until the scan settles, mirroring RunScanButton's
+  // own `disabled={scanning}` guard.
+  const controlsDisabled = scanning;
+
   return (
     <div className={styles.bar}>
       <Text size={12} weight={600}>Search Profile</Text>
@@ -62,6 +71,8 @@ export function SearchProfileBar() {
         value={selectedId ?? ''}
         onChange={(e) => handleSelect(e.target.value)}
         aria-label="Search profile"
+        disabled={controlsDisabled}
+        title={controlsDisabled ? 'Wait for the current scan to finish before applying a different profile' : undefined}
       >
         <option value="">— none —</option>
         {modeProfiles.map((p) => (

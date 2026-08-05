@@ -27,6 +27,11 @@
   border-color: var(--accent);
 }
 
+.select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
