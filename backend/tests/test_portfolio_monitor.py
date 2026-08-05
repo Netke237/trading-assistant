@@ -37,6 +37,19 @@ def _make_position(rec_id: str, symbol: str = 'AAPL') -> MagicMock:
     return p
 
 
+class _FakeNestedTransaction:
+    """Real async-context-manager shape for AsyncSession.begin_nested(),
+    which a bare AsyncMock does not provide — AsyncMock auto-specs
+    `begin_nested` as a coroutine-returning mock, so `async with
+    db.begin_nested():` fails (caught internally by log_position_alert, but
+    noisily) unless this is modeled explicitly."""
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+
 def _fake_db_with_positions(rec_ids: list[str], symbol: str = 'AAPL'):
     """Return an async-context-manager mock whose positions have the given recIds."""
     positions = [_make_position(rid, symbol) for rid in rec_ids]
@@ -47,6 +60,9 @@ def _fake_db_with_positions(rec_ids: list[str], symbol: str = 'AAPL'):
     fake_result = MagicMock()
     fake_result.scalars.return_value.all.return_value = positions
     fake_db.execute = AsyncMock(return_value=fake_result)
+    # begin_nested() is sync (it returns the async context manager, it isn't
+    # itself awaited) — must be a plain MagicMock, not an AsyncMock.
+    fake_db.begin_nested = MagicMock(return_value=_FakeNestedTransaction())
     return fake_db
 
 

@@ -458,6 +458,11 @@ export interface AlertConfig {
   // No dedicated UI control yet (deferred) — round-tripped here so saving any
   // other Alerts-page setting doesn't silently reset it back to 0 on the backend.
   positionSustainMinutes: number;
+  // default 30 — position_alert_history retention window (days). No dedicated
+  // UI control yet — round-tripped for the same reason as positionSustainMinutes
+  // above: the Alerts page POSTs the whole alert_delivery block, so any field
+  // missing here gets silently reset to the backend's Pydantic default on save.
+  positionAlertRetentionDays: number;
 }
 
 export type AlertType =

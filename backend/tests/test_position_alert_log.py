@@ -129,6 +129,66 @@ async def test_log_position_alert_new_row_after_reminder_window(db_session):
 
 
 @pytest.mark.asyncio
+async def test_log_position_alert_regime_dedup_key_includes_note(db_session):
+    """Two distinct regime transitions sharing rec_id='regime' must both get
+    a row even within the same reminder window — dedup must not collapse
+    them just because rec_id/alert_type/source match; `note` (the actual
+    transition) has to be part of the dedup key, or a second real flip within
+    the window would be silently dropped."""
+    from app.services.position_alert_log import log_position_alert
+
+    await log_position_alert(
+        db_session, rec_id="regime", symbol="MARKET", alert_type="REGIME_CHANGE",
+        source="backend", reference_kind="regime", note="BULL -> NEUTRAL",
+    )
+    await log_position_alert(
+        db_session, rec_id="regime", symbol="MARKET", alert_type="REGIME_CHANGE",
+        source="backend", reference_kind="regime", note="NEUTRAL -> BEAR",
+    )
+    rows = (await db_session.execute(
+        select(PositionAlertHistoryModel).where(PositionAlertHistoryModel.rec_id == "regime")
+    )).scalars().all()
+    assert {r.note for r in rows} == {"BULL -> NEUTRAL", "NEUTRAL -> BEAR"}
+
+
+@pytest.mark.asyncio
+async def test_log_position_alert_failure_does_not_expire_sibling_objects(db_session, monkeypatch):
+    """Regression test for the original bug: log_position_alert() used to call
+    db.rollback() on failure, which expires EVERY object already loaded on a
+    shared session — corrupting sibling work still in progress on that same
+    session (e.g. other positions in the same generate_alerts() loop, or
+    `position` in routers/alerts.py's post_alert_notify accessed again after
+    the call). The fixed version scopes its own work in a SAVEPOINT
+    (begin_nested) so a failure here only rolls back its own insert."""
+    from app.services.position_alert_log import log_position_alert
+
+    pos = await _insert_position(db_session, rec_id="REC-7", symbol="AAPL")
+    assert pos.symbol == "AAPL"  # loaded/tracked on db_session before the failure
+
+    def _boom(_obj):
+        raise RuntimeError("simulated insert failure")
+    monkeypatch.setattr(db_session, "add", _boom)
+
+    # Must swallow the error, not raise it to the caller.
+    await log_position_alert(
+        db_session, rec_id="REC-7", symbol="AAPL", alert_type="STOP_REACHED", source="backend",
+    )
+
+    monkeypatch.undo()
+    # A full Session.rollback() would have expired `pos`, and accessing an
+    # expired attribute outside an awaited context raises MissingGreenlet in
+    # async SQLAlchemy — this must still be plain, synchronous, working access.
+    assert pos.symbol == "AAPL"
+    assert pos.stop == 3.00  # from _insert_position's defaults, still intact
+
+    # And the session itself must still be usable for further queries.
+    rows = (await db_session.execute(
+        select(PositionAlertHistoryModel).where(PositionAlertHistoryModel.rec_id == "REC-7")
+    )).scalars().all()
+    assert rows == []  # the failed insert never landed
+
+
+@pytest.mark.asyncio
 async def test_log_position_alert_dedup_is_per_source(db_session):
     """backend and frontend firing the same condition both get a row — the
     dedup key includes source, so one engine never suppresses the other's row."""
@@ -175,12 +235,26 @@ async def test_generate_alerts_persists_time_stop(db_session):
 
 
 @pytest.mark.asyncio
-async def test_generate_alerts_persists_regardless_of_enabled_types(db_session, monkeypatch):
-    """generate_alerts() never reads alert_delivery.enabledTypes — persistence
-    must not depend on it, unlike notify_alert's own dispatch gating. Simulates
-    a user having disabled STOP_REACHED notifications entirely and confirms the
-    audit row still appears."""
+async def test_generate_alerts_persists_even_when_notify_alert_would_suppress_dispatch(
+    db_session, tmp_path, monkeypatch,
+):
+    """Proves the decoupling this design depends on: persistence (via
+    generate_alerts -> log_position_alert) does not depend on
+    alert_delivery.enabledTypes, while notify_alert's actual dispatch DOES.
+    Points BOTH modules' settings-file constants at the same monkeypatched
+    yaml (enabledTypes excludes STOP_REACHED) and asserts one behavior each
+    way — a prior version of this test asserted only the persistence half
+    with an unused `monkeypatch` fixture, which could pass even if the two
+    systems were wrongly coupled."""
     from app.services.alert_generator import generate_alerts
+    from app.services.notifications import alert_notifier
+
+    settings_path = tmp_path / "settings.yaml"
+    settings_path.write_text(
+        "alert_delivery:\n  masterEnabled: true\n  enabledTypes: [TP_HIT]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(alert_notifier, "_SETTINGS_PATH", settings_path)
 
     await _insert_position(db_session, rec_id="REC-6", stop=190.0, direction="Bullish")
     # price below stop -> STOP_REACHED condition is met
@@ -192,10 +266,13 @@ async def test_generate_alerts_persists_regardless_of_enabled_types(db_session, 
             PositionAlertHistoryModel.alert_type == "STOP_REACHED",
         )
     )).scalars().all()
-    assert len(rows) == 1
+    assert len(rows) == 1, "persistence must not depend on enabledTypes"
     assert rows[0].source == "backend"
     assert rows[0].price == 185.0
     assert rows[0].reference_value == 190.0
+
+    dispatched = alert_notifier.notify_alert("AAPL", "STOP_REACHED", "Stop breached", "REC-6")
+    assert dispatched is False, "dispatch, unlike persistence, must respect enabledTypes"
 
 
 # ── Retention ──────────────────────────────────────────────────────────────────

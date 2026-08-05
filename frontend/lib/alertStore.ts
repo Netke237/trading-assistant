@@ -28,6 +28,7 @@ export const DEFAULT_CONFIG: AlertConfig = {
   keepAlertsDays: 30,
   retentionDays: 30,
   positionSustainMinutes: 0,
+  positionAlertRetentionDays: 30,
   enabledTypes: [
     'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP',
     'EVENT_RISK', 'REGIME_CHANGE', 'SCAN_COMPLETE', 'SCAN_FAILED',

@@ -24,6 +24,9 @@ async def get_alerts(db: AsyncSession = Depends(get_db)) -> list[AlertItem]:
 
 
 class AlertNotifyRequest(BaseModel):
+    # symbol is accepted but intentionally unused below (post_alert_notify
+    # derives it from the DB row instead) — kept on the wire schema since the
+    # frontend already sends it and it's harmless input.
     symbol: str
     alertType: str
     reason: str
@@ -76,6 +79,12 @@ async def post_alert_notify(
     if position is None:
         return {'sent': False, 'reason': 'position_not_found'}
 
+    # Only tag a reference_kind when there's an actual reference_value to go
+    # with it — e.g. the frontend engine has no dollar price/threshold in
+    # scope for PREMIUM_STOP (only pnlPct), so both are left None rather than
+    # stamping "price" on a row with nothing to measure.
+    reference_kind = _REFERENCE_KIND_BY_TYPE.get(req.alertType) if req.referenceValue is not None else None
+
     await log_position_alert(
         db,
         rec_id=req.recId,
@@ -84,11 +93,14 @@ async def post_alert_notify(
         source="frontend",
         price=req.price,
         reference_value=req.referenceValue,
-        reference_kind=_REFERENCE_KIND_BY_TYPE.get(req.alertType),
+        reference_kind=reference_kind,
         direction=position.direction,
         contract=position.contract,
         note=req.note,
     )
+    # log_position_alert no longer commits the (shared, request-scoped) session
+    # itself — see its docstring — so this endpoint owns the final commit.
+    await db.commit()
 
     sent = notify_alert(position.symbol, req.alertType, req.reason, req.recId, req.timestamp)
     return {'sent': sent}

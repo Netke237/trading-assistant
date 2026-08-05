@@ -23,6 +23,7 @@ from app.services.portfolio_performance import (
 )
 from app.data.market import fetch_contract_quote_async
 from app.services.audit import log_approval
+from app.models.audit_event import AuditEventModel
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -295,6 +296,12 @@ async def delete_position(rec_id: str, db: AsyncSession = Depends(get_db)) -> No
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Position with rec_id '{rec_id}' not found.",
         )
+    # A hard delete (unlike close_position) never creates a closed_positions
+    # row, so prune_old_history's audit_events cascade — which only looks at
+    # rec_ids it finds via closed_positions — can never reach this rec_id.
+    # Clean it up here instead: the position is gone entirely, so there's no
+    # "why was this bought" left to explain.
+    await db.execute(delete(AuditEventModel).where(AuditEventModel.rec_id == rec_id))
     await db.delete(position)
     await db.commit()
 

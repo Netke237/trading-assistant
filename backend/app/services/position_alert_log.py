@@ -52,8 +52,25 @@ async def log_position_alert(
     contract: Optional[str] = None,
     note: Optional[str] = None,
 ) -> None:
-    """Write one row, deduped per (rec_id, alert_type, source) within the
-    reminder window — one row per new occurrence/reminder, not per tick."""
+    """Write one row, deduped per (rec_id, alert_type, source[, note]) within
+    the reminder window — one row per new occurrence/reminder, not per tick.
+    `note` participates in the dedup key so distinct events that happen to
+    share the same rec_id/alert_type/source (e.g. two different REGIME_CHANGE
+    transitions, both keyed rec_id="regime") aren't suppressed as duplicates
+    of each other.
+
+    Callers pass a `db` session they own the transaction lifecycle of — this
+    function NEVER commits or rolls back that session directly (a rollback
+    would expire every object already loaded on it, which can crash sibling
+    work still in progress on the same session, e.g. other positions in the
+    same generate_alerts() loop). Instead it does its own work inside a
+    SAVEPOINT (begin_nested): on success the insert is flushed and the
+    savepoint released (still pending in the caller's outer transaction,
+    persisted whenever the caller eventually commits); on failure only the
+    savepoint rolls back, leaving the caller's session/transaction untouched.
+    The caller is responsible for its own eventual commit, same as it always
+    was before this call was added to its code path.
+    """
     try:
         delivery = _load_delivery_config()
         hours = delivery.get('reminderIntervalHours', _DEFAULT_REMINDER_HOURS)
@@ -63,34 +80,37 @@ async def log_position_alert(
             window = timedelta(hours=_DEFAULT_REMINDER_HOURS)
 
         cutoff = datetime.now(timezone.utc) - window
-        existing = await db.execute(
-            select(PositionAlertHistoryModel.id).where(
+
+        async with db.begin_nested():
+            conditions = [
                 PositionAlertHistoryModel.rec_id == rec_id,
                 PositionAlertHistoryModel.alert_type == alert_type,
                 PositionAlertHistoryModel.source == source,
                 PositionAlertHistoryModel.triggered_at >= cutoff,
-            ).limit(1)
-        )
-        if existing.scalar_one_or_none() is not None:
-            return
+            ]
+            if note is not None:
+                conditions.append(PositionAlertHistoryModel.note == note)
+            existing = await db.execute(
+                select(PositionAlertHistoryModel.id).where(*conditions).limit(1)
+            )
+            if existing.scalar_one_or_none() is not None:
+                return
 
-        row = PositionAlertHistoryModel(
-            rec_id=rec_id,
-            symbol=symbol,
-            alert_type=alert_type,
-            source=source,
-            price=price,
-            reference_value=reference_value,
-            reference_kind=reference_kind,
-            direction=direction,
-            contract=contract,
-            note=note,
-        )
-        db.add(row)
-        await db.commit()
+            row = PositionAlertHistoryModel(
+                rec_id=rec_id,
+                symbol=symbol,
+                alert_type=alert_type,
+                source=source,
+                price=price,
+                reference_value=reference_value,
+                reference_kind=reference_kind,
+                direction=direction,
+                contract=contract,
+                note=note,
+            )
+            db.add(row)
     except Exception:
         logger.error('Failed to log position alert %s|%s|%s', rec_id, alert_type, source, exc_info=True)
-        await db.rollback()
 
 
 async def prune_position_alert_history(db: AsyncSession, retention_days: int) -> None:

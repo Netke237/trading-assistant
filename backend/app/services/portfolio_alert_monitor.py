@@ -142,6 +142,10 @@ async def _run_once() -> None:
                         db, rec_id='regime', symbol='MARKET', alert_type='REGIME_CHANGE',
                         source='backend', reference_kind='regime', note=note,
                     )
+                    # log_position_alert no longer commits its (possibly shared)
+                    # session itself — this session is dedicated to this one
+                    # call, so it owns the final commit.
+                    await db.commit()
             except Exception:
                 logger.error('Failed to persist regime flip', exc_info=True)
 
