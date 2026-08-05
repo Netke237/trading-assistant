@@ -71,13 +71,21 @@ const NOTIFY_BASE_URL = () =>
 
 // Fire-and-forget: tell the backend to deliver this alert. The backend enforces
 // masterEnabled/enabledTypes and dedups (shared with the headless monitor), so
-// the browser just reports every NEW alert it shows.
+// the browser just reports every NEW alert it shows. It also ALWAYS persists a
+// position_alert_history row (source="frontend") for this fire, independent
+// of masterEnabled/enabledTypes — that's what backs "why did this alert fire"
+// even when notifications for the type are muted.
 function notifyBackend(item: {
   symbol: string;
   alertType: string;
   reason: string;
   recId: string;
   firedAt: string;
+  price?: number;
+  referenceValue?: number;
+  direction?: string;
+  contract?: string;
+  note?: string;
 }): void {
   if (typeof window === 'undefined') return;
   if (!NOTIFIABLE_TYPES.has(item.alertType)) return;
@@ -91,6 +99,11 @@ function notifyBackend(item: {
         reason: item.reason,
         recId: item.recId,
         timestamp: item.firedAt,
+        price: item.price,
+        referenceValue: item.referenceValue,
+        direction: item.direction,
+        contract: item.contract,
+        note: item.note,
       }),
     }).catch(() => {
       /* backend offline — in-app alert still shows */
@@ -200,6 +213,11 @@ export const useAlertStore = create<AlertStoreState>()(
             reason: item.reason,
             recId: item.recId,
             firedAt: nowIso,
+            price: item.price,
+            referenceValue: item.referenceValue,
+            direction: item.direction,
+            contract: item.contract,
+            note: item.note,
           });
         }
 

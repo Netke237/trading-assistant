@@ -22,6 +22,7 @@ from app.services.portfolio_performance import (
     realized_pnl, bucket_realized_by_calendar, cumulative_curve, _contract_multiplier,
 )
 from app.data.market import fetch_contract_quote_async
+from app.services.audit import log_approval
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -260,6 +261,15 @@ async def add_position(
             detail=f"Could not save position: duplicate rec_id '{body.recId}'.",
         )
     await db.refresh(position)
+
+    if body.tradeCardSnapshot:
+        # Wrapped: log_approval does its own commit — a failure here must never
+        # turn an already-persisted position into an apparent 500 for the client.
+        try:
+            await log_approval(body.recId, body.tradeCardSnapshot, db)
+        except Exception:
+            _log.error("log_approval failed for %s", body.recId, exc_info=True)
+
     return PortfolioPositionSchema.from_orm_model(position)
 
 

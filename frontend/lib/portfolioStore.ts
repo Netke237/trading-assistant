@@ -45,7 +45,7 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     contracts:    p.qty,
     entryDate:    p.entryDate,
     expiry,
-    stop:         p.stop ?? 0,
+    stop:         p.stop,
     targets:      p.targets ?? [],
     dteTotal:     p.dteTotal ?? 0,
     dteRemaining: p.dteRemaining ?? 0,
@@ -106,11 +106,12 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     entryPrice:     p.entryPrice,
     qty:            p.contracts ?? 1,
     entryDate:      p.entryDate ?? new Date().toISOString().slice(0, 10),
-    stop:           p.stop > 0 ? p.stop : null,
+    stop:           p.stop != null && p.stop > 0 ? p.stop : null,
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,
     scanStockPrice: p.scanStockPrice ?? null,
+    tradeCardSnapshot: p.tradeCardSnapshot ?? null,
   };
 }
 

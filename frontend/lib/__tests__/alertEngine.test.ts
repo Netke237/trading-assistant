@@ -79,23 +79,53 @@ describe('scanPortfolio', () => {
     expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(false);
   });
 
-  it('does NOT fire STOP_REACHED for a Bearish position with no stop set (stop=0)', () => {
-    // portfolioStore.ts coerces a null backend stop to 0 before it reaches
-    // AlertPosition — without a guard, a Bearish position with no stop would
-    // satisfy currentPrice >= 0 on virtually every poll, firing a spurious
-    // Critical alert continuously (found during audit of this plan).
-    const short = makePosition({ direction: 'Bearish', stop: 0, currentPrice: 150 });
+  it('does NOT fire STOP_REACHED for a Bearish position with no stop set (stop=null)', () => {
+    // AlertPosition.stop is now genuinely nullable end-to-end (portfolioStore.ts
+    // no longer coerces a null backend stop to 0) — `stop: 0` is a real $0 stop,
+    // not an "unset" sentinel, so the guard checks `!= null` rather than `> 0`.
+    // Without this guard, a Bearish position with no stop would satisfy
+    // currentPrice >= 0 on virtually every poll, firing a spurious Critical
+    // alert continuously (found during audit of this plan).
+    const short = makePosition({ direction: 'Bearish', stop: null, currentPrice: 150 });
     const out = scanPortfolio([short]);
     expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(false);
   });
 
-  it('does NOT fire STOP_REACHED for a Bullish position with no stop set (stop=0)', () => {
-    // Symmetric to the Bearish stop=0 guard above — for a long position this was
-    // already coincidentally safe (currentPrice <= 0 is never true for a real
-    // price), but this test makes that safety explicit instead of relying on it
-    // remaining a coincidence (flagged during adversarial review of this plan).
-    const long = makePosition({ direction: 'Bullish', stop: 0, currentPrice: 150 });
+  it('does NOT fire STOP_REACHED for a Bullish position with no stop set (stop=null)', () => {
+    // Symmetric to the Bearish stop=null guard above — for a long position this
+    // was already coincidentally safe (currentPrice <= 0 is never true for a
+    // real price), but this test makes that safety explicit instead of relying
+    // on it remaining a coincidence (flagged during adversarial review of this plan).
+    const long = makePosition({ direction: 'Bullish', stop: null, currentPrice: 150 });
     const out = scanPortfolio([long]);
     expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(false);
+  });
+
+  it('fires STOP_REACHED for a Bearish position with a real $0 stop (stop=0 is not "unset")', () => {
+    // Guards against silently reintroducing the old stop>0 workaround, which
+    // treated a genuine $0 stop the same as "no stop set".
+    const short = makePosition({ direction: 'Bearish', stop: 0, currentPrice: 150 });
+    const out = scanPortfolio([short]);
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(true);
+  });
+
+  it('populates price/referenceValue/direction/contract on TP_HIT and STOP_REACHED', () => {
+    const withTarget = makePosition({
+      currentPrice: 100, stop: 90, direction: 'Bullish',
+      targets: [{ id: 't1', stockPrice: 95, contractsToSell: 1, status: 'PENDING' }],
+    });
+    const out = scanPortfolio([withTarget]);
+    const tpHit = out.find((a) => a.alertType === 'TP_HIT');
+    expect(tpHit).toMatchObject({
+      price: 100, referenceValue: 95, direction: 'Bullish', contract: withTarget.contract,
+    });
+  });
+
+  it('populates referenceValue (days) and note on EVENT_RISK, with no price', () => {
+    const withEvent = makePosition({ nextEventDays: 2, nextEventLabel: 'Earnings' });
+    const out = scanPortfolio([withEvent]);
+    const eventRisk = out.find((a) => a.alertType === 'EVENT_RISK');
+    expect(eventRisk).toMatchObject({ referenceValue: 2, note: 'Earnings' });
+    expect(eventRisk?.price).toBeUndefined();
   });
 });

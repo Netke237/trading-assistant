@@ -55,6 +55,10 @@ _DEFAULT_DELIVERY = {
     # While a condition stays true, how often email/Telegram reminds you.
     'reminderIntervalHours': 4,
     'retentionDays': 30,
+    # Rolling window for position_alert_history (alert-fire audit rows) —
+    # separate from retentionDays (the sent-message log) since this table
+    # backs "why did this alert fire", not notification delivery.
+    'positionAlertRetentionDays': 30,
     # How often background monitors (portfolio + chart-drawn rules) re-check
     # conditions. Lower = faster detection, more API/price-fetch load.
     'checkIntervalSeconds': 60,
@@ -71,6 +75,7 @@ class AlertDeliveryConfig(BaseModel):
     dedupWindowMinutes: int = 15
     reminderIntervalHours: int = 4
     retentionDays: int = 30
+    positionAlertRetentionDays: int = 30
     checkIntervalSeconds: int = 60
     positionSustainMinutes: int = 0
 
@@ -103,6 +108,7 @@ async def get_alert_delivery() -> dict:
         'dedupWindowMinutes': int(d.get('dedupWindowMinutes', 15)),
         'reminderIntervalHours': int(d.get('reminderIntervalHours', 4)),
         'retentionDays': int(d.get('retentionDays', 30)),
+        'positionAlertRetentionDays': int(d.get('positionAlertRetentionDays', 30)),
         'checkIntervalSeconds': int(d.get('checkIntervalSeconds', 60)),
         'positionSustainMinutes': int(d.get('positionSustainMinutes', 0)),
     }
@@ -117,6 +123,7 @@ async def save_alert_delivery(body: AlertDeliveryConfig) -> dict:
         'dedupWindowMinutes': body.dedupWindowMinutes,
         'reminderIntervalHours': body.reminderIntervalHours,
         'retentionDays': body.retentionDays,
+        'positionAlertRetentionDays': max(1, body.positionAlertRetentionDays),
         'checkIntervalSeconds': max(15, body.checkIntervalSeconds),
         'positionSustainMinutes': max(0, body.positionSustainMinutes),
     }

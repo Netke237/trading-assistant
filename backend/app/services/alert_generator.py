@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.portfolio import PortfolioPositionModel
 from app.schemas import AlertItem
 from app.services.audit import log_event
+from app.services.position_alert_log import log_position_alert
 
 _CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
@@ -103,6 +104,11 @@ async def generate_alerts(
                     "target": target_stock_price,
                     "direction": pos.direction,
                 })
+                await log_position_alert(
+                    db, rec_id=pos.rec_id, symbol=symbol, alert_type="TP_HIT",
+                    source="backend", price=price, reference_value=target_stock_price,
+                    reference_kind="price", direction=pos.direction, contract=pos.contract,
+                )
                 alerts.append(AlertItem(
                     id=f"a{counter}",
                     kind="Action",
@@ -111,6 +117,10 @@ async def generate_alerts(
                     timestamp=now_iso,
                     recId=pos.rec_id,
                     alertType="TP_HIT",
+                    price=price,
+                    referenceValue=target_stock_price,
+                    direction=pos.direction,
+                    contract=pos.contract,
                 ))
 
         # STOP_REACHED — direction-aware: puts are invalidated when stock rises above stop
@@ -127,6 +137,11 @@ async def generate_alerts(
                 "stop": pos.stop,
                 "direction": pos.direction,
             })
+            await log_position_alert(
+                db, rec_id=pos.rec_id, symbol=symbol, alert_type="STOP_REACHED",
+                source="backend", price=price, reference_value=pos.stop,
+                reference_kind="price", direction=pos.direction, contract=pos.contract,
+            )
             alerts.append(AlertItem(
                 id=f"a{counter}",
                 kind="Critical",
@@ -135,6 +150,10 @@ async def generate_alerts(
                 timestamp=now_iso,
                 recId=pos.rec_id,
                 alertType="STOP_REACHED",
+                price=price,
+                referenceValue=pos.stop,
+                direction=pos.direction,
+                contract=pos.contract,
             ))
 
         # PREMIUM_STOP
@@ -144,6 +163,7 @@ async def generate_alerts(
         )
         if _sustained("PREMIUM_STOP", premium_hit_raw):
             counter += 1
+            threshold_price = round(pos.entry_price * (1 - _premium_stop_pct()), 4)
             log_event("alert_fired", pos.rec_id, {
                 "symbol": symbol,
                 "alertType": "PREMIUM_STOP",
@@ -151,6 +171,11 @@ async def generate_alerts(
                 "entryPrice": pos.entry_price,
                 "thresholdPct": _premium_stop_pct(),
             })
+            await log_position_alert(
+                db, rec_id=pos.rec_id, symbol=symbol, alert_type="PREMIUM_STOP",
+                source="backend", price=opt_price, reference_value=threshold_price,
+                reference_kind="price", direction=pos.direction, contract=pos.contract,
+            )
             alerts.append(AlertItem(
                 id=f"a{counter}",
                 kind="Critical",
@@ -159,6 +184,10 @@ async def generate_alerts(
                 timestamp=now_iso,
                 recId=pos.rec_id,
                 alertType="PREMIUM_STOP",
+                price=opt_price,
+                referenceValue=threshold_price,
+                direction=pos.direction,
+                contract=pos.contract,
             ))
 
         # TIME_STOP — day-granularity already; sustain does not apply.
@@ -167,6 +196,17 @@ async def generate_alerts(
             days_to_expiry = (expiry - date.today()).days
             if 0 <= days_to_expiry <= 3:
                 counter += 1
+                log_event("alert_fired", pos.rec_id, {
+                    "symbol": symbol,
+                    "alertType": "TIME_STOP",
+                    "daysToExpiry": days_to_expiry,
+                    "direction": pos.direction,
+                })
+                await log_position_alert(
+                    db, rec_id=pos.rec_id, symbol=symbol, alert_type="TIME_STOP",
+                    source="backend", reference_value=days_to_expiry,
+                    reference_kind="days", direction=pos.direction, contract=pos.contract,
+                )
                 alerts.append(AlertItem(
                     id=f"a{counter}",
                     kind="Action",
@@ -175,6 +215,9 @@ async def generate_alerts(
                     timestamp=now_iso,
                     recId=pos.rec_id,
                     alertType="TIME_STOP",
+                    referenceValue=float(days_to_expiry),
+                    direction=pos.direction,
+                    contract=pos.contract,
                 ))
 
         pos.alert_state = alert_state

@@ -191,7 +191,7 @@ export interface PortfolioPosition {
   currentPrice: number;
   pnlDollar:     number;
   pnlPct:        number;
-  stop:          number;
+  stop:          number | null;
   targets:       TargetLevel[];
   status:        Status;
   // Options-specific fields surfaced in the portfolio table.
@@ -210,6 +210,12 @@ export interface PortfolioPosition {
   recId:         string;
   /** Underlying stock price at scan time — used to re-anchor stop/targets to fill price. */
   scanStockPrice?: number;
+  /** Full trade-card/score-breakdown snapshot at buy time — sent once on create
+   *  so the backend can permanently attach it (audit_events via log_approval)
+   *  answering "why was this bought". Stored on the position object itself
+   *  (not passed only as a one-off call argument) so addPosition's pending-
+   *  retry path — which re-POSTs from this stored object — carries it too. */
+  tradeCardSnapshot?: Record<string, unknown>;
   /** Local-only sync state vs the backend. Never sent to the backend.
    *  'pending'  — optimistically added, POST in flight or retrying.
    *  'synced'   — confirmed present on the backend. */
@@ -477,6 +483,13 @@ export interface ToastItem {
   firedAt: string;         // ISO timestamp when the alert fired
   recId: string;
   alertType: AlertType;
+  // Structured fire data, forwarded to POST /api/alerts/notify for
+  // position_alert_history — see lib/alertEngine.ts AlertReason.
+  price?: number;
+  referenceValue?: number;
+  direction?: Direction;
+  contract?: string;
+  note?: string;
 }
 
 // --- Risk management ---

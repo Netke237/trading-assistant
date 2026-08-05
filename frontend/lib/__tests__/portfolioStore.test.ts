@@ -631,6 +631,28 @@ describe('portfolioStore', () => {
       expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'PEND')?.syncStatus).toBe('synced');
     });
 
+    it('re-sends tradeCardSnapshot on the pending-row retry (stored on the position, not a one-off arg)', async () => {
+      // This is the scenario the audit flagged: a buy made while the backend
+      // is unreachable must not silently lose its "why was this bought"
+      // snapshot when syncFromBackend later retries the POST.
+      const snapshot = { stockScore: 82, stockBreakdown: { trend: 'PASS' } };
+      usePortfolioStore.setState({
+        positions: [mkLocal('PEND-SNAP', {
+          syncStatus: 'pending', syncPendingSince: Date.now(), tradeCardSnapshot: snapshot,
+        })],
+      } as never);
+      let retryBody: Record<string, unknown> | null = null;
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockImplementation((_url: string, init?: { method?: string; body?: string }) => {
+          if ((init?.method ?? 'GET') === 'GET') return Promise.resolve({ ok: true, json: async () => [] });
+          retryBody = JSON.parse(init!.body as string);
+          return Promise.resolve({ ok: true, status: 201, json: async () => ({}) });
+        });
+      await usePortfolioStore.getState().syncFromBackend();
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'PEND-SNAP')?.syncStatus).toBe('synced');
+      expect(retryBody).toMatchObject({ tradeCardSnapshot: snapshot });
+    });
+
     it('keeps a pending row (never silently drops it) when the retry POST also fails on network', async () => {
       usePortfolioStore.setState({
         positions: [mkLocal('PEND2', { syncStatus: 'pending', syncPendingSince: Date.now() - 999_999 })],

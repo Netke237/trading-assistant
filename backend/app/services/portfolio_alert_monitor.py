@@ -16,6 +16,7 @@ from app.schemas import AlertItem
 from app.services.alert_generator import generate_alerts
 from app.services.alert_service import alert_service
 from app.services.notifications.alert_notifier import forget_alerts, notify_alert
+from app.services.position_alert_log import log_position_alert, prune_position_alert_history
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,13 @@ async def _run_once() -> None:
             await prune_old_history(db, retention_years)
     except Exception:
         logger.debug('History prune failed', exc_info=True)
+
+    # Prune position_alert_history to its own (shorter, high-volume) retention window.
+    try:
+        async with AsyncSessionLocal() as db:
+            await prune_position_alert_history(db, int(delivery.get('positionAlertRetentionDays', 30)))
+    except Exception:
+        logger.debug('position_alert_history prune failed', exc_info=True)
 
     if not delivery.get('masterEnabled', True):
         return
@@ -119,11 +127,25 @@ async def _run_once() -> None:
     _known_rec_ids = current_rec_ids
 
     # ── 2. Regime flip detection ─────────────────────────────────────────────
-    if 'REGIME_CHANGE' in enabled_types:
-        try:
-            from datetime import datetime, timezone
-            current_regime = await asyncio.to_thread(compute_overall_regime)
-            if _last_regime is not None and current_regime != _last_regime:
+    # Detection (and persistence) always runs, independent of enabledTypes —
+    # only the notification dispatch below is gated by it, matching the
+    # position-alert branches above (generate_alerts computes all types
+    # unconditionally; enabledTypes only filters what notify_alert sends).
+    try:
+        from datetime import datetime, timezone
+        current_regime = await asyncio.to_thread(compute_overall_regime)
+        if _last_regime is not None and current_regime != _last_regime:
+            note = f'{_last_regime} -> {current_regime}'
+            try:
+                async with AsyncSessionLocal() as db:
+                    await log_position_alert(
+                        db, rec_id='regime', symbol='MARKET', alert_type='REGIME_CHANGE',
+                        source='backend', reference_kind='regime', note=note,
+                    )
+            except Exception:
+                logger.error('Failed to persist regime flip', exc_info=True)
+
+            if 'REGIME_CHANGE' in enabled_types:
                 alerts.append(AlertItem(
                     id='regime-flip',
                     kind='Action',
@@ -133,9 +155,9 @@ async def _run_once() -> None:
                     recId='regime',
                     alertType='REGIME_CHANGE',
                 ))
-            _last_regime = current_regime
-        except Exception:
-            logger.error('Regime flip check failed', exc_info=True)
+        _last_regime = current_regime
+    except Exception:
+        logger.error('Regime flip check failed', exc_info=True)
 
     # ── 3. Dispatch (shared dedup with the browser path) ─────────────────────
     # notify_alert enforces masterEnabled/enabledTypes and dedups by
