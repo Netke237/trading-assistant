@@ -31,7 +31,7 @@ TestSessionLocal = async_sessionmaker(
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def setup_db():
-    from app.models import portfolio, watchlist, audit_event  # noqa: F401
+    from app.models import portfolio, watchlist, audit_event, position_alert  # noqa: F401
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -351,3 +351,51 @@ async def test_all_alert_types_write_audit_events(db_session):
         if c.args[0] == "alert_fired"
     }
     assert fired_types == {"TP_HIT", "STOP_REACHED", "PREMIUM_STOP"}
+
+
+# ── Test: GET /api/alerts actually commits its position_alert_history writes ──
+
+@pytest.mark.asyncio
+async def test_get_alerts_endpoint_commits_position_alert_history(client, db_session):
+    """log_position_alert() no longer self-commits (see its docstring) — it
+    writes inside a SAVEPOINT and leaves the final commit to the caller.
+    get_alerts() is one of three real call paths and was the one initially
+    missed when that change landed: get_db() only closes the session, never
+    commits, so without get_alerts() owning an explicit commit, every write
+    from a poll through this endpoint was silently discarded.
+
+    Asserting on read-after-write via `db_session` alone would NOT catch a
+    missing commit here, because this test's `client` fixture overrides
+    get_db() to reuse the exact same `db_session` the test queries with —
+    an uncommitted write is trivially visible to a later query on the SAME
+    session/transaction regardless of whether commit() was ever called
+    (this masked the original bug entirely on SQLite, since a SAVEPOINT
+    release with no real outer BEGIN commits immediately there anyway,
+    which asyncpg/Postgres — the deployed database — does not do). Spying
+    on commit() itself, independent of read visibility, is the only way to
+    actually prove the commit happens.
+    """
+    from unittest.mock import AsyncMock
+    await _insert_position(db_session, symbol="AAPL", stop=180.0, rec_id="REC-GET-COMMIT")
+
+    real_commit = db_session.commit
+    commit_spy = AsyncMock(wraps=real_commit)
+    db_session.commit = commit_spy
+
+    # This is the first test in this file to hit the router directly (rather
+    # than calling generate_alerts() in-process) — get_alerts() calls the real
+    # (synchronous) fetch_quotes for live prices, which must be mocked here.
+    with patch("app.routers.alerts.fetch_quotes", return_value={"AAPL": {"last": 175.0}}):
+        resp = await client.get("/api/alerts")
+    assert resp.status_code == 200
+
+    assert commit_spy.await_count >= 1, "GET /api/alerts must commit its position_alert_history writes"
+
+    db_session.commit = real_commit
+    from sqlalchemy import select
+    from app.models.position_alert import PositionAlertHistoryModel
+    rows = (await db_session.execute(
+        select(PositionAlertHistoryModel).where(PositionAlertHistoryModel.rec_id == "REC-GET-COMMIT")
+    )).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].alert_type == "STOP_REACHED"

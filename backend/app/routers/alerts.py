@@ -20,7 +20,14 @@ async def get_alerts(db: AsyncSession = Depends(get_db)) -> list[AlertItem]:
     symbols = list({p.symbol for p in result.scalars().all()})
     quotes = fetch_quotes(symbols)
     current_prices = {sym: q["last"] for sym, q in quotes.items()}
-    return await generate_alerts(db, current_prices)
+    alerts = await generate_alerts(db, current_prices)
+    # generate_alerts() writes position_alert_history rows (log_position_alert)
+    # and updates PortfolioPositionModel.alert_state, neither of which self-
+    # commits any more (see log_position_alert's docstring) — get_db() only
+    # closes the session without committing, so this endpoint owns the commit.
+    # Without this, both were silently discarded on every poll through here.
+    await db.commit()
+    return alerts
 
 
 class AlertNotifyRequest(BaseModel):
