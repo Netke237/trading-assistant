@@ -50,6 +50,7 @@ const DEFAULTS: ScanParams = {
 interface ScanParamsStore extends ScanParams {
   setParam: <K extends keyof ScanParams>(key: K, value: ScanParams[K]) => void;
   resetToDefaults: () => void;
+  loadParams: (p: ScanParams) => void;
   setMeanReversionVariants:   (v: string[]) => void;
   setMeanReversionMinConfirm: (v: number) => void;
   setVwapLookback:            (v: number) => void;
@@ -62,6 +63,7 @@ export const useScanParamsStore = create<ScanParamsStore>()(
       ...DEFAULTS,
       setParam: (key, value) => set({ [key]: value }),
       resetToDefaults: () => set({ ...DEFAULTS }),
+      loadParams: (p) => set({ ...p }),
       setMeanReversionVariants:   (v) => set({ meanReversionVariants: v }),
       setMeanReversionMinConfirm: (v) => set({ meanReversionMinConfirm: v }),
       setVwapLookback:            (v) => set({ vwapLookback: v }),

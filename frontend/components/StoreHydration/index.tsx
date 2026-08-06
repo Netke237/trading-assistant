@@ -15,6 +15,7 @@ import { useRiskStore } from '@/lib/riskStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useAlertStore } from '@/lib/alertStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { api } from '@/lib/api';
 
 // Backend timestamps are real UTC-offset ISO strings (e.g. "...T18:32:10+00:00",
@@ -41,6 +42,7 @@ export function StoreHydration() {
     usePortfolioStore.persist.rehydrate();
     useAlertStore.persist.rehydrate();
     useScanParamsStore.persist.rehydrate();
+    useSearchProfilesStore.persist.rehydrate();
 
     (async () => {
       await useScanStore.persist.rehydrate();

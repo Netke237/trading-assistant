@@ -17,6 +17,7 @@ import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
+import { SearchProfileBar } from '@/components/organisms/SearchProfileBar';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
 import {
@@ -679,6 +680,23 @@ export default function Step3Page() {
     return unsub;
   }, []);
 
+  // Keep local dir/hz/holdMin/holdMax mirrored to context after every change,
+  // not just at hydration — e.g. a Search Profile applied from the sibling
+  // SearchProfileBar updates context directly on an already-mounted page, and
+  // without this, the Directional-bias/Horizon buttons would keep showing
+  // stale values until the user clicked one (silently re-overwriting the
+  // just-applied profile). Safe to run unconditionally: when the change
+  // originated from this page's own handlers (handleDirChange/handleHzChange/
+  // handleMinChange/handleMaxChange), context already matches local state, so
+  // this is a no-op re-affirmation.
+  useEffect(() => {
+    if (!context) return;
+    setDir(context.direction ?? 'Bullish');
+    setHz(context.horizonPreset ?? 'Swing');
+    setHoldMin(Math.round(context.holdMin ?? presetByKey('Swing').holdMin));
+    setHoldMax(Math.round(context.holdMax ?? presetByKey('Swing').holdMax));
+  }, [context]);
+
   const descriptorRef = useRef<RegimeDescriptor>('Choppy');
 
   useEffect(() => {
@@ -791,6 +809,8 @@ export default function Step3Page() {
           </div>
         )}
       </div>
+
+      <SearchProfileBar />
 
       {regimeDirection === 'BULL' && dir === 'Bearish' && (
         <div className={formStyles.mismatchWarn} role="status">
