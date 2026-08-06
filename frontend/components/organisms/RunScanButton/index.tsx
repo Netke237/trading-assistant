@@ -13,7 +13,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useScanStore } from '@/lib/scanStore';
+import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
@@ -184,6 +184,13 @@ export function RunScanButton() {
         useScanStore.getState().setConflictedSymbols(conflicted);
         if (screenerMode === 'options') useScanStore.getState().setOptionsScanAt(startISO);
         setScanState('COMPLETED', startISO, Date.now() - t0);  // keep same startISO
+        // Refresh last-run status from the backend so TopBar/Settings reflect
+        // this scan immediately, not just after the next full page load.
+        api.getLastScanStatus()
+          .then((s) => useScanStore.getState().setLastOptionsScanMeta(
+            s.status, s.updated_at ? toLocalWallClock(s.updated_at) : null,
+          ))
+          .catch(() => {});
       })
       .catch(() => {
         console.error('[RunScanButton] scan failed, is backend running on port 8000?');

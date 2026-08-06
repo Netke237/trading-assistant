@@ -78,6 +78,7 @@ export function TopBar() {
   const scanDuration   = useScanStore((s) => s.scanDurationMs);
   const context        = useScanStore((s) => s.context);
   const stockScanAt    = useScanStore((s) => s.stockScanAt);
+  const lastStockScanStrategy = useScanStore((s) => s.lastStockScanStrategy);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -106,6 +107,7 @@ export function TopBar() {
         {stockScanAt && mounted && (
           <Text size={12} tone="secondary">
             Last stock scan: {labelWithDate(stockScanAt)}
+            {lastStockScanStrategy && <> · {lastStockScanStrategy}</>}
           </Text>
         )}
       </div>

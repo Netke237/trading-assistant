@@ -69,6 +69,22 @@ export interface ScanResult {
   dte_window?: DteWindow;
 }
 
+/** Last-run metadata for a scan session (options or stock mode) — from
+ *  GET /api/scan/last-run and /api/stock-scan/last-run. `status` means
+ *  different things per mode: for options, "running"/"stopped" reflect the
+ *  continuous-scan scheduler's on/off toggle, not a single in-flight scan;
+ *  for stock mode, "running" means a scan request is actively executing.
+ *  Render each with mode-appropriate copy — don't treat the two as
+ *  interchangeable. */
+export interface ScanSessionStatus {
+  status: 'idle' | 'running' | 'complete' | 'stopped';
+  updated_at: string | null;
+  universe?: string[] | null;
+  direction?: string | null;
+  horizon?: string | null;
+  strategy?: string | null;
+}
+
 interface ScanStoreState {
   scanState:  ScanState;
   /** ISO-ish local timestamp, e.g. "2026-04-21T09:42:00" (no TZ suffix). */
@@ -117,6 +133,20 @@ interface ScanStoreState {
   clearStockBasket:      () => void;
   activeStrategy:      string | null;
   setActiveStrategy:   (s: string | null) => void;
+  /** Last-run status for the options-mode scan session, as reported by the
+   *  backend (GET /api/scan/last-run) — distinct from `scanAt`/`scanState`,
+   *  which reflect this browser's own local scan lifecycle. */
+  lastOptionsScanStatus:    string | null;
+  lastOptionsScanUpdatedAt: string | null;
+  /** Last-run status for the stock-mode scan session (GET /api/stock-scan/last-run). */
+  lastStockScanStatus:      string | null;
+  lastStockScanUpdatedAt:   string | null;
+  /** Strategy used by the last completed/running stock scan, per the backend —
+   *  distinct from `activeStrategy`, which reflects the user's *currently
+   *  selected* strategy for the *next* scan. Do not conflate the two. */
+  lastStockScanStrategy:    string | null;
+  setLastOptionsScanMeta: (status: string | null, updatedAt: string | null) => void;
+  setLastStockScanMeta:   (status: string | null, updatedAt: string | null, strategy: string | null) => void;
   /** Session-only — not persisted; cleared on page load. */
   regimeDirection:    'BULL' | 'BEAR' | 'MIXED' | null;
   setRegimeDirection: (d: 'BULL' | 'BEAR' | 'MIXED' | null) => void;
@@ -197,6 +227,11 @@ export const useScanStore = create<ScanStoreState>()(
       optionsScanAt:            null,
       stockBasket:           [],
       activeStrategy:           null,
+      lastOptionsScanStatus:    null,
+      lastOptionsScanUpdatedAt: null,
+      lastStockScanStatus:      null,
+      lastStockScanUpdatedAt:   null,
+      lastStockScanStrategy:    null,
       setScreenerMode:     (m) => set({ screenerMode: m }),
       setOptionsScanAt:    (at) => set({ optionsScanAt: at }),
       setStockScanResult:  (r) => set((state) => ({
@@ -212,6 +247,12 @@ export const useScanStore = create<ScanStoreState>()(
       })),
       clearStockBasket:      () => set({ stockBasket: [] }),
       setActiveStrategy:   (s) => set({ activeStrategy: s }),
+      setLastOptionsScanMeta: (status, updatedAt) => set({
+        lastOptionsScanStatus: status, lastOptionsScanUpdatedAt: updatedAt,
+      }),
+      setLastStockScanMeta: (status, updatedAt, strategy) => set({
+        lastStockScanStatus: status, lastStockScanUpdatedAt: updatedAt, lastStockScanStrategy: strategy,
+      }),
     }),
     {
       name: 'bamendjou-scan-store',
@@ -220,7 +261,7 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 10,
+      version: 11,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -253,6 +294,16 @@ export const useScanStore = create<ScanStoreState>()(
               : null,
           };
         }
+        if (version < 11) {
+          s = {
+            ...s,
+            lastOptionsScanStatus: null,
+            lastOptionsScanUpdatedAt: null,
+            lastStockScanStatus: null,
+            lastStockScanUpdatedAt: null,
+            lastStockScanStrategy: null,
+          };
+        }
         return s;
       },
       partialize: (state) => ({
@@ -272,6 +323,11 @@ export const useScanStore = create<ScanStoreState>()(
         stockScanAt:              state.stockScanAt,
         optionsScanAt:            state.optionsScanAt,
         stockBasket:     state.stockBasket,
+        lastOptionsScanStatus:    state.lastOptionsScanStatus,
+        lastOptionsScanUpdatedAt: state.lastOptionsScanUpdatedAt,
+        lastStockScanStatus:      state.lastStockScanStatus,
+        lastStockScanUpdatedAt:   state.lastStockScanUpdatedAt,
+        lastStockScanStrategy:    state.lastStockScanStrategy,
       }),
       merge: (persisted, current) => {
         const p = persisted as Partial<ScanStoreState>;

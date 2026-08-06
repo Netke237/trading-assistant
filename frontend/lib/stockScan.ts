@@ -1,5 +1,5 @@
 import { api } from '@/lib/api';
-import { useScanStore } from '@/lib/scanStore';
+import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import type { StockScanResult } from '@/types/stockDomain';
@@ -106,5 +106,18 @@ export async function runStockScan(
   } catch {
     store.setScanState('FAILED');
     return null;
+  } finally {
+    // Refresh last-run status/strategy from the backend so TopBar/Settings
+    // reflect this scan immediately (success or failure), not just after the
+    // next full page load — the backend is the source of truth for what it
+    // actually persisted (e.g. reverted to "idle" on a mid-scan failure).
+    try {
+      const s = await api.getLastStockScanStatus();
+      store.setLastStockScanMeta(
+        s.status, s.updated_at ? toLocalWallClock(s.updated_at) : null, s.strategy ?? null,
+      );
+    } catch {
+      // Backend unreachable — leave stale, StoreHydration will catch up on next load.
+    }
   }
 }

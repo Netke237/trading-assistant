@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text } from '@/components/primitives';
-import { useScanStore } from '@/lib/scanStore';
+import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useShallow } from 'zustand/shallow';
@@ -246,6 +246,17 @@ export default function Step5StrategyPage() {
       setError(String(e));
     } finally {
       setLoadingStrategy(null);
+      // Refresh last-run status/strategy from the backend so TopBar/Settings
+      // reflect this scan immediately (success or failure), not just after
+      // the next full page load.
+      try {
+        const s = await api.getLastStockScanStatus();
+        useScanStore.getState().setLastStockScanMeta(
+          s.status, s.updated_at ? toLocalWallClock(s.updated_at) : null, s.strategy ?? null,
+        );
+      } catch {
+        // Backend unreachable — leave stale, StoreHydration will catch up on next load.
+      }
     }
   }
 

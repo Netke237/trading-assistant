@@ -147,3 +147,49 @@ async def test_restore_from_db_restores_globals():
         scan_module._last_request = orig_request
         scan_module._last_result = orig_result
         scan_module.AsyncSessionLocal = orig_async_session_local
+
+
+# ── Test 4: /scan/last-run ────────────────────────────────────────────────────
+
+def test_last_run_idle_when_no_scan_yet(client, monkeypatch):
+    import app.routers.scan as scan_module
+    monkeypatch.setattr(scan_module, "_last_request", None)
+    monkeypatch.setattr(scan_module, "_last_status", "idle")
+    monkeypatch.setattr(scan_module, "_last_updated_at", None)
+    r = client.get("/api/scan/last-run")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "idle"
+    assert body["updated_at"] is None
+    assert body["universe"] is None
+    assert body["strategy"] is None
+
+
+def test_last_run_reflects_last_completed_scan(client):
+    r = client.post("/api/scan", json={
+        "universe": [],
+        "direction": "Bullish",
+        "horizon": "Swing",
+        "overrides": {},
+    })
+    assert r.status_code == 200
+
+    r = client.get("/api/scan/last-run")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "complete"
+    assert body["updated_at"] is not None
+    assert body["direction"] == "Bullish"
+    assert body["horizon"] == "Swing"
+
+
+def test_last_run_prefers_live_scheduler_state_over_stale_complete(client, monkeypatch):
+    """A scheduled tick always writes status='complete' regardless of whether
+    continuous mode is still active — /scan/last-run must report the live
+    scheduler state ('running'), not the stale DB-cached value."""
+    import app.routers.scan as scan_module
+    monkeypatch.setattr(scan_module, "_last_status", "complete")
+    monkeypatch.setattr(scan_module._scheduler, "get_status", lambda: {"running": True})
+    r = client.get("/api/scan/last-run")
+    assert r.status_code == 200
+    assert r.json()["status"] == "running"

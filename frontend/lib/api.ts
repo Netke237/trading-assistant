@@ -1,7 +1,7 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow } from '@/types/domain';
 import type { StockScanResult } from '@/types/stockDomain';
-import type { OptionsPipeline, ScanResult } from '@/lib/scanStore';
+import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import type { AlertRule, AlertHistory } from '@/types/alerts';
 import type { ScheduleConfig } from '@/lib/settingsStore';
@@ -453,6 +453,8 @@ export const api = {
 
   getLastScan: () => get<ScanResult | null>('/api/scan/last'),
   getLastStockScan: () => get<StockScanResult | null>('/api/stock-scan/last'),
+  getLastScanStatus: () => get<ScanSessionStatus>('/api/scan/last-run'),
+  getLastStockScanStatus: () => get<ScanSessionStatus>('/api/stock-scan/last-run'),
 
   postStockOrder: (req: {
     broker: string; symbol: string; action: 'BUY' | 'SELL';

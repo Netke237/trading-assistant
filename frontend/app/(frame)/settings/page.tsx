@@ -184,6 +184,11 @@ function ScanForm() {
   } = useSettingsStore();
   const horizon = useScanStore((s) => s.context?.horizon);
   const isIntraday = horizon?.toLowerCase().includes('intraday') ?? false;
+  const lastOptionsScanStatus    = useScanStore((s) => s.lastOptionsScanStatus);
+  const lastOptionsScanUpdatedAt = useScanStore((s) => s.lastOptionsScanUpdatedAt);
+  const lastStockScanStatus      = useScanStore((s) => s.lastStockScanStatus);
+  const lastStockScanUpdatedAt   = useScanStore((s) => s.lastStockScanUpdatedAt);
+  const lastStockScanStrategy    = useScanStore((s) => s.lastStockScanStrategy);
   const [continuous, setContinuous] = useState(false);
   const [schedule, setSchedule] = useState<ScheduleConfig>(scheduleConfig ?? DEFAULT_SCHEDULE_CONFIG);
   const [scheduleSaveResult, setScheduleSaveResult] = useState('');
@@ -226,6 +231,18 @@ function ScanForm() {
   useEffect(() => { setFCautionText(String(fundamentalsGate?.cautionBelow ?? 45)); }, [fundamentalsGate?.cautionBelow]);
   useEffect(() => { setFRejectText(String(fundamentalsGate?.rejectBelow ?? 30));   }, [fundamentalsGate?.rejectBelow]);
   useEffect(() => { setFDeRejectText(String(fundamentalsGate?.deReject ?? 3.0));   }, [fundamentalsGate?.deReject]);
+
+  function formatLastRun(iso: string | null): string {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        weekday: 'short', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch {
+      return iso;
+    }
+  }
 
   return (
     <>
@@ -395,6 +412,20 @@ function ScanForm() {
       />
       <SpreadsSection />
       <IvThresholdsSection />
+
+      <Row label="Last options scan" hint="Status and time of the most recent options-mode scan">
+        <Text size={13} tone="secondary">
+          Continuous scanning: {lastOptionsScanStatus ?? '—'}
+          {lastOptionsScanUpdatedAt && ` · ${formatLastRun(lastOptionsScanUpdatedAt)}`}
+        </Text>
+      </Row>
+      <Row label="Last stock scan" hint="Status, time, and strategy of the most recent stock-mode scan">
+        <Text size={13} tone="secondary">
+          Scan: {lastStockScanStatus ?? '—'}
+          {lastStockScanUpdatedAt && ` · ${formatLastRun(lastStockScanUpdatedAt)}`}
+          {lastStockScanStrategy && ` · ${lastStockScanStrategy}`}
+        </Text>
+      </Row>
 
       <SectionIntro
         title="Scheduled scanning"

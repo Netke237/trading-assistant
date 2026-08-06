@@ -31,7 +31,7 @@ from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
     ScanDelta, ContinuousScanConfig, ScanState, OptionsPipeline,
-    AlternativeContract, DteWindow,
+    AlternativeContract, DteWindow, ScanSessionStatus,
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
     SentimentData, FundamentalsOut,
@@ -100,6 +100,8 @@ def _load_default_cadence() -> int:
 _scheduler = ScanScheduler(cadence_minutes=_load_default_cadence())
 _last_request: ScanRequest | None = None
 _last_result: ScanResult | None = None
+_last_status: str = "idle"
+_last_updated_at: str | None = None
 # Serialises concurrent reads/writes of _last_request and _last_result so that
 # a scheduler-triggered scan and a user-triggered scan don't race on these globals.
 _state_lock = asyncio.Lock()
@@ -1020,6 +1022,7 @@ async def _upsert_session(
     status: str,
 ) -> None:
     """Persist scan state to the DB as a single row with id='current'."""
+    global _last_status, _last_updated_at
     await db.merge(
         ScanSession(
             id="current",
@@ -1029,6 +1032,8 @@ async def _upsert_session(
         )
     )
     await db.commit()
+    _last_status = status
+    _last_updated_at = datetime.now(timezone.utc).isoformat()
 
 
 async def restore_from_db() -> str | None:
@@ -1036,7 +1041,7 @@ async def restore_from_db() -> str | None:
 
     Returns the stored status string so the caller can auto-resume the scheduler.
     """
-    global _last_request, _last_result
+    global _last_request, _last_result, _last_status, _last_updated_at
     async with AsyncSessionLocal() as db:
         try:
             result = await db.execute(select(ScanSession).where(ScanSession.id == "current"))
@@ -1050,6 +1055,8 @@ async def restore_from_db() -> str | None:
             _last_result = ScanResult.model_validate_json(row.last_result_json)
         if row.last_request_json:
             _last_request = ScanRequest.model_validate_json(row.last_request_json)
+        _last_status = row.status
+        _last_updated_at = row.updated_at.isoformat() if row.updated_at else None
         return row.status
 
 
@@ -1060,6 +1067,22 @@ async def get_last_scan() -> ScanResult | None:
     lifespan startup hook (restore_from_db()). Used by the frontend as a
     fallback when localStorage has no cached scan result."""
     return _last_result
+
+
+@router.get('/scan/last-run', response_model=ScanSessionStatus)
+async def get_last_scan_status() -> ScanSessionStatus:
+    """Return last-run metadata (status/timestamp/request params) for
+    options-mode scans. `status` prefers the continuous-scan scheduler's live
+    state over the DB-cached value, since a scheduled tick's completion write
+    would otherwise make a still-active continuous scan look "complete"."""
+    status = "running" if _scheduler.get_status().get("running") else _last_status
+    return ScanSessionStatus(
+        status=status,
+        updated_at=_last_updated_at,
+        universe=_last_request.universe if _last_request else None,
+        direction=_last_request.direction if _last_request else None,
+        horizon=_last_request.horizon if _last_request else None,
+    )
 
 
 @router.post('/scan', response_model=ScanResult)

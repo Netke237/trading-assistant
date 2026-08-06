@@ -32,7 +32,7 @@ from app.schemas.stock_scan import (
 )
 from app.data.sector_map import sector_for_symbol
 from app.routers.regime import _ema as _regime_ema, compute_overall_regime
-from app.schemas import SentimentData
+from app.schemas import SentimentData, ScanSessionStatus
 from app.data.market import fetch_company_name_async, fetch_price_async, fetch_quotes, fetch_intraday_candles
 from app.services.historical_store import get_bars as get_historical_bars
 from app.scoring.stock_scorer import score_stock
@@ -157,25 +157,42 @@ _BACKTEST_POOL = concurrent.futures.ProcessPoolExecutor(
 
 _last_stock_request: StockScanRequest | None = None
 _last_stock_result: StockScanResult | None = None
+_last_stock_status: str = "idle"
+_last_stock_updated_at: str | None = None
 
 
-async def _upsert_stock_session(db: AsyncSession, req: StockScanRequest | None, result: StockScanResult | None) -> None:
+async def _upsert_stock_session(
+    db: AsyncSession,
+    req: StockScanRequest | None,
+    result: StockScanResult | None,
+    status: str = "complete",
+) -> None:
     """Persist the last stocks-mode scan to the same scan_sessions table the
-    options-mode scan uses, under a distinct id so the two never collide."""
+    options-mode scan uses, under a distinct id so the two never collide.
+
+    Single place that reassigns the in-memory "last stock scan" globals, so
+    `status`/`strategy` (sourced from `_last_stock_request`) always stay in
+    sync with each other at every write, including the running/idle writes
+    from run_stock_scan() below — not just the final completed write."""
+    global _last_stock_request, _last_stock_result, _last_stock_status, _last_stock_updated_at
     await db.merge(
         ScanSession(
             id="stock-current",
-            status="complete",
+            status=status,
             last_result_json=result.model_dump_json() if result else None,
             last_request_json=req.model_dump_json() if req else None,
         )
     )
     await db.commit()
+    _last_stock_request = req
+    _last_stock_result = result
+    _last_stock_status = status
+    _last_stock_updated_at = datetime.now(timezone.utc).isoformat()
 
 
 async def restore_stock_from_db() -> None:
     """Restore _last_stock_result from DB on startup — mirrors scan.py's restore_from_db()."""
-    global _last_stock_request, _last_stock_result
+    global _last_stock_request, _last_stock_result, _last_stock_status, _last_stock_updated_at
     async with AsyncSessionLocal() as db:
         try:
             result = await db.execute(select(ScanSession).where(ScanSession.id == "stock-current"))
@@ -189,6 +206,13 @@ async def restore_stock_from_db() -> None:
             _last_stock_result = StockScanResult.model_validate_json(row.last_result_json)
         if row.last_request_json:
             _last_stock_request = StockScanRequest.model_validate_json(row.last_request_json)
+        # A restored "running" status means the process was killed mid-scan
+        # (OOM, container restart) — unlike options mode's continuous-scan
+        # scheduler, no in-flight stock-scan request can survive a restart
+        # to resume it, so treat it as idle rather than reporting a scan
+        # that will never finish as permanently "running".
+        _last_stock_status = row.status if row.status != "running" else "idle"
+        _last_stock_updated_at = row.updated_at.isoformat() if row.updated_at else None
 
 
 def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], params: dict | None = None) -> str:
@@ -872,11 +896,50 @@ async def get_last_stock_scan() -> StockScanResult | None:
     return _last_stock_result
 
 
+@router.get('/stock-scan/last-run', response_model=ScanSessionStatus)
+async def get_last_stock_scan_status() -> ScanSessionStatus:
+    """Return last-run metadata (status/timestamp/strategy) for stock-mode scans."""
+    return ScanSessionStatus(
+        status=_last_stock_status,
+        updated_at=_last_stock_updated_at,
+        strategy=_last_stock_request.strategy if _last_stock_request else None,
+    )
+
+
 @router.post("/stock-scan")
 async def run_stock_scan(req: StockScanRequest, db: AsyncSession = Depends(get_db)) -> StockScanResult:
-    from app.data.universe_presets import expand_universe, PresetUnavailableError
-
+    # NOTE: nothing serializes overlapping requests to this endpoint (unlike
+    # scan.py's run_scan(), _SCAN_SEM above only throttles per-symbol work
+    # inside _process_stock, not the endpoint itself) — two concurrent
+    # POST /api/stock-scan calls race on the single shared "stock-current"
+    # row/globals below (e.g. one request's failure-triggered idle-revert
+    # could clobber another's genuine in-flight/completed state). Accepted as
+    # a low-probability edge case given this app is single-user and the UI
+    # only issues one stock scan at a time, rather than engineered around
+    # with a lock/sequence-token.
     scan_id = new_rec_id()
+    _prev_request, _prev_result, _prev_status = _last_stock_request, _last_stock_result, _last_stock_status
+    await _upsert_stock_session(db, req=req, result=_prev_result, status="running")
+
+    try:
+        return await _run_stock_scan_body(req, db, scan_id)
+    except Exception:
+        # Revert to the request/result/status that were current before THIS
+        # attempt started (not `req`/"idle" unconditionally) — otherwise a
+        # scan that fails right after a genuinely completed one would
+        # mislabel that still-valid prior result as "idle" instead of
+        # "complete". `_prev_status` is "idle" only when there really was no
+        # prior scan (module default / a fresh DB).
+        await _upsert_stock_session(db, req=_prev_request, result=_prev_result, status=_prev_status)
+        raise
+
+
+async def _run_stock_scan_body(req: StockScanRequest, db: AsyncSession, scan_id: str) -> StockScanResult:
+    # Deliberately NOT hoisted to the module-level import at line 57 — tests
+    # patch `app.data.universe_presets.expand_universe` (not
+    # `app.routers.stock_scan.expand_universe`), which only takes effect if
+    # this name is re-resolved from the source module at call time.
+    from app.data.universe_presets import expand_universe, PresetUnavailableError
 
     if req.symbols:
         symbols = req.symbols
@@ -988,9 +1051,7 @@ async def run_stock_scan(req: StockScanRequest, db: AsyncSession = Depends(get_d
         original_count=original_count, shortlist_truncated=shortlist_truncated,
         direction_banner=_direction_banner,
     )
-    global _last_stock_request, _last_stock_result
-    _last_stock_request, _last_stock_result = req, result
-    await _upsert_stock_session(db, req, result)
+    await _upsert_stock_session(db, req, result, status="complete")
     return result
 
 

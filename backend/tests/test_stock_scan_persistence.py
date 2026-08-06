@@ -126,3 +126,136 @@ async def test_restore_stock_from_db_restores_globals():
         stock_scan_module._last_stock_request = orig_request
         stock_scan_module._last_stock_result = orig_result
         stock_scan_module.AsyncSessionLocal = orig_async_session_local
+
+
+# ── Tests for /stock-scan/last-run and the running/idle status writes ────────
+
+def test_last_run_idle_when_no_scan_yet(stock_client, monkeypatch):
+    import app.routers.stock_scan as stock_scan_module
+    monkeypatch.setattr(stock_scan_module, "_last_stock_request", None)
+    monkeypatch.setattr(stock_scan_module, "_last_stock_status", "idle")
+    monkeypatch.setattr(stock_scan_module, "_last_stock_updated_at", None)
+    r = stock_client.get("/api/stock-scan/last-run")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "idle"
+    assert body["updated_at"] is None
+    assert body["strategy"] is None
+
+
+def test_running_write_happens_before_complete_write_and_preserves_prior_result(stock_client):
+    """The running-write at scan start must not null out the previously
+    completed result — it should carry the prior result forward until the
+    scan actually finishes and overwrites it with the new one."""
+    import app.routers.stock_scan as stock_scan_module
+    from app.schemas.stock_scan import StockScanResult
+
+    prior_result = StockScanResult(
+        scan_id="SSCAN-PRIOR", timestamp="2026-08-01T00:00:00", candidates=[], rejected=[],
+    )
+    prior_request = StockScanRequest(
+        universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema",
+    )
+    stock_scan_module._last_stock_request = prior_request
+    stock_scan_module._last_stock_result = prior_result
+
+    seen_statuses: list[str] = []
+    orig_upsert = stock_scan_module._upsert_stock_session
+
+    async def _spy_upsert(db, req, result, status="complete"):
+        seen_statuses.append(status)
+        if status == "running":
+            # At the moment of the running-write, the prior result must still
+            # be what gets persisted — not None.
+            assert result is not None
+            assert result.scan_id == "SSCAN-PRIOR"
+        await orig_upsert(db, req, result, status)
+
+    with (
+        patch("app.data.universe_presets.expand_universe", return_value=[]),
+        patch("app.routers.stock_scan.fetch_quotes", return_value={}),
+        patch.object(stock_scan_module, "_upsert_stock_session", _spy_upsert),
+    ):
+        r = stock_client.post("/api/stock-scan", json={
+            "universe": ["SP500"],
+            "direction": "Bullish",
+            "horizon": "Swing",
+            "strategy": "breakout_base",
+        })
+    assert r.status_code == 200
+    assert seen_statuses == ["running", "complete"]
+    assert stock_scan_module._last_stock_status == "complete"
+    assert stock_scan_module._last_stock_request.strategy == "breakout_base"
+
+
+def test_mid_scan_exception_reverts_to_idle_not_stuck_running(stock_client, monkeypatch):
+    """A failure inside the scan body (e.g. an unavailable universe preset)
+    must not leave the session stranded at status='running' forever — and
+    with no prior scan, the revert target genuinely is 'idle'."""
+    import app.routers.stock_scan as stock_scan_module
+    from app.data.universe_presets import PresetUnavailableError
+
+    stock_scan_module._last_stock_request = None
+    stock_scan_module._last_stock_result = None
+    monkeypatch.setattr(stock_scan_module, "_last_stock_status", "idle")
+
+    with patch(
+        "app.data.universe_presets.expand_universe",
+        side_effect=PresetUnavailableError("SP500 preset unavailable"),
+    ):
+        r = stock_client.post("/api/stock-scan", json={
+            "universe": ["SP500"],
+            "direction": "Bullish",
+            "horizon": "Swing",
+            "strategy": "pullback_ema",
+        })
+    assert r.status_code == 400
+    assert stock_scan_module._last_stock_status == "idle"
+
+    import asyncio
+    from sqlalchemy import select
+
+    async def _check():
+        async with _TestSession() as session:
+            result = await session.execute(
+                select(ScanSession).where(ScanSession.id == "stock-current")
+            )
+            return result.scalar_one_or_none()
+
+    row = asyncio.run(_check())
+    assert row is not None
+    assert row.status == "idle"
+
+
+def test_mid_scan_exception_after_a_completed_scan_reverts_to_complete_not_idle(stock_client):
+    """A failed scan immediately after a genuinely completed one must not
+    mislabel that still-valid prior result as 'idle' — the revert should
+    restore the real prior status ('complete'), not hardcode 'idle'."""
+    import app.routers.stock_scan as stock_scan_module
+    from app.data.universe_presets import PresetUnavailableError
+    from app.schemas.stock_scan import StockScanResult
+
+    prior_result = StockScanResult(
+        scan_id="SSCAN-PRIOR", timestamp="2026-08-01T00:00:00", candidates=[], rejected=[],
+    )
+    prior_request = StockScanRequest(
+        universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema",
+    )
+    stock_scan_module._last_stock_request = prior_request
+    stock_scan_module._last_stock_result = prior_result
+    stock_scan_module._last_stock_status = "complete"
+
+    with patch(
+        "app.data.universe_presets.expand_universe",
+        side_effect=PresetUnavailableError("SP500 preset unavailable"),
+    ):
+        r = stock_client.post("/api/stock-scan", json={
+            "universe": ["SP500"],
+            "direction": "Bullish",
+            "horizon": "Swing",
+            "strategy": "breakout_base",
+        })
+    assert r.status_code == 400
+    assert stock_scan_module._last_stock_status == "complete"
+    assert stock_scan_module._last_stock_request.strategy == "pullback_ema"
+    assert stock_scan_module._last_stock_result.scan_id == "SSCAN-PRIOR"

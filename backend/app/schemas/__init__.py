@@ -556,6 +556,26 @@ class ScanResult(BaseModel):
     dte_window: Optional[DteWindow] = None
 
 
+class ScanSessionStatus(BaseModel):
+    """Last-run status for a scan session (options or stock mode).
+
+    `status` means different things per mode. For options mode, "running"/
+    "stopped" only reflect whether the continuous scan scheduler is toggled
+    on/off — a plain one-off scan never transitions through "running", it
+    goes straight to "complete". For stock mode, "running" reflects that a
+    specific scan request is actively executing right now, and there is no
+    "stopped" state (no continuous-scan equivalent exists for stock mode).
+    Consumers must not treat the two endpoints' status values as
+    interchangeable.
+    """
+    status: str                     # "idle" | "running" | "complete" | "stopped"
+    updated_at: Optional[str] = None
+    universe: Optional[list[str]] = None
+    direction: Optional[str] = None
+    horizon: Optional[str] = None
+    strategy: Optional[str] = None  # stock-mode only
+
+
 # ── Portfolio persistence ─────────────────────────────────────────────────────
 
 class PortfolioPositionCreate(BaseModel):

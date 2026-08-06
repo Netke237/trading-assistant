@@ -74,6 +74,30 @@ export function StoreHydration() {
           // Same fallback behavior as above.
         }
       }
+
+      // Last-run status/strategy metadata — unlike the two blocks above, fetch
+      // unconditionally on every load (not just when the store is empty): this
+      // can go stale independent of whether a cached result already exists.
+      try {
+        const optStatus = await api.getLastScanStatus();
+        useScanStore.getState().setLastOptionsScanMeta(
+          optStatus.status,
+          optStatus.updated_at ? toLocalWallClock(optStatus.updated_at) : null,
+        );
+      } catch {
+        // No backend reachable yet, or nothing to recover — leave state as-is.
+      }
+
+      try {
+        const stkStatus = await api.getLastStockScanStatus();
+        useScanStore.getState().setLastStockScanMeta(
+          stkStatus.status,
+          stkStatus.updated_at ? toLocalWallClock(stkStatus.updated_at) : null,
+          stkStatus.strategy ?? null,
+        );
+      } catch {
+        // Same fallback behavior as above.
+      }
     })();
   }, []);
 
