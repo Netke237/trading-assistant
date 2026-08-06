@@ -137,6 +137,32 @@ async def test_portfolio_delete(client):
     assert get_resp.json() == []
 
 
+@pytest.mark.asyncio
+async def test_portfolio_hard_delete_also_removes_audit_event(client, db_session):
+    """A hard DELETE never creates a closed_positions row, so prune_old_history's
+    audit_events cascade (which only discovers rec_ids via closed_positions)
+    can never reach it — delete_position must clean up audit_events itself,
+    or the buy-decision snapshot orphans forever."""
+    from app.models.audit_event import AuditEventModel
+
+    payload = {**_POSITION_PAYLOAD, "tradeCardSnapshot": {"stockScore": 77}}
+    post_resp = await client.post("/api/portfolio", json=payload)
+    assert post_resp.status_code == 201, post_resp.text
+
+    existing = await db_session.execute(
+        select(AuditEventModel).where(AuditEventModel.rec_id == payload["recId"])
+    )
+    assert existing.scalar_one_or_none() is not None, "log_approval should have written an audit_events row"
+
+    del_resp = await client.delete(f"/api/portfolio/{payload['recId']}")
+    assert del_resp.status_code == 204, del_resp.text
+
+    after = await db_session.execute(
+        select(AuditEventModel).where(AuditEventModel.rec_id == payload["recId"])
+    )
+    assert after.scalar_one_or_none() is None, "audit_events row must be cleaned up on hard delete"
+
+
 # ── Test 3: Portfolio persistence across sessions ─────────────────────────────
 
 @pytest.mark.asyncio

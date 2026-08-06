@@ -24,6 +24,7 @@ alert_delivery:
   dedupWindowMinutes: 15
   reminderIntervalHours: 4
   retentionDays: 30
+  positionAlertRetentionDays: 30
 
 ibkr:
   enabled: true

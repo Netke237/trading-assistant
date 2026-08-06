@@ -6,7 +6,7 @@ export interface AlertPosition {
   contract: string;
   currentPrice: number;
   entryPrice: number;
-  stop: number;
+  stop: number | null;
   targets: TargetLevel[];
   dteRemaining: number;
   dteTotal: number;
@@ -22,6 +22,14 @@ export interface AlertReason {
   symbol: string;
   alertType: AlertType;
   reason: string;
+  // Structured fields for position_alert_history — populated where the data
+  // is actually available client-side; left undefined otherwise (e.g.
+  // PREMIUM_STOP has no dollar price/threshold in scope here, only pnlPct).
+  price?: number;
+  referenceValue?: number;
+  direction?: Direction;
+  contract?: string;
+  note?: string;
 }
 
 export interface ScanOptions {
@@ -52,34 +60,38 @@ export function scanPortfolio(
         symbol: p.symbol,
         alertType: 'TP_HIT',
         reason: `Target reached — ${p.symbol} at $${p.currentPrice.toFixed(2)}`,
+        price: p.currentPrice,
+        referenceValue: firstTarget?.stockPrice,
+        direction: p.direction,
+        contract: p.contract,
       });
     }
 
     // STOP_REACHED — direction-aware: puts/shorts are invalidated when price rises above stop.
-    // `p.stop > 0` guards positions with no stop set: portfolioStore.ts:47 coerces a
-    // null backend stop to 0 before it reaches this function (AlertPosition.stop is
-    // non-optional), so the null/unset case is invisible here — without this guard,
-    // a Bearish position with no stop would satisfy `currentPrice >= 0` on virtually
-    // every poll (any real stock price is positive), firing a spurious Critical alert
-    // every 30 seconds. The backend's equivalent check (alert_generator.py:109-112)
-    // guards this explicitly via `pos.stop is not None`; `stop > 0` is this function's
-    // only available proxy for the same condition since the null information is
-    // already lost by the time data reaches here. (Bullish positions were already
-    // safe from this by coincidence — currentPrice <= 0 is never true for a real
-    // price — this guard makes that safety explicit for both directions instead of
-    // relying on it remaining a coincidence.)
-    const stopBreached = p.stop > 0 && (isBearish ? p.currentPrice >= p.stop : p.currentPrice <= p.stop);
-    if (stopBreached) {
+    // `stop != null` guards positions with no stop set — matches the backend's
+    // equivalent check (alert_generator.py: `pos.stop is not None`) explicitly,
+    // rather than relying on a `stop > 0` proxy for "unset" (that proxy broke
+    // once `AlertPosition.stop`/`PortfolioPosition.stop` stopped being coerced
+    // from null to 0 upstream in portfolioStore.ts).
+    const stop = p.stop;
+    const stopBreached = stop != null && (isBearish ? p.currentPrice >= stop : p.currentPrice <= stop);
+    if (stopBreached && stop != null) {
       out.push({
         recId: p.recId,
         kind: 'Critical',
         symbol: p.symbol,
         alertType: 'STOP_REACHED',
-        reason: `Stop breached — ${p.symbol} ${isBearish ? 'above' : 'below'} $${p.stop.toFixed(2)} (price $${p.currentPrice.toFixed(2)})`,
+        reason: `Stop breached — ${p.symbol} ${isBearish ? 'above' : 'below'} $${stop.toFixed(2)} (price $${p.currentPrice.toFixed(2)})`,
+        price: p.currentPrice,
+        referenceValue: stop,
+        direction: p.direction,
+        contract: p.contract,
       });
     }
 
-    // PREMIUM_STOP — option lost premiumStopPct of its value
+    // PREMIUM_STOP — option lost premiumStopPct of its value. No dollar price/
+    // threshold is available in this scope (only pnlPct), so price/referenceValue
+    // are left undefined rather than mislabeled.
     if (p.pnlPct <= premiumStopThreshold) {
       out.push({
         recId: p.recId,
@@ -87,6 +99,8 @@ export function scanPortfolio(
         symbol: p.symbol,
         alertType: 'PREMIUM_STOP',
         reason: `Premium stop — ${p.symbol} down ${p.pnlPct.toFixed(1)}%`,
+        direction: p.direction,
+        contract: p.contract,
       });
     }
 
@@ -98,6 +112,9 @@ export function scanPortfolio(
         symbol: p.symbol,
         alertType: 'TIME_STOP',
         reason: `Time stop — ${p.symbol} ${p.dteRemaining} DTE`,
+        referenceValue: p.dteRemaining,
+        direction: p.direction,
+        contract: p.contract,
       });
     }
 
@@ -109,6 +126,10 @@ export function scanPortfolio(
         symbol: p.symbol,
         alertType: 'EVENT_RISK',
         reason: `${p.nextEventLabel ?? 'Event'} in ${p.nextEventDays} days — ${p.symbol}`,
+        referenceValue: p.nextEventDays,
+        direction: p.direction,
+        contract: p.contract,
+        note: p.nextEventLabel,
       });
     }
   }

@@ -479,7 +479,7 @@ function EditDrawer({
         <EditField
           label="Stop"
           hint="Exit if the underlying stock drops below this price (invalidates the trade thesis)."
-          value={position.stop}
+          value={position.stop ?? 0}
           onChange={(n) => onChange({ stop: n })}
         />
         <TargetEditor

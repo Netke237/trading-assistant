@@ -52,6 +52,21 @@ function generateRecId(): string {
   return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
 }
 
+// The "why was this bought" snapshot — attached to the position once, at buy
+// time, so it survives independent of later scans overwriting scanStore.
+function tradeCardSnapshotOf(card: TradeCardData): Record<string, unknown> {
+  return {
+    stockScore: card.stockScore,
+    stockConfidence: card.stockConfidence,
+    stockBreakdown: card.stockBreakdown,
+    contractScore: card.contractScore,
+    contractConfidence: card.contractConfidence,
+    contractBreakdown: card.contractBreakdown,
+    rrRatio: card.rrRatio,
+    rrModel: card.rrModel,
+  };
+}
+
 function positionFromOrder(order: DraftOrder): PortfolioPosition {
   const c   = order.card;
   const cd  = c.contractDetails;
@@ -80,6 +95,7 @@ function positionFromOrder(order: DraftOrder): PortfolioPosition {
     source:        order.autoSend ? 'broker' : 'manual',
     orderedAt:     nowISOLocal(),
     recId:         generateRecId(),
+    tradeCardSnapshot: tradeCardSnapshotOf(c),
   };
 }
 
@@ -455,6 +471,7 @@ export default function Step7Page() {
       orderedAt:     nowISOLocal(),
       recId:         generateRecId(),
       scanStockPrice: card.price,
+      tradeCardSnapshot: tradeCardSnapshotOf(card),
     };
   }
 

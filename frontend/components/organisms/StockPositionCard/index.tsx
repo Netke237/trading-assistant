@@ -5,7 +5,7 @@ import { Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
-import { buildPaperStockPosition } from '@/lib/paperTrade';
+import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
 import { StockAutoTradeArm } from '@/components/organisms/StockAutoTradeArm';
@@ -205,7 +205,9 @@ export function StockPositionCard({
     setAdding(true);
     setErr(null);
     try {
-      const res = await addPosition(buildPaperStockPosition(card.symbol, overlay.entry, overlay.shares));
+      const res = await addPosition(
+        buildPaperStockPosition(card.symbol, overlay.entry, overlay.shares, stockCardSnapshotOf(card)),
+      );
       if (res.status === 'rejected') {
         setErr(res.detail ?? 'Portfolio rejected this position.');
         return;

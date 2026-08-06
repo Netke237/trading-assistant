@@ -160,6 +160,7 @@ export default function AlertsPage() {
             // No UI control yet (deferred) — still round-tripped so this page's
             // save effect doesn't clobber a value set through another path.
             positionSustainMinutes: data.positionSustainMinutes ?? config.positionSustainMinutes,
+            positionAlertRetentionDays: data.positionAlertRetentionDays ?? config.positionAlertRetentionDays,
           });
         }
         deliveryLoaded.current = true;
@@ -184,13 +185,14 @@ export default function AlertsPage() {
           checkIntervalSeconds: config.checkIntervalSeconds,
           retentionDays: config.retentionDays,
           positionSustainMinutes: config.positionSustainMinutes,
+          positionAlertRetentionDays: config.positionAlertRetentionDays,
         }),
       }).catch(() => {});
     }, 800);
     return () => {
       if (deliverySyncTimer.current) clearTimeout(deliverySyncTimer.current);
     };
-  }, [BASE_URL, config.enabledTypes, config.dedupWindowMinutes, config.reminderIntervalHours, config.checkIntervalSeconds, config.retentionDays, config.positionSustainMinutes]);
+  }, [BASE_URL, config.enabledTypes, config.dedupWindowMinutes, config.reminderIntervalHours, config.checkIntervalSeconds, config.retentionDays, config.positionSustainMinutes, config.positionAlertRetentionDays]);
 
   const loadWatches = useCallback(() => {
     api.listCompositeWatches()

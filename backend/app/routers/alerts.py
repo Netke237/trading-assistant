@@ -9,6 +9,7 @@ from app.models.portfolio import PortfolioPositionModel
 from app.schemas import AlertItem
 from app.services.alert_generator import generate_alerts
 from app.services.notifications.alert_notifier import notify_alert
+from app.services.position_alert_log import log_position_alert
 
 router = APIRouter(prefix='/api', tags=['alerts'])
 
@@ -19,15 +20,40 @@ async def get_alerts(db: AsyncSession = Depends(get_db)) -> list[AlertItem]:
     symbols = list({p.symbol for p in result.scalars().all()})
     quotes = fetch_quotes(symbols)
     current_prices = {sym: q["last"] for sym, q in quotes.items()}
-    return await generate_alerts(db, current_prices)
+    alerts = await generate_alerts(db, current_prices)
+    # generate_alerts() writes position_alert_history rows (log_position_alert)
+    # and updates PortfolioPositionModel.alert_state, neither of which self-
+    # commits any more (see log_position_alert's docstring) — get_db() only
+    # closes the session without committing, so this endpoint owns the commit.
+    # Without this, both were silently discarded on every poll through here.
+    await db.commit()
+    return alerts
 
 
 class AlertNotifyRequest(BaseModel):
+    # symbol is accepted but intentionally unused below (post_alert_notify
+    # derives it from the DB row instead) — kept on the wire schema since the
+    # frontend already sends it and it's harmless input.
     symbol: str
     alertType: str
     reason: str
     recId: str
     timestamp: str | None = None
+    price: float | None = None
+    referenceValue: float | None = None
+    direction: str | None = None
+    contract: str | None = None
+    note: str | None = None
+
+
+_REFERENCE_KIND_BY_TYPE = {
+    "TP_HIT": "price",
+    "STOP_REACHED": "price",
+    "PREMIUM_STOP": "price",
+    "TIME_STOP": "days",
+    "EVENT_RISK": "days",
+    "REGIME_CHANGE": "regime",
+}
 
 
 @router.post('/alerts/notify')
@@ -35,21 +61,53 @@ async def post_alert_notify(
     req: AlertNotifyRequest,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Dispatch a single in-app alert to email/Telegram.
+    """Persist the frontend engine's alert fire, then separately dispatch it
+    to email/Telegram.
 
     Called by the browser when a NEW portfolio alert is shown. Guarded: the
-    alert is only dispatched when its recId is a currently-open position in the
-    DB, so a stale localStorage phantom in the browser cannot email alerts for a
-    position the backend does not hold. Deduped server-side (shared with the
-    headless monitor).
+    alert is only recorded/dispatched when its recId is a currently-open
+    position in the DB, so a stale localStorage phantom in the browser cannot
+    write history or email alerts for a position the backend does not hold.
+    symbol/contract/direction are derived from the authoritative DB row, not
+    trusted from the request body, so a buggy tab can't misattribute a fire to
+    the wrong symbol/contract. price/referenceValue ARE taken from the request
+    — they're the frontend engine's own observed values, which is the point of
+    a source="frontend" row.
+
+    Persistence (log_position_alert) is independent of notify_alert's
+    masterEnabled/enabledTypes dispatch gating, so a muted alert type still
+    gets an audit row even when it isn't emailed/Telegrammed.
     """
-    exists = (await db.execute(
-        select(PortfolioPositionModel.id).where(
+    position = (await db.execute(
+        select(PortfolioPositionModel).where(
             PortfolioPositionModel.rec_id == req.recId
         )
-    )).first()
-    if exists is None:
+    )).scalar_one_or_none()
+    if position is None:
         return {'sent': False, 'reason': 'position_not_found'}
 
-    sent = notify_alert(req.symbol, req.alertType, req.reason, req.recId, req.timestamp)
+    # Only tag a reference_kind when there's an actual reference_value to go
+    # with it — e.g. the frontend engine has no dollar price/threshold in
+    # scope for PREMIUM_STOP (only pnlPct), so both are left None rather than
+    # stamping "price" on a row with nothing to measure.
+    reference_kind = _REFERENCE_KIND_BY_TYPE.get(req.alertType) if req.referenceValue is not None else None
+
+    await log_position_alert(
+        db,
+        rec_id=req.recId,
+        symbol=position.symbol,
+        alert_type=req.alertType,
+        source="frontend",
+        price=req.price,
+        reference_value=req.referenceValue,
+        reference_kind=reference_kind,
+        direction=position.direction,
+        contract=position.contract,
+        note=req.note,
+    )
+    # log_position_alert no longer commits the (shared, request-scoped) session
+    # itself — see its docstring — so this endpoint owns the final commit.
+    await db.commit()
+
+    sent = notify_alert(position.symbol, req.alertType, req.reason, req.recId, req.timestamp)
     return {'sent': sent}

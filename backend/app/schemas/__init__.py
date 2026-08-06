@@ -314,6 +314,10 @@ class AlertItem(BaseModel):
     timestamp: str
     recId: str = ""
     alertType: str = "SCAN_COMPLETE"
+    price: Optional[float] = None
+    referenceValue: Optional[float] = None
+    direction: Optional[str] = None
+    contract: Optional[str] = None
 
 
 # ── Events ───────────────────────────────────────────────────────────────────
@@ -569,6 +573,7 @@ class PortfolioPositionCreate(BaseModel):
     dteTotal: Optional[int] = Field(alias="dte_total", default=None)
     portfolioValue: float = Field(alias="portfolio_value", default=50000.0)
     scanStockPrice: Optional[float] = Field(alias="scan_stock_price", default=None)
+    tradeCardSnapshot: Optional[dict] = Field(alias="trade_card_snapshot", default=None)
 
     def __init__(self, **data):
         # Support both camelCase and snake_case field names
@@ -580,6 +585,7 @@ class PortfolioPositionCreate(BaseModel):
             "dte_total": "dteTotal",
             "portfolio_value": "portfolioValue",
             "scan_stock_price": "scanStockPrice",
+            "trade_card_snapshot": "tradeCardSnapshot",
         }
         for k, v in data.items():
             mapped[aliases.get(k, k)] = v

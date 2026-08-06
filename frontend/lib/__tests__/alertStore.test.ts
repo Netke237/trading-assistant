@@ -87,4 +87,37 @@ describe('alertStore', () => {
     // touched by the unrelated addToast call.
     expect(newFiredAlerts[key]).toBe(now - 25 * 3600_000);
   });
+
+  it('forwards price/referenceValue/direction/contract/note to POST /api/alerts/notify', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ sent: true }) });
+    (global as unknown as { fetch: typeof fetch }).fetch = fetchMock as unknown as typeof fetch;
+
+    useAlertStore.getState().addToast({
+      kind: 'Critical',
+      symbol: 'AAPL',
+      reason: 'Stop breached — AAPL below $90.00 (price $88.00)',
+      recId: 'REC-1',
+      alertType: 'STOP_REACHED',
+      price: 88,
+      referenceValue: 90,
+      direction: 'Bullish',
+      contract: 'AAPL|STOCK',
+      note: 'from-test',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, opts] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain('/api/alerts/notify');
+    const body = JSON.parse((opts as RequestInit).body as string);
+    expect(body).toMatchObject({
+      symbol: 'AAPL',
+      alertType: 'STOP_REACHED',
+      recId: 'REC-1',
+      price: 88,
+      referenceValue: 90,
+      direction: 'Bullish',
+      contract: 'AAPL|STOCK',
+      note: 'from-test',
+    });
+  });
 });
