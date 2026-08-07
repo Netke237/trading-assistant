@@ -187,7 +187,7 @@ export default function AnalysisPage() {
                           <Text size={10} tone="dim">{lbl}</Text>
                           <Data
                             size={12}
-                            tone={v == null ? 'dim' : v >= 0 ? 'pass' : 'reject'}
+                            tone={v == null ? 'dim' : v > 0.5 ? 'pass' : v < -0.5 ? 'reject' : 'secondary'}
                             title={v == null ? undefined : `Stock ${lbl} return minus ${result.sector_rs!.benchmark} ETF return. >+0.5% outperforming, <-0.5% lagging, else in line.`}
                           >
                             {v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`}

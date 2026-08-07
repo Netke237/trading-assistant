@@ -427,8 +427,8 @@ export default function Step4PreBreakoutPage() {
                   <Data size={12} tone="secondary">{row.fib_level_hit}%</Data>
                   <Data
                     size={12}
-                    tone={row.fib_dist_pct != null && row.fib_dist_pct <= 1.5 ? 'pass' : 'caution'}
-                    title="Distance from current price to the nearest Fibonacci level. ≤1.5% (the tolerance band) = within range."
+                    tone={row.fib_dist_pct != null && row.fib_dist_pct <= fibParams.fibTolerancePct * 100 ? 'pass' : 'caution'}
+                    title={`Distance from current price to the nearest Fibonacci level. ≤${(fibParams.fibTolerancePct * 100).toFixed(1)}% (the tolerance band, adjustable above) = within range.`}
                   >
                     {row.fib_dist_pct != null ? `${row.fib_dist_pct.toFixed(1)}%` : '—'}
                   </Data>
