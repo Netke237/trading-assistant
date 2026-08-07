@@ -1,6 +1,7 @@
 import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { statusForScore } from '@/lib/status';
+import { contractBreakdownTooltip } from '@/lib/statusTooltips';
 import type { AlternativeContract } from '@/types/domain';
 import styles from './AlternativeContractRow.module.css';
 
@@ -25,7 +26,7 @@ export function AlternativeContractRow({ alt, rank }: AlternativeContractRowProp
           <Text size={11} tone="secondary">DTE {alt.dte}</Text>
         </div>
         <div className={styles.rightGroup}>
-          <StatusBadge status={alt.contractConfidence} tooltip={alt.reason} tooltipAlign="right" />
+          <StatusBadge status={alt.contractConfidence} tooltip={contractBreakdownTooltip(alt.contractBreakdown)} tooltipAlign="right" />
           <Data size={12} weight={500}>{alt.score}</Data>
         </div>
       </div>

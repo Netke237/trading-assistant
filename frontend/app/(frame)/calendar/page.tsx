@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
 import { EventFlag } from '@/components/atoms/EventFlag';
+import { eventProximityGateTooltip } from '@/lib/statusTooltips';
 import { api } from '@/lib/api';
 import type { UpcomingEvent } from '@/types/domain';
 import type { Status } from '@/lib/status';
@@ -192,11 +193,7 @@ export default function CalendarPage() {
           <ul className={styles.items}>
             {selectedEvents.map((ev) => (
               <li key={`${ev.date}-${ev.symbol}-${ev.label}`} className={styles.item}>
-                <StatusDot
-                  tone={ev.status}
-                  size="sm"
-                  title={`Event-proximity gate: ${ev.status}. Reflects how close this event is to a scan's reject/caution window for the relevant horizon.`}
-                />
+                <StatusDot tone={ev.status} size="sm" title={eventProximityGateTooltip(ev.status)} />
                 <Data size={12} weight={500} className={styles.sym}>{ev.symbol}</Data>
                 <Text size={12} tone="secondary">{ev.label}</Text>
               </li>

@@ -14,7 +14,7 @@ import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { api } from '@/lib/api';
-import { scanPipelineStatusTooltip, regimeStatusTooltip, alertStatusTooltip } from '@/lib/statusTooltips';
+import { scanPipelineStatusTooltip, regimeStatusTooltip, alertStatusTooltip, eventProximityGateTooltip } from '@/lib/statusTooltips';
 import type { AlertItem, UpcomingEvent } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -113,11 +113,7 @@ export default function DashboardContextRail() {
         <div className={styles.eventStack}>
           {events.slice(0, 5).map((e) => (
             <div key={`${e.date}-${e.symbol}`} className={styles.eventRow}>
-              <StatusDot
-                tone={e.status}
-                size="sm"
-                title={`Event-proximity gate: ${e.status}. Reflects how close this event is to a scan's reject/caution window for the relevant horizon.`}
-              />
+              <StatusDot tone={e.status} size="sm" title={eventProximityGateTooltip(e.status)} />
               <Data size={11} tone="secondary">{shortDate(e.date)}</Data>
               <Data size={11} weight={500}>{e.symbol}</Data>
               <Text size={12} tone="secondary">{e.label}</Text>

@@ -27,14 +27,19 @@ export function triggerDetailText(d?: TriggerDetail): string | undefined {
   ].join(' · ');
   const candle = d.candle !== 'none' ? d.candle : '';
   const vol = d.volume_bonus ? ' + vol' : '';
-  return [candle, `${checks} · ${d.momentum_count}/3 signals${vol}`].filter(Boolean).join(' · ');
+  return [candle, `${checks} · ${d.momentum_count}/3 signals${vol}`].filter(Boolean).join(' · ') || undefined;
 }
 
 export function pullbackDetailText(d?: PullbackDetail): string | undefined {
   if (!d) return undefined;
   const ret = d.retracement_pct != null ? `Ret ${d.retracement_pct.toFixed(1)}%` : '';
   const fvg = d.fvg_hit ? '+ FVG' : '';
-  return [ret, fvg, d.reason].filter(Boolean).join(' · ');
+  // d.reason is typed as required, but the un-validated /api/analyze-stock path can
+  // forward a raw dict missing it (e.g. the atr_fallback branch of _rule_pullback) —
+  // `|| undefined` (not just relying on filter(Boolean)) ensures an all-empty result
+  // falls back to the caller's generic status copy instead of silently rendering no
+  // tooltip at all.
+  return [ret, fvg, d.reason].filter(Boolean).join(' · ') || undefined;
 }
 
 export function trendDetailText(d?: TrendDetail): string | undefined {

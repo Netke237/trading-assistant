@@ -12,7 +12,7 @@ import { runStockScan } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { WatchStar } from '@/components/atoms/WatchStar';
-import { regimeFitTooltip, stockScanGateTooltip, fundamentalScoreTooltip } from '@/lib/statusTooltips';
+import { regimeFitTooltip, stockScanGateTooltip, fundamentalScoreTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
@@ -321,7 +321,11 @@ export default function Step4StocksPage() {
                     <Data size={11} tone={!d ? 'dim' : d.scoreDelta > 0 ? 'pass' : d.scoreDelta < 0 ? 'reject' : 'secondary'}>
                       {!d ? '—' : `${d.scoreDelta > 0 ? '+' : ''}${d.scoreDelta}${d.rankDelta !== 0 ? ` (${d.rankDelta > 0 ? '↑' : '↓'}${Math.abs(d.rankDelta)})` : ''}`}
                     </Data>
-                    <Data size={12} tone={bt.win_rate >= 0.5 ? 'pass' : bt.win_rate >= 0.40 ? 'caution' : 'reject'}>
+                    <Data
+                      size={12}
+                      tone={bt.win_rate >= 0.5 ? 'pass' : bt.win_rate >= 0.40 ? 'caution' : 'reject'}
+                      title={winRateTooltip(bt.win_rate, 0.5, 0.40)}
+                    >
                       {(bt.win_rate * 100).toFixed(0)}%
                     </Data>
                     <Data size={12}>{bt.n_trades}</Data>
@@ -338,7 +342,14 @@ export default function Step4StocksPage() {
                     )}
                     <StatusBadge
                       status={gateStatus}
-                      tooltip={stockScanGateTooltip({ passes: bt.passes_gate, winRate: bt.win_rate, nTrades: bt.n_trades })}
+                      tooltip={stockScanGateTooltip({
+                        passes: bt.passes_gate,
+                        winRate: bt.win_rate,
+                        nTrades: bt.n_trades,
+                        expectancy: bt.expectancy,
+                        minWinRate: params.btMinWinRate,
+                        minTrades: params.btMinTrades,
+                      })}
                     />
                   </button>
                   {open && (

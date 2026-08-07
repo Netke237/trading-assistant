@@ -130,6 +130,12 @@ interface TradeCardProps {
   onEditsChange?: (overlay: EditOverlay) => void;
 }
 
+function targetStatusTooltip(statusVal: TargetLevel['status']): string {
+  if (statusVal === 'HIT') return 'This profit target has been reached.';
+  if (statusVal === 'MISSED') return 'Price moved past this target level without filling — treated as missed.';
+  return 'Target not yet reached.';
+}
+
 function generateRecId(): string {
   return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
 }
@@ -719,16 +725,26 @@ export function TradeCard({
         <section className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
           <div className={styles.scoreCardHeader}>
             <Text size={14} weight={600}>Final Recommendation</Text>
-            <LabeledStatusBadge label="Final Status" status={data.finalStatus} />
+            <LabeledStatusBadge
+              label="Final Status"
+              status={data.finalStatus}
+              tooltip="Overall recommendation for this trade — the worse of the stock signal's historical accuracy and the contract's quality verdict below."
+            />
           </div>
           <div className={styles.scoreCardBody}>
             <div className={styles.scoreRow}>
               <Text size={12} tone="secondary">Historical accuracy (3×ATR exit)</Text>
-              <StatusBadge status={data.stockConfidence} />
+              <StatusBadge
+                status={data.stockConfidence}
+                tooltip="Backtested confidence tier for the stock signal. CAUTION means the pattern's historical win rate is marginal — consider reducing position size or waiting for a higher-conviction entry."
+              />
             </div>
             <div className={styles.scoreRow}>
               <Text size={12} tone="secondary">Contract confidence</Text>
-              <StatusBadge status={data.contractConfidence} />
+              <StatusBadge
+                status={data.contractConfidence}
+                tooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
+              />
             </div>
             <div className={styles.scoreRow}>
               <Text size={12} tone="secondary">Projected R/R (+8% stock move)</Text>
@@ -860,7 +876,7 @@ function EditableTargetRow({
       <div className={styles.targetMain}>
         <div className={styles.targetId}>
           <Text size={12} weight={600} tone={rowTone}>{label}</Text>
-          {statusVal && <StatusBadge status={badgeStatus as 'PENDING' | 'PASS' | 'REJECT'} />}
+          {statusVal && <StatusBadge status={badgeStatus as 'PENDING' | 'PASS' | 'REJECT'} tooltip={targetStatusTooltip(statusVal)} />}
           {isTargetEdited && (
             <span className={styles.editBadge}>
               <Text size={10} tone="accent">edited</Text>
@@ -1039,7 +1055,7 @@ function TargetRow({
       <div className={styles.targetMain}>
         <div className={styles.targetId}>
           <Text size={12} weight={600} tone={rowTone}>{label}</Text>
-          {statusVal && <StatusBadge status={badgeStatus as 'PENDING' | 'PASS' | 'REJECT'} />}
+          {statusVal && <StatusBadge status={badgeStatus as 'PENDING' | 'PASS' | 'REJECT'} tooltip={targetStatusTooltip(statusVal)} />}
         </div>
         <div className={styles.targetValues}>
           <KV label="Stock price" value={`$${(target.targetPrice ?? target.stockPrice).toFixed(2)}`} mono tone={rowTone} />

@@ -6,7 +6,7 @@
  * the badge's color instead of drifting into stale hardcoded copy.
  */
 import type { Status } from '@/lib/status';
-import type { OptionContract } from '@/types/domain';
+import type { OptionContract, ContractScoreBreakdown } from '@/types/domain';
 import type { ScanState } from '@/lib/scanStore';
 import type { PortfolioRiskMetrics, RiskLimits } from '@/types/domain';
 import {
@@ -15,6 +15,11 @@ import {
   triggerDetailText,
   eventDetailText,
   volDetailText,
+  dteDetailText,
+  deltaDetailText,
+  ivDetailText,
+  liquidityDetailText,
+  spreadDetailText,
 } from '@/lib/scoreDetailText';
 import type { TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail } from '@/types/domain';
 
@@ -28,9 +33,35 @@ export const GENERIC_STATUS_TOOLTIP: Record<Status, string> = {
   NO_DATA: 'Insufficient price or volume data to score this.',
 };
 
-/** Composite stock-score badge with the actual score attached (Step 7 Position Card). */
+/** Portfolio table's per-position status badge. Deliberately NOT the same copy as
+ *  GENERIC_STATUS_TOOLTIP — that wording ("skip this candidate", "proceed at normal
+ *  size") is written for a not-yet-entered scan candidate, not a position already
+ *  held. lib/portfolioStore.ts currently sets every position's `status` to 'PENDING'
+ *  at creation and never updates it, so the PENDING case is the one that will
+ *  actually render in practice — its copy says so honestly instead of implying a
+ *  live scoring process that will "update soon" (it won't). */
+export function positionStatusTooltip(status: Status): string {
+  switch (status) {
+    case 'PASS':    return 'Position status: healthy — no known issues since entry.';
+    case 'CAUTION': return 'Position status: flagged — review this position, something about it warrants a closer look.';
+    case 'REJECT':  return 'Position status: at risk — this position has triggered a warning condition.';
+    case 'PENDING': return 'Position status is not actively tracked post-entry — this reflects the state at order time, not a live re-score.';
+    case 'NO_DATA': return 'No status data available for this position.';
+  }
+}
+
+/** Composite stock-score badge with the actual score attached (Step 7 Position Card).
+ *  The score->status band mapping (55/35, backend/app/scoring/stock_scorer.py's
+ *  _status_from_score) is only the STARTING verdict — four demote-only gates
+ *  (pullback timing veto, confidence, regime, fundamentals) can cap it lower
+ *  server-side, so a CAUTION/REJECT badge doesn't necessarily mean the raw score
+ *  itself was borderline. Don't state the band as the sole explanation. */
 export function stockStatusTooltip(status: Status, score: number): string {
-  return `Composite stock score: ${score}/100 (≥55 PASS, 35-54 CAUTION, <35 REJECT). ${GENERIC_STATUS_TOOLTIP[status]}`;
+  const band = score >= 55 ? 'PASS' : score >= 35 ? 'CAUTION' : 'REJECT';
+  const capped = band !== status;
+  return `Composite stock score: ${score}/100 (≥55 PASS, 35-54 CAUTION, <35 REJECT — raw band: ${band})`
+    + (capped ? `, capped to ${status} by a confidence/regime/fundamentals/pullback-timing gate.` : '.')
+    + ` ${GENERIC_STATUS_TOOLTIP[status]}`;
 }
 
 /** Regime-specific wording — distinct from the generic composite-score copy above. */
@@ -97,26 +128,55 @@ export function eventVolGateTooltip(args: {
   return `Gate shows the worse of IV rank and event proximity. ${ivPart}; ${evPart}. Driven by: ${driver}.`;
 }
 
-/** Step 6 Backtest GATE badge. */
+/** Bare win-rate cells that sit next to (but separately from) a GATE badge — several
+ *  pages show the historical backtest win rate with its own color bands that don't
+ *  always match the neighboring gate's threshold; state this cell's own band rather
+ *  than imply it's the gate. */
+export function winRateTooltip(winRate: number, passMin: number, cautionMin?: number): string {
+  const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
+  const bands = cautionMin != null
+    ? `≥${pct(passMin)} good, ${pct(cautionMin)}-${pct(passMin)} borderline, <${pct(cautionMin)} weak`
+    : `≥${pct(passMin)} good, below borderline`;
+  return `Historical backtest win rate: ${pct(winRate)} (${bands}).`;
+}
+
+/** Step 6 Backtest GATE badge — mirrors backend/app/services/strategy_backtest.py's
+ *  `passes = win_rate >= min_win_rate and n_trades >= min_trades and expectancy >= 0`.
+ *  All three clauses must hold — quoting only trades/win-rate produces a
+ *  self-contradictory tooltip whenever a negative-expectancy setup fails the
+ *  gate despite clearing the other two. */
 export function backtestGateTooltip(args: {
   passes: boolean;
   winRate: number;
   nTrades: number;
+  expectancy: number;
   minWinRate: number;
   minTrades: number;
 }): string {
-  const { passes, winRate, nTrades, minWinRate, minTrades } = args;
-  const rule = `Needs ≥${minTrades} historical trades and ≥${(minWinRate * 100).toFixed(0)}% win rate to pass.`;
-  const actual = `This setup: ${nTrades} trades, ${(winRate * 100).toFixed(0)}% win rate.`;
-  return `${rule} ${actual} ${passes ? 'PASS.' : 'REJECT — falls short of the gate.'}`;
+  const { passes, winRate, nTrades, expectancy, minWinRate, minTrades } = args;
+  const rule = `Needs ≥${minTrades} historical trades, ≥${(minWinRate * 100).toFixed(0)}% win rate, and non-negative expectancy per trade.`;
+  const actual = `This setup: ${nTrades} trades, ${(winRate * 100).toFixed(0)}% win rate, ${expectancy.toFixed(2)} expectancy.`;
+  const why = !passes && nTrades >= minTrades && winRate >= minWinRate && expectancy < 0
+    ? ' Fails on expectancy despite clearing trades/win-rate.'
+    : '';
+  return `${rule} ${actual}${why} ${passes ? 'PASS.' : 'REJECT — falls short of the gate.'}`;
 }
 
-/** Step 4 Stocks GATE column — same idea, different (lower) win-rate bar than Step 6. */
-export function stockScanGateTooltip(args: { passes: boolean; winRate: number; nTrades: number }): string {
-  const { passes, winRate, nTrades } = args;
-  const rule = 'Needs ≥40% historical win rate to clear this earlier-stage gate (Step 6’s backtest gate is stricter).';
-  const actual = `This setup: ${nTrades} trades, ${(winRate * 100).toFixed(0)}% win rate.`;
-  return `${rule} ${actual} ${passes ? 'PASS.' : 'CAUTION — below the bar.'}`;
+/** Step 4 Stocks GATE column — this is the SAME `passes_gate` field Step 6 shows,
+ *  not a separate earlier-stage gate; the row only *lists* candidates down to a
+ *  40% win rate (see the filter above this table), it doesn't change the gate. */
+export function stockScanGateTooltip(args: {
+  passes: boolean;
+  winRate: number;
+  nTrades: number;
+  expectancy: number;
+  minWinRate: number;
+  minTrades: number;
+}): string {
+  const { passes, winRate, nTrades, expectancy, minWinRate, minTrades } = args;
+  const rule = `Needs ≥${minTrades} historical trades, ≥${(minWinRate * 100).toFixed(0)}% win rate, and non-negative expectancy per trade — same backtest gate Step 6 shows.`;
+  const actual = `This setup: ${nTrades} trades, ${(winRate * 100).toFixed(0)}% win rate, ${expectancy.toFixed(2)} expectancy.`;
+  return `${rule} ${actual} ${passes ? 'PASS.' : 'CAUTION — falls short of the gate.'}`;
 }
 
 // Soft-rank preferred bands mirrored from backend/config/contract_rules.yaml
@@ -156,10 +216,33 @@ export function contractScoreTooltip(c: OptionContract): string {
   return `${base} Weakest: ${weaknesses[0]}${weaknesses.length > 1 ? ` (+${weaknesses.length - 1} more)` : ''}.`;
 }
 
+/** AlternativeContractRow's contractConfidence badge. Unlike contractScoreTooltip
+ *  above (OptionContract, no per-component detail), AlternativeContract carries a
+ *  full ContractScoreBreakdown — use the real sub-scores/detail objects instead of
+ *  re-deriving a heuristic. `alt.reason` (rendered separately, already visible)
+ *  explains the trade-off vs. the primary contract, not the confidence verdict —
+ *  don't reuse it here. */
+export function contractBreakdownTooltip(b: ContractScoreBreakdown): string {
+  const components: Array<{ label: string; score: number; text?: string }> = [
+    { label: 'DTE fit', score: b.dteFit, text: dteDetailText(b.dteDetail) },
+    { label: 'delta', score: b.delta, text: deltaDetailText(b.deltaDetail) },
+    { label: 'IV rank', score: b.ivAttractiveness, text: ivDetailText(b.ivDetail) },
+    { label: 'liquidity', score: b.liquidity, text: liquidityDetailText(b.liquidityDetail) },
+    { label: 'spread', score: b.spread, text: spreadDetailText(b.spreadDetail) },
+  ];
+  const weakest = components.reduce((min, c) => (c.score < min.score ? c : min), components[0]);
+  const base = 'Composite contract score — combines DTE fit, delta, IV rank, liquidity, and spread quality.';
+  return weakest.text
+    ? `${base} Weakest: ${weakest.label} — ${weakest.text}.`
+    : `${base} Weakest: ${weakest.label} (${weakest.score}/100).`;
+}
+
 export type RegimeFit = 'PASS' | 'CAUTION' | 'REJECT';
 
-/** Step 5 Strategy / Step 4 Stocks "Recommended/Neutral/Avoid" regime-fit badge,
- *  and Step 2 Universe's picker cards (same PASS/CAUTION/REJECT semantics). */
+/** Step 5 Strategy / Step 4 Stocks "Recommended/Neutral/Avoid" regime-fit badge.
+ *  (Step 2 Universe's picker cards are a different concept — today's index/sector
+ *  price move, not a strategy's fit to the regime — and have their own local
+ *  `cardStatusTooltip` in step-2-universe/page.tsx.) */
 export function regimeFitTooltip(strategyLabel: string, fit: RegimeFit, regimeStatus: Status): string {
   const regimeWord = regimeStatus === 'PASS' ? 'a clean' : regimeStatus === 'CAUTION' ? 'a mixed' : 'an unfavorable';
   switch (fit) {
@@ -192,30 +275,55 @@ export function fundamentalScoreTooltip(kind: 'overall' | 'growth' | 'quality' |
   }
 }
 
-/** RiskPanel's combined RiskBadge, and (with `metric` set) each of the 4 individual Stat cells. */
+/** RiskPanel's combined RiskBadge, and (with `metric` set) each of the 4 individual Stat cells.
+ *  Comparators mirror lib/riskStore.ts's computeMetrics exactly (per-band, not uniform):
+ *  exposure/concentration reject strictly above the cap; positions/daily reject at-or-above
+ *  it and floor their 80% caution threshold — using a single `>= cap` rule for all four (as
+ *  an earlier version of this function did) makes the badge color and the tooltip disagree
+ *  right at the boundary. */
 export function riskStatusTooltip(
   metrics: PortfolioRiskMetrics,
   limits: RiskLimits,
   metric?: 'exposure' | 'positions' | 'concentration' | 'daily',
 ): string {
-  const bands: Array<{ key: 'exposure' | 'positions' | 'concentration' | 'daily'; label: string; value: number; cap: number; fmt: (n: number) => string }> = [
-    { key: 'exposure', label: 'total exposure', value: metrics.totalExposurePct, cap: limits.maxTotalExposurePct, fmt: (n) => `${(n * 100).toFixed(0)}%` },
-    { key: 'positions', label: 'concurrent positions', value: metrics.concurrentPositions, cap: limits.maxConcurrentPositions, fmt: (n) => `${n}` },
-    { key: 'concentration', label: `largest position (${metrics.largestConcentrationSymbol})`, value: metrics.largestConcentrationPct, cap: limits.maxSingleTradeExposurePct, fmt: (n) => `${(n * 100).toFixed(0)}%` },
-    { key: 'daily', label: 'today’s recommendations', value: metrics.dailyRecommendations, cap: limits.maxDailyRecommendations, fmt: (n) => `${n}` },
+  const bands: Array<{
+    key: 'exposure' | 'positions' | 'concentration' | 'daily';
+    label: string;
+    value: number;
+    cap: number;
+    fmt: (n: number) => string;
+    statusFor: (value: number, cap: number) => Status;
+  }> = [
+    {
+      key: 'exposure', label: 'total exposure', value: metrics.totalExposurePct, cap: limits.maxTotalExposurePct,
+      fmt: (n) => `${(n * 100).toFixed(0)}%`,
+      statusFor: (v, c) => v > c ? 'REJECT' : v > c * 0.8 ? 'CAUTION' : 'PASS',
+    },
+    {
+      key: 'positions', label: 'concurrent positions', value: metrics.concurrentPositions, cap: limits.maxConcurrentPositions,
+      fmt: (n) => `${n}`,
+      statusFor: (v, c) => v >= c ? 'REJECT' : v >= Math.floor(c * 0.8) ? 'CAUTION' : 'PASS',
+    },
+    {
+      key: 'concentration', label: `largest position (${metrics.largestConcentrationSymbol})`, value: metrics.largestConcentrationPct, cap: limits.maxSingleTradeExposurePct,
+      fmt: (n) => `${(n * 100).toFixed(0)}%`,
+      statusFor: (v, c) => v > c ? 'REJECT' : v > c * 0.8 ? 'CAUTION' : 'PASS',
+    },
+    {
+      key: 'daily', label: 'today’s recommendations', value: metrics.dailyRecommendations, cap: limits.maxDailyRecommendations,
+      fmt: (n) => `${n}`,
+      statusFor: (v, c) => v >= c ? 'REJECT' : v >= Math.floor(c * 0.8) ? 'CAUTION' : 'PASS',
+    },
   ];
-
-  const statusFor = (value: number, cap: number): Status =>
-    value >= cap ? 'REJECT' : value >= cap * 0.8 ? 'CAUTION' : 'PASS';
 
   if (metric) {
     const b = bands.find((x) => x.key === metric)!;
-    const s = statusFor(b.value, b.cap);
-    return `${b.fmt(b.value)} of a ${b.fmt(b.cap)} limit (${s}). REJECT at 100% of the cap, CAUTION from 80%.`;
+    const s = b.statusFor(b.value, b.cap);
+    return `${b.fmt(b.value)} of a ${b.fmt(b.cap)} limit (${s}).`;
   }
 
   const worst = bands
-    .map((b) => ({ ...b, status: statusFor(b.value, b.cap) }))
+    .map((b) => ({ ...b, status: b.statusFor(b.value, b.cap) }))
     .sort((a, b2) => (a.status === 'REJECT' ? 0 : a.status === 'CAUTION' ? 1 : 2) - (b2.status === 'REJECT' ? 0 : b2.status === 'CAUTION' ? 1 : 2))[0];
   if (worst.status === 'PASS') return 'All portfolio risk limits (exposure, positions, concentration, daily recommendations) are comfortably within bounds.';
   return `Driven by ${worst.label}: ${worst.fmt(worst.value)} of a ${worst.fmt(worst.cap)} limit (${worst.status}).`;
@@ -240,6 +348,12 @@ export function alertStatusTooltip(kind: string): string {
   if (kind === 'Critical') return 'Critical alert — needs immediate attention (e.g. a stop or invalidation level was hit).';
   if (kind === 'Action')   return 'Action alert — a condition worth reviewing soon (e.g. a target or gate change).';
   return 'Informational alert — no action required.';
+}
+
+/** calendar page's per-event dot and the contextRail "Upcoming Events" dot — same
+ *  copy, deduped here instead of the two call sites carrying their own literal. */
+export function eventProximityGateTooltip(status: Status): string {
+  return `Event-proximity gate: ${status}. Reflects how close this event is to a scan's reject/caution window for the relevant horizon.`;
 }
 
 /** Analysis page per-rule cards and ValidationTable's five per-rule cells.

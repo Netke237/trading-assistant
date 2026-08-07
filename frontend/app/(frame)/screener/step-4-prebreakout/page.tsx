@@ -425,10 +425,18 @@ export default function Step4PreBreakoutPage() {
                     {row.direction === 'Bullish' ? '↑' : '↓'}
                   </Text>
                   <Data size={12} tone="secondary">{row.fib_level_hit}%</Data>
-                  <Data size={12} tone={row.fib_dist_pct != null && row.fib_dist_pct <= 1.5 ? 'pass' : 'caution'}>
+                  <Data
+                    size={12}
+                    tone={row.fib_dist_pct != null && row.fib_dist_pct <= 1.5 ? 'pass' : 'caution'}
+                    title="Distance from current price to the nearest Fibonacci level. ≤1.5% (the tolerance band) = within range."
+                  >
                     {row.fib_dist_pct != null ? `${row.fib_dist_pct.toFixed(1)}%` : '—'}
                   </Data>
-                  <Data size={12} tone={row.at_level ? 'pass' : 'dim'}>
+                  <Data
+                    size={12}
+                    tone={row.at_level ? 'pass' : 'dim'}
+                    title={row.at_level ? 'Price is currently within the tolerance band of the Fib level.' : 'Price is outside the tolerance band right now.'}
+                  >
                     {row.at_level ? 'YES' : 'no'}
                   </Data>
                   <Data

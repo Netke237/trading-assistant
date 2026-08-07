@@ -22,7 +22,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useAlertStore } from '@/lib/alertStore';
 import { scanPortfolio } from '@/lib/alertEngine';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
-import { GENERIC_STATUS_TOOLTIP } from '@/lib/statusTooltips';
+import { positionStatusTooltip } from '@/lib/statusTooltips';
 import type { PortfolioPosition } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -336,7 +336,7 @@ export default function PortfolioPage() {
                   <Data size={12} className={styles.right} tone="reject">
                     {p.theta !== undefined ? p.theta.toFixed(2) : '—'}
                   </Data>
-                  <StatusBadge status={p.status} tooltip={GENERIC_STATUS_TOOLTIP[p.status]} />
+                  <StatusBadge status={p.status} tooltip={positionStatusTooltip(p.status)} />
                   <button
                     type="button"
                     className={styles.editBtn}

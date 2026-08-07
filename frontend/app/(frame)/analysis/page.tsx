@@ -149,7 +149,11 @@ export default function AnalysisPage() {
                 const verdictTone = verdict === 'PASS' ? 'pass' : verdict === 'REJECT' ? 'reject' : 'caution';
                 return (
                   <>
-                    <Data size={14} tone={verdictTone}>
+                    <Data
+                      size={14}
+                      tone={verdictTone}
+                      title={`Regime ${result.sentiment.state} vs. a ${result.direction} scan direction → ${verdictLabel}. Tailwind = regime supports the direction, Headwind = opposes it, Choppy = unclear.`}
+                    >
                       {ommStateIcon(result.sentiment.state)} {result.sentiment.state} · {verdictLabel}
                     </Data>
                     <Text size={11} tone="secondary">
@@ -181,7 +185,11 @@ export default function AnalysisPage() {
                       return (
                         <span key={k} className={styles.rsCell}>
                           <Text size={10} tone="dim">{lbl}</Text>
-                          <Data size={12} tone={v == null ? 'dim' : v >= 0 ? 'pass' : 'reject'}>
+                          <Data
+                            size={12}
+                            tone={v == null ? 'dim' : v >= 0 ? 'pass' : 'reject'}
+                            title={v == null ? undefined : `Stock ${lbl} return minus ${result.sector_rs!.benchmark} ETF return. >+0.5% outperforming, <-0.5% lagging, else in line.`}
+                          >
                             {v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`}
                           </Data>
                           {verdict && (
