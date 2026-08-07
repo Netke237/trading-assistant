@@ -7,6 +7,7 @@ import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
+import { stockStatusTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
 
@@ -128,7 +129,7 @@ export default function Step7PositionCardPage() {
           </div>
           <div className={styles.badges}>
             <ConfidenceBadge confidence={card.confidence} title={card.confidence_text ?? undefined} />
-            <StatusBadge status={card.stock_status} />
+            <StatusBadge status={card.stock_status} tooltip={stockStatusTooltip(card.stock_status, card.stock_score)} />
           </div>
         </div>
 

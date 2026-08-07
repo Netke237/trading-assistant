@@ -8,12 +8,15 @@ import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
+import { backtestGateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
 
 function BacktestRow({ c, selected, onClick }: { c: PositionCardData; selected: boolean; onClick: () => void }) {
   const bt = c.backtest;
   const pass = bt.passes_gate;
+  const minTrades = useScanParamsStore((s) => s.btMinTrades);
+  const minWinRate = useScanParamsStore((s) => s.btMinWinRate);
   return (
     <button className={`${styles.row} ${selected ? styles.rowSelected : ''} ${!pass ? styles.rowFail : ''}`}
       onClick={onClick}>
@@ -54,7 +57,10 @@ function BacktestRow({ c, selected, onClick }: { c: PositionCardData; selected: 
           : '—'}
       </Text>
       <ConfidenceBadge confidence={c.confidence} title={c.confidence_text ?? undefined} />
-      <StatusBadge status={pass ? 'PASS' : 'REJECT'} />
+      <StatusBadge
+        status={pass ? 'PASS' : 'REJECT'}
+        tooltip={backtestGateTooltip({ passes: pass, winRate: bt.win_rate, nTrades: bt.n_trades, minWinRate, minTrades })}
+      />
     </button>
   );
 }

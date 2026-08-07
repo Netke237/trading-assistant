@@ -25,7 +25,7 @@ export function AlternativeContractRow({ alt, rank }: AlternativeContractRowProp
           <Text size={11} tone="secondary">DTE {alt.dte}</Text>
         </div>
         <div className={styles.rightGroup}>
-          <StatusBadge status={alt.contractConfidence} />
+          <StatusBadge status={alt.contractConfidence} tooltip={alt.reason} tooltipAlign="right" />
           <Data size={12} weight={500}>{alt.score}</Data>
         </div>
       </div>

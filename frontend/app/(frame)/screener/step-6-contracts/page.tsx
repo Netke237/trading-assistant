@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { statusForScore } from '@/lib/status';
+import { contractScoreTooltip } from '@/lib/statusTooltips';
 import { api } from '@/lib/api';
 import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { useScanStore } from '@/lib/scanStore';
@@ -222,7 +223,7 @@ export default function Step6Page() {
                   <Data size={12} className={tbl.right}>{c.volume.toLocaleString()}</Data>
                   <div className={tbl.scoreCell}>
                     <Data size={13} weight={500}>{c.score}</Data>
-                    <StatusBadge status={status} />
+                    <StatusBadge status={status} tooltip={contractScoreTooltip(c)} />
                   </div>
                   {isSpread && (
                     <>

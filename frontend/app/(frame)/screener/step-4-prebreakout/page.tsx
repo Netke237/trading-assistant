@@ -329,7 +329,13 @@ export default function Step4PreBreakoutPage() {
                   <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
                     {row.direction === 'Bullish' ? '↑' : '↓'}
                   </Text>
-                  <Data size={13} tone={_confidenceTone(row.stock_score)}>{row.stock_score}</Data>
+                  <Data
+                    size={13}
+                    tone={_confidenceTone(row.stock_score)}
+                    title={`Pullback setup score: ${row.stock_score}/100. ≥70 = strong setup, 40-69 = borderline, <40 = weak.`}
+                  >
+                    {row.stock_score}
+                  </Data>
                   <Data size={12} tone="secondary">${row.price.toFixed(2)}</Data>
                   <Data
                     size={13}

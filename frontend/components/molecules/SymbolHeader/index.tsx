@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import type { Status } from '@/lib/status';
+import { GENERIC_STATUS_TOOLTIP } from '@/lib/statusTooltips';
 import type { Direction } from '@/types/domain';
 import styles from './SymbolHeader.module.css';
 
@@ -24,14 +25,6 @@ interface SymbolHeaderProps {
   showChartButton?: boolean;
   className?: string;
 }
-
-const STATUS_TOOLTIP: Record<Status, string> = {
-  PASS:    'Strong stock signal — all key scoring components cleared the threshold. Good base to proceed at normal size.',
-  CAUTION: 'Borderline stock signal — the stock qualifies but has notable weaknesses. Review which scorecard bars are low before committing capital.',
-  REJECT:  'Stock signal below the quality gate. Consider skipping this candidate or waiting for a cleaner setup.',
-  PENDING: 'Scoring is still in progress. Status will update once all components are evaluated.',
-  NO_DATA: 'Insufficient price or volume data to score this stock.',
-};
 
 const DIRECTION_TOOLTIP: Record<Direction, string> = {
   Bullish: 'Scan direction: Bullish. You are looking for upward moves — call options profit when the stock rises above the strike before expiry.',
@@ -71,7 +64,7 @@ export function SymbolHeader({
           ${price.toFixed(2)}
         </Data>
       </div>
-      <StatusBadge status={status} tooltip={STATUS_TOOLTIP[status]} tooltipPosition="bottom" />
+      <StatusBadge status={status} tooltip={GENERIC_STATUS_TOOLTIP[status]} tooltipPosition="bottom" />
       <DirectionPill direction={direction} />
     </div>
   );

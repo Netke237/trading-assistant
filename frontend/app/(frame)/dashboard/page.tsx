@@ -28,6 +28,8 @@ import { scanPortfolio } from '@/lib/alertEngine';
 import { api } from '@/lib/api';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ToastContainer } from '@/components/organisms/ToastContainer';
+import { Tooltip } from '@/components/atoms/Tooltip';
+import { regimeStatusTooltip, regimeMetricTooltip } from '@/lib/statusTooltips';
 import { RiskPanel } from '@/components/molecules/RiskPanel';
 import type { WatchlistRow, MarketRegime, NewsItem } from '@/types/domain';
 import styles from './page.module.css';
@@ -160,15 +162,21 @@ export default function DashboardPage() {
       {/* Regime banner */}
       <section className={`${styles.regime} ${styles[`regime_${regime?.overall ?? 'PENDING'}`]}`}>
         <div className={styles.regimeLeft}>
-          <StatusBadge status={regime?.overall ?? 'PENDING'} label={`REGIME ${regime?.overall ?? '…'}`} />
+          <StatusBadge
+            status={regime?.overall ?? 'PENDING'}
+            label={`REGIME ${regime?.overall ?? '…'}`}
+            tooltip={regimeStatusTooltip(regime?.overall ?? 'PENDING')}
+          />
           <Text size={13} weight={500}>{regime?.headline ?? ''}</Text>
         </div>
         <div className={styles.regimeMetrics}>
           {(regime?.metrics ?? []).map((m) => (
-            <div key={m.label} className={styles.metric}>
-              <Text size={11} tone="secondary">{m.label}</Text>
-              <Data size={13} weight={500} tone={toneFor(m.status)}>{m.value}</Data>
-            </div>
+            <Tooltip key={m.label} text={regimeMetricTooltip(m.label, m.status)}>
+              <div className={styles.metric}>
+                <Text size={11} tone="secondary">{m.label}</Text>
+                <Data size={13} weight={500} tone={toneFor(m.status)}>{m.value}</Data>
+              </div>
+            </Tooltip>
           ))}
         </div>
       </section>
@@ -218,7 +226,7 @@ export default function DashboardPage() {
               <Data size={12} weight={500}>{row.symbol}</Data>
               <Text size={12} tone="secondary">{row.company}</Text>
               <Data size={12} weight={500}>{row.score}</Data>
-              <RankDelta value={row.rankDelta} />
+              <RankDelta value={row.rankDelta} context="rank" />
               {row.nextEventDays != null
                 ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel ?? undefined} />
                 : <Text size={11} tone="dim">—</Text>}

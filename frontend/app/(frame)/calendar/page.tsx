@@ -182,14 +182,21 @@ export default function CalendarPage() {
               : 'Select a day'}
           </Data>
           {selectedDate && selectedEvents.length > 0 && (
-            <EventFlag days={Math.round((selectedDate.getTime() - TODAY.getTime()) / 86_400_000)} />
+            <EventFlag
+              days={Math.round((selectedDate.getTime() - TODAY.getTime()) / 86_400_000)}
+              title={`${selectedEvents.length} event${selectedEvents.length !== 1 ? 's' : ''} on this day`}
+            />
           )}
         </header>
         {selectedEvents.length > 0 ? (
           <ul className={styles.items}>
             {selectedEvents.map((ev) => (
               <li key={`${ev.date}-${ev.symbol}-${ev.label}`} className={styles.item}>
-                <StatusDot tone={ev.status} size="sm" />
+                <StatusDot
+                  tone={ev.status}
+                  size="sm"
+                  title={`Event-proximity gate: ${ev.status}. Reflects how close this event is to a scan's reject/caution window for the relevant horizon.`}
+                />
                 <Data size={12} weight={500} className={styles.sym}>{ev.symbol}</Data>
                 <Text size={12} tone="secondary">{ev.label}</Text>
               </li>

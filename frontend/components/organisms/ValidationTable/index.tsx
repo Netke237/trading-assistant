@@ -6,7 +6,10 @@ import { TableRow } from '@/components/molecules/TableRow';
 import { Pagination } from '@/components/molecules/Pagination';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
+import { Tooltip } from '@/components/atoms/Tooltip';
 import { statusForScore } from '@/lib/status';
+import { GENERIC_STATUS_TOOLTIP } from '@/lib/statusTooltips';
+import { trendDetailText, pullbackDetailText, triggerDetailText, eventDetailText, volDetailText } from '@/lib/scoreDetailText';
 import type { TradeCardData } from '@/types/domain';
 import styles from './ValidationTable.module.css';
 
@@ -69,24 +72,34 @@ export function ValidationTable({ candidates }: ValidationTableProps) {
                 <Text size={11} tone="secondary">{c.company}</Text>
               </div>
               <Data size={11} weight={500}>{c.direction === 'Bullish' ? '↑' : '↓'}</Data>
-              <Data size={12} weight={500} tone={trendStatus === 'PASS' ? 'pass' : trendStatus === 'CAUTION' ? 'caution' : 'reject'}>
-                {c.stockBreakdown.trend}
-              </Data>
-              <Data size={12} weight={500} tone={pullbackStatus === 'PASS' ? 'pass' : pullbackStatus === 'CAUTION' ? 'caution' : 'reject'}>
-                {c.stockBreakdown.pullback}
-              </Data>
-              <Data size={12} weight={500} tone={triggerStatus === 'PASS' ? 'pass' : triggerStatus === 'CAUTION' ? 'caution' : 'reject'}>
-                {c.stockBreakdown.trigger}
-              </Data>
-              <Data size={12} weight={500} tone={eventStatus === 'PASS' ? 'pass' : eventStatus === 'CAUTION' ? 'caution' : 'reject'}>
-                {c.stockBreakdown.event}
-              </Data>
-              <Data size={12} weight={500} tone={volStatus === 'PASS' ? 'pass' : volStatus === 'CAUTION' ? 'caution' : 'reject'}>
-                {c.stockBreakdown.volatility}
-              </Data>
+              <Tooltip text={trendDetailText(c.stockBreakdown.trendDetail) ?? GENERIC_STATUS_TOOLTIP[trendStatus]}>
+                <Data size={12} weight={500} tone={trendStatus === 'PASS' ? 'pass' : trendStatus === 'CAUTION' ? 'caution' : 'reject'}>
+                  {c.stockBreakdown.trend}
+                </Data>
+              </Tooltip>
+              <Tooltip text={pullbackDetailText(c.stockBreakdown.pullbackDetail) ?? GENERIC_STATUS_TOOLTIP[pullbackStatus]}>
+                <Data size={12} weight={500} tone={pullbackStatus === 'PASS' ? 'pass' : pullbackStatus === 'CAUTION' ? 'caution' : 'reject'}>
+                  {c.stockBreakdown.pullback}
+                </Data>
+              </Tooltip>
+              <Tooltip text={triggerDetailText(c.stockBreakdown.triggerDetail) ?? GENERIC_STATUS_TOOLTIP[triggerStatus]}>
+                <Data size={12} weight={500} tone={triggerStatus === 'PASS' ? 'pass' : triggerStatus === 'CAUTION' ? 'caution' : 'reject'}>
+                  {c.stockBreakdown.trigger}
+                </Data>
+              </Tooltip>
+              <Tooltip text={eventDetailText(c.stockBreakdown.eventDetail) ?? GENERIC_STATUS_TOOLTIP[eventStatus]}>
+                <Data size={12} weight={500} tone={eventStatus === 'PASS' ? 'pass' : eventStatus === 'CAUTION' ? 'caution' : 'reject'}>
+                  {c.stockBreakdown.event}
+                </Data>
+              </Tooltip>
+              <Tooltip text={volDetailText(c.stockBreakdown.volDetail) ?? GENERIC_STATUS_TOOLTIP[volStatus]}>
+                <Data size={12} weight={500} tone={volStatus === 'PASS' ? 'pass' : volStatus === 'CAUTION' ? 'caution' : 'reject'}>
+                  {c.stockBreakdown.volatility}
+                </Data>
+              </Tooltip>
               <Data size={13} weight={500}>{c.stockScore}</Data>
               <ConfidenceBadge confidence={c.confidence} title={c.confidenceText ?? undefined} />
-              <StatusBadge status={c.finalStatus} />
+              <StatusBadge status={c.finalStatus} tooltip={GENERIC_STATUS_TOOLTIP[c.finalStatus]} />
             </TableRow>
           );
         })}

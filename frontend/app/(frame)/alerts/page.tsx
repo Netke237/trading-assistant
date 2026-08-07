@@ -463,6 +463,7 @@ export default function AlertsPage() {
                         : (c.nextEventDays ?? 999) <= 14 ? 'caution'
                         : undefined
                       }
+                      title={`Next: ${c.nextEventLabel ?? 'event'} in ${c.nextEventDays}d`}
                     >
                       {c.nextEventDays}d
                     </Data>

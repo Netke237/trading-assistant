@@ -28,6 +28,7 @@ import { api } from '@/lib/api';
 import type { MarketRegime, SectorTile, NewsItem } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import { alignmentVerdict, descriptorFromState } from '@/lib/regimeAlignment';
+import { regimeStatusTooltip, regimeMetricTooltip, regimeNoDataTooltip } from '@/lib/statusTooltips';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
 
@@ -151,7 +152,7 @@ export default function Step1RegimePage() {
       {/* 1. Overall banner */}
       <section className={`${pageStyles.banner} ${pageStyles[`banner_${combinedStatus}`]}`}>
         <div className={pageStyles.bannerLeft}>
-          <StatusBadge status={combinedStatus} label={`REGIME ${combinedStatus}`} />
+          <StatusBadge status={combinedStatus} label={`REGIME ${combinedStatus}`} tooltip={regimeStatusTooltip(combinedStatus)} />
           {regime?.regime_direction && (
             <span
               role="img"
@@ -236,7 +237,7 @@ export default function Step1RegimePage() {
               {m.trend === 'up'   && <span className={pageStyles.trendUp}>↑</span>}
               {m.trend === 'down' && <span className={pageStyles.trendDown}>↓</span>}
             </div>
-            <StatusBadge status={m.status} />
+            <StatusBadge status={m.status} tooltip={regimeMetricTooltip(m.label, m.status)} />
           </div>
         ))}
       </div>
@@ -293,9 +294,9 @@ export default function Step1RegimePage() {
                   )}
                 </>
               ) : regime?.intraday_hmm_status === 'insufficient_data' ? (
-                <StatusBadge status="NO_DATA" label="Insufficient data" />
+                <StatusBadge status="NO_DATA" label="Insufficient data" tooltip={regimeNoDataTooltip('insufficient_data')} />
               ) : regime?.intraday_hmm_status === 'unavailable' ? (
-                <StatusBadge status="NO_DATA" label="Data unavailable" />
+                <StatusBadge status="NO_DATA" label="Data unavailable" tooltip={regimeNoDataTooltip('unavailable')} />
               ) : (
                 <Text size={11} tone="dim">Calculating…</Text>
               )}
@@ -327,7 +328,7 @@ export default function Step1RegimePage() {
                   )}
                 </>
               ) : (
-                <StatusBadge status="NO_DATA" label="Insufficient history" />
+                <StatusBadge status="NO_DATA" label="Insufficient history" tooltip={regimeNoDataTooltip('insufficient_history')} />
               )}
             </div>
 
@@ -357,7 +358,7 @@ export default function Step1RegimePage() {
                   )}
                 </>
               ) : (
-                <StatusBadge status="NO_DATA" label="Insufficient history" />
+                <StatusBadge status="NO_DATA" label="Insufficient history" tooltip={regimeNoDataTooltip('insufficient_history')} />
               )}
             </div>
 

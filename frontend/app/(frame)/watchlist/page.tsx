@@ -19,6 +19,7 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { statusForScore } from '@/lib/status';
+import { GENERIC_STATUS_TOOLTIP, contractScoreTooltip } from '@/lib/statusTooltips';
 import { api, type CompositeWatch } from '@/lib/api';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { contractLabel, type OptionContract } from '@/types/domain';
@@ -332,7 +333,7 @@ export default function WatchlistPage() {
                        * The StatusBadge + numeric score already communicate the score quality.
                        */}
                       <Data size={13} weight={500}>{row.score}</Data>
-                      <StatusBadge status={row.status} />
+                      <StatusBadge status={row.status} tooltip={GENERIC_STATUS_TOOLTIP[row.status]} />
                     </div>
                     <RankDelta value={row.rankDelta} context="rank" />
                     <RankDelta value={row.scoreDelta ?? 0} context="score pt" />
@@ -471,7 +472,7 @@ function ContractsTab({
               <Data size={12} className={styles.right}>{c.theta.toFixed(2)}</Data>
               <div className={styles.scoreCell}>
                 <Data size={13} weight={500}>{c.score}</Data>
-                <StatusBadge status={status} />
+                <StatusBadge status={status} tooltip={contractScoreTooltip(c)} />
               </div>
             </TableRow>
           );

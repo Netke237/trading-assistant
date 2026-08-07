@@ -10,7 +10,9 @@ import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { runStockScan } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { Tooltip } from '@/components/atoms/Tooltip';
 import { WatchStar } from '@/components/atoms/WatchStar';
+import { regimeFitTooltip, stockScanGateTooltip, fundamentalScoreTooltip } from '@/lib/statusTooltips';
 import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
@@ -203,7 +205,11 @@ export default function Step4StocksPage() {
               <div className={styles.cardHeader}>
                 <Text size={14} weight={500}>{strategyLabel[s.key] ?? s.label}</Text>
                 <Text size={11} tone="secondary">{s.when}</Text>
-                {badge && fit && <span className={`${styles.regimeBadge} ${BADGE_CLASS[fit]}`}>{badge.label}</span>}
+                {badge && fit && (
+                  <Tooltip text={regimeFitTooltip(strategyLabel[s.key] ?? s.label, fit, combinedRegime)}>
+                    <span className={`${styles.regimeBadge} ${BADGE_CLASS[fit]}`}>{badge.label}</span>
+                  </Tooltip>
+                )}
               </div>
               <div className={styles.cardBody}>
                 <Text size={11} tone="dim">Entry: {entryLabel[s.key] ?? s.entry}</Text>
@@ -321,10 +327,19 @@ export default function Step4StocksPage() {
                     <Data size={12}>{bt.n_trades}</Data>
                     <Data size={12} tone={bt.total_return_pct >= 0 ? 'pass' : 'reject'}>{bt.total_return_pct.toFixed(1)}%</Data>
                     <Data size={12} tone="reject">{Math.abs(bt.max_drawdown_pct).toFixed(1)}%</Data>
-                    <Data size={12} tone={c.fundamentals ? (c.fundamentals.score >= 65 ? 'pass' : c.fundamentals.score >= 40 ? 'caution' : 'reject') : 'dim'}>
-                      {c.fundamentals?.score ?? '—'}
-                    </Data>
-                    <StatusBadge status={gateStatus} />
+                    {c.fundamentals ? (
+                      <Tooltip text={fundamentalScoreTooltip('overall', c.fundamentals.score)}>
+                        <Data size={12} tone={c.fundamentals.score >= 65 ? 'pass' : c.fundamentals.score >= 40 ? 'caution' : 'reject'}>
+                          {c.fundamentals.score}
+                        </Data>
+                      </Tooltip>
+                    ) : (
+                      <Data size={12} tone="dim">—</Data>
+                    )}
+                    <StatusBadge
+                      status={gateStatus}
+                      tooltip={stockScanGateTooltip({ passes: bt.passes_gate, winRate: bt.win_rate, nTrades: bt.n_trades })}
+                    />
                   </button>
                   {open && (
                     <StockPositionCard

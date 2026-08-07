@@ -10,6 +10,7 @@ import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import { useAnalysisStore } from '@/lib/analysisStore';
 import { alignmentVerdict, descriptorFromState } from '@/lib/regimeAlignment';
+import { GENERIC_STATUS_TOOLTIP, regimeStatusTooltip, regimeNoDataTooltip, ruleContributionTooltip } from '@/lib/statusTooltips';
 import type { FundamentalsOut } from '@/types/domain';
 import { api } from '@/lib/api';
 import type { Candle } from '@/types/chart';
@@ -106,11 +107,14 @@ export default function AnalysisPage() {
               <Text size={14} tone="secondary">{result.company}</Text>
             </div>
             <Data size={14}>${result.price.toFixed(2)}</Data>
-            <StatusBadge status={result.stock_status} />
+            <StatusBadge status={result.stock_status} tooltip={GENERIC_STATUS_TOOLTIP[result.stock_status]} />
             <span className={styles.dirPill}>{result.direction}</span>
             {result.market_backdrop && (
               <span className={styles.backdropChip}>
-                Market: <StatusBadge status={result.market_backdrop.overall as 'PASS' | 'CAUTION' | 'REJECT' | 'PENDING' | 'NO_DATA'} />
+                Market: <StatusBadge
+                  status={result.market_backdrop.overall as 'PASS' | 'CAUTION' | 'REJECT' | 'PENDING' | 'NO_DATA'}
+                  tooltip={regimeStatusTooltip(result.market_backdrop.overall as 'PASS' | 'CAUTION' | 'REJECT' | 'PENDING' | 'NO_DATA')}
+                />
               </span>
             )}
             <button
@@ -234,7 +238,7 @@ export default function AnalysisPage() {
                       )}
                     </>
                   ) : (
-                    <StatusBadge status="NO_DATA" label="Insufficient data" />
+                    <StatusBadge status="NO_DATA" label="Insufficient data" tooltip={regimeNoDataTooltip('insufficient_data')} />
                   )}
                 </div>
               );
@@ -268,7 +272,7 @@ export default function AnalysisPage() {
                   <Text size={11} tone="dim">Advisory — would not pass scanner:</Text>
                   {result.gate_flags.map((g, i) => (
                     <span key={i} className={styles.gateFlag}>
-                      <StatusBadge status={g.status} />
+                      <StatusBadge status={g.status} tooltip={g.detail} />
                       <Text size={11} tone="secondary">{g.gate}: {g.detail}</Text>
                     </span>
                   ))}
@@ -324,7 +328,7 @@ export default function AnalysisPage() {
                         </div>
                         <div className={styles.compMetaCell}>
                           <Text size={10} tone="dim">STATUS</Text>
-                          <StatusBadge status={r.status} />
+                          <StatusBadge status={r.status} tooltip={ruleContributionTooltip(r.name, r.status, r.detail)} />
                         </div>
                       </div>
                     </article>
