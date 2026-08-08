@@ -41,8 +41,9 @@ Thumbs.db
 *.swo
 *~
 
-# Session / tool metadata
-.claude/
+# Session / tool metadata (local settings/cache) — but track project-scoped skills so they travel with the repo
+.claude/*
+!.claude/skills/
 .superpowers/
 .worktrees/
 .opencode/
