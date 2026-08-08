@@ -5,6 +5,7 @@ from app.scoring.signal_confidence import (
     aggregate,
     ConfidenceResult,
     compute_confidence,
+    _measure_excursion,
 )
 
 
@@ -161,3 +162,67 @@ def test_compute_confidence_accepts_scoring_mode(monkeypatch):
     sc.compute_confidence(bars, direction="Bullish", horizon="Swing", atr_mult=1.5, scoring_mode="stock")
     assert seen_modes, "score_stock was never called — check the monkeypatch target"
     assert all(m == "stock" for m in seen_modes)
+
+
+# ── Empirical payoff-ratio calibration ────────────────────────────────────────
+
+def test_measure_excursion_bullish_captures_full_range():
+    history = [_bar(100, 101, 99, 100) for _ in range(20)]
+    # entry=100, atr=2: high reaches 106 (+3 ATR), low reaches 97 (-1.5 ATR)
+    forward = [_bar(100, 106, 97, 103)]
+    favorable, adverse = _measure_excursion(history, forward, direction="Bullish", atr=2.0)
+    assert abs(favorable - 3.0) < 1e-9
+    assert abs(adverse - 1.5) < 1e-9
+
+
+def test_measure_excursion_bearish_mirrors_direction():
+    history = [_bar(100, 101, 99, 100) for _ in range(20)]
+    forward = [_bar(100, 103, 94, 96)]  # low=94 (-3 ATR favorable for bearish), high=103 (+1.5 ATR adverse)
+    favorable, adverse = _measure_excursion(history, forward, direction="Bearish", atr=2.0)
+    assert abs(favorable - 3.0) < 1e-9
+    assert abs(adverse - 1.5) < 1e-9
+
+
+def test_measure_excursion_zero_atr_or_empty_forward_is_safe():
+    history = [_bar(100, 101, 99, 100)]
+    assert _measure_excursion(history, [], direction="Bullish", atr=2.0) == (0.0, 0.0)
+    assert _measure_excursion(history, [_bar(100, 101, 99, 100)], direction="Bullish", atr=0.0) == (0.0, 0.0)
+
+
+def test_aggregate_uses_empirical_payoff_ratio_when_supplied():
+    # 5 wins, 5 losses -> hit_rate 0.5. Config ratio (target=1/stop=1=1.0) would
+    # give confidence=50. Empirical: wins ran 4 ATR on average, losses only 1 ATR
+    # -> payoff_ratio=4.0, clipped to 1.0 by min(1, ratio) -> still confidence=50
+    # at this hit rate/clip, so use a below-1 empirical ratio to prove it's used.
+    outcomes = ["win"] * 5 + ["loss"] * 5
+    res_config = aggregate(outcomes, min_samples=5, atr_mult_target=3.0, atr_mult_stop=1.0)
+    assert res_config.confidence == 50  # min(1, 3.0) clips to 1.0 -> 100*0.5*1.0
+
+    res_empirical = aggregate(
+        outcomes, min_samples=5, atr_mult_target=3.0, atr_mult_stop=1.0,
+        favorable_atrs=[0.4] * 5, adverse_atrs=[1.0] * 5,   # realized payoff_ratio=0.4, unlike the assumed 3.0
+    )
+    assert res_empirical.confidence == 20   # 100 * 0.5 * min(1, 0.4) = 20
+    assert res_empirical.confidence != res_config.confidence
+
+
+def test_aggregate_falls_back_to_config_ratio_without_excursion_data():
+    """Backward compatibility: callers that only pass bare outcome strings
+    (no favorable_atrs/adverse_atrs) get the old assumed-ratio behavior."""
+    outcomes = ["win"] * 7 + ["loss"] * 3
+    res = aggregate(outcomes, min_samples=5)
+    assert res.confidence == 70  # unchanged from the pre-calibration formula
+
+
+def test_compute_confidence_populates_empirical_excursion_end_to_end():
+    """Smoke test: the live compute_confidence() path now threads excursion
+    data through to aggregate() rather than always falling back to the
+    config-assumed ratio."""
+    bars = []
+    price = 50.0
+    for i in range(400):
+        price *= 1.004
+        bars.append(_bar(price * 0.997, price * 1.01, price * 0.99, price, 1000 + i))
+    res = compute_confidence(bars, direction="Bullish", horizon="Swing", atr_mult=1.5)
+    assert res.confidence is not None
+    assert 0 <= res.confidence <= 100

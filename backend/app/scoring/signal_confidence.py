@@ -89,13 +89,55 @@ def evaluate_fire(
     return "flat"
 
 
+def _measure_excursion(
+    history: list[dict], forward: list[dict], *, direction: str, atr: float,
+) -> tuple[float, float]:
+    """Measure realized max-favorable and max-adverse price excursion over the
+    forward window, in ATR units — independent of whether/when a barrier fired.
+
+    Used to empirically calibrate the payoff ratio in `aggregate()` from actual
+    historical price action, rather than assuming it always equals the
+    configured target/stop ATR multiples (a fire that "won" may have run well
+    past the target before the window closed, or a "loss" may have kept
+    falling past the stop — this captures that, per fire).
+    """
+    if atr <= 0 or not forward:
+        return 0.0, 0.0
+    entry = history[-1]["close"]
+    if direction == "Bullish":
+        best_high = max(b["high"] for b in forward)
+        worst_low = min(b["low"] for b in forward)
+        favorable = max(0.0, (best_high - entry) / atr)
+        adverse = max(0.0, (entry - worst_low) / atr)
+    else:
+        best_low = min(b["low"] for b in forward)
+        worst_high = max(b["high"] for b in forward)
+        favorable = max(0.0, (entry - best_low) / atr)
+        adverse = max(0.0, (worst_high - entry) / atr)
+    return favorable, adverse
+
+
 def aggregate(
     outcomes: list[str],
     *,
     min_samples: int,
     atr_mult_target: float = 1.0,
     atr_mult_stop: float = 1.0,
+    favorable_atrs: list[float] | None = None,
+    adverse_atrs: list[float] | None = None,
 ) -> ConfidenceResult:
+    """Aggregate replayed fire outcomes into a confidence score.
+
+    payoff_ratio = avg realized favorable excursion (wins) / avg realized
+    adverse excursion (losses), when `favorable_atrs`/`adverse_atrs` are
+    supplied (empirically calibrated from `_measure_excursion` per fire).
+    Falls back to the assumed atr_mult_target/atr_mult_stop ratio when they
+    aren't (e.g. no wins or no losses to average, or a caller that only has
+    bare outcome strings) — this is the same formula the config-driven ratio
+    always produced before empirical calibration existed.
+
+    confidence = 100 * hit_rate * min(1, payoff_ratio)  (formula per spec; tunable)
+    """
     wins = sum(1 for o in outcomes if o == "win")
     losses = sum(1 for o in outcomes if o == "loss")
     flats = sum(1 for o in outcomes if o == "flat")
@@ -105,9 +147,12 @@ def aggregate(
     hit_rate = wins / decisive
     if decisive < min_samples:
         return ConfidenceResult(None, round(hit_rate, 4), decisive, flats)
-    # payoff_ratio = favorable_distance / adverse_distance = atr_mult_target / atr_mult_stop
-    # confidence = 100 * hit_rate * min(1, payoff_ratio)  (formula per spec; tunable)
-    payoff_ratio = (atr_mult_target / atr_mult_stop) if atr_mult_stop > 0 else 1.0
+    if favorable_atrs and adverse_atrs:
+        avg_favorable = sum(favorable_atrs) / len(favorable_atrs)
+        avg_adverse = sum(adverse_atrs) / len(adverse_atrs)
+        payoff_ratio = (avg_favorable / avg_adverse) if avg_adverse > 0 else 1.0
+    else:
+        payoff_ratio = (atr_mult_target / atr_mult_stop) if atr_mult_stop > 0 else 1.0
     confidence = round(100 * hit_rate * min(1.0, payoff_ratio))
     confidence = max(0, min(100, confidence))
     return ConfidenceResult(confidence, round(hit_rate, 4), decisive, flats)
@@ -188,6 +233,8 @@ def compute_confidence(
 
     warmup = 60  # need enough bars for MAs/ADX before the first meaningful score
     outcomes: list[str] = []
+    favorable_atrs: list[float] = []
+    adverse_atrs: list[float] = []
     last = len(bars) - n_days
     for i in range(warmup, last):
         window = bars[: i + 1]
@@ -199,9 +246,14 @@ def compute_confidence(
             continue
         atr = _atr(window, atr_period)
         forward = bars[i + 1 : i + 1 + n_days]
-        outcomes.append(
-            evaluate_fire(window, forward, direction=direction, atr=atr,
-                          atr_mult_target=_atr_mult_target, atr_mult_stop=_atr_mult_stop)
-        )
+        outcome = evaluate_fire(window, forward, direction=direction, atr=atr,
+                                atr_mult_target=_atr_mult_target, atr_mult_stop=_atr_mult_stop)
+        outcomes.append(outcome)
+        favorable, adverse = _measure_excursion(window, forward, direction=direction, atr=atr)
+        if outcome == "win":
+            favorable_atrs.append(favorable)
+        elif outcome == "loss":
+            adverse_atrs.append(adverse)
     return aggregate(outcomes, min_samples=min_samples,
-                     atr_mult_target=_atr_mult_target, atr_mult_stop=_atr_mult_stop)
+                     atr_mult_target=_atr_mult_target, atr_mult_stop=_atr_mult_stop,
+                     favorable_atrs=favorable_atrs, adverse_atrs=adverse_atrs)

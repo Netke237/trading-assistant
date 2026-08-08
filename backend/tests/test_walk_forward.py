@@ -154,3 +154,106 @@ def test_optimizer_builds_proposal_shape():
     assert prop["consistency"] == round(2/3, 4)
     assert prop["eligible"] is True
     assert "verdict" in prop and prop["verdict"]["degradation_pct"] is not None
+
+
+# ── Complexity penalty (grid-search overfitting guard) ───────────────────────
+
+def test_complexity_penalty_zero_at_grid_center():
+    from app.services.walk_forward import _complexity_penalty
+    space = {"ema_period": [10, 20, 30, 40, 50]}  # center index = 2 -> value 30
+    assert _complexity_penalty({"ema_period": 30}, space) == 0.0
+
+
+def test_complexity_penalty_max_at_grid_edge():
+    from app.services.walk_forward import _complexity_penalty
+    space = {"ema_period": [10, 20, 30, 40, 50]}
+    edge_penalty = _complexity_penalty({"ema_period": 10}, space, weight=0.05)
+    mid_penalty = _complexity_penalty({"ema_period": 20}, space, weight=0.05)
+    assert edge_penalty == 0.05          # full weight at the edge
+    assert 0.0 < mid_penalty < edge_penalty
+
+
+def test_complexity_penalty_sums_across_params():
+    from app.services.walk_forward import _complexity_penalty
+    space = {"a": [1, 2, 3], "b": [10, 20, 30]}
+    # both params at their edge -> two full penalties
+    penalty = _complexity_penalty({"a": 1, "b": 30}, space, weight=0.05)
+    assert abs(penalty - 0.10) < 1e-9
+
+
+def test_complexity_penalty_ignores_single_value_or_missing_key():
+    from app.services.walk_forward import _complexity_penalty
+    space = {"a": [5], "b": [1, 2]}
+    assert _complexity_penalty({"a": 5}, space) == 0.0   # single-value grid, no penalty
+    assert _complexity_penalty({}, space) == 0.0          # combo missing keys entirely
+
+
+def test_complexity_penalty_skips_categorical_and_boolean_grids():
+    """A categorical/boolean param has no ordinal 'center' — penalizing by its
+    arbitrary YAML list position would be meaningless, so it's skipped."""
+    from app.services.walk_forward import _complexity_penalty
+    space = {"ma_type": ["EMA", "SMA"], "use_filter": [True, False], "ema_period": [10, 20, 30]}
+    # ema_period=10 is at the numeric grid's edge; ma_type/use_filter contribute nothing
+    penalty = _complexity_penalty({"ma_type": "SMA", "use_filter": False, "ema_period": 10}, space, weight=0.05)
+    assert penalty == 0.05  # only the numeric param's edge-penalty counts
+
+
+def test_train_fold_breaks_sharpe_tie_toward_grid_center(monkeypatch):
+    """Equal in-sample Sharpe across combos -> the complexity penalty should
+    make train_fold prefer the more central grid value, not silently default
+    to whichever combo itertools.product happens to enumerate first."""
+    from app.services import walk_forward as wf_mod
+    from app.services.walk_forward import train_fold, Fold
+
+    class _StubResult:
+        def __init__(self, sharpe):
+            self.sharpe = sharpe
+            self.n_trades = 5
+
+    def _stub_backtest(train_bars, *, strategy, direction, params):
+        return _StubResult(sharpe=1.0)  # identical Sharpe for every combo
+
+    monkeypatch.setattr(wf_mod, "run_strategy_backtest", _stub_backtest)
+
+    bars = [{"time": f"2020-01-{d:02d}", "close": 100.0} for d in range(1, 32)] * 4  # >100 bars
+    for b in bars:
+        b["_date"] = date.fromisoformat(b["time"])
+    fold = Fold(date(2020, 1, 1), date(2021, 1, 1), date(2021, 1, 1), date(2021, 4, 1))
+
+    winner = train_fold(
+        "pullback_ema", "bullish", {"SYM": bars}, fold,
+        {"ema_period": [10, 20, 30, 40, 50]}, {"fee_pct": 0.001, "slippage_pct": 0.001},
+    )
+    assert winner == {"ema_period": 30}, (
+        f"expected the grid-center value to win an exact Sharpe tie, got {winner}"
+    )
+
+
+def test_train_fold_lets_a_clear_edge_winner_through(monkeypatch):
+    """The penalty is a tie-breaker, not a hard ban — a combo with a large
+    enough genuine Sharpe advantage should still win even at the grid edge."""
+    from app.services import walk_forward as wf_mod
+    from app.services.walk_forward import train_fold, Fold
+
+    class _StubResult:
+        def __init__(self, sharpe):
+            self.sharpe = sharpe
+            self.n_trades = 5
+
+    def _stub_backtest(train_bars, *, strategy, direction, params):
+        # Edge value (10) is far better than everything else -> should still win.
+        sharpe = 2.0 if params["ema_period"] == 10 else 1.0
+        return _StubResult(sharpe=sharpe)
+
+    monkeypatch.setattr(wf_mod, "run_strategy_backtest", _stub_backtest)
+
+    bars = [{"time": f"2020-01-{d:02d}", "close": 100.0} for d in range(1, 32)] * 4
+    for b in bars:
+        b["_date"] = date.fromisoformat(b["time"])
+    fold = Fold(date(2020, 1, 1), date(2021, 1, 1), date(2021, 1, 1), date(2021, 4, 1))
+
+    winner = train_fold(
+        "pullback_ema", "bullish", {"SYM": bars}, fold,
+        {"ema_period": [10, 20, 30, 40, 50]}, {"fee_pct": 0.001, "slippage_pct": 0.001},
+    )
+    assert winner == {"ema_period": 10}
