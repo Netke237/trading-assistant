@@ -130,9 +130,56 @@ def _slice_bars(bars: list[dict], start: date, end: date) -> list[dict]:
     ]
 
 
+def _complexity_penalty(combo: dict, search_space: dict, *, weight: float = 0.05) -> float:
+    """Penalize a param combo for sitting at the edges of its search grid.
+
+    Grid-search selection by raw in-sample Sharpe alone tends to pick extreme
+    values that happened to fit this particular training window rather than a
+    generalizable regime — the walk-forward eligibility gate (n_trades/
+    consistency in strategy_param_optimizer.py) catches this after the fact,
+    but doesn't stop the in-sample search itself from reaching for the edge.
+    This adds a mild, in-sample regularization: combos near the center of each
+    parameter's grid pay no penalty; combos at the edges pay up to `weight`
+    Sharpe units per parameter. A genuinely better edge value still wins if its
+    Sharpe advantage exceeds the penalty — this discourages marginal curve-fits,
+    it doesn't forbid extreme values outright.
+
+    Only numeric parameters (matching the numeric/categorical split `consensus()`
+    already uses below) have a meaningful "center" — a categorical grid like
+    `ma_type: ["EMA", "SMA"]` has no ordinal distance, so those keys are skipped
+    rather than penalized by arbitrary YAML list order.
+
+    Args:
+        combo: A single parameter combination (one entry from param_combos()).
+        search_space: The full grid the combo was drawn from.
+        weight: Max penalty (in Sharpe units) per parameter, at the grid's edge.
+
+    Returns:
+        Non-negative penalty to subtract from the combo's pooled Sharpe.
+    """
+    penalty = 0.0
+    for key, values in search_space.items():
+        if key not in combo or len(values) < 2:
+            continue
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values):
+            continue  # categorical/boolean grid — no ordinal "center" to measure distance from
+        try:
+            idx = values.index(combo[key])
+        except ValueError:
+            continue
+        center = (len(values) - 1) / 2
+        if center > 0:
+            penalty += weight * (abs(idx - center) / center)
+    return penalty
+
+
 def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]],
                fold: Fold, search_space: dict, costs: dict) -> dict:
     """Grid search on the train window, pooled across the basket. Return winning params.
+
+    Combos are ranked by pooled in-sample Sharpe minus a complexity penalty
+    (see `_complexity_penalty`) that discourages picking grid-edge values on a
+    marginal in-sample advantage.
 
     Args:
         strategy: Strategy name.
@@ -145,7 +192,7 @@ def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]]
     Returns:
         Dict of winning parameters, or empty dict if no combo passes.
     """
-    best, best_sharpe = None, float("-inf")
+    best, best_score = None, float("-inf")
     for combo in param_combos(search_space):
         sharpes = []
         for sym, bars in basket_bars.items():
@@ -156,8 +203,9 @@ def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]]
             if res.n_trades > 0:
                 sharpes.append(res.sharpe)
         pooled = sum(sharpes) / len(sharpes) if sharpes else float("-inf")
-        if pooled > best_sharpe:
-            best_sharpe, best = pooled, combo
+        score = pooled - _complexity_penalty(combo, search_space) if sharpes else pooled
+        if score > best_score:
+            best_score, best = score, combo
     return best or {}
 
 

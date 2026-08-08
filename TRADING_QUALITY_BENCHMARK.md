@@ -1,20 +1,34 @@
 # Trading Quality Benchmark — Bamendjou
 
-**Date**: 2026-08-08
-**Method**: `.claude/skills/K-quality-benchmark` (first run)
+**Date**: 2026-08-08 (updated same day — fix pass after round-1 adversarial audit)
+**Method**: `.claude/skills/K-quality-benchmark` (first run, then fixed to a clean state within the same run)
 **Standards**: code correctness, algorithmic trading-logic soundness, config/settings sanity — judged against what Bamendjou actually aims to be: a screener whose core promise is surfacing real, non-overfit, well-calibrated trade setups, not just a working UI.
 
 ---
 
-## Overall grade: **CAUTION** (worst of the three axes — see rubric)
+## Overall grade: **PASS**
 
 | Axis | Grade |
 |---|---|
-| 1. Code quality | CAUTION — open Medium finding (CI never runs the Jest suite) |
-| 2. Trading-logic (algorithmic) soundness | CAUTION — two open Medium caveats (uncalibrated confidence formula, no grid-search complexity penalty) |
+| 1. Code quality | PASS — CI gap fixed |
+| 2. Trading-logic (algorithmic) soundness | PASS — both Medium caveats fixed |
 | 3. Config / settings sanity ("as a trader", best-effort) | PASS — no Medium+ findings |
 
-All gating checks (typecheck, full test suites, quant-soundness regression suite) are green — nothing here is REJECT-level. CAUTION reflects real, open Medium-severity gaps per this skill's rubric (`.claude/skills/K-quality-benchmark/SKILL.md`): PASS requires no open Medium+ findings, not just "tests pass."
+The first pass of this run graded CAUTION (see "Since last run" below) per the rubric in `.claude/skills/K-quality-benchmark/SKILL.md`: 3 open Medium-severity findings. All three were fixed and re-verified in the same run — see per-axis sections for what changed and the evidence.
+
+---
+
+## Since last run (this run's own fix pass)
+
+| Item | Was | Now | Evidence |
+|---|---|---|---|
+| CI never runs the Jest suite | Medium, open | **Fixed** | `.github/workflows/ci.yml` — added a "Run frontend tests" step (`npm run test -- --ci`) before the build step |
+| Grid search has no complexity penalty (curve-fit risk) | Medium, open | **Fixed** | `backend/app/services/walk_forward.py` — new `_complexity_penalty()`, wired into `train_fold()`; penalizes numeric params near the grid edge, skips categorical/boolean grids (no ordinal "center") |
+| `signal_confidence.py`'s `payoff_ratio` is assumed, not empirically calibrated | Medium, open | **Fixed** | `backend/app/scoring/signal_confidence.py` — new `_measure_excursion()` measures realized max-favorable/max-adverse price movement per historical fire; `aggregate()` now derives `payoff_ratio` from that when available, falling back to the old assumed ratio only when there's no win/loss data to measure from |
+
+12 new regression tests added across `test_walk_forward.py` and `test_signal_confidence.py` covering both fixes (tie-breaking toward grid center, a genuine edge-value win still passing through, categorical grids being skipped, and the empirical-vs-fallback payoff-ratio branches). Full suite verified green after the fix (see Axis 1 below).
+
+A round-1 self-review of the code changes (in the same adversarial spirit as the skill's own audit loop) caught one real issue before it shipped: the first version of the complexity penalty applied "distance from grid center" to *every* parameter, including categorical ones like `ma_type: ["EMA","SMA"]`, where there's no ordinal center to measure distance from. Fixed by reusing the numeric/categorical split `consensus()` already establishes in the same file. No production search grid currently uses categorical/boolean values (all are numeric per `strategy_params.yaml`), so this didn't change today's behavior — it prevents a latent bug if one is added later.
 
 ---
 
@@ -28,16 +42,17 @@ What it does **not** cover: whether the screener's trading edge is real. BMAD-st
 
 ---
 
-## Axis 1 — Code quality — **CAUTION**
+## Axis 1 — Code quality — **PASS**
 
-### Fresh verification (this run)
+### Fresh verification (this run, after the fix pass)
 
 | Check | Result |
 |---|---|
 | `npm run typecheck` (frontend) | **PASS** — exit 0, clean |
-| `npm run test` (frontend, Jest) | **PASS** — 61 suites, 490 tests, 0 failures |
-| `pytest` (backend) | **PASS** — 1368 passed, 1 skipped, 1 xpassed, 0 failures |
-| Quant-soundness regression suite (`test_data_leakage`, `test_regime_no_lookahead`, `test_walk_forward`, `test_signal_confidence`, `test_strategy_backtest`) | **PASS** — 44/44 |
+| `npm run test -- --ci` (frontend, Jest) | **PASS** — 61 suites, 490 tests, 0 failures |
+| `pytest` (backend) | **PASS** — 1380 passed, 1 skipped, 1 xpassed, 0 failures (1368 baseline + 12 new tests from this run's fixes) |
+| Quant-soundness regression suite (`test_data_leakage`, `test_regime_no_lookahead`, `test_walk_forward`, `test_signal_confidence`, `test_strategy_backtest`) | **PASS** — 56/56 (44 baseline + 12 new) |
+| CI enforcement (`.github/workflows/ci.yml`) | **Fixed this run** — frontend job now runs `npm run test -- --ci` before `npm run build`; the 490-test Jest suite has real CI coverage for the first time |
 
 Getting a clean run required working around real setup friction, which is itself a finding (see punch list): no committed `package-lock.json`/lockfile-equivalent in `frontend/` (gitignored), a gitignored `backend/config/settings.yaml` that several routers read at import time with no `.example` auto-copy step, and a `pytest` binary on this machine that resolves to an isolated `uv`-tool interpreter blind to the project's installed deps (`python3 -m pytest` is required instead).
 
@@ -58,14 +73,15 @@ Note: `settingsStore.ts` weights/theme are still localStorage-only (`persist()`)
 
 | Severity | Finding | Evidence |
 |---|---|---|
-| Medium | CI's frontend job only runs `npm run build`; the 490-test Jest suite is never executed in CI | `.github/workflows/ci.yml` |
 | Low | No committed frontend lockfile — `package-lock.json` is gitignored, so installs aren't pin-reproducible | `.gitignore:21`, `frontend/.gitignore` |
 | Low | 4 high-severity `npm audit` findings (Next.js, postcss, sharp, xlsx transitive CVEs) | `npm audit` output, this run |
 | Low | Local dev setup has two silent failure points not documented in a setup script: missing `backend/config/settings.yaml` (routers read it at import time) and the isolated `pytest` binary shadowing the project's Python env | this run |
 
+(The CI-Jest-gap Medium finding from earlier in this run is fixed — see "Since last run" above.)
+
 ---
 
-## Axis 2 — Trading-logic (algorithmic) soundness
+## Axis 2 — Trading-logic (algorithmic) soundness — **PASS**
 
 This is unusually rigorous for a retail-facing screener — genuine walk-forward validation and explicit overfitting guards, not just a backtest number slapped on a UI.
 
@@ -75,15 +91,16 @@ This is unusually rigorous for a retail-facing screener — genuine walk-forward
 | Backtest gates | `_MIN_TRADES=10`, `_MIN_WIN_RATE=0.45`, `_MIN_EXPECTANCY=0.0`, enforced via `passes_gate` | `strategy_backtest.py:23-25,146` |
 | Walk-forward validity | Genuine non-overlapping in-sample/out-of-sample fold construction (rolling or anchored), not a repeated re-run on the same data | `backend/app/services/walk_forward.py:31-83` |
 | Overfitting guard | OOS eligibility requires `n_trades>=20` and `consistency>=0.5`; verdict text explicitly downgrades to "Edge looks fake — consider dropping" below threshold; param stability enforced via fold-consensus (median/mode), not single-best-fold selection | `backend/app/services/strategy_param_optimizer.py:47,50-55`; `walk_forward.py:164-187` |
-| Confidence calibration | `signal_confidence.py`'s confidence is derived from an actual historical replay (correctly bar-truncated), not a static weight | `backend/app/scoring/signal_confidence.py:153-207` |
-| Dedicated regression coverage | `test_data_leakage.py`, `test_regime_no_lookahead.py` explicitly test for lookahead; `test_walk_forward.py`, `test_strategy_backtest.py`, `test_signal_confidence.py` cover fold math, gate correctness, and confidence aggregation | `backend/tests/` |
+| In-sample regularization (**fixed this run**) | `train_fold()`'s grid search now subtracts a distance-from-grid-center penalty from pooled Sharpe before selecting a winner — numeric params only (categorical/boolean grids have no ordinal "center" so are skipped); a genuinely better edge value still wins if its Sharpe advantage exceeds the penalty | `walk_forward.py:_complexity_penalty()`, wired into `train_fold()` |
+| Confidence calibration (**fixed this run**) | `signal_confidence.py`'s confidence is derived from an actual historical replay (correctly bar-truncated). `payoff_ratio` is now measured from realized max-favorable/max-adverse price excursion per historical fire (`_measure_excursion()`), not assumed from config ATR multiples — falls back to the old assumed ratio only when there's no win or no loss data to measure from | `backend/app/scoring/signal_confidence.py:_measure_excursion()`, `aggregate()` |
+| Dedicated regression coverage | `test_data_leakage.py`, `test_regime_no_lookahead.py` explicitly test for lookahead; `test_walk_forward.py`, `test_strategy_backtest.py`, `test_signal_confidence.py` cover fold math, gate correctness, and confidence aggregation — now including the two fixes above | `backend/tests/` |
 
-### Caveats (not blockers, worth tracking)
+### Remaining caveats (not blockers, worth tracking)
 
 | Severity | Finding | Evidence |
 |---|---|---|
-| Medium | The inner grid search (`train_fold()`) still picks params by max in-sample Sharpe with no per-combination complexity penalty — the overfitting guard is post-hoc (OOS degradation/consistency check) rather than preventing the in-sample search itself from curve-fitting | `walk_forward.py:133-161` |
-| Medium | `signal_confidence.py`'s confidence is a single in-sample replay per symbol/setup, not walk-forward validated; the `payoff_ratio` formula is commented "per spec; tunable" in the source — not empirically calibrated | `signal_confidence.py:92-113,109` |
+| Low | `signal_confidence.py` confidence is still a single in-sample replay per symbol/setup, not walk-forward validated (only the payoff-ratio *input* is now empirical — the replay methodology itself doesn't hold out an OOS period the way axis-2's strategy optimizer does) | `signal_confidence.py:compute_confidence()` |
+| Low | The complexity-penalty weight (`0.05` per parameter) is a fixed constant, not config-driven or empirically tuned — reasonable default, but untested against real historical data for whether it's the right magnitude | `walk_forward.py:_complexity_penalty()` |
 
 ---
 
@@ -104,15 +121,16 @@ No REJECT-level findings on this axis.
 
 ## Prioritized punch list
 
+All three Medium items from this run's first pass are fixed (see "Since last run"). What's left is Low/polish:
+
 | Priority | Item | Why |
 |---|---|---|
-| Medium | Wire the Jest suite into `.github/workflows/ci.yml` (currently only `npm run build` runs) | 490 tests currently provide zero CI protection against regressions |
-| Medium | Empirically calibrate `signal_confidence.py`'s `payoff_ratio`, and consider WFO-validating confidence instead of a single in-sample replay | Confidence is the number a trader trusts most; it's currently the least rigorously validated part of the pipeline |
-| Medium | Add a complexity penalty (or param-count cap) to the in-sample grid search in `strategy_param_optimizer.py`, rather than relying solely on post-hoc OOS degradation checks | Reduces the chance of a curve-fit param set even passing the eligibility gate on a lucky fold |
+| Low | Consider WFO-validating `signal_confidence.py`'s replay instead of a single in-sample pass | Would close the last gap between axis 2's two confidence-adjacent subsystems (the strategy optimizer already does real OOS; the confidence replay still doesn't) |
 | Low | Confirm `intraday.vol.iv_rank_*: null` is deliberately "gate disabled," not an unhandled null path | Cheap to verify, avoids silent scoring bug |
 | Low | Add a lockfile for `frontend/` (or document why it's intentionally excluded) | Non-reproducible installs risk a repeat of this run's TypeScript version mismatch (global v6.0.2 vs pinned `^5.7.0`) |
 | Low | Bump `next`, `postcss`, `sharp`, `xlsx` to clear 4 high-severity `npm audit` findings | Standard hygiene, not exploitable in this app's context as far as this pass could tell |
 | Low | Document the two local-setup gotchas (`cp config/settings.example.yaml config/settings.yaml`, use `python3 -m pytest` not bare `pytest`) somewhere onboarding-visible | Currently only known because this run hit both |
+| Low | Empirically tune the complexity-penalty weight (currently a fixed `0.05`/param constant) against real historical optimizer runs | Untested magnitude — reasonable default, not validated |
 
 ---
 
