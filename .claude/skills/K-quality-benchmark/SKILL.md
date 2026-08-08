@@ -118,6 +118,25 @@ the way a trader reviewing a risk desk's settings would:
 Label this section explicitly as a best-effort pass, not a substitute for the
 user's own settings-audit skill. Grade PASS/CAUTION/REJECT.
 
+## Grading rubric
+
+Apply this per axis, then combine — don't eyeball it, since "PASS despite an open
+Medium finding" is exactly the kind of drift this skill exists to catch:
+
+- **REJECT** — a gating check actually fails (typecheck, test suite, or the quant
+  regression suite is red), or you find a genuine soundness bug (real lookahead,
+  WFO folds that actually overlap, a risk-config value with no cap where one is
+  needed to survive a losing streak).
+- **CAUTION** — every gating check is green, but at least one open finding in that
+  axis is Medium severity or worse (a real gap, not polish) — e.g. a validated
+  suite that CI never runs, an uncalibrated formula a trader would rely on, a
+  curve-fitting exposure with only a post-hoc guard.
+- **PASS** — no open Medium+ findings; only Low/polish items remain.
+
+Overall grade = the worst of the three axis grades (REJECT > CAUTION > PASS),
+mirroring `worstStatus()` in `frontend/lib/status.ts` — don't average, don't let a
+strong axis 2 paper over a CAUTION-level axis 1.
+
 ## Output
 
 Write/update `TRADING_QUALITY_BENCHMARK.md` at repo root:

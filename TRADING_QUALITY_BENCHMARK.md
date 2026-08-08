@@ -6,13 +6,15 @@
 
 ---
 
-## Overall grade: **PASS** (with a short punch list)
+## Overall grade: **CAUTION** (worst of the three axes — see rubric)
 
 | Axis | Grade |
 |---|---|
-| 1. Code quality | PASS |
-| 2. Trading-logic (algorithmic) soundness | PASS |
-| 3. Config / settings sanity ("as a trader", best-effort) | PASS |
+| 1. Code quality | CAUTION — open Medium finding (CI never runs the Jest suite) |
+| 2. Trading-logic (algorithmic) soundness | CAUTION — two open Medium caveats (uncalibrated confidence formula, no grid-search complexity penalty) |
+| 3. Config / settings sanity ("as a trader", best-effort) | PASS — no Medium+ findings |
+
+All gating checks (typecheck, full test suites, quant-soundness regression suite) are green — nothing here is REJECT-level. CAUTION reflects real, open Medium-severity gaps per this skill's rubric (`.claude/skills/K-quality-benchmark/SKILL.md`): PASS requires no open Medium+ findings, not just "tests pass."
 
 ---
 
@@ -26,7 +28,7 @@ What it does **not** cover: whether the screener's trading edge is real. BMAD-st
 
 ---
 
-## Axis 1 — Code quality
+## Axis 1 — Code quality — **CAUTION**
 
 ### Fresh verification (this run)
 
@@ -85,7 +87,7 @@ This is unusually rigorous for a retail-facing screener — genuine walk-forward
 
 ---
 
-## Axis 3 — Config / settings sanity, "as a trader" (best-effort)
+## Axis 3 — Config / settings sanity, "as a trader" (best-effort) — **PASS**
 
 The user has their own bespoke trader-perspective settings-audit skill on their local machine, not yet committed to this repo — **this section is my own best-effort judgment as a stand-in, not a substitute for it.** Should defer to the user's skill once it's added here.
 
