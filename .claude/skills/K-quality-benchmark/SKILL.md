@@ -1,5 +1,5 @@
 ---
-name: bamendjou-quality-benchmark
+name: K-quality-benchmark
 description: Grade Bamendjou (this repo) on three axes — frontend/backend code quality, algorithmic trading-logic soundness, and trading-config sanity — and write the result to TRADING_QUALITY_BENCHMARK.md at repo root. Use when asked to benchmark, audit, grade, or score the quality of this trading screener, or to check whether it's still production-ready / whether its trading logic is sound.
 ---
 
@@ -15,10 +15,12 @@ Background: a prior audit (`PRODUCTION_READINESS_AUDIT.md`, 2026-05-05) was prod
 by a different AI tool running the `bmad-review-adversarial-general` skill from
 [bmad-code-org/BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) — a real,
 public skill that already covers axis 1 well (PRD/code-correctness auditing). This
-skill exists because axes 2 and 3 are domain-specific to Bamendjou and no generic
-external tool grades them. If BMAD-METHOD or a similar skill is ever committed into
-this repo's own `.claude/skills/`, prefer running it for axis 1 instead of
-re-deriving code-quality findings by hand.
+skill (`K-quality-benchmark`, named after this repo's own `K-adversarial-audit-loop`
+convention in `docs/superpowers/plans/*.md`) exists because axes 2 and 3 are
+domain-specific to Bamendjou and no generic external tool grades them. If
+BMAD-METHOD or a similar skill is ever committed into this repo's own
+`.claude/skills/`, prefer running it for axis 1 instead of re-deriving code-quality
+findings by hand.
 
 The user has their own bespoke trader-perspective settings-audit skill, built
 locally on their machine, not (yet) committed to this repo. Axis 3 below is a

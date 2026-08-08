@@ -1,7 +1,7 @@
 # Trading Quality Benchmark — Bamendjou
 
 **Date**: 2026-08-08
-**Method**: `.claude/skills/bamendjou-quality-benchmark` (first run)
+**Method**: `.claude/skills/K-quality-benchmark` (first run)
 **Standards**: code correctness, algorithmic trading-logic soundness, config/settings sanity — judged against what Bamendjou actually aims to be: a screener whose core promise is surfacing real, non-overfit, well-calibrated trade setups, not just a working UI.
 
 ---
@@ -22,7 +22,7 @@ Yes — and it was already run on this exact repo once before.
 
 `PRODUCTION_READINESS_AUDIT.md` (repo root, dated 2026-05-05) was produced by a different AI tool ("opencode") running the **`bmad-review-adversarial-general`** skill from **[bmad-code-org/BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD)** (skill source: `src/core-skills/bmad-review-adversarial-general/SKILL.md`), a real, public, actively-maintained Claude/Codex skill for adversarial code review against a spec. This repo's own planning docs (`docs/superpowers/plans/*.md`) also repeatedly invoke a "K-adversarial-audit-loop" using that same skill, alongside the **[obra/superpowers](https://github.com/obra/superpowers)** plugin for review-driven implementation.
 
-What it does **not** cover: whether the screener's trading edge is real. BMAD-style review checks code correctness and spec compliance — it has no concept of lookahead bias, walk-forward validity, or whether a YAML risk parameter is survivable. That's domain-specific to Bamendjou, which is why axes 2 and 3 below are first-party rather than borrowed from an external tool. See `.claude/skills/bamendjou-quality-benchmark/SKILL.md` for the reusable rubric this report was generated from.
+What it does **not** cover: whether the screener's trading edge is real. BMAD-style review checks code correctness and spec compliance — it has no concept of lookahead bias, walk-forward validity, or whether a YAML risk parameter is survivable. That's domain-specific to Bamendjou, which is why axes 2 and 3 below are first-party rather than borrowed from an external tool. See `.claude/skills/K-quality-benchmark/SKILL.md` for the reusable rubric this report was generated from.
 
 ---
 
@@ -116,4 +116,4 @@ No REJECT-level findings on this axis.
 
 ## Next run
 
-Re-invoke `.claude/skills/bamendjou-quality-benchmark`. It will read this file first and report fixed/still-open/new against the punch list above instead of re-deriving everything from scratch.
+Re-invoke `.claude/skills/K-quality-benchmark`. It will read this file first and report fixed/still-open/new against the punch list above instead of re-deriving everything from scratch.
