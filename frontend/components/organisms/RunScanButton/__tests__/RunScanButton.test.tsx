@@ -3,6 +3,7 @@ import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { api } from '@/lib/api';
+import { runStockScan } from '@/lib/stockScan';
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -80,8 +81,7 @@ describe('RunScanButton — conflict suppression wiring', () => {
   });
 
   it('runs a stock scan when screenerMode is stocks and a strategy is active', async () => {
-    const { runStockScan } = require('@/lib/stockScan');
-    useScanStore.setState({ screenerMode: 'stocks', activeStrategy: 'pullback_ema' } as any);
+    useScanStore.setState({ screenerMode: 'stocks', activeStrategy: 'pullback_ema' } as Partial<ReturnType<typeof useScanStore.getState>>);
 
     render(<RunScanButton />);
     fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));

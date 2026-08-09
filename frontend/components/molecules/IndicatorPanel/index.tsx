@@ -10,9 +10,16 @@ import {
 } from 'lightweight-charts';
 import styles from './IndicatorPanel.module.css';
 
+// Mirrors lib/chart/indicators.ts's calculateRSI/calculateMACD/calculateVolume
+// return shapes exactly — `data` is whichever one matches the `type` prop.
+type RsiPoint = { time: string | number; value: number };
+type MacdPoint = { time: string | number; macd: number; signal: number; histogram: number };
+type VolumePoint = { time: string | number; value: number; color: string };
+type IndicatorDataPoint = RsiPoint | MacdPoint | VolumePoint;
+
 interface IndicatorPanelProps {
   chart: IChartApi;
-  data: any[];
+  data: IndicatorDataPoint[];
   type: 'rsi' | 'macd' | 'volume';
 }
 
@@ -23,7 +30,7 @@ function token(name: string): string {
 
 export function IndicatorPanel({ chart, data, type }: IndicatorPanelProps) {
   const paneIndexRef = useRef<number | null>(null);
-  const seriesRef = useRef<ISeriesApi<any>[]>([]);
+  const seriesRef = useRef<(ISeriesApi<'Line'> | ISeriesApi<'Histogram'>)[]>([]);
 
   useEffect(() => {
     if (!chart) return;
@@ -110,26 +117,26 @@ export function IndicatorPanel({ chart, data, type }: IndicatorPanelProps) {
 
     if (type === 'rsi') {
       seriesRef.current[0].setData(
-        data.map((d: { time: string; value: number }) => ({
+        (data as RsiPoint[]).map((d) => ({
           time: d.time as Time,
           value: d.value,
         })),
       );
     } else if (type === 'macd') {
       seriesRef.current[0].setData(
-        data.map((d: { time: string; macd: number }) => ({
+        (data as MacdPoint[]).map((d) => ({
           time: d.time as Time,
           value: d.macd,
         })),
       );
       seriesRef.current[1].setData(
-        data.map((d: { time: string; signal: number }) => ({
+        (data as MacdPoint[]).map((d) => ({
           time: d.time as Time,
           value: d.signal,
         })),
       );
       seriesRef.current[2].setData(
-        data.map((d: { time: string; histogram: number }) => ({
+        (data as MacdPoint[]).map((d) => ({
           time: d.time as Time,
           value: d.histogram,
           color:
@@ -140,7 +147,7 @@ export function IndicatorPanel({ chart, data, type }: IndicatorPanelProps) {
       );
     } else if (type === 'volume') {
       seriesRef.current[0].setData(
-        data.map((d: { time: string; value: number; color: string }) => ({
+        (data as VolumePoint[]).map((d) => ({
           time: d.time as Time,
           value: d.value,
           color:

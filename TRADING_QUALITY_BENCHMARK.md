@@ -1,34 +1,36 @@
 # Trading Quality Benchmark — Bamendjou
 
-**Date**: 2026-08-08 (updated same day — fix pass after round-1 adversarial audit)
-**Method**: `.claude/skills/K-quality-benchmark` (first run, then fixed to a clean state within the same run)
+**Date**: 2026-08-08 (round 3 — clean-room fixes + real-data trader evidence)
+**Method**: `.claude/skills/K-quality-benchmark`
 **Standards**: code correctness, algorithmic trading-logic soundness, config/settings sanity — judged against what Bamendjou actually aims to be: a screener whose core promise is surfacing real, non-overfit, well-calibrated trade setups, not just a working UI.
 
 ---
 
-## Overall grade: **PASS**
+## Overall grade: **CAUTION**
 
 | Axis | Grade |
 |---|---|
-| 1. Code quality | PASS — CI gap fixed |
-| 2. Trading-logic (algorithmic) soundness | PASS — both Medium caveats fixed |
+| 1. Code quality | PASS — genuinely clean this time (see "Since last run") |
+| 2. Trading-logic (algorithmic) soundness | CAUTION — mechanism is sound, but real-data evidence shows this environment can't yet validate any strategy's actual edge |
 | 3. Config / settings sanity ("as a trader", best-effort) | PASS — no Medium+ findings |
 
-The first pass of this run graded CAUTION (see "Since last run" below) per the rubric in `.claude/skills/K-quality-benchmark/SKILL.md`: 3 open Medium-severity findings. All three were fixed and re-verified in the same run — see per-axis sections for what changed and the evidence.
+Per this skill's own rubric, insufficient real data to validate strategy performance is a CAUTION-level finding (a real gap), not a REJECT (the backtest/WFO *mechanism* isn't shown broken — see axis 2).
 
 ---
 
-## Since last run (this run's own fix pass)
+## Since last run — round 3 changes
+
+**Round 2's axis-1 "PASS" was wrong**, caught by a second, independent skill run (a different session) plus a foreground adversarial-audit subagent this round (the first attempt at this audit, run in the background, died silently with no notification after ~2h40m — not the first time; background subagents have been unreliable for this kind of long verification work in this environment, so this round's audits ran synchronously instead):
 
 | Item | Was | Now | Evidence |
 |---|---|---|---|
-| CI never runs the Jest suite | Medium, open | **Fixed** | `.github/workflows/ci.yml` — added a "Run frontend tests" step (`npm run test -- --ci`) before the build step |
-| Grid search has no complexity penalty (curve-fit risk) | Medium, open | **Fixed** | `backend/app/services/walk_forward.py` — new `_complexity_penalty()`, wired into `train_fold()`; penalizes numeric params near the grid edge, skips categorical/boolean grids (no ordinal "center") |
-| `signal_confidence.py`'s `payoff_ratio` is assumed, not empirically calibrated | Medium, open | **Fixed** | `backend/app/scoring/signal_confidence.py` — new `_measure_excursion()` measures realized max-favorable/max-adverse price movement per historical fire; `aggregate()` now derives `payoff_ratio` from that when available, falling back to the old assumed ratio only when there's no win/loss data to measure from |
+| `@playwright/test` genuinely missing from `frontend/package.json` | Believed fixed, actually masked | **Fixed** | A stray, unrelated root-level `package.json` (placeholder scaffolding, unconnected to the real app) had it installed, and Node's module resolution walked up to find it — passing typecheck locally while CI (scoped strictly to `frontend/`) would still fail. Removed the stray root entry + root `node_modules`; added `@playwright/test: ^1.62.1` directly to `frontend/package.json`. Re-verified `npx tsc --noEmit` passes with the root masking gone. |
+| `backend/app/routers/scan.py` crashes on a clean checkout | Broken | **Fixed** | Module-level `settings.yaml` read had no fallback; gitignored file, so any fresh clone failed to import the router, breaking collection of 22+ test modules. Now falls back to the committed `settings.example.yaml` when the local override is absent. Verified: `pytest --collect-only` succeeds with `settings.yaml` genuinely deleted (1383 tests collected, 0 errors). |
+| `npm run build` never actually run in prior checks | Untested — 47 real errors hiding | **Fixed** | Real bug: `components/organisms/ScanLog/index.tsx` called `useState` after an early `return null` (genuine React rules-of-hooks violation — moved the hook above the return). Remaining 44 of 47 errors were `@typescript-eslint/no-explicit-any` inside test-mock code; added a scoped ESLint override for `__tests__/`/`*.test.{ts,tsx}` files only (production code still fully typed). Fixed the 3 real production-code `any`s properly: `IndicatorPanel`'s chart-data/series types, and `TradeCardData`'s `_userOverride` field (widened `mergePlan`'s return type instead of casting at the call site). Fixed one `require()`-style import in a test file. `npm run build` now exits 0. |
 
-12 new regression tests added across `test_walk_forward.py` and `test_signal_confidence.py` covering both fixes (tie-breaking toward grid center, a genuine edge-value win still passing through, categorical grids being skipped, and the empirical-vs-fallback payoff-ratio branches). Full suite verified green after the fix (see Axis 1 below).
+**Round-1 adversarial audit of the fix plan** (foreground/synchronous, before any code was touched) caught 2 blockers and 4 majors — corrected before implementing: the Playwright "reproducibility" claim was subtler than first stated (see above); the planned isolated-clone verification method would have tested stale pre-fix code (a plain `git clone` only sees committed history — now: commit fixes locally first, then clone); `mean_reversion_rsi`/`mean_reversion_bb` need ≥219–225 bars of warmup against only ~251 fixture bars (addressed below); `mean_reversion_vwap` is documented intraday-only and invalid on daily bars (excluded from the real-backtest run); the "48 ESLint errors" figure hadn't actually been measured yet (measured: 47, matches once the ScanLog fix is accounted for); and the plan's branch-reuse was ambiguous (resolved: worked directly on `main`, matching the established no-PR pattern).
 
-A round-1 self-review of the code changes (in the same adversarial spirit as the skill's own audit loop) caught one real issue before it shipped: the first version of the complexity penalty applied "distance from grid center" to *every* parameter, including categorical ones like `ma_type: ["EMA","SMA"]`, where there's no ordinal center to measure distance from. Fixed by reusing the numeric/categorical split `consensus()` already establishes in the same file. No production search grid currently uses categorical/boolean values (all are numeric per `strategy_params.yaml`), so this didn't change today's behavior — it prevents a latent bug if one is added later.
+**New this round — real trader-quality evidence for axis 2** (see below): ran the actual `run_strategy_backtest()` against real historical data instead of only synthetic mechanics checks, per the user's direct feedback that axis 2 had never delivered an actual "experienced trader's opinion."
 
 ---
 
@@ -36,7 +38,7 @@ A round-1 self-review of the code changes (in the same adversarial spirit as the
 
 Yes — and it was already run on this exact repo once before.
 
-`PRODUCTION_READINESS_AUDIT.md` (repo root, dated 2026-05-05) was produced by a different AI tool ("opencode") running the **`bmad-review-adversarial-general`** skill from **[bmad-code-org/BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD)** (skill source: `src/core-skills/bmad-review-adversarial-general/SKILL.md`), a real, public, actively-maintained Claude/Codex skill for adversarial code review against a spec. This repo's own planning docs (`docs/superpowers/plans/*.md`) also repeatedly invoke a "K-adversarial-audit-loop" using that same skill, alongside the **[obra/superpowers](https://github.com/obra/superpowers)** plugin for review-driven implementation.
+`PRODUCTION_READINESS_AUDIT.md` (repo root, dated 2026-05-05) was produced by a different AI tool ("opencode") running the **`bmad-review-adversarial-general`** skill from **[bmad-code-org/BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD)** (skill source: `src/core-skills/bmad-review-adversarial-general/SKILL.md`), a real, public, actively-maintained Claude/Codex skill for adversarial code review against a spec. This repo's own planning docs (`docs/superpowers/plans/*.md`) also repeatedly invoke a "K-adversarial-audit-loop" using that same skill, alongside the **[obra/superpowers](https://github.com/obra/superpowers)** plugin for review-driven implementation. Neither BMAD-METHOD nor Superpowers is actually installed/committed in this repo — every "adversarial audit" mentioned in this report is a foreground subagent instructed to adopt that posture, not the real plugin.
 
 What it does **not** cover: whether the screener's trading edge is real. BMAD-style review checks code correctness and spec compliance — it has no concept of lookahead bias, walk-forward validity, or whether a YAML risk parameter is survivable. That's domain-specific to Bamendjou, which is why axes 2 and 3 below are first-party rather than borrowed from an external tool. See `.claude/skills/K-quality-benchmark/SKILL.md` for the reusable rubric this report was generated from.
 
@@ -44,96 +46,112 @@ What it does **not** cover: whether the screener's trading edge is real. BMAD-st
 
 ## Axis 1 — Code quality — **PASS**
 
-### Fresh verification (this run, after the fix pass)
+### Fresh verification (this run, genuinely clean-room this time)
 
 | Check | Result |
 |---|---|
-| `npm run typecheck` (frontend) | **PASS** — exit 0, clean |
+| `npm run typecheck` (frontend) | **PASS** — exit 0, with the stray root-level masking removed (proven self-contained) |
 | `npm run test -- --ci` (frontend, Jest) | **PASS** — 61 suites, 490 tests, 0 failures |
-| `pytest` (backend) | **PASS** — 1380 passed, 1 skipped, 1 xpassed, 0 failures (1368 baseline + 12 new tests from this run's fixes) |
-| Quant-soundness regression suite (`test_data_leakage`, `test_regime_no_lookahead`, `test_walk_forward`, `test_signal_confidence`, `test_strategy_backtest`) | **PASS** — 56/56 (44 baseline + 12 new) |
-| CI enforcement (`.github/workflows/ci.yml`) | **Fixed this run** — frontend job now runs `npm run test -- --ci` before `npm run build`; the 490-test Jest suite has real CI coverage for the first time |
+| `npm run build` (frontend) | **PASS** — exit 0, 0 errors (was 47 errors, all fixed or scoped out as test-mock typing), 45 non-blocking warnings remain (pre-existing `exhaustive-deps`/unused-vars, not gating) |
+| `pytest --collect-only` with `settings.yaml` genuinely absent | **PASS** — 1383 tests collected, 0 import errors |
+| `pytest` (backend, full) | **PASS** — 1380 passed, 1 skipped, 1 xpassed, 0 failures |
+| Quant-soundness regression suite | **PASS** — 56/56 |
 
-Getting a clean run required working around real setup friction, which is itself a finding (see punch list): no committed `package-lock.json`/lockfile-equivalent in `frontend/` (gitignored), a gitignored `backend/config/settings.yaml` that several routers read at import time with no `.example` auto-copy step, and a `pytest` binary on this machine that resolves to an isolated `uv`-tool interpreter blind to the project's installed deps (`python3 -m pytest` is required instead).
+### Prior audit (2026-05-05, BMAD) — all 6 findings still fixed
 
-### Prior audit (2026-05-05, BMAD) — all 6 findings now fixed
+| # | Item | Status |
+|---|---|---|
+| 1 | Hardcoded `SEED_SYMBOLS` watchlist | **Fixed** |
+| 2 | Watchlist empty state | **Fixed** |
+| 3 | Portfolio empty state | **Fixed** |
+| 4 | Settings Save button unwired | **Fixed** |
+| 5 | FR-07 CSV upload missing | **Fixed** |
+| 6 | FR-12 ranked-table columns missing | **Fixed** |
 
-| # | Item | Status | Evidence |
-|---|---|---|---|
-| 1 | Hardcoded `SEED_SYMBOLS` watchlist | **Fixed** | `frontend/lib/watchlistStore.ts:13` — empty array |
-| 2 | Watchlist empty state | **Fixed** | `frontend/app/(frame)/watchlist/page.tsx:278-280` |
-| 3 | Portfolio empty state | **Fixed** | `frontend/app/(frame)/portfolio/page.tsx:276-277` |
-| 4 | Settings Save button unwired | **Fixed** | `frontend/app/(frame)/settings/page.tsx:126-144` |
-| 5 | FR-07 CSV upload missing | **Fixed** | `frontend/app/(frame)/screener/step-2-universe/page.tsx:521-549` |
-| 6 | FR-12 ranked-table columns missing | **Fixed** | `frontend/app/(frame)/screener/step-4-ranking/page.tsx:36-37,239-274` |
-
-Note: `settingsStore.ts` weights/theme are still localStorage-only (`persist()`); risk/schedule/credentials/history-retention are API-backed via `frontend/lib/api.ts` + matching backend routers. Not a defect, just a scope boundary.
-
-### New findings this run
+### Open findings (Low only)
 
 | Severity | Finding | Evidence |
 |---|---|---|
-| Low | No committed frontend lockfile — `package-lock.json` is gitignored, so installs aren't pin-reproducible | `.gitignore:21`, `frontend/.gitignore` |
-| Low | 4 high-severity `npm audit` findings (Next.js, postcss, sharp, xlsx transitive CVEs) | `npm audit` output, this run |
-| Low | Local dev setup has two silent failure points not documented in a setup script: missing `backend/config/settings.yaml` (routers read it at import time) and the isolated `pytest` binary shadowing the project's Python env | this run |
-
-(The CI-Jest-gap Medium finding from earlier in this run is fixed — see "Since last run" above.)
+| Low | No committed frontend lockfile — `package-lock.json` is gitignored, so installs aren't pin-reproducible | `.gitignore:21` |
+| Low | 4 high-severity `npm audit` findings (Next.js, postcss, sharp, xlsx transitive CVEs) | `npm audit` output |
+| Low | 45 non-blocking ESLint warnings remain (`react-hooks/exhaustive-deps`, unused vars) — not gating, but real polish debt | `npm run build` output |
+| Low | The two-package.json situation (root scaffolding + `frontend/`) is itself worth a cleanup or a comment explaining why the root one exists at all, to stop future confusion | `package.json` (root) |
 
 ---
 
-## Axis 2 — Trading-logic (algorithmic) soundness — **PASS**
+## Axis 2 — Trading-logic (algorithmic) soundness — **CAUTION**
 
-This is unusually rigorous for a retail-facing screener — genuine walk-forward validation and explicit overfitting guards, not just a backtest number slapped on a UI.
+### Mechanism correctness (unchanged from round 2, still holds)
 
 | Component | Finding | Evidence |
 |---|---|---|
-| Lookahead safety | Signal function only ever sees a truncated `bars[:n]` slice up to the current simulated bar; entries fill on subsequent bars via `backtesting.py`, not same-bar | `backend/app/services/strategy_backtest.py:96-119` |
-| Backtest gates | `_MIN_TRADES=10`, `_MIN_WIN_RATE=0.45`, `_MIN_EXPECTANCY=0.0`, enforced via `passes_gate` | `strategy_backtest.py:23-25,146` |
-| Walk-forward validity | Genuine non-overlapping in-sample/out-of-sample fold construction (rolling or anchored), not a repeated re-run on the same data | `backend/app/services/walk_forward.py:31-83` |
-| Overfitting guard | OOS eligibility requires `n_trades>=20` and `consistency>=0.5`; verdict text explicitly downgrades to "Edge looks fake — consider dropping" below threshold; param stability enforced via fold-consensus (median/mode), not single-best-fold selection | `backend/app/services/strategy_param_optimizer.py:47,50-55`; `walk_forward.py:164-187` |
-| In-sample regularization (**fixed this run**) | `train_fold()`'s grid search now subtracts a distance-from-grid-center penalty from pooled Sharpe before selecting a winner — numeric params only (categorical/boolean grids have no ordinal "center" so are skipped); a genuinely better edge value still wins if its Sharpe advantage exceeds the penalty | `walk_forward.py:_complexity_penalty()`, wired into `train_fold()` |
-| Confidence calibration (**fixed this run**) | `signal_confidence.py`'s confidence is derived from an actual historical replay (correctly bar-truncated). `payoff_ratio` is now measured from realized max-favorable/max-adverse price excursion per historical fire (`_measure_excursion()`), not assumed from config ATR multiples — falls back to the old assumed ratio only when there's no win or no loss data to measure from | `backend/app/scoring/signal_confidence.py:_measure_excursion()`, `aggregate()` |
-| Dedicated regression coverage | `test_data_leakage.py`, `test_regime_no_lookahead.py` explicitly test for lookahead; `test_walk_forward.py`, `test_strategy_backtest.py`, `test_signal_confidence.py` cover fold math, gate correctness, and confidence aggregation — now including the two fixes above | `backend/tests/` |
+| Lookahead safety | Signal function only ever sees a truncated `bars[:n]` slice up to the current simulated bar; entries fill on subsequent bars, not same-bar | `strategy_backtest.py:96-119` |
+| Backtest gates | `_MIN_TRADES=10`, `_MIN_WIN_RATE=0.45`, `_MIN_EXPECTANCY=0.0` | `strategy_backtest.py:23-25,146` |
+| Walk-forward validity | Genuine non-overlapping in-sample/out-of-sample fold construction | `walk_forward.py:31-83` |
+| Overfitting guard | OOS eligibility requires `n_trades>=20` and `consistency>=0.5`; grid search now also penalizes grid-edge params (round 2 fix) | `strategy_param_optimizer.py:47,50-55`; `walk_forward.py:_complexity_penalty()` |
+| Confidence calibration | Derived from historical replay; `payoff_ratio` now empirically measured (round 2 fix) | `signal_confidence.py:_measure_excursion()`, `aggregate()` |
+| Dedicated regression coverage | `test_data_leakage.py`, `test_regime_no_lookahead.py`, `test_walk_forward.py`, `test_strategy_backtest.py`, `test_signal_confidence.py` | `backend/tests/` |
 
-### Remaining caveats (not blockers, worth tracking)
+**This is still just mechanism correctness** — it verifies the backtest/WFO infrastructure is implemented right using synthetic fake price data. It is not a trader's opinion on whether the strategies actually work.
 
-| Severity | Finding | Evidence |
-|---|---|---|
-| Low | `signal_confidence.py` confidence is still a single in-sample replay per symbol/setup, not walk-forward validated (only the payoff-ratio *input* is now empirical — the replay methodology itself doesn't hold out an OOS period the way axis-2's strategy optimizer does) | `signal_confidence.py:compute_confidence()` |
-| Low | The complexity-penalty weight (`0.05` per parameter) is a fixed constant, not config-driven or empirically tuned — reasonable default, but untested against real historical data for whether it's the right magnitude | `walk_forward.py:_complexity_penalty()` |
+### Real-data evidence (new this round)
+
+Ran `run_strategy_backtest()` — the actual production backtest function, not a mock — against real historical fixture data (`backend/tests/fixtures/{AAPL,MSFT,NVDA,SPY}_candles.json`, 251 real daily bars each, 2024-04-30 to 2025-04-30), bullish direction, default `strategy_params.yaml` params. `mean_reversion_vwap` excluded (documented intraday-only in `strategy_engine.py`; produces a semantically meaningless number on daily bars).
+
+| Strategy | AAPL | MSFT | NVDA | SPY |
+|---|---|---|---|---|
+| `pullback_ema` | 3 trades | 1 trade | 2 trades | 1 trade |
+| `breakout_base` | 0 trades | 0 trades | 0 trades | 0 trades |
+| `ma_crossover` | 5 trades | 3 trades | 4 trades | 4 trades |
+| `mean_reversion_rsi` | 0 trades | 0 trades | 0 trades | 0 trades |
+| `mean_reversion_bb` | 0 trades | 0 trades | 0 trades | 0 trades |
+
+**Finding**: zero of these 20 strategy×symbol combinations reach the system's own `_MIN_TRADES=10` eligibility gate. Best case is `ma_crossover`/AAPL at 5 trades. `mean_reversion_rsi` and `mean_reversion_bb` predictably hit zero everywhere — they need ≥219–225 bars of warmup (`trend_sma=200` + period, per `strategy_params.yaml`) against only 251 total bars, leaving a 26–32 bar tail with essentially no room to trade. `breakout_base` also produced zero trades on all four symbols, which is not explained by warmup alone and is worth a closer look at whether its entry conditions are simply rare, or the fixture period (a relatively calm, grinding-up year across large-caps) just didn't offer qualifying setups.
+
+**What this means, honestly**: this is not evidence the strategies are bad — every single result the gate itself flags as "not enough trades" is correctly treated as `_empty_result` (win_rate/Sharpe/expectancy all reported as 0.0 placeholders, not real computed statistics). It means **this environment's fixture data (~1 year, 4 symbols) is insufficient to give any real trader-quality opinion on these strategies at all.** A genuine assessment needs multi-year history across a broader symbol basket — matching what `run_optimization()`'s real WFO windows (12mo train / 3mo test, needing 15+ months minimum) already assume. That's the honest axis-2 answer to "what do you think of my code as an experienced trader": *the mechanism is well-built, but I have no real evidence yet that any of the 5 testable strategies clears its own bar for statistical significance — and the reason is data availability in this environment, not a flaw found in the strategies themselves.*
+
+### Remaining caveats
+
+| Severity | Finding |
+|---|---|
+| Medium | No real-data evidence exists yet that any strategy reaches minimum trade-count significance — see above |
+| Low | `signal_confidence.py` confidence replay is still a single in-sample pass, not walk-forward validated |
+| Low | Complexity-penalty weight (`0.05`/param) is a fixed constant, untested against real historical optimizer runs |
+| Low | `breakout_base` producing 0/4 trades on real data deserves a second look independent of the warmup-data explanation that covers the two mean-reversion strategies |
 
 ---
 
 ## Axis 3 — Config / settings sanity, "as a trader" (best-effort) — **PASS**
 
-The user has their own bespoke trader-perspective settings-audit skill on their local machine, not yet committed to this repo — **this section is my own best-effort judgment as a stand-in, not a substitute for it.** Should defer to the user's skill once it's added here.
+Unchanged from round 2 — no code in this axis's scope was touched this round.
 
-| File | Judgment | Evidence |
-|---|---|---|
-| `risk_rules.yaml` | Conservative, survivable numbers: 5% max single-trade exposure, 25% max aggregate, a real 2%-of-portfolio daily-loss circuit breaker, one position per symbol. Reads as risk-desk-considered, not backtest-optimized. | `backend/config/risk_rules.yaml:3-11,37` |
-| `contract_rules.yaml` | Two-tier design (hard-reject vs soft-preference) for liquidity/spread/delta/DTE — hard reject at 20% spread but soft-preferred cutoff at 8%, which is the more realistic fill target. `max_iv_rank: 70` for long-premium is a sensible volatility-crush guard. | `backend/config/contract_rules.yaml:11-32` |
-| `scoring_rules.yaml` | `pass:55 / caution:35` leaves a genuine middle band, not a near-binary gate. Event and IV-rank gates are differentiated by horizon (intraday vs swing vs position) rather than copy-pasted — matches the documented rationale in `SCORING_RULES.md`. One thing worth a human double-check rather than asserted as a defect: `intraday.vol.iv_rank_*` are all `null` (`scoring_rules.yaml:178-180`) — confirm the vol-rule scorer treats this as "gate disabled" intentionally, not an unhandled null. | `backend/config/scoring_rules.yaml:6-7,102-107,174-180`; `SCORING_RULES.md` |
-| `strategy_params.yaml` | Per-strategy stop/target multiples are sane, not aggressive (e.g. `pullback_ema`: 1.5x ATR stop vs 2.0x R:R target — a standard ≥2:1 setup). WFO `windows` (12mo train / 3mo test) and `optimization` (`min_trades:20`, `min_consistency:0.5`) match exactly what axis 2 found enforced in code — config and implementation are in sync, not drifted. | `backend/config/strategy_params.yaml:1-4,18-20,27-40` |
+| File | Judgment |
+|---|---|
+| `risk_rules.yaml` | Conservative, survivable numbers: 5% max single-trade exposure, 25% max aggregate, a real 2%-of-portfolio daily-loss circuit breaker. |
+| `contract_rules.yaml` | Two-tier hard-reject vs soft-preference design; sensible IV-rank volatility-crush guard. |
+| `scoring_rules.yaml` | `pass:55/caution:35` leaves a real middle band; gates differentiated by horizon, matching `SCORING_RULES.md`. |
+| `strategy_params.yaml` | Stop/target multiples sane; WFO windows/optimization config matches what axis 2 found enforced in code. |
 
-No REJECT-level findings on this axis.
+Still labeled best-effort — defers to the user's own local settings-audit skill once it's committed to this repo.
 
 ---
 
 ## Prioritized punch list
 
-All three Medium items from this run's first pass are fixed (see "Since last run"). What's left is Low/polish:
-
 | Priority | Item | Why |
 |---|---|---|
-| Low | Consider WFO-validating `signal_confidence.py`'s replay instead of a single in-sample pass | Would close the last gap between axis 2's two confidence-adjacent subsystems (the strategy optimizer already does real OOS; the confidence replay still doesn't) |
-| Low | Confirm `intraday.vol.iv_rank_*: null` is deliberately "gate disabled," not an unhandled null path | Cheap to verify, avoids silent scoring bug |
-| Low | Add a lockfile for `frontend/` (or document why it's intentionally excluded) | Non-reproducible installs risk a repeat of this run's TypeScript version mismatch (global v6.0.2 vs pinned `^5.7.0`) |
-| Low | Bump `next`, `postcss`, `sharp`, `xlsx` to clear 4 high-severity `npm audit` findings | Standard hygiene, not exploitable in this app's context as far as this pass could tell |
-| Low | Document the two local-setup gotchas (`cp config/settings.example.yaml config/settings.yaml`, use `python3 -m pytest` not bare `pytest`) somewhere onboarding-visible | Currently only known because this run hit both |
-| Low | Empirically tune the complexity-penalty weight (currently a fixed `0.05`/param constant) against real historical optimizer runs | Untested magnitude — reasonable default, not validated |
+| **Medium** | Get real multi-year historical data (more symbols, more years) into this environment and re-run the axis-2 real-data backtest | Currently zero evidence any strategy clears its own significance bar — this is the single biggest gap between "code looks right" and "this makes money" |
+| Low | Investigate why `breakout_base` produced 0/4 trades on real data — confirm it's data-period luck, not an entry-condition bug | Not explained by the warmup-data issue covering the mean-reversion strategies |
+| Low | WFO-validate `signal_confidence.py`'s replay instead of single in-sample pass | |
+| Low | Empirically tune the complexity-penalty weight against real historical optimizer runs | |
+| Low | Confirm `intraday.vol.iv_rank_*: null` is deliberately "gate disabled" | |
+| Low | Add a frontend lockfile or document why it's excluded | |
+| Low | Clear 4 high-severity `npm audit` findings | |
+| Low | Clean up or document the stray root-level `package.json` | Prevents a repeat of this round's masking bug |
+| Low | Address the 45 remaining ESLint warnings | Non-blocking polish |
 
 ---
 
 ## Next run
 
-Re-invoke `.claude/skills/K-quality-benchmark`. It will read this file first and report fixed/still-open/new against the punch list above instead of re-deriving everything from scratch.
+Re-invoke `.claude/skills/K-quality-benchmark`. It will read this file first and report fixed/still-open/new against the punch list above. Most impactful next step: sourcing real multi-year historical data for a genuine axis-2 performance evaluation.

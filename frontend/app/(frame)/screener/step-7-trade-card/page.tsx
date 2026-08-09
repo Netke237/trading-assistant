@@ -623,7 +623,7 @@ export default function Step7Page() {
 
       {effectiveCard && (
         <>
-          {(effectiveCard as any)._userOverride && (
+          {effectiveCard._userOverride && (
             <StatusBadge status="PENDING" label="User-selected" />
           )}
           {/* For an overridden contract, don't render the card until its plan is

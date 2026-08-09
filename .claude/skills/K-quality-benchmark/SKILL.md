@@ -41,28 +41,50 @@ repo's `.claude/skills/`, defer to it for axis 3 instead.
    noise to hide).
 3. Combine into one overall grade and write/update `TRADING_QUALITY_BENCHMARK.md`.
 
-### Axis 1 — Code quality
+### Clean-room verification methodology — read before axis 1
+
+A prior run of this skill graded axis 1 PASS twice while genuinely broken from a
+clean checkout, because the checks ran against a polluted local environment rather
+than a real clean room. Avoid repeating that:
+
+- **This repo has a stray root-level `package.json`** (separate from
+  `frontend/package.json`, unrelated placeholder scaffolding — check it hasn't
+  regrown a dependency entry that masks a `frontend/`-scoped gap via Node's
+  parent-directory module resolution walk-up). If `frontend/`'s own install is ever
+  in doubt, verify with root `node_modules/` absent or renamed aside, not just
+  `cd frontend && npx tsc`.
+- **`npm run build` is a required check, not optional** — it catches ESLint errors
+  `npm run typecheck`/`npm run test` don't (a prior run skipped it entirely and
+  missed 47 real build-blocking errors, including a genuine React rules-of-hooks
+  bug). Always run all three: typecheck, test, **and build**.
+- **If you need a genuine "does this work from nothing installed" check**: apply
+  any fixes, commit them locally first (a plain `git clone` of an uncommitted
+  working tree silently tests the *previous* commit, not your fix), then `git
+  clone` that commit into an isolated scratch directory and run the install/build
+  there — never `rm -rf node_modules`/delete local config directly in the shared
+  working tree, since a broken intermediate state left behind can be misread by a
+  future session as a real regression. Delete the scratch clone when done.
 
 ```bash
 cd frontend
 npm install                    # no committed package-lock.json in this repo — always reinstall, don't trust a stale node_modules
 npm run typecheck              # must exit 0
-npm run test                   # capture "Test Suites: N passed" / "Tests: N passed" summary
+npm run test -- --ci           # capture "Test Suites: N passed" / "Tests: N passed" summary
+npm run build                  # must exit 0 — this is the real CI gate; do not skip it
 npm audit --json | jq '.metadata.vulnerabilities'   # note high/critical counts, don't block on them
 
 cd ../backend
 pip install -r requirements.txt
-cp -n config/settings.example.yaml config/settings.yaml   # gitignored local config; tests import routers that read it at import time
 python3 -m pytest -q           # NOT the bare `pytest` binary — on some machines it resolves to an isolated uv-tool
                                 # interpreter that never sees this repo's installed deps and fails with a misleading
-                                # "No module named 'fastapi'" even though fastapi is installed
+                                # "No module named 'fastapi'" even though fastapi is installed.
+                                # settings.yaml is no longer required for import — scan.py falls back to the
+                                # committed settings.example.yaml when it's absent (fixed 2026-08).
 ```
 
 Also check `.github/workflows/*.yml` for whether these commands are actually the
 ones CI runs — a green CI badge only means what the workflow file says it means.
-(As of the 2026-08 run: CI's frontend job runs `npm run build` only — the Jest
-suite is never executed in CI. Re-verify this hasn't changed before repeating the
-finding.)
+Re-verify current CI behavior each run rather than trusting a prior finding.
 
 Grade PASS/CAUTION/REJECT using this project's own vocabulary
 (`frontend/lib/status.ts`).
@@ -87,9 +109,32 @@ Read and re-verify against current source (line numbers drift):
 - Run the quant-specific regression suite and confirm it's still green:
   `python3 -m pytest -q tests/test_data_leakage.py tests/test_regime_no_lookahead.py tests/test_walk_forward.py tests/test_signal_confidence.py tests/test_strategy_backtest.py`
 
+**This mechanism-correctness check alone is not a trader's opinion on code
+quality** — it verifies the backtest/WFO infrastructure is implemented correctly,
+using synthetic fake price data. It says nothing about whether the actual
+strategies produce real edge. Always pair it with:
+
+**Real-data evidence** — run `run_strategy_backtest()` (not synthetic bars) against
+the real fixture data in `backend/tests/fixtures/{AAPL,MSFT,NVDA,SPY}_candles.json`
+(~251 real daily bars each, currently spanning about one year) for every strategy
+except `mean_reversion_vwap` (documented intraday-only — daily bars produce a
+semantically meaningless result for it, exclude or label N/A). Report actual
+`n_trades`/`win_rate`/`sharpe`/`expectancy`/`max_drawdown_pct` per strategy×symbol —
+real numbers, not fabricated. Expect (and report honestly rather than paper over):
+`mean_reversion_rsi`/`mean_reversion_bb` need ≥219–225 bars of warmup
+(`trend_sma`+period from `strategy_params.yaml`) against ~251 total bars, leaving
+too thin a tail to hit `_MIN_TRADES=10` — a near-certain empty result on this
+fixture, which is itself a legitimate finding ("insufficient real historical data
+in this environment to evaluate these strategies meaningfully"), not something to
+hide. If *no* strategy×symbol combination reaches the gate, say so plainly — that's
+a real, trader-relevant limitation of what this environment can validate, not a
+verdict on the strategies themselves.
+
 Grade PASS/CAUTION/REJECT. A REJECT here (e.g. a genuine lookahead bug, or WFO folds
 that actually overlap) is more serious than any frontend finding — it means the
-product's core promise is broken even if the UI is flawless.
+product's core promise is broken even if the UI is flawless. Insufficient real data
+to validate strategy performance is a CAUTION-level finding (a real gap), not a
+REJECT (the mechanism itself isn't shown broken).
 
 ### Axis 3 — Config / settings sanity, "as a trader" (best-effort)
 

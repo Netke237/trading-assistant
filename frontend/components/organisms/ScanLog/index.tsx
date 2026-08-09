@@ -194,6 +194,8 @@ function StockRejectionSection({
 // ---------------------------------------------------------------------------
 
 function ContractRejectionSection({ rejected }: { rejected: RejectedEntry[] }) {
+  const [open, setOpen] = useState(false);
+
   const contractRej = rejected.filter(
     (r) => r.reason.startsWith('all contracts') || r.reason === 'no option chain',
   );
@@ -209,8 +211,6 @@ function ContractRejectionSection({ rejected }: { rejected: RejectedEntry[] }) {
       catCounts[cat] = (catCounts[cat] ?? 0) + n;
     }
   }
-
-  const [open, setOpen] = useState(false);
 
   return (
     <div className={styles.section}>

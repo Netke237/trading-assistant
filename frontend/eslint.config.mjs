@@ -20,6 +20,15 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    // Test files loosely type mocks/spies/store-partial-state on purpose —
+    // strict typing of test doubles is more friction than value. Production
+    // code still gets the full no-explicit-any rule.
+    files: ['**/__tests__/**/*.{ts,tsx}', '**/*.test.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
 ];
 
 export default eslintConfig;

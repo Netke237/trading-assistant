@@ -82,10 +82,19 @@ router = APIRouter(prefix='/api', tags=['scan'])
 class _PrewarmRequest(BaseModel):
     symbols: list[str]
 
-# Load settings once at module level (patchable in tests via app.routers.scan._settings)
-_settings: dict = yaml.safe_load(
-    (_Path(__file__).parent.parent.parent / "config" / "settings.yaml").read_text()
-)
+# Load settings once at module level (patchable in tests via app.routers.scan._settings).
+# settings.yaml is gitignored (local override); settings.example.yaml is the committed
+# default, so a fresh checkout with no local settings.yaml still imports successfully.
+_SETTINGS_PATH = _Path(__file__).parent.parent.parent / "config" / "settings.yaml"
+_SETTINGS_EXAMPLE_PATH = _Path(__file__).parent.parent.parent / "config" / "settings.example.yaml"
+
+
+def _load_settings() -> dict:
+    path = _SETTINGS_PATH if _SETTINGS_PATH.exists() else _SETTINGS_EXAMPLE_PATH
+    return yaml.safe_load(path.read_text()) or {}
+
+
+_settings: dict = _load_settings()
 
 # ── Scheduler instance ───────────────────────────────────────────────────────
 

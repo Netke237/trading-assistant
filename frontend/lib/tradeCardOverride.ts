@@ -53,8 +53,10 @@ export function contractKeyFor(card: TradeCardData | undefined): string | null {
   return `${card.symbol}|${cd.strike}|${cd.expiry}|${cd.right}`;
 }
 
-/** Merge a resolved plan into an overridden card's Entry/Exit/RR. */
-export function mergePlan(card: OverriddenCard, plan: RecomputedPlanShape): TradeCardData {
+/** Merge a resolved plan into an overridden card's Entry/Exit/RR. Preserves
+ *  `_userOverride` via the spread — the return type reflects that instead of
+ *  narrowing it away. */
+export function mergePlan(card: OverriddenCard, plan: RecomputedPlanShape): OverriddenCard {
   return { ...card, entry: plan.entry, exit: plan.exit, rrRatio: plan.rrRatio, rrModel: plan.rrModel };
 }
 
