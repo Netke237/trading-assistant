@@ -12,14 +12,46 @@ Fixes:
 from __future__ import annotations
 
 # ── Test DB safety pin (MUST run before any app import) ───────────────────────
-# The app now defaults to PostgreSQL for dev (backend/.env), and several tests
-# import the real app.main:app without overriding get_db, so they use the
-# module-level engine built from DATABASE_URL. Pin that to the local SQLite file
-# during tests so the suite can NEVER connect to or mutate the real Postgres dev
-# database. An env var takes precedence over .env in pydantic-settings; setdefault
-# lets an explicit test DATABASE_URL still win if someone sets one.
+# Several tests import the real app.main:app without overriding get_db, so they
+# use the module-level engine built from DATABASE_URL (app/database.py builds it
+# once at import time). Pin that to an isolated file during tests so the suite
+# can NEVER connect to or mutate a real database.
+#
+# This used to pin to "sqlite+aiosqlite:///./dev.db" — but that is *also*
+# app/config.py's own hardcoded fallback default, and the real backend
+# (start-backend.bat runs `uvicorn app.main:app` from backend/ with no .env and
+# no DATABASE_URL set) resolves to that exact same relative path when Postgres
+# isn't configured. Since `cd backend && pytest` runs from the same directory,
+# the two pointed at the identical file. Any code path that reads/writes via the
+# raw module-level AsyncSessionLocal instead of the request-scoped, overridable
+# get_db dependency (restore_stock_from_db/restore_from_db on startup,
+# historical_store.py, fundamentals_store.py, ingestion_job.py,
+# portfolio_alert_monitor.py, regime_monitor.py, two spots in scan.py) would
+# read or write real local trading data during a test run — confirmed to have
+# actually happened, see the (now-removed) xfail on
+# test_portfolio_monitor.py::test_master_disabled_skips_all, which reproducibly
+# saw a real leftover position (symbol KDP) instead of test data.
+#
+# Fixed by pinning to a fresh, uniquely-named temp file every test session —
+# structurally unable to collide with the real default regardless of whether
+# the real backend is on Postgres or the SQLite fallback. An env var takes
+# precedence over .env in pydantic-settings; setdefault lets an explicit test
+# DATABASE_URL still win if someone sets one.
+import atexit
 import os
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./dev.db")
+import shutil
+import tempfile
+from pathlib import Path
+
+_TEST_DB_DIR = tempfile.mkdtemp(prefix="bamendjou-pytest-db-")
+atexit.register(shutil.rmtree, _TEST_DB_DIR, True)
+# Path(...).as_posix() normalizes to forward slashes — mkdtemp() returns
+# backslash-separated paths on Windows (the real user's dev OS, per
+# start-backend.bat), and a bare f-string would mix those with the URL's own
+# hardcoded "/", producing a fragile sqlite URL SQLAlchemy doesn't document
+# supporting on Windows.
+_TEST_DB_PATH = Path(_TEST_DB_DIR, "test.db").as_posix()
+os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
 
 import asyncio
 from typing import AsyncGenerator

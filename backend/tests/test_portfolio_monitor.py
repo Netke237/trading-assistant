@@ -75,27 +75,31 @@ def _reset_monitor_state():
     an._first_seen.clear()
 
 
-@pytest.mark.xfail(
-    reason="Pre-existing test-isolation gap, unrelated to any recent change: "
-           "conftest.py falls back to the real local dev.db (which holds live "
-           "position data, e.g. KDP) instead of an isolated DB when DATABASE_URL "
-           "isn't set, so this assertion sees real leftover data. Confirmed to "
-           "reproduce identically on commits predating this marker. Tracked as "
-           "a separate follow-up (see task_a7badc37 / conftest.py DB fixture).",
-    strict=False,
-)
 @pytest.mark.asyncio
 async def test_master_disabled_skips_all():
-    """masterEnabled=False short-circuits before any dispatch."""
+    """masterEnabled=False short-circuits before any dispatch — even with a
+    real alert-worthy position in play, generate_alerts/notify_alert must
+    never be reached. (A prior version of this test asserted only
+    notify_alert.assert_not_called() with no position fixture, which is
+    vacuously true regardless of the gate — there was nothing to alert on
+    either way. This reproduces the fixture from
+    test_position_alert_dispatched_via_notify_alert, which proves an alert
+    WOULD fire absent the gate, so the negative assertion here is meaningful.)"""
     from app.services import portfolio_alert_monitor as mon
     _reset_monitor_state()
 
+    fake_db = _fake_db_with_positions(['pos1'])
+
     with (
-        patch.object(mon, '_load_delivery_config', return_value={'masterEnabled': False}),
+        patch.object(mon, '_load_settings', return_value={'alert_delivery': {'masterEnabled': False}}),
+        patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[_make_alert('TP_HIT')])) as m_generate,
         patch.object(mon, 'notify_alert') as m_notify,
+        patch('app.services.portfolio_alert_monitor.AsyncSessionLocal', return_value=fake_db),
+        patch.object(mon.asyncio, 'to_thread', new=AsyncMock(return_value={'AAPL': {'last': 150.0}})),
     ):
         await mon._run_once()
 
+    m_generate.assert_not_called()
     m_notify.assert_not_called()
 
 
@@ -108,8 +112,8 @@ async def test_position_alert_dispatched_via_notify_alert():
     fake_db = _fake_db_with_positions(['pos1'])
 
     with (
-        patch.object(mon, '_load_delivery_config',
-                     return_value={'masterEnabled': True, 'enabledTypes': ['TP_HIT']}),
+        patch.object(mon, '_load_settings',
+                     return_value={'alert_delivery': {'masterEnabled': True, 'enabledTypes': ['TP_HIT']}}),
         patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[_make_alert('TP_HIT')])),
         patch.object(mon, 'notify_alert') as m_notify,
         patch.object(mon.alert_service, 'broadcast', new=AsyncMock()),
@@ -135,8 +139,8 @@ async def test_closed_position_calls_forget_alerts():
     fake_db = _fake_db_with_positions([])  # position closed this tick
 
     with (
-        patch.object(mon, '_load_delivery_config',
-                     return_value={'masterEnabled': True, 'enabledTypes': ['TP_HIT']}),
+        patch.object(mon, '_load_settings',
+                     return_value={'alert_delivery': {'masterEnabled': True, 'enabledTypes': ['TP_HIT']}}),
         patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[])),
         patch.object(mon, 'notify_alert'),
         patch.object(mon, 'forget_alerts') as m_forget,
@@ -158,8 +162,8 @@ async def test_regime_flip_dispatched():
     fake_db = _fake_db_with_positions([])  # no positions — only testing the flip
 
     with (
-        patch.object(mon, '_load_delivery_config',
-                     return_value={'masterEnabled': True, 'enabledTypes': ['REGIME_CHANGE']}),
+        patch.object(mon, '_load_settings',
+                     return_value={'alert_delivery': {'masterEnabled': True, 'enabledTypes': ['REGIME_CHANGE']}}),
         patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[])),
         patch.object(mon, 'notify_alert') as m_notify,
         patch.object(mon.alert_service, 'broadcast', new=AsyncMock()),
@@ -184,8 +188,8 @@ async def test_no_regime_flip_when_state_unchanged():
     fake_db = _fake_db_with_positions([])
 
     with (
-        patch.object(mon, '_load_delivery_config',
-                     return_value={'masterEnabled': True, 'enabledTypes': ['REGIME_CHANGE']}),
+        patch.object(mon, '_load_settings',
+                     return_value={'alert_delivery': {'masterEnabled': True, 'enabledTypes': ['REGIME_CHANGE']}}),
         patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[])),
         patch.object(mon, 'notify_alert') as m_notify,
         patch.object(mon.alert_service, 'broadcast', new=AsyncMock()),
