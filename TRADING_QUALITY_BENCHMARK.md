@@ -30,6 +30,11 @@ Per this skill's own rubric, insufficient real data to validate strategy perform
 
 **Round-1 adversarial audit of the fix plan** (foreground/synchronous, before any code was touched) caught 2 blockers and 4 majors — corrected before implementing: the Playwright "reproducibility" claim was subtler than first stated (see above); the planned isolated-clone verification method would have tested stale pre-fix code (a plain `git clone` only sees committed history — now: commit fixes locally first, then clone); `mean_reversion_rsi`/`mean_reversion_bb` need ≥219–225 bars of warmup against only ~251 fixture bars (addressed below); `mean_reversion_vwap` is documented intraday-only and invalid on daily bars (excluded from the real-backtest run); the "48 ESLint errors" figure hadn't actually been measured yet (measured: 47, matches once the ScanLog fix is accounted for); and the plan's branch-reuse was ambiguous (resolved: worked directly on `main`, matching the established no-PR pattern).
 
+**Round-2 adversarial audit of the actual code diff** (foreground/synchronous, after the fixes were committed locally, before pushing) independently re-verified every claim above by re-running the checks from scratch and re-deriving all 20 real-backtest cells — found the IndicatorPanel/mergePlan/scan.py/ESLint-override fixes all genuinely sound, but caught 2 more real issues:
+- **`playwright.yml` used `npm ci` against a gitignored, uncommitted lockfile** — a hard CI failure on every clean checkout, unrelated to but adjacent to this round's Playwright fix, and never checked until this audit. Fixed above.
+- **This round's own commit message overstated its test coverage** ("12 new/updated test files" — a stale figure copied from the prior round's commit, which actually had 12 *tests* across 2 *files*). This round genuinely touched only 1 test file directly, with no new regression coverage for `scan.py`'s settings fallback or the ScanLog hooks fix. Added both: `backend/tests/test_scan_settings_fallback.py` (4 tests covering the fallback logic directly) and `frontend/components/organisms/ScanLog/__tests__/ScanLog.hooksOrder.test.tsx` (4 tests, including a mount→re-render transition between zero and non-zero contract rejections — the exact scenario that would throw "Rendered fewer hooks than expected" if the bug recurred).
+- Also caught a **minor factual slip**: this report previously said "1380 passed" for the backend suite; actual count was 1381 at that point (now 1385 after the new tests above) — corrected.
+
 **New this round — real trader-quality evidence for axis 2** (see below): ran the actual `run_strategy_backtest()` against real historical data instead of only synthetic mechanics checks, per the user's direct feedback that axis 2 had never delivered an actual "experienced trader's opinion."
 
 ---
@@ -51,11 +56,12 @@ What it does **not** cover: whether the screener's trading edge is real. BMAD-st
 | Check | Result |
 |---|---|
 | `npm run typecheck` (frontend) | **PASS** — exit 0, with the stray root-level masking removed (proven self-contained) |
-| `npm run test -- --ci` (frontend, Jest) | **PASS** — 61 suites, 490 tests, 0 failures |
+| `npm run test -- --ci` (frontend, Jest) | **PASS** — 62 suites, 494 tests, 0 failures |
 | `npm run build` (frontend) | **PASS** — exit 0, 0 errors (was 47 errors, all fixed or scoped out as test-mock typing), 45 non-blocking warnings remain (pre-existing `exhaustive-deps`/unused-vars, not gating) |
 | `pytest --collect-only` with `settings.yaml` genuinely absent | **PASS** — 1383 tests collected, 0 import errors |
-| `pytest` (backend, full) | **PASS** — 1380 passed, 1 skipped, 1 xpassed, 0 failures |
+| `pytest` (backend, full) | **PASS** — 1385 passed, 1 skipped, 1 xpassed, 0 failures |
 | Quant-soundness regression suite | **PASS** — 56/56 |
+| `.github/workflows/playwright.yml` | **Fixed this round (round-2 audit finding)** — used `npm ci`, which requires a committed lockfile; `frontend/package-lock.json` is gitignored, so this workflow hard-failed on every clean checkout regardless of the dependency fix above. Changed to `npm install`, matching `ci.yml`'s existing approach, and removed the now-invalid `cache-dependency-path` pointing at a file that doesn't exist. |
 
 ### Prior audit (2026-05-05, BMAD) — all 6 findings still fixed
 
