@@ -1,7 +1,7 @@
 import { api } from '@/lib/api';
 import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
-import { useSettingsStore } from '@/lib/settingsStore';
+import { useSettingsStore, atrMultForHorizon } from '@/lib/settingsStore';
 import type { StockScanResult } from '@/types/stockDomain';
 
 /** Optional per-run param overrides (the page passes its locally-edited params). */
@@ -94,6 +94,15 @@ export async function runStockScan(
       overrides: stocksOverrides,
       confidence_caution_below: confidenceGate.enabled ? confidenceGate.cautionBelow : undefined,
       confidence_reject_below:  confidenceGate.enabled ? confidenceGate.rejectBelow  : undefined,
+      // ATR barriers always apply (they change what confidence measures,
+      // regardless of the gate) — Step-3 override wins per-field, else the
+      // Settings default for this scan's horizon.
+      confidence_atr_mult_target: typeof rawOverrides.confidence_atr_mult_target === 'number'
+        ? rawOverrides.confidence_atr_mult_target
+        : atrMultForHorizon(confidenceGate, context?.horizon ?? 'Swing').target,
+      confidence_atr_mult_stop: typeof rawOverrides.confidence_atr_mult_stop === 'number'
+        ? rawOverrides.confidence_atr_mult_stop
+        : atrMultForHorizon(confidenceGate, context?.horizon ?? 'Swing').stop,
       regime_headwind_caution_pct: typeof rawOverrides.regime_headwind_caution_pct === 'number' ? rawOverrides.regime_headwind_caution_pct : undefined,
       regime_headwind_reject_pct:  typeof rawOverrides.regime_headwind_reject_pct  === 'number' ? rawOverrides.regime_headwind_reject_pct  : undefined,
       fundamentals_caution_above:  typeof rawOverrides.fundamentals_caution_above  === 'number' ? rawOverrides.fundamentals_caution_above  : undefined,

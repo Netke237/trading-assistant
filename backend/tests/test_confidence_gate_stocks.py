@@ -13,9 +13,13 @@ def test_stock_scan_request_accepts_confidence_gate_fields():
         universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema",
         confidence_caution_below=50.0,
         confidence_reject_below=35.0,
+        confidence_atr_mult_target=3.0,
+        confidence_atr_mult_stop=1.5,
     )
     assert req.confidence_caution_below == 50.0
     assert req.confidence_reject_below == 35.0
+    assert req.confidence_atr_mult_target == 3.0
+    assert req.confidence_atr_mult_stop == 1.5
 
 
 def test_confidence_gate_fields_default_to_none():
@@ -24,6 +28,8 @@ def test_confidence_gate_fields_default_to_none():
     )
     assert req.confidence_caution_below is None
     assert req.confidence_reject_below is None
+    assert req.confidence_atr_mult_target is None
+    assert req.confidence_atr_mult_stop is None
 
 
 # ---------------------------------------------------------------------------
@@ -155,12 +161,12 @@ def test_confidence_gate_disabled_preserves_pass_status():
     )
 
 
-def test_stock_scan_cache_key_always_uses_default_atr_mult():
-    """stock_scan.py's call sites no longer accept a per-request atr_mult
-    override (the atrMult control was removed entirely — every live scan
-    now keys with atr_mult=None, i.e. the 'default' sentinel). This is the
-    stock-scan-specific regression guard; cache_key()'s own isolation between
-    explicit atr_mult values is covered directly in test_confidence_cache.py."""
+def test_stock_scan_atr_override_cache_key_is_distinct_from_default():
+    """stock_scan.py's call sites resolve req.confidence_atr_mult_target/_stop
+    (both-or-neither) and pass them through to conf_cache_key exactly as
+    routers/stock_scan.py itself does — a per-scan override must key
+    distinctly from a default (no-override) scan, or two different Settings
+    per-horizon pairs would silently share a cached confidence value."""
     import app.data.confidence_cache as cc
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
@@ -170,11 +176,14 @@ def test_stock_scan_cache_key_always_uses_default_atr_mult():
         cc._init_db()
         cc.clear_cache()
 
-        stock_key = cc.cache_key("AAPL", "Bullish", "Swing", scoring_mode="stock")
-        assert stock_key == cc.cache_key("AAPL", "Bullish", "Swing", None, scoring_mode="stock")
+        default_key = cc.cache_key("AAPL", "Bullish", "Swing", scoring_mode="stock")
+        override_key = cc.cache_key("AAPL", "Bullish", "Swing", 3.0, 1.5, scoring_mode="stock")
+        assert default_key != override_key
 
-        cc.set_cached(stock_key, {"confidence": 70, "sample_size": 50})
-        assert cc.get_cached(stock_key)["confidence"] == 70
+        cc.set_cached(default_key, {"confidence": 70, "sample_size": 50})
+        cc.set_cached(override_key, {"confidence": 40, "sample_size": 50})
+        assert cc.get_cached(default_key)["confidence"] == 70
+        assert cc.get_cached(override_key)["confidence"] == 40
     finally:
         cc._DB_PATH = original
         os.unlink(db_path)

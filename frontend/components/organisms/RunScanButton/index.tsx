@@ -18,7 +18,7 @@ import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useAlertStore } from '@/lib/alertStore';
-import { useSettingsStore } from '@/lib/settingsStore';
+import { useSettingsStore, atrMultForHorizon } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import { runStockScan } from '@/lib/stockScan';
 import { presetByKey, resolveParamsHorizon, sanitizeHoldDays } from '@/lib/horizonPresets';
@@ -133,6 +133,7 @@ export function RunScanButton() {
     // they must go in top-level filters, NOT in the score overrides dict.
     // Strip them here so they don't pollute the backend overrides map.
     const { confidence_caution_below: _cb, confidence_reject_below: _rb,
+            confidence_atr_mult_target: _amt, confidence_atr_mult_stop: _ams,
             ...scoreOnlyOverrides } = scanOverrides;
     const effectiveOverrides = { ...scoreOnlyOverrides, shortlist_max_candidates: shortlistMaxCandidates };
 
@@ -149,6 +150,13 @@ export function RunScanButton() {
       filters.confidence_caution_below = 0;
       filters.confidence_reject_below  = 0;
     }
+    // ATR barriers always apply (they change what confidence measures,
+    // regardless of the gate) — Step-3 override wins per-field, else the
+    // Settings default for this scan's horizon.
+    const atrOv = { target: scanOverrides.confidence_atr_mult_target, stop: scanOverrides.confidence_atr_mult_stop };
+    const atrDefault = atrMultForHorizon(gate, horizon);
+    filters.confidence_atr_mult_target = typeof atrOv.target === 'number' ? atrOv.target : atrDefault.target;
+    filters.confidence_atr_mult_stop   = typeof atrOv.stop   === 'number' ? atrOv.stop   : atrDefault.stop;
 
     // Fundamentals gate
     const fGate = fundamentalsGate;

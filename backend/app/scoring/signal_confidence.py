@@ -200,7 +200,9 @@ def compute_confidence(
     *,
     direction: str,
     horizon: str,
-    atr_mult: float | None = None,   # if None, uses config atr_mult_target/atr_mult_stop
+    atr_mult: float | None = None,          # legacy: symmetric override, both sides
+    atr_mult_target: float | None = None,   # preferred: asymmetric override (with atr_mult_stop)
+    atr_mult_stop: float | None = None,
     scoring_mode: str = "options",   # must match the scoring_mode the live caller scores with
 ) -> ConfidenceResult:
     """Replay the entry signal across history and score its reliability.
@@ -208,9 +210,11 @@ def compute_confidence(
     A 'fire' = score_stock(...).status == 'PASS' on bars up to and including i,
     using only price-derived rules (no event/iv inputs in the historical replay).
 
-    `atr_mult` overrides the configured ATR multiples for the win/loss barriers
-    (symmetric, both sides); when None, per-horizon atr_mult_target/atr_mult_stop
-    from config are used (asymmetric, preferred).
+    `atr_mult_target`/`atr_mult_stop` override the configured ATR multiples for
+    the win/loss barriers (asymmetric, preferred) — both must be supplied
+    together, or neither is used. `atr_mult` is a legacy symmetric override
+    (both sides equal) kept for direct callers/tests. When none are supplied,
+    per-horizon atr_mult_target/atr_mult_stop from config are used.
 
     `scoring_mode` must match the mode the live caller scores candidates with —
     'stock' and 'options' apply materially different rules (trigger scoring,
@@ -222,8 +226,10 @@ def compute_confidence(
     bt = load_backtest_cfg(horizon)
     n_days = int(bt["n_days"])
     atr_period = int(bt["atr_period"])
-    # Per-strategy asymmetric ATR: override uses same value for both (backward compat)
-    if atr_mult is not None:
+    if atr_mult_target is not None and atr_mult_stop is not None:
+        _atr_mult_target = float(atr_mult_target)
+        _atr_mult_stop   = float(atr_mult_stop)
+    elif atr_mult is not None:
         _atr_mult_target = float(atr_mult)
         _atr_mult_stop   = float(atr_mult)
     else:

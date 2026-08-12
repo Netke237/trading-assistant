@@ -315,43 +315,41 @@ async def _run_prefetch(symbols: list[str], years: int, delay_secs: float) -> No
                 bars = await get_bars(symbol, fetch_start, fetch_end)
                 _prefetch_state["done"] += 1
                 if bars:
-                    # Warm both live paths' actual cache-key shapes: the options
-                    # path (routers/scan.py) and the stocks path (routers/
-                    # stock_scan.py) both now always key/compute confidence with
-                    # atr_mult=None ("default" sentinel) — the per-request/global
-                    # atrMult override was removed entirely (it always discarded
-                    # the calibrated per-horizon asymmetric target/stop config;
-                    # see confidence_gate/confidence_backtest in scoring_rules.yaml).
-                    # The only remaining distinction between the two live paths is
-                    # scoring_mode ("stock" vs "options"), which still applies
-                    # materially different scoring rules and must stay separate.
-                    _variants = (
-                        (None, "stock"),
-                        (None, "options"),
-                    )
+                    # Warm both live paths' "no override" cache-key shape: the
+                    # options path (routers/scan.py) and the stocks path
+                    # (routers/stock_scan.py) both key/compute confidence with
+                    # atr_mult_target=atr_mult_stop=None ("default" sentinel) unless
+                    # the caller supplies a per-scan ATR override (Settings' per-
+                    # horizon confidenceGate.atrMult, or a Step-3 panel override) —
+                    # the prefetch has no way to know those ahead of a request, so
+                    # it only warms the no-override baseline. The only distinction
+                    # between the two live paths' baseline keys is scoring_mode
+                    # ("stock" vs "options"), which still applies materially
+                    # different scoring rules and must stay separate.
+                    _variants = ("stock", "options")
                     _combos = [
-                        (conf_cache_key(symbol, _d, _h, _mult, scoring_mode=_mode), _d, _h, _mult, _mode)
+                        (conf_cache_key(symbol, _d, _h, scoring_mode=_mode), _d, _h, _mode)
                         for _d in ("Bullish", "Bearish")
                         for _h in ("Intraday", "Swing", "Position")
-                        for _mult, _mode in _variants
-                        if get_cached(conf_cache_key(symbol, _d, _h, _mult, scoring_mode=_mode)) is None
+                        for _mode in _variants
+                        if get_cached(conf_cache_key(symbol, _d, _h, scoring_mode=_mode)) is None
                     ]
                     if _combos:
                         _conf_tasks = [
                             asyncio.to_thread(
                                 compute_confidence, bars,
-                                direction=_d, horizon=_h, atr_mult=None, scoring_mode=_mode,
+                                direction=_d, horizon=_h, scoring_mode=_mode,
                             )
-                            for _, _d, _h, _mult, _mode in _combos
+                            for _, _d, _h, _mode in _combos
                         ]
                         _conf_results = await asyncio.gather(
                             *_conf_tasks, return_exceptions=True
                         )
-                        for (_ck, _d, _h, _mult, _mode), _res in zip(_combos, _conf_results):
+                        for (_ck, _d, _h, _mode), _res in zip(_combos, _conf_results):
                             if isinstance(_res, BaseException):
                                 logger.debug(
-                                    "prefetch: confidence pre-warm failed %s/%s/%s/%s/%s — %s",
-                                    symbol, _d, _h, _mult, _mode, _res,
+                                    "prefetch: confidence pre-warm failed %s/%s/%s/%s — %s",
+                                    symbol, _d, _h, _mode, _res,
                                 )
                             else:
                                 set_cached(_ck, {

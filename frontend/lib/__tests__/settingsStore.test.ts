@@ -1,4 +1,4 @@
-import { useSettingsStore, migrateSettings, clampGateThresholds, DEFAULT_CONFIDENCE_GATE, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER, DEFAULT_TASTYTRADE_PAPER, DEFAULT_TASTYTRADE_LIVE, DEFAULT_TARGET_PROFIT_PCT } from '@/lib/settingsStore';
+import { useSettingsStore, migrateSettings, clampGateThresholds, atrMultForHorizon, DEFAULT_CONFIDENCE_GATE, DEFAULT_ATR_MULT_BY_HORIZON, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER, DEFAULT_TASTYTRADE_PAPER, DEFAULT_TASTYTRADE_LIVE, DEFAULT_TARGET_PROFIT_PCT } from '@/lib/settingsStore';
 
 // Reset store state before each test
 beforeEach(() => {
@@ -57,29 +57,53 @@ describe('settingsStore — migrate is cumulative', () => {
     expect(result.confidenceGate).toEqual(DEFAULT_CONFIDENCE_GATE);
   });
 
-  it('migrating from v22 removes atrMult from an existing gate', () => {
+  it('migrating from v22 restructures a legacy numeric atrMult into per-horizon pairs', () => {
     const result = migrateSettings(
       { confidenceGate: { enabled: true, cautionBelow: 60, rejectBelow: 40, atrMult: 2.0 } },
       21,
     ) as unknown as Record<string, unknown>;
     const gate = result.confidenceGate as Record<string, unknown>;
-    expect('atrMult' in gate).toBe(false);
+    expect(gate.atrMult).toEqual(DEFAULT_ATR_MULT_BY_HORIZON);
     expect(gate.cautionBelow).toBe(60); // existing value preserved
     expect(gate.rejectBelow).toBe(40);
+  });
+
+  it('migrating from v22 leaves an already-nested atrMult untouched', () => {
+    const nested = { intraday: { target: 1.0, stop: 1.0 }, swing: { target: 1.0, stop: 1.0 }, position: { target: 1.0, stop: 1.0 } };
+    const result = migrateSettings(
+      { confidenceGate: { enabled: true, cautionBelow: 60, rejectBelow: 40, atrMult: nested } },
+      21,
+    ) as unknown as Record<string, unknown>;
+    const gate = result.confidenceGate as Record<string, unknown>;
+    expect(gate.atrMult).toEqual(nested);
   });
 });
 
 describe('settingsStore — confidenceGate', () => {
-  it('defaults to enabled 50/35', () => {
+  it('defaults to enabled 50/35 with per-horizon ATR pairs', () => {
     expect(useSettingsStore.getState().confidenceGate).toEqual({
-      enabled: true, cautionBelow: 50, rejectBelow: 35,
+      enabled: true, cautionBelow: 50, rejectBelow: 35, atrMult: DEFAULT_ATR_MULT_BY_HORIZON,
     });
   });
 
   it('setConfidenceGate updates the value', () => {
-    useSettingsStore.getState().setConfidenceGate({ enabled: true, cautionBelow: 60, rejectBelow: 40 });
+    useSettingsStore.getState().setConfidenceGate({
+      enabled: true, cautionBelow: 60, rejectBelow: 40, atrMult: DEFAULT_ATR_MULT_BY_HORIZON,
+    });
     expect(useSettingsStore.getState().confidenceGate.cautionBelow).toBe(60);
     expect(useSettingsStore.getState().confidenceGate.rejectBelow).toBe(40);
+  });
+});
+
+describe('atrMultForHorizon', () => {
+  it('resolves intraday/swing/position by first word, case-insensitively', () => {
+    expect(atrMultForHorizon(DEFAULT_CONFIDENCE_GATE, 'Intraday')).toEqual({ target: 2.0, stop: 1.5 });
+    expect(atrMultForHorizon(DEFAULT_CONFIDENCE_GATE, 'swing')).toEqual({ target: 3.0, stop: 1.5 });
+    expect(atrMultForHorizon(DEFAULT_CONFIDENCE_GATE, 'Position (15-45d)')).toEqual({ target: 2.5, stop: 1.5 });
+  });
+
+  it('falls back to swing for an unrecognized horizon', () => {
+    expect(atrMultForHorizon(DEFAULT_CONFIDENCE_GATE, 'Quarterly')).toEqual({ target: 3.0, stop: 1.5 });
   });
 });
 

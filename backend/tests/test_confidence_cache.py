@@ -83,24 +83,37 @@ def test_cache_key_is_stable_and_distinct():
     assert cc.cache_key("AAPL", "Bullish", "Swing") != cc.cache_key("AAPL", "Bearish", "Swing")
 
 
-def test_cache_key_includes_atr_mult():
+def test_cache_key_includes_atr_mult_target_and_stop():
     import app.data.confidence_cache as cc
-    assert cc.cache_key("AAPL", "Bullish", "Swing", 1.5) != cc.cache_key("AAPL", "Bullish", "Swing", 2.0)
-    assert cc.cache_key("AAPL", "Bullish", "Swing", 1.5) == cc.cache_key("AAPL", "Bullish", "Swing", 1.5)
+    assert cc.cache_key("AAPL", "Bullish", "Swing", 3.0, 1.5) != cc.cache_key("AAPL", "Bullish", "Swing", 2.0, 1.5)
+    assert cc.cache_key("AAPL", "Bullish", "Swing", 3.0, 1.5) != cc.cache_key("AAPL", "Bullish", "Swing", 3.0, 2.0)
+    assert cc.cache_key("AAPL", "Bullish", "Swing", 3.0, 1.5) == cc.cache_key("AAPL", "Bullish", "Swing", 3.0, 1.5)
 
 
 def test_cache_key_default_does_not_collide_with_explicit_default_value():
     import app.data.confidence_cache as cc
-    assert cc.cache_key("AAPL", "Bullish", "Swing", None) != cc.cache_key("AAPL", "Bullish", "Swing", 1.5)
+    assert cc.cache_key("AAPL", "Bullish", "Swing", None, None) != cc.cache_key("AAPL", "Bullish", "Swing", 3.0, 1.5)
 
 
 def test_cache_key_omitting_atr_mult_matches_explicit_none():
-    """Regression: after the atrMult-control removal, every live caller omits
-    atr_mult entirely. Omitting it must produce the same 'default' sentinel as
-    passing None explicitly — not silently key as the old 1.5 default."""
+    """Regression: a scan with no per-scan ATR override and no Settings
+    per-horizon default resolved must key identically whether atr_mult_target/
+    stop are omitted or passed explicitly as None — not silently collide with
+    some other explicit pair."""
     import app.data.confidence_cache as cc
-    assert cc.cache_key("AAPL", "Bullish", "Swing") == cc.cache_key("AAPL", "Bullish", "Swing", None)
-    assert cc.cache_key("AAPL", "Bullish", "Swing") != cc.cache_key("AAPL", "Bullish", "Swing", 1.5)
+    assert cc.cache_key("AAPL", "Bullish", "Swing") == cc.cache_key("AAPL", "Bullish", "Swing", None, None)
+    assert cc.cache_key("AAPL", "Bullish", "Swing") != cc.cache_key("AAPL", "Bullish", "Swing", 3.0, 1.5)
+
+
+def test_cache_key_lone_target_or_stop_still_distinguishes_from_default():
+    """A key with only one side overridden (the other left at its 'default'
+    sentinel) is still distinct from the all-default key and from a key with
+    both sides overridden — this shape is never produced by live callers
+    (routers/scan.py and routers/stock_scan.py always apply both-or-neither),
+    but cache_key() itself must not collapse it."""
+    import app.data.confidence_cache as cc
+    assert cc.cache_key("AAPL", "Bullish", "Swing", 3.0, None) != cc.cache_key("AAPL", "Bullish", "Swing")
+    assert cc.cache_key("AAPL", "Bullish", "Swing", 3.0, None) != cc.cache_key("AAPL", "Bullish", "Swing", 3.0, 1.5)
 
 
 def test_ttl_evicts_stale_entries(monkeypatch):

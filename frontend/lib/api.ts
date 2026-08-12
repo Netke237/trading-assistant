@@ -394,6 +394,7 @@ export const api = {
     filters?: {
       min_price?: number; max_price?: number; min_cap_usd?: number; max_cap_usd?: number;
       confidence_caution_below?: number; confidence_reject_below?: number;
+      confidence_atr_mult_target?: number; confidence_atr_mult_stop?: number;
       fundamentals_enabled?: boolean;
       fundamentals_caution_below?: number;
       fundamentals_reject_below?: number;
@@ -440,6 +441,8 @@ export const api = {
     overrides?: Record<string, number | boolean | string>;
     confidence_caution_below?: number;
     confidence_reject_below?:  number;
+    confidence_atr_mult_target?: number;
+    confidence_atr_mult_stop?:   number;
     regime_headwind_caution_pct?: number;
     regime_headwind_reject_pct?:  number;
     fundamentals_caution_above?:  number;

@@ -50,6 +50,11 @@ class StockScanRequest(BaseModel):
     # When None, the gate is disabled (backend falls back to scoring_rules.yaml defaults).
     confidence_caution_below: Optional[float] = None  # win-rate < this → cap at CAUTION
     confidence_reject_below:  Optional[float] = None  # win-rate < this → cap at REJECT
+    # Per-scan ATR win/loss barrier override (asymmetric — must be provided
+    # together; a lone target or stop is ignored, see routers/stock_scan.py).
+    # When both are None, the per-horizon config in scoring_rules.yaml applies.
+    confidence_atr_mult_target: Optional[float] = None
+    confidence_atr_mult_stop:   Optional[float] = None
     # Per-scan regime gate overrides — sector headwind thresholds.
     regime_headwind_caution_pct: Optional[float] = None
     regime_headwind_reject_pct:  Optional[float] = None

@@ -41,17 +41,55 @@ export interface BrokerConfig {
   paperTrading: boolean;
 }
 
+export interface AtrMultPair {
+  target: number;   // win barrier = target × ATR
+  stop:   number;   // loss barrier = stop × ATR
+}
+
+export interface AtrMultByHorizon {
+  intraday: AtrMultPair;
+  swing:    AtrMultPair;
+  position: AtrMultPair;
+}
+
 export interface ConfidenceGate {
   enabled:      boolean;
   cautionBelow: number;   // confidence < this -> cap at CAUTION
   rejectBelow:  number;   // confidence < this -> cap at REJECT
+  // Per-horizon backtest win/loss ATR barriers — a single symmetric multiple
+  // can't represent backend/config/scoring_rules.yaml's calibrated per-horizon
+  // ASYMMETRIC atr_mult_target/atr_mult_stop (e.g. swing targets ~3 ATR but
+  // risks only ~1.5 ATR stop), so each horizon gets its own target/stop pair.
+  atrMult: AtrMultByHorizon;
 }
+
+export const DEFAULT_ATR_MULT_BY_HORIZON: AtrMultByHorizon = {
+  intraday: { target: 2.0, stop: 1.5 },
+  swing:    { target: 3.0, stop: 1.5 },
+  position: { target: 2.5, stop: 1.5 },
+};
 
 export const DEFAULT_CONFIDENCE_GATE: ConfidenceGate = {
   enabled: true,
   cautionBelow: 50,
   rejectBelow: 35,
+  atrMult: { ...DEFAULT_ATR_MULT_BY_HORIZON },
 };
+
+/**
+ * Resolve the per-horizon ATR target/stop pair for a scan's horizon string
+ * (e.g. "Swing", "Intraday", "Position", or a full display string like
+ * "Swing (5-15d)" — only the first word is matched, case-insensitively).
+ * Falls back to the swing pair for any unrecognized horizon (Quarterly/
+ * SemiAnnual/Annual all resolve to "Position" upstream via scoringHorizon,
+ * so this should only miss on a genuinely new/typo'd horizon name).
+ */
+export function atrMultForHorizon(gate: ConfidenceGate, horizon: string): AtrMultPair {
+  const key = horizon.trim().split(/\s+/)[0]?.toLowerCase();
+  if (key === 'intraday') return gate.atrMult.intraday;
+  if (key === 'position') return gate.atrMult.position;
+  return gate.atrMult.swing;
+}
 
 /**
  * Clamps a paired cautionBelow/rejectBelow threshold edit into a valid range:
@@ -310,12 +348,14 @@ export function migrateSettings(
     next.targetProfitPct = { ...DEFAULT_TARGET_PROFIT_PCT };
   }
   if (version < 22) {
-    // atrMult removed: it always forced a single symmetric ATR multiple into
-    // compute_confidence, discarding the calibrated per-horizon asymmetric
-    // atr_mult_target/atr_mult_stop config — see confidence_backtest in
-    // backend/config/scoring_rules.yaml.
-    const gate = { ...(next.confidenceGate ?? DEFAULT_CONFIDENCE_GATE) } as Partial<ConfidenceGate> & { atrMult?: number };
-    delete gate.atrMult;
+    // atrMult restructured: a single symmetric multiple always overrode
+    // compute_confidence's calibrated per-horizon ASYMMETRIC atr_mult_target/
+    // atr_mult_stop config (see confidence_backtest in backend/config/
+    // scoring_rules.yaml) — replaced with a target/stop pair per horizon.
+    const gate = { ...(next.confidenceGate ?? DEFAULT_CONFIDENCE_GATE) } as Partial<ConfidenceGate> & { atrMult?: unknown };
+    if (typeof gate.atrMult !== 'object' || gate.atrMult === null) {
+      gate.atrMult = { ...DEFAULT_ATR_MULT_BY_HORIZON };
+    }
     next.confidenceGate = gate as ConfidenceGate;
   }
   return next as unknown as SettingsState;

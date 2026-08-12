@@ -110,10 +110,13 @@ def test_get_prefetch_status_returns_dict():
 
 def test_prefetch_warms_both_options_and_stock_cache_keys(monkeypatch):
     """The Load History prefetch job must warm BOTH the live options-path's cache key
-    AND the live stocks-path's cache key. Since the atrMult control was removed
-    entirely, both live paths now always key/compute confidence with atr_mult=None
-    (the 'default' sentinel) — the only remaining distinction is scoring_mode
-    ('stock' vs 'options'), which still applies materially different scoring rules.
+    AND the live stocks-path's cache key, each at the 'no override' baseline (the
+    prefetch has no way to know a caller's per-scan ATR target/stop override ahead
+    of a request — see settingsStore.ts's per-horizon confidenceGate.atrMult and
+    step-3-direction/page.tsx's confidence_atr_mult_target/_stop panel rows — so
+    it only warms the baseline that a scan with no override reads). The only
+    distinction between the two baseline keys is scoring_mode ('stock' vs
+    'options'), which still applies materially different scoring rules.
     Repointing the prefetch entirely to one scoring_mode would silently regress
     the other path's warm-cache hit — this test guards against that."""
     import tempfile
@@ -149,20 +152,17 @@ def test_prefetch_warms_both_options_and_stock_cache_keys(monkeypatch):
         assert stock_calls, "prefetch never computed a scoring_mode='stock' variant"
         assert options_calls, "prefetch stopped computing the options-path variant — regression"
 
-        # Both variants must compute with atr_mult=None — the only value any live
-        # path ever passes now that the per-request/global atrMult override is gone.
-        assert all(kw.get("atr_mult") is None for kw in stock_calls), (
-            "stock variant must call compute_confidence with atr_mult=None"
-        )
-        assert all(kw.get("atr_mult") is None for kw in options_calls), (
-            "options variant computed confidence with atr_mult != None — this no "
-            "longer matches what routers/scan.py ever passes to compute_confidence, "
-            "so the prefetch would warm the cache under a key the live scan path "
-            "never reads (regression)"
-        )
+        # Both variants must compute with the config default — no atr_mult/
+        # atr_mult_target/atr_mult_stop override passed — matching a real scan
+        # that resolves no per-scan or Settings override (the baseline both live
+        # paths read absent an explicit request-level override).
+        for kw in stock_calls + options_calls:
+            assert kw.get("atr_mult") is None
+            assert kw.get("atr_mult_target") is None
+            assert kw.get("atr_mult_stop") is None
 
-        # Both live paths' actual key shapes must be warmed — both now key with
-        # atr_mult=None ("default"), differing only by scoring_mode.
+        # Both live paths' baseline key shapes must be warmed — both key with
+        # atr_mult_target=atr_mult_stop=None ("default"), differing only by scoring_mode.
         stock_key = cc.cache_key("AAPL", "Bullish", "Swing", scoring_mode="stock")
         options_key = cc.cache_key("AAPL", "Bullish", "Swing", scoring_mode="options")
         assert cc.get_cached(stock_key) is not None, "stocks-path key was not warmed"

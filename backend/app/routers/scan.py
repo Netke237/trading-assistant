@@ -446,6 +446,8 @@ async def _process_symbol(
     dte_bounds: tuple[int, int] | None = None,
     hold_max_days: int | None = None,
     gate: dict | None = None,
+    atr_mult_target: float | None = None,
+    atr_mult_stop: float | None = None,
     price_map: dict | None = None,
     bars_map: dict | None = None,
     fund_map: dict | None = None,
@@ -617,11 +619,14 @@ async def _process_symbol(
     _conf: int | None = None
     _conf_n: int = 0
     if gate is not None:
-        _ck = confidence_cache.cache_key(symbol, direction, horizon, scoring_mode="options")
+        _ck = confidence_cache.cache_key(
+            symbol, direction, horizon, atr_mult_target, atr_mult_stop, scoring_mode="options"
+        )
         _cached = confidence_cache.get_cached(_ck)
         if _cached is None:
             _res = await asyncio.to_thread(
-                compute_confidence, candles, direction=direction, horizon=horizon
+                compute_confidence, candles, direction=direction, horizon=horizon,
+                atr_mult_target=atr_mult_target, atr_mult_stop=atr_mult_stop,
             )
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
             confidence_cache.set_cached(_ck, _cached)
@@ -1123,6 +1128,11 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
         raise HTTPException(status_code=422, detail=str(e))
 
     gate = _resolve_gate(req)
+    # Asymmetric ATR override — a lone target or stop is ignored (both or neither).
+    _atr_target = req.confidence_atr_mult_target
+    _atr_stop = req.confidence_atr_mult_stop
+    if _atr_target is None or _atr_stop is None:
+        _atr_target = _atr_stop = None
 
     candidates: list[TradeCardData] = []
     rejected: list[RejectedCandidate] = []
@@ -1213,6 +1223,8 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 dte_bounds=_dte_bounds,
                 hold_max_days=req.hold_max_days,
                 gate=gate,
+                atr_mult_target=_atr_target,
+                atr_mult_stop=_atr_stop,
                 price_map=price_map,
                 bars_map=bars_map,
                 fund_map=fund_map,

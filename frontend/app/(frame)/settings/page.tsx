@@ -14,7 +14,7 @@
 import React, { useState, useEffect } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
-import { useSettingsStore, MARKOV_PRESETS, clampGateThresholds, type MarkovPreset, type MarkovConfig, type FundamentalsGate, type ScheduleConfig, DEFAULT_SCHEDULE_CONFIG } from '@/lib/settingsStore';
+import { useSettingsStore, MARKOV_PRESETS, clampGateThresholds, type MarkovPreset, type MarkovConfig, type FundamentalsGate, type AtrMultPair, type ScheduleConfig, DEFAULT_SCHEDULE_CONFIG } from '@/lib/settingsStore';
 import { useIvThresholdsStore, type HorizonIvThresholds } from '@/lib/ivThresholdsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
@@ -118,6 +118,59 @@ function Row({
       </div>
       <div className={styles.rowControl}>{children}</div>
     </div>
+  );
+}
+
+function AtrPairRow({
+  label,
+  hint,
+  pair,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  pair: AtrMultPair;
+  onChange: (pair: AtrMultPair) => void;
+}) {
+  const [targetText, setTargetText] = useState(String(pair.target));
+  const [stopText,   setStopText]   = useState(String(pair.stop));
+
+  useEffect(() => { setTargetText(String(pair.target)); }, [pair.target]);
+  useEffect(() => { setStopText(String(pair.stop));     }, [pair.stop]);
+
+  return (
+    <Row label={label} hint={hint} defaultValue={`${pair.target} target / ${pair.stop} stop`}>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <input
+          type="text"
+          inputMode="decimal"
+          className={styles.input}
+          value={targetText}
+          onChange={(e) => setTargetText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(targetText);
+            const clamped = isNaN(val) ? pair.target : Math.max(0.5, Math.min(5, val));
+            setTargetText(String(clamped));
+            onChange({ ...pair, target: clamped });
+          }}
+        />
+        <Text size={11} tone="dim">target /</Text>
+        <input
+          type="text"
+          inputMode="decimal"
+          className={styles.input}
+          value={stopText}
+          onChange={(e) => setStopText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(stopText);
+            const clamped = isNaN(val) ? pair.stop : Math.max(0.5, Math.min(5, val));
+            setStopText(String(clamped));
+            onChange({ ...pair, stop: clamped });
+          }}
+        />
+        <Text size={11} tone="dim">stop</Text>
+      </div>
+    </Row>
   );
 }
 
@@ -384,6 +437,24 @@ function ScanForm() {
           }}
         />
       </Row>
+      <AtrPairRow
+        label="ATR multiple — Intraday"
+        hint="Backtest win/loss barrier for Intraday scans = target/stop × ATR (0.5–5)"
+        pair={confidenceGate.atrMult.intraday}
+        onChange={(pair) => setConfidenceGate({ ...confidenceGate, atrMult: { ...confidenceGate.atrMult, intraday: pair } })}
+      />
+      <AtrPairRow
+        label="ATR multiple — Swing"
+        hint="Backtest win/loss barrier for Swing scans = target/stop × ATR (0.5–5)"
+        pair={confidenceGate.atrMult.swing}
+        onChange={(pair) => setConfidenceGate({ ...confidenceGate, atrMult: { ...confidenceGate.atrMult, swing: pair } })}
+      />
+      <AtrPairRow
+        label="ATR multiple — Position"
+        hint="Backtest win/loss barrier for Position scans (incl. Quarterly/Semi-annual/Annual) = target/stop × ATR (0.5–5)"
+        pair={confidenceGate.atrMult.position}
+        onChange={(pair) => setConfidenceGate({ ...confidenceGate, atrMult: { ...confidenceGate.atrMult, position: pair } })}
+      />
       <FundamentalsGateSection
         gate={fundamentalsGate}
         setGate={setFundamentalsGate}
