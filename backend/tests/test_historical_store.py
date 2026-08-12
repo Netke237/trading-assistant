@@ -110,21 +110,15 @@ def test_get_prefetch_status_returns_dict():
 
 def test_prefetch_warms_both_options_and_stock_cache_keys(monkeypatch):
     """The Load History prefetch job must warm BOTH the live options-path's cache key
-    (atr_mult=1.5, scoring_mode='options' — the prefetch's pre-existing, correct
-    behavior) AND the live stocks-path's cache key (atr_mult=None -> 'default'
-    sentinel, scoring_mode='stock' — the bug this task fixes). Repointing the
-    prefetch entirely to scoring_mode='stock' would silently regress the
-    options path's warm-cache hit while fixing the stocks path — this test
-    guards against that regression, not just the original bug.
-
-    It also guards a second, subtler regression: routers/scan.py's live
-    options-scan path forces atr_mult=1.5 into its CACHE KEY (_atr_for_key)
-    but always calls compute_confidence with the raw, un-forced atr_mult —
-    which is None in the common case (no per-request override). So the
-    prefetch's "options" variant must compute confidence with atr_mult=None
-    even though its cache key is labeled 1.5 — computing with atr_mult=1.5
-    would cache a numerically different value under the key the live path
-    reads, silently poisoning the REJECT gate."""
+    AND the live stocks-path's cache key, each at the 'no override' baseline (the
+    prefetch has no way to know a caller's per-scan ATR target/stop override ahead
+    of a request — see settingsStore.ts's per-horizon confidenceGate.atrMult and
+    step-3-direction/page.tsx's confidence_atr_mult_target/_stop panel rows — so
+    it only warms the baseline that a scan with no override reads). The only
+    distinction between the two baseline keys is scoring_mode ('stock' vs
+    'options'), which still applies materially different scoring rules.
+    Repointing the prefetch entirely to one scoring_mode would silently regress
+    the other path's warm-cache hit — this test guards against that."""
     import tempfile
     import os
     import app.data.confidence_cache as cc
@@ -158,24 +152,19 @@ def test_prefetch_warms_both_options_and_stock_cache_keys(monkeypatch):
         assert stock_calls, "prefetch never computed a scoring_mode='stock' variant"
         assert options_calls, "prefetch stopped computing the options-path variant — regression"
 
-        # Both variants must actually COMPUTE with atr_mult=None — matching what
-        # routers/scan.py's live options-scan path passes to compute_confidence in
-        # the common case (no per-request confidence_atr_mult override). The
-        # options variant's cache KEY is still labeled 1.5 (asserted below via
-        # options_key) — only the value passed to compute_confidence must be None.
-        assert all(kw.get("atr_mult") is None for kw in stock_calls), (
-            "stock variant must call compute_confidence with atr_mult=None"
-        )
-        assert all(kw.get("atr_mult") is None for kw in options_calls), (
-            "options variant computed confidence with atr_mult != None (likely 1.5) — "
-            "this mismatches what routers/scan.py actually passes to compute_confidence "
-            "in the common case, so the prefetch would warm the cache with the wrong "
-            "confidence value under the key the live scan path reads (regression)"
-        )
+        # Both variants must compute with the config default — no atr_mult/
+        # atr_mult_target/atr_mult_stop override passed — matching a real scan
+        # that resolves no per-scan or Settings override (the baseline both live
+        # paths read absent an explicit request-level override).
+        for kw in stock_calls + options_calls:
+            assert kw.get("atr_mult") is None
+            assert kw.get("atr_mult_target") is None
+            assert kw.get("atr_mult_stop") is None
 
-        # Both live paths' actual key shapes must be warmed.
-        stock_key = cc.cache_key("AAPL", "Bullish", "Swing", None, scoring_mode="stock")
-        options_key = cc.cache_key("AAPL", "Bullish", "Swing", 1.5, scoring_mode="options")
+        # Both live paths' baseline key shapes must be warmed — both key with
+        # atr_mult_target=atr_mult_stop=None ("default"), differing only by scoring_mode.
+        stock_key = cc.cache_key("AAPL", "Bullish", "Swing", scoring_mode="stock")
+        options_key = cc.cache_key("AAPL", "Bullish", "Swing", scoring_mode="options")
         assert cc.get_cached(stock_key) is not None, "stocks-path key was not warmed"
         assert cc.get_cached(options_key) is not None, "options-path key was not warmed (regression)"
     finally:

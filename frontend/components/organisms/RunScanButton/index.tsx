@@ -18,7 +18,7 @@ import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useAlertStore } from '@/lib/alertStore';
-import { useSettingsStore } from '@/lib/settingsStore';
+import { useSettingsStore, atrMultForHorizon } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import { runStockScan } from '@/lib/stockScan';
 import { presetByKey, resolveParamsHorizon, sanitizeHoldDays } from '@/lib/horizonPresets';
@@ -133,18 +133,16 @@ export function RunScanButton() {
     // they must go in top-level filters, NOT in the score overrides dict.
     // Strip them here so they don't pollute the backend overrides map.
     const { confidence_caution_below: _cb, confidence_reject_below: _rb,
-            confidence_atr_mult: _am, ...scoreOnlyOverrides } = scanOverrides;
+            confidence_atr_mult_target: _amt, confidence_atr_mult_stop: _ams,
+            ...scoreOnlyOverrides } = scanOverrides;
     const effectiveOverrides = { ...scoreOnlyOverrides, shortlist_max_candidates: shortlistMaxCandidates };
 
     // Confidence gate: persisted Settings default, overridden per-scan by the
     // Execution Parameters panel (Step 3, Stocks section) which writes scanOverrides.
     // Disabled gate -> send 0/0 thresholds so confidence can never demote.
-    // ATR always applies (it changes the computed confidence regardless of the gate).
     const gate = useSettingsStore.getState().confidenceGate;
     const cautionOv = scanOverrides.confidence_caution_below;
     const rejectOv  = scanOverrides.confidence_reject_below;
-    const atrOv     = scanOverrides.confidence_atr_mult;
-    filters.confidence_atr_mult = typeof atrOv === 'number' ? atrOv : gate.atrMult;
     if (gate.enabled) {
       filters.confidence_caution_below = typeof cautionOv === 'number' ? cautionOv : gate.cautionBelow;
       filters.confidence_reject_below  = typeof rejectOv === 'number' ? rejectOv : gate.rejectBelow;
@@ -152,6 +150,21 @@ export function RunScanButton() {
       filters.confidence_caution_below = 0;
       filters.confidence_reject_below  = 0;
     }
+    // ATR barriers always apply (they change what confidence measures,
+    // regardless of the gate). Both-or-neither: a lone target/stop override
+    // in Step 3 (without the other) is ignored entirely, falling back to the
+    // full Settings default pair for this scan's horizon — a mismatched pair
+    // must never be sent, since it would silently bypass the backend's own
+    // both-or-neither guard (which only nulls a pair when it receives an
+    // explicit None on one side, not two mismatched numbers).
+    const hasFullAtrOverride =
+      typeof scanOverrides.confidence_atr_mult_target === 'number' &&
+      typeof scanOverrides.confidence_atr_mult_stop === 'number';
+    const atrPair = hasFullAtrOverride
+      ? { target: scanOverrides.confidence_atr_mult_target as number, stop: scanOverrides.confidence_atr_mult_stop as number }
+      : atrMultForHorizon(gate, horizon);
+    filters.confidence_atr_mult_target = atrPair.target;
+    filters.confidence_atr_mult_stop   = atrPair.stop;
 
     // Fundamentals gate
     const fGate = fundamentalsGate;

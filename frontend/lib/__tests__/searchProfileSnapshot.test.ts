@@ -1,7 +1,7 @@
 import { useUniverseStore } from '@/lib/universeStore';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore, SCAN_PARAM_DEFAULTS } from '@/lib/scanParamsStore';
-import { useSettingsStore, DEFAULT_CONFIDENCE_GATE, DEFAULT_FUNDAMENTALS_GATE, DEFAULT_SPREADS } from '@/lib/settingsStore';
+import { useSettingsStore, DEFAULT_CONFIDENCE_GATE, DEFAULT_ATR_MULT_BY_HORIZON, DEFAULT_FUNDAMENTALS_GATE, DEFAULT_SPREADS } from '@/lib/settingsStore';
 import { captureCurrentSnapshot, applySearchProfile, stableStringify } from '@/lib/searchProfileSnapshot';
 
 function resetStores() {
@@ -133,7 +133,7 @@ describe('captureCurrentSnapshot — options mode', () => {
 describe('scanSettings mode-asymmetry', () => {
   it('captures and restores all four fields for an options profile', () => {
     useSettingsStore.setState({
-      confidenceGate: { enabled: false, cautionBelow: 55, rejectBelow: 40, atrMult: 2.0 },
+      confidenceGate: { enabled: false, cautionBelow: 55, rejectBelow: 40, atrMult: DEFAULT_ATR_MULT_BY_HORIZON },
       fundamentalsGate: { enabled: false, cautionBelow: 60, rejectBelow: 50, deReject: 4.0 },
       shortlistMaxCandidates: 25,
       spreads: { shortLegDelta: 0.25, widthPoints: 10, ivRankThreshold: 60, minCredit: 1.0, maxDebitPctOfWidth: 50 },
@@ -155,7 +155,7 @@ describe('scanSettings mode-asymmetry', () => {
 
   it('captures only confidenceGate for a stocks profile, and applying it leaves the other three untouched', () => {
     useSettingsStore.setState({
-      confidenceGate: { enabled: false, cautionBelow: 55, rejectBelow: 40, atrMult: 2.0 },
+      confidenceGate: { enabled: false, cautionBelow: 55, rejectBelow: 40, atrMult: DEFAULT_ATR_MULT_BY_HORIZON },
       fundamentalsGate: { enabled: false, cautionBelow: 60, rejectBelow: 50, deReject: 4.0 },
       shortlistMaxCandidates: 25,
       spreads: { shortLegDelta: 0.25, widthPoints: 10, ivRankThreshold: 60, minCredit: 1.0, maxDebitPctOfWidth: 50 },

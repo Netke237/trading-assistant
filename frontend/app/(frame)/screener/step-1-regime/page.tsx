@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
+import { toneForStatus } from '@/lib/status';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
@@ -30,13 +31,6 @@ import type { Candle } from '@/types/chart';
 import { alignmentVerdict, descriptorFromState } from '@/lib/regimeAlignment';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
-
-function toneFor(status: string): 'pass' | 'caution' | 'reject' | undefined {
-  if (status === 'PASS')    return 'pass';
-  if (status === 'CAUTION') return 'caution';
-  if (status === 'REJECT')  return 'reject';
-  return undefined;
-}
 
 function lastClose(candles: Candle[]): { close: number; changePct: number } {
   const last = candles[candles.length - 1];
@@ -232,7 +226,7 @@ export default function Step1RegimePage() {
           <div key={m.label} className={pageStyles.metricCard}>
             <Text size={12} tone="secondary">{m.label}</Text>
             <div className={pageStyles.metricValueRow}>
-              <Data size={18} weight={500} tone={toneFor(m.status)}>{m.value}</Data>
+              <Data size={18} weight={500} tone={toneForStatus(m.status)}>{m.value}</Data>
               {m.trend === 'up'   && <span className={pageStyles.trendUp}>↑</span>}
               {m.trend === 'down' && <span className={pageStyles.trendDown}>↓</span>}
             </div>
@@ -383,7 +377,7 @@ export default function Step1RegimePage() {
           >
             <div className={pageStyles.sectorRow}>
               <Data size={12} weight={500}>{s.key}</Data>
-              <Data size={12} weight={500} tone={toneFor(s.status)}>
+              <Data size={12} weight={500} tone={toneForStatus(s.status)}>
                 {s.changePct > 0 ? '+' : ''}{s.changePct.toFixed(2)}%
               </Data>
             </div>

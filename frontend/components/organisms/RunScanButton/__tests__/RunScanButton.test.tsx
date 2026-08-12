@@ -2,6 +2,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useSettingsStore, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import { runStockScan } from '@/lib/stockScan';
 
@@ -159,5 +160,59 @@ describe('RunScanButton — hold days', () => {
     expect(hold).toEqual({ hold_min_days: 60, hold_max_days: 185 });
     expect(overrides).not.toHaveProperty('min_dte');
     expect(overrides).not.toHaveProperty('max_dte');
+  });
+});
+
+describe('RunScanButton — confidence ATR override both-or-neither', () => {
+  beforeEach(() => {
+    resetStores();
+    jest.clearAllMocks();
+    useSettingsStore.setState({ confidenceGate: { ...DEFAULT_CONFIDENCE_GATE } });
+  });
+
+  async function runAndGetFilters() {
+    mockPostScan.mockResolvedValue({
+      scan_id: 'SCAN-ATR', timestamp: '2026-07-10T10:00:00', candidates: [], rejected: [],
+    });
+    render(<RunScanButton />);
+    const button = screen.getByRole('button', { name: /run scan/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    const [, , , , filters] = mockPostScan.mock.calls[0];
+    return filters as Record<string, number>;
+  }
+
+  it('sends the full Settings default ATR pair for the resolved horizon when no override is set', async () => {
+    useScanStore.setState({
+      context: { universe: 'SP500', direction: 'Bullish', horizon: 'Swing (5–15d)', horizonPreset: 'Swing' },
+    } as any);
+    const filters = await runAndGetFilters();
+    expect(filters.confidence_atr_mult_target).toBe(3.0); // swing default
+    expect(filters.confidence_atr_mult_stop).toBe(1.5);
+  });
+
+  it('ignores a lone confidence_atr_mult_stop override (without a target) rather than sending a mismatched pair', async () => {
+    // Regression: resolving target/stop independently would send the lone
+    // override's stop paired with the Settings default's target, silently
+    // producing a pair the user never actually configured together and
+    // bypassing the backend's both-or-neither guard.
+    useScanStore.setState({
+      context: { universe: 'SP500', direction: 'Bullish', horizon: 'Swing (5–15d)', horizonPreset: 'Swing' },
+      scanOverrides: { confidence_atr_mult_stop: 0.5 },
+    } as any);
+    const filters = await runAndGetFilters();
+    expect(filters.confidence_atr_mult_target).toBe(3.0); // full fallback to swing default, not mixed
+    expect(filters.confidence_atr_mult_stop).toBe(1.5);
+  });
+
+  it('uses both override values together when both target and stop are set', async () => {
+    useScanStore.setState({
+      context: { universe: 'SP500', direction: 'Bullish', horizon: 'Swing (5–15d)', horizonPreset: 'Swing' },
+      scanOverrides: { confidence_atr_mult_target: 2.5, confidence_atr_mult_stop: 0.5 },
+    } as any);
+    const filters = await runAndGetFilters();
+    expect(filters.confidence_atr_mult_target).toBe(2.5);
+    expect(filters.confidence_atr_mult_stop).toBe(0.5);
   });
 });

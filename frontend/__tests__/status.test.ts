@@ -1,4 +1,5 @@
-import { statusForScore } from '@/lib/status';
+import { statusForScore, toneForStatus } from '@/lib/status';
+import type { Status } from '@/lib/status';
 
 describe('statusForScore', () => {
   it('returns PASS for score >= 55', () => {
@@ -22,5 +23,19 @@ describe('statusForScore', () => {
     expect(statusForScore(55, 200)).toBe('REJECT');
     // (110 / 200) * 100 = 55% → PASS (>= 55)
     expect(statusForScore(110, 200)).toBe('PASS');
+  });
+});
+
+describe('toneForStatus', () => {
+  const cases: [Status, string][] = [
+    ['PASS', 'pass'],
+    ['CAUTION', 'caution'],
+    ['REJECT', 'reject'],
+    ['PENDING', 'dim'],
+    ['NO_DATA', 'dim'],
+  ];
+
+  it.each(cases)('maps %s to tone %s', (status, tone) => {
+    expect(toneForStatus(status)).toBe(tone);
   });
 });

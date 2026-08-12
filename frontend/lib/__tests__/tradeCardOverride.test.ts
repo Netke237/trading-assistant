@@ -32,7 +32,7 @@ function makeOption(overrides: Partial<OptionContract> = {}): OptionContract {
   return {
     id: 'AAPL|375|2027-01-15|C', symbol: 'AAPL', strike: 375, expiry: '2027-01-15', right: 'C',
     dte: 185, dteTotal: 185, price: 7.47, delta: 0.24, theta: -0.06, ivRank: 68, ivPercentile: 0,
-    spread: 0.25, volume: 811, score: 60,
+    spread: 0.25, volume: 811, score: 60, contractConfidence: 'PASS',
     ...overrides,
   };
 }
@@ -65,6 +65,16 @@ describe('applyPickedContract', () => {
     // still show the WRONG numbers. This is exactly why resolveBasketCards below
     // withholds an overridden card until its plan is merged.
     expect(result.entry).toBe(card.entry);
+  });
+
+  it('carries the picked contract\'s own contractConfidence, not one re-derived from its score', () => {
+    // score=60 would be 'PASS' under stock-scale thresholds (>=55) but the
+    // contract-scale backend classification (>=65 PASS, >=45 CAUTION) says
+    // CAUTION — proves this is a direct field copy, not statusForScore(score).
+    const card = makeCard();
+    const picked = makeOption({ score: 60, contractConfidence: 'CAUTION' });
+    const result = applyPickedContract(card, picked);
+    expect(result.contractConfidence).toBe('CAUTION');
   });
 });
 

@@ -77,7 +77,7 @@ export default function DashboardContextRail() {
 
       <RailSection title="Market Regime">
         <div className={styles.regimeRow}>
-          <StatusDot tone={toneFor(combinedRegime)} size="sm" />
+          <StatusDot tone={combinedRegime} size="sm" />
           <Text size={12} tone="secondary">
             {combinedRegime === 'PASS'    && 'Clear — EMA/VIX + HMM aligned.'}
             {combinedRegime === 'CAUTION' && 'Caution — mixed signals.'}
@@ -143,9 +143,3 @@ function alertKindToStatus(kind: string): 'PASS' | 'CAUTION' | 'REJECT' {
   return 'PASS';
 }
 
-function toneFor(status: string): 'PASS' | 'CAUTION' | 'REJECT' | 'PENDING' {
-  if (status === 'CAUTION') return 'CAUTION';
-  if (status === 'REJECT')  return 'REJECT';
-  if (status === 'PASS')    return 'PASS';
-  return 'PENDING';
-}

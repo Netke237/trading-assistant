@@ -318,6 +318,7 @@ export interface OptionContract {
   spread:       number;
   volume:       number;
   score:        number;
+  contractConfidence: Status;
 }
 
 export function contractId(symbol: string, strike: number, expiry: string, right: OptionRight): string {

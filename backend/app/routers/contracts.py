@@ -114,6 +114,7 @@ async def get_contracts(
             spread=float(c.get("spread", 0)),
             volume=int(c.get("volume", 0)),
             score=score_card.score,
+            contractConfidence=score_card.status,
         ))
 
     # 7. Sort by score descending (stable — preserves input order for ties)

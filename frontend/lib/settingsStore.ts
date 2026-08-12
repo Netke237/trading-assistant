@@ -41,19 +41,75 @@ export interface BrokerConfig {
   paperTrading: boolean;
 }
 
+export interface AtrMultPair {
+  target: number;   // win barrier = target × ATR
+  stop:   number;   // loss barrier = stop × ATR
+}
+
+export interface AtrMultByHorizon {
+  intraday: AtrMultPair;
+  swing:    AtrMultPair;
+  position: AtrMultPair;
+}
+
 export interface ConfidenceGate {
   enabled:      boolean;
   cautionBelow: number;   // confidence < this -> cap at CAUTION
   rejectBelow:  number;   // confidence < this -> cap at REJECT
-  atrMult:      number;   // ATR multiple for the backtest win/loss barriers
+  // Per-horizon backtest win/loss ATR barriers — a single symmetric multiple
+  // can't represent backend/config/scoring_rules.yaml's calibrated per-horizon
+  // ASYMMETRIC atr_mult_target/atr_mult_stop (e.g. swing targets ~3 ATR but
+  // risks only ~1.5 ATR stop), so each horizon gets its own target/stop pair.
+  atrMult: AtrMultByHorizon;
 }
+
+export const DEFAULT_ATR_MULT_BY_HORIZON: AtrMultByHorizon = {
+  intraday: { target: 2.0, stop: 1.5 },
+  swing:    { target: 3.0, stop: 1.5 },
+  position: { target: 2.5, stop: 1.5 },
+};
 
 export const DEFAULT_CONFIDENCE_GATE: ConfidenceGate = {
   enabled: true,
   cautionBelow: 50,
   rejectBelow: 35,
-  atrMult: 1.5,
+  atrMult: { ...DEFAULT_ATR_MULT_BY_HORIZON },
 };
+
+/**
+ * Resolve the per-horizon ATR target/stop pair for a scan's horizon string
+ * (e.g. "Swing", "Intraday", "Position", or a full display string like
+ * "Swing (5-15d)" — only the first word is matched, case-insensitively).
+ * Falls back to the swing pair for any unrecognized horizon (Quarterly/
+ * SemiAnnual/Annual all resolve to "Position" upstream via scoringHorizon,
+ * so this should only miss on a genuinely new/typo'd horizon name).
+ */
+export function atrMultForHorizon(gate: ConfidenceGate, horizon: string): AtrMultPair {
+  const key = horizon.trim().split(/\s+/)[0]?.toLowerCase();
+  if (key === 'intraday') return gate.atrMult.intraday;
+  if (key === 'position') return gate.atrMult.position;
+  return gate.atrMult.swing;
+}
+
+/**
+ * Clamps a paired cautionBelow/rejectBelow threshold edit into a valid range:
+ * both within [0,100], and rejectBelow <= cautionBelow. status_cap() in
+ * backend/app/scoring/signal_confidence.py assumes this ordering — a gate
+ * configured backwards makes the REJECT tier unreachable or inverted.
+ * `edited` identifies which field the caller just changed (it wins the
+ * boundary; the OTHER stored field is pulled into range if needed).
+ */
+export function clampGateThresholds(
+  edited: 'cautionBelow' | 'rejectBelow',
+  newValue: number,
+  otherValue: number,
+): { cautionBelow: number; rejectBelow: number } {
+  const clamped = Math.max(0, Math.min(100, newValue));
+  if (edited === 'cautionBelow') {
+    return { cautionBelow: clamped, rejectBelow: Math.min(otherValue, clamped) };
+  }
+  return { cautionBelow: Math.max(otherValue, clamped), rejectBelow: clamped };
+}
 
 export interface TargetProfitPct {
   t1: number;   // fraction of premium (0.20 = 20%)
@@ -291,6 +347,23 @@ export function migrateSettings(
   if (version < 21) {
     next.targetProfitPct = { ...DEFAULT_TARGET_PROFIT_PCT };
   }
+  if (version < 23) {
+    // atrMult restructured: a single symmetric multiple always overrode
+    // compute_confidence's calibrated per-horizon ASYMMETRIC atr_mult_target/
+    // atr_mult_stop config (see confidence_backtest in backend/config/
+    // scoring_rules.yaml) — replaced with a target/stop pair per horizon.
+    // Deliberately version<23, not <22: an earlier build shipped at version 22
+    // and DELETED atrMult entirely (rather than nesting it), so a store
+    // already persisted at exactly 22 must still run this branch — gating on
+    // <22 would make persist() skip migrate() outright for that case (version
+    // equality means no migration runs at all), leaving atrMult permanently
+    // undefined and crashing every reader.
+    const gate = { ...(next.confidenceGate ?? DEFAULT_CONFIDENCE_GATE) } as Partial<ConfidenceGate> & { atrMult?: unknown };
+    if (typeof gate.atrMult !== 'object' || gate.atrMult === null) {
+      gate.atrMult = { ...DEFAULT_ATR_MULT_BY_HORIZON };
+    }
+    next.confidenceGate = gate as ConfidenceGate;
+  }
   return next as unknown as SettingsState;
 }
 
@@ -364,7 +437,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 21,
+      version: 23,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,

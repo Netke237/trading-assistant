@@ -6,6 +6,8 @@
  * position state) and belong in their own types.
  */
 
+import type { DataTone } from '@/components/primitives/Data';
+
 export type Status = 'PASS' | 'CAUTION' | 'REJECT' | 'PENDING' | 'NO_DATA';
 
 export const STATUS_LABEL: Record<Status, string> = {
@@ -38,4 +40,22 @@ export function worstStatus(...statuses: Status[]): Status {
   if (statuses.includes('PENDING')) return 'PENDING';
   if (statuses.includes('PASS')) return 'PASS';
   return 'NO_DATA';
+}
+
+/**
+ * Maps a Status to a Data-primitive tone. DataTone has no PENDING/NO_DATA
+ * slot, so both map to 'dim' (the established "unknown/inactive" tone) —
+ * an exhaustive Record so a future Status addition fails to compile here
+ * instead of silently falling through to `undefined`.
+ */
+const STATUS_TONE: Record<Status, DataTone> = {
+  PASS: 'pass',
+  CAUTION: 'caution',
+  REJECT: 'reject',
+  PENDING: 'dim',
+  NO_DATA: 'dim',
+};
+
+export function toneForStatus(status: Status): DataTone {
+  return STATUS_TONE[status];
 }

@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
+import { toneForStatus } from '@/lib/status';
 import { SectionCard } from '@/components/molecules/SectionCard';
 import { TableRow } from '@/components/molecules/TableRow';
 import { AlertRow } from '@/components/molecules/AlertRow';
@@ -167,7 +168,7 @@ export default function DashboardPage() {
           {(regime?.metrics ?? []).map((m) => (
             <div key={m.label} className={styles.metric}>
               <Text size={11} tone="secondary">{m.label}</Text>
-              <Data size={13} weight={500} tone={toneFor(m.status)}>{m.value}</Data>
+              <Data size={13} weight={500} tone={toneForStatus(m.status)}>{m.value}</Data>
             </div>
           ))}
         </div>
@@ -366,13 +367,6 @@ function Stat({
       <Data size={18} weight={500} tone={tone}>{value}</Data>
     </div>
   );
-}
-
-function toneFor(status: string): 'pass' | 'caution' | 'reject' | undefined {
-  if (status === 'PASS')    return 'pass';
-  if (status === 'CAUTION') return 'caution';
-  if (status === 'REJECT')  return 'reject';
-  return undefined;
 }
 
 function timeAgo(iso: string): string {

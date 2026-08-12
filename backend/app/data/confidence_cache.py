@@ -20,15 +20,21 @@ def cache_key(
     symbol: str,
     direction: str,
     horizon: str,
-    atr_mult: float | None = 1.5,
+    atr_mult_target: float | None = None,
+    atr_mult_stop: float | None = None,
     scoring_mode: str = "options",
 ) -> str:
-    # atr_mult is part of the key: changing it changes the computed confidence,
-    # so cached results under a different multiple must not be reused. None means
-    # "no override" (compute_confidence uses asymmetric per-horizon config values)
-    # and must key differently from any explicit float, including 1.5 — those are
-    # genuinely different computations, not the same thing spelled two ways.
-    mult_key = "default" if atr_mult is None else f"{float(atr_mult):g}"
+    # atr_mult_target/atr_mult_stop are part of the key: changing either changes
+    # the computed confidence, so cached results under a different pair must
+    # not be reused. None means "no override" (compute_confidence uses the
+    # per-horizon config's asymmetric values) and must key differently from any
+    # explicit pair — those are genuinely different computations, not the same
+    # thing spelled two ways. Settings/Step-3 expose this as a per-horizon
+    # target/stop pair (see settingsStore.ts's ConfidenceGate.atrMult and
+    # step-3-direction/page.tsx's confidence_atr_mult_target/_stop rows).
+    target_key = "default" if atr_mult_target is None else f"{float(atr_mult_target):g}"
+    stop_key = "default" if atr_mult_stop is None else f"{float(atr_mult_stop):g}"
+    mult_key = f"{target_key}:{stop_key}"
     # scoring_mode is also part of the key: 'stock' and 'options' apply materially
     # different scoring rules, so a value computed under one mode must never be
     # served to a lookup under the other (Critical finding #4, 2026-07-15 audit).
