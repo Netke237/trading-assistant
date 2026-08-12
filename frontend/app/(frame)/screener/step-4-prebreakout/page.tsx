@@ -20,6 +20,8 @@ import {
   type FibPullbackParams,
 } from '@/components/organisms/FibPullbackParamsPanel';
 import { _horizonEnum } from '@/lib/analysisStore';
+import { confidenceTier, confidenceTone } from '@/lib/confidenceText';
+import { statusForScore, toneForStatus } from '@/lib/status';
 import styles from './page.module.css';
 
 type ScanRowMetrics = {
@@ -75,12 +77,6 @@ function parseSymbols(raw: string): string[] {
     .split(/[\s,;\n]+/)
     .map((s) => s.trim().toUpperCase())
     .filter((s) => TICKER_RE.test(s));
-}
-
-function _confidenceTone(c: number): 'pass' | 'caution' | 'reject' {
-  if (c >= 70) return 'pass';
-  if (c >= 40) return 'caution';
-  return 'reject';
 }
 
 export default function Step4PreBreakoutPage() {
@@ -329,11 +325,11 @@ export default function Step4PreBreakoutPage() {
                   <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
                     {row.direction === 'Bullish' ? '↑' : '↓'}
                   </Text>
-                  <Data size={13} tone={_confidenceTone(row.stock_score)}>{row.stock_score}</Data>
+                  <Data size={13} tone={toneForStatus(statusForScore(row.stock_score))}>{row.stock_score}</Data>
                   <Data size={12} tone="secondary">${row.price.toFixed(2)}</Data>
                   <Data
                     size={13}
-                    tone={row.confidence != null ? _confidenceTone(row.confidence) : 'dim'}
+                    tone={confidenceTone(confidenceTier(row.confidence))}
                     title={row.confidence != null
                       ? `Backtest-based signal confidence: ${row.confidence}%.\nHow it's calculated: the strategy engine ran this setup against historical data. The score reflects how often similar pullback-to-EMA setups led to a profitable move within the selected horizon. 60%+ = PASS gate.`
                       : undefined}
@@ -427,7 +423,7 @@ export default function Step4PreBreakoutPage() {
                   </Data>
                   <Data
                     size={13}
-                    tone={_confidenceTone(row.confidence)}
+                    tone={confidenceTone(confidenceTier(row.confidence))}
                     title={`Fib proximity confidence: ${row.confidence}%.\nHow it's calculated: 100% = exactly at the Fibonacci level. Drops toward 60% the further price is within the tolerance band (default 1.5%). Falls below 60% once price is outside that band. This score only measures distance to the fib level — it does NOT check volatility, volume, or trend.`}
                   >
                     {row.confidence}%
@@ -514,7 +510,7 @@ export default function Step4PreBreakoutPage() {
                   </Text>
                   <Data
                     size={13}
-                    tone={_confidenceTone(row.confidence)}
+                    tone={confidenceTone(confidenceTier(row.confidence))}
                     title={`Setup quality confidence: ${row.confidence}%.\nHow it's calculated: weighted composite of three factors — ATR compression (30%), volume quiet (25%), proximity to key level (45%). Each factor scores 0–100 based on how extreme the reading is. Example: ATR ratio 0.60 on a 0.85 threshold scores ~29/100 on that factor. All four hard gates must pass first (ATR compressed, range tight, volume quiet, price near resistance) — the score then reflects how good each factor is within the gates.`}
                   >
                     {row.confidence}%

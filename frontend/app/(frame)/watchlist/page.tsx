@@ -18,7 +18,6 @@ import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
-import { statusForScore } from '@/lib/status';
 import { api, type CompositeWatch } from '@/lib/api';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { contractLabel, type OptionContract } from '@/types/domain';
@@ -458,7 +457,7 @@ function ContractsTab({
 
       <div className={styles.tableBody}>
         {contracts.map((c) => {
-          const status = statusForScore(c.score);
+          const status = c.contractConfidence;
           return (
             <TableRow key={c.id} status={status} columns={CONTRACT_COLUMNS}>
               <ContractStar contractId={c.id} size="sm" />

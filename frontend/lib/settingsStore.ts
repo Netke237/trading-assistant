@@ -45,15 +45,33 @@ export interface ConfidenceGate {
   enabled:      boolean;
   cautionBelow: number;   // confidence < this -> cap at CAUTION
   rejectBelow:  number;   // confidence < this -> cap at REJECT
-  atrMult:      number;   // ATR multiple for the backtest win/loss barriers
 }
 
 export const DEFAULT_CONFIDENCE_GATE: ConfidenceGate = {
   enabled: true,
   cautionBelow: 50,
   rejectBelow: 35,
-  atrMult: 1.5,
 };
+
+/**
+ * Clamps a paired cautionBelow/rejectBelow threshold edit into a valid range:
+ * both within [0,100], and rejectBelow <= cautionBelow. status_cap() in
+ * backend/app/scoring/signal_confidence.py assumes this ordering — a gate
+ * configured backwards makes the REJECT tier unreachable or inverted.
+ * `edited` identifies which field the caller just changed (it wins the
+ * boundary; the OTHER stored field is pulled into range if needed).
+ */
+export function clampGateThresholds(
+  edited: 'cautionBelow' | 'rejectBelow',
+  newValue: number,
+  otherValue: number,
+): { cautionBelow: number; rejectBelow: number } {
+  const clamped = Math.max(0, Math.min(100, newValue));
+  if (edited === 'cautionBelow') {
+    return { cautionBelow: clamped, rejectBelow: Math.min(otherValue, clamped) };
+  }
+  return { cautionBelow: Math.max(otherValue, clamped), rejectBelow: clamped };
+}
 
 export interface TargetProfitPct {
   t1: number;   // fraction of premium (0.20 = 20%)
@@ -291,6 +309,15 @@ export function migrateSettings(
   if (version < 21) {
     next.targetProfitPct = { ...DEFAULT_TARGET_PROFIT_PCT };
   }
+  if (version < 22) {
+    // atrMult removed: it always forced a single symmetric ATR multiple into
+    // compute_confidence, discarding the calibrated per-horizon asymmetric
+    // atr_mult_target/atr_mult_stop config — see confidence_backtest in
+    // backend/config/scoring_rules.yaml.
+    const gate = { ...(next.confidenceGate ?? DEFAULT_CONFIDENCE_GATE) } as Partial<ConfidenceGate> & { atrMult?: number };
+    delete gate.atrMult;
+    next.confidenceGate = gate as ConfidenceGate;
+  }
   return next as unknown as SettingsState;
 }
 
@@ -364,7 +391,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 21,
+      version: 22,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,

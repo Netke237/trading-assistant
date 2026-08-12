@@ -133,18 +133,15 @@ export function RunScanButton() {
     // they must go in top-level filters, NOT in the score overrides dict.
     // Strip them here so they don't pollute the backend overrides map.
     const { confidence_caution_below: _cb, confidence_reject_below: _rb,
-            confidence_atr_mult: _am, ...scoreOnlyOverrides } = scanOverrides;
+            ...scoreOnlyOverrides } = scanOverrides;
     const effectiveOverrides = { ...scoreOnlyOverrides, shortlist_max_candidates: shortlistMaxCandidates };
 
     // Confidence gate: persisted Settings default, overridden per-scan by the
     // Execution Parameters panel (Step 3, Stocks section) which writes scanOverrides.
     // Disabled gate -> send 0/0 thresholds so confidence can never demote.
-    // ATR always applies (it changes the computed confidence regardless of the gate).
     const gate = useSettingsStore.getState().confidenceGate;
     const cautionOv = scanOverrides.confidence_caution_below;
     const rejectOv  = scanOverrides.confidence_reject_below;
-    const atrOv     = scanOverrides.confidence_atr_mult;
-    filters.confidence_atr_mult = typeof atrOv === 'number' ? atrOv : gate.atrMult;
     if (gate.enabled) {
       filters.confidence_caution_below = typeof cautionOv === 'number' ? cautionOv : gate.cautionBelow;
       filters.confidence_reject_below  = typeof rejectOv === 'number' ? rejectOv : gate.rejectBelow;

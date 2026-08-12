@@ -316,15 +316,18 @@ async def _run_prefetch(symbols: list[str], years: int, delay_secs: float) -> No
                 _prefetch_state["done"] += 1
                 if bars:
                     # Warm both live paths' actual cache-key shapes: the options
-                    # path (routers/scan.py) reads atr_mult=1.5,scoring_mode=
-                    # "options"; the stocks path (routers/stock_scan.py) reads
-                    # atr_mult=None ("default" sentinel),scoring_mode="stock".
-                    # These are genuinely different computations — repointing
-                    # this loop entirely to one or the other silently stops
-                    # warming the path left behind.
+                    # path (routers/scan.py) and the stocks path (routers/
+                    # stock_scan.py) both now always key/compute confidence with
+                    # atr_mult=None ("default" sentinel) — the per-request/global
+                    # atrMult override was removed entirely (it always discarded
+                    # the calibrated per-horizon asymmetric target/stop config;
+                    # see confidence_gate/confidence_backtest in scoring_rules.yaml).
+                    # The only remaining distinction between the two live paths is
+                    # scoring_mode ("stock" vs "options"), which still applies
+                    # materially different scoring rules and must stay separate.
                     _variants = (
                         (None, "stock"),
-                        (1.5, "options"),
+                        (None, "options"),
                     )
                     _combos = [
                         (conf_cache_key(symbol, _d, _h, _mult, scoring_mode=_mode), _d, _h, _mult, _mode)
@@ -334,20 +337,6 @@ async def _run_prefetch(symbols: list[str], years: int, delay_secs: float) -> No
                         if get_cached(conf_cache_key(symbol, _d, _h, _mult, scoring_mode=_mode)) is None
                     ]
                     if _combos:
-                        # NOTE: the value passed to compute_confidence's atr_mult=
-                        # is intentionally None for BOTH variants here — only the
-                        # CACHE KEY uses _mult (None for "stock", 1.5 for "options").
-                        # This mirrors routers/scan.py:446-451, where the live
-                        # options-scan path forces atr_mult=1.5 into the CACHE KEY
-                        # (_atr_for_key) but always calls compute_confidence with
-                        # the raw, un-forced atr_mult — which is None in the common
-                        # case (no per-request confidence_atr_mult override). If we
-                        # computed the "options" variant here with atr_mult=1.5 (the
-                        # naive, symmetric-looking choice), we'd cache a numerically
-                        # different confidence value under the exact key the live
-                        # path reads, silently poisoning the REJECT gate. Do not
-                        # "fix" this back to atr_mult=_mult without re-reading
-                        # scan.py's key/value split first.
                         _conf_tasks = [
                             asyncio.to_thread(
                                 compute_confidence, bars,

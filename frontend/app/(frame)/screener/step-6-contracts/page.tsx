@@ -7,7 +7,6 @@ import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { ContractStar } from '@/components/atoms/ContractStar';
-import { statusForScore } from '@/lib/status';
 import { api } from '@/lib/api';
 import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { useScanStore } from '@/lib/scanStore';
@@ -195,7 +194,7 @@ export default function Step6Page() {
 
             /** Renders a single contract row, reused for recommended + chain. */
             const renderRow = (c: OptionContract, extra?: { className?: string }) => {
-              const status = statusForScore(c.score);
+              const status = c.contractConfidence;
               const netDC = candidate.netDebitCredit;
               const sign  = netDC != null ? (netDC >= 0 ? '+' : '−') : null;
               return (

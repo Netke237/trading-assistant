@@ -94,7 +94,6 @@ export async function runStockScan(
       overrides: stocksOverrides,
       confidence_caution_below: confidenceGate.enabled ? confidenceGate.cautionBelow : undefined,
       confidence_reject_below:  confidenceGate.enabled ? confidenceGate.rejectBelow  : undefined,
-      confidence_atr_mult:      confidenceGate.enabled ? confidenceGate.atrMult       : undefined,
       regime_headwind_caution_pct: typeof rawOverrides.regime_headwind_caution_pct === 'number' ? rawOverrides.regime_headwind_caution_pct : undefined,
       regime_headwind_reject_pct:  typeof rawOverrides.regime_headwind_reject_pct  === 'number' ? rawOverrides.regime_headwind_reject_pct  : undefined,
       fundamentals_caution_above:  typeof rawOverrides.fundamentals_caution_above  === 'number' ? rawOverrides.fundamentals_caution_above  : undefined,

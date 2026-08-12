@@ -13,11 +13,9 @@ def test_stock_scan_request_accepts_confidence_gate_fields():
         universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema",
         confidence_caution_below=50.0,
         confidence_reject_below=35.0,
-        confidence_atr_mult=1.5,
     )
     assert req.confidence_caution_below == 50.0
     assert req.confidence_reject_below == 35.0
-    assert req.confidence_atr_mult == 1.5
 
 
 def test_confidence_gate_fields_default_to_none():
@@ -26,7 +24,6 @@ def test_confidence_gate_fields_default_to_none():
     )
     assert req.confidence_caution_below is None
     assert req.confidence_reject_below is None
-    assert req.confidence_atr_mult is None
 
 
 # ---------------------------------------------------------------------------
@@ -138,11 +135,11 @@ def test_confidence_gate_caution_caps_pass_to_caution():
 
 
 def test_confidence_gate_disabled_preserves_pass_status():
-    """When all three confidence gate fields are None, the gate is skipped entirely
+    """When both confidence gate fields are None, the gate is skipped entirely
     and a PASS card must come through as a PositionCardOut with status PASS."""
     req = StockScanRequest(
         universe=["AAPL"], direction="Bullish", horizon="Swing", strategy="pullback_ema",
-        # confidence_caution_below, confidence_reject_below, confidence_atr_mult all default to None
+        # confidence_caution_below, confidence_reject_below both default to None
     )
     result = _run_process_stock(req, conf_val=20.0)  # very low conf_val — gate must not fire
     assert "reason" not in result, (
@@ -158,9 +155,12 @@ def test_confidence_gate_disabled_preserves_pass_status():
     )
 
 
-def test_custom_atr_mult_does_not_collide_with_default_cache_key():
-    """A scan with a custom confidence_atr_mult must not read or overwrite the
-    cache entry used by default-multiple scans (Critical finding #3, 2026-07-15 audit)."""
+def test_stock_scan_cache_key_always_uses_default_atr_mult():
+    """stock_scan.py's call sites no longer accept a per-request atr_mult
+    override (the atrMult control was removed entirely — every live scan
+    now keys with atr_mult=None, i.e. the 'default' sentinel). This is the
+    stock-scan-specific regression guard; cache_key()'s own isolation between
+    explicit atr_mult values is covered directly in test_confidence_cache.py."""
     import app.data.confidence_cache as cc
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
@@ -170,19 +170,11 @@ def test_custom_atr_mult_does_not_collide_with_default_cache_key():
         cc._init_db()
         cc.clear_cache()
 
-        default_key = cc.cache_key("AAPL", "Bullish", "Swing", 1.5)
-        custom_key = cc.cache_key("AAPL", "Bullish", "Swing", 2.5)
-        assert default_key != custom_key
+        stock_key = cc.cache_key("AAPL", "Bullish", "Swing", scoring_mode="stock")
+        assert stock_key == cc.cache_key("AAPL", "Bullish", "Swing", None, scoring_mode="stock")
 
-        cc.set_cached(default_key, {"confidence": 70, "sample_size": 50})
-        cc.set_cached(custom_key, {"confidence": 30, "sample_size": 50})
-
-        # The two entries must stay independent — this is what stock_scan.py's
-        # call sites rely on when they pass req.confidence_atr_mult straight
-        # through to the cache key (None keys separately as "default" — see
-        # test_cache_key_default_does_not_collide_with_explicit_default_value).
-        assert cc.get_cached(default_key)["confidence"] == 70
-        assert cc.get_cached(custom_key)["confidence"] == 30
+        cc.set_cached(stock_key, {"confidence": 70, "sample_size": 50})
+        assert cc.get_cached(stock_key)["confidence"] == 70
     finally:
         cc._DB_PATH = original
         os.unlink(db_path)

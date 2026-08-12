@@ -16,7 +16,7 @@ import type { HorizonKey } from '@/lib/horizonPresets';
 export type ParamDefaults = Record<string, number | boolean | string | null>;
 
 export const PARAM_DEFAULTS_POSITION: ParamDefaults = {
-  confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
+  confidence_caution_below: 50, confidence_reject_below: 35,
   weight_trend: 30, weight_pullback: 20, weight_trigger: 20, weight_event: 20, weight_vol: 10,
   ma_type: 'EMA', fast_ema: 50, slow_ema: 200, adx_period: 14, ema_required: true, rsi_period: 14,
   swing_high_lookback_bars: 15, atr_caution_max: 2.5, pullback_require_reversal: false,
@@ -41,7 +41,7 @@ export const PARAM_DEFAULTS_POSITION: ParamDefaults = {
 
 export const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
   Intraday: {
-    confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
+    confidence_caution_below: 50, confidence_reject_below: 35,
     weight_trend: 35, weight_pullback: 20, weight_trigger: 30, weight_event: 5,  weight_vol: 10,
     ma_type: 'EMA', fast_ema: 20, slow_ema: 50, adx_period: 7, ema_required: false, rsi_period: 14,
     swing_high_lookback_bars: 20, atr_caution_max: 2.5, pullback_require_reversal: false,
@@ -64,7 +64,7 @@ export const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
     rr_bullish_invalidation_pct: 0.03, rr_bearish_invalidation_pct: 0.03,
   },
   Swing: {
-    confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
+    confidence_caution_below: 50, confidence_reject_below: 35,
     weight_trend: 30, weight_pullback: 20, weight_trigger: 25, weight_event: 15, weight_vol: 10,
     ma_type: 'EMA', fast_ema: 50, slow_ema: 200, adx_period: 14, ema_required: true, rsi_period: 14,
     swing_high_lookback_bars: 40, atr_caution_max: 2.5, pullback_require_reversal: false,
@@ -91,7 +91,7 @@ export const PARAM_DEFAULTS_PER_HORIZON: Record<HorizonKey, ParamDefaults> = {
   SemiAnnual: { ...PARAM_DEFAULTS_POSITION },
   Annual:     { ...PARAM_DEFAULTS_POSITION },
   Custom: {
-    confidence_caution_below: 50, confidence_reject_below: 35, confidence_atr_mult: 1.5,
+    confidence_caution_below: 50, confidence_reject_below: 35,
     weight_trend: 30, weight_pullback: 20, weight_trigger: 25, weight_event: 15, weight_vol: 10,
     ma_type: 'EMA', fast_ema: 50, slow_ema: 200, adx_period: 14, ema_required: true, rsi_period: 14,
     swing_high_lookback_bars: 40, atr_caution_max: 2.5, pullback_require_reversal: false,

@@ -6,8 +6,6 @@
  * override reached the single-card buttons but not the basket path, since
  * the basket cards were built straight from the raw scan candidates).
  */
-import { statusForScore } from '@/lib/status';
-import type { Status } from '@/lib/status';
 import type { TradeCardData, OptionContract } from '@/types/domain';
 
 export type OverriddenCard = TradeCardData & { _userOverride?: boolean };
@@ -29,7 +27,7 @@ export function applyPickedContract(card: TradeCardData, picked: OptionContract 
     ...card,
     contract: picked.id,
     contractScore: picked.score,
-    contractConfidence: statusForScore(picked.score) as Status,
+    contractConfidence: picked.contractConfidence,
     contractDetails: {
       strike:       picked.strike,
       expiry:       picked.expiry,

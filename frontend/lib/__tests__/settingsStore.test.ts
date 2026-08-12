@@ -1,4 +1,4 @@
-import { useSettingsStore, migrateSettings, DEFAULT_CONFIDENCE_GATE, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER, DEFAULT_TASTYTRADE_PAPER, DEFAULT_TASTYTRADE_LIVE, DEFAULT_TARGET_PROFIT_PCT } from '@/lib/settingsStore';
+import { useSettingsStore, migrateSettings, clampGateThresholds, DEFAULT_CONFIDENCE_GATE, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER, DEFAULT_TASTYTRADE_PAPER, DEFAULT_TASTYTRADE_LIVE, DEFAULT_TARGET_PROFIT_PCT } from '@/lib/settingsStore';
 
 // Reset store state before each test
 beforeEach(() => {
@@ -57,28 +57,56 @@ describe('settingsStore — migrate is cumulative', () => {
     expect(result.confidenceGate).toEqual(DEFAULT_CONFIDENCE_GATE);
   });
 
-  it('migrating from v11 adds atrMult to an existing gate', () => {
+  it('migrating from v22 removes atrMult from an existing gate', () => {
     const result = migrateSettings(
-      { confidenceGate: { enabled: true, cautionBelow: 60, rejectBelow: 40 } },
-      11,
+      { confidenceGate: { enabled: true, cautionBelow: 60, rejectBelow: 40, atrMult: 2.0 } },
+      21,
     ) as unknown as Record<string, unknown>;
     const gate = result.confidenceGate as Record<string, unknown>;
-    expect(gate.atrMult).toBe(1.5);
+    expect('atrMult' in gate).toBe(false);
     expect(gate.cautionBelow).toBe(60); // existing value preserved
+    expect(gate.rejectBelow).toBe(40);
   });
 });
 
 describe('settingsStore — confidenceGate', () => {
-  it('defaults to enabled 50/35 with ATR 1.5', () => {
+  it('defaults to enabled 50/35', () => {
     expect(useSettingsStore.getState().confidenceGate).toEqual({
-      enabled: true, cautionBelow: 50, rejectBelow: 35, atrMult: 1.5,
+      enabled: true, cautionBelow: 50, rejectBelow: 35,
     });
   });
 
   it('setConfidenceGate updates the value', () => {
-    useSettingsStore.getState().setConfidenceGate({ enabled: true, cautionBelow: 60, rejectBelow: 40, atrMult: 2.0 });
+    useSettingsStore.getState().setConfidenceGate({ enabled: true, cautionBelow: 60, rejectBelow: 40 });
     expect(useSettingsStore.getState().confidenceGate.cautionBelow).toBe(60);
-    expect(useSettingsStore.getState().confidenceGate.atrMult).toBe(2.0);
+    expect(useSettingsStore.getState().confidenceGate.rejectBelow).toBe(40);
+  });
+});
+
+describe('clampGateThresholds', () => {
+  it('normal edit: caution still above reject leaves reject untouched', () => {
+    const result = clampGateThresholds('cautionBelow', 60, 35);
+    expect(result).toEqual({ cautionBelow: 60, rejectBelow: 35 });
+  });
+
+  it('normal edit: reject still below caution leaves caution untouched', () => {
+    const result = clampGateThresholds('rejectBelow', 40, 60);
+    expect(result).toEqual({ cautionBelow: 60, rejectBelow: 40 });
+  });
+
+  it('backwards edit: caution dropped below current reject pulls reject down to match', () => {
+    const result = clampGateThresholds('cautionBelow', 10, 35);
+    expect(result).toEqual({ cautionBelow: 10, rejectBelow: 10 });
+  });
+
+  it('backwards edit: reject raised above current caution pulls caution up to match', () => {
+    const result = clampGateThresholds('rejectBelow', 80, 50);
+    expect(result).toEqual({ cautionBelow: 80, rejectBelow: 80 });
+  });
+
+  it('clamps out-of-range values to [0,100] in combination with the ordering fix', () => {
+    expect(clampGateThresholds('cautionBelow', 150, 35)).toEqual({ cautionBelow: 100, rejectBelow: 35 });
+    expect(clampGateThresholds('rejectBelow', -20, 50)).toEqual({ cautionBelow: 50, rejectBelow: 0 });
   });
 });
 

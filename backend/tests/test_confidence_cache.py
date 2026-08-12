@@ -94,6 +94,15 @@ def test_cache_key_default_does_not_collide_with_explicit_default_value():
     assert cc.cache_key("AAPL", "Bullish", "Swing", None) != cc.cache_key("AAPL", "Bullish", "Swing", 1.5)
 
 
+def test_cache_key_omitting_atr_mult_matches_explicit_none():
+    """Regression: after the atrMult-control removal, every live caller omits
+    atr_mult entirely. Omitting it must produce the same 'default' sentinel as
+    passing None explicitly — not silently key as the old 1.5 default."""
+    import app.data.confidence_cache as cc
+    assert cc.cache_key("AAPL", "Bullish", "Swing") == cc.cache_key("AAPL", "Bullish", "Swing", None)
+    assert cc.cache_key("AAPL", "Bullish", "Swing") != cc.cache_key("AAPL", "Bullish", "Swing", 1.5)
+
+
 def test_ttl_evicts_stale_entries(monkeypatch):
     import app.data.confidence_cache as cc
 

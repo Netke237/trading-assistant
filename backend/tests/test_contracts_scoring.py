@@ -216,6 +216,43 @@ async def test_get_contracts_respects_limit():
     assert len(data) <= 5, f"Expected at most 5, got {len(data)}"
 
 
+@pytest.mark.asyncio
+async def test_get_contracts_forwards_backend_contractConfidence_not_stock_scale():
+    """Regression: /api/contracts must forward validate_contract()'s own status
+    (contract-scale thresholds from contract_rules.yaml: pass>=65/caution>=45),
+    not one a client would derive from stock-scale thresholds (pass>=55/
+    caution>=35). score=60 is PASS under stock-scale but CAUTION under
+    contract-scale — mock validate_contract to return exactly that pair and
+    assert the response carries the real CAUTION status through untouched.
+    """
+    from app.scoring.contract_validator import ContractScoreCard, ContractScoreBreakdown
+
+    app = _build_test_app()
+
+    fake_card = ContractScoreCard(
+        contract_id="AAPL|190|2099-01-01|C", symbol="AAPL", strike=190, expiry="2099-01-01",
+        is_call=True, score=60, status="CAUTION",
+        breakdown=ContractScoreBreakdown(0, 0, 0, 0, 0, 0),
+    )
+
+    with (
+        patch("app.routers.contracts.fetch_option_chain", return_value=SAMPLE_CHAIN[:1]),
+        patch("app.routers.contracts.fetch_price", return_value=190.0),
+        patch("app.routers.contracts.validate_contract", return_value=fake_card),
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get("/api/contracts?symbol=AAPL&right=C&stock_score=70")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["score"] == 60
+    assert data[0]["contractConfidence"] == "CAUTION", (
+        f"Expected backend status 'CAUTION' to pass through untouched, got {data[0]['contractConfidence']!r}"
+    )
+
+
 # ── 4. max_price filter ───────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

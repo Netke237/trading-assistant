@@ -176,6 +176,7 @@ export async function setupApiMocks(page: Page): Promise<void> {
           spread: 0.02,
           volume: 1250,
           score: 78,
+          contractConfidence: 'PASS',
         },
         {
           id: 'AAPL|190|2025-05-16|C',
@@ -193,6 +194,7 @@ export async function setupApiMocks(page: Page): Promise<void> {
           spread: 0.03,
           volume: 890,
           score: 72,
+          contractConfidence: 'PASS',
         },
         {
           id: 'AAPL|180|2025-05-16|C',
@@ -210,6 +212,7 @@ export async function setupApiMocks(page: Page): Promise<void> {
           spread: 0.02,
           volume: 2100,
           score: 75,
+          contractConfidence: 'PASS',
         },
       ]),
     });

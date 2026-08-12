@@ -184,6 +184,7 @@ class OptionContract(BaseModel):
     spread: float
     volume: int
     score: int
+    contractConfidence: Status
 
 
 # ── Candles ──────────────────────────────────────────────────────────────────
@@ -495,7 +496,6 @@ class ScanRequest(BaseModel):
     # Per-scan confidence-gate overrides (snake_case, matching this model's style)
     confidence_caution_below: Optional[int] = None
     confidence_reject_below:  Optional[int] = None
-    confidence_atr_mult:      Optional[float] = None
     # Per-scan fundamentals-gate overrides
     fundamentals_enabled:        Optional[bool]  = None
     fundamentals_caution_below:  Optional[float] = None

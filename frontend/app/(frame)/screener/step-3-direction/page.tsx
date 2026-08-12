@@ -254,8 +254,6 @@ const PARAM_DEFS: ParamDef[] = [
     hint: 'Signal backtest win rate below this % triggers CAUTION. ↑ Higher → broader caution zone · ↓ Lower → narrower caution zone' },
   { key: 'confidence_reject_below',  label: 'Confidence reject below',  type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0,   max: 100, step: 1,   unit: '%',
     hint: 'Signal backtest win rate below this % triggers REJECT. ↑ Higher → stricter gate, better-tested results (fewer) · ↓ Lower → looser gate (more)' },
-  { key: 'confidence_atr_mult',      label: 'Confidence ATR multiple',  type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0.5, max: 5,   step: 0.1,
-    hint: 'R/R ratio used in the mini backtest (target ÷ stop size). ↑ Higher → demands bigger winners (stricter, fewer) · ↓ Lower → accepts smaller winners (more)' },
   // OPTIONS — Contract
   { key: 'max_delta',              label: 'Max delta',              type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01,
     hint: 'Highest delta (0–1) allowed — controls how far in-the-money contracts can be. ↑ Higher → near-the-money contracts allowed (more) · ↓ Lower → OTM-only (fewer)' },

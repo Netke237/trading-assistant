@@ -6,6 +6,8 @@ score_thresholds:
   pass: 55
   caution: 35
 
+# confidence_gate: the frontend confidenceTier() mirrors these values —
+# see frontend/lib/confidenceText.ts.
 confidence_gate:
   enabled: true
   cautionBelow: 50   # confidence < 50 -> cap final status at CAUTION
