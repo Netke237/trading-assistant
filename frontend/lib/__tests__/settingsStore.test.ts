@@ -1,4 +1,5 @@
-import { useSettingsStore, migrateSettings, clampGateThresholds, atrMultForHorizon, DEFAULT_CONFIDENCE_GATE, DEFAULT_ATR_MULT_BY_HORIZON, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER, DEFAULT_TASTYTRADE_PAPER, DEFAULT_TASTYTRADE_LIVE, DEFAULT_TARGET_PROFIT_PCT } from '@/lib/settingsStore';
+import { act } from '@testing-library/react';
+import { useSettingsStore, migrateSettings, clampGateThresholds, atrMultForHorizon, SETTINGS_STORAGE_KEY, DEFAULT_CONFIDENCE_GATE, DEFAULT_ATR_MULT_BY_HORIZON, DEFAULT_IBKR_PAPER, DEFAULT_TRADIER_PAPER, DEFAULT_TASTYTRADE_PAPER, DEFAULT_TASTYTRADE_LIVE, DEFAULT_TARGET_PROFIT_PCT } from '@/lib/settingsStore';
 
 // Reset store state before each test
 beforeEach(() => {
@@ -92,6 +93,41 @@ describe('settingsStore — confidenceGate', () => {
     });
     expect(useSettingsStore.getState().confidenceGate.cautionBelow).toBe(60);
     expect(useSettingsStore.getState().confidenceGate.rejectBelow).toBe(40);
+  });
+});
+
+describe('settingsStore — real rehydration through zustand persist (not migrateSettings() called directly)', () => {
+  afterEach(() => {
+    localStorage.removeItem(SETTINGS_STORAGE_KEY);
+  });
+
+  it('recovers a missing atrMult on a store already persisted at the current version', async () => {
+    // Regression: an earlier build shipped `version: 22` and deleted atrMult
+    // entirely rather than nesting it. zustand's persist middleware only runs
+    // migrate() when the persisted version differs from the current version —
+    // gating this fix on `version < 22` (matching that old build's number)
+    // would make persist() skip migrate() outright for a store already at 22,
+    // leaving confidenceGate.atrMult permanently undefined and crashing every
+    // reader. This seeds exactly that broken localStorage shape and rehydrates
+    // through the real persist/migrate machinery, not a direct migrateSettings() call.
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        version: 22,
+        state: {
+          confidenceGate: { enabled: true, cautionBelow: 55, rejectBelow: 40 },
+        },
+      }),
+    );
+
+    await act(async () => {
+      await useSettingsStore.persist.rehydrate();
+    });
+
+    const gate = useSettingsStore.getState().confidenceGate;
+    expect(gate.atrMult).toEqual(DEFAULT_ATR_MULT_BY_HORIZON);
+    expect(gate.cautionBelow).toBe(55); // existing value preserved
+    expect(gate.rejectBelow).toBe(40);
   });
 });
 

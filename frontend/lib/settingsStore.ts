@@ -347,11 +347,17 @@ export function migrateSettings(
   if (version < 21) {
     next.targetProfitPct = { ...DEFAULT_TARGET_PROFIT_PCT };
   }
-  if (version < 22) {
+  if (version < 23) {
     // atrMult restructured: a single symmetric multiple always overrode
     // compute_confidence's calibrated per-horizon ASYMMETRIC atr_mult_target/
     // atr_mult_stop config (see confidence_backtest in backend/config/
     // scoring_rules.yaml) — replaced with a target/stop pair per horizon.
+    // Deliberately version<23, not <22: an earlier build shipped at version 22
+    // and DELETED atrMult entirely (rather than nesting it), so a store
+    // already persisted at exactly 22 must still run this branch — gating on
+    // <22 would make persist() skip migrate() outright for that case (version
+    // equality means no migration runs at all), leaving atrMult permanently
+    // undefined and crashing every reader.
     const gate = { ...(next.confidenceGate ?? DEFAULT_CONFIDENCE_GATE) } as Partial<ConfidenceGate> & { atrMult?: unknown };
     if (typeof gate.atrMult !== 'object' || gate.atrMult === null) {
       gate.atrMult = { ...DEFAULT_ATR_MULT_BY_HORIZON };
@@ -431,7 +437,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 22,
+      version: 23,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,

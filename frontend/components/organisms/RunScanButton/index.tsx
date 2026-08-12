@@ -151,12 +151,20 @@ export function RunScanButton() {
       filters.confidence_reject_below  = 0;
     }
     // ATR barriers always apply (they change what confidence measures,
-    // regardless of the gate) — Step-3 override wins per-field, else the
-    // Settings default for this scan's horizon.
-    const atrOv = { target: scanOverrides.confidence_atr_mult_target, stop: scanOverrides.confidence_atr_mult_stop };
-    const atrDefault = atrMultForHorizon(gate, horizon);
-    filters.confidence_atr_mult_target = typeof atrOv.target === 'number' ? atrOv.target : atrDefault.target;
-    filters.confidence_atr_mult_stop   = typeof atrOv.stop   === 'number' ? atrOv.stop   : atrDefault.stop;
+    // regardless of the gate). Both-or-neither: a lone target/stop override
+    // in Step 3 (without the other) is ignored entirely, falling back to the
+    // full Settings default pair for this scan's horizon — a mismatched pair
+    // must never be sent, since it would silently bypass the backend's own
+    // both-or-neither guard (which only nulls a pair when it receives an
+    // explicit None on one side, not two mismatched numbers).
+    const hasFullAtrOverride =
+      typeof scanOverrides.confidence_atr_mult_target === 'number' &&
+      typeof scanOverrides.confidence_atr_mult_stop === 'number';
+    const atrPair = hasFullAtrOverride
+      ? { target: scanOverrides.confidence_atr_mult_target as number, stop: scanOverrides.confidence_atr_mult_stop as number }
+      : atrMultForHorizon(gate, horizon);
+    filters.confidence_atr_mult_target = atrPair.target;
+    filters.confidence_atr_mult_stop   = atrPair.stop;
 
     // Fundamentals gate
     const fGate = fundamentalsGate;

@@ -67,6 +67,20 @@ export async function runStockScan(
   store.setStockScanResult(null);
   store.setScanState('SCANNING');
 
+  // ATR barriers always apply (they change what confidence measures,
+  // regardless of the gate). Both-or-neither: a lone target/stop override in
+  // Step 3 (without the other) is ignored entirely, falling back to the full
+  // Settings default pair for this scan's horizon — a mismatched pair must
+  // never be sent, since it would silently bypass the backend's own
+  // both-or-neither guard (which only nulls a pair when it receives an
+  // explicit None on one side, not when it receives two mismatched numbers).
+  const hasFullAtrOverride =
+    typeof rawOverrides.confidence_atr_mult_target === 'number' &&
+    typeof rawOverrides.confidence_atr_mult_stop === 'number';
+  const atrPair = hasFullAtrOverride
+    ? { target: rawOverrides.confidence_atr_mult_target as number, stop: rawOverrides.confidence_atr_mult_stop as number }
+    : atrMultForHorizon(confidenceGate, context?.horizon ?? 'Swing');
+
   try {
     const result = await api.postStockScan({
       universe:  context?.universe ? [context.universe] : ['SP500'],
@@ -94,15 +108,8 @@ export async function runStockScan(
       overrides: stocksOverrides,
       confidence_caution_below: confidenceGate.enabled ? confidenceGate.cautionBelow : undefined,
       confidence_reject_below:  confidenceGate.enabled ? confidenceGate.rejectBelow  : undefined,
-      // ATR barriers always apply (they change what confidence measures,
-      // regardless of the gate) — Step-3 override wins per-field, else the
-      // Settings default for this scan's horizon.
-      confidence_atr_mult_target: typeof rawOverrides.confidence_atr_mult_target === 'number'
-        ? rawOverrides.confidence_atr_mult_target
-        : atrMultForHorizon(confidenceGate, context?.horizon ?? 'Swing').target,
-      confidence_atr_mult_stop: typeof rawOverrides.confidence_atr_mult_stop === 'number'
-        ? rawOverrides.confidence_atr_mult_stop
-        : atrMultForHorizon(confidenceGate, context?.horizon ?? 'Swing').stop,
+      confidence_atr_mult_target: atrPair.target,
+      confidence_atr_mult_stop:   atrPair.stop,
       regime_headwind_caution_pct: typeof rawOverrides.regime_headwind_caution_pct === 'number' ? rawOverrides.regime_headwind_caution_pct : undefined,
       regime_headwind_reject_pct:  typeof rawOverrides.regime_headwind_reject_pct  === 'number' ? rawOverrides.regime_headwind_reject_pct  : undefined,
       fundamentals_caution_above:  typeof rawOverrides.fundamentals_caution_above  === 'number' ? rawOverrides.fundamentals_caution_above  : undefined,
