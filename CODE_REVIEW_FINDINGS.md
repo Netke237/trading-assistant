@@ -1,8 +1,17 @@
 # Code Review Findings — Bamendjou
 
-Audit date: 2026-08-13. Scope: `frontend/`, `backend/`, root docs, and cross-checks against
-`CLAUDE.md`. Findings are grouped by severity. File:line references are accurate as of this
-commit; re-verify before fixing if the branch has moved on.
+Audit date: 2026-08-13 (round 1), extended 2026-08-13 (round 2 — full-repo pass). Scope:
+`frontend/`, `backend/`, root docs, and cross-checks against `CLAUDE.md`. Findings are grouped by
+severity. File:line references are accurate as of this commit; re-verify before fixing if the
+branch has moved on.
+
+**Round 2 update:** Findings 1-3 below were independently re-verified by direct code inspection
+(not just re-reported by an agent) — confirmed accurate as written. Round 2 extends coverage to
+areas round 1 didn't touch: broker adapters, auto-trader, credential/websocket/migration/test
+infra, the remaining app pages (dashboard/watchlist/calendar/alerts/analysis/chart/strategy-watch/
+validation), e2e tests, `frontend/lib/api.ts`, and the rest of the docs tree (`llm-contexts/`,
+`docs/mockup/`, `docs/superpowers/`, CI config, root `.md` files). New findings are numbered
+continuing from round 1 and slotted into the same severity sections.
 
 ---
 
@@ -36,6 +45,20 @@ sites correctly does `action: c.direction === 'Bullish' ? 'BUY' : 'SELL'`
 feeds `alertEngine.scanPortfolio()`'s direction-aware stop/target comparisons
 (`frontend/lib/alertEngine.ts:49-90`) backwards for every short position.
 
+### 15. Tradier and Tastytrade disagree on what `SELL` means — same request, opposite real-world trade
+`backend/app/data/tradier_paper.py:19-23` maps `SELL` → `sell_to_open` ("the screener always
+opens a new position"). `backend/app/data/tastytrade_paper.py:35-49` maps `SELL` →
+`SELL_TO_CLOSE` (closes an existing long; fails if none exists). Both adapters are reachable with
+an identical `{"action": "SELL", ...}` payload from `POST /broker/option-order`,
+`POST /broker/stock-order` (`backend/app/routers/broker.py:16-34`), and `POST /auto-trade/arm`
+(`backend/app/routers/auto_trade.py:15-25`) — broker selection is a plain string field with
+nothing reconciling the two conventions. Routing a SELL to Tradier opens an unintended short
+(real money exposure); routing the identical intent to Tastytrade throws instead of executing.
+Confirmed by direct inspection of both files; `tests/test_broker_router.py` and
+`tests/test_auto_trader.py` only exercise `SELL` against `ibkr_paper`, so this divergence has no
+test coverage. This is the same class of bug as findings 1-3: a config/routing seam where one
+side of an either/or path was never reconciled with the other.
+
 ---
 
 ## High
@@ -63,6 +86,31 @@ REJECT gate." Actual code (`frontend/components/organisms/StepNavBar/index.tsx:2
 status, `combinedRegime` is `alignmentVerdict(direction, descriptor)`
 (`frontend/app/(frame)/screener/step-1-regime/page.tsx:85,89`). A developer trusting the doc
 would edit the wrong field and silently break the REJECT confirmation overlay.
+
+### 16. Calendar's "Today" can land on the wrong day for US-timezone users in the evening
+`frontend/app/(frame)/calendar/page.tsx:20` — `const TODAY = new Date()` captures local
+wall-clock time, but every comparison against it (`isoForUTC`, the month grid's `isToday` flag,
+the "Today" nav button) treats it as UTC-anchored via `getUTCFullYear/Month/Date()`. For a US
+Eastern-time user, once local time passes ~8pm ET the UTC calendar day has already rolled to
+tomorrow, so the grid highlights tomorrow as "Today" and the "Today" button jumps a day ahead. A
+second symptom: the selected-day header's `EventFlag` (line 185,
+`Math.round((selectedDate.getTime() - TODAY.getTime()) / 86_400_000)`) can go negative for
+genuinely-today events, silently hiding the flag (`EventFlag` returns `null` for `days < 0`,
+`frontend/components/atoms/EventFlag/index.tsx:23`) while the event still shows in the list below.
+
+### 17. Alerts page shows the wrong premium-stop percentage
+`frontend/app/(frame)/alerts/page.tsx:43` — `ALERT_TYPE_LABELS.PREMIUM_STOP` is hardcoded to
+`'Premium stop (–40%)'`, but the real default/configured threshold is 60%
+(`frontend/lib/settingsStore.ts:379` → `premiumStopPct: 0.60`, mirrored in
+`frontend/lib/alertEngine.ts:43`) and is user-adjustable in Settings. The label never reflects the
+actual trigger threshold, misleading the user about when the alert fires — worse once a user
+changes the setting away from the default, since the label doesn't update at all.
+
+### 18. `/auto-trade/arm` has no quantity validation
+`backend/app/routers/auto_trade.py:20` declares `quantity: int` with no `Field(ge=1)`, unlike the
+equivalent fields in `broker.py:20,31` (`Field(..., ge=1)`). `AutoTradeService.arm()`
+(`backend/app/services/auto_trader.py:139-148`) only validates `entry_premium > 0`, not quantity,
+so an arm/fire cycle can submit a zero- or negative-quantity order straight to a broker adapter.
 
 ---
 
@@ -105,6 +153,48 @@ CLAUDE.md documents `Text size={11|12|13|14}`, `Data weight={400|500|600}`, and
 `TitleSize = 20|24|32` with `as: 'h1'|'h2'|'span'|'div'`. `size={16}` is used extensively in real
 code, so the doc's scale is stale.
 
+### 19. Test suite defaults to the real local dev database — already causing confirmed pollution
+`backend/tests/conftest.py:22` — `os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./dev.db")`.
+Any test that imports `app.main:app` without an explicit `get_db` override talks to the actual
+local `dev.db` used by the running dev app, not an isolated test DB. This isn't hypothetical:
+`backend/tests/test_portfolio_monitor.py:78-86` carries an `xfail` documenting that the assertion
+"sees real leftover data" (a real position) because of exactly this gap. Any other test assuming
+an empty/known DB state is at the same risk, and a buggy test could mutate real dev portfolio data.
+
+### 20. Live-broker safety is an incomplete block-list, not a structural guarantee
+`backend/app/services/broker_router.py:5` — `_LIVE_BROKERS = {"ibkr_live", "alpaca_live",
+"tastytrade_live"}` omits `"tradier_live"`. Currently harmless only because
+`build_router_from_credentials()` (lines 33-67) never registers a `tradier_live` adapter — but
+the thing preventing live trading is "nobody wired it up yet," not a structural allow-list. If a
+`TradierLiveAdapter` is added later without also updating this set in the same change, live
+trading with real money silently activates. Should be inverted to an explicit allow-list of
+paper-only broker keys instead of a block-list of live ones.
+
+### 21. `ci.yml` never runs `npm run typecheck` — the documented pre-commit gate lives elsewhere
+CLAUDE.md's dev workflow says `npm run typecheck` "must be clean before every commit."
+`.github/workflows/ci.yml`'s frontend job runs only `npm run test -- --ci` and `npm run build`;
+the actual `tsc --noEmit` step lives solely in the separate `playwright.yml` workflow, bundled in
+with Playwright browser installs and `@smoke` e2e tests. `next build` does implicitly type-check
+(no `ignoreBuildErrors` set), so type errors aren't entirely unguarded — but the documented gate
+isn't literally present in `ci.yml`, and disabling/removing `playwright.yml` (which reads as "just
+e2e tests") would silently drop the typecheck gate with nothing else calling it out.
+
+### 22. Screener steps 4-7 e2e tests are permanently disabled with no explanation
+`frontend/e2e/tests/screener-steps-4-7.spec.ts:5-31` — all 4 tests use `test.fixme()` with no
+comment explaining why. Their locators (`frontend/e2e/pages/ScreenerPage.ts:103,113` —
+`page.getByRole('table')` for both the ranking and contracts tables) look like they'd never match
+the current div/grid-based table implementations, suggesting these are stale rather than
+temporarily broken — but nothing documents that or tracks fixing/removing them.
+
+### 23. Dashboard e2e test can never fail regardless of the actual regime banner
+`frontend/e2e/pages/DashboardPage.ts:11` — `regimeBanner = page.getByRole('banner')` resolves to
+the app's persistent `<header>` (`frontend/components/organisms/TopBar/index.tsx:89`, which
+carries the implicit ARIA "banner" role), not the dashboard's own
+`<section className={styles.regime}>` block (`frontend/app/(frame)/dashboard/page.tsx:162`).
+Since TopBar renders on every page, `frontend/e2e/tests/dashboard.spec.ts:18-25`'s assertion can
+never fail from a broken/missing regime section — it's effectively just checking page chrome
+loaded.
+
 ---
 
 ## Low / cleanup
@@ -133,6 +223,45 @@ Several sites (`backend/app/data/market.py:40-41,156-157,426-427,1054-1055,1113-
 non-fatal fallbacks, but broad enough to also hide genuine programming errors (`AttributeError`,
 `KeyError`) rather than just the intended I/O failures.
 
+### 24. Auto-trade daily-loss blocks leave no audit trail
+`backend/app/services/auto_trader.py:196-217` — a fire blocked by `_check_exposure` is recorded
+to `AutoTradeState.history` with `status: "cap_blocked"` before re-raising. But
+`_check_daily_loss(...)` (called unguarded at line 217, defined at 330-352) raises `RuntimeError`
+directly with no surrounding try/except, so a fire blocked by the daily-loss circuit breaker
+leaves zero trace in history even though the armed state was already cleared — an operator
+checking `/auto-trade/status` after a blocked daily-loss fire sees nothing happened, not that a
+trade was stopped.
+
+### 25. `/ws/alerts` has no authentication
+`backend/app/routers/ws_alerts.py:12-38` accepts any WebSocket connection and immediately
+registers it for live portfolio-alert broadcast — no token/session check. Likely acceptable given
+the single-user-local-machine assumption documented elsewhere (`credential_store.py:28-35`), but
+there's no comment here acknowledging that same reasoning, so it reads as an oversight rather than
+a deliberate call.
+
+### 26. Credential file has no permission hardening
+`backend/app/services/credential_store.py:71-79` writes `local_credentials.yaml` (plaintext
+broker secrets, explicitly acknowledged at lines 28-35) via `os.replace` with no
+`os.chmod(0o600)`, so the file inherits the process umask (often group/world-readable). Cheap
+defense-in-depth that's currently missing.
+
+### 27. `update_sp500_liquidity.py` overwrites production config with no backup or dry-run
+`backend/scripts/update_sp500_liquidity.py:134-150` rewrites `backend/app/data/sp500.csv`
+unconditionally. It warns on zero-liquidity symbols (line 142) but has no `--dry-run` or backup —
+a bad yfinance batch (e.g. a transient outage returning mostly-empty `Close`/`Volume` series)
+would still write a largely-zeroed `liquidity` column over the file that drives the sector heatmap
+and universe filters.
+
+### 28. Stale doc comment on `AlertConfig.keepAlertsDays`
+`frontend/types/domain.ts:456` says "default 10" but the real default
+(`frontend/lib/alertStore.ts:28` → `DEFAULT_CONFIG.keepAlertsDays: 30`) is 30.
+
+### 29. Redundant duplicate PRD file at repo root
+`temp_prd.md` is a byte-for-byte duplicate of
+`PRD-02 Master Phased PRD — Options Screener and Recommendation Assistant.md` (confirmed via
+diff, zero differences, both 1050 lines) — dead weight that doubles the maintenance surface for
+the same text.
+
 ---
 
 ## Documentation staleness (root-level docs, not CLAUDE.md)
@@ -151,6 +280,43 @@ non-fatal fallbacks, but broad enough to also hide genuine programming errors (`
   don't match the repo; calls the repo "the initial workspace."
 - **`IMPLEMENTATION_PLAN.md`** — "Current state" table claims scoring/pricing/contract
   validation are "Not started," directly contradicted by CLAUDE.md's own pipeline description.
+- **`PHASE_1_COMPLETION.md`** — "What remains" section claims `SendToBrokerDialog` "does not call
+  any broker API," candle data is "currently seeded RNG," and the frontend still has `MOCK_*`
+  imports to replace. All three are false today (live paper-broker adapters exist per CLAUDE.md's
+  Integrations table; `frontend/lib/api.ts` has zero `MOCK_*` references). No superseded/archived
+  marker, and its closing line ("Next: Backend integration / Phase 3 TBD") reads as current status.
+- **`llm-contexts/01-backend-fastapi.md`** — presents itself as authoritative ("read every section
+  before writing a single line of code") but describes a backend with no database, hardcoded
+  fixture dicts, and fixtures sourced from `frontend/mocks/{watchlist,contracts,candles}.ts` —
+  `frontend/mocks/` doesn't exist. Directly contradicts CLAUDE.md's SQLAlchemy v2 + Alembic +
+  AsyncPG backend with real data adapters.
+- **`llm-contexts/CONTEXT_FIX_STARTUP_AND_PERFORMANCE.md`** — describes a Windows dev setup
+  (`F:\Git\GitHub\Trading assistant`, `start-backend.bat`/`start-frontend.bat`, entrypoint
+  `backend\main.py`) that no longer exists; no `.bat` files or root `package.json` are in the
+  repo, and the real entrypoint is `backend/app/main.py`.
+- **`llm-contexts/04-execution-params.md`** still calls Direction+Horizon "Step 2," pre-dating the
+  reorder documented in `llm-contexts/05-step-reorder.md` that moved it to Step 3 (matching
+  CLAUDE.md's current `step-3-direction`) — the two files in the same directory contradict each
+  other with no indication which is current.
+- **`llm-contexts/`** (65 files) and **`docs/superpowers/`** (~90 files) are an undocumented,
+  unindexed pile of point-in-time task/plan specs — CLAUDE.md never references either directory.
+  Several present themselves as authoritative, dated-free "single source of truth" documents with
+  no status header, so an agent landing on one at random has no signal it may be long superseded.
+  Lower-confidence spot check: `docs/superpowers/plans/*` and `specs/*` reference component names
+  that were never built (`BacktestReport/index.tsx`, `StrategyPicker/index.tsx`) and test files
+  that don't exist (`test_edgar_mapping.py`, `test_fundamentals_gate.py`, others) — expected
+  plan/implementation drift, not urgent, but adds to the same pile-of-stale-specs problem.
+- **`docs/mockup/trading-workbench-mockup.html`** — a static HTML mockup predating the
+  Options/Stocks/Pre-Breakout three-mode screener split; doesn't reference real file/component
+  names so it isn't factually wrong, just a visually outdated design reference.
+- Two files are non-authoritative content that happen to sit among project docs with nothing
+  marking them as such: `llm-contexts/Bamendjou Stabilization Plan.md` (written as instructions
+  for a different LLM, "DeepSeek") and
+  `2026-06-02_How_To_Get_TradingView_Paid_Features_For_FREE_(Claude_Code_Is_Insane).md` (a YouTube
+  transcript about Pine Script/TradingView — this repo doesn't use either).
+- **`tests/` at repo root** is confirmed to be exactly a stub: one `tests/README.md` describing
+  goals, zero actual test files. All real coverage lives in `backend/tests/` and
+  `frontend/__tests__/`/`frontend/lib/__tests__/`, which is what CI actually runs.
 
 ---
 
@@ -168,10 +334,32 @@ non-fatal fallbacks, but broad enough to also hide genuine programming errors (`
 - All scheduled-job wiring in `main.py` matches the CLAUDE.md scheduler table.
 - `reward_risk.py`, `entry_quality.py`, `walk_forward.py`, `signal_confidence.py`,
   `contract_validator.py` — no defects found.
+- Alembic migration history (`backend/migrations/versions/`) has exactly one head, every migration
+  has a real `downgrade()`, and the schema-drift fix migration matches current ORM models.
+- Notification dispatch (`gmail.py`, `telegram.py`, `sent_log.py`, `alert_notifier.py`) — dedup
+  logic and CRLF header-injection defenses are sound and tested; no plaintext-credential logging.
+- `governor.py`'s token bucket / circuit breaker / symbol budget — no race found.
+- All scheduled jobs match CLAUDE.md's descriptions and fail soft (logged warning, not a crashed
+  startup) if registration fails.
+- `frontend/lib/api.ts` — every endpoint call's URL/method matches its backend router; no
+  mismatches found.
+- `frontend/lib/alertEngine.ts`, `alertStore.ts`, `chartAlertStore.ts`, `strategyWatchStore.ts`,
+  `performanceStore.ts`, `autoTradeStore.ts`, `universeStore.ts`, `structureStore.ts`,
+  `eventThresholdsStore.ts`, `ivThresholdsStore.ts` — direction/sign comparisons, dedup, and
+  Zustand immutability patterns all correct.
+- Dependency/version claims in CLAUDE.md all confirmed accurate against `frontend/package.json`
+  (Next 15.5.23, TypeScript 5.7, Zustand 5.0.2, lightweight-charts 5.0.0) and
+  `backend/requirements.txt` (FastAPI, Pydantic v2, SQLAlchemy v2, AsyncPG, aiosqlite,
+  pytest-asyncio) — no drift here.
 
 ---
 
 ## Suggested next step
 
-Fix items 1-3 first (they affect real money/risk decisions), then 4-5 (correctness/perf), then
-sweep the doc staleness in one pass. Happy to implement any subset on request.
+Fix items 1-3 and 15 first (they affect real money/risk decisions — misapplied risk settings,
+wrong P&L display, mislabeled short direction, and a broker-dependent SELL that either opens an
+unintended short or throws). Then 4-5, 17-18, 20 (correctness/safety), then 21-23 (test/CI gaps),
+then sweep the doc staleness (round 1 and round 2 sections) in one pass — the `llm-contexts/` and
+`docs/superpowers/` piles in particular would benefit from either a top-level index noting which
+files are current vs. historical, or archiving the superseded ones out of the main tree. Happy to
+implement any subset on request.
