@@ -19,11 +19,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # no cache: 'npm' — that requires cache-dependency-path to point at a
-          # committed lockfile, and frontend/package-lock.json is gitignored repo-wide
+          # no cache: 'npm' yet — frontend/package-lock.json is now committed,
+          # but switching this to cache-dependency-path + npm ci is a deliberate
+          # follow-up, not bundled into the lockfile commit itself
 
       - name: Install dependencies
-        run: npm install   # not npm ci — same reason, no committed lockfile to install from
+        run: npm install   # not npm ci yet — same reason, deferred follow-up
 
       - name: Run typecheck
         run: npm run typecheck

@@ -185,7 +185,7 @@ export default function Step4PreBreakoutPage() {
     } finally {
       setScanning(false);
     }
-  }, [scanMode, symbolOverride, universePick, customRaw, direction, params, fibParams, setResults, setFibResults]);
+  }, [scanMode, symbolOverride, universePick, customRaw, direction, params, fibParams, context?.horizon, pullbackEmaParams.emaPeriod, pullbackEmaParams.trendEma, setResults, setFibResults]);
 
   const sorted: ScanRow[] = [...preResults].sort((a, b) => b.confidence - a.confidence);
 

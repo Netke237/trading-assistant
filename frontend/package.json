@@ -13,11 +13,16 @@
   "dependencies": {
     "framer-motion": "^11.15.0",
     "lightweight-charts": "^5.0.0",
-    "next": "15.5.18",
+    "next": "15.5.23",
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.2"
+  },
+  "_overridesNote": "postcss/sharp are forced past what next@15.5.23 itself declares (postcss@8.4.31 exact, sharp@^0.34.3) to close known high-severity CVEs (postcss <=8.5.22, sharp <0.35.0) without a major next bump. next was only QA'd against its own older bundled versions, not these — drop this override once next's own floor moves past postcss@8.5.23 / sharp@0.35.0. sharp specifically is currently unused at runtime (no next/image usage in this app), so its override is verified safe for the build pipeline but not exercised end-to-end.",
+  "overrides": {
+    "postcss": "^8.5.23",
+    "sharp": "^0.35.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

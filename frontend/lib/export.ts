@@ -1,3 +1,9 @@
+// xlsx has 2 known high-severity CVEs (prototype pollution, ReDoS) with no
+// upstream fix on npm — both trigger only via XLSX.read/readFile parsing
+// attacker-controlled input. This file only writes (json_to_sheet/writeFile)
+// from our own in-memory data, never parses external files, so neither is
+// reachable here. Re-check this note if XLSX.read/readFile is ever added
+// anywhere in this codebase.
 import * as XLSX from 'xlsx';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 
