@@ -179,7 +179,7 @@ export default function Step4StocksPage() {
   return (
     <div className={styles.main}>
       <div className={styles.header}>
-        <Text size={11} tone="dim" weight={500}>STEP 4 OF 4</Text>
+        <Text size={11} tone="dim" weight={500}>STEP 4 OF 7</Text>
         <Title as="h1" size={24}>Stocks</Title>
         <Text size={13} tone="secondary">
           Pick a strategy, run the scan, and act on the results — all on this page.

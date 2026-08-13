@@ -30,10 +30,13 @@ export const SCREENER_STEPS_OPTIONS: ScreenerStep[] = [
 ];
 
 export const SCREENER_STEPS_STOCKS: ScreenerStep[] = [
-  { index: 1, slug: 'step-1-regime',    label: 'Market Regime' },
-  { index: 2, slug: 'step-2-universe',  label: 'Universe'      },
-  { index: 3, slug: 'step-3-direction', label: 'Direction'     },
-  { index: 4, slug: 'step-4-stocks',    label: 'Stocks'        },
+  { index: 1, slug: 'step-1-regime',        label: 'Market Regime' },
+  { index: 2, slug: 'step-2-universe',      label: 'Universe'      },
+  { index: 3, slug: 'step-3-direction',     label: 'Direction'     },
+  { index: 4, slug: 'step-4-stocks',        label: 'Stocks'        },
+  { index: 5, slug: 'step-5-strategy',      label: 'Strategy'      },
+  { index: 6, slug: 'step-6-backtest',      label: 'Backtest'      },
+  { index: 7, slug: 'step-7-position-card', label: 'Position'      },
 ];
 
 export const SCREENER_STEPS_PREBREAKOUT: ScreenerStep[] = [

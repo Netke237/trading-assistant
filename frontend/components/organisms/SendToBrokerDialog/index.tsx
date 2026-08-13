@@ -228,7 +228,7 @@ export function SendToBrokerDialog({ cards, onClose, onSubmit }: Props) {
           })}
         </div>
 
-        <div style={{ padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--border-subtle)' }}>
+        <div className={styles.riskSummaryWrap}>
           <RiskSummary
             hasMissingInvalidation={hasMissingInvalidation}
             hasWarnings={hasWarnings}
@@ -307,7 +307,7 @@ function RiskSummary({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+    <div className={styles.riskReasonsStack}>
       {Array.from(reasons).map((r) => (
         <Text key={r} size={12} tone="caution">
           {reasonLabels[r] ?? r}

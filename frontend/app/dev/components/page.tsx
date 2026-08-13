@@ -9,6 +9,7 @@
  * no SEO concern.
  */
 
+import { notFound } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ScoreBar } from '@/components/atoms/ScoreBar';
@@ -30,6 +31,7 @@ import styles from './page.module.css';
 const ALL_STATUSES: Status[] = ['PASS', 'CAUTION', 'REJECT', 'PENDING', 'NO_DATA'];
 
 export default function ComponentsGallery() {
+  if (process.env.NODE_ENV !== 'development') notFound();
   return (
     <div className={styles.page}>
       <header className={styles.header}>

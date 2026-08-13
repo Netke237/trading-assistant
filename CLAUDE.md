@@ -31,13 +31,14 @@ frontend/
   app/
     (frame)/              # Persistent shell (TopBar, NavRail, ContextRail)
       layout.tsx          # Frame layout with parallel @contextRail slot
-      screener/           # Multi-mode screener (Options / Stocks toggle in layout)
+      screener/           # Multi-mode screener (Options / Stocks / Pre-Breakout toggle in layout)
         layout.tsx        # Mode toggle + StepNavBar
         step-1-regime/    # Market regime (Markov/HMM, SPX/NDX charts, sector heatmap)
         step-2-universe/  # Universe picker + price/cap filters
         step-3-direction/ # Direction + horizon + Execution Parameters panel
         step-4-stocks/    # [Stocks mode] Stock scan results table, StockPositionCard
         step-4-ranking/   # [Options mode] Sortable ranked candidates table
+        step-4-prebreakout/ # [Pre-Breakout mode] Setup scanner (prebreakout/pullback/fib sub-modes) — self-contained, no steps 5-7
         step-5-strategy/  # [Stocks mode] Strategy picker (pullback_ema, breakout_base…)
         step-5-vol-events/# [Options mode] IV rank, IV percentile, event proximity gate
         step-6-backtest/  # [Stocks mode] Backtest results + confidence gate
@@ -49,6 +50,11 @@ frontend/
       portfolio/
       calendar/
       settings/
+      alerts/           # Price/condition alert rules (AlertRuleBuilder) + composite watch summaries
+      analysis/         # Single-symbol deep dive — regime alignment, fundamentals, candlestick chart
+      chart/            # Standalone full-page chart workspace (ChartWorkspace)
+      strategy-watch/   # Per-symbol strategy watch subscriptions (state-machine evaluator UI)
+      validation/       # Scan candidate validation table + XLSX export
   components/
     primitives/           # Text, Title, Data — font/tone/size only
     atoms/                # Single-purpose UI: StatusBadge, WatchStar, RankDelta, EventFlag…
@@ -88,9 +94,9 @@ frontend/
 
 | File | Purpose |
 |---|---|
-| `scanStore.ts` | Scan state, scan context (universe/direction/horizon), regime status, `screenerMode` ('options'\|'stocks') |
+| `scanStore.ts` | Scan state, scan context (universe/direction/horizon), regime status, `screenerMode` ('options'\|'stocks'\|'prebreakout') |
 | `scanParamsStore.ts` | Execution parameters (strategy params, horizon preset) fed into stock scan |
-| `settingsStore.ts` | Broker config (IBKR/Tradier/Alpaca paper+live), `premiumStopPct`, IV thresholds, `confidenceGate`, `fundamentalsGate`, `markov` config, shortlist/contract/price limits |
+| `settingsStore.ts` | Broker config (IBKR/Tradier/Alpaca/Tastytrade paper+live), `premiumStopPct`, IV thresholds, `confidenceGate`, `fundamentalsGate`, `markov` config, shortlist/contract/price limits |
 | `watchlistStore.ts` | Starred symbols — symmetric add/remove, versioned migrate |
 | `watchedContractsStore.ts` | Starred contracts |
 | `portfolioStore.ts` | Open positions — `addPosition` merges duplicate contracts |
@@ -104,9 +110,13 @@ frontend/
 | `autoTradeStore.ts` | Auto-trade state |
 | `universeStore.ts` | Selected universe + custom symbols |
 | `structureStore.ts` | Market structure cache |
+| `analysisStore.ts` | Single-symbol Analysis page state (`/analysis`) — fetched `StockAnalysis` result, loading/error |
+| `eventThresholdsStore.ts` | Per-horizon event-proximity reject/caution day windows, fetched from the backend at app start (mirrors `scoring_rules.yaml`'s `horizons.<horizon>.event` block; falls back to hardcoded values if the fetch fails) |
+| `ivThresholdsStore.ts` | Per-horizon IV rank pass/caution thresholds, fetched from the backend at app start (same fetch-with-fallback pattern as `eventThresholdsStore`) |
+| `searchProfilesStore.ts` | Saved scan-parameter search profiles (name + snapshot) — persisted, CRUD via `saveProfile`/`updateProfile`/`renameProfile`/`deleteProfile` |
 
 `scanStore.regime` is set by Step 1 on mount and read by StepNavBar for the REJECT gate.
-`scanStore.screenerMode` switches between the Options path (steps 4-ranking → 5-vol-events → 6-contracts → 7-trade-card) and the Stocks path (steps 4-stocks → 5-strategy → 6-backtest → 7-position-card).
+`scanStore.screenerMode` switches between the Options path (steps 4-ranking → 5-vol-events → 6-contracts → 7-trade-card), the Stocks path (steps 4-stocks → 5-strategy → 6-backtest → 7-position-card), and the Pre-Breakout path (step 4-prebreakout only — self-contained, no steps 5-7).
 
 ---
 
@@ -130,8 +140,9 @@ Test fixtures live in `backend/tests/fixtures/` (OHLCV JSON files per symbol).
 
 ## Screener workflow
 
-The screener has two modes toggled in the layout header: **Options** and **Stocks**.
-Steps 1–3 are shared; steps 4–7 diverge per mode.
+The screener has three modes toggled in the layout header: **Options**, **Stocks**, and **Pre-Breakout**.
+Steps 1–3 are shared; step 4 onward diverges per mode. Options and Stocks continue through steps 4–7;
+Pre-Breakout is a single self-contained step 4 with no steps 5–7 (see below).
 
 ### Shared steps
 
@@ -158,6 +169,12 @@ Steps 1–3 are shared; steps 4–7 diverge per mode.
 | 5 | `step-5-strategy` | Strategy picker (pullback_ema, breakout_base, ma_crossover, mean_reversion_rsi) + StrategyParamsPanel |
 | 6 | `step-6-backtest` | Backtest results per candidate — confidence gate (pass/fail), win rate, expectancy |
 | 7 | `step-7-position-card` | Position card with ConfidenceBadge + broker execution mode selector (IBKR/Tradier/Alpaca paper) |
+
+### Pre-Breakout path (step 4 only)
+
+| Step | Slug | Description |
+|---|---|---|
+| 4 | `step-4-prebreakout` | Setup scanner with an in-page sub-toggle between three scan modes — `prebreakout`, `pullback`, `fib` (`PreBreakoutParamsPanel`, `FibPullbackParamsPanel`) — surfacing per-symbol ATR/range/volume ratios, proximity to swing levels, and Fibonacci retracement hits. No separate contract/trade-card step; candidates are actioned inline via `WatchStar` and `CompositeAlertDialog` instead of a step 5–7 handoff. |
 
 StepNavBar handles Back/Next navigation and keyboard shortcuts (←/→).
 If `scanStore.regime === 'REJECT'`, clicking Next on Step 1 shows a confirmation overlay.
@@ -196,6 +213,7 @@ Config: `scoring_rules.yaml` (scorer weights/thresholds), `strategy_params.yaml`
 | Tradier | `tradier_paper.py`, `tradier_stream.py` | Paper trading + streaming quotes |
 | IBKR | `ibkr.py`, `ibkr_paper.py` | Client Portal API paper trading |
 | Alpaca | `alpaca.py`, `alpaca_paper_execution.py` | Paper trading |
+| Tastytrade | `tastytrade_bridge.py`, `tastytrade_session.py`, `tastytrade_iv.py`, `tastytrade_paper.py` | Paper trading + real IV Rank/Percentile; `tastytrade_bridge.py` routes every sync-to-async tastytrade call through one persistent background event loop, since tastytrade's SDK is reached from synchronous code paths (unlike the other rate-limited providers, all called from async code on the app's single event loop) |
 | Tiingo | `tiingo.py` | EOD/intraday price data |
 
 Credentials stored via `credential_store.py`; broker routing via `broker_router.py`.

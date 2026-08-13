@@ -169,3 +169,14 @@
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
+
+.riskSummaryWrap {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.riskReasonsStack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
