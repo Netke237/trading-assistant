@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
+import type { Direction } from '@/types/domain';
 import { StockAutoTradeArm } from '@/components/organisms/StockAutoTradeArm';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
@@ -187,6 +188,7 @@ export function StockPositionCard({
         broker: execMode,
         symbol: card.symbol,
         action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        effect: 'OPEN',
         quantity: overlay.shares,
         order_type: orderType,
         limit_price: orderType === 'LMT' ? overlay.entry : null,
@@ -206,7 +208,7 @@ export function StockPositionCard({
     setErr(null);
     try {
       const res = await addPosition(
-        buildPaperStockPosition(card.symbol, overlay.entry, overlay.shares, stockCardSnapshotOf(card)),
+        buildPaperStockPosition(card.symbol, overlay.entry, overlay.shares, card.direction as Direction, stockCardSnapshotOf(card)),
       );
       if (res.status === 'rejected') {
         setErr(res.detail ?? 'Portfolio rejected this position.');

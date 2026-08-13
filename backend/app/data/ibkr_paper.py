@@ -59,6 +59,7 @@ def paper_gateway_available() -> bool:
 
 OrderType = Literal["MKT", "LMT"]
 ActionType = Literal["BUY", "SELL"]
+Effect = Literal["OPEN", "CLOSE"]
 TIF = Literal["DAY", "GTC"]
 
 
@@ -66,6 +67,11 @@ TIF = Literal["DAY", "GTC"]
 class BrokerOrder:
     symbol: str
     action: ActionType
+    # Whether this order opens a new position or closes an existing one — decoupled
+    # from `action` because BUY/SELL alone is ambiguous (a SELL can open a short or
+    # close a long). IBKR/Alpaca infer this from account state and ignore the field;
+    # Tradier and Tastytrade require it explicitly (see their adapters).
+    effect: Effect
     quantity: int
     order_type: OrderType
     limit_price: Optional[float]
@@ -96,6 +102,8 @@ class IbkrPaperAdapter:
         self._timeout = timeout
 
     def _build_payload(self, order: BrokerOrder) -> dict:
+        # order.effect is intentionally unused here — IBKR's Client Portal API infers
+        # open-vs-close from current account position given a plain BUY/SELL side.
         o: dict = {
             "orderType": order.order_type,
             "side": order.action,

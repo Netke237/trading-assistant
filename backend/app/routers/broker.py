@@ -17,6 +17,7 @@ class StockOrderRequest(BaseModel):
     broker: BrokerKey
     symbol: str
     action: Literal["BUY", "SELL"]
+    effect: Literal["OPEN", "CLOSE"]
     quantity: int = Field(..., ge=1)
     order_type: Literal["MKT", "LMT"] = "LMT"
     limit_price: Optional[float] = None
@@ -28,6 +29,7 @@ class OptionOrderRequest(BaseModel):
     symbol: str
     option_symbol: str
     action: Literal["BUY", "SELL"]
+    effect: Literal["OPEN", "CLOSE"]
     quantity: int = Field(..., ge=1)
     order_type: Literal["MKT", "LMT"] = "LMT"
     limit_price: Optional[float] = None
@@ -55,6 +57,7 @@ async def place_stock_order(req: StockOrderRequest) -> dict:
     order = BrokerOrder(
         symbol=req.symbol,
         action=req.action,
+        effect=req.effect,
         quantity=req.quantity,
         order_type=req.order_type,
         limit_price=req.limit_price,
@@ -103,6 +106,7 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
     order = BrokerOrder(
         symbol=req.symbol,
         action=req.action,
+        effect=req.effect,
         quantity=req.quantity,
         order_type=req.order_type,
         limit_price=req.limit_price,

@@ -118,6 +118,11 @@ def execute_option_order(strategy: ArmedStrategy):
     order = BrokerOrder(
         symbol=strategy.symbol,
         action=strategy.action,
+        # Auto-trade is structurally entry-only — arm()/fire() have no existing-position
+        # lookup anywhere, and the only caller (AutoTradeArm/index.tsx) always requests a
+        # buy-to-open. Hardcoded rather than added to ArmRequest/ArmedStrategy so there's
+        # no way to call this endpoint with the wrong effect.
+        effect="OPEN",
         quantity=strategy.quantity,
         order_type=strategy.order_type,
         limit_price=strategy.limit_price,

@@ -459,14 +459,14 @@ export const api = {
   getLastStockScanStatus: () => get<ScanSessionStatus>('/api/stock-scan/last-run'),
 
   postStockOrder: (req: {
-    broker: string; symbol: string; action: 'BUY' | 'SELL';
+    broker: string; symbol: string; action: 'BUY' | 'SELL'; effect: 'OPEN' | 'CLOSE';
     quantity: number; order_type: 'MKT' | 'LMT';
     limit_price: number | null; tif: 'DAY' | 'GTC';
   }) => post<{ order_id: string; status: string; broker: string }>('/broker/stock-order', req),
 
   postOptionOrder: (req: {
     broker: string; symbol: string; option_symbol: string;
-    action: 'BUY' | 'SELL'; quantity: number;
+    action: 'BUY' | 'SELL'; effect: 'OPEN' | 'CLOSE'; quantity: number;
     order_type: 'MKT' | 'LMT'; limit_price: number | null;
     tif: 'DAY' | 'GTC'; conid?: number;
   }) => post<{ order_id: string; status: string; broker: string }>('/broker/option-order', req),

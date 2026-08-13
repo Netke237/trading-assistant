@@ -27,13 +27,13 @@ export function checkInvalidation(invalidation: number | undefined): boolean {
 
 export const hasInvalidation = checkInvalidation;
 
-function _multiplier(p: PortfolioPosition): number {
+export function positionMultiplier(p: PortfolioPosition): number {
   return p.contract.endsWith('|STOCK') ? 1 : 100;
 }
 
 export function totalNotional(positions: PortfolioPosition[]): number {
   return positions.reduce(
-    (sum, p) => sum + p.currentPrice * _multiplier(p) * (p.contracts ?? 1),
+    (sum, p) => sum + p.currentPrice * positionMultiplier(p) * (p.contracts ?? 1),
     0,
   );
 }
@@ -51,7 +51,7 @@ export function computePortfolioRiskMetrics(
   let largestConcentrationPct = 0;
   let largestConcentrationSymbol = '—';
   for (const p of positions) {
-    const posNotional = p.currentPrice * _multiplier(p) * (p.contracts ?? 1);
+    const posNotional = p.currentPrice * positionMultiplier(p) * (p.contracts ?? 1);
     const posPct = posNotional / portfolioValue;
     if (posPct > largestConcentrationPct) {
       largestConcentrationPct = posPct;

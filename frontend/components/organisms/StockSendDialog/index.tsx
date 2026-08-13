@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
+import type { Direction } from '@/types/domain';
 import styles from './StockSendDialog.module.css';
 
 export interface StockDraftOrder {
@@ -88,7 +89,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
       if (!r.autoSend) {
         // Manual → paper portfolio
         const res = await addPosition(
-          buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares, stockCardSnapshotOf(c)),
+          buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction, stockCardSnapshotOf(c)),
         );
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
@@ -99,6 +100,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
             broker,
             symbol: c.symbol,
             action: c.direction === 'Bullish' ? 'BUY' : 'SELL',
+            effect: 'OPEN',
             quantity: r.shares,
             order_type: 'LMT',
             limit_price: c.strategy.entry_price,
@@ -110,7 +112,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
       } else {
         // Auto-send but broker = recommendation → fall back to paper
         const res = await addPosition(
-          buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares, stockCardSnapshotOf(c)),
+          buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction, stockCardSnapshotOf(c)),
         );
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';

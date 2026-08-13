@@ -22,7 +22,7 @@ def _alpaca_order_resp(order_id: str = "abc123", status: str = "accepted") -> ht
 def test_place_market_order_returns_order_result():
     adapter = AlpacaPaperAdapter(key_id="key1", secret_key="secret1")
     order = BrokerOrder(
-        symbol="AAPL", action="BUY", quantity=10,
+        symbol="AAPL", action="BUY", effect="OPEN", quantity=10,
         order_type="MKT", limit_price=None, tif="DAY", sec_type="STK",
     )
     with patch.object(httpx, "post", return_value=_alpaca_order_resp("order-001", "accepted")):
@@ -36,7 +36,7 @@ def test_place_market_order_returns_order_result():
 def test_place_limit_order_includes_limit_price():
     adapter = AlpacaPaperAdapter(key_id="key1", secret_key="secret1")
     order = BrokerOrder(
-        symbol="MSFT", action="BUY", quantity=5,
+        symbol="MSFT", action="BUY", effect="OPEN", quantity=5,
         order_type="LMT", limit_price=380.50, tif="GTC", sec_type="STK",
     )
     captured = {}
@@ -56,7 +56,7 @@ def test_place_limit_order_includes_limit_price():
 def test_place_order_raises_on_http_error():
     adapter = AlpacaPaperAdapter(key_id="key1", secret_key="secret1")
     order = BrokerOrder(
-        symbol="TSLA", action="BUY", quantity=1,
+        symbol="TSLA", action="BUY", effect="OPEN", quantity=1,
         order_type="MKT", limit_price=None, sec_type="STK",
     )
     request = httpx.Request("POST", "https://paper-api.alpaca.markets/v2/orders")
@@ -69,7 +69,7 @@ def test_place_order_raises_on_http_error():
 def test_options_order_raises_not_supported():
     adapter = AlpacaPaperAdapter(key_id="key1", secret_key="secret1")
     order = BrokerOrder(
-        symbol="AAPL", action="BUY", quantity=1,
+        symbol="AAPL", action="BUY", effect="OPEN", quantity=1,
         order_type="MKT", limit_price=None, sec_type="OPT",
         option_symbol="AAPL250117C00200000",
     )

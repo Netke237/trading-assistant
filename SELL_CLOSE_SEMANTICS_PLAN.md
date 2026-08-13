@@ -1,6 +1,14 @@
 # Implementation Plan — Explicit Open/Close Order Semantics (Stock + Options)
 
-Status: REVISED after 3 rounds of adversarial review. Round 1: 13 issues (3 at severity 5). Round
+Status: IMPLEMENTED. Backend and frontend changes complete; full backend suite (1408 passed),
+frontend typecheck, and full frontend suite (519 passed) all green. One additional correctness
+issue was caught during implementation itself (not by any of the 3 review rounds) and fixed on the
+spot — see the note inline in §2.3: the P&L sign-flip must only apply to short *stock* positions,
+not to bearish *options* (a bought put is still long the contract, not short — this app never
+writes/sells options). CODE_REVIEW_FINDINGS.md findings #2, #3, and #15 are marked fixed.
+
+Below is the plan as executed, retained for reference. Status: REVISED after 3 rounds of
+adversarial review. Round 1: 13 issues (3 at severity 5). Round
 2: verified round 1's fixes against real code, found 3 more (1 at severity 4 — the Tradier-stock
 "no change" claim was factually wrong per Tradier's own API docs). Round 3: verified round 2's
 fixes, found 3 more mechanical implementation-blocking gaps (max severity 3, all "fails loudly at
@@ -243,13 +251,20 @@ model short vs. long" gap, and leaving them for a follow-up risks the same landm
    as part of the same change, not a separate follow-up.
 2. **New, found while scoping this plan:** both `realizedDollar` AND `realizedPct`
    (`ClosePositionDrawer/index.tsx:34-37`) assume a long position (profit when price rises). For a
-   short position, P&L is inverted — profit when price *falls*. **Round 1 review caught that the
-   original draft only patched `realizedDollar`, leaving `realizedPct` unfixed — the result would
-   have been an internally contradictory display like "+$500 (-3.2%)" for a profitable short
-   close.** Fix: compute a single signed `priceDelta = position.direction === 'Bearish' ?
-   (entryPrice - exitPrice) : (exitPrice - entryPrice)` once, then derive both
+   *short stock* position, P&L is inverted — profit when price *falls*. **Round 1 review caught
+   that the original draft only patched `realizedDollar`, leaving `realizedPct` unfixed — the
+   result would have been an internally contradictory display like "+$500 (-3.2%)" for a
+   profitable short close.** Fix: compute a single signed `priceDelta` once, then derive both
    `realizedDollar = priceDelta * mult * qty` and `realizedPct = (priceDelta / entryPrice) * 100`
    from that same `priceDelta` — not two independently-written branches that can drift apart again.
+   **Caught during implementation (round 4, self-caught, not by rounds 1-3):** the sign flip must
+   NOT apply to `direction === 'Bearish'` unconditionally — it only applies to a short *stock*
+   position. A `'Bearish'` **option** position is a bought put (this app never writes/sells
+   options to open, per §1's confirmed-latent finding), which is still long the contract and
+   profits when its premium rises, exactly like a bought call. Flipping the sign for a bearish
+   option would have silently inverted P&L for every put position in the portfolio. Correct
+   formula: `isShortStock = position.direction === 'Bearish' && position.contract.endsWith('|STOCK')`,
+   then `priceDelta = isShortStock ? (entryPrice - exitPrice) : (exitPrice - entryPrice)`.
 
 This requires `PortfolioPosition.direction` to be trustworthy, which is round-1 finding #3
 (`buildPaperStockPosition` hardcodes `'Bullish'`) — fixed as part of this same plan since it's a

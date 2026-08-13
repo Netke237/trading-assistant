@@ -90,6 +90,7 @@ export default function Step7PositionCardPage() {
         broker: execMode,
         symbol: card.symbol,
         action: card.direction === 'Bullish' ? 'BUY' : 'SELL',
+        effect: 'OPEN',
         quantity: card.shares,
         order_type: orderType,
         limit_price: orderType === 'LMT' ? card.strategy.entry_price : null,

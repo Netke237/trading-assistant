@@ -14,7 +14,7 @@ def _adapter():
 def test_adapter_builds_order_payload_stock():
     adapter = _adapter()
     order = BrokerOrder(
-        symbol="AAPL", action="BUY", quantity=10,
+        symbol="AAPL", action="BUY", effect="OPEN", quantity=10,
         order_type="LMT", limit_price=185.0, tif="DAY"
     )
     payload = adapter._build_payload(order)
@@ -39,7 +39,7 @@ def test_adapter_place_order_success():
     from app.data import ibkr_paper
     ibkr_paper._auth_cache = None  # avoid cross-test cache leakage
     adapter = _adapter()
-    order = BrokerOrder(symbol="AAPL", action="BUY", quantity=5,
+    order = BrokerOrder(symbol="AAPL", action="BUY", effect="OPEN", quantity=5,
                         order_type="MKT", limit_price=None, tif="DAY")
     result = adapter.place_order(order)
     assert result.order_id == "987654"
@@ -61,7 +61,7 @@ def test_adapter_place_order_failure_raises():
     from app.data import ibkr_paper
     ibkr_paper._auth_cache = None
     adapter = _adapter()
-    order = BrokerOrder(symbol="AAPL", action="BUY", quantity=1,
+    order = BrokerOrder(symbol="AAPL", action="BUY", effect="OPEN", quantity=1,
                         order_type="MKT", limit_price=None, tif="DAY")
     with pytest.raises(RuntimeError, match="IBKR paper order failed"):
         adapter.place_order(order)
@@ -75,7 +75,7 @@ def test_adapter_place_order_raises_when_not_authenticated():
     from app.data import ibkr_paper
     ibkr_paper._auth_cache = None
     adapter = _adapter()
-    order = BrokerOrder(symbol="AAPL", action="BUY", quantity=1,
+    order = BrokerOrder(symbol="AAPL", action="BUY", effect="OPEN", quantity=1,
                         order_type="MKT", limit_price=None, tif="DAY")
     with pytest.raises(RuntimeError, match="gateway session is not authenticated"):
         adapter.place_order(order)

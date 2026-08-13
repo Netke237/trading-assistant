@@ -1,4 +1,4 @@
-import type { PortfolioPosition } from '@/types/domain';
+import type { Direction, PortfolioPosition } from '@/types/domain';
 import type { PositionCardData } from '@/types/stockDomain';
 
 // The "why was this bought" snapshot for the stocks path — attached once at
@@ -20,13 +20,14 @@ export function buildPaperStockPosition(
   symbol: string,
   price: number,
   shares: number,
+  direction: Direction,
   snapshot?: Record<string, unknown>,
 ): PortfolioPosition {
   const today = new Date().toISOString().slice(0, 10);
   return {
     symbol,
     contract:     `${symbol}|STOCK`,
-    direction:    'Bullish',
+    direction,
     entryPrice:   price,
     contracts:    shares,
     entryDate:    today,

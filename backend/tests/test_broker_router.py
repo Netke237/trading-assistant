@@ -10,7 +10,7 @@ def test_router_routes_to_ibkr_paper():
         order_id="ORD1", status="PreSubmitted", broker="ibkr_paper"
     )
     router = BrokerRouter(adapters={"ibkr_paper": mock_adapter})
-    order = BrokerOrder(symbol="AAPL", action="BUY", quantity=10,
+    order = BrokerOrder(symbol="AAPL", action="BUY", effect="OPEN", quantity=10,
                         order_type="LMT", limit_price=185.0, tif="DAY")
     result = router.execute("ibkr_paper", order)
     assert result.broker == "ibkr_paper"
@@ -23,7 +23,7 @@ def test_router_routes_to_tradier_paper():
         order_id="222", status="ok", broker="tradier_paper"
     )
     router = BrokerRouter(adapters={"tradier_paper": mock_adapter})
-    order = BrokerOrder(symbol="NVDA", action="BUY", quantity=5,
+    order = BrokerOrder(symbol="NVDA", action="BUY", effect="OPEN", quantity=5,
                         order_type="MKT", limit_price=None, tif="DAY")
     result = router.execute("tradier_paper", order)
     assert result.order_id == "222"
@@ -31,7 +31,7 @@ def test_router_routes_to_tradier_paper():
 
 def test_router_raises_for_unknown_broker():
     router = BrokerRouter(adapters={})
-    order = BrokerOrder(symbol="X", action="BUY", quantity=1,
+    order = BrokerOrder(symbol="X", action="BUY", effect="OPEN", quantity=1,
                         order_type="MKT", limit_price=None, tif="DAY")
     with pytest.raises(ValueError, match="Unknown broker"):
         router.execute("nonexistent", order)
@@ -39,7 +39,7 @@ def test_router_raises_for_unknown_broker():
 
 def test_router_raises_for_inactive_live():
     router = BrokerRouter(adapters={})
-    order = BrokerOrder(symbol="X", action="BUY", quantity=1,
+    order = BrokerOrder(symbol="X", action="BUY", effect="OPEN", quantity=1,
                         order_type="MKT", limit_price=None, tif="DAY")
     with pytest.raises(ValueError, match="not yet activated"):
         router.execute("ibkr_live", order)
@@ -57,7 +57,7 @@ def test_tastytrade_live_is_blocked():
     # Do not "simplify" this to adapters={}; that would weaken the test to no
     # longer prove the guard runs first.
     router = BrokerRouter(adapters={"tastytrade_live": MagicMock()})
-    order = BrokerOrder(symbol="AAPL", action="BUY", quantity=1,
+    order = BrokerOrder(symbol="AAPL", action="BUY", effect="OPEN", quantity=1,
                          order_type="MKT", limit_price=None, sec_type="STK")
     with pytest.raises(ValueError, match="not yet activated"):
         router.execute("tastytrade_live", order)
@@ -87,7 +87,7 @@ async def test_stock_order_accepts_tastytrade_paper_broker_key():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/broker/stock-order", json={
             "broker": "tastytrade_paper", "symbol": "AAPL",
-            "action": "BUY", "quantity": 1, "order_type": "MKT",
+            "action": "BUY", "effect": "OPEN", "quantity": 1, "order_type": "MKT",
         })
     # No tastytrade credentials configured in this test environment, so the
     # expected failure is 503 (credentials unavailable) or 502 (adapter
@@ -97,3 +97,25 @@ async def test_stock_order_accepts_tastytrade_paper_broker_key():
         f"broker.py's BrokerKey Literal still rejects 'tastytrade_paper' "
         f"(got {resp.status_code}, body: {resp.text})"
     )
+
+
+@pytest.mark.asyncio
+async def test_stock_order_requires_effect_field():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/broker/stock-order", json={
+            "broker": "ibkr_paper", "symbol": "AAPL",
+            "action": "BUY", "quantity": 1, "order_type": "MKT",
+        })
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_option_order_requires_effect_field():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/broker/option-order", json={
+            "broker": "ibkr_paper", "symbol": "AAPL", "option_symbol": "AAPL250117C00200000",
+            "action": "BUY", "quantity": 1, "order_type": "MKT",
+        })
+    assert resp.status_code == 422

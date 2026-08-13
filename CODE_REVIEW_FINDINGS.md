@@ -26,8 +26,13 @@ and is hardcoded at `0.05` in `risk_rules.yaml:4`. A user tightening or loosenin
 Settings has zero effect on real trade sizing/exposure enforcement. This is a silent risk-control
 failure, not a display bug.
 
-### 2. Closing a stock position shows realized P&L ~100x too large
-`frontend/components/organisms/ClosePositionDrawer/index.tsx:34` computes
+### 2. Closing a stock position shows realized P&L ~100x too large — FIXED
+**Fix:** `ClosePositionDrawer` now branches on `positionMultiplier()` (exported from
+`lib/risk.ts`, was previously module-private `_multiplier`) instead of hardcoding `* 100`. See
+`SELL_CLOSE_SEMANTICS_PLAN.md` for the full fix (implemented together with findings #3 and #15,
+which share a root cause). Covered by `ClosePositionDrawer/__tests__/ClosePositionDrawer.test.tsx`.
+
+Original finding: `frontend/components/organisms/ClosePositionDrawer/index.tsx:34` computes
 `realizedDollar = (exitPrice - entryPrice) * 100 * qty` unconditionally, assuming a 100-share
 option contract. Every other P&L/exposure calculation in the app branches on
 `position.contract.endsWith('|STOCK') ? 1 : 100` (`frontend/app/(frame)/portfolio/page.tsx:119,501`,
@@ -36,8 +41,13 @@ option contract. Every other P&L/exposure calculation in the app branches on
 (`contract` = `"SYM|STOCK"`), the confirm dialog shows a wildly wrong number before the user
 confirms the close.
 
-### 3. Shorted stock positions are recorded as "Bullish" in the local portfolio
-`frontend/lib/paperTrade.ts:29` — `buildPaperStockPosition()` hardcodes `direction: 'Bullish'`
+### 3. Shorted stock positions are recorded as "Bullish" in the local portfolio — FIXED
+**Fix:** `buildPaperStockPosition()` now takes a required `direction` parameter, threaded from
+the real trade direction at all 4 call sites (3 pass through `c.direction`/`card.direction`; the
+chart-click buy popover has no direction in scope by design and passes the literal `'Bullish'`,
+since that entry point is always a long/buy). Covered by `lib/paperTrade.test.ts`.
+
+Original finding: `frontend/lib/paperTrade.ts:29` — `buildPaperStockPosition()` hardcodes `direction: 'Bullish'`
 regardless of the actual trade direction, even though the broker order sent from the same call
 sites correctly does `action: c.direction === 'Bullish' ? 'BUY' : 'SELL'`
 (`frontend/components/organisms/StockSendDialog/index.tsx:101`,
@@ -45,8 +55,19 @@ sites correctly does `action: c.direction === 'Bullish' ? 'BUY' : 'SELL'`
 feeds `alertEngine.scanPortfolio()`'s direction-aware stop/target comparisons
 (`frontend/lib/alertEngine.ts:49-90`) backwards for every short position.
 
-### 15. Tradier and Tastytrade disagree on what `SELL` means — same request, opposite real-world trade
-`backend/app/data/tradier_paper.py:19-23` maps `SELL` → `sell_to_open` ("the screener always
+### 15. Tradier and Tastytrade disagree on what `SELL` means — same request, opposite real-world trade — FIXED
+**Fix:** every `BrokerOrder` now carries an explicit `effect: 'OPEN' | 'CLOSE'` field, decoupled
+from `action`. Tradier and Tastytrade both now key their side/action mapping on
+`(action, effect)` instead of guessing; Tradier's *stock* side also gained the same 4-way
+treatment (`sell_short`/`buy_to_cover`), which turned out to need fixing too — its "no change,
+auto-infers" assumption was verified false against Tradier's own API docs during planning. IBKR
+and Alpaca are unchanged (they genuinely auto-infer open/close from account state). Full design,
+3 rounds of adversarial review, and rationale in `SELL_CLOSE_SEMANTICS_PLAN.md`. Covered by new
+tests in `test_tradier_paper.py` (7 new cases across stock + options), `test_tastytrade_paper.py`
+(8-combination parametrized test + a live-bug regression test), and schema-validation tests in
+`test_broker_router.py`.
+
+Original finding: `backend/app/data/tradier_paper.py:19-23` maps `SELL` → `sell_to_open` ("the screener always
 opens a new position"). `backend/app/data/tastytrade_paper.py:35-49` maps `SELL` →
 `SELL_TO_CLOSE` (closes an existing long; fails if none exists). Both adapters are reachable with
 an identical `{"action": "SELL", ...}` payload from `POST /broker/option-order`,
