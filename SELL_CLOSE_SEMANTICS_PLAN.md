@@ -1,11 +1,27 @@
 # Implementation Plan — Explicit Open/Close Order Semantics (Stock + Options)
 
-Status: IMPLEMENTED. Backend and frontend changes complete; full backend suite (1408 passed),
-frontend typecheck, and full frontend suite (519 passed) all green. One additional correctness
-issue was caught during implementation itself (not by any of the 3 review rounds) and fixed on the
+Status: IMPLEMENTED, including a post-implementation adversarial audit and its one real finding.
+Backend and frontend changes complete; full backend suite (1408 passed), frontend typecheck, and
+full frontend suite (519 passed) all green. One additional correctness issue was caught during
+implementation itself (not by any of the 3 pre-implementation review rounds) and fixed on the
 spot — see the note inline in §2.3: the P&L sign-flip must only apply to short *stock* positions,
 not to bearish *options* (a bought put is still long the contract, not short — this app never
 writes/sells options). CODE_REVIEW_FINDINGS.md findings #2, #3, and #15 are marked fixed.
+
+**Post-implementation audit (separate from the 3 plan-review rounds — this one reviewed the actual
+diff, not the plan):** found no live bugs in the shipped code. It did find and prove, via mutation
+testing, that this plan's own §3 requirement for router-level SELL/CLOSE regression tests
+(`test_broker_router.py`) had not actually been implemented — the schema-validation tests only
+checked for a *missing* `effect` field, not that a *present* value was correctly propagated from
+the HTTP request into `BrokerOrder`. The auditor mutated `broker.py` to silently hardcode
+`effect="OPEN"` and the full 1408-test backend suite still passed. Fixed: added
+`test_stock_order_propagates_close_effect_to_broker_order`,
+`test_stock_order_propagates_open_effect_to_broker_order`,
+`test_option_order_propagates_close_effect_to_broker_order` (mock-adapter tests through the real
+FastAPI route), plus the plan's other previously-unmet §3 item —
+`test_ibkr_payload_unaffected_by_effect`/`test_alpaca_payload_unaffected_by_effect`. Independently
+re-verified the exact same mutation is now caught (test fails as expected), then confirmed the
+file was restored and the full suite is green.
 
 Below is the plan as executed, retained for reference. Status: REVISED after 3 rounds of
 adversarial review. Round 1: 13 issues (3 at severity 5). Round

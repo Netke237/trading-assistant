@@ -119,3 +119,92 @@ async def test_option_order_requires_effect_field():
             "action": "BUY", "quantity": 1, "order_type": "MKT",
         })
     assert resp.status_code == 422
+
+
+# ── effect propagation: broker.py's route handlers -> BrokerOrder ───────────
+# The plan's own stated reason for these tests: "this exact combination is the
+# gap that let the original bug ship untested." These go through the real HTTP
+# route (not BrokerRouter.execute() directly), which is the layer that actually
+# reads req.effect and builds BrokerOrder — a route handler silently hardcoding
+# effect="OPEN" instead of using req.effect would pass every other existing
+# test in this file but fail these.
+
+def _mock_router_with_capture():
+    """A BrokerRouter-shaped mock whose adapter records the BrokerOrder it received."""
+    captured = {}
+    mock_adapter = MagicMock()
+
+    def capture_and_respond(order):
+        captured["order"] = order
+        return OrderResult(order_id="CAP1", status="ok", broker="ibkr_paper")
+
+    mock_adapter.place_order.side_effect = capture_and_respond
+    router = BrokerRouter(adapters={"ibkr_paper": mock_adapter})
+    return router, captured
+
+
+@pytest.mark.asyncio
+async def test_stock_order_propagates_close_effect_to_broker_order():
+    router, captured = _mock_router_with_capture()
+    with patch("app.routers.broker.build_router_from_credentials", return_value=router):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/broker/stock-order", json={
+                "broker": "ibkr_paper", "symbol": "AAPL",
+                "action": "SELL", "effect": "CLOSE", "quantity": 1, "order_type": "MKT",
+            })
+    assert resp.status_code == 200
+    assert captured["order"].effect == "CLOSE"
+    assert captured["order"].action == "SELL"
+
+
+@pytest.mark.asyncio
+async def test_stock_order_propagates_open_effect_to_broker_order():
+    router, captured = _mock_router_with_capture()
+    with patch("app.routers.broker.build_router_from_credentials", return_value=router):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/broker/stock-order", json={
+                "broker": "ibkr_paper", "symbol": "AAPL",
+                "action": "SELL", "effect": "OPEN", "quantity": 1, "order_type": "MKT",
+            })
+    assert resp.status_code == 200
+    assert captured["order"].effect == "OPEN"
+
+
+@pytest.mark.asyncio
+async def test_option_order_propagates_close_effect_to_broker_order():
+    router, captured = _mock_router_with_capture()
+    with patch("app.routers.broker.build_router_from_credentials", return_value=router):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/broker/option-order", json={
+                "broker": "ibkr_paper", "symbol": "AAPL", "option_symbol": "AAPL250117C00200000",
+                "action": "SELL", "effect": "CLOSE", "quantity": 1, "order_type": "MKT",
+            })
+    assert resp.status_code == 200
+    assert captured["order"].effect == "CLOSE"
+    assert captured["order"].action == "SELL"
+
+
+# ── IBKR/Alpaca accept `effect` but their payload is unaffected by it ───────
+# (auto-inferred from account state) — see ibkr_paper.py/alpaca_paper_execution.py.
+
+def test_ibkr_payload_unaffected_by_effect():
+    from app.data.ibkr_paper import IbkrPaperAdapter
+    adapter = IbkrPaperAdapter(base_url="https://localhost:7499/v1/api", account_id="DU123456")
+    open_order = BrokerOrder(symbol="AAPL", action="SELL", effect="OPEN", quantity=1,
+                              order_type="MKT", limit_price=None)
+    close_order = BrokerOrder(symbol="AAPL", action="SELL", effect="CLOSE", quantity=1,
+                               order_type="MKT", limit_price=None)
+    assert adapter._build_payload(open_order) == adapter._build_payload(close_order)
+
+
+def test_alpaca_payload_unaffected_by_effect():
+    from app.data.alpaca_paper_execution import AlpacaPaperAdapter
+    adapter = AlpacaPaperAdapter(key_id="key1", secret_key="secret1")
+    open_order = BrokerOrder(symbol="AAPL", action="SELL", effect="OPEN", quantity=1,
+                              order_type="MKT", limit_price=None, sec_type="STK")
+    close_order = BrokerOrder(symbol="AAPL", action="SELL", effect="CLOSE", quantity=1,
+                               order_type="MKT", limit_price=None, sec_type="STK")
+    assert adapter._build_payload(open_order) == adapter._build_payload(close_order)

@@ -64,8 +64,11 @@ auto-infers" assumption was verified false against Tradier's own API docs during
 and Alpaca are unchanged (they genuinely auto-infer open/close from account state). Full design,
 3 rounds of adversarial review, and rationale in `SELL_CLOSE_SEMANTICS_PLAN.md`. Covered by new
 tests in `test_tradier_paper.py` (7 new cases across stock + options), `test_tastytrade_paper.py`
-(8-combination parametrized test + a live-bug regression test), and schema-validation tests in
-`test_broker_router.py`.
+(8-combination parametrized test + a live-bug regression test), and in `test_broker_router.py`:
+missing-field schema validation, plus router-level `effect`-propagation tests through the real
+HTTP route (added after a post-implementation adversarial audit proved via mutation testing that
+the original schema-only tests would silently pass even if a route handler discarded the caller's
+`effect` and hardcoded `"OPEN"` — the same class of bug as the original finding, one layer up).
 
 Original finding: `backend/app/data/tradier_paper.py:19-23` maps `SELL` → `sell_to_open` ("the screener always
 opens a new position"). `backend/app/data/tastytrade_paper.py:35-49` maps `SELL` →
