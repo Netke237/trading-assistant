@@ -1,8 +1,10 @@
 # Implementation Plan — Explicit Open/Close Order Semantics (Stock + Options)
 
-Status: REVISED after adversarial review (round 1). Round 1 found 13 issues, 3 at severity 5
-(would have broken the fix or crashed `/auto-trade/arm` outright). All are addressed below; see
-"Round 1 review — resolutions" at the end of each affected section, and §6 for the full log.
+Status: REVISED after adversarial review, round 2 of 2. Round 1 found 13 issues (3 at severity 5).
+Round 2 verified round 1's fixes against the actual code and found 3 more issues (1 at severity 4:
+the Tradier-stock "no change" claim was factually wrong per Tradier's own API docs — it has
+`sell_short`/`buy_to_cover`, not auto-inference). All 16 total findings are addressed below; see
+§6 for the full log of both rounds.
 
 ## 1. Problem
 
@@ -67,9 +69,32 @@ Combinations and what they mean:
       ("BUY",  "CLOSE"): "buy_to_close",
   }
   ```
-- **Tradier stock** — no change. Tradier's equity API takes plain `buy`/`sell` with no
-  open/close qualifier; it infers short-vs-cover from account state itself. Confirmed still
-  correct under the new model: `side = order.action.lower()` regardless of `effect`.
+- **Tradier stock — REVISED after round 2 review, this is NOT "no change."** The original draft
+  claimed Tradier's equity API auto-infers short-vs-cover from plain `buy`/`sell`. Round 2 review
+  checked this against Tradier's actual API documentation and found it false: Tradier's equity
+  `side` parameter has **four** explicit values — `buy`, `sell`, `sell_short`, `buy_to_cover` —
+  paralleling the options vocabulary exactly, with no auto-inference. This codebase's adapter
+  currently sends plain `order.action.lower()` for stock (`tradier_paper.py:70`), so a bearish
+  stock entry today sends `"sell"` — which per Tradier's real API is the *close-a-long* side, not
+  *open-a-short*. This is live and reachable (`'tradier_paper'` is a selectable broker for stock
+  orders in `StockSendDialog`/`StockPositionCard`), so leaving it as "no change" would ship this
+  plan without actually fixing Tradier for stock — directly against the plan's own stated goal.
+  Fix: give Tradier stock the same 4-way treatment as its options side:
+  ```python
+  _EQUITY_SIDE = {
+      ("BUY",  "OPEN"):  "buy",
+      ("SELL", "OPEN"):  "sell_short",
+      ("SELL", "CLOSE"): "sell",
+      ("BUY",  "CLOSE"): "buy_to_cover",
+  }
+  ```
+  **Behavior change, not just a field addition:** this changes the wire value for a bearish stock
+  entry from `"sell"` to `"sell_short"` — that's the actual bug fix, not incidental. The existing
+  test `test_adapter_builds_equity_params` (`test_tradier_paper.py:11-23`) only covers BUY and is
+  unaffected; there is currently no existing test asserting stock SELL's wire value, so nothing
+  existing needs its assertion changed — but new tests must cover all 4 stock combinations,
+  including confirming `sell_short` (not `sell`) for the opening-short case, since that's precisely
+  the behavior this plan is here to correct.
 - **Tastytrade stock + options** (`tastytrade_paper.py`) — replace the 2-entry map with the full
   4-way one already described in the file's own comment as "known, accepted limitation — not
   fixed in this task" (this task fixes it):
@@ -89,6 +114,20 @@ Combinations and what they mean:
   writing/shorting an option — is added to the map for completeness but stays unreachable dead
   code after this plan ships (see §2.4); do not read its presence as "selling to open an option is
   now supported."
+- **Consuming lookup lines must change shape too (round 2 review flagged this as missing from the
+  original snippets-only draft):** it's not enough to redefine the maps — the code that *reads*
+  them must be updated to match, or every order (open and close alike) breaks, not just close
+  orders:
+  - `tradier_paper.py:70` — currently `side = order.action.lower()` for equities; becomes
+    `side = _EQUITY_SIDE[(order.action, order.effect)]`.
+  - `tradier_paper.py`'s option-side lookup — currently `_OPTION_SIDE[order.action]` (single-key);
+    becomes `_OPTION_SIDE[(order.action, order.effect)]` (tuple-keyed).
+  - `tastytrade_paper.py:57` — currently `_ACTION_MAP.get((order.action, order.sec_type))`
+    (2-tuple); becomes `_ACTION_MAP.get((order.action, order.effect, order.sec_type))` (3-tuple).
+  These three line changes are as load-bearing as the map redefinitions themselves and must ship
+  in the same commit as each map change — the existing test suite will catch a mismatch
+  immediately (every BUY/OPEN case would fail, not just SELL/CLOSE), so this is self-correcting
+  during implementation, but it's called out explicitly so it isn't discovered by trial and error.
 - **IBKR** (`ibkr_paper.py`) and **Alpaca** (`alpaca_paper_execution.py`) — no change. Both send
   plain `side: BUY/SELL` and the broker's own engine infers open-vs-close from current account
   position (standard behavior for both platforms' retail APIs). `effect` is accepted on
@@ -197,6 +236,19 @@ direct dependency:
   `buildPaperStockPosition('AAPL', 150, 10)` with no direction — this existing test breaks once
   `direction` becomes a required parameter and must be updated in the same change (round 1 flagged
   this as missing from the original draft).
+- **Residual gap, found in round 2 review, not fixed by this plan:** `direction` is only
+  *statically* trustworthy after the fix above — not at runtime end-to-end. Backend
+  `PortfolioPositionCreate.direction` / `PortfolioPositionSchema.direction`
+  (`backend/app/schemas/__init__.py:592,627`) are plain unconstrained `str`, not
+  `Literal["Bullish","Bearish"]`, and `frontend/lib/portfolioStore.ts:43` does an unchecked
+  `p.direction as Direction` cast when hydrating from the backend. So the new
+  `direction === 'Bearish'` ternary in `ClosePositionDrawer` will silently take the *long* branch
+  for any value that isn't the exact string `'Bearish'` — not just a mislabeled-but-valid value
+  (§2.4's existing note) but also `undefined`, `''`, or a typo, with no validation catching it.
+  Blast radius today is display-only (broker-send stays disabled), so not blocking, but tightening
+  the backend schemas to `Literal["Bullish","Bearish"]` would be a natural, small follow-up — not
+  included in this plan's scope since it's a pre-existing gap this plan doesn't worsen, only fails
+  to close.
 
 ### 2.4 Known out-of-scope items (flagging, not fixing here)
 
@@ -237,26 +289,38 @@ zero `"SELL"` occurrences anywhere in `test_broker_router.py` or `test_ibkr_pape
 existing `BrokerOrder(...)` there uses `action="BUY"`. All SELL/OPEN/CLOSE coverage below is
 **new**, not an extension of something that already exists.
 
-**Step 0 — migration of existing tests (must happen before any new test can pass), sized
-precisely per round 1's count so it isn't a surprise mid-implementation:**
-Making `effect` a required field with no default breaks every existing construction that doesn't
-supply it. Counted directly: **~45 call sites across 6 backend test files** —
-`test_broker_router.py` (5 `BrokerOrder(...)`), `test_ibkr_paper.py` (4), `test_tastytrade_paper.py`
-(1), `test_tradier_paper.py` (7, against `tradier_paper.py`'s own `BrokerOrder` — see §2.2), plus
-3 raw JSON POST bodies missing `effect` in `test_auto_trade.py`×2/`test_broker_router.py`×1 that
-would newly 422. `test_alpaca_paper_execution.py`'s 4 constructions and `test_auto_trader.py`'s 19
-`ArmedStrategy(...)` constructions do **not** need updating — Alpaca's adapter still takes
-`effect` on `BrokerOrder` (needs it added there too, 4 sites) but `ArmedStrategy` itself is
-unchanged per §2.2's resolution. Net: **~41 sites need `effect="OPEN"` added** (matching what they
-already implicitly meant, since every existing test is an entry scenario) as a first, purely
-mechanical commit, before writing any new SELL/CLOSE-specific test.
+**Step 0 — migration of existing tests (must happen before any new test can pass). Round 2 review
+found the round-1 count was internally self-contradictory (undercounted `test_alpaca_paper_execution.py`
+after saying two sentences later that it needs updating; wrongly included `test_auto_trade.py`,
+which posts to the unchanged `ArmRequest`). Corrected count, verified against actual file
+contents:**
+
+| File | Sites needing `effect` added | Why |
+|---|---|---|
+| `test_broker_router.py` | 5 `BrokerOrder(...)` + 1 raw JSON POST body | Constructs `ibkr_paper.BrokerOrder`; posts to `StockOrderRequest`/`OptionOrderRequest` |
+| `test_ibkr_paper.py` | 4 | Same dataclass |
+| `test_tastytrade_paper.py` | 1 | Same dataclass |
+| `test_tradier_paper.py` | 7 | `tradier_paper.py`'s own separate `BrokerOrder` (§2.2) |
+| `test_alpaca_paper_execution.py` | 4 | Imports and constructs `ibkr_paper.BrokerOrder` too — **round 1 wrongly exempted this file; it does need updating** |
+| `test_auto_trader.py` | 0 | `ArmedStrategy` is unchanged (§2.2's resolution removed the field from this path entirely) |
+| `test_auto_trade.py` | 0 | Posts to `ArmRequest`, which is unchanged — **round 1 wrongly included this file** |
+
+**Net: 22 sites** need `effect="OPEN"` added, as a first, purely mechanical commit with no other
+behavior change, before writing any new SELL/CLOSE-specific test. Separately (not part of this
+mechanical pass, since it's a real behavior change): `test_tradier_paper.py`'s
+`test_option_sell_uses_sell_to_open` (line 40-48) currently asserts that a bare `action="SELL"`
+maps to `sell_to_open` — under the new model this test's premise changes (that mapping is now
+conditional on `effect="OPEN"`), so it must be rewritten to pass `effect="OPEN"` explicitly and
+keep asserting `sell_to_open`, alongside new sibling tests for `effect="CLOSE"` → `sell_to_close`.
 
 - **Backend, per adapter** (`backend/tests/test_broker_router.py` or a new
   `test_broker_adapters.py`): for `tradier_paper` and `tastytrade_paper`, assert all 4
   `(action, effect)` combinations produce the correct wire-level side/action string, for both
-  `STK` and `OPT` where applicable. For `ibkr_paper` and `alpaca_paper`, assert `effect` is
-  accepted but doesn't change the payload (documents the "auto-inferred" behavior as intentional,
-  not untested).
+  `STK` and `OPT` where applicable — for Tradier stock specifically, explicitly assert
+  `(SELL, OPEN)` → `"sell_short"` and `(BUY, CLOSE)` → `"buy_to_cover"`, not just `"sell"`/`"buy"`,
+  since that value change *is* the fix (§2.1). For `ibkr_paper` and `alpaca_paper`, assert `effect`
+  is accepted but doesn't change the payload (documents the "auto-inferred" behavior as
+  intentional, not untested).
 - **Backend, schema validation**: `StockOrderRequest`/`OptionOrderRequest` reject a request
   missing `effect` (no default → 422). (`ArmRequest` is unchanged, no test needed there.)
 - **Backend, routing** (genuinely new, not an extension of anything): add SELL+OPEN and SELL+CLOSE
@@ -307,22 +371,35 @@ engineering around with a transitional default; noting it so it isn't a silent g
   rather than trading it for a "caller must always pass OPEN" convention that has no enforcement
   behind it.
 
-## 6. Round 1 adversarial review — full finding log
+## 6. Adversarial review log (2 rounds)
 
-For traceability, every issue the round 1 review raised and where it's addressed above:
+### Round 1
 
 | # | Finding | Severity | Resolved in |
 |---|---|---|---|
-| 1 | `tradier_paper.py` has its own separate `BrokerOrder`, not shared with `ibkr_paper.py` | 5 | §2.2 |
-| 2 | `ArmedStrategy`/`execute_option_order()` unaddressed → guaranteed 500 on `/auto-trade/arm` | 5 | §2.2 (removed the field instead) |
-| 3 | Wrong frontend component named for auto-trade arm call site | 4 | §2.3 (corrected, now moot per #2's resolution) |
-| 4 | `ChartWorkspace` buy-popover call site has no direction in scope | 4 | §2.3 (hardcode `'Bullish'`) |
-| 5 | `realizedPct` sign left unfixed alongside `realizedDollar` | 3 | §2.3 |
-| 6 | False claim of "existing SELL-against-ibkr_paper" tests to extend | 3 | §3 (corrected) |
-| 7 | Test-migration blast radius unquantified | 3 | §3 Step 0, §4 step 0 |
-| 8 | No handling proposed for broker-side rejection of a close with no matching position | 3 | §2.4 (explicitly deferred, not silently ignored) |
-| 9 | `(SELL, OPEN, OPT)` unreachable dead code, no margin modeling if ever wired up | 2 | §2.4 |
-| 10 | Plan internally inconsistent about the `ArmRequest.effect` open question | 2 | §2.2 / §5 (resolved) |
-| 11 | `paperTrade.test.ts`'s existing 3-arg call breaks silently | 1 | §2.3, §3 |
+| 1 | `tradier_paper.py` has its own separate `BrokerOrder`, not shared with `ibkr_paper.py` | 5 | §2.2 — verified correct by round 2 |
+| 2 | `ArmedStrategy`/`execute_option_order()` unaddressed → guaranteed 500 on `/auto-trade/arm` | 5 | §2.2 (removed the field instead) — verified correct by round 2, full-file read |
+| 3 | Wrong frontend component named for auto-trade arm call site | 4 | §2.3 (corrected, now moot per #2's resolution) — verified correct by round 2 |
+| 4 | `ChartWorkspace` buy-popover call site has no direction in scope | 4 | §2.3 (hardcode `'Bullish'`) — verified correct by round 2, incl. no downstream code assumes chart-click positions could be short |
+| 5 | `realizedPct` sign left unfixed alongside `realizedDollar` | 3 | §2.3 — formula verified correct by round 2 with worked long/short examples |
+| 6 | False claim of "existing SELL-against-ibkr_paper" tests to extend | 3 | §3 (corrected) — verified correct by round 2 |
+| 7 | Test-migration blast radius unquantified | 3 | §3 Step 0 — round 1's own fix was itself wrong (see round 2 #2 below); corrected again |
+| 8 | No handling proposed for broker-side rejection of a close with no matching position | 3 | §2.4 (explicitly deferred, not silently ignored) — confirmed not contradicted elsewhere by round 2 |
+| 9 | `(SELL, OPEN, OPT)` unreachable dead code, no margin modeling if ever wired up | 2 | §2.4 — verified correct by round 2 |
+| 10 | Plan internally inconsistent about the `ArmRequest.effect` open question | 2 | §2.2 / §5 (resolved) — verified correct by round 2 |
+| 11 | `paperTrade.test.ts`'s existing 3-arg call breaks silently | 1 | §2.3, §3 — verified accurate by round 2 |
 | 12 | Rollout ordering / transient-breakage window not addressed | 1 | §4 |
-| 13 | Tradier/IBKR auto-infer assumption still unverified against live sandbox | 3 | §2.1 (flagged explicitly as residual, pre-existing risk) |
+| 13 | Tradier/IBKR auto-infer assumption still unverified against live sandbox | 3 | Only half-resolved by round 1 (IBKR/Alpaca hedge was fine; Tradier's was replaced with a false-confidence claim) — see round 2 #1 |
+
+### Round 2 (verified round 1's fixes against real code; found these additional issues)
+
+| # | Finding | Severity | Resolved in |
+|---|---|---|---|
+| 1 | Tradier-stock "no change" claim is factually wrong — Tradier's equity API has explicit `sell_short`/`buy_to_cover` sides, not auto-inference (verified against Tradier's own API docs) | 4 | §2.1, rewritten with a 4-way `_EQUITY_SIDE` map — this was the most significant finding of either round, since it left the plan's own stated goal ("sell is sell to close... for both stock and options, everywhere") unmet for a live, reachable broker+asset-class combination |
+| 2 | §3's Step 0 test-count table was self-contradictory (said `test_alpaca_paper_execution.py` needs no updates, then said it does two sentences later) and wrong (missed Alpaca's 4 sites, wrongly included `test_auto_trade.py`'s 2 sites which post to the unchanged `ArmRequest`) | 3 | §3, corrected table: 22 sites, not ~41 |
+| 3 | Map redefinitions (`_OPTION_SIDE`, `_ACTION_MAP`) never said the *consuming lookup lines* (`tradier_paper.py:70` and the option-side lookup, `tastytrade_paper.py:57`) must change key shape too — if missed, every order breaks, not just close orders | 3 | §2.1, new explicit subsection listing all 3 lookup-line changes |
+| — | (Confirmed correct, no action needed): §2.3 P&L formula math, `auto_trader.py` full-file read, ChartWorkspace kind-typing, §2.4/§3 "unreachable from UI" vs. new tests not actually contradictory, dict tuple-key hashing mechanics | — | — |
+| — | (New residual gap noted, not blocking): `direction` isn't runtime-enforced end-to-end (backend schemas are plain `str`) — added as an explicit caveat, not a required fix | 2 | §2.3 |
+
+Round 2's own verdict: "not clean" pending the 3 findings above. All 3 are now addressed in this
+revision. No round 3 has been run yet — see next steps.
