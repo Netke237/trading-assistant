@@ -321,7 +321,7 @@ export default function AlertsPage() {
             <Text size={12} tone="secondary">Toggles control both in-app and Telegram / email delivery.</Text>
 
             <div className={styles.settingsGrid}>
-              <SettingsRow label="Keep alerts for (days)" hint="Alerts older than this are auto-purged." defaultValue="10">
+              <SettingsRow label="Keep alerts for (days)" hint="Alerts older than this are auto-purged." defaultValue="30">
                 <input
                   type="number"
                   className={styles.input}

@@ -2,12 +2,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Status } from '@/lib/status';
 import { worstStatus } from '@/lib/status';
-import { hasInvalidation } from '@/lib/risk';
 import type {
-  TradeCardData,
   PortfolioPosition,
   RiskLimits,
-  RiskCheckResult,
   PortfolioRiskMetrics,
 } from '@/types/domain';
 
@@ -39,7 +36,6 @@ interface RiskState {
   metrics: PortfolioRiskMetrics;
   symbols: string[];
   setLimits: (l: RiskLimits) => void;
-  checkTrade: (card: TradeCardData, proposedContracts: number) => RiskCheckResult;
   incrementDaily: () => void;
   computeMetrics: (positions: PortfolioPosition[]) => void;
 }
@@ -53,44 +49,6 @@ export const useRiskStore = create<RiskState>()(
       metrics: { ...DEFAULT_METRICS },
       symbols: [],
       setLimits: (l) => set({ limits: l }),
-      checkTrade: (card, proposedContracts) => {
-        const { limits, metrics, symbols, dailyRecommendations } = get();
-        const reasons: string[] = [];
-        const mid = card.contractDetails?.mid ?? 0;
-        const notional = mid * proposedContracts * 100;
-        const portfolioValue = limits.portfolioValue || 1;
-        const singleExposurePct = notional / portfolioValue;
-        const currentTotalNotional = metrics.totalExposurePct * portfolioValue;
-        const totalExposurePct = (currentTotalNotional + notional) / portfolioValue;
-        const capitalAtRisk = notional;
-
-        if (!hasInvalidation(card.exit.invalidation)) {
-          reasons.push('missing_invalidation');
-        }
-        if (symbols.includes(card.symbol)) {
-          reasons.push('duplicate_symbol');
-        }
-        if (metrics.concurrentPositions >= limits.maxConcurrentPositions) {
-          reasons.push('max_concurrent_positions_reached');
-        }
-        if (singleExposurePct > limits.maxSingleTradeExposurePct) {
-          reasons.push('single_trade_exposure_too_high');
-        }
-        if (totalExposurePct > limits.maxTotalExposurePct) {
-          reasons.push('total_exposure_limit_reached');
-        }
-        if (dailyRecommendations >= limits.maxDailyRecommendations) {
-          reasons.push('max_daily_recommendations_reached');
-        }
-
-        return {
-          approved: reasons.length === 0,
-          reasons,
-          singleExposurePct,
-          totalExposurePct,
-          capitalAtRisk,
-        };
-      },
       incrementDaily: () => {
         const today = new Date().toISOString().split('T')[0];
         set((s) => {

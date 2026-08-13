@@ -32,7 +32,14 @@ def build_bear_put(puts: list[dict], *, expiry: str, width: float, short_delta: 
     """Buy a higher-strike put, sell a put `width` lower. Debit spread."""
     short = _nearest_by_delta(puts, short_delta)
     long_strike = short["strike"] + width
-    long = min(puts, key=lambda c: abs(c["strike"] - long_strike))
+    # Only consider puts with a strictly higher strike for the long leg — without
+    # this filter, a chain with no strike near long_strike above short["strike"]
+    # can pick `long == short`, producing a zero-width spread with a negative
+    # "max profit" instead of a clear error (mirrors build_bear_call's guard).
+    higher_puts = [c for c in puts if c["strike"] > short["strike"]]
+    if not higher_puts:
+        raise ValueError("Not enough strikes in chain to build a bear put spread")
+    long = min(higher_puts, key=lambda c: abs(c["strike"] - long_strike))
     debit = round(long["ask"] - short["bid"], 2)
     w = long["strike"] - short["strike"]
     return Spread(

@@ -69,8 +69,12 @@ interface PortfolioStoreState {
   clearSyncError: () => void;
   hydrate:        (positions: PortfolioPosition[]) => void;
   /** status: 'ok' saved; 'rejected' backend refused (dropped); 'pending' network
-   *  error, kept locally and retried by syncFromBackend. `ok` === (status==='ok'). */
-  addPosition:    (p: PortfolioPosition) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string }>;
+   *  error, kept locally and retried by syncFromBackend. `ok` === (status==='ok').
+   *  `adjustedQty` is set when the backend's risk check auto-reduced the
+   *  requested size to fit exposure limits — the position was still saved,
+   *  just at a smaller quantity than requested; callers should surface this
+   *  rather than silently showing the originally-requested size. */
+  addPosition:    (p: PortfolioPosition) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number }>;
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   closePosition:  (contract: string) => void;
   closePositionRemote: (
@@ -116,7 +120,7 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
 }
 
 type SaveOutcome =
-  | { kind: 'ok' }
+  | { kind: 'ok'; adjustedQty?: number }
   | { kind: 'rejected'; detail: string }   // backend 4xx (except 409) — do not keep the row
   | { kind: 'duplicate' }                  // 409 — backend already has this contract
   | { kind: 'network' };                   // unreachable — keep the row pending
@@ -128,7 +132,11 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(toBackendPayload(p, portfolioValue)),
     });
-    if (res.ok) return { kind: 'ok' };
+    if (res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const adjustedQty = (body as { adjustedQty?: number }).adjustedQty;
+      return typeof adjustedQty === 'number' ? { kind: 'ok', adjustedQty } : { kind: 'ok' };
+    }
     if (res.status === 409) return { kind: 'duplicate' };
     const body = await res.json().catch(() => ({}));
     return { kind: 'rejected', detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
@@ -147,14 +155,18 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
 export async function persistPosition(
   p: PortfolioPosition,
   portfolioValue = accountValue(),
-): Promise<{ ok: boolean; detail?: string }> {
+): Promise<{ ok: boolean; detail?: string; adjustedQty?: number }> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(toBackendPayload(p, portfolioValue)),
     });
-    if (res.ok) return { ok: true };
+    if (res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const adjustedQty = (body as { adjustedQty?: number }).adjustedQty;
+      return typeof adjustedQty === 'number' ? { ok: true, adjustedQty } : { ok: true };
+    }
     const body = await res.json().catch(() => ({}));
     return { ok: false, detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
   } catch {
@@ -305,14 +317,29 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         const scaleInRefused = outcome.kind === 'duplicate' && didMerge;
 
         if ((outcome.kind === 'ok' || outcome.kind === 'duplicate') && !scaleInRefused) {
+          const adjustedQty = outcome.kind === 'ok' ? outcome.adjustedQty : undefined;
           set((s) => ({
             positions: s.positions.map((x) =>
               x.recId === promoteRecId
-                ? { ...x, syncStatus: 'synced', syncedAt: Date.now(), syncPendingSince: undefined }
+                ? {
+                    ...x,
+                    syncStatus: 'synced', syncedAt: Date.now(), syncPendingSince: undefined,
+                    // The backend's risk check auto-reduced the size to fit exposure
+                    // limits — reflect the persisted quantity locally, don't keep
+                    // showing what was requested. Skipped on a MERGE: the POST only
+                    // ever sends the incoming increment (not the locally-summed
+                    // total), so adjustedQty there describes that increment alone —
+                    // overwriting the already-merged `contracts` with it would be
+                    // wrong, not just imprecise. The caller is still told via the
+                    // returned adjustedQty below; only the merged local total is left
+                    // untouched, same as before this fix, to be corrected by the next
+                    // authoritative sync.
+                    ...(adjustedQty != null && !didMerge ? { contracts: adjustedQty } : {}),
+                  }
                 : x,
             ),
           }));
-          return { ok: true, status: 'ok' as const };
+          return { ok: true, status: 'ok' as const, adjustedQty };
         }
         if (outcome.kind === 'rejected' || scaleInRefused) {
           const detail = outcome.kind === 'rejected'

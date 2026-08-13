@@ -50,6 +50,21 @@ def test_iv_rank_none_is_not_rejected():
     assert "iv_rank_too_high" not in card.reject_reasons
 
 
+def test_caution_tier_stock_score_hard_rejects():
+    """A CAUTION-tier stock score (35-49, below the documented >=50 gate but
+    above the separate REJECT-status cutoff elsewhere) must reject here —
+    previously this parameter was accepted but never checked."""
+    card = validate_contract(_base_contract(), stock_score=45)
+    assert card.status == "REJECT"
+    assert "stock_score_below_threshold" in card.reject_reasons
+
+
+def test_stock_score_at_threshold_passes():
+    """stock_score exactly at the gate (50) should not be rejected on this basis."""
+    card = validate_contract(_base_contract(), stock_score=50)
+    assert "stock_score_below_threshold" not in card.reject_reasons
+
+
 def test_override_raises_max_iv_rank():
     """Caller can override the threshold to 80 via overrides dict."""
     card = validate_contract(

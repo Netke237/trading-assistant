@@ -103,6 +103,9 @@ interface ToastState {
   auto:    number;
   manual:  number;
   queued:  number;   // subset of auto+manual that is pending a backend retry
+  // Positions whose requested size was auto-reduced by the backend's risk
+  // check to fit exposure limits — "SYMBOL: N contracts" per entry.
+  adjusted: string[];
 }
 
 export default function Step7Page() {
@@ -128,6 +131,7 @@ export default function Step7Page() {
   const [marketPlacing,  setMarketPlacing]    = useState(false);
   const [paperOrderId,   setPaperOrderId]     = useState<string | null>(null);
   const [orderError,     setOrderError]       = useState<string | null>(null);
+  const [sizeAdjustedNote, setSizeAdjustedNote] = useState<string | null>(null);
   const [liveQuote,      setLiveQuote]        = useState<{ price: number; delta: number; theta: number; ivRank: number; spread: number; volume: number } | null>(null);
   const [liveStockPrice, setLiveStockPrice]   = useState<number | null>(null);
   const [fetchingQuote,  setFetchingQuote]    = useState(false);
@@ -165,7 +169,7 @@ export default function Step7Page() {
   }, [active, setSelectedSymbol]);
 
   // Clear paper order feedback when the user navigates to a different candidate.
-  useEffect(() => { setPaperOrderId(null); setOrderError(null); }, [active]);
+  useEffect(() => { setPaperOrderId(null); setOrderError(null); setSizeAdjustedNote(null); }, [active]);
 
   const addPosition = usePortfolioStore((s) => s.addPosition);
   const incrementDaily = useRiskStore((s) => s.incrementDaily);
@@ -496,6 +500,9 @@ export default function Step7Page() {
         setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${saved.detail}`);
         return;
       }
+      if (saved.adjustedQty != null) {
+        setSizeAdjustedNote(`Size reduced to ${saved.adjustedQty} contract${saved.adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
+      }
       setPaperOrderId(res.order_id);
       void addPosition(pos);
     } catch (e) {
@@ -526,6 +533,9 @@ export default function Step7Page() {
         setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${saved.detail}`);
         return;
       }
+      if (saved.adjustedQty != null) {
+        setSizeAdjustedNote(`Size reduced to ${saved.adjustedQty} contract${saved.adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
+      }
       setPaperOrderId(res.order_id);
       void addPosition(pos);
     } catch (e) {
@@ -548,6 +558,7 @@ export default function Step7Page() {
     usePortfolioStore.getState().clearSyncError();
     let auto = 0, manual = 0, queued = 0;
     const failures: string[] = [];
+    const adjusted: string[] = [];
 
     for (const o of orders) {
       // One canonical recId per order: addPosition syncs it to the backend
@@ -570,6 +581,9 @@ export default function Step7Page() {
       // status === 'ok' — confirmed saved by the backend.
       incrementDaily();
       if (o.autoSend) auto++; else manual++;
+      if (res.adjustedQty != null) {
+        adjusted.push(`${o.card.symbol}: ${res.adjustedQty} contract${res.adjustedQty === 1 ? '' : 's'}`);
+      }
       logAudit('APPROVE', recId, {
         symbol: o.card.symbol,
         contract: o.card.contract,
@@ -584,7 +598,7 @@ export default function Step7Page() {
     // a mixed basket — but a network-only submit shows just the toast (no
     // contradictory red banner) with the queued count reported distinctly.
     if (auto + manual + queued > 0) {
-      setToast({ auto, manual, queued });
+      setToast({ auto, manual, queued, adjusted });
       window.setTimeout(() => setToast(null), 6000);
     }
     if (failures.length) {
@@ -710,6 +724,7 @@ export default function Step7Page() {
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">Order placed — ID: {paperOrderId}</Text>}
+              {sizeAdjustedNote && <Text size={12} tone="caution">{sizeAdjustedNote}</Text>}
               {orderError   && <Text size={12} tone="reject">{orderError}</Text>}
               {planReady && <AutoTradeArm card={effectiveCard} broker={selectedBroker} />}
             </>
@@ -735,6 +750,11 @@ export default function Step7Page() {
               {toast.auto} sent to broker · {toast.manual} added manually
               {toast.queued > 0 ? ` · ${toast.queued} awaiting backend sync` : ''}
             </Text>
+            {toast.adjusted.length > 0 && (
+              <Text size={11} tone="caution">
+                Size reduced to fit exposure limits — {toast.adjusted.join(', ')}
+              </Text>
+            )}
           </div>
           <Link href="/portfolio" className={toastStyles.link}>
             View Portfolio →

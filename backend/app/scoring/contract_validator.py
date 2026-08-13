@@ -247,6 +247,8 @@ def validate_contract(
     contract_id = _contract_id(contract)
 
     reject_reasons = _hard_reject_reasons(contract, cfg)
+    if stock_score < cfg["hard_reject"]["min_stock_score"]:
+        reject_reasons.append("stock_score_below_threshold")
 
     liq_score, oi_score_val, liq_flags = _score_liquidity(contract, cfg)
     spread_score, spread_pct, spread_flags = _score_spread(contract, cfg)

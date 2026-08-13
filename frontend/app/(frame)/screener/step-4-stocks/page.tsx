@@ -161,19 +161,26 @@ export default function Step4StocksPage() {
     // Auto-execute symbols armed for after_scan — add as paper positions locally
     const failures: string[] = [];
     const queued: string[] = [];
+    const adjusted: string[] = [];
     for (const c of res.candidates) {
       if (afterScanArmedSymbols.has(c.symbol)) {
         const addRes = await addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, c.shares));
         if (addRes.status === 'rejected') failures.push(`${c.symbol}: ${addRes.detail ?? 'not saved'}`);
         else if (addRes.status === 'pending') queued.push(c.symbol);
+        else if (addRes.adjustedQty != null) adjusted.push(`${c.symbol} (${addRes.adjustedQty} sh)`);
       }
     }
     if (failures.length) {
       setError(`Some auto-executed positions were not saved — ${failures.join('; ')}`);
     }
+    const noticeParts: string[] = [];
     if (queued.length) {
-      setNotice(`Queued — backend unreachable, will sync automatically: ${queued.join(', ')}`);
+      noticeParts.push(`Queued — backend unreachable, will sync automatically: ${queued.join(', ')}`);
     }
+    if (adjusted.length) {
+      noticeParts.push(`Size reduced to fit exposure limits — ${adjusted.join(', ')}`);
+    }
+    if (noticeParts.length) setNotice(noticeParts.join(' · '));
   }
 
   return (

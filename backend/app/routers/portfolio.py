@@ -223,7 +223,7 @@ async def add_position(
         contract=body.contract,
         direction=body.direction,
         entry_price=entry_price,
-        qty=body.qty,
+        qty=risk.adjusted_size or body.qty,
         entry_date=body.entryDate,
         stop=adjusted_stop,
         targets=adjusted_targets,
@@ -271,7 +271,10 @@ async def add_position(
         except Exception:
             _log.error("log_approval failed for %s", body.recId, exc_info=True)
 
-    return PortfolioPositionSchema.from_orm_model(position)
+    resp = PortfolioPositionSchema.from_orm_model(position)
+    if risk.adjusted_size is not None:
+        resp.adjustedQty = risk.adjusted_size
+    return resp
 
 
 @router.delete('/portfolio/history', status_code=status.HTTP_204_NO_CONTENT)

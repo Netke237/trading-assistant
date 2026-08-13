@@ -4,15 +4,15 @@ import tempfile
 import os
 
 
-def test_set_and_get_in_memory():
+async def test_set_and_get_in_memory():
     import app.data.confidence_cache as cc
     cc._store.clear()
-    cc.set_cached("k1", {"confidence": 70, "sample_size": 100})
+    await cc.set_cached("k1", {"confidence": 70, "sample_size": 100})
     result = cc.get_cached("k1")
     assert result == {"confidence": 70, "sample_size": 100}
 
 
-def test_l2_survives_l1_clear():
+async def test_l2_survives_l1_clear():
     """After clearing L1 and re-running warm_load from SQLite, key is recovered."""
     import app.data.confidence_cache as cc
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -23,7 +23,7 @@ def test_l2_survives_l1_clear():
         cc._init_db()
         cc._store.clear()
 
-        cc.set_cached("k_persist", {"confidence": 55, "sample_size": 42})
+        await cc.set_cached("k_persist", {"confidence": 55, "sample_size": 42})
         assert cc.get_cached("k_persist") is not None
 
         # Simulate restart: clear L1, reload from DB
@@ -68,12 +68,12 @@ def test_expired_entries_not_returned():
 
 # ── Preserved original tests ──────────────────────────────────────────────────
 
-def test_set_and_get_roundtrip():
+async def test_set_and_get_roundtrip():
     import app.data.confidence_cache as cc
     cc.clear_cache()
     key = cc.cache_key("AAPL", "Bullish", "Swing")
     assert cc.get_cached(key) is None
-    cc.set_cached(key, {"confidence": 62, "sample_size": 140})
+    await cc.set_cached(key, {"confidence": 62, "sample_size": 140})
     assert cc.get_cached(key)["confidence"] == 62
 
 
@@ -116,13 +116,13 @@ def test_cache_key_lone_target_or_stop_still_distinguishes_from_default():
     assert cc.cache_key("AAPL", "Bullish", "Swing", 3.0, None) != cc.cache_key("AAPL", "Bullish", "Swing", 3.0, 1.5)
 
 
-def test_ttl_evicts_stale_entries(monkeypatch):
+async def test_ttl_evicts_stale_entries(monkeypatch):
     import app.data.confidence_cache as cc
 
     cc.clear_cache()
     key = cc.cache_key("MSFT", "Bullish", "Swing")
     base = cc.time.time()
-    cc.set_cached(key, {"confidence": 50, "sample_size": 30})
+    await cc.set_cached(key, {"confidence": 50, "sample_size": 30})
     # jump time well past the TTL relative to when it was stored
     monkeypatch.setattr(cc.time, "time", lambda: base + cc._TTL_SECONDS + 10_000)
     assert cc.get_cached(key) is None

@@ -84,6 +84,37 @@ def test_compute_confidence_runs_end_to_end_on_synthetic_uptrend():
     assert 0 <= res.confidence <= 100
 
 
+def test_compute_confidence_truncates_to_history_years():
+    """history_years (swing=4) was defined in scoring_rules.yaml but never
+    read — verify compute_confidence now actually bounds its replay window
+    by it. Prepend a long, clearly-distinct flat-price prefix ahead of a
+    tail sized to exactly the truncation bound; if truncation works, the
+    prefix must be sliced off entirely and the result must match calling
+    compute_confidence with only that tail directly."""
+    from app.scoring.signal_confidence import load_backtest_cfg
+
+    n_days = load_backtest_cfg("swing")["n_days"]
+    history_years = load_backtest_cfg("swing")["history_years"]
+    max_bars = int(history_years * 252) + n_days
+
+    tail = []
+    price = 50.0
+    for i in range(max_bars):
+        price *= 1.0004
+        tail.append(_bar(price * 0.997, price * 1.01, price * 0.99, price, 1000 + i))
+    assert len(tail) == max_bars
+
+    junk_prefix = [_bar(10, 10.1, 9.9, 10, 1) for _ in range(600)]
+    full_bars = junk_prefix + tail
+    assert len(full_bars) > max_bars  # truncation must actually engage
+
+    res_full = compute_confidence(full_bars, direction="Bullish", horizon="Swing", atr_mult=1.5)
+    res_tail_only = compute_confidence(tail, direction="Bullish", horizon="Swing", atr_mult=1.5)
+
+    assert res_full.confidence == res_tail_only.confidence
+    assert res_full.sample_size == res_tail_only.sample_size
+
+
 # ── Asymmetric ATR tests (Task 3) ─────────────────────────────────────────────
 
 def test_evaluate_fire_asymmetric_win_requires_larger_target():

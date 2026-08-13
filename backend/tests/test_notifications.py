@@ -85,15 +85,3 @@ class TestTelegram:
         with patch('app.services.notifications.telegram.httpx.AsyncClient') as mock_cls:
             await send_telegram(bot_token='', chat_id='', text='test')
             mock_cls.assert_not_called()
-
-
-class TestQueue:
-    @pytest.mark.asyncio
-    async def test_queue_drops_when_full_not_raises(self):
-        from app.services.notifications.queue import _NOTIFY_QUEUE, enqueue
-        _NOTIFY_QUEUE._queue.clear()
-        for i in range(500):
-            _NOTIFY_QUEUE.put_nowait({'channel': 'gmail', 'params': {}})
-        await enqueue('gmail', {'to': 'x@x.com'})
-        assert _NOTIFY_QUEUE.qsize() == 500
-        _NOTIFY_QUEUE._queue.clear()

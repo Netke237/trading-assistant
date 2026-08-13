@@ -76,6 +76,28 @@ class TestCheckPositionRisk:
         else:
             assert "single_trade_exposure_too_high" in result.reasons
 
+    def test_reducible_single_trade_exposure_is_approved_at_adjusted_size(self):
+        """A trade that exceeds single-trade exposure at the requested size,
+        but fits at a smaller size, must be APPROVED with adjusted_size set —
+        not rejected outright. (Regression: check_position_risk previously
+        always returned approved=False whenever adjusted_size was set, even
+        though "size_reduced_to_fit_exposure_limit" is an informational
+        reason, not a hard block — the trade could always proceed at the
+        smaller size, it just never actually could.)
+        """
+        # max_single_trade_exposure_pct = 0.05, portfolio_value = 50_000
+        # -> max_allowed_premium = 2_500
+        # entry_premium=10, proposed_contracts=5 -> capital_at_risk = 5_000 (exceeds)
+        # adjusted = int(2_500 / (10*100)) = 2 -> a valid, non-zero smaller size
+        result = check_position_risk(**_make_request(
+            entry_premium=10.0,
+            proposed_contracts=5,
+            portfolio_value=50_000.0,
+        ))
+        assert result.approved is True
+        assert result.adjusted_size == 2
+        assert result.reasons == ["size_reduced_to_fit_exposure_limit"]
+
     def test_rejected_by_max_concurrent_positions(self):
         """Portfolio already at max_concurrent_positions (10) → rejected."""
         full_portfolio = [

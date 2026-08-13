@@ -61,7 +61,7 @@ What it does **not** cover: whether the screener's trading edge is real. BMAD-st
 | `pytest --collect-only` with `settings.yaml` genuinely absent | **PASS** — 1383 tests collected, 0 import errors |
 | `pytest` (backend, full) | **PASS** — 1385 passed, 1 skipped, 1 xpassed, 0 failures |
 | Quant-soundness regression suite | **PASS** — 56/56 |
-| `.github/workflows/playwright.yml` | **Fixed this round (round-2 audit finding)** — used `npm ci`, which requires a committed lockfile; `frontend/package-lock.json` is gitignored, so this workflow hard-failed on every clean checkout regardless of the dependency fix above. Changed to `npm install`, matching `ci.yml`'s existing approach, and removed the now-invalid `cache-dependency-path` pointing at a file that doesn't exist. |
+| `.github/workflows/playwright.yml` | **Fixed this round (round-2 audit finding)** — at the time, used `npm ci`, which requires a committed lockfile; `frontend/package-lock.json` was gitignored, so this workflow hard-failed on every clean checkout regardless of the dependency fix above. Changed to `npm install` as a stopgap. **[Update, later session]**: a lockfile is now committed (see Open findings below) and this workflow has since been switched back to `npm ci` with `cache: 'npm'` / `cache-dependency-path: frontend/package-lock.json` — this row describes the state at the time of this round's audit, not the current file. |
 
 ### Prior audit (2026-05-05, BMAD) — all 6 findings still fixed
 
@@ -76,12 +76,12 @@ What it does **not** cover: whether the screener's trading edge is real. BMAD-st
 
 ### Open findings (Low only)
 
-| Severity | Finding | Evidence |
-|---|---|---|
-| Low | No committed frontend lockfile — `package-lock.json` is gitignored, so installs aren't pin-reproducible | `.gitignore:21` |
-| Low | 4 high-severity `npm audit` findings (Next.js, postcss, sharp, xlsx transitive CVEs) | `npm audit` output |
-| Low | 45 non-blocking ESLint warnings remain (`react-hooks/exhaustive-deps`, unused vars) — not gating, but real polish debt | `npm run build` output |
-| Low | The two-package.json situation (root scaffolding + `frontend/`) is itself worth a cleanup or a comment explaining why the root one exists at all, to stop future confusion | `package.json` (root) |
+| Severity | Finding | Evidence | Status |
+|---|---|---|---|
+| Low | No committed frontend lockfile — `package-lock.json` is gitignored, so installs aren't pin-reproducible | `.gitignore:21` | **Fixed, later session** — `frontend/package-lock.json` is now committed (`.gitignore` scoped to root-only) |
+| Low | 4 high-severity `npm audit` findings (Next.js, postcss, sharp, xlsx transitive CVEs) | `npm audit` output | **Reduced to 1, later session** — next/postcss/sharp fixed (next bumped + postcss/sharp version overrides); only `xlsx` remains, no upstream fix exists (documented as low-risk: write-only usage in this codebase) |
+| Low | 45 non-blocking ESLint warnings remain (`react-hooks/exhaustive-deps`, unused vars) — not gating, but real polish debt | `npm run build` output | Still open |
+| Low | The two-package.json situation (root scaffolding + `frontend/`) is itself worth a cleanup or a comment explaining why the root one exists at all, to stop future confusion | `package.json` (root) | **Fixed, later session** — the root `package.json` was deleted entirely (it only ever supported an orphaned, unwired root-level e2e suite, which was deleted alongside it) |
 
 ---
 
@@ -151,9 +151,9 @@ Still labeled best-effort — defers to the user's own local settings-audit skil
 | Low | WFO-validate `signal_confidence.py`'s replay instead of single in-sample pass | |
 | Low | Empirically tune the complexity-penalty weight against real historical optimizer runs | |
 | Low | Confirm `intraday.vol.iv_rank_*: null` is deliberately "gate disabled" | |
-| Low | Add a frontend lockfile or document why it's excluded | |
-| Low | Clear 4 high-severity `npm audit` findings | |
-| Low | Clean up or document the stray root-level `package.json` | Prevents a repeat of this round's masking bug |
+| ~~Low~~ | ~~Add a frontend lockfile or document why it's excluded~~ | **Fixed, later session** |
+| ~~Low~~ | ~~Clear 4 high-severity `npm audit` findings~~ | **Reduced to 1 (xlsx, no fix exists), later session** |
+| ~~Low~~ | ~~Clean up or document the stray root-level `package.json`~~ | **Fixed, later session** — deleted, along with the orphaned e2e suite it existed to support |
 | Low | Address the 45 remaining ESLint warnings | Non-blocking polish |
 
 ---

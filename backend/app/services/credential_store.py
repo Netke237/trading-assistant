@@ -23,7 +23,16 @@ def _mask_dict(d: dict) -> dict:
 
 
 class CredentialStore:
-    """Thread-safe in-memory credential store backed by a local gitignored YAML file."""
+    """Thread-safe in-memory credential store backed by a local gitignored YAML file.
+
+    Security note: credentials are persisted to `local_credentials.yaml`
+    UNENCRYPTED — `_mask()` below only redacts values in API responses, the
+    on-disk file itself is plaintext. This is an accepted risk under the
+    explicit assumption that this app runs single-user on a trusted local
+    machine, never a shared or internet-exposed host. If that assumption
+    ever changes, this needs real encryption-at-rest (e.g. an OS keychain
+    or a passphrase-derived key) before broader deployment.
+    """
 
     def __init__(self, path: Path | None = _DEFAULT_PATH) -> None:
         self._path = path

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sqlite3
@@ -106,9 +107,9 @@ def _write_db(key: str, value: dict, expires_at: float) -> None:
         pass  # Never block a scan on cache write failure
 
 
-# ── Public API (call sites in stock_scan.py are unchanged) ────────────────────
+# ── Public API ──────────────────────────────────────────────────────────────
 
-def set_cached(key: str, value: dict) -> None:
+async def set_cached(key: str, value: dict) -> None:
     now = time.time()
     expires_at = now + _TTL_SECONDS
     with _lock:
@@ -116,7 +117,11 @@ def set_cached(key: str, value: dict) -> None:
     # _write_db is intentionally called outside _lock: SQLite has its own
     # write serialisation via file locking. For this cache (deterministic
     # confidence scores, weekly TTL, low write rate) last-writer-wins is safe.
-    _write_db(key, value, expires_at)
+    # Offloaded to a thread: this does synchronous disk I/O (open/write/commit/
+    # close) and is called from async request handlers running concurrently
+    # across up to ~500 symbols per scan — running it inline on the event loop
+    # would stall every other concurrent request for the duration of each write.
+    await asyncio.to_thread(_write_db, key, value, expires_at)
 
 
 def get_cached(key: str) -> dict | None:

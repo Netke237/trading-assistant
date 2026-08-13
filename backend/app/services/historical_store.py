@@ -352,7 +352,7 @@ async def _run_prefetch(symbols: list[str], years: int, delay_secs: float) -> No
                                     symbol, _d, _h, _mode, _res,
                                 )
                             else:
-                                set_cached(_ck, {
+                                await set_cached(_ck, {
                                     "confidence": _res.confidence,
                                     "sample_size": _res.sample_size,
                                 })

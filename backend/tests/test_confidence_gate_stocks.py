@@ -161,7 +161,7 @@ def test_confidence_gate_disabled_preserves_pass_status():
     )
 
 
-def test_stock_scan_atr_override_cache_key_is_distinct_from_default():
+async def test_stock_scan_atr_override_cache_key_is_distinct_from_default():
     """stock_scan.py's call sites resolve req.confidence_atr_mult_target/_stop
     (both-or-neither) and pass them through to conf_cache_key exactly as
     routers/stock_scan.py itself does — a per-scan override must key
@@ -180,8 +180,8 @@ def test_stock_scan_atr_override_cache_key_is_distinct_from_default():
         override_key = cc.cache_key("AAPL", "Bullish", "Swing", 3.0, 1.5, scoring_mode="stock")
         assert default_key != override_key
 
-        cc.set_cached(default_key, {"confidence": 70, "sample_size": 50})
-        cc.set_cached(override_key, {"confidence": 40, "sample_size": 50})
+        await cc.set_cached(default_key, {"confidence": 70, "sample_size": 50})
+        await cc.set_cached(override_key, {"confidence": 40, "sample_size": 50})
         assert cc.get_cached(default_key)["confidence"] == 70
         assert cc.get_cached(override_key)["confidence"] == 40
     finally:

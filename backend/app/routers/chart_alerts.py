@@ -769,6 +769,7 @@ async def evaluate_and_notify_for_symbol(
         for _ri, _row in zip(rule_inputs, rows):
             _row.condition_state = json.dumps(_ri.condition_state)
         _rule_input_by_id = {_ri.id: _ri for _ri in rule_inputs}
+        _rule_row_by_id = {_row.id: _row for _row in rows}
 
         for entry in triggered:
             history = AlertHistoryModel(
@@ -780,9 +781,7 @@ async def evaluate_and_notify_for_symbol(
             )
             db.add(history)
 
-            rule_row = (await db.execute(
-                select(AlertRuleModel).where(AlertRuleModel.id == entry['rule_id'])
-            )).scalar_one_or_none()
+            rule_row = _rule_row_by_id.get(entry['rule_id'])
             rule_name = rule_row.name if rule_row else None
             if rule_row:
                 rule_row.last_triggered_at = entry['triggered_at']

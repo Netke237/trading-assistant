@@ -511,6 +511,14 @@ describe('portfolioStore', () => {
       const body = JSON.parse(fetchMock.mock.calls[0][1].body);
       expect(body.portfolioValue).toBe(50000);
     });
+
+    it('persistPosition surfaces adjustedQty when the backend auto-reduces the size', async () => {
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({ ok: true, status: 201, json: async () => ({ adjustedQty: 2 }) });
+      const res = await persistPosition({ ...abt, recId: 'REC-AV-2', contracts: 5 });
+      expect(res.ok).toBe(true);
+      expect(res.adjustedQty).toBe(2);
+    });
   });
 
   describe('addPosition verified write', () => {
@@ -521,6 +529,15 @@ describe('portfolioStore', () => {
       expect(res.ok).toBe(true);
       expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-ABT-1')?.syncStatus).toBe('synced');
       expect(usePortfolioStore.getState().lastSyncError).toBeNull();
+    });
+
+    it('surfaces adjustedQty and updates the local row when the backend auto-reduces the size', async () => {
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({ ok: true, status: 201, json: async () => ({ adjustedQty: 1 }) });
+      const res = await usePortfolioStore.getState().addPosition({ ...abt, contracts: 5 });
+      expect(res.ok).toBe(true);
+      expect(res.adjustedQty).toBe(1);
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-ABT-1')?.contracts).toBe(1);
     });
 
     it('drops the row and records the reason when the backend rejects it (422)', async () => {

@@ -46,6 +46,20 @@ export function StockAutoTradeArm({
     }
   }
 
+  async function handleDisarm() {
+    if (!watchId) return;
+    setWorking(true);
+    setError(null);
+    try {
+      await api.removeStrategyWatch(watchId);
+      setWatchId(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setWorking(false);
+    }
+  }
+
   return (
     <div className={styles.wrap}>
       <Text size={13} weight={500}>Auto-trade mode</Text>
@@ -87,9 +101,10 @@ export function StockAutoTradeArm({
               <button
                 type="button"
                 className={styles.btn}
-                onClick={() => setWatchId(null)}
+                onClick={handleDisarm}
+                disabled={working}
               >
-                <Text size={12}>Disarm</Text>
+                <Text size={12}>{working ? 'Disarming…' : 'Disarm'}</Text>
               </button>
             </>
           )}

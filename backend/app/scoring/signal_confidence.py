@@ -226,6 +226,16 @@ def compute_confidence(
     bt = load_backtest_cfg(horizon)
     n_days = int(bt["n_days"])
     atr_period = int(bt["atr_period"])
+
+    # Bound the replay window to this horizon's configured history_years —
+    # was previously defined in scoring_rules.yaml but never read, so editing
+    # it had no effect. +n_days keeps room for the forward-outcome window the
+    # loop below still needs after truncation.
+    history_years = bt.get("history_years")
+    if history_years:
+        max_bars = int(float(history_years) * 252) + n_days
+        if len(bars) > max_bars:
+            bars = bars[-max_bars:]
     if atr_mult_target is not None and atr_mult_stop is not None:
         _atr_mult_target = float(atr_mult_target)
         _atr_mult_stop   = float(atr_mult_stop)

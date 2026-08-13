@@ -627,6 +627,11 @@ class PortfolioPositionSchema(BaseModel):
     direction: str
     entryPrice: float
     qty: int
+    # Set only on the POST /api/portfolio response, when the risk check
+    # auto-reduced the requested qty to fit exposure limits — `qty` above
+    # already reflects the adjusted value; this tells the caller it differs
+    # from what was requested, rather than silently applying a different size.
+    adjustedQty: Optional[int] = None
     entryDate: str
     stop: Optional[float] = None
     targets: list[dict] = []

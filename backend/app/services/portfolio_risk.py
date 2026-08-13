@@ -106,8 +106,14 @@ def check_position_risk(
         reasons.append("total_exposure_limit_reached")
 
     if reasons:
+        # "size_reduced_to_fit_exposure_limit" is the one soft/informational
+        # reason — the trade CAN proceed at adjusted_size. Every other reason
+        # is a hard block. Without this split, a trade that fits fine at a
+        # smaller size was rejected outright, identical to one with no valid
+        # smaller size at all — adjusted_size was computed but never usable.
+        hard_reasons = [r for r in reasons if r != "size_reduced_to_fit_exposure_limit"]
         return RiskCheckResult(
-            approved=False,
+            approved=not hard_reasons,
             reasons=reasons,
             adjusted_size=adjusted_size,
             portfolio_exposure_pct=_current_exposure(portfolio, portfolio_value),

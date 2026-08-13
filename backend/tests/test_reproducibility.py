@@ -92,9 +92,13 @@ class TestContractValidatorReproducibility:
         contract = _make_contract()
         card_high = validate_contract(contract, stock_score=90)
         card_low = validate_contract(contract, stock_score=30)
-        # Higher stock score should generally yield >= contract score
         assert isinstance(card_high.score, int)
         assert isinstance(card_low.score, int)
+        # stock_score=30 is below the hard-reject gate (min_stock_score=50,
+        # contract_rules.yaml) — must reject, not silently score it anyway.
+        assert card_low.status == "REJECT"
+        assert "stock_score_below_threshold" in card_low.reject_reasons
+        assert "stock_score_below_threshold" not in card_high.reject_reasons
 
 
 class TestEndToEndPipelineReproducibility:

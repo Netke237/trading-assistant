@@ -4,6 +4,13 @@
 **Auditor**: opencode (bmad-review-adversarial-general skill)  
 **Standards**: PRD compliance, No mock/fake data, No dead UI  
 
+> **Historical snapshot** — this report reflects the app's state on 2026-05-05
+> and is preserved as-is; it is not updated to track later changes. Its
+> architecture references (route slugs like `step-3-regime`/`step-1-universe`,
+> the mode list) predate the current Stocks/Pre-Breakout modes and the
+> Tastytrade integration and no longer match the live app. For the current
+> state, see `TRADING_QUALITY_BENCHMARK.md`.
+
 ---
 
 ## Executive Summary

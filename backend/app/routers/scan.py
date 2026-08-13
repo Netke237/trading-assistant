@@ -629,7 +629,7 @@ async def _process_symbol(
                 atr_mult_target=atr_mult_target, atr_mult_stop=atr_mult_stop,
             )
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
-            confidence_cache.set_cached(_ck, _cached)
+            await confidence_cache.set_cached(_ck, _cached)
         _conf = _cached["confidence"]
         _conf_n = _cached["sample_size"]
 

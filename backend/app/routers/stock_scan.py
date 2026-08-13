@@ -394,7 +394,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
                                            horizon=req.horizon, scoring_mode="stock",
                                            atr_mult_target=_atr_target, atr_mult_stop=_atr_stop)
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
-            set_cached(_ck, _cached)
+            await set_cached(_ck, _cached)
         conf_val = _cached["confidence"]
         conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
         if conf_val is not None and req.confidence_reject_below is not None and conf_val < req.confidence_reject_below:
@@ -813,7 +813,7 @@ async def _process_stock(
                     scoring_mode="stock", atr_mult_target=_atr_target, atr_mult_stop=_atr_stop,
                 )
                 _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
-                set_cached(_ck, _cached)
+                await set_cached(_ck, _cached)
             conf_val = _cached["confidence"]
             conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
 
