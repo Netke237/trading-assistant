@@ -1,10 +1,13 @@
 # Implementation Plan — Explicit Open/Close Order Semantics (Stock + Options)
 
-Status: REVISED after adversarial review, round 2 of 2. Round 1 found 13 issues (3 at severity 5).
-Round 2 verified round 1's fixes against the actual code and found 3 more issues (1 at severity 4:
-the Tradier-stock "no change" claim was factually wrong per Tradier's own API docs — it has
-`sell_short`/`buy_to_cover`, not auto-inference). All 16 total findings are addressed below; see
-§6 for the full log of both rounds.
+Status: REVISED after 3 rounds of adversarial review. Round 1: 13 issues (3 at severity 5). Round
+2: verified round 1's fixes against real code, found 3 more (1 at severity 4 — the Tradier-stock
+"no change" claim was factually wrong per Tradier's own API docs). Round 3: verified round 2's
+fixes, found 3 more mechanical implementation-blocking gaps (max severity 3, all "fails loudly at
+implementation time" rather than "ships a silent bug" per round 3's own assessment) — a
+dataclass field-ordering hazard, a missing propagation step in `broker.py`'s handlers, and a
+non-exported helper the plan told the implementer to reuse. All 19 total findings across 3 rounds
+are addressed below; see §6 for the full log. Ready for implementation.
 
 ## 1. Problem
 
@@ -94,7 +97,14 @@ Combinations and what they mean:
   unaffected; there is currently no existing test asserting stock SELL's wire value, so nothing
   existing needs its assertion changed — but new tests must cover all 4 stock combinations,
   including confirming `sell_short` (not `sell`) for the opening-short case, since that's precisely
-  the behavior this plan is here to correct.
+  the behavior this plan is here to correct. **Residual caveat (round 3):** `sell_short` generally
+  requires a margin-enabled brokerage account and Tradier may reject it for a cash account or a
+  hard-to-borrow symbol — this plan does not add any pre-flight check for that (mirrors how the
+  plan already accepts, rather than pre-validates, other broker-side rejections per §2.4's
+  "acceptable for now, nothing in live UI can trigger it yet" reasoning — except this one *is*
+  live-reachable, so a Tradier-side rejection here should surface as a clear error message to the
+  user, not the generic truncated-fault-text 502 described in §2.4; worth a follow-up, not a
+  blocker for this plan).
 - **Tastytrade stock + options** (`tastytrade_paper.py`) — replace the 2-entry map with the full
   4-way one already described in the file's own comment as "known, accepted limitation — not
   fixed in this task" (this task fixes it):
@@ -156,14 +166,28 @@ constructs `tradier_paper.BrokerOrder` directly in 7 places. Both classes must c
   same order) even though they're not literally the same class — anything else is a footgun for
   the next person who assumes they're interchangeable, which is exactly the bug in this repo today.
 - `backend/app/routers/broker.py` — `StockOrderRequest` / `OptionOrderRequest` gain
-  `effect: Literal["OPEN", "CLOSE"]` (required field, no default).
+  `effect: Literal["OPEN", "CLOSE"]` (required field, no default). **Round 3 review caught that
+  this alone is incomplete:** both route handlers construct `BrokerOrder(...)` directly
+  (`place_stock_order` at lines 55-63, `place_option_order` at lines 103-113) and must also gain
+  `effect=req.effect` in that construction — the schema change alone doesn't propagate the value,
+  it just makes it possible to receive. Omitting this crashes every order with a missing-kwarg
+  `TypeError` (loud and immediate, not a silent bug, but a real omission from this checklist).
+- **Round 3 review found a dataclass field-ordering hazard, reproduced directly:** both
+  `ibkr_paper.BrokerOrder` and `tradier_paper.BrokerOrder` have several trailing fields with
+  defaults (`tif: TIF = "DAY"`, `option_symbol: Optional[str] = None`, etc.). Appending
+  `effect: Effect` at the end — the natural-looking place to add a new field — raises
+  `TypeError: non-default argument 'effect' follows default argument` at import time, since
+  `effect` has no default. Fix: insert `effect: Effect` among the existing *non-defaulted* fields,
+  immediately after `action` (both dataclasses currently order those as `symbol, action, quantity,
+  order_type, limit_price` before the first defaulted field `tif`) — i.e. `symbol, action, effect,
+  quantity, order_type, limit_price, tif="DAY", ...`, unchanged after that point.
 - `backend/app/routers/auto_trade.py` / `backend/app/services/auto_trader.py` — **no new field.**
   Round 1 review confirmed `AutoTradeService.fire()`/`arm()` have no existing-position lookup
   anywhere and are structurally entry-only (`ArmRequest` requires `option_symbol`, and
   `AutoTradeArm/index.tsx:39` hardcodes `action: 'BUY'` with the comment "long single-leg option
   ... is always buy-to-open"). Resolving the plan's own open question from round 1 in favor of the
   safer option: **hardcode `effect="OPEN"` as a literal inside `execute_option_order()`** when it
-  constructs `BrokerOrder` (`auto_trader.py:118-124`), rather than adding a caller-supplied field
+  constructs `BrokerOrder` (`auto_trader.py:118-127`), rather than adding a caller-supplied field
   to `ArmRequest`/`ArmedStrategy`. This is deliberately the smaller, safer change — it removes the
   single biggest crash risk round 1 found (a required field on `ArmRequest` with no corresponding
   field on `ArmedStrategy` would 500 every `/auto-trade/arm` call via `ArmedStrategy(**req.model_dump())`
@@ -211,6 +235,12 @@ model short vs. long" gap, and leaving them for a follow-up risks the same landm
    unconditionally — wrong for stock positions (`contract` ending `|STOCK'`). Fix: use the same
    `contract.endsWith('|STOCK') ? 1 : 100` multiplier every other P&L calc in the app already
    uses (`frontend/lib/risk.ts:31` is the canonical helper — reuse it instead of re-deriving).
+   **Round 3 review caught that this helper, `_multiplier`, is not currently exported** (leading
+   underscore, module-private, only used internally by `risk.ts`'s own `totalNotional`/
+   `computePortfolioRiskMetrics`) — `ClosePositionDrawer` cannot import it as-is. This plan's fix
+   includes adding `export` to that function (and dropping the underscore prefix, or renaming to
+   something like `positionMultiplier` for an exported name — implementer's call, either is fine)
+   as part of the same change, not a separate follow-up.
 2. **New, found while scoping this plan:** both `realizedDollar` AND `realizedPct`
    (`ClosePositionDrawer/index.tsx:34-37`) assume a long position (profit when price rises). For a
    short position, P&L is inverted — profit when price *falls*. **Round 1 review caught that the
@@ -371,7 +401,7 @@ engineering around with a transitional default; noting it so it isn't a silent g
   rather than trading it for a "caller must always pass OPEN" convention that has no enforcement
   behind it.
 
-## 6. Adversarial review log (2 rounds)
+## 6. Adversarial review log (3 rounds)
 
 ### Round 1
 
@@ -401,5 +431,27 @@ engineering around with a transitional default; noting it so it isn't a silent g
 | — | (Confirmed correct, no action needed): §2.3 P&L formula math, `auto_trader.py` full-file read, ChartWorkspace kind-typing, §2.4/§3 "unreachable from UI" vs. new tests not actually contradictory, dict tuple-key hashing mechanics | — | — |
 | — | (New residual gap noted, not blocking): `direction` isn't runtime-enforced end-to-end (backend schemas are plain `str`) — added as an explicit caveat, not a required fix | 2 | §2.3 |
 
-Round 2's own verdict: "not clean" pending the 3 findings above. All 3 are now addressed in this
-revision. No round 3 has been run yet — see next steps.
+Round 2's own verdict: "not clean" pending the 3 findings above. All 3 are addressed in the round-2
+revision.
+
+### Round 3 (verified round 2's `_EQUITY_SIDE` fix, test-count table, and lookup-line note against
+real code; independently re-fetched Tradier's API docs rather than trusting round 2's citation)
+
+| # | Finding | Severity | Resolved in |
+|---|---|---|---|
+| 1 | `_EQUITY_SIDE` map itself confirmed correct against Tradier's docs (independently re-fetched) — no action needed | — | — |
+| 2 | `broker.py`'s two route handlers construct `BrokerOrder(...)` directly and were never told to add `effect=req.effect` — schema-only change is incomplete | 2 | §2.2, new explicit note |
+| 3 | Appending `effect` (no default) after already-defaulted fields on both `BrokerOrder` dataclasses raises `TypeError` at import time — reproduced directly by the reviewer | 3 | §2.2, explicit field-placement instruction (insert after `action`, before `tif`) |
+| 4 | Test-count table (22 sites) re-verified correct, independently recounted — no action needed | — | — |
+| 5 | `ClosePositionDrawer`'s instructed reuse of `risk.ts`'s `_multiplier` is impossible as written — the helper is module-private, not exported | 2 | §2.3, explicit export instruction added |
+| 6 | Tradier `sell_short` has no margin-account caveat, unlike the equivalent IBKR/Alpaca hedge | 2 | §2.1, caveat added |
+| 7 | Minor line-citation slips (`auto_trader.py:118-124` should be `118-127`; the plan's two "consuming lookup line" bullets for Tradier are actually one physical line) | 1 | §2.1/§2.2 citation fixed; the one-line-two-halves nuance is described accurately enough in context, not further split |
+
+Round 3's own verdict: no severity-4/5 findings; all issues are described by the reviewer itself
+as "self-correcting... fail loudly and immediately (import-time TypeError, missing-kwarg TypeError,
+or a `tsc` compile error) rather than shipping a silent bug." All are fixed in this revision.
+Diminishing-returns judgment call: stopping the adversarial-review loop here rather than running a
+round 4 — three consecutive rounds have moved from severity-5 structural errors, to one
+severity-4 factual error, to purely mechanical severity-≤3 gaps that a normal implementation pass
+(guided by this now much more precise plan) and the existing test suite would catch immediately
+even if this document missed something else at this point.
