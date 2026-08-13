@@ -238,7 +238,7 @@ export default function WatchlistPage() {
             : `${compositeWatches.length} composite alert${compositeWatches.length === 1 ? '' : 's'}`}
         </Text>
         {offline && (
-          <Text size={13} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
+          <Text size={13} tone="dim">Backend not running — start it (uvicorn app.main:app --port 8000) to load live data.</Text>
         )}
       </div>
 

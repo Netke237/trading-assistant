@@ -2,8 +2,9 @@
  * Phase 2–4 end-to-end cohesion tests.
  *
  * Covers: backend API, WS protocol, structure overlays, alert CRUD, notification routes.
- * Requires backend running on http://127.0.0.1:8000 (start-backend.bat) and
- * frontend on http://localhost:3001 (managed by playwright webServer config).
+ * Requires backend running on http://127.0.0.1:8000 (cd backend && uvicorn
+ * app.main:app --reload --port 8000) and frontend on http://localhost:3001
+ * (managed by playwright webServer config).
  */
 
 import { test, expect, type Page } from '@playwright/test';

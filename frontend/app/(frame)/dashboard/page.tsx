@@ -155,7 +155,7 @@ export default function DashboardPage() {
       </div>
 
       {offline && (
-        <Text size={13} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
+        <Text size={13} tone="dim">Backend not running — start it (uvicorn app.main:app --port 8000) to load live data.</Text>
       )}
 
       {/* Regime banner */}
@@ -293,7 +293,7 @@ export default function DashboardPage() {
         <SectionCard title="News — watchlist" count={news.length}>
           <div className={styles.newsList}>
             {offline ? (
-              <Text size={12} tone="dim">Backend not running — start start-backend.bat to load live data.</Text>
+              <Text size={12} tone="dim">Backend not running — start it (uvicorn app.main:app --port 8000) to load live data.</Text>
             ) : watchlist.length === 0 ? (
               <Text size={12} tone="dim">Add stocks to your watchlist to see news here.</Text>
             ) : news.length === 0 ? (
