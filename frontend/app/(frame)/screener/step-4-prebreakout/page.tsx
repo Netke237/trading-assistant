@@ -109,7 +109,7 @@ export default function Step4PreBreakoutPage() {
     setResults([]);
     setFibResults([]);
     setPullbackResults([]);
-  }, [params, fibParams, universePick, direction, setResults, setFibResults]);
+  }, [scanMode, params, fibParams, pullbackEmaParams, universePick, direction, setResults, setFibResults]);
 
   const runScan = useCallback(async () => {
     const manualSymbols = parseSymbols(symbolOverride);

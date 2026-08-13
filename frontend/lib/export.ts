@@ -1,9 +1,15 @@
-// xlsx has 2 known high-severity CVEs (prototype pollution, ReDoS) with no
-// upstream fix on npm — both trigger only via XLSX.read/readFile parsing
-// attacker-controlled input. This file only writes (json_to_sheet/writeFile)
-// from our own in-memory data, never parses external files, so neither is
-// reachable here. Re-check this note if XLSX.read/readFile is ever added
-// anywhere in this codebase.
+// xlsx@0.18.5 (pinned in package.json) has 2 known high-severity CVEs, both
+// unfixed on the npm registry — SheetJS stopped publishing to npm after
+// 0.18.5 and only ships 0.19.3+/0.20.2+ fixes via their own CDN
+// (cdn.sheetjs.com), which is a heavier trust/tooling change than this repo
+// warrants for a write-only dependency:
+//   - GHSA-4r6h-8v6p-xvw6 (Prototype Pollution, fixed upstream in 0.19.3)
+//   - GHSA-5pgg-2g8v-p4x9 (ReDoS, fixed upstream in 0.20.2)
+// Both trigger only via XLSX.read/readFile parsing attacker-controlled
+// input. This file only writes (json_to_sheet/writeFile) from our own
+// in-memory data, and no XLSX.read/readFile call exists anywhere in this
+// codebase (grep for "XLSX.read" before assuming this note still holds),
+// so neither CVE is reachable here. Accepted risk, not a bug to fix.
 import * as XLSX from 'xlsx';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 

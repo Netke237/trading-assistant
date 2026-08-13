@@ -19,12 +19,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # no cache: 'npm' yet — frontend/package-lock.json is now committed,
-          # but switching this to cache-dependency-path + npm ci is a deliberate
-          # follow-up, not bundled into the lockfile commit itself
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm install   # not npm ci yet — same reason, deferred follow-up
+        run: npm ci
 
       - name: Run typecheck
         run: npm run typecheck
