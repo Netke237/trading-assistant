@@ -114,9 +114,14 @@ function rrContribution(
   estOptionPrice: number,
   entryLimit: number,
 ): number {
+  // Mirrors the backend's reward_risk.py M2 fix: a negative reward's sign/
+  // magnitude is preserved, not flattened to 0 — a target priced below entry
+  // is a real loss the trader should see, not an indistinguishable "no data".
+  // Only risk<=0 (a degenerate/missing entry price) is genuinely not
+  // computable.
   const risk = entryLimit;
   const reward = estOptionPrice - risk;
-  if (risk <= 0 || reward <= 0) return 0;
+  if (risk <= 0) return 0;
   return Math.round((reward / risk) * 10) / 10;
 }
 
@@ -913,7 +918,9 @@ function EditableTargetRow({
           {estOptionPrice > 0 && (
             <KV label="Est. option" value={`$${estOptionPrice.toFixed(2)}`} mono tone={rowTone} />
           )}
-          {rr > 0 && <KV label="R:R" value={`${rr.toFixed(1)}x`} mono />}
+          {estOptionPrice > 0 && entryLimit > 0 && (
+            <KV label="R:R" value={`${rr.toFixed(1)}x`} mono tone={rr < 0 ? 'reject' : undefined} />
+          )}
           {target.contractsToSell !== undefined && (
             <KV label="Contracts" value={`${target.contractsToSell}`} mono />
           )}

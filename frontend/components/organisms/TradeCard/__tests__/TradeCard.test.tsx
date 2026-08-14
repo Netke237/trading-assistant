@@ -92,6 +92,24 @@ const mockTradeCard: TradeCardData = {
 };
 
 describe('TradeCard', () => {
+  it('shows a negative per-target R:R instead of hiding the row (M2 parity)', () => {
+    // Mirrors the backend's reward_risk.py M2 fix: a target priced below
+    // entry (estimatedOptionPrice=1.0 < entry.limit=2.5, reward=-1.5,
+    // rr=-1.5/2.5=-0.6) is a real loss the trader should see, not silently
+    // omitted the way `rr > 0`-gated rendering used to.
+    const dataWithLosingTarget: TradeCardData = {
+      ...mockTradeCard,
+      exit: {
+        ...mockTradeCard.exit,
+        targets: [
+          { id: 'tp1', stockPrice: 195.0, targetPrice: 195.0, estimatedOptionPrice: 1.0, contractsToSell: 1, status: 'PENDING', rrContribution: -0.6 },
+        ],
+      },
+    };
+    render(<TradeCard data={dataWithLosingTarget} />);
+    expect(screen.getByText('-0.6x')).toBeInTheDocument();
+  });
+
   it('renders symbol and company in header', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByTestId('symbol-header')).toHaveTextContent('AAPL — Apple Inc.');
