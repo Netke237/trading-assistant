@@ -77,12 +77,14 @@ def _reset_monitor_state():
 
 @pytest.mark.asyncio
 async def test_master_disabled_skips_all():
-    """masterEnabled=False short-circuits before any dispatch — even when a
-    position alert would otherwise definitely fire. Without a non-empty
-    generate_alerts/fake_db setup, this test would also "pass" if the
-    masterEnabled gate were deleted entirely, since an empty portfolio
-    produces zero alerts regardless of the gate — see the sibling tests
-    below for that fixture pattern."""
+    """masterEnabled=False short-circuits before any dispatch — even with a
+    real alert-worthy position in play, generate_alerts/notify_alert must
+    never be reached. (A prior version of this test asserted only
+    notify_alert.assert_not_called() with no position fixture, which is
+    vacuously true regardless of the gate — there was nothing to alert on
+    either way. This reproduces the fixture from
+    test_position_alert_dispatched_via_notify_alert, which proves an alert
+    WOULD fire absent the gate, so the negative assertion here is meaningful.)"""
     from app.services import portfolio_alert_monitor as mon
     _reset_monitor_state()
 
@@ -90,7 +92,7 @@ async def test_master_disabled_skips_all():
 
     with (
         patch.object(mon, '_load_settings', return_value={'alert_delivery': {'masterEnabled': False}}),
-        patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[_make_alert('TP_HIT')])),
+        patch.object(mon, 'generate_alerts', new=AsyncMock(return_value=[_make_alert('TP_HIT')])) as m_generate,
         patch.object(mon, 'notify_alert') as m_notify,
         patch.object(mon.alert_service, 'broadcast', new=AsyncMock()),
         patch('app.services.portfolio_alert_monitor.AsyncSessionLocal', return_value=fake_db),
@@ -98,6 +100,7 @@ async def test_master_disabled_skips_all():
     ):
         await mon._run_once()
 
+    m_generate.assert_not_called()
     m_notify.assert_not_called()
 
 

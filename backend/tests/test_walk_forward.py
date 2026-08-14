@@ -198,6 +198,47 @@ def test_complexity_penalty_skips_categorical_and_boolean_grids():
     assert penalty == 0.05  # only the numeric param's edge-penalty counts
 
 
+def test_train_fold_finds_a_winner_on_real_sub_gate_trade_counts():
+    """Real-data regression (2026-08 audit): train_fold calls run_strategy_backtest
+    without overriding min_trades, so it used to inherit the module default
+    (_MIN_TRADES=10). On real daily fixture data, a full 12-month/4-symbol window
+    routinely produces 1-5 real trades per symbol for pullback_ema — every one of
+    which used to come back as n_trades=0 (see the strategy_backtest.py fix this
+    round), making every combo look untraded (`sharpes=[]` for all of them) and
+    train_fold silently return {} despite real, computable per-trade performance
+    existing. This must now return a real, non-empty winner."""
+    import json
+    from pathlib import Path
+    from app.services.walk_forward import train_fold, Fold, precompute_bar_dates
+
+    fixtures = Path(__file__).parent / "fixtures"
+    basket_bars = {}
+    for sym in ["AAPL", "MSFT", "NVDA", "SPY"]:
+        path = fixtures / f"{sym}_candles.json"
+        if not path.exists():
+            import pytest
+            pytest.skip(f"Fixture not found: {path}")
+        bars = json.loads(path.read_text())
+        precompute_bar_dates(bars)
+        basket_bars[sym] = bars
+
+    fold = Fold(date(2024, 4, 30), date(2025, 4, 30), date(2025, 4, 30), date(2025, 7, 30))
+    search_space = {
+        "ema_period": [20, 50], "trend_ema": [100, 150, 200],
+        "atr_stop_mult": [1.0, 1.5, 2.0], "rr_target_mult": [1.5, 2.0, 2.5, 3.0],
+        "tolerance": [0.02, 0.04, 0.06, 0.08],
+    }
+    winner = train_fold(
+        "pullback_ema", "Bullish", basket_bars, fold, search_space,
+        {"fee_pct": 0.001, "slippage_pct": 0.001},
+    )
+    assert winner != {}, (
+        "train_fold returned no winner on real fixture data with real (sub-gate) "
+        "trade counts — the min_trades zeroing bug has regressed"
+    )
+    assert set(winner.keys()) == set(search_space.keys())
+
+
 def test_train_fold_breaks_sharpe_tie_toward_grid_center(monkeypatch):
     """Equal in-sample Sharpe across combos -> the complexity penalty should
     make train_fold prefer the more central grid value, not silently default

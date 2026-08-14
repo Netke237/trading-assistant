@@ -195,6 +195,26 @@ async def test_process_stock_uses_process_pool_for_backtest():
     )
 
 
+def test_below_gate_result_preserves_real_trade_stats():
+    """A backtest that produces real trades but fewer than min_trades must NOT
+    report n_trades/win_rate/sharpe as 0 — only confidence and passes_gate are
+    gated. Callers (WFO train_fold, IS/OOS re-runs) key off `n_trades > 0` to
+    decide whether a window traded at all; collapsing a real sub-gate trade
+    count down to 0 made those windows indistinguishable from windows with zero
+    signals, which silently broke walk-forward optimization on realistic (low)
+    trade counts (2026-08 audit)."""
+    bars = _synth_bars(400, trend=True)
+    below_gate = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish",
+                                        min_trades=1000)  # unreachable gate
+    assert below_gate.n_trades > 0, "fixture must produce at least one real trade for this test to be meaningful"
+    assert below_gate.passes_gate is False
+    assert below_gate.confidence is None
+    assert below_gate.sharpe != 0.0 or below_gate.win_rate != 0.0, (
+        "real per-trade stats must survive even when the eligibility gate isn't met"
+    )
+    assert str(below_gate.n_trades) in below_gate.summary_text
+
+
 def test_backtest_result_changes_with_params():
     """run_strategy_backtest must actually use the params dict passed to it —
     two materially different param sets on the same bars should not be

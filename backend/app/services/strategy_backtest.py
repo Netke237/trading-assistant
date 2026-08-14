@@ -126,8 +126,6 @@ def run_strategy_backtest(
         return _empty_result(strategy, direction, str(exc))
 
     n_trades = int(stats.get("# Trades", 0))
-    if n_trades < min_trades:
-        return _empty_result(strategy, direction, f"Only {n_trades} trades — need {min_trades}")
 
     win_rate    = float(stats.get("Win Rate [%]", 0)) / 100.0
     total_ret   = float(stats.get("Return [%]", 0))
@@ -142,13 +140,24 @@ def run_strategy_backtest(
     avg_loss = (abs(sum(losses_pnl) / len(losses_pnl))) if losses_pnl else 0.0
     expectancy = win_rate * avg_win - (1 - win_rate) * avg_loss
 
-    confidence = min(100, max(0, round(win_rate * 100)))
     passes = win_rate >= min_win_rate and n_trades >= min_trades and expectancy >= _MIN_EXPECTANCY
+    # Real n_trades/win_rate/sharpe/expectancy are always preserved, even when the
+    # eligibility gate isn't met — callers that pool real backtest activity across
+    # windows (WFO train_fold's grid search, its IS/OOS re-runs) key off n_trades>0
+    # to decide whether a window "actually traded"; silently zeroing these fields
+    # below the gate made every sub-`min_trades` window look identical to a window
+    # with zero signals, which defeated the grid search whenever real trade counts
+    # (the common case on realistic bar history) sat under the gate. Only the
+    # UI-facing `confidence` score and `passes_gate` verdict are gated.
+    confidence = min(100, max(0, round(win_rate * 100))) if n_trades >= min_trades else None
 
-    summary = (
-        f"{n_trades} trades · Win {win_rate:.0%} · "
-        f"Return {total_ret:.1f}% · MaxDD {max_dd:.1f}% · Sharpe {sharpe:.2f} · Expectancy ${expectancy:.2f}"
-    )
+    if n_trades < min_trades:
+        summary = f"Only {n_trades} trades — need {min_trades}"
+    else:
+        summary = (
+            f"{n_trades} trades · Win {win_rate:.0%} · "
+            f"Return {total_ret:.1f}% · MaxDD {max_dd:.1f}% · Sharpe {sharpe:.2f} · Expectancy ${expectancy:.2f}"
+        )
     return BacktestResult(
         strategy=strategy, direction=direction,
         n_trades=n_trades, win_rate=win_rate,
