@@ -1,15 +1,16 @@
 # Implementation Plan — Tier 4: Documentation Corrections & Staleness Sweep
 
-Status: REVISED after adversarial review round 1. The review confirmed CLAUDE.md itself hasn't
-drifted since the original audit (checked via git log — no commits since touched any cited file),
-so the "current reality" comparisons below are still valid, but found: item #8's own replacement
-count was wrong (7 strategies in the picker, not 6 — the plan would have written a new inaccuracy
-into CLAUDE.md); §3's justification for `bamendjou-design-spec.md` was partly fabricated (it has
-no `/mocks` references at all, that claim was conflated from a different file); §3's disclaimer
-sweep as originally scoped would have mislabeled a third `docs/design/` file
-(`stitch-drift-log.md`) that is NOT stale — live source code still cites it by name; the README
-rewrite instruction was underspecified; and #29 (temp_prd.md) is claimed by both this plan and
-`PLAN_TIER3_CLEANUP.md` with no stated owner. All fixed below.
+Status: REVISED after 2 rounds of adversarial review. Round 1: item #8's replacement count was
+wrong (7 strategies, not 6); §3's justification for `bamendjou-design-spec.md` was partly
+fabricated; §3's disclaimer sweep would have mislabeled `stitch-drift-log.md`, a file live source
+code still cites; README rewrite was underspecified; #29 ownership was ambiguous between this plan
+and `PLAN_TIER3_CLEANUP.md`. Round 2 confirmed all of round 1's fixes (including re-deriving the
+7-strategy count independently) and found two more small issues: item #10 named a nonexistent
+type (`TitleAs` — actually `TitleTag`, and it's not currently exported); the README's corrected
+command list still didn't actually make the backend runnable (`pytest` runs tests, it doesn't
+start the service — the real command is `docker-compose up`). Both fixed below. Round 2 also noted
+`stitch-drift-log.md`'s per-screen sections (not the two cited Global items) are themselves stale,
+though this plan still takes no action on that file per its own stated scope boundary.
 
 Scope: CLAUDE.md corrections (findings #5, #7, #8, #9, #10), the full "Documentation staleness"
 section of `CODE_REVIEW_FINDINGS.md`, and #29 (duplicate PRD file). This tier is fundamentally
@@ -69,11 +70,18 @@ these five items get fixed for real, not archived:
   ones are grandfathered. Recommend (b) — it gives future development a clear rule without
   pretending the past is fixable for free.
 - **#10** — primitive prop API (`Text`/`Data`/`Title` size/weight unions) → copy the actual current
-  `TextSize`/`DataWeight`/`TitleSize`/`TitleAs` unions directly from
+  `TextSize`/`DataWeight`/`TitleSize`/`TitleTag` unions directly from
   `frontend/components/primitives/{Text,Data,Title}.tsx` into the doc instead of hand-describing
-  them, so this specific drift class (a type union changes, doc doesn't) is less likely to recur
-  silently — though note even a copy-pasted union will drift again the next time someone changes
-  the type without updating CLAUDE.md; that's a process gap, not something a doc edit alone fixes.
+  them. **Round 2 review caught that the type name here was wrong** — there is no `TitleAs`
+  anywhere in the codebase; `Title.tsx`'s actual (and currently unexported) type is
+  `TitleTag = 'h1' | 'h2' | 'span' | 'div'`. Neither `TitleTag` nor `TitleSize` (`20 | 24 | 32`,
+  also unexported) is currently `export`ed, unlike `TextSize`/`TextWeight`/`DataWeight` which are —
+  so "copy the union" for Title's two types means either adding `export` to them first, or
+  inlining their literal values into the doc without a type-name reference. Either is fine; just
+  don't send an implementer grepping for a type name (`TitleAs`) that doesn't exist. This specific
+  drift class (a type union changes, doc doesn't) will recur again the next time someone changes
+  the type without updating CLAUDE.md — that's a process gap, not something this one doc edit
+  fixes, but not this plan's problem to solve either.
 
 **Verification:** after editing, re-run the same kind of grep-based cross-check the original audit
 did (compare each CLAUDE.md claim against the actual file it describes) for just these 5 sections,
@@ -104,10 +112,18 @@ pointing to CLAUDE.md.**
   workspace" framing and the wrong root `config/` reference, (2) state plainly that `tests/` is a
   stub with real coverage living in `backend/tests/`/`frontend/__tests__/`, (3) give a one-line
   description of what the app does (stock/options screener, 3 modes), (4) link to CLAUDE.md as
-  the authoritative architecture doc rather than duplicating it, (5) include the actual dev-start
-  commands (`cd frontend && npm run dev`, `cd backend && pytest`) so a new clone is runnable from
-  the README alone. Keep it short — a few paragraphs plus a commands block, not a rewrite of
-  CLAUDE.md.
+  the authoritative architecture doc rather than duplicating it, (5) include real, runnable
+  commands. **Round 2 review caught that the original command list here was itself wrong** —
+  `cd backend && pytest` runs the test suite, it does not start the backend service, and there is
+  no bare `uvicorn`/entrypoint command documented anywhere in this repo (checked `app/main.py` and
+  CLAUDE.md's own dev-workflow section — neither has one). The only way to actually run the full
+  app (frontend + a live backend) is `docker-compose up` (confirmed via the repo's
+  `docker-compose.yml`, which runs `backend` + `db` on ports 8001/5433). The corrected command set
+  should be: `cd frontend && npm run dev` (frontend dev server), `docker-compose up` (full backend
+  + DB), and `cd backend && pytest` labeled explicitly as "run tests," not as a way to start
+  anything — so the README's "runnable from the README alone" promise is actually true for someone
+  who wants the full app running, not just the frontend against nothing. Keep it short — a few
+  paragraphs plus a commands block, not a rewrite of CLAUDE.md.
 - **`IMPLEMENTATION_PLAN.md`** — archive with historical disclaimer; its "Current state" table is
   entirely superseded by CLAUDE.md's own pipeline/integrations tables.
 - **`PHASE_1_COMPLETION.md`** — archive with historical disclaimer; same reasoning.
@@ -139,7 +155,13 @@ and a scope gap that would have mislabeled a third, still-live file as stale.**
   misleadingly suggest a doc that live code still points to is safe to ignore. Leave this file
   untouched by this plan entirely (no disclaimer, no edit) unless a separate, deliberate review of
   its *current* accuracy (not staleness) turns up something worth fixing — that's a different kind
-  of task than what this section covers.
+  of task than what this section covers. **Round 2 review, checking that exact question, found
+  the file is not uniformly current either**: its per-screen sections (dated 2026-04-17) describe
+  "6 nav items present" and old stepper names, while the live `NavItems/index.tsx` now has 10
+  items (Analysis, Chart, Alerts, Strategy Watch added since). The two specifically-cited Global
+  items (G1, G4) remain accurate; the per-screen sections around them don't. This plan still takes
+  no action on the file (that remains a separate task, per above) — noting the nuance here only so
+  "leave it alone" isn't read as "the whole file is fine," which isn't quite true.
 
 ---
 

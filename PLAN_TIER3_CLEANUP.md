@@ -1,11 +1,14 @@
 # Implementation Plan — Tier 3: Mechanical Cleanup & Hardening
 
-Status: REVISED after adversarial review round 1. Three items had severity-5 findings: #2 rested
-on a false "no existing token" premise (one already exists) and undercounted affected files ~2x;
-#3's original recommendation risked a real data-loss bug (silently dropping a placed order on a
-network hiccup); #7 targeted the wrong file — the actual unattended nightly cron path is a
-different, undocumented duplicate script that was left completely unprotected. All three revised
-below.
+Status: REVISED after 2 rounds of adversarial review. Round 1: #2 rested on a false "no existing
+token" premise and undercounted affected files ~2x; #3's original recommendation risked a
+data-loss bug; #7 targeted the wrong file (the actual unattended nightly path is a different,
+undocumented duplicate script). Round 2 confirmed #2 and #7's fixes hold up, but found #3's
+round-1 revision still had a real gap — the corrected `persistPosition` return shape was never
+wired into the call site's existing rejection gate, which would have caused every network hiccup
+to show a misleading error and skip the retry path entirely. Fixed below with an explicit 3-way
+branch. #6 also got a minor factual correction (the chmod fix runs on every order placement, not
+just app start).
 
 Scope: findings #11, #12, #13, #14, #25, #26, #27, #28, #29, plus two deferred residual notes from
 `SELL_CLOSE_SEMANTICS_PLAN.md` (Tradier `sell_short` margin caveat, IBKR/Alpaca auto-infer
@@ -111,11 +114,47 @@ in this entire tier.
 
 **Recommend (A)** — it fixes the ambiguity at its source rather than working around it at each
 call site, and makes `persistPosition`'s return value trustworthy for any future caller too, not
-just this one. Whichever is chosen, **do not ship a fix here without a test that specifically
+just this one.
+
+**Round 2 review found (A) as originally described is still incomplete: it changes
+`persistPosition`'s return shape but never says the call site's existing gate must change to
+match, and the two are incompatible as-is.** The current gate at both call sites is
+`if (!saved.ok) { setOrderError(...); return; }` — a **hard return**, before `addPosition` is ever
+reached. If `persistPosition`'s catch branch starts returning `{ ok: false, offline: true }`
+(distinguishable, per option A) instead of `{ ok: true }`, a genuine network hiccup would hit this
+*same* generic `!saved.ok` branch: show a misleading "...portfolio tracking rejected: undefined"
+message (the offline shape has no `detail` field) and **return before `addPosition` is ever
+called** — never engaging the pending/retry path that's supposed to make this safe. That directly
+contradicts option (A)'s own stated goal two paragraphs up ("still call `addPosition` normally...
+so the existing pending/retry path still engages").
+
+**The call site must branch on the offline case specifically, before the generic rejection
+check:**
+```ts
+const saved = await persistPosition(pos);
+if (saved.offline) {
+  // Couldn't reach the backend to confirm — let addPosition's own POST + pending/retry
+  // path handle it, exactly as every other call site (without a persistPosition step) does.
+  void addPosition(pos);
+} else if (!saved.ok) {
+  setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${saved.detail}`);
+  return;
+} else {
+  // Genuine confirmed success — skip addPosition's own POST, just sync local state.
+  // (Requires addPosition to gain a variant/option that updates state without re-POSTing —
+  // see point 3 below; do not skip this call entirely without that capability existing.)
+  void addPosition(pos, { skipPost: true });
+}
+```
+This three-way branch (offline / rejected / confirmed-success) is the actual fix — not just the
+`persistPosition` return-shape change alone. **Do not ship this item without also rewriting the
+call-site gate this explicitly**, in both `placeLimitPaper` and `placeMarketNow`.
+
+Whichever exact shape is chosen, **do not ship a fix here without a test that specifically
 simulates a network failure during `persistPosition` and asserts the position still ends up
-`syncStatus: 'pending'` (retryable), not silently dropped** — this is the actual regression the
-original "just skip the second POST" idea would have introduced, and the happy-path-only test the
-original plan proposed would not have caught it.
+`syncStatus: 'pending'` (retryable) via a real `addPosition` call, not silently dropped or
+silently un-tracked** — this is the actual regression both rounds of review found the naive
+version of this fix would introduce, and a happy-path-only test would not catch it.
 
 **Test plan:**
 1. Happy path: exactly one POST to the position-create endpoint per `placeLimitPaper`/
@@ -188,7 +227,13 @@ review caught that this alone doesn't cover a file that already exists from befo
 shipped** (its permissions won't change until the next `save()` call, which may be a long time for
 a file that's rarely re-saved) — also add a one-time `os.chmod(self._path, 0o600)` in `load()` (or
 wherever the store is initialized) if `self._path.exists()`, so an already-broadly-permissioned
-file gets tightened on the next app start, not just the next save:
+file gets tightened proactively. **Round 2 review corrected the frequency claim here:** `load()`
+isn't just an app-start thing — `broker_router.py:36`'s `build_router_from_credentials()` calls
+`credential_store.load()` explicitly on every broker order-placement request and every auto-trade
+cycle (3 route handlers in `broker.py` plus `auto_trader.py:133`), specifically so credential
+changes take effect without a restart. So this chmod runs far more often than "once at startup" —
+harmless in practice (`chmod` on an already-0o600 file is a cheap, idempotent syscall), but don't
+describe it as a startup-only thing in any commit message or comment:
 ```python
 # in save():
 tmp.write_text(yaml.dump(data_copy, default_flow_style=False))
@@ -272,11 +317,11 @@ actually run unattended and do damage.
 `temp_prd.md` is a confirmed byte-for-byte duplicate of
 `PRD-02 Master Phased PRD — Options Screener and Recommendation Assistant.md`.
 
-**Fix:** delete `temp_prd.md`. Before doing so, grep the repo (including `llm-contexts/` and
-`docs/superpowers/`) for any reference to the filename `temp_prd.md` specifically — if nothing
-references it by name, it's safe to remove outright. This is folded into the doc cleanup in
-`PLAN_TIER4_DOCS.md` for sequencing (it's a doc-tree change), but the underlying action is trivial
-enough to do as its own tiny commit if easier.
+**Ownership: `PLAN_TIER4_DOCS.md` §7 owns this deletion, not this plan.** (Round 2 review found
+this item's earlier "trivial enough to do from here too if easier" phrasing reopened the exact
+ambiguity the two plans were supposed to have resolved — removed.) If `PLAN_TIER4_DOCS.md` has
+already run by the time this item is reached, treat it as done and skip it; do not re-delete or
+re-verify here.
 
 ---
 
