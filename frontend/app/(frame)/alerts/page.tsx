@@ -7,6 +7,7 @@ import { useAlertStore, DEFAULT_CONFIG } from '@/lib/alertStore';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
 import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
 import { api, type CompositeWatch } from '@/lib/api';
@@ -40,7 +41,7 @@ function fmtDate(iso: string): string {
 const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   TP_HIT:                 'Target reached',
   STOP_REACHED:           'Stop-loss breach',
-  PREMIUM_STOP:           'Premium stop (–40%)',
+  PREMIUM_STOP:           'Premium stop',
   TIME_STOP_APPROACHING:  'Time stop approaching',
   TIME_STOP:              'Time stop (≤3 DTE)',
   EARNINGS_APPROACHING:   'Earnings within 3 days',
@@ -51,16 +52,24 @@ const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   SCAN_FAILED:            'Scan failed',
 };
 
+// PREMIUM_STOP's percentage is user-configurable (settingsStore.premiumStopPct) — never
+// hardcode it in the static label map above, or it will drift out of sync with the real value.
+function alertTypeLabel(type: AlertType, premiumStopPct: number): string {
+  if (type === 'PREMIUM_STOP') return `Premium stop (–${Math.round(premiumStopPct * 100)}%)`;
+  return ALERT_TYPE_LABELS[type] ?? type;
+}
+
 /* ─── Alert row ─── */
 
 function AlertRow({ toast }: { toast: ToastItem }) {
   const { acknowledgeAlert, deleteAlert } = useAlertStore();
+  const premiumStopPct = useSettingsStore((s) => s.premiumStopPct);
   return (
     <div className={[styles.alertRow, toast.acknowledged ? styles.alertRowAck : ''].join(' ')}>
       <div className={styles.alertMeta}>
         <Data size={12} weight={500}>{toast.symbol}</Data>
         <span className={styles.alertKind} data-kind={toast.kind}>{toast.kind}</span>
-        <Text size={11} tone="secondary">{ALERT_TYPE_LABELS[toast.alertType] ?? toast.alertType}</Text>
+        <Text size={11} tone="secondary">{alertTypeLabel(toast.alertType, premiumStopPct)}</Text>
       </div>
       <Text size={12}>{toast.reason}</Text>
       <div className={styles.alertFooter}>
@@ -132,6 +141,7 @@ function conditionsSummary(rule: AlertRule): string {
 export default function AlertsPage() {
   const { toasts, config, setConfig, clearAll, clearOldAlerts, acknowledgeAlert, testSound } = useAlertStore();
   const { rules, updateRule, deleteRule } = useChartAlertStore();
+  const premiumStopPct = useSettingsStore((s) => s.premiumStopPct);
 
   const [tab, setTab] = useState<'alerts' | 'rules' | 'watches'>('alerts');
   const [showRuleBuilder, setShowRuleBuilder] = useState(false);
@@ -403,7 +413,7 @@ export default function AlertsPage() {
               {(Object.keys(ALERT_TYPE_LABELS) as AlertType[]).map((type) => (
                 <SettingsRow
                   key={type}
-                  label={ALERT_TYPE_LABELS[type]}
+                  label={alertTypeLabel(type, premiumStopPct)}
                   defaultValue={DEFAULT_CONFIG.enabledTypes.includes(type) ? 'On' : 'Off'}
                 >
                   <Toggle

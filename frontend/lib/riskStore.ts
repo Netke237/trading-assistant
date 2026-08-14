@@ -29,6 +29,15 @@ const DEFAULT_METRICS: PortfolioRiskMetrics = {
   status: 'PASS',
 };
 
+// `new Date().toISOString().split('T')[0]` derives the date string from the UTC calendar day of
+// the live instant, not the user's local calendar day — for a user behind UTC (e.g. US Eastern),
+// this resets the daily recommendation counter hours before their actual local midnight, silently
+// granting extra daily slots early. Derive the ISO date from local calendar fields instead.
+function localTodayIso(): string {
+  const d = new Date();
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+}
+
 interface RiskState {
   limits: RiskLimits;
   dailyRecommendations: number;
@@ -45,12 +54,12 @@ export const useRiskStore = create<RiskState>()(
     (set, get) => ({
       limits: { ...DEFAULT_LIMITS },
       dailyRecommendations: 0,
-      lastResetDate: new Date().toISOString().split('T')[0],
+      lastResetDate: localTodayIso(),
       metrics: { ...DEFAULT_METRICS },
       symbols: [],
       setLimits: (l) => set({ limits: l }),
       incrementDaily: () => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = localTodayIso();
         set((s) => {
           if (s.lastResetDate !== today) {
             return { dailyRecommendations: 1, lastResetDate: today };

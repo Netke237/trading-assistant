@@ -239,7 +239,9 @@ export default function Step4Page() {
             <Text size={11} tone="dim">CONF</Text>
             <SortHeader label="NEXT"     sortKey="nextEventDays" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
           </div>
-          <div className={styles.tableBody}>
+          {/* role="table" marks this as the ranked-candidates table for screen readers and for
+              any future e2e test that seeds scan data and asserts on it via getByRole('table'). */}
+          <div role="table" className={styles.tableBody}>
             {paginated.map((row) => (
               <TableRow
                 key={row.symbol}

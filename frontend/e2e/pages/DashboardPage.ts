@@ -1,14 +1,14 @@
 import { Page, Locator } from '@playwright/test';
 
 export class DashboardPage {
-  readonly regimeBanner: Locator;
+  readonly regimeSection: Locator;
   readonly watchlistSection: Locator;
   readonly portfolioSection: Locator;
   readonly alertsSection: Locator;
   readonly navRail: Locator;
 
   constructor(private page: Page) {
-    this.regimeBanner = page.getByRole('banner');
+    this.regimeSection = page.getByRole('region', { name: /market regime/i });
     this.watchlistSection = page.getByRole('region', { name: /watchlist/i }).or(page.getByText(/watchlist/i).first());
     this.portfolioSection = page.getByRole('region', { name: /portfolio/i }).or(page.getByText(/portfolio/i).first());
     this.alertsSection = page.getByRole('region', { name: /alerts/i }).or(page.getByText(/alerts/i).first());

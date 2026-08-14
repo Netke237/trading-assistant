@@ -19,7 +19,7 @@ test.describe('Dashboard @smoke', () => {
     const dashboard = new DashboardPage(page);
     await dashboard.goto();
 
-    await expect(dashboard.regimeBanner).toBeVisible();
+    await expect(dashboard.regimeSection).toBeVisible();
     const badge = page.locator('[class*="badge"], [class*="status"]').first();
     await expect(badge).toBeVisible();
   });
