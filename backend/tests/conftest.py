@@ -14,12 +14,20 @@ from __future__ import annotations
 # ── Test DB safety pin (MUST run before any app import) ───────────────────────
 # The app now defaults to PostgreSQL for dev (backend/.env), and several tests
 # import the real app.main:app without overriding get_db, so they use the
-# module-level engine built from DATABASE_URL. Pin that to the local SQLite file
-# during tests so the suite can NEVER connect to or mutate the real Postgres dev
-# database. An env var takes precedence over .env in pydantic-settings; setdefault
-# lets an explicit test DATABASE_URL still win if someone sets one.
+# module-level engine built from DATABASE_URL. Point that at a dedicated,
+# isolated SQLite file during tests — NOT the real local dev.db, which is used
+# by the actually-running dev server and would otherwise let a test read/mutate
+# real dev data (confirmed: test_portfolio_monitor.py used to carry an xfail
+# documenting exactly this — "sees real leftover data"). Deleted and recreated
+# fresh at the start of every test session. An env var takes precedence over
+# .env in pydantic-settings; setdefault lets an explicit test DATABASE_URL
+# still win if someone sets one.
 import os
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./dev.db")
+import tempfile
+_TEST_DB_PATH = os.path.join(tempfile.gettempdir(), "bamendjou_backend_tests.db")
+if os.path.exists(_TEST_DB_PATH):
+    os.remove(_TEST_DB_PATH)
+os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
 
 import asyncio
 from typing import AsyncGenerator
@@ -162,8 +170,56 @@ async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
 
 @pytest.fixture(scope="session", autouse=True)
 def _db_tables():
-    """Create scan_sessions table once per test session."""
+    """Create scan_sessions table once per test session (against the separate
+    in-memory `_test_engine` used only by the `client` fixture below)."""
     asyncio.run(_create_tables())
+    yield
+
+
+# ── App DB tables (for tests that import app.main:app directly) ───────────────
+# The `client` fixture below is fully self-isolated (its own in-memory engine,
+# get_db overridden locally) and doesn't need any of this. But several test
+# files do `from app.main import app` and hit the real `get_db` — i.e. the
+# real `app.database.engine`, now pointed at the isolated file DB pinned above
+# instead of dev.db. Those tables need to actually exist in that file.
+#
+# This codebase has FOUR independent SQLAlchemy declarative-base/metadata
+# registries, not one:
+#   1. app.models.base.Base       — dead code, nothing registers against it.
+#      Deliberately NOT used below — it's the obvious-looking name to import,
+#      but create_all() against it silently creates zero tables.
+#   2. app.database.Base          — the real one; every actual model
+#      (PortfolioPositionModel, AlertRuleModel, ClosedPositionModel, etc.)
+#      inherits from this.
+#   3. ScanSessionBase            — ScanSessionModel only.
+#   4. OhlcvBase                  — OhlcvDailyModel only.
+# (backend/migrations/env.py's target_metadata list is the reference for this
+# — it already has to name all four separately, because they don't merge.)
+async def _create_app_db_tables() -> None:
+    # Import app.main so every router — and therefore every model module — is
+    # loaded and registered against its Base before create_all runs. In
+    # practice this is already true by the time this fixture executes (pytest
+    # collection imports every test module, many of which import app.main,
+    # before any fixture runs) — importing it explicitly here too is a cheap,
+    # self-contained belt-and-suspenders measure that doesn't rely on that
+    # import-order side effect.
+    import app.main  # noqa: F401
+    from app.database import engine, Base as AppBase
+    from app.models.scan_session import ScanSessionBase
+    from app.models.ohlcv_daily import OhlcvBase
+    async with engine.begin() as conn:
+        await conn.run_sync(AppBase.metadata.create_all)
+        await conn.run_sync(ScanSessionBase.metadata.create_all)
+        await conn.run_sync(OhlcvBase.metadata.create_all)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _app_db_tables():
+    """Create every real table against the isolated test DB file once per
+    session, so any test importing app.main:app directly gets working tables
+    instead of "no such table" errors — or, before this fixture existed,
+    instead of silently reading/writing the real local dev.db."""
+    asyncio.run(_create_app_db_tables())
     yield
 
 
