@@ -326,6 +326,39 @@ def test_daily_loss_blocks_fire_when_limit_exceeded(mocker):
     assert svc.get_state().armed is False
 
 
+def test_daily_loss_block_records_daily_loss_blocked_history(mocker):
+    """Regression: a fire blocked by the daily-loss circuit breaker left no
+    history entry at all, unlike the cap_blocked path immediately above it —
+    a blocked fire vanished without an audit trail. Must append a
+    'daily_loss_blocked' entry before re-raising, mirroring cap_blocked."""
+    from app.data.ibkr_paper import OrderResult
+    mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+    mocker.patch("app.services.auto_trader.execute_option_order",
+                 return_value=OrderResult("x", "ok", "ibkr_paper"))
+
+    svc = AutoTradeService()
+    today = datetime.now(timezone.utc).date().isoformat()
+    svc._state.history.append({
+        "order_id": "prev1",
+        "status": "ok",
+        "broker": "ibkr_paper",
+        "symbol": "NVDA",
+        "option": "NVDA_opt",
+        "timestamp": f"{today}T10:00:00+00:00",
+        "premium_at_risk": 2500.0,   # already over the $2,000 (2% of $100k) limit
+    })
+
+    svc.arm(_make_armed(symbol="AAPL", premium=1.0, qty=1, pv=100_000.0))
+    with pytest.raises(RuntimeError, match="Daily loss limit"):
+        svc.fire()
+
+    history = svc.get_state().history
+    assert history[-1]["status"] == "daily_loss_blocked"
+    assert history[-1]["order_id"] is None
+    assert history[-1]["symbol"] == "AAPL"
+    assert history[-1]["broker"] == "ibkr_paper"
+
+
 def test_daily_loss_allows_fire_when_under_limit(mocker):
     """If today's premium_at_risk is under the limit, fire proceeds."""
     from app.data.ibkr_paper import OrderResult

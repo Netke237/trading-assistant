@@ -250,16 +250,17 @@ def test_get_contracts_applies_hold_day_dte_window(monkeypatch):
         **near_contract, "id": "AAPL|185|far|C",
         "expiry": _expiry_str(365), "dte": 365, "dteTotal": 365,
     }
-    monkeypatch.setattr(
-        "app.routers.contracts.fetch_option_chain",
-        lambda symbol, option_type="C", dte_bounds=None: (
-            [far_contract] if dte_bounds == (330, 400) else [near_contract, far_contract]
-        ),
-    )
-    # get_contracts() also calls fetch_price() unconditionally (contracts.py:46), which
+    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None):
+        return [far_contract] if dte_bounds == (330, 400) else [near_contract, far_contract]
+
+    monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_option_chain)
+    # get_contracts() also calls fetch_price_async() unconditionally (contracts.py:46), which
     # otherwise makes a real Tradier/yfinance network call in a test run — the same reason
     # backend/tests/conftest.py's `client` fixture patches both together.
-    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
+    async def _fake_price(client, symbol):
+        return 190.0
+
+    monkeypatch.setattr("app.routers.contracts.fetch_price_async", _fake_price)
     client = TestClient(app)
     resp = client.get("/api/contracts", params={
         "symbol": "AAPL", "right": "C", "hold_min_days": 165, "hold_max_days": 200,
@@ -273,11 +274,13 @@ def test_get_contracts_applies_hold_day_dte_window(monkeypatch):
 def test_get_contracts_without_hold_days_keeps_legacy_behaviour(monkeypatch):
     """No hold days -> dte_bounds=None -> unchanged from today's behaviour."""
     calls = []
-    def _fake_fetch(symbol, option_type="C", dte_bounds=None):
+    async def _fake_fetch(client, symbol, expiry=None, option_type="C", dte_bounds=None):
         calls.append(dte_bounds)
         return []
-    monkeypatch.setattr("app.routers.contracts.fetch_option_chain", _fake_fetch)
-    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
+    monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_fetch)
+    async def _fake_price(client, symbol):
+        return 190.0
+    monkeypatch.setattr("app.routers.contracts.fetch_price_async", _fake_price)
     client = TestClient(app)
     client.get("/api/contracts", params={"symbol": "AAPL", "right": "C"})
     assert calls == [None]
@@ -299,11 +302,13 @@ def test_get_contracts_does_not_hard_reject_a_tolerance_fallback_expiry(monkeypa
         "price": 27.1, "bid": 26.85, "ask": 27.4, "delta": 0.558, "theta": -0.02,
         "volume": 224, "open_interest": 19059, "iv_rank": 30,
     }
-    monkeypatch.setattr(
-        "app.routers.contracts.fetch_option_chain",
-        lambda symbol, option_type="C", dte_bounds=None: [contract_179d],
-    )
-    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 326.59)
+    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None):
+        return [contract_179d]
+
+    monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_option_chain)
+    async def _fake_price(client, symbol):
+        return 326.59
+    monkeypatch.setattr("app.routers.contracts.fetch_price_async", _fake_price)
     client = TestClient(app)
     resp = client.get("/api/contracts", params={
         "symbol": "AAPL", "right": "C", "hold_min_days": 90, "hold_max_days": 105,
@@ -327,11 +332,13 @@ def test_get_contracts_still_rejects_a_too_short_contract_for_a_narrow_horizon(m
         "price": 2.0, "bid": 1.9, "ask": 2.1, "delta": 0.45, "theta": -0.05,
         "volume": 500, "open_interest": 1000, "iv_rank": 30,
     }
-    monkeypatch.setattr(
-        "app.routers.contracts.fetch_option_chain",
-        lambda symbol, option_type="C", dte_bounds=None: [contract_12d],
-    )
-    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
+    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None):
+        return [contract_12d]
+
+    monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_option_chain)
+    async def _fake_price(client, symbol):
+        return 190.0
+    monkeypatch.setattr("app.routers.contracts.fetch_price_async", _fake_price)
     client = TestClient(app)
     resp = client.get("/api/contracts", params={
         "symbol": "AAPL", "right": "C", "hold_min_days": 5, "hold_max_days": 15,
@@ -375,9 +382,12 @@ def test_get_contracts_falls_back_gracefully_on_misconfigured_multiplier(monkeyp
     call as scan.py's round-1 fix addressed, just on the sibling endpoint. A
     misconfigured dte_holding_multiplier (0 here) must not 500 /api/contracts."""
     monkeypatch.setattr("app.routers.contracts.dte_holding_multiplier", lambda: 0.0)
-    monkeypatch.setattr("app.routers.contracts.fetch_option_chain",
-                         lambda symbol, option_type="C", dte_bounds=None: [])
-    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
+    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None):
+        return []
+    monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_option_chain)
+    async def _fake_price(client, symbol):
+        return 190.0
+    monkeypatch.setattr("app.routers.contracts.fetch_price_async", _fake_price)
     client = TestClient(app)
     resp = client.get("/api/contracts", params={
         "symbol": "AAPL", "right": "C", "hold_min_days": 15, "hold_max_days": 45,
@@ -395,9 +405,12 @@ def test_get_contracts_rejects_inverted_hold_range(monkeypatch):
     string) works against both endpoints. The `loc` contents legitimately
     differ (this is a query-param check, /api/scan's is a whole-body check) —
     only the list-of-dicts envelope is asserted here, not exact loc equality."""
-    monkeypatch.setattr("app.routers.contracts.fetch_option_chain",
-                         lambda symbol, option_type="C", dte_bounds=None: [])
-    monkeypatch.setattr("app.routers.contracts.fetch_price", lambda symbol: 190.0)
+    async def _fake_option_chain(client, symbol, expiry=None, option_type="C", dte_bounds=None):
+        return []
+    monkeypatch.setattr("app.routers.contracts.fetch_option_chain_async", _fake_option_chain)
+    async def _fake_price(client, symbol):
+        return 190.0
+    monkeypatch.setattr("app.routers.contracts.fetch_price_async", _fake_price)
     client = TestClient(app)
     resp = client.get("/api/contracts", params={
         "symbol": "AAPL", "right": "C", "hold_min_days": 100, "hold_max_days": 15,

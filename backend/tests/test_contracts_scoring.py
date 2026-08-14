@@ -11,7 +11,7 @@ Covers:
 from __future__ import annotations
 
 from datetime import date, timedelta
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 import pytest
 from httpx import AsyncClient, ASGITransport
@@ -155,8 +155,8 @@ async def test_get_contracts_integration():
     app = _build_test_app()
 
     with (
-        patch("app.routers.contracts.fetch_option_chain", return_value=SAMPLE_CHAIN),
-        patch("app.routers.contracts.fetch_price", return_value=190.0),
+        patch("app.routers.contracts.fetch_option_chain_async", new_callable=AsyncMock, return_value=SAMPLE_CHAIN),
+        patch("app.routers.contracts.fetch_price_async", new_callable=AsyncMock, return_value=190.0),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
@@ -177,8 +177,8 @@ async def test_get_contracts_sorted_by_score_desc():
     app = _build_test_app()
 
     with (
-        patch("app.routers.contracts.fetch_option_chain", return_value=SAMPLE_CHAIN),
-        patch("app.routers.contracts.fetch_price", return_value=190.0),
+        patch("app.routers.contracts.fetch_option_chain_async", new_callable=AsyncMock, return_value=SAMPLE_CHAIN),
+        patch("app.routers.contracts.fetch_price_async", new_callable=AsyncMock, return_value=190.0),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
@@ -203,8 +203,8 @@ async def test_get_contracts_respects_limit():
     app = _build_test_app()
 
     with (
-        patch("app.routers.contracts.fetch_option_chain", return_value=chain),
-        patch("app.routers.contracts.fetch_price", return_value=190.0),
+        patch("app.routers.contracts.fetch_option_chain_async", new_callable=AsyncMock, return_value=chain),
+        patch("app.routers.contracts.fetch_price_async", new_callable=AsyncMock, return_value=190.0),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
@@ -236,8 +236,8 @@ async def test_get_contracts_forwards_backend_contractConfidence_not_stock_scale
     )
 
     with (
-        patch("app.routers.contracts.fetch_option_chain", return_value=SAMPLE_CHAIN[:1]),
-        patch("app.routers.contracts.fetch_price", return_value=190.0),
+        patch("app.routers.contracts.fetch_option_chain_async", new_callable=AsyncMock, return_value=SAMPLE_CHAIN[:1]),
+        patch("app.routers.contracts.fetch_price_async", new_callable=AsyncMock, return_value=190.0),
         patch("app.routers.contracts.validate_contract", return_value=fake_card),
     ):
         async with AsyncClient(
@@ -268,8 +268,8 @@ async def test_get_contracts_max_price_filter():
     app = _build_test_app()
 
     with (
-        patch("app.routers.contracts.fetch_option_chain", return_value=[cheap, expensive]),
-        patch("app.routers.contracts.fetch_price", return_value=190.0),
+        patch("app.routers.contracts.fetch_option_chain_async", new_callable=AsyncMock, return_value=[cheap, expensive]),
+        patch("app.routers.contracts.fetch_price_async", new_callable=AsyncMock, return_value=190.0),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
@@ -319,8 +319,8 @@ async def test_get_contracts_empty_chain():
     app = _build_test_app()
 
     with (
-        patch("app.routers.contracts.fetch_option_chain", return_value=[]),
-        patch("app.routers.contracts.fetch_price", return_value=190.0),
+        patch("app.routers.contracts.fetch_option_chain_async", new_callable=AsyncMock, return_value=[]),
+        patch("app.routers.contracts.fetch_price_async", new_callable=AsyncMock, return_value=190.0),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
