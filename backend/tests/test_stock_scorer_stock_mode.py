@@ -338,14 +338,57 @@ def test_wilder_smooth_fixes_latent_adx_scale_bug_vs_pre_refactor_sum_math():
     )
 
 
-def test_rsi_unchanged_after_wilder_smooth_extraction():
-    """RSI values must be numerically identical after switching _rsi to use the shared
-    _wilder_smooth helper instead of its own inline loop."""
+def _rsi_old_inline(closes: list[float], period: int = 14) -> list[float]:
+    """Reproduces _rsi's pre-_wilder_smooth-extraction implementation exactly,
+    so test_rsi_matches_pre_extraction_tail_values below has a real reference
+    to diff against instead of only checking shape/range."""
+    gains, losses = [], []
+    for i in range(1, len(closes)):
+        d = closes[i] - closes[i - 1]
+        gains.append(max(d, 0))
+        losses.append(max(-d, 0))
+    avg_g = sum(gains[:period]) / period
+    avg_l = sum(losses[:period]) / period
+    rsi_vals = []
+    for i in range(period, len(gains)):
+        avg_g = (avg_g * (period - 1) + gains[i]) / period
+        avg_l = (avg_l * (period - 1) + losses[i]) / period
+        rs = avg_g / avg_l if avg_l > 0 else 100.0
+        rsi_vals.append(100 - 100 / (1 + rs))
+    return rsi_vals
+
+
+def test_rsi_matches_pre_extraction_tail_values():
+    """_rsi's values must be numerically identical to the pre-_wilder_smooth-
+    extraction implementation, for every value actually consumed by callers.
+
+    The extracted _wilder_smooth seeds its result list with the plain
+    (not-yet-incrementally-updated) starting average, so the new _rsi's
+    series has ONE EXTRA leading element the old hand-rolled loop never
+    produced (see _wilder_smooth's docstring) -- this shifts len(rsi_vals)
+    by +1 but does NOT shift indices counted from the end: new[-1] == old[-1],
+    new[-2] == old[-2], etc., since the extra element only prepends. Every
+    call site in this codebase indexes from the end (rsi_vals[-1]/[-2]), so
+    this is verified harmless here rather than just asserted away -- if a
+    future caller ever consumes the full series or indexes from the front,
+    this test's own next assertion (exact list-length delta of 1) is what
+    would need revisiting first."""
     from app.scoring.stock_scorer import _rsi
     closes = [100.0 + (i % 5) - 2 + i * 0.05 for i in range(60)]
-    vals = _rsi(closes, period=14)
-    assert vals, "expected non-empty RSI series"
-    assert all(0.0 <= v <= 100.0 for v in vals)
+    period = 14
+
+    new_vals = _rsi(closes, period=period)
+    old_vals = _rsi_old_inline(closes, period=period)
+
+    assert len(new_vals) == len(old_vals) + 1, (
+        "expected exactly one extra leading element from _wilder_smooth's seed row"
+    )
+    # Every tail-indexed value old code could ever have produced must match exactly
+    # (old_vals is the shorter list by exactly 1 -- see the length assertion above).
+    for i in range(1, len(old_vals) + 1):
+        assert new_vals[-i] == pytest.approx(old_vals[-i], abs=1e-9), (
+            f"RSI value at index -{i} drifted after the _wilder_smooth extraction"
+        )
 
 
 def test_wilder_smooth_helper_matches_manual_recurrence():

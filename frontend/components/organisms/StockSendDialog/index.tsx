@@ -145,9 +145,15 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     onSubmit(orders);
   }
 
-  // Once any row is queued (backend unreachable), block a same-mount re-submit:
-  // a second pass would mint fresh recIds and merge/double contracts in the store.
+  // Once any row is queued (backend unreachable), block a same-mount re-submit
+  // of THAT row: a second pass would mint a fresh recId and merge/double it in
+  // the store. But a mixed attempt (some rows queued, others hard-rejected)
+  // must not get stuck forever — `targets` above already only re-processes
+  // `errors` symbols on retry (queued symbols are never in `errors`, so they
+  // can't be touched by a retry), so only fully block the button when there's
+  // nothing left to retry.
   const hasQueued = Object.keys(queued).length > 0;
+  const hasRetryableErrors = Object.keys(errors).length > 0;
 
   const brokerOptions: Array<[BrokerMode, string, boolean]> = [
     ['recommendation', 'Recommendation', true],
@@ -274,15 +280,15 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={submit}
-              disabled={cards.length === 0 || submitting || hasQueued}
+              disabled={cards.length === 0 || submitting || (hasQueued && !hasRetryableErrors)}
             >
               <Text size={13}>
                 {submitting
                   ? 'Submitting…'
-                  : hasQueued
-                    ? 'Queued — close to continue'
-                    : Object.keys(errors).length > 0
-                      ? `Retry ${Object.keys(errors).length} failed order${Object.keys(errors).length === 1 ? '' : 's'}`
+                  : hasRetryableErrors
+                    ? `Retry ${Object.keys(errors).length} failed order${Object.keys(errors).length === 1 ? '' : 's'}`
+                    : hasQueued
+                      ? 'Queued — close to continue'
                       : `Submit ${cards.length} order${cards.length === 1 ? '' : 's'}`}
               </Text>
             </button>

@@ -90,4 +90,53 @@ describe('StockSendDialog — partial basket failure retry', () => {
     // Final onSubmit still reports the full 3-symbol basket to the caller.
     expect(onSubmit.mock.calls[0][0]).toHaveLength(3);
   });
+
+  it('does not permanently disable Submit when one row is queued and another hard-failed', async () => {
+    // AAPL stays Manual (routes through addPosition -> queued when the
+    // backend is unreachable). MSFT stays Auto-send (routes through
+    // postStockOrder -> hard error). Regression for a bug where any queued
+    // row disabled the Submit button unconditionally, forever, even when a
+    // different row had a real error the user should be able to retry.
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch;
+    (api.postStockOrder as jest.Mock).mockRejectedValue(new Error('broker rejected'));
+
+    const cards = [makeCard('AAPL'), makeCard('MSFT')];
+    const onSubmit = jest.fn();
+
+    render(<StockSendDialog cards={cards} onClose={jest.fn()} onSubmit={onSubmit} />);
+
+    fireEvent.click(screen.getByText('IBKR Paper'));
+    fireEvent.click(screen.getByLabelText('Auto-send AAPL')); // AAPL -> Manual
+
+    const submitBtn = screen.getByRole('button', { name: /submit 2 orders/i });
+    await act(async () => {
+      fireEvent.click(submitBtn);
+      await waitFor(() => expect(api.postStockOrder).toHaveBeenCalledTimes(1));
+    });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(await screen.findByText(/queued — backend unreachable, will sync/i)).toBeInTheDocument();
+    expect(screen.getByText(/broker rejected/i)).toBeInTheDocument();
+
+    // MSFT's error must still be retryable — the button must not be stuck
+    // disabled just because AAPL is queued.
+    const retryBtn = screen.getByRole('button', { name: /retry 1 failed order/i });
+    expect(retryBtn).not.toBeDisabled();
+
+    (api.postStockOrder as jest.Mock).mockResolvedValue({ order_id: 'retry-1' });
+    await act(async () => {
+      fireEvent.click(retryBtn);
+    });
+
+    // Only MSFT (the errored symbol) gets retried — AAPL's already-queued
+    // attempt must not be resubmitted (would mint a fresh recId and double it).
+    expect(api.postStockOrder).toHaveBeenCalledTimes(2);
+    const retrySymbols = (api.postStockOrder as jest.Mock).mock.calls
+      .slice(1)
+      .map(([arg]: [{ symbol: string }]) => arg.symbol);
+    expect(retrySymbols).toEqual(['MSFT']);
+
+    global.fetch = originalFetch;
+  });
 });

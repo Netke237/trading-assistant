@@ -36,7 +36,7 @@ export function RiskPanel() {
         <Stat
           label="Positions"
           value={`${metrics.concurrentPositions} / ${limits.maxConcurrentPositions}`}
-          tone={metrics.concurrentPositions >= limits.maxConcurrentPositions ? 'reject' : metrics.concurrentPositions >= limits.maxConcurrentPositions * 0.8 ? 'caution' : 'pass'}
+          tone={metrics.concurrentPositions >= limits.maxConcurrentPositions ? 'reject' : metrics.concurrentPositions >= Math.floor(limits.maxConcurrentPositions * 0.8) ? 'caution' : 'pass'}
           tooltip={riskStatusTooltip(metrics, limits, 'positions')}
         />
         <Stat
@@ -48,7 +48,7 @@ export function RiskPanel() {
         <Stat
           label="Daily"
           value={`${metrics.dailyRecommendations} / ${limits.maxDailyRecommendations}`}
-          tone={metrics.dailyRecommendations >= limits.maxDailyRecommendations ? 'reject' : metrics.dailyRecommendations >= limits.maxDailyRecommendations * 0.8 ? 'caution' : 'pass'}
+          tone={metrics.dailyRecommendations >= limits.maxDailyRecommendations ? 'reject' : metrics.dailyRecommendations >= Math.floor(limits.maxDailyRecommendations * 0.8) ? 'caution' : 'pass'}
           tooltip={riskStatusTooltip(metrics, limits, 'daily')}
         />
       </div>
