@@ -1,6 +1,10 @@
 # Product Requirements Document
 # HMM Regime-Based Automated Trading System
 
+> **Note**: This PRD's HMM regime-detection concept was implemented as `step-1-regime`
+> (see `backend/app/services/` for the shipped Markov/HMM implementation). This document is
+> preserved as the original design exploration, not an active/unimplemented spec.
+
 ---
 
 | Field | Value |

@@ -1,5 +1,11 @@
 # Trading Assistant — Phase Completion Tracker
 
+> **Historical snapshot** — this document reflects the app's state as of the end of Phase 1/Phase 2
+> of an earlier development push and is preserved as-is; it is not updated to track later changes.
+> Its "What remains" claims (no broker API calls, seeded-RNG candle data, remaining `MOCK_*`
+> imports) are long false — live paper-broker adapters exist and `frontend/lib/api.ts` has zero
+> `MOCK_*` references today. For the current state, see `CLAUDE.md`.
+
 ## Where we are
 
 This is the **Bamendjou Options Screener and Recommendation Assistant** (repo: `F:\Git\GitHub\Trading assistant`). We have completed **Phase 1 and Phase 2** of a production-readiness push against PRD-02 (`PRD-02 Master Phased PRD — Options Screener and Recommendation Assistant.md`).

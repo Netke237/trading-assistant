@@ -1,5 +1,7 @@
 # LLM Context — Round 4: Execution Parameters Panel (CR-02)
 
+> **Historical snapshot** — calls Direction+Horizon "Step 2"; `05-step-reorder.md` later moved it to Step 3, matching CLAUDE.md's current `step-3-direction`. See `CLAUDE.md`.
+
 **Workstream:** CR-02 — Add an "Execution Parameters" panel to the Direction + Horizon page (Step 2).
 **Conflict class:** Medium — modifies `RunScanButton`, `api.ts`, and `scanStore.ts`. Do not change any exported type signatures beyond what is specified.
 

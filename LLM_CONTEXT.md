@@ -1,5 +1,13 @@
 # Bamendjou — LLM Context Document
 
+> **Historical snapshot** — this document reflects an early development phase of the app
+> (pre-backend, deterministic-mocks-only, step order `step-1-universe/step-2-direction/step-3-regime`)
+> and is preserved as-is; it is not updated to track later changes. The backend, real data
+> integrations, and current step order (`step-1-regime/step-2-universe/step-3-direction`) have
+> since superseded everything described below, including the "single source of truth" and
+> "project root only contains this file and CLAUDE.md" claims in the block immediately below.
+> For the current state, see `CLAUDE.md`.
+
 > **How to use this file**
 > You are working on the Bamendjou options screener (Next.js 15, TypeScript).
 > This file is the single source of truth for every convention, default value, and design decision in the project.

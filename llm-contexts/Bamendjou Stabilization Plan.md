@@ -1,5 +1,7 @@
 # Bamendjou Stabilization Plan
 
+> **Note**: written as operating instructions for a different LLM tool (DeepSeek), not Claude Code — not an instruction set for this agent. Kept for historical reference.
+
 This document defines **all allowed actions** for the LLM (DeepSeek) when working on the Bamendjou project.  
 DeepSeek must **not** perform actions outside this document.
 

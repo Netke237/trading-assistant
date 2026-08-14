@@ -5,6 +5,12 @@
 **Stack**: Next.js (React) frontend, FastAPI backend  
 **Target user**: Single discretionary swing options trader, high IT affinity, limited screen time
 
+> **Historical snapshot** — this document is preserved as-is and is not updated to track later
+> changes. Its Section 8 page-map prose (around lines 539-541) still describes the old step
+> ordering ("Step 1: Universe," "Step 2: Direction + Horizon," "Step 3: Market Regime"), which no
+> longer matches the live app's `step-1-regime/step-2-universe/step-3-direction` order. For the
+> current state, see `CLAUDE.md`.
+
 ---
 
 ## Design Decisions Log

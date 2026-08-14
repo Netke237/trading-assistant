@@ -1,5 +1,10 @@
 # Bamendjou — Master Implementation Plan
 
+> **Historical snapshot** — this document reflects the app's state on 2026-04-30
+> and is preserved as-is; it is not updated to track later changes. Its "Current state" table
+> (scoring/pricing/contract validation marked "Not started") is long superseded by CLAUDE.md's
+> own pipeline/integrations tables. For the current state, see `CLAUDE.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship the Bamendjou options screener from its current fixture-data state to a fully working scan engine — real market data, real scoring, real pricing, real trade cards — by dispatching parallel LLM workstreams in four waves.
