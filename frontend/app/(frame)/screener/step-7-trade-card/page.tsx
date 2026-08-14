@@ -496,15 +496,23 @@ export default function Step7Page() {
       });
       const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id, liveQuote?.price);
       const saved = await persistPosition(pos);
-      if (!saved.ok) {
+      if (saved.offline) {
+        // Couldn't reach the backend to confirm — let addPosition's own POST + pending/retry
+        // path handle it, exactly as every other call site (without a persistPosition step) does.
+        void addPosition(pos);
+      } else if (!saved.ok) {
         setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${saved.detail}`);
         return;
-      }
-      if (saved.adjustedQty != null) {
-        setSizeAdjustedNote(`Size reduced to ${saved.adjustedQty} contract${saved.adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
+      } else {
+        // Genuine confirmed success — skip addPosition's own POST, just sync local state.
+        // (Requires addPosition to gain a variant/option that updates state without re-POSTing —
+        // see point 3 below; do not skip this call entirely without that capability existing.)
+        if (saved.adjustedQty != null) {
+          setSizeAdjustedNote(`Size reduced to ${saved.adjustedQty} contract${saved.adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
+        }
+        void addPosition(pos, { skipPost: true });
       }
       setPaperOrderId(res.order_id);
-      void addPosition(pos);
     } catch (e) {
       setOrderError(String(e));
     } finally {
@@ -529,15 +537,23 @@ export default function Step7Page() {
       });
       const pos = buildPaperPosition(card, 'MKT', selectedBroker, res.order_id, liveQuote?.price);
       const saved = await persistPosition(pos);
-      if (!saved.ok) {
+      if (saved.offline) {
+        // Couldn't reach the backend to confirm — let addPosition's own POST + pending/retry
+        // path handle it, exactly as every other call site (without a persistPosition step) does.
+        void addPosition(pos);
+      } else if (!saved.ok) {
         setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${saved.detail}`);
         return;
-      }
-      if (saved.adjustedQty != null) {
-        setSizeAdjustedNote(`Size reduced to ${saved.adjustedQty} contract${saved.adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
+      } else {
+        // Genuine confirmed success — skip addPosition's own POST, just sync local state.
+        // (Requires addPosition to gain a variant/option that updates state without re-POSTing —
+        // see point 3 below; do not skip this call entirely without that capability existing.)
+        if (saved.adjustedQty != null) {
+          setSizeAdjustedNote(`Size reduced to ${saved.adjustedQty} contract${saved.adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
+        }
+        void addPosition(pos, { skipPost: true });
       }
       setPaperOrderId(res.order_id);
-      void addPosition(pos);
     } catch (e) {
       setOrderError(String(e));
     } finally {

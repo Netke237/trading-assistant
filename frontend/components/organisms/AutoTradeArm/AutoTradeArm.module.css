@@ -6,4 +6,4 @@
 .armRow { display: flex; align-items: center; gap: var(--space-3); }
 .btn { padding: 6px 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-surface); cursor: pointer; font-size: 12px; }
 .btn:disabled { opacity: .5; cursor: wait; }
-.btnArm { background: var(--caution); border-color: var(--caution); color: #fff; }
+.btnArm { background: var(--caution); border-color: var(--caution); color: var(--accent-text); }

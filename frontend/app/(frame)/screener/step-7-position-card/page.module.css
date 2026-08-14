@@ -15,5 +15,5 @@
 .actions { display: flex; gap: var(--space-3); }
 .btn { padding: 8px 20px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer; font-size: 13px; }
 .btn:disabled { opacity: .5; cursor: wait; }
-.btnPrimary { background: var(--pass); color: #fff; border-color: var(--pass); }
-.btnMarket { background: var(--caution); color: #fff; border-color: var(--caution); }
+.btnPrimary { background: var(--pass); color: var(--accent-text); border-color: var(--pass); }
+.btnMarket { background: var(--caution); color: var(--accent-text); border-color: var(--caution); }

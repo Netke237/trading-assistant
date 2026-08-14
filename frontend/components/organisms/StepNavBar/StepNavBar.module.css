@@ -95,7 +95,7 @@
 .btnDanger {
   background: var(--reject);
   border-color: var(--reject);
-  color: #fff;
+  color: var(--accent-text);
 }
 
 .btnDanger:hover {

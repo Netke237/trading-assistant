@@ -453,7 +453,7 @@ export interface AlertConfig {
   checkIntervalSeconds: number;    // default 60 — how often background monitors re-check conditions
   enabledTypes: AlertType[];
   soundEnabled: boolean;
-  keepAlertsDays: number;          // default 10 — auto-purge after N days
+  keepAlertsDays: number;          // default 30 — auto-purge after N days
   retentionDays: number;           // default 30 — backend sent-message log retention (days)
   // default 0 — portfolio position (TP/stop/premium) sustain-minutes filter.
   // No dedicated UI control yet (deferred) — round-tripped here so saving any

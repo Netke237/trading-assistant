@@ -8,4 +8,4 @@
 .brokerStub { display: flex; align-items: center; gap: 8px; opacity: 0.6; cursor: not-allowed; }
 .footer { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .btn { border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-primary); border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
-.btnPrimary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btnPrimary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }

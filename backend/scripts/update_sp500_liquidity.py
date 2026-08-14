@@ -7,11 +7,19 @@ normalisation are looked up individually via yfinance .info — this is slow
 (~1–2 s per symbol) so it only runs for unknown symbols.
 
 Run from repo root:
-    python backend/scripts/update_sp500_liquidity.py
+    python backend/scripts/update_sp500_liquidity.py [--dry-run] [--force]
+
+    --dry-run   Fetch and report, but do not write sp500.csv.
+    --force     Write even if the zero-liquidity fraction looks suspiciously
+                high (data-quality sanity check would otherwise abort with a
+                non-zero exit code). Use only when you've checked the WARN
+                output above and are confident the low numbers are real.
 """
 from __future__ import annotations
 
+import argparse
 import csv
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -23,7 +31,14 @@ from app.data.sector_names import NORMALIZE as CANONICAL_NAMES  # noqa: E402
 import yfinance as yf
 
 CSV_PATH = Path(__file__).parent.parent / "app" / "data" / "sp500.csv"
+BACKUP_PATH = CSV_PATH.with_suffix(".csv.bak")
 PERIOD = "1mo"   # ~20 trading days
+
+# A human runs this script (unlike sp500_update_service.py's unattended nightly
+# path), so the sanity check here surfaces as a loud warning + non-zero exit
+# rather than silently aborting — the operator can inspect the WARN lines
+# above and re-run with --force if the low liquidity numbers are legitimate.
+ZERO_LIQUIDITY_WARN_THRESHOLD = 0.5
 
 
 def _yf_key(symbol: str) -> str:
@@ -106,7 +121,19 @@ def fetch_sectors_for_unknowns(symbols: list[str]) -> dict[str, str]:
     return result
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--dry-run", action="store_true", help="Fetch and report, but do not write sp500.csv.")
+    parser.add_argument(
+        "--force", action="store_true",
+        help="Write even if the zero-liquidity fraction is suspiciously high.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+
     rows = list(csv.DictReader(CSV_PATH.open(encoding="utf-8")))
     symbols = [r["symbol"] for r in rows]
 
@@ -130,25 +157,51 @@ def main() -> None:
     # ── 3. Fetch liquidity ───────────────────────────────────────────────────
     liquidity = fetch_liquidity(symbols)
 
-    # ── 4. Write back ────────────────────────────────────────────────────────
+    for row in rows:
+        sym = row["symbol"]
+        if liquidity.get(sym, 0.0) == 0.0:
+            print(f"  WARN {sym}: liquidity=0 (data unavailable)")
+
+    written = sum(1 for r in rows if liquidity.get(r["symbol"], 0) > 0)
+    still_unknown = sum(1 for r in rows if r["sector"] == "Unknown")
+    zero_count = len(rows) - written
+    zero_fraction = (zero_count / len(rows)) if rows else 0.0
+
+    print(f"\n{written}/{len(rows)} symbols have liquidity > 0.")
+    if still_unknown:
+        print(f"WARNING: {still_unknown} symbols still have Unknown sector.")
+
+    if zero_fraction > ZERO_LIQUIDITY_WARN_THRESHOLD and not args.force:
+        print(
+            f"\nERROR: {zero_count}/{len(rows)} symbols ({zero_fraction:.0%}) returned "
+            f"liquidity=0 — this looks like a bad fetch (rate-limited, yfinance outage, "
+            f"or schema change), not real data.\n"
+            f"Refusing to overwrite {CSV_PATH} with this. Re-run with --force if you've "
+            f"checked the WARN lines above and are confident this is legitimate.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.dry_run:
+        print(f"\nDry run — {CSV_PATH} was NOT written.")
+        return 0
+
+    # ── 4. Backup, then write ────────────────────────────────────────────────
+    if CSV_PATH.exists():
+        shutil.copy2(CSV_PATH, BACKUP_PATH)
+        print(f"Backed up existing file to: {BACKUP_PATH}")
+
     fieldnames = ["symbol", "sector", "liquidity"]
     with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
             sym = row["symbol"]
-            liq = liquidity.get(sym, 0.0)
-            if liq == 0.0:
-                print(f"  WARN {sym}: liquidity=0 (data unavailable)")
-            writer.writerow({"symbol": sym, "sector": row["sector"], "liquidity": liq})
+            writer.writerow({"symbol": sym, "sector": row["sector"], "liquidity": liquidity.get(sym, 0.0)})
 
-    written = sum(1 for r in rows if liquidity.get(r["symbol"], 0) > 0)
-    still_unknown = sum(1 for r in rows if r["sector"] == "Unknown")
-    print(f"\nDone. {written}/{len(rows)} symbols have liquidity > 0.")
-    if still_unknown:
-        print(f"WARNING: {still_unknown} symbols still have Unknown sector.")
-    print(f"Updated: {CSV_PATH}")
+    print(f"\nDone. Updated: {CSV_PATH}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

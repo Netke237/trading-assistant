@@ -53,6 +53,15 @@ class CredentialStore:
     def load(self) -> None:
         if not self._path:
             return
+        if self._path.exists():
+            # Tighten permissions on a file that may already exist from before
+            # this hardening shipped — save() below keeps new writes at 0o600,
+            # but this covers files that predate that fix. load() runs far more
+            # often than just app start: build_router_from_credentials() in
+            # broker_router.py calls it on every broker order-placement request
+            # and every auto-trade cycle, so this is a cheap, idempotent no-op
+            # on an already-0o600 file, not a startup-only concern.
+            os.chmod(self._path, 0o600)
         try:
             raw = yaml.safe_load(self._path.read_text()) or {}
         except (yaml.YAMLError, OSError) as exc:
@@ -76,6 +85,13 @@ class CredentialStore:
         with self._lock:
             data_copy = {k: dict(v) for k, v in self._data.items()}
         tmp.write_text(yaml.dump(data_copy, default_flow_style=False))
+        # os.chmod before os.replace: the atomic rename preserves the source
+        # inode's permission bits, so this also locks down the final path.
+        # POSIX-effective only — os.chmod is a no-op-ish best-effort on
+        # Windows (doesn't map cleanly to NTFS ACLs). No Windows-dev-env
+        # expectations found in this repo (CI runs ubuntu-latest), so this
+        # is treated as purely beneficial here.
+        os.chmod(tmp, 0o600)
         os.replace(tmp, self._path)
 
     def get(self, key: str) -> dict | None:
