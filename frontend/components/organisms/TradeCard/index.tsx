@@ -86,7 +86,10 @@ function computeEditedRR(
   const priceMove = Math.abs(targetStockPrice - currentStockPrice);
   const estOptionPrice = Math.max(0.01, risk + delta * priceMove);
   const reward = estOptionPrice - risk;
-  const rr = reward > 0 ? Math.round((reward / risk) * 100) / 100 : 0;
+  // Mirrors the backend's reward_risk.py M2 fix: a negative reward's sign/
+  // magnitude is preserved, not flattened to 0 (risk<=0 above is the only
+  // genuinely not-computable case).
+  const rr = Math.round((reward / risk) * 100) / 100;
 
   return { rr, model: 'Edit (delta approx)' };
 }
@@ -299,7 +302,11 @@ export function TradeCard({
     if (risk <= 0) return null;
     return firstPassage.targets.map((t) => {
       const reward = t.optionPrice - firstPassageContext.premium;
-      return { pct: t.pct, rr: reward > 0 ? reward / risk : null };
+      // Mirrors the backend's reward_risk.py M2 fix: a negative reward's
+      // sign/magnitude is preserved, not nulled out to "—" (indistinguishable
+      // from "not yet computed") — risk<=0 above is the only genuinely
+      // not-computable case.
+      return { pct: t.pct, rr: reward / risk };
     });
   }, [structuralStop, structuralStopStockPrice, firstPassage, firstPassageContext]);
 
