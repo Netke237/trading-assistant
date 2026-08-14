@@ -21,6 +21,7 @@ import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThr
 import { useEventThresholdsStore, getEventWindow } from '@/lib/eventThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import { worstStatus, type Status } from '@/lib/status';
+import { eventVolGateTooltip } from '@/lib/statusTooltips';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
 
@@ -148,7 +149,18 @@ export default function Step5Page() {
                 ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />
                 : <Text size={11} tone="dim">—</Text>}
 
-              <StatusBadge status={gate} />
+              <StatusBadge
+                status={gate}
+                tooltip={eventVolGateTooltip({
+                  ivRank: hasIv ? rank : null,
+                  ivStatus: ivSt,
+                  nextEventDays: r.nextEventDays ?? null,
+                  proxStatus,
+                  evReject,
+                  evCaution,
+                  gate,
+                })}
+              />
             </TableRow>
           );
         })}

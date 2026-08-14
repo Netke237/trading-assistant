@@ -11,6 +11,8 @@ import { api, getLastDataRefresh } from '@/lib/api';
 import styles from './page.module.css';
 import { StrategyParamsPanel } from '@/components/organisms/StrategyParamsPanel';
 import { MeanReversionConfirmPanel } from '@/components/molecules/MeanReversionConfirmPanel';
+import { Tooltip } from '@/components/atoms/Tooltip';
+import { regimeFitTooltip } from '@/lib/statusTooltips';
 
 const STRATEGIES = [
   {
@@ -330,9 +332,11 @@ export default function Step5StrategyPage() {
                 if (!fit) return null;
                 const badge = REGIME_BADGE[fit];
                 return (
-                  <span className={`${styles.regimeBadge} ${styles[badge.cls]}`}>
-                    {badge.label}
-                  </span>
+                  <Tooltip text={regimeFitTooltip(strategyLabel[s.key] ?? s.label, fit, combinedRegime)}>
+                    <span className={`${styles.regimeBadge} ${styles[badge.cls]}`}>
+                      {badge.label}
+                    </span>
+                  </Tooltip>
                 );
               })()}
             </div>

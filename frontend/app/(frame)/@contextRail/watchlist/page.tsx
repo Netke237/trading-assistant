@@ -9,6 +9,7 @@ import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { GENERIC_STATUS_TOOLTIP } from '@/lib/statusTooltips';
 import { api } from '@/lib/api';
 import type { WatchlistRow } from '@/types/domain';
 import styles from './page.module.css';
@@ -26,9 +27,9 @@ export default function WatchlistContextRail() {
     <>
       <RailSection title="Status breakdown">
         <div className={styles.statStack}>
-          <Row><StatusBadge status="PASS"    /><Data size={12}>{pass}</Data></Row>
-          <Row><StatusBadge status="CAUTION" /><Data size={12}>{caution}</Data></Row>
-          <Row><StatusBadge status="REJECT"  /><Data size={12}>{reject}</Data></Row>
+          <Row><StatusBadge status="PASS"    tooltip={GENERIC_STATUS_TOOLTIP.PASS} /><Data size={12}>{pass}</Data></Row>
+          <Row><StatusBadge status="CAUTION" tooltip={GENERIC_STATUS_TOOLTIP.CAUTION} /><Data size={12}>{caution}</Data></Row>
+          <Row><StatusBadge status="REJECT"  tooltip={GENERIC_STATUS_TOOLTIP.REJECT} /><Data size={12}>{reject}</Data></Row>
         </div>
       </RailSection>
 

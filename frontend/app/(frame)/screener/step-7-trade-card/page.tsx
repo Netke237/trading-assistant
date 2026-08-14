@@ -638,7 +638,7 @@ export default function Step7Page() {
       {effectiveCard && (
         <>
           {effectiveCard._userOverride && (
-            <StatusBadge status="PENDING" label="User-selected" />
+            <StatusBadge status="PENDING" label="User-selected" tooltip="Manually pinned as the active trade card — not a scoring verdict." />
           )}
           {/* For an overridden contract, don't render the card until its plan is
               recomputed — otherwise the Exit Plan / R-R would briefly show the

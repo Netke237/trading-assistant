@@ -47,6 +47,12 @@ function parseNumOrNull(raw: string): number | null {
 function fmtPrice(n: number): string { return `$${n}`; }
 function fmtCap(n: number, u: CapUnit): string { return `$${n}${u}`; }
 
+function cardStatusTooltip(label: string, status: IndexChangeTile['status'] | null, changePct: number | undefined): string | undefined {
+  if (!status || changePct == null) return undefined;
+  const move = status === 'PASS' ? 'up' : status === 'REJECT' ? 'down' : 'roughly flat';
+  return `${label} is ${move} today (${changePct > 0 ? '+' : ''}${changePct.toFixed(2)}%) — border color reflects this.`;
+}
+
 function rangeSummary<T>(
   min: T | null,
   max: T | null,
@@ -263,6 +269,7 @@ export default function Step2Page() {
               onClick={() => setPick(o.key)}
               className={cardClasses(o.key)}
               aria-pressed={pick === o.key}
+              title={cardStatusTooltip(o.label, pick !== o.key ? statusForKey(o.key) : null, changePct)}
             >
               <div className={formStyles.cardHeader}>
                 <Text size={14} weight={600}>{o.label}</Text>
@@ -308,6 +315,7 @@ export default function Step2Page() {
               onClick={() => setPick(o.key)}
               className={cardClasses(o.key)}
               aria-pressed={pick === o.key}
+              title={cardStatusTooltip(o.label, pick !== o.key ? (o.tile?.status ?? null) : null, pct)}
             >
               <div className={formStyles.cardHeader}>
                 <Text size={13} weight={600}>{o.label}</Text>

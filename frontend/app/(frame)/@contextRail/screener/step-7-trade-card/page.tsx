@@ -20,6 +20,9 @@ import styles from './page.module.css';
 interface Gate {
   label:  string;
   status: 'PASS' | 'CAUTION' | 'REJECT';
+  /** Non-redundant hover detail — the actual value behind the gate, not a
+   *  repeat of `label`. */
+  detail: string;
 }
 
 function buildChecklist(
@@ -35,7 +38,7 @@ function buildChecklist(
   if (regime !== 'PENDING' && regime !== 'NO_DATA') {
     const regimeStatus: 'PASS' | 'CAUTION' | 'REJECT' =
       regime === 'PASS' ? 'PASS' : regime === 'CAUTION' ? 'CAUTION' : 'REJECT';
-    gates.push({ label: 'Regime PASS', status: regimeStatus });
+    gates.push({ label: 'Regime PASS', status: regimeStatus, detail: `Current market regime: ${regime}.` });
   }
 
   // IV rank acceptable — thresholds from ivThresholdsStore (fetched from backend)
@@ -48,7 +51,13 @@ function buildChecklist(
       ivRank <= ivPassMax   ? 'PASS' :
       ivCautionMax !== null && ivRank <= ivCautionMax ? 'CAUTION' :
       'REJECT';
-    gates.push({ label: 'IV rank acceptable', status: ivStatus });
+    gates.push({
+      label: 'IV rank acceptable',
+      status: ivStatus,
+      detail: ivPassMax === null
+        ? `IV rank ${ivRank} — no IV gate for ${horizonKey}.`
+        : `IV rank ${ivRank} vs. pass ≤${ivPassMax}${ivCautionMax != null ? ` / caution ≤${ivCautionMax}` : ''}.`,
+    });
   }
 
   // Earnings > 7d away
@@ -57,6 +66,7 @@ function buildChecklist(
     gates.push({
       label: 'Earnings > 7d away',
       status: days > 7 ? 'PASS' : days >= 3 ? 'CAUTION' : 'REJECT',
+      detail: `Next event in ${days}d — pass >7d, caution 3-7d, reject <3d.`,
     });
   }
 
@@ -65,12 +75,14 @@ function buildChecklist(
   gates.push({
     label: 'Score ≥ 55',
     status: statusForScore(minScore) as 'PASS' | 'CAUTION' | 'REJECT',
+    detail: `Lower of stock score (${candidate.stockScore}) and contract score (${candidate.contractScore}) = ${minScore}.`,
   });
 
   // R:R ≥ 2.0
   gates.push({
     label: 'R:R ≥ 2.0',
     status: candidate.rrRatio >= 2.0 ? 'PASS' : candidate.rrRatio >= 1.5 ? 'CAUTION' : 'REJECT',
+    detail: `Projected reward:risk is ${candidate.rrRatio.toFixed(1)}× — pass ≥2.0×, caution 1.5-2.0×.`,
   });
 
   // Spread score ≥ 70 (higher = tighter spread)
@@ -78,6 +90,7 @@ function buildChecklist(
   gates.push({
     label: 'Spread < 5% of price',
     status: spreadScore >= 70 ? 'PASS' : spreadScore >= 40 ? 'CAUTION' : 'REJECT',
+    detail: `Spread quality sub-score ${spreadScore}/100 — pass ≥70, caution 40-69.`,
   });
 
   return gates;
@@ -130,7 +143,7 @@ export default function TradeCardContextRail() {
             <div className={styles.checklistStack}>
               {gates.map((g) => (
                 <div key={g.label} className={styles.checklistRow}>
-                  <StatusDot tone={g.status} size="sm" />
+                  <StatusDot tone={g.status} size="sm" title={g.detail} />
                   <Text size={12} tone={g.status === 'CAUTION' ? 'caution' : 'secondary'}>
                     {g.label}
                   </Text>

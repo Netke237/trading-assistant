@@ -7,6 +7,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
+import { winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
 import type { Direction } from '@/types/domain';
 import { StockAutoTradeArm } from '@/components/organisms/StockAutoTradeArm';
@@ -265,7 +266,7 @@ export function StockPositionCard({
         </div>
         <div className={styles.editCell}>
           <Text size={10} tone="dim">WIN %</Text>
-          <Data size={14} weight={500} tone={winTone}>
+          <Data size={14} weight={500} tone={winTone} title={winRateTooltip(card.backtest.win_rate, 0.5)}>
             {(card.backtest.win_rate * 100).toFixed(0)}%
           </Data>
         </div>

@@ -27,6 +27,7 @@ import { exportToXlsx } from '@/lib/export';
 import { useScanStore } from '@/lib/scanStore';
 import { cardToRow } from './cardToRow';
 import { trendDetailText, pullbackDetailText, triggerDetailText, eventDetailText, volDetailText } from '@/components/organisms/TradeCard';
+import { GENERIC_STATUS_TOOLTIP } from '@/lib/statusTooltips';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import styles from './page.module.css';
@@ -313,7 +314,7 @@ export default function Step4Page() {
               <Text size={11} tone="secondary">Total score</Text>
               <Data size={24} weight={500}>{selected.score}<Text size={12} tone="dim"> / 100</Text></Data>
             </div>
-            <StatusBadge status={selected.status} />
+            <StatusBadge status={selected.status} tooltip={GENERIC_STATUS_TOOLTIP[selected.status]} />
           </div>
         </section>
       </div>

@@ -7,6 +7,7 @@ import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
+import { stockStatusTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
 
@@ -129,7 +130,7 @@ export default function Step7PositionCardPage() {
           </div>
           <div className={styles.badges}>
             <ConfidenceBadge confidence={card.confidence} title={card.confidence_text ?? undefined} />
-            <StatusBadge status={card.stock_status} />
+            <StatusBadge status={card.stock_status} tooltip={stockStatusTooltip(card.stock_status, card.stock_score)} />
           </div>
         </div>
 
@@ -151,7 +152,7 @@ export default function Step7PositionCardPage() {
           <div><Text size={10} tone="dim">SHARES</Text><Data size={16} weight={500}>{card.shares}</Data></div>
           <div><Text size={10} tone="dim">RISK $</Text><Data size={16} weight={500}>{card.dollar_risk.toFixed(0)}</Data></div>
           <div><Text size={10} tone="dim">SIZE $</Text><Data size={16} weight={500}>{card.dollar_size.toFixed(0)}</Data></div>
-          <div><Text size={10} tone="dim">WIN %</Text><Data size={16} weight={500} tone={card.backtest.win_rate >= 0.5 ? 'pass' : 'caution'}>{(card.backtest.win_rate * 100).toFixed(0)}%</Data></div>
+          <div><Text size={10} tone="dim">WIN %</Text><Data size={16} weight={500} tone={card.backtest.win_rate >= 0.5 ? 'pass' : 'caution'} title={winRateTooltip(card.backtest.win_rate, 0.5)}>{(card.backtest.win_rate * 100).toFixed(0)}%</Data></div>
         </div>
       </div>
 

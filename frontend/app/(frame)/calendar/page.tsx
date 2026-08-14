@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
 import { EventFlag } from '@/components/atoms/EventFlag';
+import { eventProximityGateTooltip } from '@/lib/statusTooltips';
 import { api } from '@/lib/api';
 import type { UpcomingEvent } from '@/types/domain';
 import type { Status } from '@/lib/status';
@@ -189,14 +190,17 @@ export default function CalendarPage() {
               : 'Select a day'}
           </Data>
           {selectedDate && selectedEvents.length > 0 && (
-            <EventFlag days={Math.round((selectedDate.getTime() - TODAY.getTime()) / 86_400_000)} />
+            <EventFlag
+              days={Math.round((selectedDate.getTime() - TODAY.getTime()) / 86_400_000)}
+              title={`${selectedEvents.length} event${selectedEvents.length !== 1 ? 's' : ''} on this day`}
+            />
           )}
         </header>
         {selectedEvents.length > 0 ? (
           <ul className={styles.items}>
             {selectedEvents.map((ev) => (
               <li key={`${ev.date}-${ev.symbol}-${ev.label}`} className={styles.item}>
-                <StatusDot tone={ev.status} size="sm" />
+                <StatusDot tone={ev.status} size="sm" title={eventProximityGateTooltip(ev.status)} />
                 <Data size={12} weight={500} className={styles.sym}>{ev.symbol}</Data>
                 <Text size={12} tone="secondary">{ev.label}</Text>
               </li>

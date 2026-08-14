@@ -18,6 +18,7 @@ import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { SearchProfileBar } from '@/components/organisms/SearchProfileBar';
+import { Tooltip } from '@/components/atoms/Tooltip';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
 import {
@@ -51,6 +52,8 @@ function BreakdownRow({ compKey, rawScore, weight }: { compKey: string; rawScore
   const weightedPts = Math.round((rawScore / 100) * weight);
   const tone: 'pass' | 'caution' | 'reject' =
     weightedPts >= weight * 0.6 ? 'pass' : weightedPts >= weight * 0.3 ? 'caution' : 'reject';
+  const tooltip = `${label} contributed ${weightedPts} of a possible ${weight} points (${rawScore}/100 raw × ${weight}% weight). `
+    + `${tone === 'pass' ? '≥60% of its weight — pulling the score up.' : tone === 'caution' ? '30-59% of its weight — a mild drag.' : '<30% of its weight — the main reason this symbol was rejected.'}`;
   return (
     <div className={formStyles.breakdownRow}>
       <Text size={11} tone="secondary" weight={400}>{label}</Text>
@@ -59,7 +62,9 @@ function BreakdownRow({ compKey, rawScore, weight }: { compKey: string; rawScore
       <div className={formStyles.miniTrack}>
         <div className={formStyles.miniFill} style={{ width: `${rawScore}%` }} />
       </div>
-      <Data size={11} weight={500} tone={tone}>{weightedPts}pt</Data>
+      <Tooltip text={tooltip} position="top" align="right">
+        <Data size={11} weight={500} tone={tone}>{weightedPts}pt</Data>
+      </Tooltip>
     </div>
   );
 }

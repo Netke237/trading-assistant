@@ -8,18 +8,25 @@ import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
+import { backtestGateTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
 
 function BacktestRow({ c, selected, onClick }: { c: PositionCardData; selected: boolean; onClick: () => void }) {
   const bt = c.backtest;
   const pass = bt.passes_gate;
+  const minTrades = useScanParamsStore((s) => s.btMinTrades);
+  const minWinRate = useScanParamsStore((s) => s.btMinWinRate);
   return (
     <button className={`${styles.row} ${selected ? styles.rowSelected : ''} ${!pass ? styles.rowFail : ''}`}
       onClick={onClick}>
       <Data size={12} weight={500}>{c.symbol}</Data>
       <Text size={11}>{c.backtest.summary_text.split('·')[0]?.trim()}</Text>
-      <Data size={12} tone={bt.win_rate >= 0.5 ? 'pass' : bt.win_rate >= 0.45 ? 'caution' : 'reject'}>
+      <Data
+        size={12}
+        tone={bt.win_rate >= 0.5 ? 'pass' : bt.win_rate >= 0.45 ? 'caution' : 'reject'}
+        title={winRateTooltip(bt.win_rate, 0.5, 0.45)}
+      >
         {(bt.win_rate * 100).toFixed(0)}%
       </Data>
       <Data size={12}>{bt.n_trades}</Data>
@@ -54,7 +61,10 @@ function BacktestRow({ c, selected, onClick }: { c: PositionCardData; selected: 
           : '—'}
       </Text>
       <ConfidenceBadge confidence={c.confidence} title={c.confidence_text ?? undefined} />
-      <StatusBadge status={pass ? 'PASS' : 'REJECT'} />
+      <StatusBadge
+        status={pass ? 'PASS' : 'REJECT'}
+        tooltip={backtestGateTooltip({ passes: pass, winRate: bt.win_rate, nTrades: bt.n_trades, expectancy: bt.expectancy, minWinRate, minTrades })}
+      />
     </button>
   );
 }

@@ -102,7 +102,7 @@ export function AutoTradeArm({ card, broker }: AutoTradeArmProps) {
             </button>
           ) : (
             <>
-              <StatusBadge status="CAUTION" />
+              <StatusBadge status="CAUTION" tooltip="Auto-trade is armed — the next matching signal will submit a live order automatically. Always CAUTION while armed, regardless of scan status, because unattended execution carries elevated risk." />
               <Text size={12} tone="caution">Armed — waiting for next trigger</Text>
               <button type="button" className={styles.btn} onClick={handleDisarm} disabled={working}>
                 Disarm

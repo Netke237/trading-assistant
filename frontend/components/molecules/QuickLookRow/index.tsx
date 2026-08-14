@@ -2,6 +2,7 @@ import { Data } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
 import { statusForScore } from '@/lib/status';
 import type { Status } from '@/lib/status';
+import { GENERIC_STATUS_TOOLTIP } from '@/lib/statusTooltips';
 import styles from './QuickLookRow.module.css';
 
 const SCORE_TONE: Record<string, 'pass' | 'caution' | 'reject'> = {
@@ -29,7 +30,7 @@ export function QuickLookRow({ symbol, score, status, onClick }: QuickLookRowPro
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}
     >
-      <StatusDot tone={status} size="sm" />
+      <StatusDot tone={status} size="sm" title={GENERIC_STATUS_TOOLTIP[status]} />
       <Data size={12} weight={500}>{symbol}</Data>
       <Data size={12} tone={scoreTone}>{score}</Data>
     </div>

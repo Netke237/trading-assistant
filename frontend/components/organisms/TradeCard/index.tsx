@@ -13,7 +13,19 @@ import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk } from '@/lib/risk';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
-import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, TriggerDetail, PullbackDetail, TrendDetail, EventDetail, VolDetail, DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail } from '@/types/domain';
+import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate } from '@/types/domain';
+import {
+  triggerDetailText,
+  pullbackDetailText,
+  trendDetailText,
+  eventDetailText,
+  volDetailText,
+  dteDetailText,
+  deltaDetailText,
+  ivDetailText,
+  liquidityDetailText,
+  spreadDetailText,
+} from '@/lib/scoreDetailText';
 import styles from './TradeCard.module.css';
 
 interface EditOverlay {
@@ -108,72 +120,6 @@ function rrContribution(
   return Math.round((reward / risk) * 10) / 10;
 }
 
-function triggerDetailText(d?: TriggerDetail): string | undefined {
-  if (!d) return undefined;
-  const checks = [
-    d.macd_pass  ? 'MACD ✓'  : 'MACD ✗',
-    d.rsi_pass   ? 'RSI ✓'   : 'RSI ✗',
-    d.stoch_pass ? 'Stoch ✓' : 'Stoch ✗',
-  ].join(' · ');
-  const candle = d.candle !== 'none' ? d.candle : '';
-  const vol = d.volume_bonus ? ' + vol' : '';
-  return [candle, `${checks} · ${d.momentum_count}/3 signals${vol}`].filter(Boolean).join(' · ');
-}
-
-function pullbackDetailText(d?: PullbackDetail): string | undefined {
-  if (!d) return undefined;
-  const ret = d.retracement_pct != null ? `Ret ${d.retracement_pct.toFixed(1)}%` : '';
-  const fvg = d.fvg_hit ? '+ FVG' : '';
-  return [ret, fvg, d.reason].filter(Boolean).join(' · ');
-}
-
-function trendDetailText(d?: TrendDetail): string | undefined {
-  if (!d) return undefined;
-  if (d.adx_val != null) return `ADX ${d.adx_val.toFixed(0)} · ${d.method}`;
-  if (d.stock_roc != null) return `RS ${d.stock_roc.toFixed(1)}% vs bench ${d.bench_roc?.toFixed(1)}%`;
-  return d.method;
-}
-
-function eventDetailText(d?: EventDetail): string | undefined {
-  if (!d) return undefined;
-  if (d.event === 'none') return 'No upcoming event';
-  return `${d.event} in ${d.days_to_event}d`;
-}
-
-function volDetailText(d?: VolDetail): string | undefined {
-  if (!d) return undefined;
-  const parts = [];
-  if (d.iv_rank != null) parts.push(`IV Rank ${d.iv_rank.toFixed(0)}`);
-  if (d.reason) parts.push(d.reason);
-  return parts.join(' · ') || undefined;
-}
-
-function dteDetailText(d?: DteDetail): string | undefined {
-  if (!d) return undefined;
-  return `${d.dte}d · target ${d.preferred_min}-${d.preferred_max}d`;
-}
-
-function deltaDetailText(d?: DeltaDetail): string | undefined {
-  if (!d) return undefined;
-  return `Δ${d.delta.toFixed(2)} · target ${d.preferred_min.toFixed(2)}-${d.preferred_max.toFixed(2)}`;
-}
-
-function ivDetailText(d?: IvRankDetail): string | undefined {
-  if (!d) return undefined;
-  if (d.iv_rank == null) return 'No IV rank data';
-  return `IV Rank ${d.iv_rank.toFixed(0)} · pref ≤${d.preferred_max.toFixed(0)}`;
-}
-
-function liquidityDetailText(d?: LiquidityDetail): string | undefined {
-  if (!d) return undefined;
-  return `Vol ${d.volume.toLocaleString()} · OI ${d.open_interest.toLocaleString()} · pref ≥${d.preferred_volume_min.toLocaleString()}/${d.preferred_oi_min.toLocaleString()}`;
-}
-
-function spreadDetailText(d?: SpreadDetail): string | undefined {
-  if (!d) return undefined;
-  return `Spread ${(d.spread_pct * 100).toFixed(1)}% · pref ≤${(d.preferred_max_pct * 100).toFixed(0)}%`;
-}
-
 interface TradeCardProps {
   data: TradeCardData;
   recId?: string;
@@ -182,6 +128,12 @@ interface TradeCardProps {
   sendDisabled?: boolean;
   contracts?: number;
   onEditsChange?: (overlay: EditOverlay) => void;
+}
+
+function targetStatusTooltip(statusVal: TargetLevel['status']): string {
+  if (statusVal === 'HIT') return 'This profit target has been reached.';
+  if (statusVal === 'MISSED') return 'Price moved past this target level without filling — treated as missed.';
+  return 'Target not yet reached.';
 }
 
 function generateRecId(): string {
@@ -773,16 +725,26 @@ export function TradeCard({
         <section className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
           <div className={styles.scoreCardHeader}>
             <Text size={14} weight={600}>Final Recommendation</Text>
-            <LabeledStatusBadge label="Final Status" status={data.finalStatus} />
+            <LabeledStatusBadge
+              label="Final Status"
+              status={data.finalStatus}
+              tooltip="Overall recommendation for this trade — the worse of the stock signal's historical accuracy and the contract's quality verdict below."
+            />
           </div>
           <div className={styles.scoreCardBody}>
             <div className={styles.scoreRow}>
               <Text size={12} tone="secondary">Historical accuracy (3×ATR exit)</Text>
-              <StatusBadge status={data.stockConfidence} />
+              <StatusBadge
+                status={data.stockConfidence}
+                tooltip="Backtested confidence tier for the stock signal. CAUTION means the pattern's historical win rate is marginal — consider reducing position size or waiting for a higher-conviction entry."
+              />
             </div>
             <div className={styles.scoreRow}>
               <Text size={12} tone="secondary">Contract confidence</Text>
-              <StatusBadge status={data.contractConfidence} />
+              <StatusBadge
+                status={data.contractConfidence}
+                tooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
+              />
             </div>
             <div className={styles.scoreRow}>
               <Text size={12} tone="secondary">Projected R/R (+8% stock move)</Text>
@@ -914,7 +876,7 @@ function EditableTargetRow({
       <div className={styles.targetMain}>
         <div className={styles.targetId}>
           <Text size={12} weight={600} tone={rowTone}>{label}</Text>
-          {statusVal && <StatusBadge status={badgeStatus as 'PENDING' | 'PASS' | 'REJECT'} />}
+          {statusVal && <StatusBadge status={badgeStatus as 'PENDING' | 'PASS' | 'REJECT'} tooltip={targetStatusTooltip(statusVal)} />}
           {isTargetEdited && (
             <span className={styles.editBadge}>
               <Text size={10} tone="accent">edited</Text>
@@ -1093,7 +1055,7 @@ function TargetRow({
       <div className={styles.targetMain}>
         <div className={styles.targetId}>
           <Text size={12} weight={600} tone={rowTone}>{label}</Text>
-          {statusVal && <StatusBadge status={badgeStatus as 'PENDING' | 'PASS' | 'REJECT'} />}
+          {statusVal && <StatusBadge status={badgeStatus as 'PENDING' | 'PASS' | 'REJECT'} tooltip={targetStatusTooltip(statusVal)} />}
         </div>
         <div className={styles.targetValues}>
           <KV label="Stock price" value={`$${(target.targetPrice ?? target.stockPrice).toFixed(2)}`} mono tone={rowTone} />

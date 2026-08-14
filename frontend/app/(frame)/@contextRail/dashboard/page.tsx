@@ -14,6 +14,7 @@ import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { api } from '@/lib/api';
+import { scanPipelineStatusTooltip, regimeStatusTooltip, alertStatusTooltip, eventProximityGateTooltip } from '@/lib/statusTooltips';
 import type { AlertItem, UpcomingEvent } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -58,7 +59,11 @@ export default function DashboardContextRail() {
           <div className={styles.scanRow}>
             <Text size={11} tone="dim">Option scan</Text>
             <div className={styles.scanTop}>
-              <StatusBadge status={scanState === 'COMPLETED' ? 'PASS' : scanState === 'FAILED' ? 'REJECT' : 'PENDING'} label={scanState} />
+              <StatusBadge
+                status={scanState === 'COMPLETED' ? 'PASS' : scanState === 'FAILED' ? 'REJECT' : 'PENDING'}
+                label={scanState}
+                tooltip={scanPipelineStatusTooltip(scanState)}
+              />
               <Text size={12} tone="secondary">{formatTime(optionsScanAt ?? scanAt)}</Text>
             </div>
           </div>
@@ -67,7 +72,7 @@ export default function DashboardContextRail() {
             <Text size={11} tone="dim">Stock scan</Text>
             <div className={styles.scanTop}>
               {stockScanAt
-                ? <><StatusBadge status="PASS" label="COMPLETED" /><Text size={12} tone="secondary">{formatTime(stockScanAt)}</Text></>
+                ? <><StatusBadge status="PASS" label="COMPLETED" tooltip={scanPipelineStatusTooltip('COMPLETED')} /><Text size={12} tone="secondary">{formatTime(stockScanAt)}</Text></>
                 : <Text size={12} tone="dim">—</Text>
               }
             </div>
@@ -77,7 +82,7 @@ export default function DashboardContextRail() {
 
       <RailSection title="Market Regime">
         <div className={styles.regimeRow}>
-          <StatusDot tone={combinedRegime} size="sm" />
+          <StatusDot tone={toneFor(combinedRegime)} size="sm" title={regimeStatusTooltip(combinedRegime)} />
           <Text size={12} tone="secondary">
             {combinedRegime === 'PASS'    && 'Clear — EMA/VIX + HMM aligned.'}
             {combinedRegime === 'CAUTION' && 'Caution — mixed signals.'}
@@ -91,7 +96,11 @@ export default function DashboardContextRail() {
         {latestAlert && (
           <div className={styles.alertBlock}>
             <div className={styles.alertTop}>
-              <StatusBadge status={alertKindToStatus(latestAlert.kind)} label={latestAlert.kind.toUpperCase()} />
+              <StatusBadge
+                status={alertKindToStatus(latestAlert.kind)}
+                label={latestAlert.kind.toUpperCase()}
+                tooltip={alertStatusTooltip(latestAlert.kind)}
+              />
               <Data size={12} weight={500}>{latestAlert.symbol}</Data>
             </div>
             <Text size={12}>{latestAlert.reason}</Text>
@@ -104,7 +113,7 @@ export default function DashboardContextRail() {
         <div className={styles.eventStack}>
           {events.slice(0, 5).map((e) => (
             <div key={`${e.date}-${e.symbol}`} className={styles.eventRow}>
-              <StatusDot tone={e.status} size="sm" />
+              <StatusDot tone={e.status} size="sm" title={eventProximityGateTooltip(e.status)} />
               <Data size={11} tone="secondary">{shortDate(e.date)}</Data>
               <Data size={11} weight={500}>{e.symbol}</Data>
               <Text size={12} tone="secondary">{e.label}</Text>
@@ -141,5 +150,12 @@ function alertKindToStatus(kind: string): 'PASS' | 'CAUTION' | 'REJECT' {
   if (kind === 'Critical') return 'REJECT';
   if (kind === 'Action')   return 'CAUTION';
   return 'PASS';
+}
+
+function toneFor(status: string): 'PASS' | 'CAUTION' | 'REJECT' | 'PENDING' {
+  if (status === 'CAUTION') return 'CAUTION';
+  if (status === 'REJECT')  return 'REJECT';
+  if (status === 'PASS')    return 'PASS';
+  return 'PENDING';
 }
 

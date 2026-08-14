@@ -6,6 +6,7 @@ import { StatusDot } from '@/components/atoms/StatusDot';
 import type { StatusDotTone } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import type { ScanState } from '@/lib/scanStore';
+import { scanPipelineStatusTooltip } from '@/lib/statusTooltips';
 import styles from './ScanIndicator.module.css';
 
 const SCAN_DOT: Record<ScanState, StatusDotTone> = {
@@ -62,7 +63,7 @@ export function ScanIndicator() {
 
   return (
     <div className={styles.root}>
-      <StatusDot tone={SCAN_DOT[scanState]} size="sm" />
+      <StatusDot tone={SCAN_DOT[scanState]} size="sm" title={scanPipelineStatusTooltip(scanState)} />
       <Text size={10} tone="secondary">{SCAN_LABEL[scanState]}</Text>
       {timestamp && <Data size={10} tone="secondary">{timestamp}</Data>}
     </div>
