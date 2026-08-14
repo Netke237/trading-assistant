@@ -1,5 +1,5 @@
 import { renderHook, act } from '@testing-library/react';
-import { usePortfolioStore, persistPosition, migratePortfolioPersist } from '@/lib/portfolioStore';
+import { usePortfolioStore, persistPosition, migratePortfolioPersist, applyPersistedPosition } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
 import type { PortfolioPosition } from '@/types/domain';
 
@@ -791,6 +791,71 @@ describe('portfolioStore', () => {
         });
       await usePortfolioStore.getState().syncFromBackend();
       expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'PEND2')?.syncStatus).toBe('pending');
+    });
+  });
+
+  // Exercises the REAL exported applyPersistedPosition — the exact function
+  // step-7-trade-card's placeLimitPaper/placeMarketNow both call — not a
+  // hand-reimplemented copy of its branching logic. This is what step-7-trade-card
+  // itself has no direct test coverage for; extracting the branch here and testing
+  // the extracted function is what makes that real production logic testable at all.
+  describe('applyPersistedPosition — the offline/rejected/confirmed-success branch', () => {
+    it('offline: falls through to addPosition with no skipPost, so the pending/retry path still engages', () => {
+      const pos = makePosition({ recId: 'REC-OFFLINE' });
+      const addPosition = jest.fn();
+      const onAdjusted = jest.fn();
+
+      const result = applyPersistedPosition({ ok: false, offline: true }, pos, addPosition, onAdjusted);
+
+      expect(result.rejected).toBe(false);
+      expect(addPosition).toHaveBeenCalledWith(pos);
+      expect(addPosition).not.toHaveBeenCalledWith(pos, { skipPost: true });
+      expect(onAdjusted).not.toHaveBeenCalled();
+    });
+
+    it('rejected: does NOT call addPosition at all, and surfaces the detail for the caller to show', () => {
+      const pos = makePosition({ recId: 'REC-REJECTED' });
+      const addPosition = jest.fn();
+
+      const result = applyPersistedPosition({ ok: false, detail: 'exposure limit exceeded' }, pos, addPosition);
+
+      expect(result).toEqual({ rejected: true, detail: 'exposure limit exceeded' });
+      expect(addPosition).not.toHaveBeenCalled();
+    });
+
+    it('confirmed success: skips addPosition\'s own POST via skipPost, since persistPosition already saved it', () => {
+      const pos = makePosition({ recId: 'REC-OK' });
+      const addPosition = jest.fn();
+      const onAdjusted = jest.fn();
+
+      const result = applyPersistedPosition({ ok: true }, pos, addPosition, onAdjusted);
+
+      expect(result.rejected).toBe(false);
+      expect(addPosition).toHaveBeenCalledWith(pos, { skipPost: true });
+      expect(onAdjusted).not.toHaveBeenCalled();
+    });
+
+    it('confirmed success with an adjusted quantity: calls the onAdjusted callback with the backend-reported qty', () => {
+      const pos = makePosition({ recId: 'REC-ADJUSTED' });
+      const addPosition = jest.fn();
+      const onAdjusted = jest.fn();
+
+      applyPersistedPosition({ ok: true, adjustedQty: 3 }, pos, addPosition, onAdjusted);
+
+      expect(onAdjusted).toHaveBeenCalledWith(3);
+      expect(addPosition).toHaveBeenCalledWith(pos, { skipPost: true });
+    });
+
+    it('regression guard: a naive "skip addPosition whenever saved.ok would be truthy" bug would fail this — offline must never take the skipPost path', () => {
+      // saved.ok is false here (network failure never reports ok:true — see persistPosition's
+      // own doc comment), so this specifically proves the offline branch is keyed on
+      // `saved.offline`, not on treating "not explicitly rejected" as success.
+      const pos = makePosition({ recId: 'REC-REGRESSION' });
+      const addPosition = jest.fn();
+
+      applyPersistedPosition({ ok: false, offline: true }, pos, addPosition);
+
+      expect(addPosition).not.toHaveBeenCalledWith(pos, { skipPost: true });
     });
   });
 });

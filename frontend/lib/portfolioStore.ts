@@ -193,6 +193,39 @@ export async function persistPosition(
   }
 }
 
+export type PersistPositionResult = Awaited<ReturnType<typeof persistPosition>>;
+
+/**
+ * The three-way outcome every `persistPosition` call site must branch on — extracted here
+ * (rather than left inline at each call site) so the real production branching logic can be
+ * unit-tested directly, instead of only via a hand-reimplemented copy in a test file:
+ *  - offline (network failure): `persistPosition` did NOT confirm anything was saved. Fall
+ *    through to `addPosition`'s own POST + pending/retry path, same as every call site that
+ *    never calls `persistPosition` at all.
+ *  - rejected (backend responded, said no): surface the error, do not add the position.
+ *  - confirmed success: skip `addPosition`'s own POST (already persisted) but still sync local
+ *    state via `addPosition(pos, { skipPost: true })`.
+ * Returns `{ rejected: true }` when the caller should show `saved.detail` and stop, mirroring
+ * the `if (!saved.ok) { setOrderError(...); return; }` shape each call site used inline before.
+ */
+export function applyPersistedPosition(
+  saved: PersistPositionResult,
+  pos: PortfolioPosition,
+  addPosition: (p: PortfolioPosition, opts?: { skipPost?: boolean }) => unknown,
+  onAdjusted?: (adjustedQty: number) => void,
+): { rejected: boolean; detail?: string } {
+  if (saved.offline) {
+    void addPosition(pos);
+    return { rejected: false };
+  }
+  if (!saved.ok) {
+    return { rejected: true, detail: saved.detail };
+  }
+  if (saved.adjustedQty != null) onAdjusted?.(saved.adjustedQty);
+  void addPosition(pos, { skipPost: true });
+  return { rejected: false };
+}
+
 async function deletePosition(recId: string): Promise<void> {
   try {
     await fetch(`${_BASE_URL()}/api/portfolio/${recId}`, { method: 'DELETE' });
