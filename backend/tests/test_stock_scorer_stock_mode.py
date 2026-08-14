@@ -359,20 +359,20 @@ def _rsi_old_inline(closes: list[float], period: int = 14) -> list[float]:
 
 
 def test_rsi_matches_pre_extraction_tail_values():
-    """_rsi's values must be numerically identical to the pre-_wilder_smooth-
-    extraction implementation, for every value actually consumed by callers.
+    """_rsi's values (including list length) must be numerically identical to
+    the pre-_wilder_smooth-extraction implementation.
 
-    The extracted _wilder_smooth seeds its result list with the plain
-    (not-yet-incrementally-updated) starting average, so the new _rsi's
-    series has ONE EXTRA leading element the old hand-rolled loop never
-    produced (see _wilder_smooth's docstring) -- this shifts len(rsi_vals)
-    by +1 but does NOT shift indices counted from the end: new[-1] == old[-1],
-    new[-2] == old[-2], etc., since the extra element only prepends. Every
-    call site in this codebase indexes from the end (rsi_vals[-1]/[-2]), so
-    this is verified harmless here rather than just asserted away -- if a
-    future caller ever consumes the full series or indexes from the front,
-    this test's own next assertion (exact list-length delta of 1) is what
-    would need revisiting first."""
+    _wilder_smooth itself seeds its result with the plain (not-yet-
+    incrementally-updated) starting average -- correct for _adx's own use,
+    which only ever reads the last element -- but _rsi drops that seed row
+    (avg_g_series[1:]/avg_l_series[1:]) before building rsi_vals, specifically
+    so len(rsi_vals) stays identical to the old hand-rolled loop's output.
+    This matters beyond simple value drift: _rule_trigger's divergence-window
+    gates key off len(rsi_vals) >= div_win / >= 2*div_win to decide whether
+    enough history exists at all -- an extra leading element would silently
+    activate that check one bar earlier than before at an exact boundary
+    length, using the seed row's differently-computed (if still legitimate)
+    value in place of a real multi-step Wilder average."""
     from app.scoring.stock_scorer import _rsi
     closes = [100.0 + (i % 5) - 2 + i * 0.05 for i in range(60)]
     period = 14
@@ -380,11 +380,7 @@ def test_rsi_matches_pre_extraction_tail_values():
     new_vals = _rsi(closes, period=period)
     old_vals = _rsi_old_inline(closes, period=period)
 
-    assert len(new_vals) == len(old_vals) + 1, (
-        "expected exactly one extra leading element from _wilder_smooth's seed row"
-    )
-    # Every tail-indexed value old code could ever have produced must match exactly
-    # (old_vals is the shorter list by exactly 1 -- see the length assertion above).
+    assert len(new_vals) == len(old_vals)
     for i in range(1, len(old_vals) + 1):
         assert new_vals[-i] == pytest.approx(old_vals[-i], abs=1e-9), (
             f"RSI value at index -{i} drifted after the _wilder_smooth extraction"

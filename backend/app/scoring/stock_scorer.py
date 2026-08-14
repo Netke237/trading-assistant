@@ -557,8 +557,18 @@ def _rsi(closes: list[float], period: int = 14) -> list[float]:
         losses.append(max(-d, 0))
     avg_g_series = _wilder_smooth(gains, period)
     avg_l_series = _wilder_smooth(losses, period)
+    # _wilder_smooth seeds its result with the un-incrementally-updated
+    # starting average (element [0]) before any recursive Wilder update —
+    # correct for _adx's own use (it only ever reads the last element, and
+    # the seed row participates in the same running-average recurrence
+    # either way). But _rule_trigger's divergence-window gates key off
+    # len(rsi_vals) to decide whether enough history exists, and dropping
+    # this seed keeps len(rsi_vals) — and therefore exactly which bar the
+    # divergence check first activates on — identical to the pre-extraction
+    # implementation, instead of one bar earlier at an exact
+    # div_win/2*div_win boundary.
     rsi_vals = []
-    for avg_g, avg_l in zip(avg_g_series, avg_l_series):
+    for avg_g, avg_l in zip(avg_g_series[1:], avg_l_series[1:]):
         rs = avg_g / avg_l if avg_l > 0 else 100.0
         rsi_vals.append(100 - 100 / (1 + rs))
     return rsi_vals
