@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,7 +12,16 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _CSV_PATH = Path(__file__).parent.parent / "data" / "sp500.csv"
+_BACKUP_PATH = _CSV_PATH.with_suffix(".csv.bak")
 _PERIOD = "1mo"
+
+# This is the unattended nightly cron path (sp500_scheduler.py calls
+# start_update_task() with nobody watching stdout/logs in real time) — if
+# yfinance has a bad night (rate-limited, outage, schema change) and most
+# symbols come back with liquidity=0, writing that over the good existing
+# CSV would silently degrade the sector heatmap / liquidity filters until
+# someone notices. Abort the write instead and keep the last-known-good file.
+_ZERO_LIQUIDITY_ABORT_THRESHOLD = 0.5
 
 _state: dict[str, Any] = {
     "status": "idle",       # idle | running | done | failed
@@ -90,6 +100,30 @@ def _run() -> None:
         rows = list(csv.DictReader(_CSV_PATH.open(encoding="utf-8")))
         symbols = [r["symbol"] for r in rows]
         liquidity = _fetch_liquidity(symbols)
+
+        zero_count = sum(1 for s in symbols if liquidity.get(s, 0.0) == 0.0)
+        zero_fraction = (zero_count / len(symbols)) if symbols else 0.0
+
+        if zero_fraction > _ZERO_LIQUIDITY_ABORT_THRESHOLD:
+            # Fetch looks mostly-empty (yfinance outage/rate-limit/schema change)
+            # — do not overwrite a good file with garbage. Nobody watches this
+            # unattended path in real time, so this must be loud (logger.error)
+            # and observable via get_update_state(), not a silent no-op.
+            msg = (
+                f"aborted write: {zero_count}/{len(symbols)} symbols "
+                f"({zero_fraction:.0%}) returned liquidity=0 — looks like a bad "
+                f"fetch, not real data. Left {_CSV_PATH.name} untouched."
+            )
+            logger.error("sp500_update_service: %s", msg)
+            with _lock:
+                _state.update({"status": "failed", "error": msg, "in_progress": False})
+            return
+
+        # Pre-write backup: even a fetch that passes the sanity check above
+        # could still be a partial/degraded update — keep one last-known-good
+        # copy recoverable regardless.
+        if _CSV_PATH.exists():
+            shutil.copy2(_CSV_PATH, _BACKUP_PATH)
 
         fieldnames = ["symbol", "sector", "liquidity"]
         with _CSV_PATH.open("w", newline="", encoding="utf-8") as f:

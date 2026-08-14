@@ -39,7 +39,7 @@ frontend/
         step-4-stocks/    # [Stocks mode] Stock scan results table, StockPositionCard
         step-4-ranking/   # [Options mode] Sortable ranked candidates table
         step-4-prebreakout/ # [Pre-Breakout mode] Setup scanner (prebreakout/pullback/fib sub-modes) — self-contained, no steps 5-7
-        step-5-strategy/  # [Stocks mode] Strategy picker (pullback_ema, breakout_base…)
+        step-5-strategy/  # [Stocks mode] Strategy picker — 7 strategies (pullback_ema, breakout_base, ma_crossover, mean_reversion_rsi, mean_reversion_bb, mean_reversion_vwap, mean_reversion_multi)
         step-5-vol-events/# [Options mode] IV rank, IV percentile, event proximity gate
         step-6-backtest/  # [Stocks mode] Backtest results + confidence gate
         step-6-contracts/ # [Options mode] 12-col sortable contracts table, ContractStar
@@ -83,9 +83,9 @@ frontend/
 ## Primitives
 
 ```tsx
-<Text size={11|12|13|14} tone="primary|secondary|dim|pass|caution|reject" weight={400|500|600} />
-<Title as="h1|h2|h3" size={18|20|24} />
-<Data size={11..24} weight={500|600} tone="pass|caution|reject" />  // monospace, tabular-nums
+<Text size={10|11|12|13|14|16} tone="primary|secondary|dim|accent|pass|caution|reject" weight={400|500|600} />
+<Title as="h1|h2|span|div" size={20|24|32} />  // Title.tsx's tag/size unions (TitleTag/TitleSize) aren't exported — literal values inlined here
+<Data size={10|11|12|13|14|16|18|24} weight={400|500} tone="primary|secondary|dim|accent|pass|caution|reject" />  // monospace, tabular-nums
 ```
 
 ---
@@ -115,7 +115,9 @@ frontend/
 | `ivThresholdsStore.ts` | Per-horizon IV rank pass/caution thresholds, fetched from the backend at app start (same fetch-with-fallback pattern as `eventThresholdsStore`) |
 | `searchProfilesStore.ts` | Saved scan-parameter search profiles (name + snapshot) — persisted, CRUD via `saveProfile`/`updateProfile`/`renameProfile`/`deleteProfile` |
 
-`scanStore.regime` is set by Step 1 on mount and read by StepNavBar for the REJECT gate.
+`scanStore.regime` (raw market-overall status) and `scanStore.combinedRegime`
+(`alignmentVerdict(direction, descriptor)` — direction-aligned verdict) are kept in sync across
+Steps 1-3 as the user progresses; StepNavBar reads `combinedRegime` for the REJECT gate.
 `scanStore.screenerMode` switches between the Options path (steps 4-ranking → 5-vol-events → 6-contracts → 7-trade-card), the Stocks path (steps 4-stocks → 5-strategy → 6-backtest → 7-position-card), and the Pre-Breakout path (step 4-prebreakout only — self-contained, no steps 5-7).
 
 ---
@@ -166,7 +168,7 @@ Pre-Breakout is a single self-contained step 4 with no steps 5–7 (see below).
 | Step | Slug | Description |
 |---|---|---|
 | 4 | `step-4-stocks` | Stock scan results table (status tint, score, WatchStar), StockPositionCard preview, StockSendDialog |
-| 5 | `step-5-strategy` | Strategy picker (pullback_ema, breakout_base, ma_crossover, mean_reversion_rsi) + StrategyParamsPanel |
+| 5 | `step-5-strategy` | Strategy picker — 7 strategies: `pullback_ema`, `breakout_base`, `ma_crossover`, `mean_reversion_rsi`, `mean_reversion_bb`, `mean_reversion_vwap`, `mean_reversion_multi` (all 7 list entries always render; only the `mean_reversion_multi` button is conditionally disabled) — + StrategyParamsPanel |
 | 6 | `step-6-backtest` | Backtest results per candidate — confidence gate (pass/fail), win rate, expectancy |
 | 7 | `step-7-position-card` | Position card with ConfidenceBadge + broker execution mode selector (IBKR/Tradier/Alpaca paper) |
 
@@ -177,7 +179,7 @@ Pre-Breakout is a single self-contained step 4 with no steps 5–7 (see below).
 | 4 | `step-4-prebreakout` | Setup scanner with an in-page sub-toggle between three scan modes — `prebreakout`, `pullback`, `fib` (`PreBreakoutParamsPanel`, `FibPullbackParamsPanel`) — surfacing per-symbol ATR/range/volume ratios, proximity to swing levels, and Fibonacci retracement hits. No separate contract/trade-card step; candidates are actioned inline via `WatchStar` and `CompositeAlertDialog` instead of a step 5–7 handoff. |
 
 StepNavBar handles Back/Next navigation and keyboard shortcuts (←/→).
-If `scanStore.regime === 'REJECT'`, clicking Next on Step 1 shows a confirmation overlay.
+If `scanStore.combinedRegime === 'REJECT'`, clicking Next on Step 1 shows a confirmation overlay.
 
 ---
 
@@ -192,7 +194,7 @@ All stock-mode logic lives in `backend/app/`:
 | `signal_confidence` | `scoring/signal_confidence.py` | Backtest-based confidence layer |
 | `entry_quality` | `scoring/entry_quality.py` | Entry quality sub-score |
 | `reward_risk` | `scoring/reward_risk.py` | Reward/risk ratio scoring |
-| `strategy_engine` | `services/strategy_engine.py` | Four named signal functions: `pullback_ema_signal`, `breakout_base_signal`, `ma_crossover_signal`, `mean_reversion_rsi_signal` |
+| `strategy_engine` | `services/strategy_engine.py` | 9 named signal functions: the 7 exposed by the `step-5-strategy` picker — `pullback_ema_signal`, `breakout_base_signal`, `ma_crossover_signal`, `mean_reversion_rsi_signal`, `mean_reversion_bb_signal`, `mean_reversion_vwap_signal`, `mean_reversion_vwap_daily_signal` — plus `breakout_setup_signal` and `_fibonacci_pullback_signal`, used by the `step-4-prebreakout` scanner instead |
 | `strategy_backtest` | `services/strategy_backtest.py` | Vectorised backtest runner over OHLCV bars — returns win rate, expectancy, passes_gate |
 | `walk_forward` | `services/walk_forward.py` | Rolling + anchored WFO fold construction over strategy_backtest |
 | `strategy_param_optimizer` | `services/strategy_param_optimizer.py` | Grid-search param tuning driven by WFO |
@@ -237,13 +239,15 @@ Dispatch layer supports Gmail, Telegram, and in-app websocket alerts (`ws_alerts
 
 ## Settings page
 
-Sub-nav: Broker · Appearance · Score weights & parameters · Alerts.
+Sub-nav (`SECTIONS` in `app/(frame)/settings/page.tsx`): Appearance (theme + density), Scan
+(continuous scan + cadence), Strategy scan (signal tolerances + backtest thresholds), Brokers
+(paper trading accounts + live IBKR preparation), Risk (exposure limits + portfolio value),
+Regime (Markov/HMM preset parameters), Notifications (Gmail + Telegram alert delivery), Data
+(nightly OHLCV ingestion schedule), Strategy Tuning (walk-forward parameter optimization).
 
-**Score weights & parameters** has a 4-tab horizon strip:
-- **Intraday / Swing / Position** — read-only preset weights + indicator parameters
-- **Custom** — fully editable; stores `customW` (weights) + `customParams` (indicator params) in local state
-
-Each component row has a collapsible "Metrics & parameters" section listing the metrics and their configurable values (MA periods, volume lookbacks, event buffers, etc.).
+Score weights and indicator parameters are **not** configured here — they live in the Step 3
+(`step-3-direction`) Execution Parameters panel. There is no separate "Score weights &
+parameters" tab or `customW`/`customParams` horizon-strip UI in Settings today.
 
 ---
 
@@ -290,7 +294,13 @@ contractLabel(c): string                           // "AAPL 185C 05/16"
 ```
 
 ### Zustand persistence
-Some stores use `persist()` with versioned `migrate()` callbacks. When adding a new persisted field, bump the `version` number and add a migration branch — do not rely on Zustand's default merge for breaking shape changes. Storage key prefix: `'bamendjou:'`.
+Some stores use `persist()` with versioned `migrate()` callbacks. When adding a new persisted field, bump the `version` number and add a migration branch — do not rely on Zustand's default merge for breaking shape changes.
+
+Storage key naming is **inconsistent today** — both forms are live in production with no migration path between them, so do not rename an existing key to "fix" this (it would silently wipe real users' localStorage data on next load):
+- Colon form: `'bamendjou:theme'`, `'bamendjou:alerts'` (chart alerts), `'bamendjou:chart'`, `'bamendjou:drawings'`, `'bamendjou:scan-params'`, `'bamendjou:search-profiles'`, `'bamendjou:structure'`
+- Hyphen form: `'bamendjou-scan-store'`, `'bamendjou-settings'`, `'bamendjou-watchlist-v1'`, `'bamendjou-watched-contracts-v1'`, `'bamendjou-portfolio-v1'`, `'bamendjou-risk-v1'`, `'bamendjou-alerts-v2'`, `'bamendjou-auto-trade'`
+
+**Going forward, use the colon form (`'bamendjou:<name>'`) for any new persisted store** — the existing hyphenated keys are grandfathered, not a pattern to replicate.
 
 ---
 

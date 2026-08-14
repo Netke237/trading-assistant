@@ -32,6 +32,8 @@ class AlpacaPaperAdapter:
         self._timeout = timeout
 
     def _build_payload(self, order: BrokerOrder) -> dict:
+        # order.effect is intentionally unused here — Alpaca infers open-vs-close from
+        # current account position given a plain buy/sell side, same as IBKR.
         payload: dict = {
             "symbol":        order.symbol,
             "qty":           str(order.quantity),

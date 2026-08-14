@@ -12,10 +12,10 @@ is otherwise identical to IbkrPaperAdapter / AlpacaPaperAdapter — broker_route
 and every caller in this codebase expects a synchronous place_order(order).
 
 Only "tastytrade_paper" credentials are ever used here. "tastytrade_live" is
-prepared in the credential store and in broker_router.py's _LIVE_BROKERS
+prepared in the credential store and in broker_router.py's _KNOWN_LIVE_BROKERS
 block list, but no adapter reads tastytrade_live credentials for order
-placement anywhere in this codebase — mirrors the ibkr_live/alpaca_live
-pattern exactly.
+placement anywhere in this codebase — mirrors the ibkr_live/tradier_live/
+alpaca_live pattern exactly.
 """
 from __future__ import annotations
 
@@ -32,20 +32,20 @@ from app.data.tastytrade_session import get_session
 
 logger = logging.getLogger(__name__)
 
-# NOTE: only covers opening/closing a long position (BUY -> BUY_TO_OPEN,
-# SELL -> SELL_TO_CLOSE) for both STK and OPT. tastytrade's real OrderAction
-# is a 4-way enum (BUY_TO_OPEN/BUY_TO_CLOSE/SELL_TO_OPEN/SELL_TO_CLOSE), but
-# BrokerOrder has no field indicating open-vs-close intent, so there is
-# currently no way for any caller to request "sell to open" (writing/shorting
-# an option) through this shared interface — not just through tastytrade's
-# adapter specifically. This matches the shape of every existing BrokerOrder
-# caller in this codebase today (long calls/puts, long stock). Known,
-# accepted limitation — not fixed in this task.
+# Full 4-way mapping, keyed on (action, effect, sec_type). (SELL, OPEN, OPT) — writing/
+# shorting an option — is included for completeness but is unreachable today: nothing
+# in this codebase's frontend ever sends an options order with action=SELL (see
+# BrokerOrder.effect's docstring in ibkr_paper.py). Selling to open a stock (opening a
+# short) IS live and reachable via bearish stock entries.
 _ACTION_MAP = {
-    ("BUY", "STK"):  OrderAction.BUY_TO_OPEN,
-    ("SELL", "STK"): OrderAction.SELL_TO_CLOSE,
-    ("BUY", "OPT"):  OrderAction.BUY_TO_OPEN,
-    ("SELL", "OPT"): OrderAction.SELL_TO_CLOSE,
+    ("BUY",  "OPEN",  "STK"): OrderAction.BUY_TO_OPEN,
+    ("SELL", "OPEN",  "STK"): OrderAction.SELL_TO_OPEN,
+    ("SELL", "CLOSE", "STK"): OrderAction.SELL_TO_CLOSE,
+    ("BUY",  "CLOSE", "STK"): OrderAction.BUY_TO_CLOSE,
+    ("BUY",  "OPEN",  "OPT"): OrderAction.BUY_TO_OPEN,
+    ("SELL", "OPEN",  "OPT"): OrderAction.SELL_TO_OPEN,
+    ("SELL", "CLOSE", "OPT"): OrderAction.SELL_TO_CLOSE,
+    ("BUY",  "CLOSE", "OPT"): OrderAction.BUY_TO_CLOSE,
 }
 
 
@@ -54,10 +54,11 @@ class TastytradePaperAdapter:
         self._account_id = account_id
 
     async def _resolve_leg(self, session, order: BrokerOrder):
-        action = _ACTION_MAP.get((order.action, order.sec_type))
+        action = _ACTION_MAP.get((order.action, order.effect, order.sec_type))
         if action is None:
             raise ValueError(
-                f"Unsupported action/sec_type combination: {order.action}/{order.sec_type}"
+                f"Unsupported action/effect/sec_type combination: "
+                f"{order.action}/{order.effect}/{order.sec_type}"
             )
         if order.sec_type == "STK":
             instrument = await Equity.get(session, order.symbol)

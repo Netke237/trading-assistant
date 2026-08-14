@@ -14,19 +14,33 @@ _SANDBOX_BASE = "https://sandbox.tradier.com/v1"
 
 OrderType = Literal["MKT", "LMT"]
 ActionType = Literal["BUY", "SELL"]
+Effect = Literal["OPEN", "CLOSE"]
 TIF = Literal["DAY", "GTC"]
 
-# Tradier option orders require open/close side semantics; plain "buy"/"sell" is
-# only valid for equity orders. The screener always opens a new position, so
-# BUY→buy_to_open and SELL→sell_to_open. (Closing variants — buy_to_close /
-# sell_to_close — are not used until an exit flow exists.)
-_OPTION_SIDE = {"BUY": "buy_to_open", "SELL": "sell_to_open"}
+# Tradier option orders require explicit open/close side semantics — plain "buy"/"sell"
+# is only valid for equity orders. Keyed on (action, effect).
+_OPTION_SIDE = {
+    ("BUY",  "OPEN"):  "buy_to_open",
+    ("SELL", "OPEN"):  "sell_to_open",
+    ("SELL", "CLOSE"): "sell_to_close",
+    ("BUY",  "CLOSE"): "buy_to_close",
+}
+
+# Tradier equity orders also distinguish open vs. close explicitly — sell_short opens
+# a new short, buy_to_cover closes one. Plain buy/sell close-a-long/open-a-long only.
+_EQUITY_SIDE = {
+    ("BUY",  "OPEN"):  "buy",
+    ("SELL", "OPEN"):  "sell_short",
+    ("SELL", "CLOSE"): "sell",
+    ("BUY",  "CLOSE"): "buy_to_cover",
+}
 
 
 @dataclass
 class BrokerOrder:
     symbol: str
     action: ActionType
+    effect: Effect  # see ibkr_paper.BrokerOrder.effect — same shape, separate dataclass
     quantity: int
     order_type: OrderType
     limit_price: Optional[float]
@@ -67,7 +81,7 @@ class TradierPaperAdapter:
         params: dict = {
             "class":    "option" if is_option else "equity",
             "symbol":   order.symbol,
-            "side":     _OPTION_SIDE[order.action] if is_option else order.action.lower(),
+            "side":     (_OPTION_SIDE if is_option else _EQUITY_SIDE)[(order.action, order.effect)],
             "quantity": str(order.quantity),
             "type":     "market" if order.order_type == "MKT" else "limit",
             "duration": order.tif.lower(),

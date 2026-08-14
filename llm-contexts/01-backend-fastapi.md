@@ -1,5 +1,7 @@
 # Bamendjou — Backend FastAPI Context Document
 
+> **Historical snapshot** — describes a pre-database, fixture-only backend that no longer exists; the real backend is SQLAlchemy v2 + Alembic + AsyncPG with live data adapters. See `CLAUDE.md`.
+
 > **How to use this file**
 > You are building the FastAPI trading-data backend for the Bamendjou options screener.
 > This document is self-contained. Read every section before writing a single line of code.

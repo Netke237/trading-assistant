@@ -1,0 +1,83 @@
+import '@testing-library/jest-dom';
+import { render, screen } from '@testing-library/react';
+import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
+import type { PortfolioPosition } from '@/types/domain';
+
+function makePosition(overrides: Partial<PortfolioPosition>): PortfolioPosition {
+  return {
+    symbol: 'AAPL',
+    contract: 'AAPL|STOCK',
+    direction: 'Bullish',
+    entryDate: '2026-01-01',
+    expiry: '',
+    dteRemaining: 0,
+    dteTotal: 0,
+    entryPrice: 100,
+    currentPrice: 100,
+    pnlDollar: 0,
+    pnlPct: 0,
+    stop: null,
+    targets: [],
+    status: 'PENDING',
+    contracts: 1,
+    recId: 'PAPER-test',
+    ...overrides,
+  } as PortfolioPosition;
+}
+
+const noop = () => {};
+
+describe('ClosePositionDrawer realized P&L', () => {
+  it('long stock: profit when exit price is above entry', () => {
+    const position = makePosition({
+      contract: 'AAPL|STOCK', direction: 'Bullish', entryPrice: 100, currentPrice: 110, contracts: 10,
+    });
+    render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    // (110 - 100) * 1 (stock multiplier) * 10 shares = +$100, +10%
+    expect(screen.getByText(/\+\$100\b/)).toBeInTheDocument();
+    expect(screen.getByText(/\+10\.0%/)).toBeInTheDocument();
+  });
+
+  it('short stock: profit when exit price is below entry (not a loss)', () => {
+    const position = makePosition({
+      contract: 'TSLA|STOCK', direction: 'Bearish', entryPrice: 100, currentPrice: 90, contracts: 5,
+    });
+    render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    // Covering a short at a lower price is a profit: (100 - 90) * 1 * 5 = +$50, +10%
+    expect(screen.getByText(/\+\$50\b/)).toBeInTheDocument();
+    expect(screen.getByText(/\+10\.0%/)).toBeInTheDocument();
+  });
+
+  it('short stock: loss when exit price is above entry', () => {
+    const position = makePosition({
+      contract: 'TSLA|STOCK', direction: 'Bearish', entryPrice: 100, currentPrice: 110, contracts: 5,
+    });
+    render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    // (100 - 110) * 1 * 5 = -$50, -10%. Component renders the sign as part of the
+    // number after the literal "$", i.e. "$-50" not "-$50".
+    expect(screen.getByText(/\$-50\b/)).toBeInTheDocument();
+    expect(screen.getByText(/-10\.0%/)).toBeInTheDocument();
+  });
+
+  it('long option: uses the 100x contract multiplier, not the stock 1x multiplier', () => {
+    const position = makePosition({
+      contract: 'AAPL 185C 05/16', direction: 'Bullish', entryPrice: 2, currentPrice: 3, contracts: 2,
+    });
+    render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    // (3 - 2) * 100 * 2 contracts = +$200, +50%
+    expect(screen.getByText(/\+\$200\b/)).toBeInTheDocument();
+    expect(screen.getByText(/\+50\.0%/)).toBeInTheDocument();
+  });
+
+  it('short option (long put entered on a bearish view): still priced with the 100x multiplier', () => {
+    const position = makePosition({
+      contract: 'AAPL 185P 05/16', direction: 'Bearish', entryPrice: 2, currentPrice: 1, contracts: 2,
+    });
+    render(<ClosePositionDrawer position={position} onCancel={noop} onConfirm={noop} />);
+    // A long put is still a BUY-to-open position, not a short — closing it is a plain
+    // sell-to-close, so P&L follows the long formula regardless of the Bearish direction
+    // tag: (1 - 2) * 100 * 2 = -$200, -50%. Rendered as "$-200", sign after the "$".
+    expect(screen.getByText(/\$-200\b/)).toBeInTheDocument();
+    expect(screen.getByText(/-50\.0%/)).toBeInTheDocument();
+  });
+});

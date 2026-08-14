@@ -845,7 +845,10 @@ export default function ChartWorkspace() {
             // (StockPositionCard and StockSendDialog now handle res.status ===
             // 'pending' too — StockPositionCard shows a "Queued — will sync" state,
             // StockSendDialog keeps the dialog open with a per-row queued note.)
-            void usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, price, qty)).then((res) => {
+            // Chart-click buy popover has no direction context to draw from — it's a
+            // manual point-and-click entry, always long (there is no "sell"/"short"
+            // popover kind; see ChartClickPopover's `kind: 'alert' | 'buy'` above).
+            void usePortfolioStore.getState().addPosition(buildPaperStockPosition(symbol, price, qty, 'Bullish')).then((res) => {
               if (res.status === 'rejected') {
                 useChartAlertStore.getState().pushToast({
                   id: `add-position-rejected-${rid()}`,

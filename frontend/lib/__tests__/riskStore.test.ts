@@ -95,3 +95,67 @@ describe('riskStore', () => {
     expect(result.current.dailyRecommendations).toBe(1);
   });
 });
+
+// Mirrors the same technique used in calendar/__tests__/page.test.tsx for the sibling
+// UTC-vs-local-midnight bug — mocks Date.prototype's local getters to simulate a timezone
+// whose local calendar day differs from the instant's UTC calendar day, without relying on
+// process.env.TZ (which doesn't reliably propagate in this Jest/Node sandbox).
+function mockLocalDayOffsetFromUtc(offsetDays: number): void {
+  const shift = (d: Date) => new Date(d.getTime() + offsetDays * 86_400_000);
+  jest.spyOn(Date.prototype, 'getFullYear').mockImplementation(function (this: Date) {
+    return shift(this).getUTCFullYear();
+  });
+  jest.spyOn(Date.prototype, 'getMonth').mockImplementation(function (this: Date) {
+    return shift(this).getUTCMonth();
+  });
+  jest.spyOn(Date.prototype, 'getDate').mockImplementation(function (this: Date) {
+    return shift(this).getUTCDate();
+  });
+}
+
+describe('riskStore daily-recommendation-limit reset — local calendar day, not UTC', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('does not reset the daily counter early for a UTC-behind zone in the evening', () => {
+    // Real UTC instant: 2026-03-16T02:30:00Z. A UTC-behind zone (e.g. US Eastern, UTC-5) has
+    // local wall-clock time 2026-03-15 21:30 -- still March 15th locally, one UTC calendar day
+    // behind. Simulate that by shifting the local getters -1 day relative to UTC.
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-16T02:30:00Z'));
+    mockLocalDayOffsetFromUtc(-1);
+
+    const { result } = renderHook(() => useRiskStore());
+    act(() => {
+      useRiskStore.setState({ dailyRecommendations: 3, lastResetDate: '2026-03-15' });
+    });
+    act(() => {
+      result.current.incrementDaily();
+    });
+
+    // Bug (naive new Date().toISOString()): lastResetDate '2026-03-15' !== UTC today
+    // '2026-03-16' -> wrongly resets to 1. Fixed: local today is still '2026-03-15' -> increments.
+    expect(result.current.dailyRecommendations).toBe(4);
+    expect(result.current.lastResetDate).toBe('2026-03-15');
+
+    jest.useRealTimers();
+  });
+
+  it('does reset the daily counter once the local calendar day genuinely advances', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-17T02:30:00Z'));
+    mockLocalDayOffsetFromUtc(-1); // local: 2026-03-16, genuinely a new day vs. lastResetDate
+
+    const { result } = renderHook(() => useRiskStore());
+    act(() => {
+      useRiskStore.setState({ dailyRecommendations: 3, lastResetDate: '2026-03-15' });
+    });
+    act(() => {
+      result.current.incrementDaily();
+    });
+
+    expect(result.current.dailyRecommendations).toBe(1);
+    expect(result.current.lastResetDate).toBe('2026-03-16');
+
+    jest.useRealTimers();
+  });
+});

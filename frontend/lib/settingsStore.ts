@@ -1,7 +1,10 @@
 /*
  * Settings store — Zustand with localStorage persistence.
  *
- * Persists broker config, alertDeduplicationHours, and IV thresholds.
+ * Persists broker config (per-broker paper/live credentials), alertDeduplicationHours,
+ * markov regime config, shortlist/contract/price limits, premiumStopPct, targetProfitPct,
+ * confidenceGate, fundamentalsGate, spreads config, and scheduleConfig. IV rank/percentile
+ * thresholds moved to ivThresholdsStore.ts in the v18 migration and no longer live here.
  * Score weights and indicator parameters live in the D+H Execution Parameters panel.
  */
 

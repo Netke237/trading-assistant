@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import numpy as np
 from fastapi import APIRouter, Query
@@ -119,11 +120,18 @@ async def get_regime(
     smoothing: float = Query(default=0.0,  ge=0.0,   le=0.99, description='EMA weight on return signal'),
 ) -> MarketRegime:
     # ── 1. Existing EMA / VIX gate (unchanged) ────────────────────────────────
-    spx = _spx_ndx_metric('SPX', 'SPX trend (200 EMA)')
-    ndx = _spx_ndx_metric('NDX', 'NDX trend (200 EMA)')
+    # These are plain sync helpers/functions doing blocking network I/O
+    # (fetch_candles / fetch_price under the hood). Run them off the event
+    # loop thread via asyncio.to_thread rather than converting them to async
+    # def — _spx_ndx_metric and compute_overall_regime are shared with three
+    # other callers elsewhere that already wrap the sync function in
+    # asyncio.to_thread/run_in_executor themselves; making them async would
+    # silently break those callers instead (see PLAN_TIER1_RISK_SAFETY.md #2).
+    spx = await asyncio.to_thread(_spx_ndx_metric, 'SPX', 'SPX trend (200 EMA)')
+    ndx = await asyncio.to_thread(_spx_ndx_metric, 'NDX', 'NDX trend (200 EMA)')
 
     try:
-        vix = fetch_price('VIX')
+        vix = await asyncio.to_thread(fetch_price, 'VIX')
     except Exception:
         vix = None
 
@@ -166,7 +174,7 @@ async def get_regime(
     vix_pct_252d: float | None = None
     if vix is not None:
         try:
-            vix_history = fetch_candles('VIX', bars=260)
+            vix_history = await asyncio.to_thread(fetch_candles, 'VIX', bars=260)
             vix_closes = [c['close'] for c in vix_history]
             if len(vix_closes) >= 2:
                 vix_pct_30d = _vix_percentile(vix_closes[-31:-1], vix)
@@ -178,7 +186,7 @@ async def get_regime(
     omm_out: OmmData | None = None
     _spx_hmm_state: str | None = None
     try:
-        spx_candles = fetch_candles('SPX', bars=600)
+        spx_candles = await asyncio.to_thread(fetch_candles, 'SPX', bars=600)
         if spx_candles:
             closes = [c['close'] for c in spx_candles]
             result = compute_omm(
@@ -219,7 +227,7 @@ async def get_regime(
     intraday_hmm_status: str = 'unavailable'
     intra_bars: list[dict] = []
     try:
-        intra_bars = fetch_intraday_candles('SPY', interval='15min', days=55)
+        intra_bars = await asyncio.to_thread(fetch_intraday_candles, 'SPY', interval='15min', days=55)
         if intra_bars:
             result_hmm = compute_intraday_hmm(intra_bars)
             if result_hmm:
@@ -329,7 +337,7 @@ async def get_intraday_hmm_series(
     # Use the same intraday fetch mechanism as the existing /regime endpoint:
     # fetch_intraday_candles from app.data.market
     try:
-        bars = fetch_intraday_candles(symbol, interval=interval, days=55)
+        bars = await asyncio.to_thread(fetch_intraday_candles, symbol, interval=interval, days=55)
     except Exception:
         bars = []
     if not bars:

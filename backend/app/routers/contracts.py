@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.schemas import OptionContract, TradeEntry, TradeExit
-from app.data.market import fetch_option_chain, fetch_price, fetch_contract_quote_async, fetch_price_async, fetch_candles_async
+from app.data.market import fetch_option_chain_async, fetch_contract_quote_async, fetch_price_async, fetch_candles_async
 from app.data.augment import _augment
 from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
@@ -77,10 +77,13 @@ async def get_contracts(
             contract_overrides = widen_contract_overrides_for_dte({}, dte_bounds[0], dte_bounds[1], hold_max_days)
 
     # 1. Fetch raw option chain
-    raw_chain = fetch_option_chain(symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds) or []
+    async with httpx.AsyncClient(timeout=8) as client:
+        raw_chain = await fetch_option_chain_async(
+            client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds
+        ) or []
 
-    # 2. Fetch current stock price (None if unavailable — _augment handles 0.0 gracefully)
-    price: float = fetch_price(symbol.upper()) or 0.0
+        # 2. Fetch current stock price (None if unavailable — _augment handles 0.0 gracefully)
+        price: float = await fetch_price_async(client, symbol.upper()) or 0.0
 
     results: list[OptionContract] = []
     for c in raw_chain:

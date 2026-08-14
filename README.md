@@ -1,20 +1,29 @@
-# Options Screener and Recommendation Assistant
+# Bamendjou — Stock & Options Screener
 
-This repository contains the initial workspace for a local-first web application designed to support discretionary swing options trading.
+A Next.js + FastAPI screener for discretionary swing trading, with three scan modes: **Options**,
+**Stocks**, and **Pre-Breakout**.
 
-The app is being built from `PRD-02 Master Phased PRD — Options Screener and Recommendation Assistant.md` and includes a backend API, frontend UI, configuration, and testing scaffolding.
+- `frontend/` — Next.js 15 App Router UI (TypeScript, CSS Modules, Zustand)
+- `backend/` — FastAPI + PostgreSQL backend (scoring, backtesting, broker integrations)
+- `docs/` — design references and historical planning documents
+- `llm-contexts/` — historical LLM task specs from earlier development phases
+- `tests/` — stub only; real test coverage lives in `backend/tests/` and `frontend/__tests__/` /
+  `frontend/lib/__tests__/`
 
-## Project structure
+For architecture, conventions, and the full component/store/backend map, see
+[`CLAUDE.md`](./CLAUDE.md) — the authoritative, actively-maintained reference for this repo.
 
-- `backend/` — FastAPI backend services and API definitions
-- `frontend/` — Next.js React application for the user interface
-- `config/` — application settings and runtime configuration
-- `docs/` — design and architecture documentation
-- `tests/` — test plans and initial test scaffolding
+## Running it
 
-## Next steps
+```bash
+# Frontend dev server (localhost:3001)
+cd frontend && npm run dev
 
-1. Install backend dependencies in `backend/`
-2. Install frontend dependencies in `frontend/`
-3. Implement scan, trade card, portfolio, and monitoring features based on the PRD
-4. Add integration tests for recommendation and risk workflows
+# Full backend + database (FastAPI on :8001, Postgres on :5433)
+docker-compose up
+
+# Backend test suite (does not start the service — see docker-compose above for that)
+cd backend && pytest
+```
+
+See `CLAUDE.md`'s "Dev workflow" section for typecheck/test commands and other day-to-day details.

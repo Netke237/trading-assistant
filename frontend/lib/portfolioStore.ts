@@ -74,7 +74,14 @@ interface PortfolioStoreState {
    *  requested size to fit exposure limits — the position was still saved,
    *  just at a smaller quantity than requested; callers should surface this
    *  rather than silently showing the originally-requested size. */
-  addPosition:    (p: PortfolioPosition) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number }>;
+  /** `opts.skipPost` skips this call's own internal POST — for a caller that
+   *  already got a real, backend-confirmed successful response from its own
+   *  `persistPosition` call and just needs local state to reflect that. Do
+   *  NOT pass this based on `persistPosition`'s offline-optimistic fallback
+   *  (see `persistPosition`'s `offline` field) — only on a genuine confirmed
+   *  success, or a network hiccup would get marked `synced` despite never
+   *  reaching the backend. */
+  addPosition:    (p: PortfolioPosition, opts?: { skipPost?: boolean }) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number }>;
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   closePosition:  (contract: string) => void;
   closePositionRemote: (
@@ -151,11 +158,19 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
  *
  *  A 409 is *not* success: the backend keeps one open position per contract and
  *  has no scale-in path, so it recorded nothing. Reporting it as ok would let the
- *  caller add quantity that only ever existed in local state. */
+ *  caller add quantity that only ever existed in local state.
+ *
+ *  On a network failure, `ok` is `false` and `offline` is `true` — this is
+ *  DELIBERATELY distinguishable from a genuine rejection. A caller must not
+ *  treat `offline: true` the same as `ok: true` (nothing was actually
+ *  persisted) nor the same as a hard rejection (the position may well be
+ *  valid — the backend just couldn't be reached to confirm it). The correct
+ *  handling is to fall back to `addPosition`'s own POST + pending/retry path,
+ *  exactly as every other call site (without a `persistPosition` step) does. */
 export async function persistPosition(
   p: PortfolioPosition,
   portfolioValue = accountValue(),
-): Promise<{ ok: boolean; detail?: string; adjustedQty?: number }> {
+): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number }> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
@@ -170,8 +185,45 @@ export async function persistPosition(
     const body = await res.json().catch(() => ({}));
     return { ok: false, detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
   } catch {
-    return { ok: true }; // backend offline — don't block the user
+    // Backend unreachable. Do NOT report ok:true here — nothing was actually
+    // persisted, and a caller that skips its own retry path on ok:true would
+    // silently lose this position on the next reconcile (see the `offline`
+    // doc comment above).
+    return { ok: false, offline: true };
   }
+}
+
+export type PersistPositionResult = Awaited<ReturnType<typeof persistPosition>>;
+
+/**
+ * The three-way outcome every `persistPosition` call site must branch on — extracted here
+ * (rather than left inline at each call site) so the real production branching logic can be
+ * unit-tested directly, instead of only via a hand-reimplemented copy in a test file:
+ *  - offline (network failure): `persistPosition` did NOT confirm anything was saved. Fall
+ *    through to `addPosition`'s own POST + pending/retry path, same as every call site that
+ *    never calls `persistPosition` at all.
+ *  - rejected (backend responded, said no): surface the error, do not add the position.
+ *  - confirmed success: skip `addPosition`'s own POST (already persisted) but still sync local
+ *    state via `addPosition(pos, { skipPost: true })`.
+ * Returns `{ rejected: true }` when the caller should show `saved.detail` and stop, mirroring
+ * the `if (!saved.ok) { setOrderError(...); return; }` shape each call site used inline before.
+ */
+export function applyPersistedPosition(
+  saved: PersistPositionResult,
+  pos: PortfolioPosition,
+  addPosition: (p: PortfolioPosition, opts?: { skipPost?: boolean }) => unknown,
+  onAdjusted?: (adjustedQty: number) => void,
+): { rejected: boolean; detail?: string } {
+  if (saved.offline) {
+    void addPosition(pos);
+    return { rejected: false };
+  }
+  if (!saved.ok) {
+    return { rejected: true, detail: saved.detail };
+  }
+  if (saved.adjustedQty != null) onAdjusted?.(saved.adjustedQty);
+  void addPosition(pos, { skipPost: true });
+  return { rejected: false };
 }
 
 async function deletePosition(recId: string): Promise<void> {
@@ -259,7 +311,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             (p as PortfolioPosition).recId ? p : { ...p, recId: generateRecId() }
           ),
         }),
-      addPosition: async (p) => {
+      addPosition: async (p, opts) => {
         const recId = (p as PortfolioPosition & { recId?: string }).recId || generateRecId();
         const value = accountValue();
 
@@ -307,6 +359,21 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           rollback = (positions) => positions.filter((x) => x.recId !== recId);
           return { positions: [...s.positions, incoming] };
         });
+
+        if (opts?.skipPost) {
+          // Caller already got a genuine, backend-confirmed successful response
+          // from its own persistPosition call (never the offline-optimistic
+          // fallback — see persistPosition's `offline` field) — just promote
+          // the optimistic row to synced without a second POST.
+          set((s) => ({
+            positions: s.positions.map((x) =>
+              x.recId === promoteRecId
+                ? { ...x, syncStatus: 'synced', syncedAt: Date.now(), syncPendingSince: undefined }
+                : x
+            ),
+          }));
+          return { ok: true, status: 'ok' as const };
+        }
 
         const outcome = await postPosition({ ...p, recId } as PortfolioPosition, value);
 

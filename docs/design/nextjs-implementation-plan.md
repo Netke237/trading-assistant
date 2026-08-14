@@ -1,5 +1,10 @@
 # Bamendjou Frontend — Implementation Plan
 
+> **Historical snapshot** — this document reflects an early design/build phase of the app
+> and is preserved as-is; it is not updated to track later changes. It documents the old
+> step ordering and a `/mocks` fixture folder that no longer exist (the real backend replaced
+> mocks long ago). For the current state, see `CLAUDE.md`.
+
 ## Overview
 
 This plan builds the Bamendjou frontend as a Next.js App Router project in six phases. The plan is executable by Claude Code in follow-up sessions, but every decision is explained so a non-coder can read along.

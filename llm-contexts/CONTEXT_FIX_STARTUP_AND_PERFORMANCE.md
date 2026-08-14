@@ -1,4 +1,5 @@
 # CONTEXT_FIX_STARTUP_AND_PERFORMANCE.md
+# > Historical snapshot — describes a Windows dev setup (F:\Git\..., .bat scripts) that no longer exists; the real entrypoint is backend/app/main.py. See CLAUDE.md.
 # Project: Options Screener / Trading Assistant
 # Purpose: Fix startup scripts, desktop shortcuts, async performance + full E2E validation
 # Project Root: F:\Git\GitHub\Trading assistant

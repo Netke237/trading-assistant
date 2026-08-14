@@ -376,7 +376,7 @@
   background: var(--reject);
   border: 1px solid var(--reject);
   border-radius: var(--radius-md);
-  color: #fff;
+  color: var(--accent-text);
   font-family: var(--font-dm);
   font-size: 12px;
   cursor: pointer;

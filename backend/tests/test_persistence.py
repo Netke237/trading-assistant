@@ -123,6 +123,19 @@ async def test_portfolio_create_rejects_missing_rec_id(client):
     assert resp.status_code == 422, resp.text
 
 
+@pytest.mark.asyncio
+async def test_portfolio_create_rejects_invalid_direction(client):
+    """direction is now Literal["Bullish","Bearish"] (was plain str) — a wrong-cased
+    or wrong-value direction must 422, not be silently persisted."""
+    bad_payload = {**_POSITION_PAYLOAD, "recId": "REC-BAD-DIRECTION-1", "direction": "bullish"}
+    resp = await client.post("/api/portfolio", json=bad_payload)
+    assert resp.status_code == 422, resp.text
+
+    bad_payload2 = {**_POSITION_PAYLOAD, "recId": "REC-BAD-DIRECTION-2", "direction": "Long"}
+    resp2 = await client.post("/api/portfolio", json=bad_payload2)
+    assert resp2.status_code == 422, resp2.text
+
+
 # ── Test 2: Portfolio delete ──────────────────────────────────────────────────
 
 @pytest.mark.asyncio

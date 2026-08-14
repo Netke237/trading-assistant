@@ -589,7 +589,7 @@ class PortfolioPositionCreate(BaseModel):
     recId: str = Field(alias="rec_id")
     symbol: str
     contract: str       # SYMBOL|STRIKE|EXPIRY|C/P
-    direction: str
+    direction: Direction
     entryPrice: float = Field(alias="entry_price")
     qty: int = Field(default=1)
     entryDate: str = Field(alias="entry_date")
@@ -624,7 +624,7 @@ class PortfolioPositionSchema(BaseModel):
     recId: str
     symbol: str
     contract: str
-    direction: str
+    direction: Direction
     entryPrice: float
     qty: int
     # Set only on the POST /api/portfolio response, when the risk check
@@ -680,7 +680,7 @@ class ClosedPositionSchema(BaseModel):
     recId: str
     symbol: str
     contract: str
-    direction: str
+    direction: Direction
     entryPrice: float
     entryDate: Optional[str] = None
     exitPrice: float

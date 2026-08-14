@@ -14,7 +14,7 @@ import { Title, Text } from '@/components/primitives';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
-import { usePortfolioStore, persistPosition } from '@/lib/portfolioStore';
+import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { contractId as buildContractId } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
@@ -489,6 +489,7 @@ export default function Step7Page() {
         symbol:        card.symbol,
         option_symbol: toOptionSymbol(card),
         action:        'BUY',
+        effect:        'OPEN',
         quantity:      1,
         order_type:    'LMT',
         limit_price:   card.entry.limit,
@@ -496,15 +497,14 @@ export default function Step7Page() {
       });
       const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id, liveQuote?.price);
       const saved = await persistPosition(pos);
-      if (!saved.ok) {
-        setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${saved.detail}`);
+      const { rejected, detail } = applyPersistedPosition(saved, pos, addPosition, (adjustedQty) => {
+        setSizeAdjustedNote(`Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
+      });
+      if (rejected) {
+        setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${detail}`);
         return;
       }
-      if (saved.adjustedQty != null) {
-        setSizeAdjustedNote(`Size reduced to ${saved.adjustedQty} contract${saved.adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
-      }
       setPaperOrderId(res.order_id);
-      void addPosition(pos);
     } catch (e) {
       setOrderError(String(e));
     } finally {
@@ -522,6 +522,7 @@ export default function Step7Page() {
         symbol:        card.symbol,
         option_symbol: toOptionSymbol(card),
         action:        'BUY',
+        effect:        'OPEN',
         quantity:      1,
         order_type:    'MKT',
         limit_price:   null,
@@ -529,15 +530,14 @@ export default function Step7Page() {
       });
       const pos = buildPaperPosition(card, 'MKT', selectedBroker, res.order_id, liveQuote?.price);
       const saved = await persistPosition(pos);
-      if (!saved.ok) {
-        setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${saved.detail}`);
+      const { rejected, detail } = applyPersistedPosition(saved, pos, addPosition, (adjustedQty) => {
+        setSizeAdjustedNote(`Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
+      });
+      if (rejected) {
+        setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${detail}`);
         return;
       }
-      if (saved.adjustedQty != null) {
-        setSizeAdjustedNote(`Size reduced to ${saved.adjustedQty} contract${saved.adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
-      }
       setPaperOrderId(res.order_id);
-      void addPosition(pos);
     } catch (e) {
       setOrderError(String(e));
     } finally {

@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import type { PortfolioPosition } from '@/types/domain';
+import { positionMultiplier } from '@/lib/risk';
 import styles from './ClosePositionDrawer.module.css';
 
 interface Props {
@@ -31,10 +32,18 @@ export function ClosePositionDrawer({ position, onCancel, onConfirm }: Props) {
   const [exitPrice, setExitPrice] = useState<number>(position.currentPrice || position.entryPrice);
   const [exitDate, setExitDate] = useState<string>(todayIso());
 
-  const realizedDollar = Math.round((exitPrice - position.entryPrice) * 100 * qty);
-  const realizedPct = position.entryPrice
-    ? ((exitPrice - position.entryPrice) / position.entryPrice) * 100
-    : 0;
+  // Short *stock* positions profit when price falls — flip the delta's sign for
+  // those. Options are never flipped: 'Bearish' on an option position just labels
+  // a bought put (this app never writes/sells options to open), which is still a
+  // long position that profits when its premium rises, same as a bought call.
+  const isShortStock = position.direction === 'Bearish' && position.contract.endsWith('|STOCK');
+  // Deriving both dollar and pct from this one signed value keeps them from
+  // drifting into a contradictory "+$500 (-3.2%)" display for a profitable short close.
+  const priceDelta = isShortStock
+    ? position.entryPrice - exitPrice
+    : exitPrice - position.entryPrice;
+  const realizedDollar = Math.round(priceDelta * positionMultiplier(position) * qty);
+  const realizedPct = position.entryPrice ? (priceDelta / position.entryPrice) * 100 : 0;
   const tone = realizedDollar > 0 ? 'pass' : realizedDollar < 0 ? 'reject' : undefined;
 
   return (

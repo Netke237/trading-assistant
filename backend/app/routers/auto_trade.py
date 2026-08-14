@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -17,7 +17,7 @@ class ArmRequest(BaseModel):
     symbol:          str
     option_symbol:   str
     action:          Literal["BUY", "SELL"]
-    quantity:        int
+    quantity:        int = Field(..., ge=1)
     order_type:      Literal["MKT", "LMT"] = "LMT"
     limit_price:     Optional[float] = None
     conid:           Optional[int] = None

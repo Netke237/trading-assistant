@@ -85,7 +85,7 @@ def check_position_risk(
     multiplier = 1 if is_stock else 100
     capital_at_risk = entry_premium * proposed_contracts * multiplier
     single_exposure_pct = capital_at_risk / portfolio_value
-    max_single = rules["max_single_trade_exposure_pct"]
+    max_single = rules["max_single_position_pct"]
 
     if single_exposure_pct > max_single:
         max_allowed_premium = portfolio_value * max_single

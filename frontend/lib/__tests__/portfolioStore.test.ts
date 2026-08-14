@@ -1,5 +1,5 @@
 import { renderHook, act } from '@testing-library/react';
-import { usePortfolioStore, persistPosition, migratePortfolioPersist } from '@/lib/portfolioStore';
+import { usePortfolioStore, persistPosition, migratePortfolioPersist, applyPersistedPosition } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
 import type { PortfolioPosition } from '@/types/domain';
 
@@ -609,6 +609,116 @@ describe('portfolioStore', () => {
     });
   });
 
+  // ── Double-POST fix (#13): persistPosition's offline field + addPosition's ──
+  // skipPost option, and the 3-way offline/rejected/confirmed-success branch
+  // the step-7-trade-card call sites use around them.
+  describe('persistPosition offline distinction + addPosition skipPost', () => {
+    it('persistPosition returns ok:false, offline:true (NOT ok:true) on a network failure', async () => {
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockRejectedValue(new Error('network'));
+      const res = await persistPosition({ ...abt, recId: 'REC-OFFLINE-1' });
+      // Regression guard: the old behavior optimistically returned {ok: true} on
+      // a network failure, which let a naive "skip re-POST when saved.ok" caller
+      // mark a never-persisted position as synced (see addPosition skipPost test
+      // below for the full failure mode this prevents).
+      expect(res.ok).toBe(false);
+      expect(res.offline).toBe(true);
+    });
+
+    it('addPosition({skipPost:true}) marks the row synced WITHOUT issuing its own POST', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      const res = await usePortfolioStore.getState().addPosition({ ...abt, recId: 'REC-SKIP-1' }, { skipPost: true });
+      expect(res.ok).toBe(true);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-SKIP-1')?.syncStatus).toBe('synced');
+    });
+
+    // ── Regression-critical (per PLAN_TIER3_CLEANUP.md #13): this is the
+    // exact failure mode both rounds of adversarial review flagged. Simulates
+    // the corrected call-site 3-way branch (offline / rejected / confirmed-
+    // success) that step-7-trade-card's placeLimitPaper/placeMarketNow use
+    // around persistPosition + addPosition, and proves a network failure
+    // during persistPosition does NOT get treated as a confirmed success. ──
+    describe('call-site 3-way branch simulation', () => {
+      /** Mirrors the exact branch shape from step-7-trade-card's
+       *  placeLimitPaper/placeMarketNow, so this test exercises the real
+       *  decision logic, not just the store primitives in isolation. */
+      async function runCallSiteBranch(pos: PortfolioPosition) {
+        const saved = await persistPosition(pos);
+        if (saved.offline) {
+          return usePortfolioStore.getState().addPosition(pos);
+        } else if (!saved.ok) {
+          return { ok: false as const, status: 'rejected' as const, detail: saved.detail };
+        } else {
+          return usePortfolioStore.getState().addPosition(pos, { skipPost: true });
+        }
+      }
+
+      it('a network failure during persistPosition ends up pending (retryable), not synced or dropped', async () => {
+        // persistPosition's own POST fails (offline)...
+        (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockRejectedValue(new Error('network'));
+
+        await runCallSiteBranch({ ...abt, recId: 'REC-NET-FAIL-1' });
+
+        const row = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-NET-FAIL-1');
+        // Must exist locally — never silently dropped.
+        expect(row).toBeDefined();
+        // Must NOT be marked synced — that would be the data-loss bug: a
+        // syncFromBackend reconcile treats a synced-but-absent-from-backend
+        // row as a genuine phantom and deletes it (see the "genuine phantom"
+        // branch in syncFromBackend below).
+        expect(row?.syncStatus).toBe('pending');
+      });
+
+      it('the pending row from a network failure is retried and confirmed by syncFromBackend, not silently dropped', async () => {
+        (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockRejectedValue(new Error('network'));
+        await runCallSiteBranch({ ...abt, recId: 'REC-NET-FAIL-2' });
+        expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-NET-FAIL-2')?.syncStatus).toBe('pending');
+
+        // Backend comes back online. syncFromBackend's reconcile retries any
+        // pending row via its own POST (postPosition) before treating an
+        // absent-from-GET row as a phantom to drop.
+        (global as unknown as { fetch: jest.Mock }).fetch = jest.fn((url: string, init?: RequestInit) => {
+          const method = init?.method ?? 'GET';
+          if (url.endsWith('/api/portfolio') && method === 'GET') {
+            return Promise.resolve(jsonResponse([], true, 200)); // backend still has nothing yet
+          }
+          if (url.endsWith('/api/portfolio') && method === 'POST') {
+            return Promise.resolve(jsonResponse({}, true, 201)); // retry succeeds
+          }
+          return Promise.resolve(jsonResponse({}, false, 500));
+        });
+
+        await usePortfolioStore.getState().syncFromBackend();
+
+        const row = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-NET-FAIL-2');
+        expect(row).toBeDefined();
+        expect(row?.syncStatus).toBe('synced');
+      });
+
+      it('a genuine rejection from persistPosition is surfaced and does NOT call addPosition a second time', async () => {
+        (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+          ok: false, status: 422, json: async () => ({ detail: 'single_trade_exposure_too_high' }),
+        });
+        const res = await runCallSiteBranch({ ...abt, recId: 'REC-REJECTED-1' });
+        expect(res.ok).toBe(false);
+        expect((res as { detail?: string }).detail).toBe('single_trade_exposure_too_high');
+        // Rejected by persistPosition means addPosition is never reached — no
+        // local row should exist for it.
+        expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-REJECTED-1')).toBeUndefined();
+      });
+
+      it('a confirmed success issues exactly one POST total (not two)', async () => {
+        const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+        (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+        const res = await runCallSiteBranch({ ...abt, recId: 'REC-CONFIRMED-1' });
+        expect(res.ok).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(1); // persistPosition's POST only — addPosition skips its own
+        expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-CONFIRMED-1')?.syncStatus).toBe('synced');
+      });
+    });
+  });
+
   describe('syncFromBackend authoritative reconcile', () => {
     const mkLocal = (recId: string, over: Record<string, unknown> = {}) => ({
       symbol: 'ABT', contract: `ABT|${recId}|2027-01-15|C`, direction: 'Bullish',
@@ -681,6 +791,71 @@ describe('portfolioStore', () => {
         });
       await usePortfolioStore.getState().syncFromBackend();
       expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'PEND2')?.syncStatus).toBe('pending');
+    });
+  });
+
+  // Exercises the REAL exported applyPersistedPosition — the exact function
+  // step-7-trade-card's placeLimitPaper/placeMarketNow both call — not a
+  // hand-reimplemented copy of its branching logic. This is what step-7-trade-card
+  // itself has no direct test coverage for; extracting the branch here and testing
+  // the extracted function is what makes that real production logic testable at all.
+  describe('applyPersistedPosition — the offline/rejected/confirmed-success branch', () => {
+    it('offline: falls through to addPosition with no skipPost, so the pending/retry path still engages', () => {
+      const pos = makePosition({ recId: 'REC-OFFLINE' });
+      const addPosition = jest.fn();
+      const onAdjusted = jest.fn();
+
+      const result = applyPersistedPosition({ ok: false, offline: true }, pos, addPosition, onAdjusted);
+
+      expect(result.rejected).toBe(false);
+      expect(addPosition).toHaveBeenCalledWith(pos);
+      expect(addPosition).not.toHaveBeenCalledWith(pos, { skipPost: true });
+      expect(onAdjusted).not.toHaveBeenCalled();
+    });
+
+    it('rejected: does NOT call addPosition at all, and surfaces the detail for the caller to show', () => {
+      const pos = makePosition({ recId: 'REC-REJECTED' });
+      const addPosition = jest.fn();
+
+      const result = applyPersistedPosition({ ok: false, detail: 'exposure limit exceeded' }, pos, addPosition);
+
+      expect(result).toEqual({ rejected: true, detail: 'exposure limit exceeded' });
+      expect(addPosition).not.toHaveBeenCalled();
+    });
+
+    it('confirmed success: skips addPosition\'s own POST via skipPost, since persistPosition already saved it', () => {
+      const pos = makePosition({ recId: 'REC-OK' });
+      const addPosition = jest.fn();
+      const onAdjusted = jest.fn();
+
+      const result = applyPersistedPosition({ ok: true }, pos, addPosition, onAdjusted);
+
+      expect(result.rejected).toBe(false);
+      expect(addPosition).toHaveBeenCalledWith(pos, { skipPost: true });
+      expect(onAdjusted).not.toHaveBeenCalled();
+    });
+
+    it('confirmed success with an adjusted quantity: calls the onAdjusted callback with the backend-reported qty', () => {
+      const pos = makePosition({ recId: 'REC-ADJUSTED' });
+      const addPosition = jest.fn();
+      const onAdjusted = jest.fn();
+
+      applyPersistedPosition({ ok: true, adjustedQty: 3 }, pos, addPosition, onAdjusted);
+
+      expect(onAdjusted).toHaveBeenCalledWith(3);
+      expect(addPosition).toHaveBeenCalledWith(pos, { skipPost: true });
+    });
+
+    it('regression guard: a naive "skip addPosition whenever saved.ok would be truthy" bug would fail this — offline must never take the skipPost path', () => {
+      // saved.ok is false here (network failure never reports ok:true — see persistPosition's
+      // own doc comment), so this specifically proves the offline branch is keyed on
+      // `saved.offline`, not on treating "not explicitly rejected" as success.
+      const pos = makePosition({ recId: 'REC-REGRESSION' });
+      const addPosition = jest.fn();
+
+      applyPersistedPosition({ ok: false, offline: true }, pos, addPosition);
+
+      expect(addPosition).not.toHaveBeenCalledWith(pos, { skipPost: true });
     });
   });
 });

@@ -9,7 +9,7 @@
   height: 16px;
   padding: 0 4px;
   background: var(--reject);
-  color: #fff;
+  color: var(--accent-text);
   border-radius: 8px;
   font-family: var(--font-dm), system-ui, sans-serif;
   font-size: 10px;

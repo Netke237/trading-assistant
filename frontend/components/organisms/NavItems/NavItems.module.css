@@ -57,7 +57,7 @@
   padding: 0 3px;
   border-radius: 8px;
   background: var(--reject);
-  color: #fff;
+  color: var(--accent-text);
   font-size: 9px;
   font-weight: 600;
   line-height: 16px;

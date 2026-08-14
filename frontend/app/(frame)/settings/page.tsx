@@ -923,14 +923,23 @@ function RiskForm() {
         };
         setTargetProfitPct(nextTargetPct);
         setLocalTargetPct(nextTargetPct);
-        setLocalLimits((prev) => ({
-          ...prev,
+        const next = {
+          ...useRiskStore.getState().limits,
           ...(s.portfolioValue           !== undefined && { portfolioValue:             s.portfolioValue }),
           ...(s.maxSinglePositionPct     !== undefined && { maxSingleTradeExposurePct:  s.maxSinglePositionPct }),
           ...(s.maxTotalExposurePct      !== undefined && { maxTotalExposurePct:        s.maxTotalExposurePct }),
           ...(s.maxConcurrentPositions   !== undefined && { maxConcurrentPositions:     s.maxConcurrentPositions }),
           ...(s.maxDailyRecommendations  !== undefined && { maxDailyRecommendations:    s.maxDailyRecommendations }),
-        }));
+        };
+        setLocalLimits(next);
+        // Also push the fetched values into the global riskStore, not just the
+        // local displayed useState — SendToBrokerDialog enforces against the
+        // global store, not this component's local state. Without this, a
+        // value that changed on the backend since the last save (e.g. in
+        // another session/device) shows correctly on screen but the pre-flight
+        // trade-send gate keeps enforcing the stale persisted limit until the
+        // user happens to touch a slider.
+        useRiskStore.getState().setLimits(next);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps

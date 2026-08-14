@@ -11,7 +11,7 @@ def _adapter():
 def test_adapter_builds_equity_params():
     adapter = _adapter()
     order = BrokerOrder(
-        symbol="NVDA", action="BUY", quantity=20,
+        symbol="NVDA", action="BUY", effect="OPEN", quantity=20,
         order_type="LMT", limit_price=130.0, tif="DAY"
     )
     params = adapter._build_params(order)
@@ -26,7 +26,7 @@ def test_adapter_builds_equity_params():
 def test_adapter_builds_option_params():
     adapter = _adapter()
     order = BrokerOrder(
-        symbol="NVDA", action="BUY", quantity=1,
+        symbol="NVDA", action="BUY", effect="OPEN", quantity=1,
         order_type="LMT", limit_price=3.50, tif="DAY",
         option_symbol="NVDA260620C00130000",
     )
@@ -37,15 +37,74 @@ def test_adapter_builds_option_params():
     assert params["side"] == "buy_to_open"
 
 
-def test_option_sell_uses_sell_to_open():
+# ── (action, effect) side mapping — options ──────────────────────────────────
+
+def test_option_sell_open_uses_sell_to_open():
     adapter = _adapter()
     order = BrokerOrder(
-        symbol="NVDA", action="SELL", quantity=1,
+        symbol="NVDA", action="SELL", effect="OPEN", quantity=1,
         order_type="LMT", limit_price=3.50, tif="DAY",
         option_symbol="NVDA260620C00130000",
     )
     params = adapter._build_params(order)
     assert params["side"] == "sell_to_open"
+
+
+def test_option_sell_close_uses_sell_to_close():
+    adapter = _adapter()
+    order = BrokerOrder(
+        symbol="NVDA", action="SELL", effect="CLOSE", quantity=1,
+        order_type="LMT", limit_price=3.50, tif="DAY",
+        option_symbol="NVDA260620C00130000",
+    )
+    params = adapter._build_params(order)
+    assert params["side"] == "sell_to_close"
+
+
+def test_option_buy_close_uses_buy_to_close():
+    adapter = _adapter()
+    order = BrokerOrder(
+        symbol="NVDA", action="BUY", effect="CLOSE", quantity=1,
+        order_type="LMT", limit_price=3.50, tif="DAY",
+        option_symbol="NVDA260620C00130000",
+    )
+    params = adapter._build_params(order)
+    assert params["side"] == "buy_to_close"
+
+
+# ── (action, effect) side mapping — equities ─────────────────────────────────
+# Bearish stock entries route through here (SELL+OPEN) — this is the live bug this
+# adapter previously had (sent plain "sell", which Tradier treats as closing a long,
+# not opening a short).
+
+def test_equity_sell_open_uses_sell_short():
+    adapter = _adapter()
+    order = BrokerOrder(
+        symbol="NVDA", action="SELL", effect="OPEN", quantity=20,
+        order_type="LMT", limit_price=130.0, tif="DAY",
+    )
+    params = adapter._build_params(order)
+    assert params["side"] == "sell_short"
+
+
+def test_equity_sell_close_uses_sell():
+    adapter = _adapter()
+    order = BrokerOrder(
+        symbol="NVDA", action="SELL", effect="CLOSE", quantity=20,
+        order_type="LMT", limit_price=130.0, tif="DAY",
+    )
+    params = adapter._build_params(order)
+    assert params["side"] == "sell"
+
+
+def test_equity_buy_close_uses_buy_to_cover():
+    adapter = _adapter()
+    order = BrokerOrder(
+        symbol="NVDA", action="BUY", effect="CLOSE", quantity=20,
+        order_type="LMT", limit_price=130.0, tif="DAY",
+    )
+    params = adapter._build_params(order)
+    assert params["side"] == "buy_to_cover"
 
 
 @respx.mock
@@ -54,7 +113,7 @@ def test_place_order_success():
         return_value=httpx.Response(200, json={"order": {"id": 111222, "status": "ok", "partner_id": "0"}})
     )
     adapter = _adapter()
-    order = BrokerOrder(symbol="NVDA", action="BUY", quantity=5,
+    order = BrokerOrder(symbol="NVDA", action="BUY", effect="OPEN", quantity=5,
                         order_type="MKT", limit_price=None, tif="DAY")
     result = adapter.place_order(order)
     assert result.order_id == "111222"
@@ -67,7 +126,7 @@ def test_place_order_failure():
         return_value=httpx.Response(400, json={"fault": {"faultstring": "Invalid token"}})
     )
     adapter = _adapter()
-    order = BrokerOrder(symbol="NVDA", action="BUY", quantity=1,
+    order = BrokerOrder(symbol="NVDA", action="BUY", effect="OPEN", quantity=1,
                         order_type="MKT", limit_price=None, tif="DAY")
     with pytest.raises(RuntimeError, match="Tradier paper order failed"):
         adapter.place_order(order)
@@ -79,7 +138,7 @@ def test_build_params_converts_pipe_to_occ():
     """Adapter converts Bamendjou pipe id to OCC when building option params."""
     adapter = _adapter()
     order = BrokerOrder(
-        symbol="AAPL", action="BUY", quantity=1,
+        symbol="AAPL", action="BUY", effect="OPEN", quantity=1,
         order_type="LMT", limit_price=2.50, tif="DAY",
         option_symbol="AAPL|185|2025-05-16|C",   # pipe format in
     )
@@ -92,7 +151,7 @@ def test_build_params_passthrough_occ():
     """Adapter passes already-OCC symbols through unchanged."""
     adapter = _adapter()
     order = BrokerOrder(
-        symbol="AAPL", action="BUY", quantity=1,
+        symbol="AAPL", action="BUY", effect="OPEN", quantity=1,
         order_type="LMT", limit_price=2.50, tif="DAY",
         option_symbol="AAPL250516C00185000",   # already OCC
     )

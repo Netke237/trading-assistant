@@ -15,6 +15,7 @@ import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
 import { buildPaperStockPosition } from '@/lib/paperTrade';
+import type { Direction } from '@/types/domain';
 import styles from './page.module.css';
 
 function _startOfDay(d: Date): number {
@@ -164,7 +165,7 @@ export default function Step4StocksPage() {
     const adjusted: string[] = [];
     for (const c of res.candidates) {
       if (afterScanArmedSymbols.has(c.symbol)) {
-        const addRes = await addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, c.shares));
+        const addRes = await addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, c.shares, c.direction as Direction));
         if (addRes.status === 'rejected') failures.push(`${c.symbol}: ${addRes.detail ?? 'not saved'}`);
         else if (addRes.status === 'pending') queued.push(c.symbol);
         else if (addRes.adjustedQty != null) adjusted.push(`${c.symbol} (${addRes.adjustedQty} sh)`);
