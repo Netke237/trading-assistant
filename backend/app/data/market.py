@@ -38,6 +38,9 @@ def get_tradier_creds() -> tuple[str, str]:
         if paper.get("token", "").strip():
             return paper["token"].strip(), "https://sandbox.tradier.com"
     except Exception:
+        # Deliberately broad: a malformed/missing credentials file (or any
+        # error reading the paper-broker token override) should never crash
+        # price fetching — fall through to the env-var token below instead.
         pass
     return TRADIER_TOKEN, TRADIER_BASE_URL
 
@@ -153,8 +156,13 @@ def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
                 }
                 for d in day_list
             ]
-    except Exception:
-        pass
+    except Exception as exc:
+        # Kept broad deliberately (the request, response-shape parsing, and the
+        # dict-comprehension below can each fail in different ways) — but this
+        # falls through to the yfinance fallback just below, so a persistent
+        # failure here (bad creds, Tradier response shape change) would
+        # otherwise go completely unnoticed. Log instead of silently passing.
+        logger.debug("Tradier daily-candles fetch failed for %s: %s", symbol, exc)
 
     if not rows:
         rows = _fetch_daily_yf(symbol)

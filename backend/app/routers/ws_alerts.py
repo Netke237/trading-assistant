@@ -14,6 +14,14 @@ async def ws_alerts(websocket: WebSocket) -> None:
     """
     WebSocket endpoint for live alert streaming.
 
+    Security note: accepts any WebSocket connection with no token/session
+    check. This is a deliberate, reviewed decision, not an oversight — it
+    mirrors the same single-user-local-machine assumption documented in
+    `credential_store.py` (this app runs single-user on a trusted local
+    machine, never a shared or internet-exposed host). If that assumption
+    ever changes (e.g. the app becomes reachable beyond localhost), this
+    endpoint needs real auth (token/session) before that deployment.
+
     On connect:
       1. Accept the connection.
       2. Register the client with alert_service.

@@ -121,6 +121,29 @@ def test_tastytrade_slots_exist_by_default(tmp_path):
     }
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits only")
+def test_save_chmods_file_to_0600(tmp_path):
+    path = tmp_path / "creds.yaml"
+    store = CredentialStore(path=path)
+    store.set("tradier_paper", {"token": "sometoken", "account_id": "ACC"})
+    store.save()
+    assert oct(os.stat(path).st_mode)[-3:] == "600"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits only")
+def test_load_tightens_permissions_on_preexisting_file(tmp_path):
+    """A file that predates the chmod fix (e.g. world-readable) must get
+    tightened proactively on load(), not just on the next save()."""
+    path = tmp_path / "creds.yaml"
+    path.write_text("tradier_paper:\n  token: pre-existing\n  account_id: ACC\n")
+    os.chmod(path, 0o644)
+    assert oct(os.stat(path).st_mode)[-3:] == "644"
+
+    store = CredentialStore(path=path)  # __init__ calls load() since path exists
+    assert oct(os.stat(path).st_mode)[-3:] == "600"
+    assert store.get("tradier_paper")["token"] == "pre-existing"
+
+
 def test_tastytrade_credentials_are_masked(tmp_path):
     """client_secret and refresh_token must never come back in plaintext from
     get_masked()/all_masked() — a leaked refresh token is a standing account

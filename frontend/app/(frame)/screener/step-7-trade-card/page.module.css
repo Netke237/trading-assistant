@@ -1,5 +1,5 @@
 .paperSection    { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-5); border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); }
 .paperButtons    { display: flex; gap: var(--space-3); }
-.paperBtnLimit   { padding: 8px 20px; background: var(--pass); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; }
-.paperBtnMarket  { padding: 8px 20px; background: var(--caution); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; }
+.paperBtnLimit   { padding: 8px 20px; background: var(--pass); color: var(--accent-text); border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; }
+.paperBtnMarket  { padding: 8px 20px; background: var(--caution); color: var(--accent-text); border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; }
 .paperBtnLimit:disabled, .paperBtnMarket:disabled { opacity: .5; cursor: wait; }

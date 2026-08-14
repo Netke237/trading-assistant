@@ -53,7 +53,7 @@
   border: 1px solid var(--reject);
   border-radius: var(--radius-md);
   background: var(--reject);
-  color: #fff;
+  color: var(--accent-text);
   cursor: pointer;
   font-family: var(--font-dm);
   font-size: 13px;
