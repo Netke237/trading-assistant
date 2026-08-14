@@ -137,6 +137,17 @@ describe('StockSendDialog — partial basket failure retry', () => {
       .map(([arg]: [{ symbol: string }]) => arg.symbol);
     expect(retrySymbols).toEqual(['MSFT']);
 
+    // Regression (round 5): MSFT's retry succeeding must NOT make the dialog
+    // report the full basket as placed — AAPL is still only queued, never
+    // actually confirmed, since it was correctly never resubmitted. A bug in
+    // an earlier fix cleared the queued-state tracking on every retry pass
+    // (even for symbols the pass didn't touch), so a successful MSFT retry
+    // made the "stay open on any unconfirmed row" gate see nothing
+    // unconfirmed and fire onSubmit for the whole basket, AAPL included.
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/queued — backend unreachable, will sync/i)).toBeInTheDocument();
+    expect(screen.queryByText(/broker rejected/i)).not.toBeInTheDocument();
+
     global.fetch = originalFetch;
   });
 });

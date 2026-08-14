@@ -87,10 +87,17 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     const targets = hasSubmittedOnce ? cards.filter((c) => c.symbol in errors) : cards;
     setHasSubmittedOnce(true);
     setErrors({});
-    setQueued({});
 
     const errs: Record<string, string> = {};
-    const q: Record<string, string> = {};
+    // Seed with the PRIOR queued state on a retry — a queued symbol is never
+    // in `targets` (queued and errored are mutually exclusive outcomes), so
+    // it never runs through the loop below to re-earn its `q[...]` entry.
+    // Without this, a retry that only fixes the errored symbol would drop
+    // the queued symbol's tracking entirely: `q` ends up {} for this pass,
+    // the "stay open on any unconfirmed row" gate below sees nothing
+    // unconfirmed, and the dialog reports the FULL basket (including the
+    // still-unconfirmed queued symbol) as placed via onSubmit.
+    const q: Record<string, string> = hasSubmittedOnce ? { ...queued } : {};
     for (const c of targets) {
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
       if (!r.autoSend) {
