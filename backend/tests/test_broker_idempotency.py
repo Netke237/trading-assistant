@@ -28,7 +28,7 @@ def test_duplicate_stock_order_within_window_is_deduped():
     marked as such via the `deduped` field."""
     client = TestClient(_make_app())
     payload = {
-        "broker": "ibkr_paper", "symbol": "AAPL", "action": "BUY",
+        "broker": "ibkr_paper", "symbol": "AAPL", "action": "BUY", "effect": "OPEN",
         "quantity": 10, "order_type": "LMT", "limit_price": 185.0, "tif": "DAY",
     }
     with patch("app.routers.broker.build_router_from_credentials",
@@ -52,7 +52,7 @@ def test_stale_duplicate_after_window_is_not_deduped():
     15s-window design had."""
     client = TestClient(_make_app())
     payload = {
-        "broker": "ibkr_paper", "symbol": "AAPL", "action": "BUY",
+        "broker": "ibkr_paper", "symbol": "AAPL", "action": "BUY", "effect": "OPEN",
         "quantity": 10, "order_type": "LMT", "limit_price": 185.0, "tif": "DAY",
     }
     fake_now = [1000.0]
@@ -70,7 +70,7 @@ def test_stale_duplicate_after_window_is_not_deduped():
 def test_different_quantity_is_not_deduped():
     client = TestClient(_make_app())
     base = {
-        "broker": "ibkr_paper", "symbol": "AAPL", "action": "BUY",
+        "broker": "ibkr_paper", "symbol": "AAPL", "action": "BUY", "effect": "OPEN",
         "order_type": "LMT", "limit_price": 185.0, "tif": "DAY",
     }
     with patch("app.routers.broker.build_router_from_credentials",
@@ -83,7 +83,7 @@ def test_different_quantity_is_not_deduped():
 def test_failed_order_is_not_cached_and_can_be_retried():
     client = TestClient(_make_app())
     payload = {
-        "broker": "ibkr_paper", "symbol": "AAPL", "action": "BUY",
+        "broker": "ibkr_paper", "symbol": "AAPL", "action": "BUY", "effect": "OPEN",
         "quantity": 10, "order_type": "LMT", "limit_price": 185.0, "tif": "DAY",
     }
     with patch("app.routers.broker.build_router_from_credentials",
@@ -98,11 +98,30 @@ def test_failed_order_is_not_cached_and_can_be_retried():
     assert build.call_count == 1, "a failed attempt must not block a subsequent real retry"
 
 
+def test_different_effect_is_not_deduped():
+    """A SELL-to-CLOSE and a SELL-to-OPEN with otherwise-identical fields (same
+    symbol/quantity/order_type) must never collide in the dedup cache — closing
+    an existing position and immediately opening a new short both look
+    identical to a client retry unless `effect` is part of the key, which would
+    silently swallow the second, genuinely different order and return the
+    first order's cached result instead."""
+    client = TestClient(_make_app())
+    base = {
+        "broker": "ibkr_paper", "symbol": "AAPL", "action": "SELL",
+        "quantity": 10, "order_type": "MKT", "limit_price": None, "tif": "DAY",
+    }
+    with patch("app.routers.broker.build_router_from_credentials",
+               return_value=_mock_router("ORD1")) as build:
+        client.post("/broker/stock-order", json={**base, "effect": "CLOSE"})
+        client.post("/broker/stock-order", json={**base, "effect": "OPEN"})
+    assert build.call_count == 2, "OPEN and CLOSE orders must not be treated as duplicates"
+
+
 def test_option_order_dedup_uses_option_symbol_and_conid():
     client = TestClient(_make_app())
     payload_call = {
         "broker": "ibkr_paper", "symbol": "AAPL", "option_symbol": "AAPL260620C00185000",
-        "action": "BUY", "quantity": 1, "order_type": "LMT", "limit_price": 2.50,
+        "action": "BUY", "effect": "OPEN", "quantity": 1, "order_type": "LMT", "limit_price": 2.50,
         "tif": "DAY", "conid": 111,
     }
     payload_put = {**payload_call, "option_symbol": "AAPL260620P00185000", "conid": 222}

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+import time
 from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -11,6 +13,50 @@ from app.services.audit import log_event, new_rec_id
 router = APIRouter(prefix="/broker", tags=["broker"])
 
 BrokerKey = Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_paper"]
+
+# ── Idempotency guard ─────────────────────────────────────────────────────────
+# Single-process, in-memory dedup keyed on the order's own fields. This is a
+# local single-user tool talking to local paper-broker gateways — a client
+# retry-on-timeout within a couple of seconds is the realistic failure mode,
+# not distributed/concurrent clients. Window is intentionally short (~3s,
+# roughly a client HTTP timeout) so a user who deliberately resubmits the
+# same-shaped order seconds later (e.g. scaling into a position) is NOT
+# treated as a duplicate. No frontend change (no client-supplied
+# idempotency-key header) is required.
+_IDEMPOTENCY_WINDOW_SECONDS = 3.0
+_idempotency_lock = threading.Lock()
+_idempotency_cache: dict[tuple, tuple[float, dict]] = {}  # natural_key -> (ts, response)
+
+
+def _natural_order_key(kind: str, req: "StockOrderRequest | OptionOrderRequest") -> tuple:
+    """Composite key from the order's own fields — two requests with the same
+    key within the dedup window are treated as the same submission attempt."""
+    base = (
+        kind, req.broker, req.symbol, req.action, req.effect, req.quantity,
+        req.order_type, req.limit_price, req.tif,
+    )
+    if isinstance(req, OptionOrderRequest):
+        return base + (req.option_symbol, req.conid)
+    return base
+
+
+def _check_idempotency(key: tuple) -> dict | None:
+    """Return a cached response (tagged deduped=True) if this exact order was
+    submitted within the dedup window, else None. Never mutates the stored
+    copy so the original response's `deduped: False` stays accurate."""
+    now = time.monotonic()
+    with _idempotency_lock:
+        # Opportunistic cleanup of stale entries.
+        for k in [k for k, (ts, _) in _idempotency_cache.items()
+                  if now - ts > _IDEMPOTENCY_WINDOW_SECONDS]:
+            del _idempotency_cache[k]
+        hit = _idempotency_cache.get(key)
+        return {**hit[1], "deduped": True} if hit else None
+
+
+def _record_idempotency(key: tuple, response: dict) -> None:
+    with _idempotency_lock:
+        _idempotency_cache[key] = (time.monotonic(), response)
 
 
 class StockOrderRequest(BaseModel):
@@ -41,6 +87,14 @@ class OptionOrderRequest(BaseModel):
 async def place_stock_order(req: StockOrderRequest) -> dict:
     """Place a paper stock order on the specified broker."""
     rec_id = new_rec_id()
+    idem_key = _natural_order_key("stock", req)
+    cached = _check_idempotency(idem_key)
+    if cached is not None:
+        log_event("broker_order_deduped", rec_id, {
+            "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+            "note": "duplicate submission within dedup window — returning cached result",
+        })
+        return cached
     log_event("broker_order_attempt", rec_id, {
         "kind": "stock", "broker": req.broker, "symbol": req.symbol,
         "action": req.action, "quantity": req.quantity,
@@ -82,13 +136,23 @@ async def place_stock_order(req: StockOrderRequest) -> dict:
         "kind": "stock", "broker": result.broker, "symbol": req.symbol,
         "order_id": result.order_id, "status": result.status,
     })
-    return {"order_id": result.order_id, "status": result.status, "broker": result.broker}
+    response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
+    _record_idempotency(idem_key, response)
+    return response
 
 
 @router.post("/option-order")
 async def place_option_order(req: OptionOrderRequest) -> dict:
     """Place a paper options order on the specified broker."""
     rec_id = new_rec_id()
+    idem_key = _natural_order_key("option", req)
+    cached = _check_idempotency(idem_key)
+    if cached is not None:
+        log_event("broker_order_deduped", rec_id, {
+            "kind": "option", "broker": req.broker, "symbol": req.symbol,
+            "note": "duplicate submission within dedup window — returning cached result",
+        })
+        return cached
     log_event("broker_order_attempt", rec_id, {
         "kind": "option", "broker": req.broker, "symbol": req.symbol,
         "option_symbol": req.option_symbol, "action": req.action,
@@ -133,7 +197,9 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
         "kind": "option", "broker": result.broker, "symbol": req.symbol,
         "order_id": result.order_id, "status": result.status,
     })
-    return {"order_id": result.order_id, "status": result.status, "broker": result.broker}
+    response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
+    _record_idempotency(idem_key, response)
+    return response
 
 
 @router.get("/status")
