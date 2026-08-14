@@ -298,6 +298,10 @@ def _composite_need_suffix(td: dict) -> str:
     return f" ({'; '.join(parts)})" if parts else ''
 
 
+# The human-readable interval-label fix below shipped as d7237dc. An earlier
+# attempt (6fb722b) was added then reverted (bab1d21) on the now-deleted
+# wip/audited-fixes branch -- that history is a dead end, not a sign this
+# fix is missing or was undone.
 def _build_notification_text(
     entry: dict, rule_name: str | None = None,
     rule_logic: str | None = None, rule_threshold: int | None = None,
