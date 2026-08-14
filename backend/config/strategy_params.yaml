@@ -39,7 +39,12 @@ strategies:
         rr_target_mult: 2.0
         tolerance: 0.04
     search:
-      ema_period: [20, 50]
+      # 35 is included alongside the original [20, 50] grid because
+      # active.bearish.ema_period is deliberately hand-tuned to 35 — this
+      # widening lets the WFO optimizer validate that live value against the
+      # rest of the grid instead of it silently sitting outside search space.
+      # See PLAN_TIER1_RISK_SAFETY.md #3.
+      ema_period: [20, 35, 50]
       trend_ema: [100, 150, 200]
       atr_stop_mult: [1.0, 1.5, 2.0]
       rr_target_mult: [1.5, 2.0, 2.5, 3.0]

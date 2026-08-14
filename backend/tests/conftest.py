@@ -23,7 +23,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./dev.db")
 
 import asyncio
 from typing import AsyncGenerator
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 import pytest
 from fastapi import FastAPI, APIRouter
@@ -260,10 +260,10 @@ def client():
         return [c.model_dump(by_alias=False) for c in candles_for(symbol)]
 
     with (
-        patch("app.routers.contracts.fetch_option_chain",
-              return_value=_contract_dicts),
-        patch("app.routers.contracts.fetch_price",
-              return_value=190.0),
+        patch("app.routers.contracts.fetch_option_chain_async",
+              new_callable=AsyncMock, return_value=_contract_dicts),
+        patch("app.routers.contracts.fetch_price_async",
+              new_callable=AsyncMock, return_value=190.0),
         patch("app.routers.candles.fetch_candles",
               side_effect=_candles_for_symbol),
     ):

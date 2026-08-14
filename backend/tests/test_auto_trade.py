@@ -23,6 +23,33 @@ async def test_arm_accepts_tastytrade_paper_broker_key():
 
 
 @pytest.mark.asyncio
+async def test_arm_rejects_zero_quantity():
+    """Regression: ArmRequest.quantity had no lower-bound validation, unlike
+    broker.py's equivalent fields (Field(ge=1)) — a 0 or negative quantity
+    was accepted and would reach the broker. Must 422."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/auto-trade/arm", json={
+            "broker": "tastytrade_paper", "symbol": "AAPL", "option_symbol": "AAPL240119C00150000",
+            "action": "BUY", "quantity": 0, "order_type": "MKT",
+            "entry_premium": 3.50,
+        })
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_arm_rejects_negative_quantity():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/auto-trade/arm", json={
+            "broker": "tastytrade_paper", "symbol": "AAPL", "option_symbol": "AAPL240119C00150000",
+            "action": "BUY", "quantity": -1, "order_type": "MKT",
+            "entry_premium": 3.50,
+        })
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_arm_disarm_clears_armed_state():
     transport = ASGITransport(app=app)
     try:

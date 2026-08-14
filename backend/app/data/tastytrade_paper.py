@@ -12,10 +12,10 @@ is otherwise identical to IbkrPaperAdapter / AlpacaPaperAdapter — broker_route
 and every caller in this codebase expects a synchronous place_order(order).
 
 Only "tastytrade_paper" credentials are ever used here. "tastytrade_live" is
-prepared in the credential store and in broker_router.py's _LIVE_BROKERS
+prepared in the credential store and in broker_router.py's _KNOWN_LIVE_BROKERS
 block list, but no adapter reads tastytrade_live credentials for order
-placement anywhere in this codebase — mirrors the ibkr_live/alpaca_live
-pattern exactly.
+placement anywhere in this codebase — mirrors the ibkr_live/tradier_live/
+alpaca_live pattern exactly.
 """
 from __future__ import annotations
 

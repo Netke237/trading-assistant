@@ -1,7 +1,6 @@
 # backend/config/risk_rules.yaml
 
 portfolio:
-  max_single_trade_exposure_pct: 0.05
   max_total_exposure_pct: 0.25
   max_concurrent_positions: 10
   max_daily_recommendations: 5

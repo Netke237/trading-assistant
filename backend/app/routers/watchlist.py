@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -7,7 +8,7 @@ from app.database import get_db
 from app.models.watchlist import WatchlistSymbolModel
 from app.models.scan_session import ScanSession
 from app.schemas import WatchlistRow, ScanResult, ScoreBreakdown
-from app.data.market import fetch_price, fetch_company_name
+from app.data.market import fetch_price_async, fetch_company_name_async
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -41,40 +42,41 @@ async def get_watchlist(db: AsyncSession = Depends(get_db)) -> list[WatchlistRow
     _empty_bd = ScoreBreakdown(trend=0, pullback=0, trigger=0, event=0, volatility=0)
 
     rows: list[WatchlistRow] = []
-    for sym in symbols:
-        if sym in scan_lookup:
-            c = scan_lookup[sym]
-            rows.append(WatchlistRow(
-                symbol=c.symbol,
-                company=c.company,
-                price=c.price,
-                direction=c.direction,
-                horizon="Swing",
-                score=c.stockScore,
-                rankDelta=0,
-                scoreDelta=None,
-                status=c.status,
-                breakdown=c.stockBreakdown,
-                nextEventDays=c.nextEventDays,
-                nextEventLabel=c.nextEventLabel,
-            ))
-        else:
-            price = fetch_price(sym) or 0.0
-            company = fetch_company_name(sym) or sym
-            rows.append(WatchlistRow(
-                symbol=sym,
-                company=company,
-                price=price,
-                direction="Bullish",
-                horizon="Swing",
-                score=0,
-                rankDelta=0,
-                scoreDelta=None,
-                status="NO_DATA",
-                breakdown=_empty_bd,
-                nextEventDays=None,
-                nextEventLabel=None,
-            ))
+    async with httpx.AsyncClient(timeout=8) as client:
+        for sym in symbols:
+            if sym in scan_lookup:
+                c = scan_lookup[sym]
+                rows.append(WatchlistRow(
+                    symbol=c.symbol,
+                    company=c.company,
+                    price=c.price,
+                    direction=c.direction,
+                    horizon="Swing",
+                    score=c.stockScore,
+                    rankDelta=0,
+                    scoreDelta=None,
+                    status=c.status,
+                    breakdown=c.stockBreakdown,
+                    nextEventDays=c.nextEventDays,
+                    nextEventLabel=c.nextEventLabel,
+                ))
+            else:
+                price = await fetch_price_async(client, sym) or 0.0
+                company = await fetch_company_name_async(client, sym) or sym
+                rows.append(WatchlistRow(
+                    symbol=sym,
+                    company=company,
+                    price=price,
+                    direction="Bullish",
+                    horizon="Swing",
+                    score=0,
+                    rankDelta=0,
+                    scoreDelta=None,
+                    status="NO_DATA",
+                    breakdown=_empty_bd,
+                    nextEventDays=None,
+                    nextEventLabel=None,
+                ))
     return rows
 
 

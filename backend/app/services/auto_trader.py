@@ -219,7 +219,20 @@ class AutoTradeService:
         # Armed state is already cleared above; circuit breaker blocks permanently (no retry).
         with self._lock:
             _history_snapshot = list(self._state.history)
-        self._check_daily_loss(strategy, _history_snapshot, pv)
+        try:
+            self._check_daily_loss(strategy, _history_snapshot, pv)
+        except RuntimeError:
+            with self._lock:
+                self._state.history.append({
+                    "order_id":        None,
+                    "status":          "daily_loss_blocked",
+                    "broker":          strategy.broker,
+                    "symbol":          strategy.symbol,
+                    "option":          strategy.option_symbol,
+                    "timestamp":       datetime.now(timezone.utc).isoformat(),
+                    "premium_at_risk": 0.0,
+                })
+            raise
 
         try:
             result = execute_option_order(strategy)

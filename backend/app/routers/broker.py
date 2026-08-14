@@ -150,6 +150,7 @@ async def broker_status() -> dict:
         "alpaca_paper":     {"configured": alpaca_ok},
         "tastytrade_paper": {"configured": tastytrade_ok},
         "ibkr_live":        {"configured": False, "enabled": False, "note": "Locked — not yet activated"},
+        "tradier_live":     {"configured": False, "enabled": False, "note": "Locked — not yet activated"},
         "alpaca_live":      {"configured": False, "enabled": False, "note": "Locked — not yet activated"},
         "tastytrade_live":  {"configured": False, "enabled": False, "note": "Locked — not yet activated"},
     }
