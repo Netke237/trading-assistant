@@ -52,11 +52,11 @@ function mockLocalDayOffsetFromUtc(offsetDays: number): void {
  */
 function renderCalendarPageFresh(): void {
   jest.isolateModules(() => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const freshReact = require('react');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { render: freshRender } = require('@testing-library/react');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const CalendarPage = require('../page').default;
     freshRender(freshReact.createElement(CalendarPage));
   });
