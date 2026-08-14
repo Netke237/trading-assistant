@@ -17,7 +17,14 @@ import type { UpcomingEvent } from '@/types/domain';
 import type { Status } from '@/lib/status';
 import styles from './page.module.css';
 
-const TODAY = new Date();
+// Anchor TODAY to the user's *local* calendar day, expressed as UTC midnight, so every
+// downstream UTC-field consumer (isoForUTC, the grid's isToday check, the Today button, the
+// EventFlag day-delta) reflects "today" the way the user actually experiences it. Building this
+// straight from `new Date()` would extract UTC calendar fields from the live instant instead,
+// which is wrong after local evening hours whenever local time is behind UTC (e.g. US Eastern
+// after 8pm/7pm ET) — the UTC calendar date has already rolled to tomorrow.
+const _now = new Date();
+const TODAY = new Date(Date.UTC(_now.getFullYear(), _now.getMonth(), _now.getDate()));
 
 const WEEK_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 

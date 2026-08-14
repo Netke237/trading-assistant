@@ -38,6 +38,10 @@ jobs:
         run: |
           cd frontend
           npm ci
+      - name: Run typecheck
+        run: |
+          cd frontend
+          npm run typecheck
       - name: Run frontend tests
         run: |
           cd frontend

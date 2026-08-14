@@ -159,7 +159,11 @@ export default function DashboardPage() {
       )}
 
       {/* Regime banner */}
-      <section className={`${styles.regime} ${styles[`regime_${regime?.overall ?? 'PENDING'}`]}`}>
+      <section
+        role="region"
+        aria-label="Market regime"
+        className={`${styles.regime} ${styles[`regime_${regime?.overall ?? 'PENDING'}`]}`}
+      >
         <div className={styles.regimeLeft}>
           <StatusBadge status={regime?.overall ?? 'PENDING'} label={`REGIME ${regime?.overall ?? '…'}`} />
           <Text size={13} weight={500}>{regime?.headline ?? ''}</Text>

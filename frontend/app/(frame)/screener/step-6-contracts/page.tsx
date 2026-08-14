@@ -280,7 +280,10 @@ export default function Step6Page() {
                 </div>
 
                 {isOpen && (
-                  <div className={tbl.groupBody}>
+                  // role="table" marks this as the per-symbol contracts table for screen
+                  // readers and for any future e2e test that seeds scan data and asserts on it
+                  // via getByRole('table').
+                  <div role="table" className={tbl.groupBody}>
                     {/* Sticky sub-header per group so spread columns have labels */}
                     <div className={tbl.headerRow} style={{ gridTemplateColumns: COLUMNS, position: 'relative', top: 0 }}>
                       <span aria-hidden />
