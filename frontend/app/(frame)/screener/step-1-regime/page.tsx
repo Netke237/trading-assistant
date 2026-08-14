@@ -15,7 +15,7 @@
  *   7. Market news
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { toneForStatus } from '@/lib/status';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
@@ -77,8 +77,15 @@ export default function Step1RegimePage() {
   const [news, setNews]             = useState<NewsItem[]>([]);
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsError, setNewsError]   = useState(false);
+  // Distinct from `offline` (which also flips on sector/candle/news fetch
+  // failures): tracks specifically that the regime fetch itself failed, so
+  // combinedRegime is stuck at PENDING — StepNavBar blocks Next in that
+  // state, so the user needs a visible way to retry rather than being
+  // silently stuck forever (see H5).
+  const [regimeFetchFailed, setRegimeFetchFailed] = useState(false);
 
-  useEffect(() => {
+  const fetchRegime = useCallback(() => {
+    setRegimeFetchFailed(false);
     // Always fetch with 'intraday' so the HMM is always computed —
     // the regime step is visited before horizon selection (step 3).
     api.getRegime('intraday', { lookback: markov.lookback, threshold: markov.threshold, smoothing: markov.smoothing }).then((r) => {
@@ -88,7 +95,14 @@ export default function Step1RegimePage() {
       const direction = useScanStore.getState().context?.direction ?? 'Bullish';
       const descriptor = descriptorFromState(r.omm?.state ?? '');
       setCombinedRegime(alignmentVerdict(direction, descriptor));
-    }).catch(() => setOffline(true));
+    }).catch(() => {
+      setOffline(true);
+      setRegimeFetchFailed(true);
+    });
+  }, [setRegime, setRegimeDirection, setCombinedRegime, markov]);
+
+  useEffect(() => {
+    fetchRegime();
 
     api.getSectors().then(setSectors).catch(() => setOffline(true));
     api.getCandles('SPY').then(setSpxCandles).catch(() => setOffline(true));
@@ -98,7 +112,7 @@ export default function Step1RegimePage() {
     const symbols = candidates.length > 0 ? candidates : ['SPY', 'QQQ', 'VIX', 'DIA'];
     setNewsLoading(true);
     api.getNews(symbols).then(setNews).catch(() => setNewsError(true)).finally(() => setNewsLoading(false));
-  }, [setRegime, setRegimeDirection, setCombinedRegime, markov]);
+  }, [fetchRegime]);
 
   const spx = lastClose(spxCandles);
   const ndx = lastClose(ndxCandles);
@@ -141,6 +155,17 @@ export default function Step1RegimePage() {
 
       {offline && (
         <Text size={13} tone="dim">Backend not running — start it (uvicorn app.main:app --port 8000) to load live data.</Text>
+      )}
+
+      {regimeFetchFailed && (
+        <div className={pageStyles.regimeRetryBanner}>
+          <Text size={13} tone="reject">
+            Regime check failed — Next is blocked until it loads.
+          </Text>
+          <button type="button" className={pageStyles.regimeRetryBtn} onClick={fetchRegime}>
+            <Text size={12} weight={500}>Retry</Text>
+          </button>
+        </div>
       )}
 
       {/* 1. Overall banner */}

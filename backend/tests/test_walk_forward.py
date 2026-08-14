@@ -1,6 +1,25 @@
 """Tests for walk-forward optimization fold construction."""
-from datetime import date
+from datetime import date, timedelta
 from app.services.walk_forward import build_folds, param_combos, apply_costs, consensus, precompute_bar_dates
+
+
+def _synth_bars_for_walk_forward(n=400, start=date(2020, 1, 1), trend=True):
+    """Daily bars with real sequential dates (unlike test_strategy_backtest.py's
+    _synth_bars, whose 'time' field cycles within a single fixed month and is
+    unsuitable for fold-based date-range slicing here)."""
+    bars, price, d = [], 50.0, start
+    for i in range(n):
+        if trend:
+            price = price * 1.002 + (0.5 if i % 10 == 0 else -0.2)
+        else:
+            price = 50.0 + (i % 7 - 3) * 0.1
+        bars.append({
+            "time": d.isoformat(),
+            "open": price * 0.998, "high": price * 1.01,
+            "low":  price * 0.99,  "close": price, "volume": 1000 + i,
+        })
+        d += timedelta(days=1)
+    return bars
 
 
 def test_rolling_folds_step_by_test_months():
@@ -228,7 +247,7 @@ def test_train_fold_finds_a_winner_on_real_sub_gate_trade_counts():
         "atr_stop_mult": [1.0, 1.5, 2.0], "rr_target_mult": [1.5, 2.0, 2.5, 3.0],
         "tolerance": [0.02, 0.04, 0.06, 0.08],
     }
-    winner = train_fold(
+    winner, _ = train_fold(
         "pullback_ema", "Bullish", basket_bars, fold, search_space,
         {"fee_pct": 0.001, "slippage_pct": 0.001},
     )
@@ -261,7 +280,7 @@ def test_train_fold_breaks_sharpe_tie_toward_grid_center(monkeypatch):
         b["_date"] = date.fromisoformat(b["time"])
     fold = Fold(date(2020, 1, 1), date(2021, 1, 1), date(2021, 1, 1), date(2021, 4, 1))
 
-    winner = train_fold(
+    winner, _ = train_fold(
         "pullback_ema", "bullish", {"SYM": bars}, fold,
         {"ema_period": [10, 20, 30, 40, 50]}, {"fee_pct": 0.001, "slippage_pct": 0.001},
     )
@@ -293,8 +312,82 @@ def test_train_fold_lets_a_clear_edge_winner_through(monkeypatch):
         b["_date"] = date.fromisoformat(b["time"])
     fold = Fold(date(2020, 1, 1), date(2021, 1, 1), date(2021, 1, 1), date(2021, 4, 1))
 
-    winner = train_fold(
+    winner, _ = train_fold(
         "pullback_ema", "bullish", {"SYM": bars}, fold,
         {"ema_period": [10, 20, 30, 40, 50]}, {"fee_pct": 0.001, "slippage_pct": 0.001},
     )
     assert winner == {"ema_period": 10}
+
+
+def test_train_fold_returns_params_and_results_tuple(monkeypatch):
+    """train_fold must return (winning_params, {symbol: BacktestResult}) so callers
+    can reuse the winning combo's backtest instead of re-running it (M11).
+
+    Uses a stubbed run_strategy_backtest rather than organically-generated
+    synthetic bars: the real strategy engines don't reliably fire trades
+    against simple noise-based synthetic series (verified directly — none of
+    the 4 core strategies produce a single trade over 400 bars of this
+    generator), so this test isolates train_fold's own selection/stashing
+    logic instead of depending on strategy_engine's entry conditions.
+    """
+    import app.services.walk_forward as wf_module
+    from app.services.walk_forward import train_fold, Fold
+    from app.services.strategy_backtest import BacktestResult
+
+    def fake_backtest(bars, *, strategy, direction, params=None, min_trades=10, min_win_rate=0.0):
+        return BacktestResult(
+            strategy=strategy, direction=direction, n_trades=15, win_rate=0.6,
+            total_return_pct=10.0, max_drawdown_pct=-5.0, expectancy=0.4,
+            sharpe=1.0, confidence=70, passes_gate=True, summary_text="ok",
+        )
+
+    monkeypatch.setattr(wf_module, "run_strategy_backtest", fake_backtest)
+
+    bars = _synth_bars_for_walk_forward(400, trend=True)
+    basket_bars = {"AAPL": bars}
+    fold = Fold(
+        train_start=date(2020, 1, 1), train_end=date(2020, 7, 1),
+        test_start=date(2020, 7, 1), test_end=date(2020, 10, 1),
+    )
+    search_space = {"ema_period": [20, 50]}
+    result = train_fold("pullback_ema", "Bullish", basket_bars, fold, search_space, costs={})
+    assert isinstance(result, tuple) and len(result) == 2
+    winner, winner_results = result
+    assert isinstance(winner, dict)
+    assert isinstance(winner_results, dict)
+    for sym, res in winner_results.items():
+        assert hasattr(res, "total_return_pct")
+        assert hasattr(res, "n_trades")
+
+
+def test_train_fold_picks_highest_sharpe_and_stashes_its_result(monkeypatch):
+    """train_fold must select the combo with the highest pooled Sharpe and stash
+    THAT combo's own BacktestResult per symbol — not e.g. the last combo tried
+    or a freshly re-run backtest (proves no double-run drift was introduced by
+    the M11 refactor: winner_results must reflect the actual winning combo)."""
+    import app.services.walk_forward as wf_module
+    from app.services.walk_forward import train_fold, Fold
+
+    def fake_backtest(bars, *, strategy, direction, params=None, min_trades=10, min_win_rate=0.0):
+        from app.services.strategy_backtest import BacktestResult
+        ema = (params or {}).get("ema_period", 50)
+        sharpe = 1.5 if ema == 20 else 0.3  # ema_period=20 is the clear winner
+        return BacktestResult(
+            strategy=strategy, direction=direction, n_trades=15, win_rate=0.6,
+            total_return_pct=10.0, max_drawdown_pct=-5.0, expectancy=0.4,
+            sharpe=sharpe, confidence=70, passes_gate=True, summary_text="ok",
+        )
+
+    monkeypatch.setattr(wf_module, "run_strategy_backtest", fake_backtest)
+
+    bars = _synth_bars_for_walk_forward(400, trend=True)
+    basket_bars = {"AAPL": bars}
+    fold = Fold(
+        train_start=date(2020, 1, 1), train_end=date(2020, 7, 1),
+        test_start=date(2020, 7, 1), test_end=date(2020, 10, 1),
+    )
+    search_space = {"ema_period": [20, 50]}
+    winner, winner_results = train_fold("pullback_ema", "Bullish", basket_bars, fold, search_space, costs={})
+
+    assert winner == {"ema_period": 20}
+    assert winner_results["AAPL"].sharpe == 1.5

@@ -63,6 +63,12 @@ def test_fire_executes_and_disarms(mocker):
     result = svc.fire()
     assert result.order_id == "999"
     mock_execute.assert_called_once()
+    forwarded = mock_execute.call_args.args[0]
+    assert forwarded.symbol == "AAPL"
+    assert forwarded.option_symbol == "AAPL260620C00185000"
+    assert forwarded.action == "BUY"
+    assert forwarded.quantity == 1
+    assert forwarded.limit_price == 2.50
     assert svc.get_state().armed is False
     assert len(svc.get_state().history) == 1
 
@@ -128,6 +134,10 @@ def test_fire_passes_when_within_cap(mocker):
     result = svc.fire(portfolio_snapshot=[])
     assert result.order_id == "ok"
     mock_execute.assert_called_once()
+    forwarded = mock_execute.call_args.args[0]
+    assert forwarded.symbol == "AAPL"
+    assert forwarded.quantity == 1
+    assert forwarded.limit_price == 2.50
 
 
 def test_fire_no_snapshot_skips_check(mocker):

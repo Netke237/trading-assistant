@@ -63,15 +63,15 @@ def test_bs_fallback_put_above_strike():
     zero price movement), the BS reprice happens at dte_at_target (half of
     expiry_years) -- a shorter time-to-expiry than the current quote's -- so
     even zero movement shows time decay: exit=0.4565739681, which is BELOW
-    current_premium(1.00) -> reward=-0.543426 <= 0 -> rr_ratio=0.0 via the
-    early-return guard (same final ratio as before this fix, reached for a
-    different, more honest reason). Verified directly against the real
+    current_premium(1.00) -> reward=-0.543426. risk=1.00*0.60=0.60 ->
+    rr=-0.543426/0.60=-0.91 (M2: negative reward's sign/magnitude is
+    preserved, not flattened to 0.0). Verified directly against the real
     bs_iv/bs_price."""
     rr = estimate_rr(
         stock_price=185, target_price=185, invalidation_price=195,
         strike=180, expiry_years=30/365, current_premium=1.00, is_call=False,
     )
-    assert rr.rr_ratio == 0.0
+    assert rr.rr_ratio == -0.91
     assert rr.estimated_exit_premium == 0.46
 
 
@@ -119,14 +119,15 @@ def test_bs_reprice_or_delta_approx_falls_back_to_crude_guess_when_bs_price_unus
 def test_zero_price_movement_returns_zero_ratio():
     """target == stock_price (185). The BS-fallback reprice at
     dte_at_target (half of expiry_years) is time-decayed below
-    current_premium (exit=1.2685575930 < 2.50) -> reward=-1.231442 <= 0 ->
-    rr_ratio=0.0 via the early-return guard. Verified directly against the
-    real bs_iv/bs_price."""
+    current_premium (exit=1.2685575930 < 2.50) -> reward=-1.231442.
+    risk=2.50*0.60=1.50 -> rr=-1.231442/1.50=-0.82 (M2: negative reward's
+    sign/magnitude is preserved, not flattened to 0.0). Verified directly
+    against the real bs_iv/bs_price."""
     rr = estimate_rr(
         stock_price=185, target_price=185, invalidation_price=175,
         strike=190, expiry_years=30/365, current_premium=2.50, is_call=True,
     )
-    assert rr.rr_ratio == 0.0
+    assert rr.rr_ratio == -0.82
     assert rr.estimated_exit_premium == 1.27
 
 
@@ -217,34 +218,35 @@ def test_estimate_rr_uses_premium_stop_pct():
 
 
 def test_estimate_exit_premium_rounded_on_zero_reward():
-    """The early-return (zero-reward) path must round estimated_exit_premium
-    to 2 decimals, matching the success path.
+    """estimated_exit_premium must round to 2 decimals even when reward is
+    negative (M2: the reward<=0 early-return was removed, so this now flows
+    through the normal division path -- but both paths always round
+    estimated_exit_premium, so this still exercises that rounding).
 
     NOTE: this can no longer use a deep-ITM fixture (the old
-    stock=100/strike=90/premium=2.567 combo) to force the early-return path.
+    stock=100/strike=90/premium=2.567 combo) to force a negative reward.
     That premium is below the option's intrinsic value at those inputs (an
     economically impossible/arbitrage quote), so bs_iv cannot converge to
     ANY volatility that reproduces it -- it correctly falls back to
     sigma_fallback(0.25), which reprices well ABOVE the premium
-    (exit=10.21), giving a POSITIVE reward and skipping the early-return
-    path entirely -- defeating the point of this test. Using an OTM,
-    zero-movement fixture instead (target==stock, strike above both)
-    reliably produces a real, convergent, time-decayed reprice below
-    current_premium, still exercising the early-return path -- and the
-    resulting decayed exit_premium already has enough decimal digits
+    (exit=10.21), giving a POSITIVE reward -- defeating the point of this
+    test. Using an OTM, zero-movement fixture instead (target==stock, strike
+    above both) reliably produces a real, convergent, time-decayed reprice
+    below current_premium, still exercising a negative-reward result -- and
+    the resulting decayed exit_premium already has enough decimal digits
     (1.3112629983) to exercise the 2-decimal rounding on its own, without
     needing an artificially over-precise current_premium input.
 
     sigma derived from bs_iv(2.567, 185, 190, 30/365, 0.05, True) = 0.203581
     (converges). exit = bs_price(185, 190, 15/365, 0.05, 0.203581, True) =
-    1.3112629983 -> 1.31, below current_premium(2.567) -> reward=-1.255737
-    <= 0 -> early return. Verified directly against the real
-    bs_iv/bs_price."""
+    1.3112629983 -> 1.31, below current_premium(2.567) -> reward=-1.255737,
+    risk=2.567*0.60=1.5402 -> rr=-1.255737/1.5402=-0.82. Verified directly
+    against the real bs_iv/bs_price."""
     rr = estimate_rr(
         stock_price=185.0, target_price=185.0, invalidation_price=175.0,
         strike=190.0, expiry_years=30 / 365, current_premium=2.567, is_call=True,
     )
-    assert rr.rr_ratio == 0.0
+    assert rr.rr_ratio == -0.82
     assert rr.estimated_exit_premium == 1.31
 
 
@@ -789,3 +791,58 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
     # display-consistency check against the ladder's actual displayed price.
     assert targets[2].pricingMethod == "Heston repriced"
     assert targets[2].estimatedOptionPrice == 15.9
+
+
+# ── M2: negative reward must preserve sign/magnitude, not clamp to 0.0 ───────
+
+def test_negative_reward_preserves_sign_deterministic():
+    """Deterministic: monkeypatch heston_price to force reward < 0. A repriced exit
+    premium below current premium (e.g. IV crush outweighing the directional move)
+    must produce a negative rr_ratio proportional to the loss, not a flattened 0.0."""
+    import unittest.mock as mock
+    from app.scoring.reward_risk import estimate_rr
+
+    params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+    with mock.patch("app.scoring.reward_risk.heston_price", return_value=3.00):
+        rr = estimate_rr(
+            stock_price=100.0, target_price=105.0, invalidation_price=95.0,
+            strike=100.0, expiry_years=0.25, current_premium=5.00, is_call=True,
+            heston_params=params, premium_stop_pct=0.60,
+        )
+    # exit=3.00, reward=-2.00, risk=5.00*0.60=3.00, rr=-0.67
+    assert rr.rr_ratio == -0.67
+    assert rr.estimated_exit_premium == 3.00
+
+
+def test_risk_zero_still_clamps_to_zero_not_negative():
+    """risk<=0 (e.g. premium_stop_pct=0) must still clamp to 0.0 — only the reward<=0
+    path changed (removed), not the risk<=0 path."""
+    from app.scoring.reward_risk import estimate_rr
+    rr = estimate_rr(
+        stock_price=100.0, target_price=90.0, invalidation_price=110.0,
+        strike=100.0, expiry_years=0.25, current_premium=2.00, is_call=True,
+        premium_stop_pct=0.0,
+    )
+    assert rr.rr_ratio == 0.0
+
+
+def test_estimate_targets_preserves_negative_rr_contribution():
+    """Sibling fix to M2: estimate_targets' rrContribution must not flatten a
+    negative-reward target level to 0.0 — same fix as estimate_rr, same file."""
+    import unittest.mock as mock
+    from app.scoring.reward_risk import estimate_targets
+
+    with mock.patch("app.scoring.reward_risk.heston_price", return_value=3.00):
+        results = estimate_targets(
+            stock_price=100.0, base_target_price=105.0,
+            strike=100.0, expiry_years=0.25, current_premium=5.00, is_call=True,
+            heston_params=HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7),
+            premium_stop_pct=0.60,
+        )
+    # opt_price stubbed to 3.00 for every target level via heston_price mock;
+    # reward = 3.00 - 5.00 = -2.00, risk_basis = 5.00*0.60 = 3.00, rr = -0.67
+    for level in results:
+        assert level.rrContribution == -0.67, (
+            f"expected -0.67 (real negative ratio), got {level.rrContribution} — "
+            "rrContribution must not clamp negative reward to 0.0"
+        )

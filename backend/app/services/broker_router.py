@@ -1,12 +1,7 @@
 from __future__ import annotations
 
 from app.data.ibkr_paper import BrokerOrder, OrderResult
-
-# Every recognized live broker key, whether or not an adapter exists for it yet — this
-# way a newly-added live adapter (e.g. TradierLiveAdapter) is blocked automatically by
-# already being in this set, rather than requiring someone to remember to add its key
-# here separately. Blocked until manually enabled in a future release.
-_KNOWN_LIVE_BROKERS = {"ibkr_live", "tradier_live", "alpaca_live", "tastytrade_live"}
+from app.services.credential_store import LIVE_BROKER_KEYS as _LIVE_BROKERS  # single source of truth
 
 
 class BrokerRouter:
@@ -21,7 +16,7 @@ class BrokerRouter:
         self._adapters = adapters
 
     def execute(self, broker_key: str, order: BrokerOrder) -> OrderResult:
-        if broker_key in _KNOWN_LIVE_BROKERS:
+        if broker_key in _LIVE_BROKERS:
             raise ValueError(
                 f"live trading via '{broker_key}' is not yet activated. "
                 "Enable it explicitly before use."

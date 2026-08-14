@@ -30,6 +30,9 @@ export function StepNavBar() {
 
   const prev = steps[current - 2];
   const next = steps[current];
+  // Step 1's regime fetch is async; block Next until it resolves so a fast
+  // click can't slip past the REJECT confirmation while regime is still PENDING.
+  const regimePending = current === 1 && regime === 'PENDING';
 
   const goPrev = useCallback(() => {
     if (prev) router.push(`/screener/${prev.slug}`);
@@ -40,12 +43,13 @@ export function StepNavBar() {
   }, [next, router]);
 
   const handleNext = useCallback(() => {
+    if (regimePending) return;
     if (current === 1 && regime === 'REJECT') {
       setShowConfirm(true);
     } else {
       goNext();
     }
-  }, [current, regime, goNext]);
+  }, [current, regime, regimePending, goNext]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -118,7 +122,8 @@ export function StepNavBar() {
           type="button"
           className={`${styles.btn} ${styles.btnPrimary}`}
           onClick={handleNext}
-          disabled={!next}
+          disabled={!next || regimePending}
+          title={regimePending ? 'Waiting for market regime to load…' : undefined}
         >
           <Text size={13} weight={500}>{next ? `Next: ${next.label}` : 'Done'}</Text>
           <span aria-hidden="true">→</span>

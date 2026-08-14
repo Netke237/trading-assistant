@@ -294,3 +294,85 @@ def test_stock_scan_bearish_direction_threads_to_signal(stock_client):
     assert sig["entry_price"] > sig["target_price"], (
         f"Bearish entry must be above target: entry={sig['entry_price']} target={sig['target_price']}"
     )
+
+
+# ── Volume contraction gate: rejection path at router level (T3) ──────────────
+
+def _uptrend_bars_high_volume_pullback(n_trend: int = 150, n_flat: int = 30) -> list[dict]:
+    """Bullish pullback_ema setup where every gate passes EXCEPT volume contraction:
+    the last 3 complete bars carry volume >= 90% of the 20-bar average, which
+    strategy_engine.pullback_ema_signal's contraction gate must reject.
+    """
+    from app.services.strategy_engine import _ema as _ema_fn
+
+    bars = []
+    price = 100.0
+    base_vol = 1_000_000
+    for _ in range(n_trend):
+        price += 0.5
+        bars.append({"open": price - 0.1, "high": price + 0.3,
+                     "low": price - 0.3, "close": price, "volume": base_vol})
+    flat_price = price
+    for _ in range(n_flat):
+        bars.append({"open": flat_price - 0.1, "high": flat_price + 0.3,
+                     "low": flat_price - 0.3, "close": flat_price, "volume": base_vol})
+
+    closes = [b["close"] for b in bars]
+    ema_val = _ema_fn(closes, 50)[-1]
+    target = ema_val * 1.02  # 2% above 50-EMA — inside the 4% default tolerance
+
+    # Last 4 bars: volume stays at 100% of base (NOT contracting) — this is the
+    # only thing distinguishing this fixture from a firing pullback_ema signal.
+    for j in range(-4, 0):
+        bars[j]["volume"] = base_vol
+    bars[-1] = {"open": target - 0.1, "high": target + 0.2,
+                "low": target - 0.2, "close": target + 0.05, "volume": base_vol}
+
+    for i, b in enumerate(bars):
+        b["time"] = f"2024-{(i // 28 % 12) + 1:02d}-{(i % 28) + 1:02d}"
+    return bars
+
+
+def test_stock_scan_rejects_symbol_with_non_contracting_volume_pullback(stock_client):
+    """T3: a symbol whose pullback_ema setup passes every gate except volume
+    contraction must be rejected end-to-end (not silently dropped or mis-scored) —
+    only the pass-path was previously exercised at the router/integration level
+    (test_stock_scan_bearish_direction_threads_to_signal uses low-volume bars)."""
+    from app.scoring.stock_scorer import StockScoreCard
+
+    bars = _uptrend_bars_high_volume_pullback()
+
+    def _pass_card_bullish(symbol: str = "AAPL"):
+        return StockScoreCard(
+            symbol=symbol, direction="Bullish", horizon="Swing",
+            score=72, status="PASS", rules=[],
+        )
+
+    with (
+        patch("app.data.universe_presets.expand_universe", return_value=["AAPL"]),
+        patch("app.routers.stock_scan.fetch_quotes", return_value={}),
+        patch("app.routers.stock_scan.get_historical_bars", AsyncMock(return_value=bars)),
+        patch("app.routers.stock_scan.score_stock", return_value=_pass_card_bullish()),
+        patch("app.routers.stock_scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
+        patch("app.routers.stock_scan.fetch_price_async", AsyncMock(return_value=bars[-1]["close"])),
+        patch("app.routers.stock_scan.get_cached", return_value={"confidence": 70, "sample_size": 50}),
+    ):
+        r = stock_client.post("/api/stock-scan", json={
+            "universe": ["SP500"],
+            "symbols": ["AAPL"],
+            "direction": "Bullish",
+            "horizon": "Swing",
+            "strategy": "pullback_ema",
+        })
+
+    assert r.status_code == 200, r.text
+    data = r.json()
+    candidate_symbols = {c["symbol"] for c in data["candidates"]}
+    assert "AAPL" not in candidate_symbols, (
+        "Symbol with non-contracting volume must not surface as a candidate"
+    )
+    rejected_entry = next((x for x in data["rejected"] if x["symbol"] == "AAPL"), None)
+    assert rejected_entry is not None, "Symbol must appear in rejected"
+    assert rejected_entry["reason"] == "no pullback_ema setup", (
+        f"Expected volume-gate rejection reason, got: {rejected_entry['reason']}"
+    )

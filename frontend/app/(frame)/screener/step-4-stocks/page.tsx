@@ -8,6 +8,7 @@ import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useShallow } from 'zustand/shallow';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
+import { MeanReversionConfirmPanel } from '@/components/molecules/MeanReversionConfirmPanel';
 import { runStockScan } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { Tooltip } from '@/components/atoms/Tooltip';
@@ -42,6 +43,7 @@ const STRATEGIES_BULLISH = [
   { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Oversold in uptrend',    entry: 'RSI < 30 while above 200-SMA',                            stop: 'Below recent swing low', exit: 'RSI returns to mid / take-profit target' },
   { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches lower Bollinger Band + reversal signal',     stop: 'Below lower band',       exit: 'Return to mid-band / upper band' },
   { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% below VWAP + reversal bar',           stop: '0.5 ATR below entry',    exit: '2× risk above VWAP' },
+  { key: 'mean_reversion_multi',  label: 'Mean Reversion Multi-Signal', when: 'High-conviction oversold entries', entry: 'RSI + BB + VWAP daily all confirm simultaneously', stop: 'Below recent swing low', exit: 'Return to mid-band / take-profit target' },
 ];
 
 const STRATEGIES_BEARISH = [
@@ -51,6 +53,7 @@ const STRATEGIES_BEARISH = [
   { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Overbought in downtrend', entry: 'RSI > 70 while below 200-SMA',                           stop: 'Above recent swing high', exit: 'RSI returns to mid / take-profit target' },
   { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches upper Bollinger Band + reversal signal',     stop: 'Above upper band',       exit: 'Return to mid-band / lower band' },
   { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% above VWAP + reversal bar',           stop: '0.5 ATR above entry',    exit: '2× risk below VWAP' },
+  { key: 'mean_reversion_multi',  label: 'Mean Reversion Multi-Signal', when: 'High-conviction overbought entries', entry: 'RSI + BB + VWAP daily all confirm simultaneously', stop: 'Above recent swing high', exit: 'Return to mid-band / take-profit target' },
 ];
 
 type RegimeFit = 'PASS' | 'CAUTION' | 'REJECT';
@@ -61,6 +64,7 @@ const REGIME_FIT: Record<string, Partial<Record<string, RegimeFit>>> = {
   mean_reversion_rsi:   { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
   mean_reversion_bb:    { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
   mean_reversion_vwap:  { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
+  mean_reversion_multi: { PASS: 'CAUTION', CAUTION: 'PASS',    REJECT: 'CAUTION' },
 };
 const REGIME_BADGE: Record<RegimeFit, { label: string }> = {
   PASS:    { label: 'Recommended' },
@@ -96,6 +100,15 @@ export default function Step4StocksPage() {
   })));
   const scanOverrides   = useScanStore((s) => s.scanOverrides);
   const requireReversal = (scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
+
+  const meanReversionVariants      = useScanParamsStore((s) => s.meanReversionVariants);
+  const meanReversionMinConfirm    = useScanParamsStore((s) => s.meanReversionMinConfirm);
+  const vwapLookback                = useScanParamsStore((s) => s.vwapLookback);
+  const vwapDeviationPct            = useScanParamsStore((s) => s.vwapDeviationPct);
+  const setMeanReversionVariants    = useScanParamsStore((s) => s.setMeanReversionVariants);
+  const setMeanReversionMinConfirm  = useScanParamsStore((s) => s.setMeanReversionMinConfirm);
+  const setVwapLookback             = useScanParamsStore((s) => s.setVwapLookback);
+  const setVwapDeviationPct         = useScanParamsStore((s) => s.setVwapDeviationPct);
 
   const stockBasket  = useScanStore((s) => s.stockBasket);
   const stockScanAt  = useScanStore((s) => s.stockScanAt);
@@ -235,13 +248,34 @@ export default function Step4StocksPage() {
         onReset={() => setParams({ ...savedParams })}
       />
 
+      {selected === 'mean_reversion_multi' && (
+        <MeanReversionConfirmPanel
+          variants={meanReversionVariants}
+          minConfirmations={meanReversionMinConfirm}
+          vwapLookback={vwapLookback}
+          vwapDeviationPct={vwapDeviationPct}
+          onChange={(update) => {
+            if (update.variants !== undefined)         setMeanReversionVariants(update.variants);
+            if (update.minConfirmations !== undefined) setMeanReversionMinConfirm(update.minConfirmations);
+            if (update.vwapLookback !== undefined)     setVwapLookback(update.vwapLookback);
+            if (update.vwapDeviationPct !== undefined) setVwapDeviationPct(update.vwapDeviationPct);
+          }}
+        />
+      )}
+
       <div className={styles.runRow}>
         <button
           type="button"
           className={styles.runBtn}
           onClick={onRun}
-          disabled={!selected || scanning}
-          title={!selected ? 'Select a strategy first' : undefined}
+          disabled={!selected || scanning || (selected === 'mean_reversion_multi' && meanReversionVariants.length === 0)}
+          title={
+            !selected
+              ? 'Select a strategy first'
+              : selected === 'mean_reversion_multi' && meanReversionVariants.length === 0
+              ? 'Select at least one confirmation signal'
+              : undefined
+          }
         >
           {scanning ? 'Running backtest scan…' : 'Run Stock Scan'}
         </button>

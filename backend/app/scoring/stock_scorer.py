@@ -55,7 +55,7 @@ def _horizon_cfg(horizon: Horizon) -> dict:
 
 
 def _thresholds() -> dict:
-    return _load_config()["score_thresholds"]
+    return _load_config()["stock_score_thresholds"]
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +93,20 @@ def _slope(series: list[float], lookback: int = 5) -> float:
     return num / den if den else 0.0
 
 
+def _wilder_smooth(data: list[float], period: int) -> list[float]:
+    """Wilder's smoothing (running average form) — shared by _adx and _rsi.
+    Returns a series of running averages, seeded by the simple average of the
+    first `period` values."""
+    if len(data) < period:
+        return []
+    avg = sum(data[:period]) / period
+    result = [avg]
+    for v in data[period:]:
+        avg = (avg * (period - 1) + v) / period
+        result.append(avg)
+    return result
+
+
 def _adx(bars: list[dict] | None, period: int = 14) -> float:
     """Average Directional Index using Wilder smoothing. Returns 0.0 if insufficient data."""
     if bars is None or len(bars) < period + 1:
@@ -112,17 +126,9 @@ def _adx(bars: list[dict] | None, period: int = 14) -> float:
         plus_dm.append(up_move if up_move > down_move and up_move > 0 else 0.0)
         minus_dm.append(down_move if down_move > up_move and down_move > 0 else 0.0)
 
-    def _wilder(data: list[float], p: int) -> list[float]:
-        if len(data) < p:
-            return []
-        result = [sum(data[:p])]
-        for v in data[p:]:
-            result.append(result[-1] - result[-1] / p + v)
-        return result
-
-    atr_s = _wilder(tr_list, period)
-    pdm_s = _wilder(plus_dm, period)
-    mdm_s = _wilder(minus_dm, period)
+    atr_s = _wilder_smooth(tr_list, period)
+    pdm_s = _wilder_smooth(plus_dm, period)
+    mdm_s = _wilder_smooth(minus_dm, period)
     n = min(len(atr_s), len(pdm_s), len(mdm_s))
     if n == 0:
         return 0.0
@@ -137,8 +143,19 @@ def _adx(bars: list[dict] | None, period: int = 14) -> float:
         di_sum = di_plus + di_minus
         dx_vals.append(100.0 * abs(di_plus - di_minus) / di_sum if di_sum > 0 else 0.0)
 
-    adx_s = _wilder(dx_vals, period)
+    adx_s = _wilder_smooth(dx_vals, period)
     return adx_s[-1] if adx_s else 0.0
+
+
+def _relative_volume(volumes: list[float], lookback: int) -> float | None:
+    """Ratio of the latest bar's volume to the mean of the preceding `lookback` bars.
+    Returns None if there isn't enough history."""
+    if len(volumes) < lookback + 1:
+        return None
+    avg_vol = sum(volumes[-lookback - 1: -1]) / lookback
+    if avg_vol <= 0:
+        return None
+    return volumes[-1] / avg_vol
 
 
 def _roc(closes: list[float], period: int) -> float:
@@ -288,9 +305,11 @@ def _trend_additive(
         "current_ma": round(current_ma, 2),
     }
 
-    if score >= 70:
+    status_pass = float(ac.get("status_pass", 70))
+    status_caution = float(ac.get("status_caution", 40))
+    if score >= status_pass:
         status: Status = "PASS"
-    elif score >= 40:
+    elif score >= status_caution:
         status = "CAUTION"
     else:
         status = "REJECT"
@@ -536,12 +555,10 @@ def _rsi(closes: list[float], period: int = 14) -> list[float]:
         d = closes[i] - closes[i - 1]
         gains.append(max(d, 0))
         losses.append(max(-d, 0))
-    avg_g = sum(gains[:period]) / period
-    avg_l = sum(losses[:period]) / period
+    avg_g_series = _wilder_smooth(gains, period)
+    avg_l_series = _wilder_smooth(losses, period)
     rsi_vals = []
-    for i in range(period, len(gains)):
-        avg_g = (avg_g * (period - 1) + gains[i]) / period
-        avg_l = (avg_l * (period - 1) + losses[i]) / period
+    for avg_g, avg_l in zip(avg_g_series, avg_l_series):
         rs = avg_g / avg_l if avg_l > 0 else 100.0
         rsi_vals.append(100 - 100 / (1 + rs))
     return rsi_vals
@@ -665,7 +682,8 @@ def _rule_trigger(
     hist = _macd_histogram(closes, tc["macd_fast"], tc["macd_slow"], tc["macd_signal"])
     if direction == "Bearish":
         # Histogram crosses DOWN: was positive, now zero/negative
-        macd_pass = len(hist) >= 2 and hist[-2] > 0 and hist[-1] <= 0
+        macd_pass = (len(hist) >= 2 and hist[-2] > 0 and hist[-1] <= 0 and
+                     (hist[-1] < hist[-2] if tc["macd_histogram_rising"] else True))
     else:
         macd_pass = (len(hist) >= 2 and hist[-2] < 0 and hist[-1] >= 0 and
                      (hist[-1] > hist[-2] if tc["macd_histogram_rising"] else True))
@@ -718,10 +736,8 @@ def _rule_trigger(
     required = tc["momentum_signals_for_pass"]
 
     # Volume bonus
-    vol_bonus = False
-    if len(volumes) >= tc["volume_lookback_bars"] + 1:
-        avg_vol = sum(volumes[-tc["volume_lookback_bars"] - 1: -1]) / tc["volume_lookback_bars"]
-        vol_bonus = volumes[-1] > avg_vol * tc["volume_multiplier"]
+    rvol = _relative_volume(volumes, tc["volume_lookback_bars"])
+    vol_bonus = rvol is not None and rvol > tc["volume_multiplier"]
 
     detail = {
         "candle": candle_name or "none",
@@ -837,12 +853,10 @@ def _rule_vol(
 ) -> RuleResult:
     # ── Stock mode: Relative Volume ───────────────────────────────────────────
     if scoring_mode == "stock":
-        if not volumes or len(volumes) < 21:
+        lookback = cfg["trigger"]["volume_lookback_bars"]
+        rvol = _relative_volume(volumes or [], lookback)
+        if rvol is None:
             return RuleResult("vol", "CAUTION", 45, {"rvol": None, "reason": "insufficient_volume_data"})
-        avg_vol = sum(volumes[-21:-1]) / 20
-        if avg_vol <= 0:
-            return RuleResult("vol", "CAUTION", 45, {"rvol": None, "reason": "zero_avg_volume"})
-        rvol = volumes[-1] / avg_vol
         detail = {"rvol": round(rvol, 2), "scored": True}
         if rvol >= 2.0:
             return RuleResult("vol", "PASS", 90, detail)

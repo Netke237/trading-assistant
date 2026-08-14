@@ -51,6 +51,27 @@ const DEFAULT_PANE_LAYOUT: PaneLayout = {
   ],
 };
 
+export function migrateChartStore(persistedState: unknown, version: number): ChartState {
+  const prev = (persistedState as Partial<ChartState> | null) ?? {};
+  if (version < 1) {
+    return {
+      symbol: prev.symbol ?? 'AAPL',
+      symbolName: prev.symbol ?? 'AAPL',
+      interval: prev.interval ?? '1D',
+      chartType: prev.chartType ?? 'candle',
+      activeIndicators: Array.isArray(prev.activeIndicators) ? prev.activeIndicators : DEFAULT_INDICATORS,
+      paneLayout: prev.paneLayout ?? DEFAULT_PANE_LAYOUT,
+    } as ChartState;
+  }
+  if (version < 2) {
+    return {
+      ...prev,
+      symbolName: (prev as { symbolName?: string }).symbolName ?? prev.symbol ?? 'AAPL',
+    } as ChartState;
+  }
+  return prev as ChartState;
+}
+
 export const useChartStore = create<ChartState>()(
   persist(
     (set) => ({
@@ -86,26 +107,7 @@ export const useChartStore = create<ChartState>()(
         paneLayout: state.paneLayout,
       }),
       version: 2,
-      migrate: (persistedState, version) => {
-        const prev = (persistedState as Partial<ChartState> | null) ?? {};
-        if (version < 1) {
-          return {
-            symbol: prev.symbol ?? 'AAPL',
-            symbolName: prev.symbol ?? 'AAPL',
-            interval: prev.interval ?? '1D',
-            chartType: prev.chartType ?? 'candle',
-            activeIndicators: Array.isArray(prev.activeIndicators) ? prev.activeIndicators : DEFAULT_INDICATORS,
-            paneLayout: prev.paneLayout ?? DEFAULT_PANE_LAYOUT,
-          } as ChartState;
-        }
-        if (version < 2) {
-          return {
-            ...prev,
-            symbolName: (prev as { symbolName?: string }).symbolName ?? prev.symbol ?? 'AAPL',
-          } as ChartState;
-        }
-        return prev as ChartState;
-      },
+      migrate: migrateChartStore,
     },
   ),
 );

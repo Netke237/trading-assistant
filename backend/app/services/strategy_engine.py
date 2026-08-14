@@ -345,6 +345,7 @@ def breakout_base_signal(
     volume_mult: float = 1.5,
     rr_target_mult: float = 2.0,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
+    current_price: float | None = None,  # accepted for router compat; not used (breakout uses close)
 ) -> StrategySignal | None:
     """Break above/below a narrow (ATR-tight) base with volume expansion.
 
@@ -373,14 +374,20 @@ def breakout_base_signal(
     if direction == "Bullish":
         if current <= base_high:
             return None
-        stop   = base_low - atr * 0.2
-        target = current + (current - stop) * rr_target_mult
+        stop = base_low - atr * 0.2
+        risk = current - stop
+        if risk <= 0:
+            return None
+        target = current + risk * rr_target_mult
         detail = {"base_high": round(base_high, 2), "base_range_pct": round(base_range_pct * 100, 1)}
     else:  # Bearish breakdown below base low
         if current >= base_low:
             return None
-        stop   = base_high + atr * 0.2
-        target = current - (stop - current) * rr_target_mult
+        stop = base_high + atr * 0.2
+        risk = stop - current
+        if risk <= 0:
+            return None
+        target = current - risk * rr_target_mult
         detail = {"base_low": round(base_low, 2), "base_range_pct": round(base_range_pct * 100, 1)}
     return StrategySignal(
         strategy="breakout_base",
@@ -426,9 +433,15 @@ def ma_crossover_signal(
             atr = _atr(bars)
             if direction == "Bullish":
                 stop   = slow_ma[-1] - atr * 0.5
+                risk   = current - stop
+                if risk <= 0:
+                    return None
                 target = current + atr * 3.0
             else:
                 stop   = slow_ma[-1] + atr * 0.5
+                risk   = stop - current
+                if risk <= 0:
+                    return None
                 target = current - atr * 3.0
             return StrategySignal(
                 strategy="ma_crossover",
@@ -480,13 +493,19 @@ def mean_reversion_rsi_signal(
         if closes[-1] <= trend[-1]:        return None   # must be above trend (uptrend context)
         if rsi[-1] >= rsi_oversold:        return None   # must be oversold
         if rsi[-1] <= rsi[-2]:             return None   # RSI must be recovering (ticking up)
-        stop   = _swing_low(bars, lookback=10) - atr * 0.2
+        stop = _swing_low(bars, lookback=10) - atr * 0.2
+        risk = current - stop
+        if risk <= 0:
+            return None
         target = current + atr * 2.5
     else:  # Bearish — overbought in downtrend
         if closes[-1] >= trend[-1]:        return None   # must be below trend (downtrend context)
         if rsi[-1] <= rsi_overbought:      return None   # must be overbought
         if rsi[-1] >= rsi[-2]:             return None   # RSI must be rolling over (ticking down)
-        stop   = _swing_high(bars, lookback=10) + atr * 0.2
+        stop = _swing_high(bars, lookback=10) + atr * 0.2
+        risk = stop - current
+        if risk <= 0:
+            return None
         target = current - atr * 2.5
     return StrategySignal(
         strategy="mean_reversion_rsi",
@@ -511,6 +530,7 @@ def mean_reversion_bb_signal(
     rr_target_mult: float = 2.0,
     require_choppy_regime: bool = False,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
+    current_price: float | None = None,  # accepted for router compat; not used (mean-rev uses close)
 ) -> StrategySignal | None:
     """Bollinger Band mean-reversion signal.
 
@@ -595,6 +615,7 @@ def mean_reversion_vwap_signal(
     rr_target_mult: float = 2.0,
     interval: str = "15m",
     direction: Literal["Bullish", "Bearish"] = "Bullish",
+    current_price: float | None = None,  # accepted for router compat; not used (VWAP mean-rev uses close)
 ) -> StrategySignal | None:
     """VWAP mean-reversion signal (intraday only).
 
@@ -660,6 +681,7 @@ def mean_reversion_vwap_daily_signal(
     stop_atr_mult: float = 0.5,
     rr_target_mult: float = 2.0,
     direction: str = "Bullish",
+    current_price: float | None = None,  # accepted for router compat; not used (VWAP mean-rev uses close)
 ) -> StrategySignal | None:
     """Rolling daily-VWAP mean-reversion signal (no intraday data needed).
 

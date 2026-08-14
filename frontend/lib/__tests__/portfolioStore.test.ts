@@ -859,3 +859,55 @@ describe('portfolioStore', () => {
     });
   });
 });
+
+describe('portfolioStore — backend payload portfolioValue', () => {
+  let fetchMock: jest.Mock;
+
+  beforeEach(() => {
+    act(() => {
+      usePortfolioStore.setState({ positions: [] });
+      useRiskStore.setState((s) => ({
+        limits: { ...s.limits, portfolioValue: 73_000 },
+      }));
+    });
+    fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  it('addPosition posts the riskStore-configured portfolioValue, not a hardcoded fallback', async () => {
+    const { result } = renderHook(() => usePortfolioStore());
+    act(() => {
+      result.current.addPosition(makePosition());
+    });
+    // postPosition is fire-and-forget; flush microtasks
+    await act(async () => { await Promise.resolve(); });
+
+    expect(fetchMock).toHaveBeenCalled();
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.portfolioValue).toBe(73_000);
+  });
+
+  it('persistPosition posts the riskStore-configured portfolioValue when called with no explicit value (matches Step 7 call sites)', async () => {
+    const { persistPosition } = await import('@/lib/portfolioStore');
+    await persistPosition(makePosition());
+
+    expect(fetchMock).toHaveBeenCalled();
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.portfolioValue).toBe(73_000);
+  });
+
+  it('syncToBackend posts the riskStore-configured portfolioValue for every local-only position (dashboard stale-cache recovery path)', async () => {
+    act(() => {
+      usePortfolioStore.setState({ positions: [makePosition(), makePosition({ symbol: 'MSFT' })] });
+    });
+    await act(async () => {
+      await usePortfolioStore.getState().syncToBackend();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const call of fetchMock.mock.calls) {
+      const body = JSON.parse(call[1].body as string);
+      expect(body.portfolioValue).toBe(73_000);
+    }
+  });
+});

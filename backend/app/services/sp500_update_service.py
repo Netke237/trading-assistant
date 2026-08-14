@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import os
 import shutil
 import threading
 from datetime import datetime, timezone
@@ -126,7 +127,8 @@ def _run() -> None:
             shutil.copy2(_CSV_PATH, _BACKUP_PATH)
 
         fieldnames = ["symbol", "sector", "liquidity"]
-        with _CSV_PATH.open("w", newline="", encoding="utf-8") as f:
+        tmp_path = _CSV_PATH.with_suffix(".csv.tmp")
+        with tmp_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for row in rows:
@@ -135,6 +137,7 @@ def _run() -> None:
                     "sector": row.get("sector", ""),
                     "liquidity": liquidity.get(row["symbol"], 0.0),
                 })
+        os.replace(tmp_path, _CSV_PATH)
 
         updated = sum(1 for s in symbols if liquidity.get(s, 0) > 0)
         logger.info("sp500_update_service: done — %d/%d symbols have liquidity > 0", updated, len(symbols))

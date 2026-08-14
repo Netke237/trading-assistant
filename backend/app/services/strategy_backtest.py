@@ -132,12 +132,19 @@ def run_strategy_backtest(
     max_dd      = float(stats.get("Max. Drawdown [%]", 0))
     sharpe      = float(stats.get("Sharpe Ratio", 0) or 0)
 
-    trades_df = stats.get("_trades")
-    pnls = trades_df["PnL"].tolist() if trades_df is not None and "PnL" in trades_df else []
-    wins_pnl  = [p for p in pnls if p > 0]
-    losses_pnl = [p for p in pnls if p <= 0]
-    avg_win  = (sum(wins_pnl) / len(wins_pnl))    if wins_pnl   else 0.0
-    avg_loss = (abs(sum(losses_pnl) / len(losses_pnl))) if losses_pnl else 0.0
+    # Use real per-trade returns (stats['_trades']['ReturnPct']) rather than deriving
+    # avg_win/avg_loss from portfolio-level aggregates (total_return_pct, max_drawdown_pct).
+    # Those aggregates are not trade-additive — e.g. total_return_pct is the compounded
+    # equity-curve return and max_drawdown_pct is a peak-to-trough equity statistic — so
+    # dividing them by win/loss counts produces avg_win/avg_loss with no correspondence to
+    # actual trade P&L, and can yield negative expectancy for a net-profitable, high-win-rate
+    # strategy.
+    trades_df = stats["_trades"]
+    per_trade_pct = trades_df["ReturnPct"].to_numpy() * 100.0  # decimal → percent
+    wins_pct  = per_trade_pct[per_trade_pct > 0]
+    losses_pct = per_trade_pct[per_trade_pct <= 0]
+    avg_win  = float(wins_pct.mean())        if len(wins_pct)   > 0 else 0.0
+    avg_loss = float(abs(losses_pct.mean())) if len(losses_pct) > 0 else 0.0
     expectancy = win_rate * avg_win - (1 - win_rate) * avg_loss
 
     passes = win_rate >= min_win_rate and n_trades >= min_trades and expectancy >= _MIN_EXPECTANCY

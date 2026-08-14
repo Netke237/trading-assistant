@@ -121,6 +121,16 @@ async function pushHistoryToAPI(entry: AlertHistory): Promise<void> {
   } catch {}
 }
 
+export function migrateChartAlerts(persistedState: unknown, version: number): ChartAlertState {
+  const prev = (persistedState as Partial<ChartAlertState> | null) ?? {};
+  if (version < 2) {
+    const oldRules: AlertRule[] = Array.isArray(prev.rules) ? prev.rules : [];
+    const oldHistory: AlertHistory[] = Array.isArray(prev.history) ? prev.history.slice(0, HISTORY_LIMIT) : [];
+    return { rules: oldRules, history: oldHistory, toasts: [], newSinceView: 0, migrated: false } as unknown as ChartAlertState;
+  }
+  return prev as ChartAlertState;
+}
+
 export const useChartAlertStore = create<ChartAlertState>()(
   persist(
     (set, get) => ({
@@ -233,15 +243,7 @@ export const useChartAlertStore = create<ChartAlertState>()(
         history: state.history,
       }),
       version: 2,
-      migrate: (persistedState: unknown, version: number) => {
-        const prev = (persistedState as Partial<ChartAlertState> | null) ?? {};
-        if (version < 2) {
-          const oldRules: AlertRule[] = Array.isArray(prev.rules) ? prev.rules : [];
-          const oldHistory: AlertHistory[] = Array.isArray(prev.history) ? prev.history.slice(0, HISTORY_LIMIT) : [];
-          return { rules: oldRules, history: oldHistory, toasts: [], newSinceView: 0, migrated: false } as unknown as ChartAlertState;
-        }
-        return prev as ChartAlertState;
-      },
+      migrate: migrateChartAlerts,
     },
   ),
 );

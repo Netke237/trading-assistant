@@ -113,9 +113,10 @@ def score_fundamentals(
     score = max(0, min(100, score))
 
     # ---- Labels --------------------------------------------------------------
-    if score >= 65:
+    label_thresholds = cfg.get("quality_label_thresholds", {"strong": 65, "neutral": 40})
+    if quality_score >= label_thresholds["strong"]:
         quality_label = "Strong"
-    elif score >= 40:
+    elif quality_score >= label_thresholds["neutral"]:
         quality_label = "Neutral"
     else:
         quality_label = "Weak"

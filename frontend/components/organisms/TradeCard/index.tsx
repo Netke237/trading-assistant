@@ -795,13 +795,7 @@ export function TradeCard({
         </button>
       </div>
 
-      <div
-        style={{
-          borderTop: '1px solid var(--border-subtle)',
-          paddingTop: 'var(--space-2)',
-          marginTop: 'var(--space-2)',
-        }}
-      >
+      <div className={styles.recIdFooter}>
         <Text size={11} tone="dim">{displayRecId}</Text>
       </div>
 

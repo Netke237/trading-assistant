@@ -24,6 +24,14 @@ interface WatchedContractsState {
   syncFromBackend:   () => Promise<void>;
 }
 
+export function migrateWatchedContracts(persisted: unknown, version: number): WatchedContractsState {
+  if (version < 2) {
+    // v1 → v2: no shape change; just keep existing ids intact
+    return persisted as WatchedContractsState;
+  }
+  return persisted as WatchedContractsState;
+}
+
 export const useWatchedContractsStore = create<WatchedContractsState>()(
   persist(
     (set, get) => ({
@@ -62,13 +70,7 @@ export const useWatchedContractsStore = create<WatchedContractsState>()(
       skipHydration: true,
       partialize: (state) => ({ ids: state.ids }),
       version: 2,
-      migrate: (persisted, version) => {
-        if (version < 2) {
-          // v1 → v2: no shape change; just keep existing ids intact
-          return persisted as WatchedContractsState;
-        }
-        return persisted as WatchedContractsState;
-      },
+      migrate: migrateWatchedContracts,
     }
   )
 );

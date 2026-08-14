@@ -1,6 +1,11 @@
 # backend/config/contract_rules.yaml
 
-score_thresholds:
+# contract_score_thresholds: classifies a CONTRACT's composite score (liquidity, spread,
+# delta, DTE, IV-rank — see `weights:` below). Read by contract_validator.py.
+# NOTE: scoring_rules.yaml has a similarly-named `score_thresholds` block with different
+# numbers (55/35) — that one classifies STOCK scores (trend/pullback/trigger/event/vol),
+# a different scale entirely. Do not "fix" the numeric mismatch; they measure different things.
+contract_score_thresholds:
   pass: 65
   caution: 45
 

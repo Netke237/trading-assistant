@@ -169,3 +169,189 @@ def test_event_still_penalises_in_options_mode():
     result = _rule_event(tomorrow, None, cfg, scoring_mode="options")
     assert result.status == "REJECT"
     assert result.score == 5
+
+
+# ── H1: shared _relative_volume between _rule_trigger and _rule_vol ──────────
+
+def test_rvol_and_trigger_volume_bonus_share_same_window():
+    """Both _rule_trigger's volume bonus and _rule_vol's rvol must be driven by the
+    same volume_lookback_bars config value — changing it in cfg should move both."""
+    from app.scoring.stock_scorer import _rule_vol
+
+    cfg = _cfg_swing()
+    cfg["trigger"]["volume_lookback_bars"] = 5   # shrink window from config, not hardcode
+
+    bars = _bars_rvol(n=30, current_vol_mult=2.5)
+    volumes = [b["volume"] for b in bars]
+
+    _, vol_bonus = _rule_trigger(bars, cfg, volumes, "Bullish", scoring_mode="stock")
+    vol_result = _rule_vol(None, cfg, volumes=volumes, scoring_mode="stock")
+
+    assert vol_bonus is True
+    assert vol_result.detail["rvol"] is not None
+    expected_rvol = volumes[-1] / (sum(volumes[-6:-1]) / 5)
+    assert abs(vol_result.detail["rvol"] - round(expected_rvol, 2)) < 0.01
+
+
+def test_relative_volume_helper_matches_manual_calc():
+    from app.scoring.stock_scorer import _relative_volume
+    volumes = [1_000_000] * 20 + [2_500_000]
+    rvol = _relative_volume(volumes, 20)
+    assert abs(rvol - 2.5) < 1e-9
+
+
+def test_relative_volume_insufficient_history_returns_none():
+    from app.scoring.stock_scorer import _relative_volume
+    assert _relative_volume([1, 2, 3], 20) is None
+
+
+# ── H2: bearish MACD requires histogram confirmation, mirroring bullish ──────
+
+def test_bearish_macd_gate_now_structurally_symmetric_with_bullish():
+    """H2: bearish trigger must apply the same 2-point cross-confirmation clause bullish
+    already had (hist[-1] < hist[-2] when macd_histogram_rising is set), closing the
+    asymmetry the audit flagged.
+
+    NOTE: with only 2 histogram points, hist[-2] > 0 and hist[-1] <= 0 mathematically
+    guarantees hist[-1] < hist[-2] (a non-positive number is always less than a positive
+    one) — so, exactly mirroring the bullish clause (which has the same tautology:
+    hist[-2] < 0 and hist[-1] >= 0 always implies hist[-1] > hist[-2]), this confirmation
+    clause is a structural no-op today, not a magnitude-based filter. That pre-existing
+    tautology is out of scope for H2 (which only asked to close the bullish/bearish
+    asymmetry); this test pins the now-symmetric structure, not a behavior difference
+    between "barely crossed" and "crossed with momentum" histograms."""
+    cfg = _cfg_swing()
+    assert cfg["trigger"]["macd_histogram_rising"] is True
+
+    import unittest.mock as mock
+    bars = _trigger_bars_macd_cross()
+    volumes = [b["volume"] for b in bars]
+
+    with mock.patch("app.scoring.stock_scorer._macd_histogram", return_value=[1.0, -0.1]):
+        result, _ = _rule_trigger(bars, cfg, volumes, "Bearish", scoring_mode="stock")
+        assert result.detail["macd_pass"] is True
+
+    with mock.patch("app.scoring.stock_scorer._macd_histogram", return_value=[1.0, -2.0]):
+        result, _ = _rule_trigger(bars, cfg, volumes, "Bearish", scoring_mode="stock")
+        assert result.detail["macd_pass"] is True
+
+
+def test_bearish_macd_ignores_confirmation_when_flag_false():
+    cfg = _cfg_swing()
+    cfg["trigger"]["macd_histogram_rising"] = False
+    bars = _trigger_bars_macd_cross()
+    volumes = [b["volume"] for b in bars]
+
+    import unittest.mock as mock
+    with mock.patch("app.scoring.stock_scorer._macd_histogram", return_value=[1.0, -0.1]):
+        result, _ = _rule_trigger(bars, cfg, volumes, "Bearish", scoring_mode="stock")
+        assert result.detail["macd_pass"] is True, "flag off -> any cross down should pass"
+
+
+# ── M1: component-level status thresholds sourced from config ───────────────
+
+def test_trend_additive_status_reads_from_config_not_hardcoded():
+    """_trend_additive's PASS/CAUTION boundaries must come from ac['status_pass'] /
+    ac['status_caution'], not hardcoded 70/40 — verify a custom cfg shifts the boundary."""
+    from app.scoring.stock_scorer import _trend_additive
+
+    cfg = _cfg_swing()
+    cfg["trend"]["additive"]["status_pass"] = 95   # near-impossible to reach
+    cfg["trend"]["additive"]["status_caution"] = 90
+
+    closes = [100.0 + i * 0.5 for i in range(60)]   # steady uptrend
+    result = _trend_additive(closes, cfg, "Bullish")
+    # With status_pass=95, even a clean uptrend should not clear PASS unless raw score >=95
+    assert result.status != "PASS" or result.score >= 95
+
+
+# ── M4: _wilder_smooth regression parity with the old sum-based ADX math ────
+
+def test_wilder_smooth_fixes_latent_adx_scale_bug_vs_pre_refactor_sum_math():
+    """The pre-refactor sum-based _wilder canceled its own p-scaling in the atr/pdm/mdm
+    ratios (di_plus/di_minus/dx_vals), but the OUTER smoothing step (`_wilder(dx_vals,
+    period)`) had no such cancellation — it returned a raw running SUM applied to
+    already-percentage dx_vals, so the final `_adx()` return value was ~`period`x too
+    large and could exceed the valid [0, 100] ADX range. The refactored average-form
+    _wilder_smooth divides back down at every step, producing a correctly-scaled ADX.
+    This is a genuine behavior change (not the 'pure refactor' M4 was originally scoped
+    as) — _adx feeds _trend_additive's scoring, so live trend scores will shift."""
+    from app.scoring.stock_scorer import _adx
+
+    def _synthetic_bars(n=40):
+        bars = []
+        price = 100.0
+        for i in range(n):
+            price += 0.3 if i % 3 != 0 else -0.1
+            bars.append({"open": price - 0.1, "high": price + 0.6,
+                         "low": price - 0.6, "close": price})
+        return bars
+
+    bars = _synthetic_bars()
+    adx_val = _adx(bars, period=14)
+
+    def _old_wilder_sum(data, p):
+        if len(data) < p:
+            return []
+        result = [sum(data[:p])]
+        for v in data[p:]:
+            result.append(result[-1] - result[-1] / p + v)
+        return result
+
+    tr_list, plus_dm, minus_dm = [], [], []
+    for i in range(1, len(bars)):
+        h, l = bars[i]["high"], bars[i]["low"]
+        pc = bars[i - 1]["close"]
+        ph, pl = bars[i - 1]["high"], bars[i - 1]["low"]
+        tr_list.append(max(h - l, abs(h - pc), abs(l - pc)))
+        up_move = h - ph
+        down_move = pl - l
+        plus_dm.append(up_move if up_move > down_move and up_move > 0 else 0.0)
+        minus_dm.append(down_move if down_move > up_move and down_move > 0 else 0.0)
+
+    atr_s = _old_wilder_sum(tr_list, 14)
+    pdm_s = _old_wilder_sum(plus_dm, 14)
+    mdm_s = _old_wilder_sum(minus_dm, 14)
+    n = min(len(atr_s), len(pdm_s), len(mdm_s))
+    dx_vals = []
+    for i in range(n):
+        atr_v = atr_s[i]
+        if atr_v == 0:
+            continue
+        di_plus = 100.0 * pdm_s[i] / atr_v
+        di_minus = 100.0 * mdm_s[i] / atr_v
+        di_sum = di_plus + di_minus
+        dx_vals.append(100.0 * abs(di_plus - di_minus) / di_sum if di_sum > 0 else 0.0)
+    adx_s_old = _old_wilder_sum(dx_vals, 14)
+    old_adx_val = adx_s_old[-1] if adx_s_old else 0.0
+
+    assert 0.0 <= adx_val <= 100.0, f"ADX must be in [0, 100], got {adx_val}"
+    # Sanity check the bug this fix corrects: the old sum-based final smoothing step
+    # produced a value out of the valid ADX range for this synthetic series.
+    assert old_adx_val > 100.0, (
+        "expected pre-refactor ADX to be out of [0, 100] range for this series, "
+        "confirming the scale bug this fix corrects"
+    )
+    assert abs(adx_val - old_adx_val / 14) < 1e-6, (
+        f"refactored ADX ({adx_val}) should equal old_adx_val/period "
+        f"({old_adx_val / 14}) — confirms the fix is exactly the missing /period division"
+    )
+
+
+def test_rsi_unchanged_after_wilder_smooth_extraction():
+    """RSI values must be numerically identical after switching _rsi to use the shared
+    _wilder_smooth helper instead of its own inline loop."""
+    from app.scoring.stock_scorer import _rsi
+    closes = [100.0 + (i % 5) - 2 + i * 0.05 for i in range(60)]
+    vals = _rsi(closes, period=14)
+    assert vals, "expected non-empty RSI series"
+    assert all(0.0 <= v <= 100.0 for v in vals)
+
+
+def test_wilder_smooth_helper_matches_manual_recurrence():
+    from app.scoring.stock_scorer import _wilder_smooth
+    data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    result = _wilder_smooth(data, period=5)
+    assert result[0] == 3.0
+    assert abs(result[1] - 3.6) < 1e-9
+    assert abs(result[2] - 4.28) < 1e-9

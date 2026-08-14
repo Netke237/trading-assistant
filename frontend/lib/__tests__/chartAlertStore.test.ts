@@ -1,5 +1,5 @@
 import { renderHook, act } from '@testing-library/react';
-import { useChartAlertStore, HISTORY_LIMIT } from '@/lib/chartAlertStore';
+import { useChartAlertStore, HISTORY_LIMIT, migrateChartAlerts } from '@/lib/chartAlertStore';
 import type { AlertRule, AlertHistory, PriceCondition } from '@/types/alerts';
 
 function makeRule(overrides: Partial<AlertRule> = {}): AlertRule {
@@ -192,5 +192,28 @@ describe('chartAlertStore', () => {
     expect(result.current.toasts).toHaveLength(1);
     act(() => result.current.dismissToast('t1'));
     expect(result.current.toasts).toHaveLength(0);
+  });
+});
+
+describe('chartAlertStore — migrate (T4)', () => {
+  it('v0/v1 -> v2 seeds toasts/newSinceView/migrated and caps history to HISTORY_LIMIT', () => {
+    const longHistory = Array.from({ length: 250 }, (_, i) => ({ id: `h${i}` }));
+    const result = migrateChartAlerts({ rules: [{ id: 'r1' }], history: longHistory }, 1);
+    expect(result.toasts).toEqual([]);
+    expect(result.newSinceView).toBe(0);
+    expect(result.migrated).toBe(false);
+    expect(result.history.length).toBe(HISTORY_LIMIT);
+    expect(result.rules).toEqual([{ id: 'r1' }]);
+  });
+
+  it('v2 -> v2 is a passthrough', () => {
+    const state = { rules: [], history: [], toasts: [{ id: 't1' }] as any };
+    expect(migrateChartAlerts(state, 2)).toBe(state);
+  });
+
+  it('handles null persisted state on v0 without throwing', () => {
+    const result = migrateChartAlerts(null, 0);
+    expect(result.rules).toEqual([]);
+    expect(result.history).toEqual([]);
   });
 });

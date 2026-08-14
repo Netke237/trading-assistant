@@ -105,7 +105,12 @@ export default function Step5Page() {
           const rank = c?.contractDetails?.ivRank;
           const pctl = c?.contractDetails?.ivPercentile;
           const hasIv = rank != null && rank > 0;
-          const ivSt = hasIv ? ivStatus(rank) : 'NO_DATA';
+          // Unknown IV must not be treated as better than a clean read — this page's
+          // own copy states "Gate = worst of IV and event proximity," so an unknown
+          // IV rank is downgraded to CAUTION (not NO_DATA) specifically so it always
+          // participates correctly in worstStatus's PASS/CAUTION/REJECT comparison
+          // instead of falling through to NO_DATA, which worstStatus ranks below PASS.
+          const ivSt: Status = hasIv ? ivStatus(rank) : 'CAUTION';
           // Gate must use THIS scan's horizon-specific window (evCaution/evReject,
           // already fetched above via useEventThresholdsStore) — not a fixed cutoff. The
           // generic eventProximity() helper (frontend/lib/date.ts) is intentionally

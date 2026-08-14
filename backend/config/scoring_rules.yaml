@@ -1,8 +1,12 @@
 # backend/config/scoring_rules.yaml
 
-# score_thresholds: used by the backend scan pipeline to classify candidates.
+# stock_score_thresholds: classifies a STOCK's composite score (trend/pullback/trigger/
+# event/vol weighted per horizon — see `horizons.*.weights` below). Read by stock_scorer.py.
 # The frontend statusForScore() mirrors these values — see frontend/lib/status.ts.
-score_thresholds:
+# NOTE: contract_rules.yaml has a similarly-named `score_thresholds` block with different
+# numbers (65/45) — that one classifies CONTRACT scores (liquidity/spread/delta/DTE/IV),
+# a different scale entirely. Do not "fix" the numeric mismatch; they measure different things.
+stock_score_thresholds:
   pass: 55
   caution: 35
 
@@ -61,6 +65,8 @@ horizons:
         price_max: 40
         slope_max: 30
         adx_max: 30
+        status_pass: 70      # component-level PASS threshold for the additive trend score
+        status_caution: 40   # component-level CAUTION threshold
       relative_strength:
         rs_period: 20
         rs_pass_threshold: 2.0
@@ -133,6 +139,8 @@ horizons:
         price_max: 40
         slope_max: 30
         adx_max: 30
+        status_pass: 70      # component-level PASS threshold for the additive trend score
+        status_caution: 40   # component-level CAUTION threshold
       relative_strength:
         rs_period: 2
         rs_pass_threshold: 1.0
@@ -205,6 +213,8 @@ horizons:
         price_max: 40
         slope_max: 30
         adx_max: 30
+        status_pass: 70      # component-level PASS threshold for the additive trend score
+        status_caution: 40   # component-level CAUTION threshold
       relative_strength:
         rs_period: 50
         rs_pass_threshold: 3.0
@@ -287,6 +297,7 @@ fundamentals_gate:
     debt_to_equity_reject: 3.0
   staleness_days: 90
   weights: { growth: 0.35, quality: 0.35, risk: 0.30 }
+  quality_label_thresholds: { strong: 65, neutral: 40 }
   thresholds:
     revenue_growth_yoy:  { strong: 0.15, weak: 0.0 }
     eps_growth_yoy:      { strong: 0.15, weak: 0.0 }

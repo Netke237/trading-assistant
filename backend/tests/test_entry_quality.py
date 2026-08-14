@@ -92,3 +92,36 @@ def test_large_premium_clears_all_checks():
     ea = assess_entry(bid=9.80, ask=10.20, mid=10.00)
     assert ea.quality_status == "PASS"
     assert ea.limit_price == 10.00
+
+
+# ── M3: crossed / stale quotes ───────────────────────────────────────────────
+
+def test_crossed_quote_rejects():
+    """bid > ask (crossed/stale quote) must REJECT regardless of the resulting
+    negative spread_pct — this must not silently PASS."""
+    ea = assess_entry(bid=2.10, ask=1.90, mid=2.00)
+    assert ea.quality_status == "REJECT"
+    assert "crossed quote" in ea.quality_reasons
+
+
+def test_crossed_quote_with_narrow_gap_still_rejects():
+    """Even a tiny crossed gap (bid=2.01, ask=1.99) must REJECT — the bug was that
+    abs(spread) could look narrow and pass."""
+    ea = assess_entry(bid=2.01, ask=1.99, mid=2.00)
+    assert ea.quality_status == "REJECT"
+    assert "crossed quote" in ea.quality_reasons
+
+
+def test_crossed_quote_combines_with_other_reject_reasons():
+    """Crossed quote AND premium too low should both appear in quality_reasons."""
+    ea = assess_entry(bid=0.06, ask=0.04, mid=0.05)
+    assert ea.quality_status == "REJECT"
+    assert "crossed quote" in ea.quality_reasons
+    assert "premium too low" in ea.quality_reasons
+
+
+def test_equal_bid_ask_is_not_crossed():
+    """bid == ask (zero spread) is a valid, if unusual, quote — must NOT trigger
+    the crossed-quote reason."""
+    ea = assess_entry(bid=2.00, ask=2.00, mid=2.00)
+    assert "crossed quote" not in ea.quality_reasons

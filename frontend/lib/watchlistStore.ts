@@ -21,6 +21,17 @@ interface WatchlistState {
   syncFromBackend: () => Promise<void>;
 }
 
+export function migrateWatchlist(persistedState: unknown, version: number): WatchlistState {
+  const prev = (persistedState as Partial<WatchlistState> | null) ?? {};
+  if (version < 1) {
+    const prevAdded = Array.isArray(prev.added)
+      ? prev.added.map((s) => String(s).toUpperCase())
+      : [];
+    return { ...prev, added: prevAdded } as WatchlistState;
+  }
+  return prev as WatchlistState;
+}
+
 export const useWatchlistStore = create<WatchlistState>()(
   persist(
     (set, get) => ({
@@ -63,16 +74,7 @@ export const useWatchlistStore = create<WatchlistState>()(
       skipHydration: true,
       partialize: (state) => ({ added: state.added }),
       version: 1,
-      migrate: (persistedState, version) => {
-        const prev = (persistedState as Partial<WatchlistState> | null) ?? {};
-        if (version < 1) {
-          const prevAdded = Array.isArray(prev.added)
-            ? prev.added.map((s) => String(s).toUpperCase())
-            : [];
-          return { ...prev, added: prevAdded } as WatchlistState;
-        }
-        return prev as WatchlistState;
-      },
+      migrate: migrateWatchlist,
     }
   )
 );

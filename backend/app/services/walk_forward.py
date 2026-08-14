@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import itertools
+import logging
 import statistics
 from dataclasses import dataclass
 from datetime import date
@@ -9,6 +10,8 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 
 from app.services.strategy_backtest import run_strategy_backtest
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -174,8 +177,10 @@ def _complexity_penalty(combo: dict, search_space: dict, *, weight: float = 0.05
 
 
 def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]],
-               fold: Fold, search_space: dict, costs: dict) -> dict:
-    """Grid search on the train window, pooled across the basket. Return winning params.
+               fold: Fold, search_space: dict, costs: dict) -> tuple[dict, dict[str, object]]:
+    """Grid search on the train window, pooled across the basket. Return winning params
+    plus the winning combo's own per-symbol backtest results (BacktestResult), so the
+    caller can read the IS return directly instead of re-running the identical backtest.
 
     Combos are ranked by pooled in-sample Sharpe minus a complexity penalty
     (see `_complexity_penalty`) that discourages picking grid-edge values on a
@@ -190,23 +195,32 @@ def train_fold(strategy: str, direction: str, basket_bars: dict[str, list[dict]]
         costs: Dict with 'fee_pct' and 'slippage_pct' keys.
 
     Returns:
-        Dict of winning parameters, or empty dict if no combo passes.
+        (winning_params, {symbol: BacktestResult}) for the winning combo. The results map
+        only contains symbols with >= 100 train bars (same guard as the grid search).
+        Both are ({}, {}) if no combo produced any trades on any symbol.
     """
     best, best_score = None, float("-inf")
+    best_results: dict[str, object] = {}
     for combo in param_combos(search_space):
         sharpes = []
+        combo_results: dict[str, object] = {}
         for sym, bars in basket_bars.items():
             train_bars = _slice_bars(bars, fold.train_start, fold.train_end)
             if len(train_bars) < 100:
                 continue
-            res = run_strategy_backtest(train_bars, strategy=strategy, direction=direction, params=combo)
+            try:
+                res = run_strategy_backtest(train_bars, strategy=strategy, direction=direction, params=combo)
+            except Exception as exc:
+                logger.debug("Train-fold backtest failed for %s: %s", sym, exc)
+                continue
+            combo_results[sym] = res
             if res.n_trades > 0:
                 sharpes.append(res.sharpe)
         pooled = sum(sharpes) / len(sharpes) if sharpes else float("-inf")
         score = pooled - _complexity_penalty(combo, search_space) if sharpes else pooled
         if score > best_score:
-            best_score, best = score, combo
-    return best or {}
+            best_score, best, best_results = score, combo, combo_results
+    return (best or {}), best_results
 
 
 def consensus(fold_winners: list[dict]) -> dict:

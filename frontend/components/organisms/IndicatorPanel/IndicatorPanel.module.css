@@ -8,7 +8,7 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  box-shadow: var(--shadow-popover);
+  box-shadow: var(--shadow-overlay);
 }
 
 .header {

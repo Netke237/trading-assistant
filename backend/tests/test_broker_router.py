@@ -27,6 +27,37 @@ def test_router_routes_to_tradier_paper():
                         order_type="MKT", limit_price=None, tif="DAY")
     result = router.execute("tradier_paper", order)
     assert result.order_id == "222"
+    mock_adapter.place_order.assert_called_once_with(order)
+
+
+def test_router_forwards_all_order_fields_for_options():
+    """An OPT order's conid/option_symbol/sec_type must reach the adapter
+    unchanged — call_args inspection, not just call-count, per T2."""
+    mock_adapter = MagicMock()
+    mock_adapter.place_order.return_value = OrderResult(
+        order_id="OPT1", status="ok", broker="tradier_paper"
+    )
+    router = BrokerRouter(adapters={"tradier_paper": mock_adapter})
+    order = BrokerOrder(
+        symbol="AAPL", action="BUY", effect="OPEN", quantity=2, order_type="LMT",
+        limit_price=2.50, tif="DAY", conid=12345, sec_type="OPT",
+        option_symbol="AAPL260620C00185000",
+    )
+    router.execute("tradier_paper", order)
+    forwarded = mock_adapter.place_order.call_args.args[0]
+    assert forwarded.conid == 12345
+    assert forwarded.option_symbol == "AAPL260620C00185000"
+    assert forwarded.sec_type == "OPT"
+    assert forwarded.quantity == 2
+
+
+def test_live_broker_keys_shared_with_credential_store():
+    """broker_router's live-block set must be the same object credential_store
+    exposes — this is the fix for H8's 'enforced only in broker_router.py' gap.
+    A regression here means someone redefined a second, driftable list."""
+    from app.services.broker_router import _LIVE_BROKERS
+    from app.services.credential_store import LIVE_BROKER_KEYS
+    assert _LIVE_BROKERS is LIVE_BROKER_KEYS
 
 
 def test_router_raises_for_unknown_broker():

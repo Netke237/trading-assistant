@@ -1,5 +1,5 @@
 import { renderHook, act } from '@testing-library/react';
-import { useWatchlistStore, WATCHLIST_STORAGE_KEY } from '@/lib/watchlistStore';
+import { useWatchlistStore, WATCHLIST_STORAGE_KEY, migrateWatchlist } from '@/lib/watchlistStore';
 
 describe('watchlistStore', () => {
   let store: Storage;
@@ -93,5 +93,22 @@ describe('watchlistStore', () => {
       result.current.addSymbol('  ');
     });
     expect(result.current.added).toEqual([]);
+  });
+});
+
+describe('watchlistStore — migrate (T4)', () => {
+  it('v0 -> v1 uppercases all persisted symbols', () => {
+    const result = migrateWatchlist({ added: ['aapl', 'Tsla'] }, 0);
+    expect(result.added).toEqual(['AAPL', 'TSLA']);
+  });
+
+  it('v0 -> v1 defaults to an empty array when added is missing/malformed', () => {
+    expect(migrateWatchlist({}, 0).added).toEqual([]);
+    expect(migrateWatchlist({ added: 'not-an-array' }, 0).added).toEqual([]);
+  });
+
+  it('v1 -> v1 is a passthrough', () => {
+    const state = { added: ['AAPL'] };
+    expect(migrateWatchlist(state, 1)).toEqual(state);
   });
 });

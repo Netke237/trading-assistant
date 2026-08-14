@@ -296,6 +296,13 @@ export interface TradeCardData {
   maxProfit?:      number;
   maxLoss?:        number;
   breakeven?:      number;
+  /**
+   * Set locally (never sent by the backend) when the user has picked a
+   * different contract than the scan's top recommendation via the contract
+   * picker (Step 6 / ContractStar). Drives the "User-selected" badge on
+   * Step 7. See step-7-trade-card/page.tsx effectiveCard.
+   */
+  _userOverride?: boolean;
 }
 
 // --- Option contracts ---

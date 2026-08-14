@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Text } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
+import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import type { TradeCardData } from '@/types/domain';
 import styles from './AutoTradeArm.module.css';
@@ -34,13 +35,17 @@ export function AutoTradeArm({ card, broker }: AutoTradeArmProps) {
     try {
       await api.armAutoTrade({
         broker,
-        symbol:        card.symbol,
-        option_symbol: contractId,
-        action:        'BUY',   // long single-leg option (call or put) is always buy-to-open
-        quantity:      1,
-        order_type:    'LMT',
-        limit_price:   card.entry.limit,
-        entry_premium: card.contractDetails?.mid ?? card.entry.limit,
+        symbol:          card.symbol,
+        option_symbol:   contractId,
+        action:          'BUY',   // long single-leg option (call or put) is always buy-to-open
+        quantity:        1,
+        order_type:      'LMT',
+        limit_price:     card.entry.limit,
+        entry_premium:   card.contractDetails?.mid ?? card.entry.limit,
+        // Must match the value the frontend's own checkTrade/computeMetrics use, or the
+        // frontend and backend exposure/daily-loss gates silently disagree on the same
+        // armed trade (see commit 003040c for the same bug in portfolioStore.ts).
+        portfolio_value: useRiskStore.getState().limits.portfolioValue,
       });
       setArmed(true);
     } catch (e) {

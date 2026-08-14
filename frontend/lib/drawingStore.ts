@@ -29,6 +29,11 @@ interface DrawingStoreState {
   syncFromBackend: (symbol: string, interval: string) => Promise<void>;
 }
 
+export function migrateDrawings(persistedState: unknown, _version: number): DrawingStoreState {
+  const prev = (persistedState as Partial<DrawingStoreState> | null) ?? {};
+  return prev as DrawingStoreState;
+}
+
 export const useDrawingStore = create<DrawingStoreState>()(
   persist(
     (set, get) => ({
@@ -96,10 +101,7 @@ export const useDrawingStore = create<DrawingStoreState>()(
       skipHydration: true,
       partialize: (state) => ({ drawings: state.drawings }),
       version: 1,
-      migrate: (persistedState: unknown, _version: number) => {
-        const prev = (persistedState as Partial<DrawingStoreState> | null) ?? {};
-        return prev as DrawingStoreState;
-      },
+      migrate: migrateDrawings,
     },
   ),
 );

@@ -97,27 +97,21 @@ def _optimize_strategy_sync(
     all_drawdowns: list[float] = []
 
     for fold in folds:
-        winner = train_fold(strategy, direction, basket_bars, fold, search_space, costs)
+        winner, winner_results = train_fold(strategy, direction, basket_bars, fold, search_space, costs)
         fold_winners.append(winner)
 
-        # IS: re-run the train window with winner params using return% to match OOS units
+        # IS return: reuse the winning combo's backtest results computed inside train_fold's
+        # grid search (train_fold already ran this exact backtest to select the winner by
+        # Sharpe) — avoids a second identical Backtest.run() per symbol per fold.
         is_returns: list[float] = []
-        for sym, bars in basket_bars.items():
-            train_bars_fold = _slice_bars(bars, fold.train_start, fold.train_end)
-            if len(train_bars_fold) >= 100:
-                try:
-                    res = run_strategy_backtest(
-                        train_bars_fold, strategy=strategy, direction=direction, params=winner
-                    )
-                    if res.n_trades > 0:
-                        net = apply_costs(
-                            gross_return_pct=res.total_return_pct,
-                            fee_pct=costs.get("fee_pct", 0.001),
-                            slippage_pct=costs.get("slippage_pct", 0.001),
-                        )
-                        is_returns.append(net)
-                except Exception as exc:
-                    logger.debug("IS backtest failed for %s: %s", sym, exc)
+        for sym, res in winner_results.items():
+            if res.n_trades > 0:
+                net = apply_costs(
+                    gross_return_pct=res.total_return_pct,
+                    fee_pct=costs.get("fee_pct", 0.001),
+                    slippage_pct=costs.get("slippage_pct", 0.001),
+                )
+                is_returns.append(net)
         in_sample_fold_returns.append(
             sum(is_returns) / len(is_returns) if is_returns else 0.0
         )

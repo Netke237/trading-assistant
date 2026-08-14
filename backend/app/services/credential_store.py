@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import threading
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,28 @@ import yaml
 _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "local_credentials.yaml"
 
 _SENSITIVE_KEYS = {"token", "apiToken", "api_token", "password", "secret", "secret_key", "client_secret", "refresh_token"}
+
+# Broker slots that are blocked from live execution until manually enabled.
+# Single source of truth — broker_router.py imports this rather than
+# redefining it, so the "no live trading" invariant can't drift between files.
+# Every recognized live broker key, whether or not an adapter exists for it
+# yet — this way a newly-added live adapter (e.g. TradierLiveAdapter) is
+# blocked automatically by already being in this set.
+LIVE_BROKER_KEYS = {"ibkr_live", "tradier_live", "alpaca_live", "tastytrade_live"}
+
+_PRIVATE_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR  # 0600 — owner read/write only
+
+
+def _restrict_permissions(path: Path) -> None:
+    """Best-effort: this is a local single-user paper-trading tool, not a
+    hardened secrets store — we deliberately do NOT encrypt these values.
+    Restricting to owner-only is a cheap, meaningful reduction in exposure
+    (e.g. other local accounts, backup tools) without key-management overhead.
+    """
+    try:
+        os.chmod(path, _PRIVATE_FILE_MODE)
+    except OSError:
+        pass  # best-effort; never block credential save/load on this
 
 
 def _mask(value: str) -> str:
@@ -70,6 +93,7 @@ class CredentialStore:
                 "credential_store: failed to load %s (%s) — using defaults", self._path, exc
             )
             return
+        _restrict_permissions(self._path)  # tighten perms on files predating this fix
         with self._lock:
             for k, v in raw.items():
                 # Only merge known broker slots; ignore stray/legacy keys in the file
@@ -91,7 +115,7 @@ class CredentialStore:
         # Windows (doesn't map cleanly to NTFS ACLs). No Windows-dev-env
         # expectations found in this repo (CI runs ubuntu-latest), so this
         # is treated as purely beneficial here.
-        os.chmod(tmp, 0o600)
+        _restrict_permissions(tmp)
         os.replace(tmp, self._path)
 
     def get(self, key: str) -> dict | None:

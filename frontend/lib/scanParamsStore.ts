@@ -57,6 +57,59 @@ interface ScanParamsStore extends ScanParams {
   setVwapDeviationPct:        (v: number) => void;
 }
 
+/**
+ * Branches must accumulate — no early returns — mirrors scanStore.ts's migrate():
+ * a store frozen at any old version must receive every intermediate field
+ * addition in one migration pass, not just the single lowest-numbered branch
+ * that would have matched an early-return waterfall.
+ *
+ * Exception: the btMinWinRate 0.30 (forced at the original v7->v8 transition)
+ * -> 0.45 (corrected at the original v8->v9 transition) pair is deliberately
+ * NOT made cumulative across every v<8/v<9 — it's guarded on the ORIGINAL
+ * persisted version being exactly 7 (force) / exactly 8 (correction) so a
+ * store frozen further back (e.g. v3) that never actually went through the
+ * v7/v8 bug window keeps its real value untouched, instead of the correction
+ * silently overwriting a value the user set deliberately at some later
+ * version. This preserves the old code's exact narrow targeting for this one
+ * field while making every other field addition genuinely cumulative.
+ */
+export function migrateScanParams(state: unknown, v: number): ScanParams {
+  let s: Record<string, unknown> = { ...DEFAULTS, ...(state as Partial<ScanParams>) };
+
+  if (v < 4) {
+    s = { ...s, pullbackMaType: 'EMA' as const };
+  }
+  if (v < 5) {
+    s = { ...s, eventFilter: 'include' as const };
+  }
+  if (v < 6) {
+    s = { ...s, pullbackTolerancePct: 0.08, btMinTrades: 5 };
+  }
+  if (v < 7) {
+    s = { ...s, stockShortlistMax: 10 };
+  }
+  if (v === 7) {
+    s = { ...s, btMinWinRate: 0.30 };
+  }
+  if (v === 8 && s.btMinWinRate === 0.30) {
+    s = { ...s, btMinWinRate: 0.45 };
+  }
+  if (v < 10) {
+    s = { ...s, requireChoppyRegime: false };
+  }
+  if (v < 11) {
+    s = {
+      ...s,
+      meanReversionVariants:   ['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap_daily'],
+      meanReversionMinConfirm: 2,
+      vwapLookback:            20,
+      vwapDeviationPct:        0.02,
+    };
+  }
+
+  return s as unknown as ScanParams;
+}
+
 export const useScanParamsStore = create<ScanParamsStore>()(
   persist(
     (set) => ({
@@ -73,31 +126,7 @@ export const useScanParamsStore = create<ScanParamsStore>()(
       name: 'bamendjou:scan-params',
       skipHydration: true,
       version: 11,
-      migrate: (state: unknown, v: number) => {
-        if (v < 2) return { ...DEFAULTS, ...(state as Partial<ScanParams>) };
-        if (v < 4) return { ...DEFAULTS, ...(state as Partial<ScanParams>), pullbackMaType: 'EMA' as const };
-        if (v < 5) return { ...DEFAULTS, ...(state as Partial<ScanParams>), eventFilter: 'include' as const };
-        if (v < 6) return { ...DEFAULTS, ...(state as Partial<ScanParams>), pullbackTolerancePct: 0.08, btMinTrades: 5 };
-        if (v < 7) return { ...DEFAULTS, ...(state as Partial<ScanParams>), stockShortlistMax: 10 };
-        if (v < 8) return { ...DEFAULTS, ...(state as Partial<ScanParams>), btMinWinRate: 0.30 };
-        if (v < 9) {
-          const migrated = { ...DEFAULTS, ...(state as Partial<ScanParams>) };
-          if ((migrated as Record<string, unknown>).btMinWinRate === 0.30) {
-            (migrated as Record<string, unknown>).btMinWinRate = 0.45;
-          }
-          return migrated;
-        }
-        if (v < 10) return { ...DEFAULTS, ...(state as Partial<ScanParams>), requireChoppyRegime: false };
-        if (v < 11) return {
-          ...DEFAULTS,
-          ...(state as Partial<ScanParams>),
-          meanReversionVariants:   ['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap_daily'],
-          meanReversionMinConfirm: 2,
-          vwapLookback:            20,
-          vwapDeviationPct:        0.02,
-        };
-        return state as ScanParams;
-      },
+      migrate: migrateScanParams,
     },
   ),
 );

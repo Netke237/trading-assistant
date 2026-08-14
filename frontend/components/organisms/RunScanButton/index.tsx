@@ -76,7 +76,16 @@ export function RunScanButton() {
     }
 
     if (screenerMode === 'stocks') {
-      if (!activeStrategy) return;
+      if (!activeStrategy) {
+        useAlertStore.getState().addToast({
+          kind: 'Critical',
+          symbol: 'SYSTEM',
+          reason: 'Pick a strategy on Step 4 before running the scan.',
+          recId: 'STRATEGY-NOT-SELECTED',
+          alertType: 'SCAN_FAILED',
+        });
+        return;
+      }
       void runStockScan(activeStrategy);
       return;
     }

@@ -73,6 +73,48 @@ describe('scanStore', () => {
     });
   });
 
+  it('clears scanResult and stockScanResult when universe changes (H6)', () => {
+    const { result } = renderHook(() => useScanStore());
+
+    act(() => {
+      result.current.setContext({
+        universe: 'SP500', direction: 'Bullish', horizon: 'Swing (5–15d)',
+        horizonPreset: 'Swing', holdMin: 5, holdMax: 15,
+      });
+      result.current.setScanResult({ scan_id: 'x', timestamp: 't', candidates: [], rejected: [] });
+      result.current.setStockScanResult({ candidates: [], rejected: [] } as any);
+    });
+
+    act(() => {
+      result.current.setContext({
+        universe: 'NDX100', direction: 'Bullish', horizon: 'Swing (5–15d)',
+        horizonPreset: 'Swing', holdMin: 5, holdMax: 15,
+      });
+    });
+
+    expect(result.current.scanResult).toBeNull();
+    expect(result.current.stockScanResult).toBeNull();
+  });
+
+  it('does not clear scanResult when context is unchanged (same values re-set) (H6)', () => {
+    const { result } = renderHook(() => useScanStore());
+    const ctx = {
+      universe: 'SP500', direction: 'Bullish' as const, horizon: 'Swing (5–15d)',
+      horizonPreset: 'Swing' as const, holdMin: 5, holdMax: 15,
+    };
+
+    act(() => {
+      result.current.setContext(ctx);
+      result.current.setScanResult({ scan_id: 'x', timestamp: 't', candidates: [], rejected: [] });
+    });
+
+    act(() => {
+      result.current.setContext({ ...ctx });
+    });
+
+    expect(result.current.scanResult).not.toBeNull();
+  });
+
   it('sets regime status', () => {
     const { result } = renderHook(() => useScanStore());
 

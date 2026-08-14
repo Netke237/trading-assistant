@@ -235,3 +235,64 @@ def test_backtest_result_changes_with_params():
     # They must not be silently identical, which is what happens if params is
     # never forwarded into the signal function.
     assert tight.n_trades != loose.n_trades or tight.summary_text != loose.summary_text
+
+
+def test_expectancy_uses_real_per_trade_returns_not_aggregate_stats():
+    """H12 regression: expectancy must be derived from stats['_trades']['ReturnPct'],
+    not from total_return_pct / max_drawdown_pct — those are portfolio-level aggregates
+    that are not trade-additive and can yield negative expectancy for a net-profitable,
+    high-win-rate strategy.
+    """
+    import pandas as pd
+    from unittest.mock import patch, MagicMock
+
+    # 15 wins of +1% each, 5 losses of -0.5% each — clearly net-profitable, 75% win rate.
+    returns = [0.01] * 15 + [-0.005] * 5
+    trades_df = pd.DataFrame({"ReturnPct": returns})
+
+    fake_stats = {
+        "# Trades": 20,
+        "Win Rate [%]": 75.0,
+        "Return [%]": 3.0,           # deliberately small/unrelated to trade returns
+        "Max. Drawdown [%]": -18.0,  # deliberately large/unrelated to trade returns
+        "Sharpe Ratio": 1.2,
+        "_trades": trades_df,
+    }
+
+    bars = _synth_bars(400, trend=True)
+    with patch("backtesting.Backtest") as MockBacktest:
+        mock_bt_instance = MagicMock()
+        mock_bt_instance.run.return_value = fake_stats
+        MockBacktest.return_value = mock_bt_instance
+        result = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish")
+
+    # avg_win = mean(1.0) = 1.0; avg_loss = mean(abs(-0.5)) = 0.5
+    # expectancy = 0.75*1.0 - 0.25*0.5 = 0.75 - 0.125 = 0.625  (positive!)
+    assert result.expectancy > 0, (
+        f"Expected positive expectancy for a 75%-win-rate, net-profitable strategy, "
+        f"got {result.expectancy}"
+    )
+    assert result.expectancy == pytest.approx(0.625, abs=0.01)
+
+
+def test_expectancy_avg_win_loss_independent_of_drawdown_magnitude():
+    """A large max_drawdown_pct must not distort expectancy when per-trade returns
+    are small and consistent — guards against reintroducing the aggregate-stat bug."""
+    import pandas as pd
+    from unittest.mock import patch, MagicMock
+
+    returns = [0.002] * 18 + [-0.001] * 2  # 90% win rate, tiny consistent edges
+    trades_df = pd.DataFrame({"ReturnPct": returns})
+    fake_stats = {
+        "# Trades": 20, "Win Rate [%]": 90.0,
+        "Return [%]": 0.5, "Max. Drawdown [%]": -40.0,  # huge, unrelated drawdown
+        "Sharpe Ratio": 0.8, "_trades": trades_df,
+    }
+    bars = _synth_bars(400, trend=True)
+    with patch("backtesting.Backtest") as MockBacktest:
+        mock_bt_instance = MagicMock()
+        mock_bt_instance.run.return_value = fake_stats
+        MockBacktest.return_value = mock_bt_instance
+        result = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish")
+
+    assert result.expectancy > 0

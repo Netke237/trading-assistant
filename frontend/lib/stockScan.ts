@@ -114,6 +114,12 @@ export async function runStockScan(
       regime_headwind_reject_pct:  typeof rawOverrides.regime_headwind_reject_pct  === 'number' ? rawOverrides.regime_headwind_reject_pct  : undefined,
       fundamentals_caution_above:  typeof rawOverrides.fundamentals_caution_above  === 'number' ? rawOverrides.fundamentals_caution_above  : undefined,
       fundamentals_reject_above:   typeof rawOverrides.fundamentals_reject_above   === 'number' ? rawOverrides.fundamentals_reject_above   : undefined,
+      ...(strategy === 'mean_reversion_multi' ? {
+        mean_reversion_variants:          saved.meanReversionVariants,
+        mean_reversion_min_confirmations: saved.meanReversionMinConfirm,
+        vwap_lookback:                    saved.vwapLookback,
+        vwap_deviation_pct:               saved.vwapDeviationPct,
+      } : {}),
     });
     store.setStockScanResult(result);
     store.setScanState('COMPLETED');

@@ -57,14 +57,18 @@ def assess_entry(
     if config is None:
         config = EntryConfig()
 
-    spread_pct = round((ask - bid) / mid, 10) if mid > 0 else 1.0
-
     limit_price = round(mid, 2)
     max_fill = round(mid * (1 + config.max_slippage_pct), 2)
     order_type: OrderType = "Limit"
 
     quality_reasons: list[str] = []
     worst_status: Status = "PASS"
+
+    if bid > ask:
+        quality_reasons.append("crossed quote")
+        worst_status = "REJECT"
+
+    spread_pct = round((ask - bid) / mid, 10) if mid > 0 else 1.0
 
     if mid < config.min_premium:
         quality_reasons.append("premium too low")

@@ -39,6 +39,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [queued, setQueued] = useState<Record<string, string>>({});
+  const [hasSubmittedOnce, setHasSubmittedOnce] = useState(false);
   const [alpacaConfigured, setAlpacaConfigured] = useState(false);
   const [tastytradeConfigured, setTastytradeConfigured] = useState(false);
 
@@ -79,12 +80,18 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   async function submit() {
     if (submitting) return;
     setSubmitting(true);
+
+    // On a retry (i.e. a prior attempt already ran), only re-process symbols
+    // that failed last time — already-succeeded symbols must not be
+    // resubmitted (would double-place broker orders / duplicate positions).
+    const targets = hasSubmittedOnce ? cards.filter((c) => c.symbol in errors) : cards;
+    setHasSubmittedOnce(true);
     setErrors({});
     setQueued({});
 
     const errs: Record<string, string> = {};
     const q: Record<string, string> = {};
-    for (const c of cards) {
+    for (const c of targets) {
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
       if (!r.autoSend) {
         // Manual → paper portfolio
@@ -127,6 +134,10 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     // (caution). Only a fully-confirmed submit advances to onSubmit + close.
     if (Object.keys(errs).length > 0 || Object.keys(q).length > 0) return;
 
+    // All symbols (across this attempt and any prior successful ones) are
+    // now placed. Report the full original card set/shares to the caller,
+    // since callers (e.g. Step 7) expect one onSubmit describing the whole
+    // basket that is now fully placed.
     const orders: StockDraftOrder[] = cards.map((c) => {
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
       return { card: c, shares: Math.max(1, Math.round(r.shares)), autoSend: r.autoSend };
@@ -270,7 +281,9 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
                   ? 'Submitting…'
                   : hasQueued
                     ? 'Queued — close to continue'
-                    : `Submit ${cards.length} order${cards.length === 1 ? '' : 's'}`}
+                    : Object.keys(errors).length > 0
+                      ? `Retry ${Object.keys(errors).length} failed order${Object.keys(errors).length === 1 ? '' : 's'}`
+                      : `Submit ${cards.length} order${cards.length === 1 ? '' : 's'}`}
               </Text>
             </button>
           </div>

@@ -3,6 +3,7 @@ import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
+import { useAlertStore } from '@/lib/alertStore';
 import { api } from '@/lib/api';
 import { runStockScan } from '@/lib/stockScan';
 
@@ -88,6 +89,20 @@ describe('RunScanButton — conflict suppression wiring', () => {
     fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
 
     expect(runStockScan).toHaveBeenCalledWith('pullback_ema');
+  });
+
+  it('shows a toast and does not call runStockScan when Stocks mode has no activeStrategy selected (M6)', async () => {
+    const { runStockScan } = require('@/lib/stockScan');
+    useScanStore.setState({ screenerMode: 'stocks', activeStrategy: null } as any);
+    const addToastSpy = jest.spyOn(useAlertStore.getState(), 'addToast');
+
+    render(<RunScanButton />);
+    fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i }));
+
+    expect(addToastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ recId: 'STRATEGY-NOT-SELECTED', alertType: 'SCAN_FAILED' })
+    );
+    expect(runStockScan).not.toHaveBeenCalled();
   });
 
   it('clears conflictedSymbols when no overlap exists', async () => {

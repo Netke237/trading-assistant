@@ -84,4 +84,24 @@ describe('runStockScan', () => {
     expect(arg.confidence_atr_mult_target).toBe(4.0);
     expect(arg.confidence_atr_mult_stop).toBe(2.0);
   });
+
+  it('forwards mean-reversion-multi params only when that strategy is selected (H4)', async () => {
+    const fake = { scan_id: 'S-1', timestamp: 't', rejected: [], candidates: [] };
+    (api.postStockScan as jest.Mock).mockResolvedValue(fake);
+
+    await runStockScan('mean_reversion_multi');
+    const multiArg = (api.postStockScan as jest.Mock).mock.calls[0][0];
+    expect(multiArg.mean_reversion_variants).toEqual(
+      expect.arrayContaining(['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap_daily'])
+    );
+    expect(multiArg.mean_reversion_min_confirmations).toBe(2);
+    expect(multiArg.vwap_lookback).toBe(20);
+    expect(multiArg.vwap_deviation_pct).toBe(0.02);
+
+    (api.postStockScan as jest.Mock).mockClear();
+    await runStockScan('pullback_ema');
+    const singleArg = (api.postStockScan as jest.Mock).mock.calls[0][0];
+    expect(singleArg.mean_reversion_variants).toBeUndefined();
+    expect(singleArg.mean_reversion_min_confirmations).toBeUndefined();
+  });
 });

@@ -476,6 +476,7 @@ export const api = {
     action: 'BUY' | 'SELL'; quantity: number;
     order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;
     entry_premium?: number;
+    portfolio_value?: number;
   }) => post<{ armed: boolean }>('/auto-trade/arm', req),
 
   disarmAutoTrade: () => del('/auto-trade/arm'),

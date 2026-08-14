@@ -10,7 +10,6 @@ portfolio:
   max_single_position_pct: 0.05
 
 sizing:
-  default_contracts: 1
   max_contracts_per_trade: 5
 
 # Reward-risk calculation defaults (FR-45)
@@ -37,4 +36,9 @@ auto_trade:
   premium_stop_pct: 0.60       # matches reward_risk.premium_stop_pct default
   regime_monitor_interval_minutes: 15
   regime_flip_sustain_minutes: 0   # 0 = warn on the first REJECT+open-positions tick (original behavior)
-  gap_threshold_pct: 0.05       # reserved: future percentage buffer around stop; currently alerts on any stop breach
+  # INTENTIONAL DEAD CONFIG (not a bug): gap_threshold_pct is reserved for a future
+  # percentage buffer around the stop-loss trigger. No code currently reads this key —
+  # auto_trader.py alerts on any stop breach with no buffer. Verified zero read sites as
+  # of Phase D config audit (2026-07-01). Leave in place; do not remove without adding the
+  # feature that consumes it.
+  gap_threshold_pct: 0.05

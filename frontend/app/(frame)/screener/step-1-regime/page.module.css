@@ -12,6 +12,32 @@
 .banner_CAUTION { border-left: 3px solid var(--caution); }
 .banner_REJECT  { border-left: 3px solid var(--reject);  }
 
+.regimeRetryBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in srgb, var(--reject) 8%, var(--bg-surface));
+  border: 1px solid var(--reject);
+  border-radius: var(--radius-md);
+}
+
+.regimeRetryBtn {
+  height: 30px;
+  padding: 0 var(--space-4);
+  background: transparent;
+  border: 1px solid var(--reject);
+  border-radius: var(--radius-md);
+  color: var(--reject);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.regimeRetryBtn:hover {
+  background: color-mix(in srgb, var(--reject) 15%, var(--bg-surface));
+}
+
 .bannerLeft {
   display: flex;
   align-items: center;

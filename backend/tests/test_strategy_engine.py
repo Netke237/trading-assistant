@@ -410,3 +410,108 @@ def test_pullback_ema_accepts_low_volume_pullback():
     assert signal is None or isinstance(signal, StrategySignal)
     if signal is not None:
         assert signal.strategy == "pullback_ema"
+
+
+def test_all_signal_functions_accept_current_price_kwarg():
+    """Every strategy registered in stock_scan._SIGNAL_FNS must accept a
+    current_price kwarg — the router calls all of them with it unconditionally
+    (stock_scan.py:296-298, 700-705). A strategy missing this parameter raises
+    TypeError for every symbol in a scan, silently masked as 'no setup' on the
+    analyze path and leaked as the failure reason on the batch path.
+
+    225 bars satisfies the longest min-length gate in the group
+    (mean_reversion_bb_signal: trend_sma=200 + bb_period=20 + 5). Note this
+    assertion only needs the call to bind successfully — Python raises
+    TypeError for an unexpected keyword argument at call-binding time, before
+    the function body's own length gate ever runs, so the exact bar count
+    doesn't gate this test's correctness.
+    """
+    from app.routers.stock_scan import _SIGNAL_FNS
+
+    bars = _rising_bars(225)
+    for name, fn in _SIGNAL_FNS.items():
+        try:
+            fn(bars, direction="Bullish", current_price=bars[-1]["close"])
+        except TypeError as e:
+            pytest.fail(f"{name} ({fn.__name__}) does not accept current_price: {e}")
+
+
+# ── risk<=0 guard tests (H13/T1) ──────────────────────────────────────────────
+
+def test_breakout_base_signal_zero_atr_direct_bullish(monkeypatch):
+    """H13/T1: on a degenerate zero-ATR base, breakout_base_signal must not emit
+    an inverted stop/target — the risk<=0 guard must fire instead."""
+    import app.services.strategy_engine as se
+    monkeypatch.setattr(se, "_atr", lambda bars, period=14: 0.0)
+    bars = _flat_bars(30, price=100.0)
+    bars += [{"open": 100.0, "high": 101.0, "low": 100.0, "close": 100.5, "volume": 5_000_000}
+             for _ in range(5)]
+    signal = se.breakout_base_signal(bars, direction="Bullish", volume_mult=1.0, atr_tight_max=999)
+    assert signal is None or signal.entry_price > signal.stop_price
+
+
+def test_breakout_base_signal_zero_atr_direct_bearish(monkeypatch):
+    import app.services.strategy_engine as se
+    monkeypatch.setattr(se, "_atr", lambda bars, period=14: 0.0)
+    bars = _flat_bars(30, price=100.0)
+    bars += [{"open": 100.0, "high": 100.0, "low": 99.0, "close": 99.5, "volume": 5_000_000}
+             for _ in range(5)]
+    signal = se.breakout_base_signal(bars, direction="Bearish", volume_mult=1.0, atr_tight_max=999)
+    assert signal is None or signal.entry_price < signal.stop_price
+
+
+def test_ma_crossover_signal_never_inverts_stop_bullish():
+    """Guard: whenever a Bullish signal fires, stop must be strictly below entry."""
+    bars = _crossover_bars(cross_bars_ago=5)
+    signal = ma_crossover_signal(bars, direction="Bullish")
+    if signal is not None:
+        assert signal.entry_price > signal.stop_price, (
+            f"stop {signal.stop_price} must be below entry {signal.entry_price}"
+        )
+
+
+def test_ma_crossover_signal_never_inverts_stop_bearish():
+    """Mirror of the bullish case — death cross must not invert stop/entry either."""
+    bars = []
+    for _ in range(100):
+        bars.append({"open": 199.9, "high": 200.5, "low": 199.5, "close": 200.0, "volume": 1_000})
+    for _ in range(5):
+        bars.append({"open": 99.9, "high": 100.5, "low": 99.5, "close": 100.0, "volume": 1_000})
+    signal = ma_crossover_signal(bars, direction="Bearish")
+    if signal is not None:
+        assert signal.entry_price < signal.stop_price, (
+            f"bearish stop {signal.stop_price} must be above entry {signal.entry_price}"
+        )
+
+
+def test_mean_reversion_rsi_signal_never_inverts_stop_bullish():
+    """Guard: whenever a Bullish RSI mean-reversion signal fires, stop must be below entry."""
+    bars = _rising_bars(250)
+    # Force a shallow oversold dip near the swing low so a degenerate/near-zero-ATR
+    # stop calculation is exercised without crashing or inverting.
+    for i in range(-5, 0):
+        bars[i]["close"] *= 0.995
+        bars[i]["low"] = bars[i]["close"]
+    signal = mean_reversion_rsi_signal(bars, direction="Bullish")
+    if signal is not None:
+        assert signal.entry_price > signal.stop_price, (
+            f"stop {signal.stop_price} must be below entry {signal.entry_price}"
+        )
+
+
+def test_mean_reversion_rsi_signal_never_inverts_stop_bearish():
+    """Mirror for the bearish/overbought-in-downtrend path."""
+    bars = []
+    price = 200.0
+    for i in range(250):
+        price -= 0.3
+        bars.append({"open": price + 0.1, "high": price + 0.3,
+                     "low": price - 0.3, "close": price, "volume": 500_000})
+    for i in range(-5, 0):
+        bars[i]["close"] *= 1.005
+        bars[i]["high"] = bars[i]["close"]
+    signal = mean_reversion_rsi_signal(bars, direction="Bearish")
+    if signal is not None:
+        assert signal.entry_price < signal.stop_price, (
+            f"bearish stop {signal.stop_price} must be above entry {signal.entry_price}"
+        )

@@ -98,7 +98,7 @@ def estimate_rr(
     risk = current_premium * premium_stop_pct   # only risk the stop-loss fraction
     reward = exit_premium - current_premium
 
-    if reward <= 0 or risk <= 0:
+    if risk <= 0:
         return RrResult(rr_ratio=0.0, model_used=model_used, estimated_exit_premium=round(exit_premium, 2))
 
     rr_ratio = round(reward / risk, 2)
@@ -251,7 +251,7 @@ def estimate_targets(
 
         reward = opt_price - current_premium
         risk_basis = current_premium * premium_stop_pct
-        rr = round(reward / risk_basis, 2) if risk_basis > 0 and reward > 0 else 0.0
+        rr = round(reward / risk_basis, 2) if risk_basis > 0 else 0.0
 
         results.append(TargetLevelSchema(
             targetPrice=round(t_price, 2),

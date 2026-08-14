@@ -197,7 +197,19 @@ export const useScanStore = create<ScanStoreState>()(
           || prev.horizon   !== c.horizon;
         return {
           context: c,
-          ...(contextChanged ? { previousRun: null, previousStockScanResult: null } : {}),
+          ...(contextChanged ? {
+            previousRun:             null,
+            previousStockScanResult: null,
+            // Stale results from the old universe/direction/horizon must not linger —
+            // Step 4 would otherwise render the previous context's candidates with no
+            // indicator that they no longer match the selected universe/direction.
+            scanResult:        null,
+            stockScanResult:   null,
+            stockScanAt:       null,
+            optionsScanAt:     null,
+            rejectedLog:       [],
+            conflictedSymbols: [],
+          } : {}),
         };
       }),
       setRegime:       (r) => set({ regime: r }),

@@ -321,7 +321,7 @@ def validate_contract(
         + iv_score * weights["iv_rank"]
     )
     score = round(weighted)
-    thresholds = cfg["score_thresholds"]
+    thresholds = cfg["contract_score_thresholds"]
 
     if score >= thresholds["pass"]:
         status: Status = "PASS"

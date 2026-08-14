@@ -102,3 +102,58 @@ def test_score_fundamentals_cfg_none_uses_yaml_loader():
         f"(baseline={baseline.score}, risk_only={risk_only.score}). "
         "cfg=None is not reading from _load_yaml_cfg."
     )
+
+
+# ── H3: quality_label must reflect quality_score, not blended score ─────────
+
+def test_quality_label_reflects_quality_score_not_blended_score():
+    """A stock with strong margins (high quality_score) but weak growth/risk (low blended
+    score) must still get quality_label='Strong' — the label describes the Quality bucket,
+    not the overall blended score."""
+    h = score_fundamentals(_snap(
+        gross_margin=0.55, operating_margin=0.30,
+        revenue_growth_yoy=-0.30, eps_growth_yoy=-0.25,
+        debt_to_equity=2.8, current_ratio=0.6, share_growth_yoy=0.08,
+    ), "Bullish")
+    assert h.quality_score >= 65, f"expected strong quality bucket, got {h.quality_score}"
+    assert h.score < 40, f"expected blended score to be dragged down, got {h.score}"
+    assert h.quality_label == "Strong", (
+        f"quality_label={h.quality_label!r} must reflect quality_score={h.quality_score}, "
+        f"not blended score={h.score}"
+    )
+
+
+def test_quality_label_weak_quality_bucket_labeled_weak_even_if_blended_score_high():
+    """Inverse case: weak margins but strong growth/risk should NOT be labeled 'Strong'
+    quality just because the blended score is high."""
+    h = score_fundamentals(_snap(
+        gross_margin=0.10, operating_margin=-0.10,
+        revenue_growth_yoy=0.40, eps_growth_yoy=0.35,
+        debt_to_equity=0.2, current_ratio=3.0, share_growth_yoy=-0.02,
+    ), "Bullish")
+    assert h.quality_score < 40, f"expected weak quality bucket, got {h.quality_score}"
+    assert h.quality_label == "Weak", (
+        f"quality_label={h.quality_label!r} should be Weak given quality_score={h.quality_score}"
+    )
+
+
+# ── M1: quality_label_thresholds must be sourced from cfg, not hardcoded ────
+
+def test_quality_label_thresholds_configurable():
+    """quality_label boundaries must be read from cfg['quality_label_thresholds'], not
+    hardcoded 65/40. Uses a mid-range quality_score (not maxed at 100) so a raised
+    'strong' threshold can actually demote the label."""
+    snap = _snap(gross_margin=0.34, operating_margin=0.12)
+    baseline = score_fundamentals(snap, "Bullish")
+    assert baseline.quality_label == "Strong"
+    assert baseline.quality_score < 100, "test needs headroom below 100 to prove demotion"
+
+    tight_cfg = {
+        "weights": {"growth": 0.35, "quality": 0.35, "risk": 0.30},
+        "safety": {"reject_on_negative_equity": True, "debt_to_equity_reject": 3.0},
+        "quality_label_thresholds": {"strong": 90, "neutral": 50},
+    }
+    tightened = score_fundamentals(snap, "Bullish", cfg=tight_cfg)
+    assert tightened.quality_label != "Strong", (
+        "raising quality_label_thresholds.strong to 90 should demote this snapshot's label"
+    )

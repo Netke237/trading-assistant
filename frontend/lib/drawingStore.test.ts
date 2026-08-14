@@ -1,4 +1,4 @@
-import { useDrawingStore } from './drawingStore';
+import { useDrawingStore, migrateDrawings } from './drawingStore';
 import type { Drawing } from '@/types/overlays';
 
 // avoid real network in unit test
@@ -44,5 +44,16 @@ describe('drawingStore', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect((global.fetch as jest.Mock).mock.calls[0][0]).toContain('/chart/drawings');
     expect((global.fetch as jest.Mock).mock.calls[0][1]).toMatchObject({ method: 'POST' });
+  });
+});
+
+describe('drawingStore — migrate (T4)', () => {
+  it('is currently a passthrough (version 1, no shape changes yet)', () => {
+    const state = { drawings: [d('d1')] };
+    expect(migrateDrawings(state, 0)).toEqual(state);
+  });
+
+  it('handles null persisted state without throwing', () => {
+    expect(migrateDrawings(null, 0)).toEqual({});
   });
 });
