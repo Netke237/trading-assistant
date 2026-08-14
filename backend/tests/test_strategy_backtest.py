@@ -17,6 +17,25 @@ def _synth_bars(n=400, trend=True):
     return bars
 
 
+def test_zero_trades_does_not_produce_nan_stats():
+    """A window with zero trades makes the underlying `backtesting` library
+    return NaN for Win Rate/Sharpe internally (division by zero trades) --
+    left unguarded this poisons expectancy (nan*x is nan) and reaches the
+    API response, where Python's default JSON encoder emits the bare,
+    invalid-JSON token `NaN`. Flat/oscillating bars with no real trend
+    reliably produce zero trades for pullback_ema (no pullback-to-EMA setup
+    ever fires)."""
+    import math
+    bars = _synth_bars(400, trend=False)
+    result = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish")
+    assert result.n_trades == 0, "fixture must produce zero trades for this test to be meaningful"
+    assert not math.isnan(result.win_rate)
+    assert not math.isnan(result.sharpe)
+    assert not math.isnan(result.expectancy)
+    assert result.win_rate == 0.0
+    assert result.expectancy == 0.0
+
+
 def test_backtest_returns_result_object():
     bars = _synth_bars(400, trend=True)
     result = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish")

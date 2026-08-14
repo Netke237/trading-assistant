@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Literal
 
@@ -127,10 +128,20 @@ def run_strategy_backtest(
 
     n_trades = int(stats.get("# Trades", 0))
 
-    win_rate    = float(stats.get("Win Rate [%]", 0)) / 100.0
+    # A zero-trade window makes the underlying `backtesting` library return
+    # NaN for Win Rate/Sharpe (division by zero trades internally) rather
+    # than 0 — `stats.get(key, 0)`'s default only fires when the key is
+    # absent, not when its value is present-but-NaN, so that default doesn't
+    # help here. Left unguarded, NaN propagates into expectancy (nan*x is
+    # nan) and reaches BacktestResult/the API response, where Python's
+    # default JSON encoder emits the bare (invalid-JSON) token `NaN`,
+    # breaking every caller's `response.json()`.
+    _win_rate_raw = float(stats.get("Win Rate [%]", 0))
+    win_rate    = 0.0 if math.isnan(_win_rate_raw) else _win_rate_raw / 100.0
     total_ret   = float(stats.get("Return [%]", 0))
     max_dd      = float(stats.get("Max. Drawdown [%]", 0))
-    sharpe      = float(stats.get("Sharpe Ratio", 0) or 0)
+    _sharpe_raw = float(stats.get("Sharpe Ratio", 0) or 0)
+    sharpe      = 0.0 if math.isnan(_sharpe_raw) else _sharpe_raw
 
     # Use real per-trade returns (stats['_trades']['ReturnPct']) rather than deriving
     # avg_win/avg_loss from portfolio-level aggregates (total_return_pct, max_drawdown_pct).
