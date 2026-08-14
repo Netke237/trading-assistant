@@ -1,7 +1,11 @@
 # Implementation Plan — Tier 3: Mechanical Cleanup & Hardening
 
-Status: DRAFT — pending adversarial review (lighter rigor than Tiers 1-2; these are low-blast-radius
-items, but still deserve one adversarial pass since several touch security-adjacent code).
+Status: REVISED after adversarial review round 1. Three items had severity-5 findings: #2 rested
+on a false "no existing token" premise (one already exists) and undercounted affected files ~2x;
+#3's original recommendation risked a real data-loss bug (silently dropping a placed order on a
+network hiccup); #7 targeted the wrong file — the actual unattended nightly cron path is a
+different, undocumented duplicate script that was left completely unprotected. All three revised
+below.
 
 Scope: findings #11, #12, #13, #14, #25, #26, #27, #28, #29, plus two deferred residual notes from
 `SELL_CLOSE_SEMANTICS_PLAN.md` (Tradier `sell_short` margin caveat, IBKR/Alpaca auto-infer
@@ -23,51 +27,102 @@ itself accurate rather than just less-wrong.
 
 ## 2. Hardcoded `#fff` bypasses the CSS-token-only rule (#12)
 
-Five files hardcode `color: #fff` for white text on solid status-color backgrounds (buttons/badges
-on `--reject`, etc.): `NavItems.module.css:60`, `StepNavBar.module.css:98`,
-`RunScanButton/index.module.css:128`, `ConfirmDialog.module.css:56`, `AlertBadge.module.css:12`.
+**Round 1 review found the "no existing token" premise was false, and the file count was
+undercounted by roughly 2x. Corrected below.**
 
-**Fix:** no existing "inverse text" / "text on solid" token exists in `app/globals.css` today —
-add one (e.g. `--text-on-solid: #fff;` in the `:root` token block, alongside the existing
-`--pass`/`--caution`/`--reject` definitions), then replace all 5 hardcoded `#fff` with
-`var(--text-on-solid)`. Check whether the token needs a different value in light vs. dark theme
-(inspect `app/globals.css`'s `[data-theme="light"]` override block for how other tokens handle
-this) — white-on-saturated-status-color usually reads fine in both themes, but verify against the
-actual `--reject`/`--pass`/`--caution` color values in both theme blocks before assuming one value
-suffices for both.
+A token for exactly this purpose already exists: `frontend/styles/tokens.css:51,112` defines
+`--accent-text: #FFFFFF;` in both the dark (`:root`) and light (`[data-theme="light"]`) blocks,
+already used 22 times across the codebase for white-text-on-solid-background. Confirming this
+isn't a "different but similar" token: `RunScanButton/index.module.css` itself uses
+`var(--accent-text)` at line 19 **and** a hardcoded `#fff` at line 128 in the same file — the
+inconsistency is already present within one file, which is the strongest signal the fix is a
+rename/reuse, not a new addition.
+
+Also: `app/globals.css` is just 2 lines (`@import` of `styles/tokens.css` and `styles/reset.css`)
+— the actual token definitions live in `frontend/styles/tokens.css`, not `app/globals.css`. Any
+edit belongs there.
+
+**Corrected file list** (round 1 review's fuller grep for `color: #fff` on a solid status/accent
+background): the original 5 —
+`NavItems.module.css:60`, `StepNavBar.module.css:98`, `RunScanButton/index.module.css:128`,
+`ConfirmDialog.module.css:56`, `AlertBadge.module.css:12` — plus 6 more the original audit missed:
+`step-7-position-card/page.module.css:18-19` (on `--pass`/`--caution`),
+`step-7-trade-card/page.module.css:3-4` (same), `portfolio/page.module.css:379` (on `--reject`),
+`AutoTradeArm/AutoTradeArm.module.css:9` (on `--caution`), and two on `--accent`:
+`alerts/page.module.css:367`, `ClosePositionDrawer.module.css:11`. **11 sites total, not 5** —
+fixing only the original 5 would leave the codebase with two competing idioms for the identical
+purpose, arguably worse than the current single (if inconsistent) one.
+
+**Fix:** replace all 11 hardcoded `color: #fff` occurrences with `var(--accent-text)` (reusing the
+existing token — do not add a new one). If the name `--accent-text` reads awkwardly for some of
+the new sites (e.g. text on `--reject`/`--pass`/`--caution`, not just `--accent`), consider
+whether a rename to something more general like `--text-on-solid` is warranted — but that would
+mean updating all 22 *existing* call sites too, which is a larger, purely-cosmetic rename with no
+functional benefit; recommend keeping the existing `--accent-text` name and just extending its
+usage, unless the implementer finds a concrete reason the current name is actively misleading.
 
 **Test plan:** none needed (pure CSS token substitution, visually verify in both themes via the
-dev server per CLAUDE.md's "test the golden path" guidance for UI changes — a screenshot diff in
-light and dark mode of the 5 affected components is sufficient).
+dev server per CLAUDE.md's "test the golden path" guidance — a screenshot diff in light and dark
+mode of the 11 affected components is sufficient).
 
 ---
 
 ## 3. Redundant double-POST on options paper-order placement (#13)
 
-`frontend/app/(frame)/screener/step-7-trade-card/page.tsx:498,507` — `persistPosition(pos)` POSTs
-the new position, then on success `addPosition(pos)` (from `portfolioStore.ts`) independently
-POSTs the same position again via its own internal `postPosition()` call. The second POST is
-swallowed as a harmless 409 today.
+**Round 1 review found the original fix recommendation contained a real data-loss trap. Corrected
+below — this is now the most important item in this tier.**
 
-**Fix — need to determine the *intended* division of labor between `persistPosition` and
-`addPosition` before removing either call, since they may not be pure duplicates:**
-1. Read `persistPosition`'s full implementation (likely local to this page or a shared helper) and
-   `portfolioStore.ts`'s `addPosition` in full — confirm both really do send an equivalent POST to
-   the same endpoint with the same payload shape, not just "both eventually POST something."
-2. If `persistPosition` exists specifically to get `saved.ok`/`saved.adjustedQty` (exposure-limit
-   feedback) back synchronously before deciding whether to also add to local store state, then
-   `addPosition`'s internal POST is the truly redundant one — check if `addPosition` has (or can
-   be given) a variant/parameter that updates local Zustand state *without* re-POSTing, since the
-   position was already persisted successfully by `persistPosition`.
-3. If no such variant exists, add one (e.g. `addPosition(pos, { skipPost: true })` or a separate
-   `addPositionLocal(pos)` that only updates client state) rather than reworking the whole
-   store's POST logic — this keeps `addPosition`'s existing behavior intact for every *other* call
-   site that doesn't first call `persistPosition` (e.g. the stock-path call sites from
-   `SELL_CLOSE_SEMANTICS_PLAN.md`, which call `addPosition` directly with no separate persist
-   step).
+`frontend/app/(frame)/screener/step-7-trade-card/page.tsx:499,508` (line numbers corrected — not
+498/507) — `persistPosition(pos)` POSTs the new position, then on success `addPosition(pos)` (from
+`portfolioStore.ts`) independently POSTs the same position again via its own internal
+`postPosition()` call. The second POST is swallowed as a harmless 409 today. **The identical
+pattern is duplicated in `placeMarketNow` at lines ~533/542 — any fix must cover both, not just
+`placeLimitPaper`.**
 
-**Test plan:** a test asserting exactly one POST to the position-create endpoint per
-`placeLimitPaper`/`placeMarketNow` call in `step-7-trade-card`, not two.
+**Why the obvious fix ("skip `addPosition`'s POST since `persistPosition` already succeeded") is
+unsafe:** `persistPosition`'s network-failure branch is deliberately lenient —
+`catch { return { ok: true }; }` — it reports `ok: true` on a connection failure, i.e. it can
+report "success" when *nothing was actually persisted*. The only thing currently catching that and
+doing the right thing is `addPosition`'s own internal `postPosition()` call, whose
+network-failure branch instead returns a `{kind: 'network'}` result, which `addPosition` turns
+into `syncStatus: 'pending'` — a state `syncFromBackend`'s reconcile loop explicitly retries
+(unit-tested: `portfolioStore.test.ts:554`). If a "skip re-POST when `saved.ok`" variant trusts
+`persistPosition`'s optimistic `ok: true` on a network hiccup, the position gets inserted locally
+as `syncStatus: 'synced'` despite never reaching the backend — and `syncFromBackend`'s own
+reconcile logic treats a synced-but-absent-from-backend row as "a genuine phantom... drop it"
+(~line 520). **That would silently delete a just-placed paper order from the user's portfolio on
+a network hiccup** — the opposite of the intended fix, and the highest-consequence failure mode
+in this entire tier.
+
+**Corrected fix:** the skip-re-POST path must only trigger on a *genuine* successful response from
+`persistPosition`, never on its offline-optimistic fallback. Two ways to make this safe:
+- **(A)** Change `persistPosition` itself to stop conflating "offline" with "ok" — have its
+  catch branch return a distinguishable result (e.g. `{ ok: false, offline: true }` or a
+  `kind: 'network'` shape matching `addPosition`'s own internal convention) instead of
+  `{ ok: true }`. Then only skip `addPosition`'s POST when `persistPosition` returns a real,
+  confirmed-successful response — on the offline/network-failure case, still call `addPosition`
+  normally (with its own POST) so the existing pending/retry path still engages exactly as it
+  does today.
+- **(B)** Simpler, smaller diff: leave `persistPosition` unchanged, and only skip `addPosition`'s
+  internal POST when `persistPosition`'s result carries a real backend-confirmed identifier/field
+  that only a genuine successful response would have (if one exists in the response shape) —
+  distinguishing "really succeeded" from "optimistically assumed succeeded" without needing to
+  change `persistPosition`'s return shape.
+
+**Recommend (A)** — it fixes the ambiguity at its source rather than working around it at each
+call site, and makes `persistPosition`'s return value trustworthy for any future caller too, not
+just this one. Whichever is chosen, **do not ship a fix here without a test that specifically
+simulates a network failure during `persistPosition` and asserts the position still ends up
+`syncStatus: 'pending'` (retryable), not silently dropped** — this is the actual regression the
+original "just skip the second POST" idea would have introduced, and the happy-path-only test the
+original plan proposed would not have caught it.
+
+**Test plan:**
+1. Happy path: exactly one POST to the position-create endpoint per `placeLimitPaper`/
+   `placeMarketNow` call (both call sites), not two.
+2. **Regression-critical:** simulate a network failure in `persistPosition`'s call, confirm the
+   resulting position is NOT marked `synced` and IS retried via the existing pending-sync path —
+   proving the fix didn't reintroduce the data-loss failure mode described above.
 
 ---
 
@@ -127,13 +182,21 @@ default to the documentation-only fix.
 (plaintext broker secrets) via `os.replace` with no `os.chmod(0o600)`.
 
 **Fix:** add `os.chmod(tmp, 0o600)` before the `os.replace(tmp, self._path)` call (chmod the temp
-file before the atomic rename, so there's no window where the final file has permissive
-permissions). Also chmod the final path once, in case an existing file predates this fix and still
-has broad permissions from before:
+file before the atomic rename — `os.replace` preserves the source inode's permission bits, so this
+also fixes the final path's permissions going forward, confirmed by round 1 review). **Round 1
+review caught that this alone doesn't cover a file that already exists from before this fix
+shipped** (its permissions won't change until the next `save()` call, which may be a long time for
+a file that's rarely re-saved) — also add a one-time `os.chmod(self._path, 0o600)` in `load()` (or
+wherever the store is initialized) if `self._path.exists()`, so an already-broadly-permissioned
+file gets tightened on the next app start, not just the next save:
 ```python
+# in save():
 tmp.write_text(yaml.dump(data_copy, default_flow_style=False))
 os.chmod(tmp, 0o600)
 os.replace(tmp, self._path)
+
+# in load() or __init__, if self._path.exists():
+os.chmod(self._path, 0o600)
 ```
 Cross-platform note: `os.chmod` is a no-op-ish/best-effort on Windows (doesn't map cleanly to NTFS
 ACLs) — check if this codebase has any Windows-dev-environment expectations (CLAUDE.md's dev
@@ -150,28 +213,48 @@ an immediate concern, but note it for completeness).
 
 ## 7. `update_sp500_liquidity.py` overwrites production config with no backup/dry-run (#27)
 
+**Round 1 review found this item was targeting the wrong file — the actual unattended nightly
+cron path is a separate, undocumented duplicate implementation that the original plan left
+completely unprotected. Corrected below.**
+
 `backend/scripts/update_sp500_liquidity.py:134-150` rewrites `backend/app/data/sp500.csv`
-unconditionally; a bad yfinance batch could write a mostly-zeroed `liquidity` column over the file
-that drives the sector heatmap and universe filters.
+unconditionally — but this is a **standalone manual script**, not what actually runs unattended.
+CLAUDE.md documents `sp500_scheduler.py` as the cron job that "updates sp500.csv via yfinance," and
+that scheduler does **not** call this script — it calls
+`backend/app/services/sp500_update_service.py`'s `start_update_task()` → `_run()`, a **separate,
+duplicated implementation** (confirmed: `sp500_update_service.py:94-103`) with its own
+unconditional CSV overwrite, no backup, no dry-run, no sanity threshold. That's the code path that
+runs every night with nobody watching stdout — the higher-risk copy of this bug, not the manual
+script (which at least has a human present who might notice bad output).
 
-**Fix:**
-1. Add a `--dry-run` flag that runs the full fetch/compute pipeline but prints the would-be
-   summary (the existing "Done. N/M symbols have liquidity > 0" line, plus per-symbol WARN lines)
-   without writing the CSV.
-2. Before writing, back up the existing file (`shutil.copy2(CSV_PATH, CSV_PATH.with_suffix('.csv.bak'))`)
-   so a bad run can be manually reverted.
-3. Add a sanity threshold: if the fraction of symbols with `liquidity == 0` after a run exceeds
-   some threshold (e.g. >20%, tunable) compared to before, print a loud warning (and consider
-   exiting non-zero without writing, gated behind a `--force` flag to override) rather than
-   silently completing — this is the actual scenario the finding describes (a transient
-   yfinance outage returning mostly-empty data).
+**Corrected fix — apply the same hardening to both, sharing logic rather than duplicating it a
+third time:**
+1. Given `sp500_update_service.py` and `update_sp500_liquidity.py` are already an undocumented
+   duplication of the same fetch/write logic, consider (as a stretch goal, not required for this
+   fix to be complete) whether `sp500_update_service.py`'s scheduled path should just call the
+   script's logic directly instead of maintaining a parallel implementation — but don't let a
+   larger refactor block shipping the safety fix; if consolidating them is too large a change for
+   this pass, apply the same three protections (dry-run capability, backup, sanity threshold) to
+   **both** files independently.
+2. `update_sp500_liquidity.py` (manual script): as originally planned —
+   `--dry-run` flag, pre-write backup (`shutil.copy2`), sanity threshold on the zero-liquidity
+   fraction with a loud warning (and non-zero exit, gated behind `--force` to override).
+3. `sp500_update_service.py` (the actual unattended nightly path — the more important half of this
+   fix): add the pre-write backup and the sanity-threshold check as non-interactive safety nets
+   (no `--dry-run` concept needed here since it's not invoked with CLI args, but the backup and
+   the "don't write if liquidity data looks mostly-empty compared to before" check both apply
+   directly, and matter more here since nobody's watching this path run).
 
-**Scope guard:** this is a maintenance script run manually or via `sp500_scheduler.py` — don't
-over-engineer it into a full CLI framework; argparse with 1-2 flags is sufficient.
+**Scope guard:** this is still maintenance-script/scheduled-job hardening, not a rewrite — argparse
+with 1-2 flags for the manual script, and a couple of defensive checks added to the service
+function, not a new framework.
 
-**Test plan:** if this script has any existing test coverage, extend it; if not, a lightweight
-test isn't required for scope — this is a low-frequency manual/scheduled maintenance script, and
-the `--dry-run` flag itself is the primary safety net, verifiable by manual invocation.
+**Test plan:** if either file has existing test coverage, extend it. For `sp500_update_service.py`
+specifically — since it's the actual unattended path — a test simulating a "yfinance returns
+mostly-empty data" scenario and asserting the CSV is NOT overwritten (or is overwritten but a
+warning is logged, per whichever behavior is chosen) is worth adding even if the manual script's
+`--dry-run` flag doesn't get equivalent test coverage, since this is the path most likely to
+actually run unattended and do damage.
 
 ---
 

@@ -1,6 +1,14 @@
 # Implementation Plan — Tier 2: Correctness Bugs (Frontend + Test/CI Infra)
 
-Status: DRAFT — pending adversarial review.
+Status: REVISED after adversarial review round 1. Two items had severity-5 findings requiring
+substantial rewrites: item 5's proposed fix targeted a dead/empty `Base` class (there are 4
+independent SQLAlchemy metadata registries in this codebase, not 1) and would have silently
+created zero or partial tables while looking complete; item 7's proposed fix (add `role="table"`)
+doesn't work because the pages being tested render an empty-state text message, not a table, when
+no scan has run — the code path that would carry the new role never executes in these tests. Both
+rewritten below. Item 2 and item 4 also had real scope gaps (a sibling timezone bug in
+`riskStore.ts` affecting the daily-recommendation-limit reset; a third `direction: str` field in
+the backend schema the original grep missed).
 
 Scope: findings #5, #16, #17, #19, #21, #22, #23 from `CODE_REVIEW_FINDINGS.md`, plus one item
 carried over from `SELL_CLOSE_SEMANTICS_PLAN.md`'s explicitly-deferred residual gaps (tightening
@@ -67,6 +75,35 @@ Before considering this fixed:
    with an explicit test case (e.g. mock a UTC+9 environment or reason about it via `Intl`/
    `process.env.TZ` in the test setup) rather than assuming.
 
+**Round 1 review found a sibling instance of this exact bug, in a higher-stakes location, that
+this item did not originally cover — adding it here rather than letting it go undocumented:**
+`frontend/lib/riskStore.ts:48,53` — `lastResetDate`/`today` are both derived via
+`new Date().toISOString().split('T')[0]`, the same UTC-vs-local-midnight pattern, but this one
+drives `incrementDaily()`'s **daily trade-recommendation counter reset** — an actual risk-limiting
+mechanism, not a UI cosmetic. For an ET user active after 8pm, this resets the daily count hours
+before their local midnight, silently granting extra daily recommendation slots early. Weaker
+instances of the same pattern also appear in `frontend/lib/portfolioStore.ts:112` and
+`frontend/lib/paperTrade.ts:26` (both used for `entryDate` defaults — lower stakes, a
+cosmetic/record-keeping date being off by a few hours near midnight, not a limit-enforcement bug).
+
+**Fix:** apply the same local-day-anchored pattern to `riskStore.ts`'s date derivation:
+```ts
+function localTodayIso(): string {
+  const d = new Date();
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
+}
+```
+(or equivalent — the point is deriving the ISO date string from local calendar fields, not from
+`toISOString()`'s inherent UTC conversion of the live instant). Use this for both `lastResetDate`
+and the `today` comparison in `incrementDaily()`. Leave `portfolioStore.ts`/`paperTrade.ts`'s
+`entryDate` usages as a noted, explicitly out-of-scope lower-priority follow-up (same bug class,
+much lower stakes — a trade's recorded entry date being off by a few hours near local midnight is
+a record-keeping cosmetic, not a risk-limit bypass) rather than silently expanding this item's
+scope further.
+
+**Test plan:** a test that mocks the system time to just after 8pm ET, calls `incrementDaily()`
+near the boundary, and confirms the daily count does NOT reset until actual local midnight.
+
 ---
 
 ## 3. Alerts page wrong premium-stop percentage label (LOW effort, real user-facing bug)
@@ -101,33 +138,55 @@ store, renders the alerts page, and asserts the displayed label reflects `45%`, 
 ## 4. Tighten `PortfolioPosition.direction` to `Literal["Bullish","Bearish"]` in backend schemas
    (LOW effort, closes a residual gap `SELL_CLOSE_SEMANTICS_PLAN.md` explicitly deferred)
 
-`backend/app/schemas/__init__.py:592` (`PortfolioPositionCreate.direction: str`) and `:627`
-(`PortfolioPositionSchema.direction: str`) are the two remaining plain-`str` typed direction
-fields; a `Direction = Literal['Bullish', 'Bearish']` alias already exists (line 16) and is
-already used by 4 other fields in the same file (lines 157, 286, 448, 483) — this is a two-line
-consistency fix, not new design work.
+**Round 1 review found a third plain-`str` field on the same underlying data that the original
+grep missed — corrected below — and independently performed the frontend risk-check this item
+asked for, finding it's low-risk (also noted below).**
 
-**Fix:**
+`backend/app/schemas/__init__.py:592` (`PortfolioPositionCreate.direction: str`), `:627`
+(`PortfolioPositionSchema.direction: str`), **and `:683` (`ClosedPositionSchema.direction: str`,
+missed by the original grep)** are the three remaining plain-`str` typed direction fields. All
+three are populated from the same underlying `PortfolioPositionModel.direction` column
+(confirmed: `backend/app/services/portfolio_alert_monitor.py:104` reads that column for
+`AlertItem.direction` too, though `AlertItem` itself is out of scope here — see note below). A
+`Direction = Literal['Bullish', 'Bearish']` alias already exists (line 16) and is already used by
+4 other fields in the same file (lines 157, 286, 448, 483).
+
+**Fix — now three fields, not two:**
 ```python
-# both PortfolioPositionCreate and PortfolioPositionSchema:
+# PortfolioPositionCreate, PortfolioPositionSchema, AND ClosedPositionSchema:
 direction: Direction   # was: direction: str
 ```
+Tightening only the open-position schemas while leaving `ClosedPositionSchema` permissive would
+mean a legacy/bad-cased row 422s on `GET /api/portfolio` but reads back fine once closed — an
+inconsistency the "consistency fix" would itself introduce if `ClosedPositionSchema` were missed.
 
-**Risk check before committing:** confirm no existing caller ever sends a `direction` value other
-than exactly `"Bullish"`/`"Bearish"` (case-sensitive) through either of these two schemas — a
-stricter type will reject anything else with a 422 where it previously silently accepted it.
-Grep `frontend/lib/api.ts`, `frontend/lib/portfolioStore.ts`, and any script/fixture that posts to
-`/api/portfolio` for the literal strings sent. Also check whether any already-persisted DB rows
-could have a different-cased or legacy value that would now fail to *read back* via
-`PortfolioPositionSchema` (if so, this becomes a migration/backfill question, not just a type
-tightening — investigate before assuming this is purely additive).
+**Scope note:** `AlertItem.direction` (line 320) and the continuous-scan-status `direction` field
+(line 579) are also plain `str` and read from/relate to the same general concept, but are
+populated from different contexts (alerts, scan status) with less certainty they're always exactly
+`"Bullish"`/`"Bearish"` — leaving these two out of scope for this item rather than assuming they
+behave identically to the portfolio-position trio; revisit separately if warranted.
+
+**Risk check — round 1 review performed this independently, results below (the original plan only
+asked for it, didn't do it):**
+- **Frontend risk is low:** `PortfolioPosition.direction` is TS-typed as `Direction` end-to-end;
+  the only loose spot is an `as Direction` cast in `portfolioStore.ts`'s `fromBackend()`, which is
+  a read-side assertion (parsing what the backend already sent back), not something that
+  constructs a bad value to send.
+- **DB-backfill risk remains genuinely open** — neither this plan nor the review that checked it
+  can inspect real production DB contents from the repo alone. If any already-persisted row has a
+  different-cased or legacy `direction` value, tightening `PortfolioPositionSchema`/
+  `ClosedPositionSchema` would make it fail to *read back*. Treat this as a real open question to
+  resolve at implementation time (e.g. a one-off query against the actual dev/prod DB, if
+  accessible, before shipping) — do not assume it's fine just because the frontend check came back
+  clean.
 
 **Test plan:** a test posting `direction: "bullish"` (wrong case) or `direction: "Long"` (wrong
-value) to the portfolio-create endpoint now expects `422` instead of being silently accepted.
+value) to the portfolio-create endpoint now expects `422` instead of being silently accepted;
+same for whatever endpoint returns `ClosedPositionSchema`.
 
 ---
 
-## 5. Test suite defaults to the real local `dev.db` (MEDIUM-HIGH effort, real isolation gap)
+## 5. Test suite defaults to the real local `dev.db` (HIGH effort, real isolation gap)
 
 **Root cause (re-verified):** `backend/tests/conftest.py:22` —
 `os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./dev.db")`. The comment directly
@@ -137,52 +196,82 @@ real local SQLite `dev.db` file used by the actually-running dev server. Any tes
 `app.main:app` directly (not through this file's `client` fixture, which builds its own isolated
 test app with `get_db` overridden) inherits this real, stateful database.
 
-The `client` fixture's own isolated in-memory DB (`_TEST_DB_URL = "sqlite+aiosqlite:///:memory:"`,
-lines ~140-160) only creates tables for `ScanSessionBase.metadata` — not necessarily every model
-reachable via `app.main`'s real `get_db` path (e.g. `PortfolioPositionModel`). This means a naive
-swap of the module-level `DATABASE_URL` default to a fresh empty DB could break any test that
-currently (accidentally) relies on tables/data already present in the real `dev.db`.
+**Round 1 review found the original fix in this section was fundamentally broken and would have
+silently created zero or partial tables. This section is rewritten from scratch with the
+investigation actually performed, not just described as a TODO.**
 
-**This needs investigation before a fix is written, not just a one-line env var change:**
-1. Enumerate every SQLAlchemy `Base`/metadata class in `backend/app/models/` and confirm which
-   ones' tables are and aren't created by the existing `_create_tables()` fixture.
-2. Enumerate every test file that does `from app.main import app` (not via the `client` fixture)
-   and check whether any of them touch DB-backed endpoints (portfolio, risk settings, anything
-   using `get_db`) — `test_broker_router.py`'s HTTP-level tests are one example; check for others.
-3. Decide the isolation mechanism: a dedicated temp-file SQLite DB (safer for async connection
-   pooling than `:memory:`, which doesn't share state across pooled connections by default) that
-   gets its schema created via `Base.metadata.create_all` (covering *all* models, not just
-   `ScanSessionBase`) in a session-scoped autouse fixture, deleted/recreated at the start of each
-   test session.
+**The codebase has FOUR independent SQLAlchemy declarative-base/metadata registries, not one:**
+1. `app.models.base.Base` (`backend/app/models/base.py:7`) — **dead code.** Confirmed via
+   whole-repo grep: nothing outside `migrations/env.py` imports it, and nothing registers a model
+   against it. `Base.metadata.create_all()` against this class runs successfully and creates
+   **zero tables** — a false-positive "it worked" signal. **Do not use this one; its name is a
+   trap precisely because it's the most obvious thing to import.**
+2. `app.database.Base` (`backend/app/database.py:22`, `declarative_base()`) — **this is the one
+   actually used by every real model**: `PortfolioPositionModel`, `AlertRuleModel`,
+   `AlertHistoryModel`, `ClosedPositionModel`, `EquitySnapshotModel`, `FundamentalsModel`,
+   `DrawingModel`, `WatchedContractModel`, `WatchlistSymbolModel`,
+   `PositionAlertHistoryModel` — confirmed via `grep -rn "from app.database import Base"`.
+3. `ScanSessionBase` (`backend/app/models/scan_session.py:7`) — only `ScanSessionModel`; the only
+   one the existing `client` fixture's `_create_tables()` currently covers.
+4. `OhlcvBase` (`backend/app/models/ohlcv_daily.py:8`) — only `OhlcvDailyModel`.
 
-**Fix (pending step 3's outcome, but the shape is clear):**
-```python
-import tempfile
-_test_db_path = os.path.join(tempfile.gettempdir(), "bamendjou_backend_tests.db")
-if os.path.exists(_test_db_path):
-    os.remove(_test_db_path)  # fresh DB every test-session start
-os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_test_db_path}")
-```
-plus a session-scoped autouse fixture that runs `Base.metadata.create_all` (the *real* app's
-`Base`, covering every model, not just `ScanSessionBase`) against this new default DB, so
-`app.main:app`'s real `get_db` path has working tables for any test that hits it directly.
+Proof this isn't speculation: the repo's own `backend/migrations/env.py:30` already has to do
+`target_metadata = [Base.metadata, DatabaseBase.metadata, ScanSessionBase.metadata,
+OhlcvBase.metadata]` — Alembic itself had to name all four separately because they don't merge.
+**Any fix must run `create_all()` against registries 2, 3, and 4 — three separate calls, not
+one** — and must specifically avoid registry 1 despite it having the most obviously-correct name.
+
+**Also corrected:** the original plan cited `test_broker_router.py`'s HTTP-level tests as an
+example of a DB-touching test needing this fix — wrong; `backend/app/routers/broker.py` has no
+`get_db`/`Session` usage at all, it isn't DB-backed. The actual `from app.main import app` test
+files that ARE relevant (enumerated by round 1 review): `test_risk_limits_endpoint.py`,
+`test_app.py`, `test_strategy_tuning_router.py`, `test_regime_direction.py`,
+`test_symbol_info.py`, `test_schedule_endpoint.py`, `test_intraday_omm_fallback.py`,
+`test_event_thresholds_endpoint.py`, `test_iv_thresholds_endpoint.py`.
+
+**A correct reference pattern already exists in this codebase and should be generalized, not
+reinvented:** `test_persistence.py`, `test_alert_notify_guard.py`, and `test_alerts.py` already
+build their own in-memory engine, correctly import `Base` from `app.database` (registry 2, the
+right one), and override `get_db` locally — entirely bypassing the module-level `DATABASE_URL`
+and the shared `client` fixture. **Start from this pattern.** The fix here is less "invent a new
+isolation mechanism" and more "make the already-correct pattern the default every test gets,
+instead of something only 3 files opted into."
+
+**Revised fix:**
+1. Session-scoped autouse fixture in `conftest.py` that creates a fresh, isolated temp-file
+   SQLite DB (a real file path, not `:memory:`, for safe behavior across pooled async
+   connections) and runs `create_all()` against **registries 2, 3, and 4** (`app.database.Base`,
+   `ScanSessionBase`, `OhlcvBase`) — three calls, explicitly skipping registry 1.
+2. Swap `conftest.py:22`'s `DATABASE_URL` default to point at this new isolated file instead of
+   `./dev.db`.
+3. Confirm the existing `client` fixture's own `_create_tables()` (currently `ScanSessionBase`
+   only) either gets folded into the same session-scoped setup, or is left alone if it already
+   works correctly for what it covers — don't break what's already isolated correctly.
+4. Run the **entire** backend suite after this change, not just the 9 files listed above — there
+   may be others not yet identified that implicitly relied on `dev.db` having tables/data.
 
 **Also revisit:** `backend/tests/test_portfolio_monitor.py`'s `xfail` (lines ~78-86) that
 documents "sees real leftover data" — once the DB is genuinely isolated, this xfail should either
-start passing (in which case remove the `xfail` marker and confirm it passes cleanly) or, if it
-still fails for an unrelated reason, needs its xfail reason updated to reflect the real cause.
+start passing (remove the marker, confirm clean) or, if it still fails for an unrelated reason,
+needs its reason updated to reflect the real cause.
 
-**Test plan:** after the fix, run the full backend suite twice in a row and confirm identical
-results both times (proving no test leaks state into a shared file); also add an explicit test
-that writes a row via one test function and asserts a *different* test function doesn't see it
-(proving isolation, not just proving tables exist).
+**Test plan:** run the full backend suite twice in a row, confirm identical results both times
+(proving no cross-run state leakage via the temp file); add a test that writes a row in one test
+function and asserts a different test function doesn't see it (proving per-test isolation, not
+just proving tables exist); specifically re-run each of the 9 named `app.main:app` test files
+individually and confirm each still passes with real tables now present instead of accidentally
+inherited ones.
 
-**Risk flag for the adversarial reviewer:** this is the highest-effort, highest-blast-radius item
-in this plan — a wrong DB isolation change could turn currently-passing tests into failures for
-reasons unrelated to this fix (missing tables, missing seed data some test implicitly relied on).
-Recommend implementing this one in isolation, running the *entire* backend suite immediately
-after, and treating any new failure as a signal to investigate before assuming it's unrelated
-flakiness.
+**Risk flag, still valid and now more specific:** this remains the highest-effort, highest-blast
+-radius item in this plan. The original "just create_all on Base" framing would have looked like a
+complete fix while silently doing nothing (registry 1) or doing a third of the job (forgetting
+registries 3/4) — implement this one in isolation, run the *entire* backend suite immediately
+after, and treat any new failure as a real signal, not noise. Given the severity of getting this
+wrong undetected, consider having a second person (or a fresh review pass) specifically re-verify
+the `create_all()` calls actually target the right 3 registries before merging, rather than
+trusting a green test run alone — a `no such table` error would surface loudly, but a registry
+that creates the WRONG empty set of tables in a way that happens not to be hit by any current test
+would not.
 
 ---
 
@@ -191,8 +280,12 @@ flakiness.
 `.github/workflows/ci.yml`'s `frontend` job runs `npm run test -- --ci` and `npm run build` only.
 The `tsc --noEmit` step lives solely in `.github/workflows/playwright.yml`.
 
-**Fix:** add a typecheck step to `ci.yml`'s `frontend` job, mirroring `playwright.yml`'s existing
-step exactly:
+**Fix:** add a typecheck step to `ci.yml`'s `frontend` job, matching that job's own existing
+per-step style (each step does its own `cd frontend && ...`; round 1 review noted
+`playwright.yml`'s equivalent step is bare `npm run typecheck` under a job-level
+`working-directory: ./frontend` default, so "mirroring it exactly" isn't quite accurate — the
+snippet below is correct for `ci.yml`'s actual established pattern, not a literal copy of
+`playwright.yml`'s):
 ```yaml
       - name: Run typecheck
         run: |
@@ -210,40 +303,66 @@ to confirm it would be caught, which is just re-confirming the command works, no
 
 ---
 
-## 7. Screener steps 4-7 e2e tests permanently `test.fixme()`'d (MEDIUM effort — partial fix,
-   partial investigation)
+## 7. Screener steps 4-7 e2e tests permanently `test.fixme()`'d (MEDIUM effort)
 
-**Root cause, confirmed for steps 4 and 6:** `frontend/e2e/pages/ScreenerPage.ts:103,113` —
-`rankingTable`/`contractsTable` locators use `page.getByRole('table')`. Confirmed via direct
-inspection: neither `step-4-ranking/page.tsx` nor `step-6-contracts/page.tsx` render an actual
-`<table>` element or anything with `role="table"` — both use div/grid-based layouts
-(`styles.tableHeader`, `styles.tableBody`). The locator can never match; that's why these were
-presumably fixme'd rather than actually broken by application logic.
+**Round 1 review found the original fix for steps 4/6 does not work, and that steps 5/7 were
+wrongly punted on when they're actually trivially fixable. This section is rewritten.**
 
-**Fix for steps 4 and 6 — add the ARIA role that's missing, don't weaken the test:**
-Add `role="table"` to the outer container div wrapping the header+body grid in both
-`step-4-ranking/page.tsx` and `step-6-contracts/page.tsx` (the element currently just has a plain
-`className`). This is a real accessibility improvement (screen readers currently have no signal
-these grids are tabular data) as well as the test fix — keeping `ScreenerPage.ts`'s
-`getByRole('table')` locator unchanged and correct, rather than replacing it with a brittle
-CSS-class-based query. Consider also adding `role="row"`/`role="columnheader"`/`role="cell"` to
-the header/row-level elements for a more complete ARIA grid if the effort is small, but
-`role="table"` on the container is the minimum needed to make the existing locator pass.
+**Steps 5 and 7 — round 1 review confirmed these ARE already correctly matchable, no punt
+needed:**
+- `step-5-vol-events/page.tsx:91-99` renders a table-header row containing the literal text
+  "IV RANK" **unconditionally**, regardless of candidate count. `screener.ivSection`'s regex
+  (`/iv rank|implied volatility/i`) matches this every time.
+- `step-7-trade-card/page.tsx:636-638` renders `{cards.length === 0 && <Text>Run a scan to
+  generate trade cards.</Text>}`, and `cards` defaults to `[]` on fresh mount — this matches
+  `screener.tradeCardEmptyState`'s regex (`/no trade cards|empty|run a scan/i`) directly.
+**Fix: simply remove `test.fixme` → `test` for these two, no application code changes needed.**
+The original plan's "needs investigation" framing for these two was an unforced punt — the answer
+was verifiable directly from the files already on disk.
 
-**Steps 5 and 7 — needs investigation before claiming a fix:** `screener.ivSection` and
-`screener.tradeCardEmptyState` locators (`ScreenerPage.ts`, exact lines not yet checked in this
-plan) haven't been verified against the current `step-5-vol-events` and `step-7-trade-card`
-component trees. Before removing `test.fixme()` from those two tests specifically, check whether
-their locators have the same "never matches" problem or a different one (e.g., the empty-state
-text changed, the section needs a real scan to render). Do not blanket-remove all 4 `fixme()`
-calls — only the 2 (steps 4, 6) confirmed fixable by this plan; leave 5 and 7 fixme'd with an
-inline comment explaining what's still unverified, or investigate and fix those too if time
-allows within the same implementation pass.
+**Steps 4 and 6 — the original fix (`role="table"`) does NOT work, for a reason the original plan
+never traced:** both pages gate their table markup behind a candidates-empty check that returns
+*before* the table renders at all:
+- `step-4-ranking/page.tsx:176-189` — `if (!selected) { ... return <Text>Run a scan to see ranked
+  candidates.</Text> }`, which fires before the `tableHeader`/`tableBody` divs (lines 231, 242)
+  are ever reached.
+- `step-6-contracts/page.tsx:175-179` — even more directly:
+  `{candidates.length === 0 && <Text>Run a scan to see contracts.</Text>}` /
+  `{candidates.length > 0 && (...the actual table markup...)}`.
 
-**Test plan:** after adding the ARIA roles, remove `test.fixme` → `test` for the steps-4 and
-steps-6 cases specifically, run them against a local dev server (per CLAUDE.md's dev workflow) to
-confirm they actually pass, not just that they no longer throw a "locator never resolves" timeout
-for a different reason.
+`ScreenerPage.goto(step)` navigates straight to the URL with no scan run and no seeded state
+(confirmed: no `page.addInitScript`/localStorage seeding, no mocked scan trigger) — so both tests
+run in exactly the empty-candidates state, where **no table-shaped DOM renders at all**, just a
+plain "Run a scan..." text message. Adding `role="table"` to markup inside a branch that never
+executes in this test's actual state does nothing; the tests would still time out waiting for a
+locator that never appears.
+
+**Corrected fix — align the test's assertion with what the app actually, correctly does in this
+state, rather than trying to force different application behavior:** the test names themselves
+("loads without crash, empty table expected") show the original intent was to smoke-test that the
+page loads without crashing in the no-data state — which the "Run a scan..." message proves just
+as well as an empty table would, since there IS no concept of an "empty table" in this app; the
+empty state is a text message, by design, on every step. Rewrite the two assertions to match:
+```ts
+// step 4
+await expect(page).toHaveURL(/step-4-ranking/);
+await expect(page.getByText(/run a scan to see ranked candidates/i)).toBeVisible();
+
+// step 6
+await expect(page).toHaveURL(/step-6-contracts/);
+await expect(page.getByText(/run a scan to see contracts/i)).toBeVisible();
+```
+This directly replaces the now-provably-wrong `rankingTable`/`contractsTable`
+`getByRole('table')` locators for these two specific tests. **Separately, and still worth doing
+as a real accessibility improvement** (not because it fixes these tests, since the round 1 review
+showed it doesn't): add `role="table"` to the header+body grid containers in both pages for when
+they DO render with real candidate data — useful for screen readers and for any future e2e test
+that actually seeds scan data before asserting on the table. Keep this as a separate, smaller
+accessibility commit, not conflated with the test fix above.
+
+**Test plan:** after rewriting the two assertions, remove `test.fixme` → `test` for all 4 tests
+(steps 4, 5, 6, 7), run all 4 against a local dev server per CLAUDE.md's dev workflow, confirm
+they actually pass — not just that they no longer time out for a different reason.
 
 ---
 
@@ -279,10 +398,19 @@ broken test also showed.
 
 1. #3 (alerts label) and #6 (CI typecheck) first — smallest, most self-contained, zero
    investigation needed beyond what's already done above.
-2. #4 (Direction Literal) — small, but do the risk-check grep first.
-3. #2 (calendar timezone) — moderate, needs the fake-timer test to be trustworthy.
-4. #8 (dashboard e2e) — moderate, needs the "can it actually fail" verification.
-5. #7 (screener e2e, steps 4/6 only unless 5/7 get investigated too) — moderate.
-6. #5 — no code change, folded into `PLAN_TIER4_DOCS.md`.
-7. #19 (test DB isolation) — last, highest effort/risk, run full suite immediately after and
-   treat any new failure as a real signal, not noise.
+2. #8 (dashboard e2e) and #7 (screener e2e, now all 4 steps since 5/7 need no investigation and
+   4/6 have a corrected fix) — moderate, self-contained frontend/test changes.
+3. #2 (calendar timezone, now including the `riskStore.ts` sibling fix) — moderate, needs the
+   fake-timer tests to be trustworthy for both the calendar and the daily-counter-reset cases.
+4. #5 (test DB isolation) — do this **before** #4, not after. Round 1 review found #4's own test
+   plan (a 422 test against `/api/portfolio`) needs a real DB-backed test client with the actual
+   portfolio router mounted — either `test_persistence.py`'s existing correct local pattern, or
+   the isolated default this item establishes. Sequencing #5 before #4 means #4's test has a
+   trustworthy home to land in rather than discovering the gap mid-implementation. This reorders
+   #5 earlier than the original draft's "do last" — still treat it as the highest-risk item and
+   run the full suite immediately after, but "last" was based on an "it's just risky, minimize
+   blast radius by doing it in isolation at the end" framing that didn't account for #4 depending
+   on it.
+5. #4 (Direction Literal, now 3 fields) — after #5, using its isolated DB setup or
+   `test_persistence.py`'s existing pattern for the new negative-case tests.
+6. #1 — no code change, folded into `PLAN_TIER4_DOCS.md`.

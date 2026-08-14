@@ -1,6 +1,9 @@
 # Implementation Plan — Tier 1: Money/Risk-Control & Backend Safety
 
-Status: DRAFT — pending adversarial review.
+Status: REVISED after adversarial review round 1. Findings: item 2's "3 confirmed sites, mechanical
+swap" framing was wrong (regime.py undercounted ~6x, one call has no async equivalent to swap to
+at all); item 5's allow-list inversion breaks an existing test the plan didn't check; item 1
+missed a second, independent, already-broken enforcement path in the frontend. All addressed below.
 
 Scope: findings #1, #4, #6, #18, #20, #24 from `CODE_REVIEW_FINDINGS.md`. These are grouped
 together because each is either a live financial-risk-control gap or a backend correctness/safety
@@ -46,36 +49,106 @@ forever. Rename `max_single_trade_exposure_pct` → `max_single_position_pct` ev
 **Test plan:** a test that sets `maxSinglePositionPct` via the settings endpoint, then confirms
 `check_position_risk` actually enforces the new value (currently: setting it would have zero
 effect on the enforcement path — the missing regression coverage that let this ship). Also update
-any existing test referencing `max_single_trade_exposure_pct` by name (grep first).
+any existing test referencing `max_single_trade_exposure_pct` by name (grep first — round 1
+review confirmed the only remaining references outside code are numeric-value comments in
+`test_portfolio_rules.py:63-88` / `test_portfolio_close_history.py:74`, which stay correct
+post-rename since the number itself doesn't change).
+
+**Round 1 review finding — a second, independent, already-broken enforcement path exists that
+this fix does NOT touch, and the plan must stop calling this a "single source of truth" fix:**
+`frontend/lib/riskStore.ts` has its own separate `maxSingleTradeExposurePct` field (default
+`0.05`), wired into the *actual pre-flight trade-send gate* in
+`frontend/components/organisms/SendToBrokerDialog/index.tsx:42,61` via `checkTradeRisk(...)`.
+The Settings page's backend-fetch effect (`frontend/app/(frame)/settings/page.tsx:914-937`) only
+updates a local `useState`, never `useRiskStore.setLimits(...)` — the global store the send-dialog
+actually reads is only updated per-keystroke via `updateLimit()` on an `onChange` handler
+(`page.tsx:939-943,1012`), and `handleSaveRisk()` doesn't touch it either. So a user can believe
+they've "saved" a tightened position-size limit in Settings while the value the send dialog
+actually enforces has silently diverged. **This plan's item 1 fixes only the backend half.**
+Action: keep item 1 scoped to the backend fix as designed (don't scope-creep into a frontend
+riskStore refactor here), but the commit/PR description must say explicitly that a second,
+independent frontend enforcement path exists and is NOT covered by this fix — flag it as a new,
+separate follow-up item (call it item 1b) rather than letting the fix read as more complete than
+it is.
+
+---
+
+## 1b. (NEW — found during round 1 review) Frontend `riskStore` position-limit is disconnected
+   from Settings
+
+See item 1's note above. `frontend/lib/riskStore.ts`'s `maxSingleTradeExposurePct` (the value
+`SendToBrokerDialog` actually enforces before sending a trade) is never updated when a user saves
+Risk settings on the Settings page — only local component state changes.
+
+**Fix:** `frontend/app/(frame)/settings/page.tsx`'s `handleSaveRisk()` (or the backend-fetch
+effect, whichever is the more correct place — investigate which one is supposed to be the sync
+point) must also call `useRiskStore.getState().setLimits(...)` with the saved values, so the
+global store `SendToBrokerDialog` reads stays in sync with what's persisted to the backend.
+
+**Test plan:** save a risk setting via the Settings page, then confirm `useRiskStore.getState()`
+reflects the new value without requiring a full page reload.
 
 ---
 
 ## 2. Blocking sync I/O inside async route handlers (HIGH)
 
-**Confirmed sites** (from the original audit, re-verify line numbers before editing since this
-file wasn't touched by the SELL_CLOSE work):
-- `backend/app/routers/contracts.py` — `get_contracts` calls sync `fetch_option_chain(...)` /
-  `fetch_price(...)` where the same file already has async-safe equivalents
-  (`fetch_price_async`, `fetch_candles_async`) used elsewhere in the file.
-- `backend/app/routers/watchlist.py` — `get_watchlist` calls sync `fetch_price`/
-  `fetch_company_name` in a per-symbol loop.
-- `backend/app/routers/regime.py` — sync `fetch_price('VIX')` inside an async handler.
+**Round 1 review substantially revised this section — the original "3 confirmed sites, mechanical
+swap" framing undercounted the real scope, especially for `regime.py`. Corrected below.**
 
-**Fix:** swap each sync call for its async-safe counterpart already present in
-`backend/app/data/market.py` (`fetch_price_async`, `fetch_candles_async`, or equivalent —
-confirm exact async function names/signatures exist for each sync call before swapping;
-`fetch_company_name_async` and an async option-chain fetcher may not exist yet and might need to
-be added, mirroring the pattern of the ones that do exist).
+**contracts.py and watchlist.py — genuinely mechanical, confirmed by round 1 review:**
+- `backend/app/routers/contracts.py` — sync `fetch_option_chain(...)` / `fetch_price(...)`;
+  async equivalents `fetch_option_chain_async` (market.py:1132) and the already-used
+  `fetch_price_async` **both confirmed to exist** with compatible signatures — straightforward
+  swap.
+- `backend/app/routers/watchlist.py` — sync `fetch_price`/`fetch_company_name`; both
+  `fetch_price_async` and `fetch_company_name_async` (market.py:1344) **confirmed to exist** —
+  straightforward swap.
 
-**Scope guard:** if an async equivalent doesn't already exist for a given call (e.g., possibly
-`fetch_company_name`), adding one is in scope (mirror the existing async pattern in the same
-module) — but do not restructure `market.py`'s broader architecture; this is a mechanical
-call-site swap, not a redesign.
+**regime.py — NOT mechanical, substantially larger scope than originally described:**
+Round 1 review found the real blocking-call footprint in this one file alone:
+- `_spx_ndx_metric` (regime.py:38-57), a **plain sync helper**, internally calls sync
+  `fetch_candles(symbol, bars=200)` — called twice (SPX, NDX) from `get_regime` at
+  regime.py:122-123.
+- `fetch_candles('VIX', bars=260)` at regime.py:169.
+- `fetch_candles('SPX', bars=600)` at regime.py:181.
+- `fetch_intraday_candles('SPY', interval='15min', days=55)` at regime.py:222, and again in the
+  separate `get_intraday_hmm_series` route at regime.py:332.
+
+**No async equivalent of `fetch_intraday_candles` exists anywhere in `market.py`** (confirmed by
+enumerating every `async def` in the file) — this one call requires genuinely new async code, not
+a swap to an existing sibling. `fetch_intraday_candles` itself is ~110 lines merging Tradier +
+IBKR + yfinance (market.py:300-409) — writing `fetch_intraday_candles_async` is real design work,
+not mechanical mirroring.
+
+Additionally, `_spx_ndx_metric` being a **sync** helper called from **async** `get_regime` means
+fixing this properly requires either converting `_spx_ndx_metric` to `async def` and propagating
+`await` through both its callers (`get_regime` at 122-123, and `compute_overall_regime` — itself a
+sync function — at 97-98), or wrapping the whole thing in `asyncio.to_thread`. This is a
+signature-level refactor, not a call-site swap.
+
+**Test-mock migration is also larger than "mock the async function instead":** existing tests
+patch the sync function names directly, including a **shared fixture reused across many test
+files**: `backend/tests/conftest.py:262-269` patches `app.routers.contracts.fetch_option_chain`/
+`fetch_price`. Also: `test_regime_direction.py:48-54` and `test_intraday_omm_fallback.py:39-43`
+each patch `app.routers.regime.fetch_price/fetch_candles/fetch_intraday_candles` directly;
+`test_contracts_scoring.py` patches contracts.py's sync names at 6 separate call sites. **Update
+`conftest.py`'s shared fixture FIRST, before touching contracts.py/regime.py** — an unnoticed miss
+there turns unrelated tests into flaky, real-network-calling tests instead of clean, attributable
+failures, which is a much worse failure mode than a loud immediate test break.
+
+**Revised fix scope:**
+1. `contracts.py`, `watchlist.py` — mechanical swap to existing async functions (as originally
+   planned).
+2. `regime.py` — write `fetch_intraday_candles_async` (new), convert `_spx_ndx_metric` to async
+   (propagate through both callers), swap `fetch_candles`→`fetch_candles_async` at the 2 direct
+   call sites, swap both `fetch_intraday_candles` call sites. Treat this file as its own
+   sub-effort, separate from the other two files' quick swaps.
+3. Update `conftest.py`'s shared fixture and all 3 named test files' mocks to patch the async
+   function names, in the same commit as the router changes they support (not after).
 
 **Test plan:** existing tests for these routers should still pass with async-safe calls (mock the
-async function instead of the sync one). Add a test asserting the route doesn't call the sync
-variant (or a lightweight concurrency test proving two simultaneous requests to a slow endpoint
-don't serialize — optional, lower priority given the mock-based test suite's usual style).
+async function instead of the sync one, including the shared `conftest.py` fixture). Add a test
+asserting the route doesn't call the sync variant.
 
 ---
 

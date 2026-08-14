@@ -1,6 +1,15 @@
 # Implementation Plan — Tier 4: Documentation Corrections & Staleness Sweep
 
-Status: DRAFT — pending adversarial review.
+Status: REVISED after adversarial review round 1. The review confirmed CLAUDE.md itself hasn't
+drifted since the original audit (checked via git log — no commits since touched any cited file),
+so the "current reality" comparisons below are still valid, but found: item #8's own replacement
+count was wrong (7 strategies in the picker, not 6 — the plan would have written a new inaccuracy
+into CLAUDE.md); §3's justification for `bamendjou-design-spec.md` was partly fabricated (it has
+no `/mocks` references at all, that claim was conflated from a different file); §3's disclaimer
+sweep as originally scoped would have mislabeled a third `docs/design/` file
+(`stitch-drift-log.md`) that is NOT stale — live source code still cites it by name; the README
+rewrite instruction was underspecified; and #29 (temp_prd.md) is claimed by both this plan and
+`PLAN_TIER3_CLEANUP.md` with no stated owner. All fixed below.
 
 Scope: CLAUDE.md corrections (findings #5, #7, #8, #9, #10), the full "Documentation staleness"
 section of `CODE_REVIEW_FINDINGS.md`, and #29 (duplicate PRD file). This tier is fundamentally
@@ -26,7 +35,14 @@ these five items get fixed for real, not archived:
 
 - **#5** — "`scanStore.regime` is set by Step 1 on mount and read by StepNavBar for the REJECT
   gate" → correct to `scanStore.combinedRegime`, with a one-clause explanation of the
-  regime/combinedRegime distinction (raw market status vs. direction-aligned verdict).
+  regime/combinedRegime distinction (raw market status vs. direction-aligned verdict). **Round 1
+  review found the "set by Step 1" half of the original claim is also imprecise** —
+  `setRegime`/`setCombinedRegime` are actually called from three places on mount:
+  `step-1-regime/page.tsx:85,89`, `step-2-universe/page.tsx:123-124` (regime only), and
+  `step-3-direction/page.tsx:705-709` (both). The value ends up correct regardless of which step
+  last wrote it, so this doesn't change what to fix, but don't write "set by Step 1" into the
+  corrected text either — say something accurate like "kept in sync across Steps 1-3 as the user
+  progresses" instead of naming a single step.
 - **#7** — Settings page sub-nav description ("Broker · Appearance · Score weights & parameters ·
   Alerts") → replace with the actual current sub-nav: Appearance, Scan, Strategy scan, Brokers,
   Risk, Regime, Notifications, Data, Strategy Tuning (verify this list is still current at
@@ -35,8 +51,15 @@ these five items get fixed for real, not archived:
   whatever the actual current score-weights UI location is (if one exists elsewhere) — check
   before assuming it simply doesn't exist anymore.
 - **#8** — "Strategy picker (pullback_ema, breakout_base…)" / "Four named signal functions" →
-  update to the actual current list (6 in the picker, 9 in `strategy_engine.py`) — copy the exact
-  names from `step-5-strategy/page.tsx` and `strategy_engine.py` rather than re-deriving.
+  update to the actual current list. **Round 1 review caught that this plan's own count was
+  wrong: the picker has 7 entries, not 6** — `step-5-strategy/page.tsx:15-71`'s `STRATEGIES`
+  array is `pullback_ema, breakout_base, ma_crossover, mean_reversion_rsi, mean_reversion_bb,
+  mean_reversion_vwap, mean_reversion_multi` (all 7 unconditionally rendered — only the *button*
+  for `mean_reversion_multi` is conditionally disabled, not the list entry, so it still counts).
+  9 in `strategy_engine.py` is correct as originally stated. **Copy the exact names from the
+  actual files at implementation time — do not copy the "6"/"7" count from this plan or the
+  original audit without re-deriving it from the real array, since this plan just demonstrated
+  that number getting it wrong once already.**
 - **#9** — storage-key prefix claim ("Storage key prefix: `'bamendjou:'`") → **do not rename any
   persisted store key to fix this** (renaming would silently wipe real users' localStorage data
   for that store on next load — colon-prefixed and hyphen-prefixed keys are both live in
@@ -75,23 +98,48 @@ pointing to CLAUDE.md.**
   isn't already covered by CLAUDE.md and is still genuinely useful, migrate that specific content
   into CLAUDE.md first, then archive the rest.
 - **`README.md`** — this is the repo's front door (first thing seen on GitHub); should describe
-  the actual current state, not be archived. Rewrite it to match the real folder layout
-  (`backend/config/`, not root `config/`; `tests/` is a stub, say so plainly) and drop "this
-  repository contains the initial workspace" framing. Can be short — README doesn't need to
-  duplicate CLAUDE.md's depth, just needs to not actively lie.
+  the actual current state, not be archived. **Round 1 review found "rewrite to match reality"
+  was underspecified enough that two implementers could produce materially different results** —
+  giving a concrete positive spec instead: the corrected README should (1) drop the "initial
+  workspace" framing and the wrong root `config/` reference, (2) state plainly that `tests/` is a
+  stub with real coverage living in `backend/tests/`/`frontend/__tests__/`, (3) give a one-line
+  description of what the app does (stock/options screener, 3 modes), (4) link to CLAUDE.md as
+  the authoritative architecture doc rather than duplicating it, (5) include the actual dev-start
+  commands (`cd frontend && npm run dev`, `cd backend && pytest`) so a new clone is runnable from
+  the README alone. Keep it short — a few paragraphs plus a commands block, not a rewrite of
+  CLAUDE.md.
 - **`IMPLEMENTATION_PLAN.md`** — archive with historical disclaimer; its "Current state" table is
   entirely superseded by CLAUDE.md's own pipeline/integrations tables.
 - **`PHASE_1_COMPLETION.md`** — archive with historical disclaimer; same reasoning.
 
 ---
 
-## 3. `docs/design/nextjs-implementation-plan.md` and `docs/design/bamendjou-design-spec.md`
+## 3. `docs/design/` — 3 files, not 2, and they need DIFFERENT treatment
 
-Same stale step ordering (`step-1-universe/step-2-direction/step-3-regime`) and `/mocks` folder
-reference as `LLM_CONTEXT.md`. **Fix:** add the historical-disclaimer blockquote to both — these
-are design-phase planning docs, appropriately archived-in-place rather than deleted (they may have
-historical/design-rationale value), just needs the disclaimer so a reader doesn't mistake them for
-current.
+**Round 1 review found two real problems here: a partly-fabricated justification for one file,
+and a scope gap that would have mislabeled a third, still-live file as stale.**
+
+- **`docs/design/nextjs-implementation-plan.md`** — genuinely has both the stale step ordering
+  and `/mocks` folder references. Add the historical-disclaimer blockquote as originally planned.
+- **`docs/design/bamendjou-design-spec.md`** — **the plan's original claim that this file shares
+  the same `/mocks` reference as `LLM_CONTEXT.md` is false** — round 1 review grepped the full
+  file and found zero `/mocks` references anywhere. It does still reference the old step ordering
+  in prose form ("Step 1: Universe," "Step 2: Direction + Horizon," "Step 3: Market Regime" at
+  lines 539-541), which is enough on its own to justify the disclaimer — but the disclaimer text
+  itself must not repeat the `/mocks` claim for this specific file, since it isn't true and would
+  be exactly the kind of unverified-claim error this whole documentation effort exists to
+  eliminate.
+- **`docs/design/stitch-drift-log.md` — NEW, the original plan didn't know this file existed and
+  would have disclaimed it incorrectly.** This file is 230 lines and, unlike the other two, is
+  **not purely historical** — its "Global" drift items G1 and G4 are actively cited by current
+  source code: `frontend/components/primitives/Data.tsx:8` ("Drift log G1") and
+  `frontend/components/organisms/StepNavBar/index.tsx:8` ("Drift log G4"). **Do not apply the
+  generic historical-snapshot disclaimer to this file** — a future editor doing a mechanical
+  "add disclaimers to docs/design/*" pass would very plausibly do exactly that, and it would
+  misleadingly suggest a doc that live code still points to is safe to ignore. Leave this file
+  untouched by this plan entirely (no disclaimer, no edit) unless a separate, deliberate review of
+  its *current* accuracy (not staleness) turns up something worth fixing — that's a different kind
+  of task than what this section covers.
 
 ---
 
@@ -126,7 +174,7 @@ specifically confirmed as actively contradictory, so they get individual treatme
 files get covered by the index alone, not individually edited.
 
 **Do not** attempt to sort all 165 files into "current" vs. "historical" individually — that's a
-much larger effort than this pass can respons responsibly cover, and the index + 3 targeted
+much larger effort than this pass can responsibly cover, and the index + 3 targeted
 disclaimers address the actual demonstrated risk (an agent or developer being misled) without
 requiring exhaustively re-auditing every planning doc ever written.
 
@@ -164,8 +212,22 @@ for current UI. -->`) — lowest priority item in this plan, skip if time-constr
 ## 7. `temp_prd.md` (#29)
 
 Confirmed byte-for-byte duplicate of
-`PRD-02 Master Phased PRD — Options Screener and Recommendation Assistant.md`. **Fix:** delete
-`temp_prd.md` after confirming (grep) nothing references it by filename.
+`PRD-02 Master Phased PRD — Options Screener and Recommendation Assistant.md` (re-confirmed twice
+now — once in the original audit, once independently by round 1 review via diff + md5sum). Grep
+confirms only planning docs — `CODE_REVIEW_FINDINGS.md`, `PLAN_TIER3_CLEANUP.md`, this file —
+reference the filename; no functional/code reference exists.
+
+**Ownership note (round 1 review flagged this): `PLAN_TIER3_CLEANUP.md`'s scope line also lists
+finding #29.** Resolving the overlap here: **this plan (Tier 4) owns and executes the deletion**,
+since it's a doc-tree change and this tier already handles the rest of the doc sweep in the same
+pass. `PLAN_TIER3_CLEANUP.md`'s item 9 should be treated as superseded by this section, not
+executed separately — if `PLAN_TIER3_CLEANUP.md` is implemented first, its item 9 becomes a no-op
+(file already deleted); if this plan runs first, `PLAN_TIER3_CLEANUP.md`'s item 9 becomes a no-op
+for the same reason. Harmless either order, but only one PR/commit should actually perform the
+deletion — whichever tier's implementation runs first claims it, and the other skips it as
+already done.
+
+**Fix:** delete `temp_prd.md`.
 
 ---
 
