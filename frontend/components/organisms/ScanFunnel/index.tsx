@@ -10,13 +10,14 @@ interface StageProps {
   rejected?: number;
   rejectedLabel?: string;
   total: number;
+  wide?: boolean;
 }
 
-function Stage({ label, count, rejected, rejectedLabel, total }: StageProps) {
+function Stage({ label, count, rejected, rejectedLabel, total, wide }: StageProps) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0;
   return (
     <>
-      <div className={styles.stage}>
+      <div className={wide ? styles.stageWide : styles.stage}>
         <Text size={11} tone="secondary">{label}</Text>
         <Data size={12} weight={500}>{count}</Data>
         {rejected != null && rejected > 0 ? (
@@ -71,13 +72,13 @@ export function ScanFunnel({ mode, pipeline }: Props) {
       <div className={styles.header}>
         <Text size={11} tone="dim" weight={500}>OPTIONS PIPELINE</Text>
       </div>
-      <Stage label="Universe"        count={p.scanned}      total={p.scanned} />
-      <Stage label="Data / Filters"  count={afterData}      rejected={p.failed_data}       rejectedLabel="filtered"  total={p.scanned} />
-      <Stage label="Pre-screen"      count={afterPreScreen} rejected={p.failed_pre_screen} rejectedLabel="score low" total={p.scanned} />
-      <Stage label="Option chain"    count={afterChain}     rejected={p.no_chain}          rejectedLabel="no chain"  total={p.scanned} />
-      <Stage label="Score + contracts" count={afterChain - p.failed_score - p.failed_contracts} rejected={p.failed_score + p.failed_contracts} rejectedLabel="rejected" total={p.scanned} />
+      <Stage wide label="Universe"        count={p.scanned}      total={p.scanned} />
+      <Stage wide label="Data / Filters (data/price/cap)" count={afterData}      rejected={p.failed_data}       rejectedLabel="filtered"  total={p.scanned} />
+      <Stage wide label="Pre-screen (setup score)"        count={afterPreScreen} rejected={p.failed_pre_screen} rejectedLabel="score low" total={p.scanned} />
+      <Stage wide label="Option chain (DTE window)"       count={afterChain}     rejected={p.no_chain}          rejectedLabel="no chain"  total={p.scanned} />
+      <Stage wide label="Score + contracts (final + rules)" count={afterChain - p.failed_score - p.failed_contracts} rejected={p.failed_score + p.failed_contracts} rejectedLabel="rejected" total={p.scanned} />
       <div className={styles.divider} />
-      <div className={styles.finalStage}>
+      <div className={styles.finalStageWide}>
         <Text size={12} tone="pass" weight={500}>Candidates</Text>
         <Data size={13} weight={500} tone="pass">{p.candidates}</Data>
       </div>

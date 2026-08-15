@@ -17,6 +17,14 @@
   padding: 2px 0;
 }
 
+.stageWide {
+  display: grid;
+  grid-template-columns: 190px 40px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
 .bar {
   height: 3px;
   background: var(--border-subtle);
@@ -45,6 +53,14 @@
 .finalStage {
   display: grid;
   grid-template-columns: 110px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.finalStageWide {
+  display: grid;
+  grid-template-columns: 190px 40px;
   align-items: center;
   gap: 8px;
   padding: 2px 0;
