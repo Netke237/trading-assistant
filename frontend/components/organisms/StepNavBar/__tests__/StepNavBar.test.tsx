@@ -64,4 +64,21 @@ describe('StepNavBar — Step 1 REJECT-gate race (H5)', () => {
     const nextBtn = screen.getByRole('button', { name: /next/i });
     expect(nextBtn).not.toBeDisabled();
   });
+
+  it('ArrowRight key does not advance when a <select> element has focus', () => {
+    useScanStore.setState({ combinedRegime: 'PASS' } as any);
+    render(
+      <>
+        <StepNavBar />
+        <select data-testid="horizon-select">
+          <option value="swing">Swing</option>
+          <option value="position">Position</option>
+        </select>
+      </>,
+    );
+    const select = screen.getByTestId('horizon-select');
+    select.focus();
+    fireEvent.keyDown(select, { key: 'ArrowRight' });
+    expect(mockPush).not.toHaveBeenCalled();
+  });
 });

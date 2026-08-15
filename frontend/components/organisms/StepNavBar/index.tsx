@@ -54,7 +54,7 @@ export function StepNavBar() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
       if (e.key === 'ArrowLeft')  { e.preventDefault(); goPrev(); }
       if (e.key === 'ArrowRight') { e.preventDefault(); handleNext(); }
       if (e.key === 'Escape' && showConfirm) setShowConfirm(false);
