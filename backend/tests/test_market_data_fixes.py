@@ -578,6 +578,38 @@ async def test_fetch_fundamentals_calendar_second_call_skips_network():
 
 
 @pytest.mark.asyncio
+async def test_fetch_fundamentals_calendar_empty_success_is_cached():
+    """A genuinely empty response (Tradier successfully answers 'no calendar
+    entries for this symbol') is a different case from a network failure
+    (test_fetch_fundamentals_calendar_network_failure_not_cached) and must
+    still be cached -- otherwise every call for a symbol with no calendar
+    data re-fetches every time, defeating the point of this cache. Pins the
+    property that distinguishes the two: cache on genuine response (empty or
+    not), never cache on exception."""
+    import app.data.market as mkt
+
+    empty_resp = MagicMock()
+    empty_resp.raise_for_status.return_value = None
+    empty_resp.json.return_value = [{"results": []}]
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=empty_resp)
+
+    saved = dict(mkt._fundamentals_calendar_cache)
+    mkt._fundamentals_calendar_cache.clear()
+    try:
+        first = await mkt.fetch_fundamentals_calendar(mock_client, "AAPL")
+        second = await mkt.fetch_fundamentals_calendar(mock_client, "AAPL")
+    finally:
+        mkt._fundamentals_calendar_cache.clear()
+        mkt._fundamentals_calendar_cache.update(saved)
+
+    assert first is None
+    assert second is None
+    mock_client.get.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_fetch_fundamentals_calendar_yesterday_entry_triggers_new_fetch():
     """A cache entry stamped with yesterday's date must NOT be served -- fresh
     HTTP call required, mirroring test_fetch_candles_async_yesterday_entry_triggers_new_fetch."""
