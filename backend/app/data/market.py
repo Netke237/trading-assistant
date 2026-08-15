@@ -56,6 +56,14 @@ _candles_cache: dict[str, tuple[list[dict], str]] = {}
 # Company names: immutable; permanent cache for the process lifetime.
 _company_cache: dict[str, str] = {}
 
+# Fundamentals calendar (earnings/dividend dates): doesn't change intraday —
+# date-keyed cache, same safety margin as _candles_cache.
+_fundamentals_calendar_cache: dict[str, tuple[dict | None, str]] = {}
+
+# Option expirations list: changes rarely (new expiries added ~weekly), not
+# intraday -- date-keyed cache, same pattern as the calendar cache above.
+_expirations_cache: dict[str, tuple[list[str], str]] = {}
+
 # yfinance calendar: reset daily (overnight earnings updates).
 _yf_cal_cache: dict[str, tuple[Optional[date], Optional[date]]] = {}
 _yf_cal_cache_date: str = ""
@@ -1146,20 +1154,25 @@ async def fetch_option_chain_async(
 ) -> list[dict]:
     """Async variant."""
     try:
-        exp_resp = await client.get(
-            f"{_tradier_base()}/v1/markets/options/expirations",
-            headers=_headers(),
-            params={"symbol": symbol, "includeAllRoots": "true"},
-        )
-        exp_resp.raise_for_status()
-        expirations = exp_resp.json().get("expirations")
-        if not expirations:
-            return []
-        dates = expirations.get("date", [])
-        if isinstance(dates, str):
-            dates = [dates]
-        if not dates:
-            return []
+        cached_exp = _expirations_cache.get(symbol)
+        if cached_exp is not None and cached_exp[1] == date.today().isoformat():
+            dates = cached_exp[0]
+        else:
+            exp_resp = await client.get(
+                f"{_tradier_base()}/v1/markets/options/expirations",
+                headers=_headers(),
+                params={"symbol": symbol, "includeAllRoots": "true"},
+            )
+            exp_resp.raise_for_status()
+            expirations = exp_resp.json().get("expirations")
+            if not expirations:
+                return []
+            dates = expirations.get("date", [])
+            if isinstance(dates, str):
+                dates = [dates]
+            if not dates:
+                return []
+            _expirations_cache[symbol] = (dates, date.today().isoformat())
 
         _today = date.today()
         if expiry and expiry in dates:
@@ -1398,6 +1411,13 @@ async def fetch_fundamentals_calendar(
     Returns the raw JSON dict (the list element for this symbol) so the caller
     can extract both earnings and dividend dates without a second HTTP round-trip.
     """
+    cached = _fundamentals_calendar_cache.get(symbol)
+    if cached is not None:
+        data, cached_date = cached
+        if cached_date == date.today().isoformat():
+            return data
+
+    result: dict | None = None
     try:
         resp = await client.get(
             f"{_tradier_base()}/beta/markets/fundamentals/calendars",
@@ -1406,14 +1426,18 @@ async def fetch_fundamentals_calendar(
         )
         resp.raise_for_status()
         data = resp.json()
-        if not data or not isinstance(data, list):
-            return None
-        for entry in data:
-            for result in entry.get("results", []):
-                return result
-        return None
+        if data and isinstance(data, list):
+            for entry in data:
+                for r in entry.get("results", []):
+                    result = r
+                    break
+                if result is not None:
+                    break
     except Exception:
-        return None
+        result = None
+
+    _fundamentals_calendar_cache[symbol] = (result, date.today().isoformat())
+    return result
 
 
 def _extract_earnings_date(fund_data: dict | None) -> Optional[date]:

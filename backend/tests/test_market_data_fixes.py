@@ -522,6 +522,209 @@ async def test_fetch_candles_async_yesterday_entry_triggers_new_fetch():
     mock_client.get.assert_called_once()
 
 
+# ── Day-scoped caches: fetch_fundamentals_calendar + option-chain expirations ──
+
+
+@pytest.mark.asyncio
+async def test_fetch_fundamentals_calendar_cache_stores_date_string():
+    """After a successful fetch, the cache entry key must be an ISO date string,
+    mirroring _candles_cache's pattern (test_fetch_candles_async_cache_stores_date_string)."""
+    import app.data.market as mkt
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.json.return_value = [{"results": [{"tables": {"earnings": {"report_date": "2026-09-01"}}}]}]
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    saved = dict(mkt._fundamentals_calendar_cache)
+    mkt._fundamentals_calendar_cache.clear()
+    try:
+        await mkt.fetch_fundamentals_calendar(mock_client, "AAPL")
+        _, cache_key = mkt._fundamentals_calendar_cache["AAPL"]
+    finally:
+        mkt._fundamentals_calendar_cache.clear()
+        mkt._fundamentals_calendar_cache.update(saved)
+
+    assert isinstance(cache_key, str), f"Expected str cache key, got {type(cache_key)}"
+    assert cache_key == date.today().isoformat()
+
+
+@pytest.mark.asyncio
+async def test_fetch_fundamentals_calendar_second_call_skips_network():
+    """A second call for the same symbol on the same day must be served from
+    cache -- exactly one HTTP call total, not two."""
+    import app.data.market as mkt
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.json.return_value = [{"results": [{"tables": {"earnings": {"report_date": "2026-09-01"}}}]}]
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    saved = dict(mkt._fundamentals_calendar_cache)
+    mkt._fundamentals_calendar_cache.clear()
+    try:
+        first = await mkt.fetch_fundamentals_calendar(mock_client, "AAPL")
+        second = await mkt.fetch_fundamentals_calendar(mock_client, "AAPL")
+    finally:
+        mkt._fundamentals_calendar_cache.clear()
+        mkt._fundamentals_calendar_cache.update(saved)
+
+    mock_client.get.assert_called_once()
+    assert first == second
+
+
+@pytest.mark.asyncio
+async def test_fetch_fundamentals_calendar_yesterday_entry_triggers_new_fetch():
+    """A cache entry stamped with yesterday's date must NOT be served -- fresh
+    HTTP call required, mirroring test_fetch_candles_async_yesterday_entry_triggers_new_fetch."""
+    import app.data.market as mkt
+
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    stale_entry = {"tables": {"earnings": {"report_date": "2025-01-01"}}}
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.json.return_value = [{"results": [{"tables": {"earnings": {"report_date": "2026-09-01"}}}]}]
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    saved = dict(mkt._fundamentals_calendar_cache)
+    mkt._fundamentals_calendar_cache.clear()
+    mkt._fundamentals_calendar_cache["AAPL"] = (stale_entry, yesterday)
+    try:
+        await mkt.fetch_fundamentals_calendar(mock_client, "AAPL")
+    finally:
+        mkt._fundamentals_calendar_cache.clear()
+        mkt._fundamentals_calendar_cache.update(saved)
+
+    mock_client.get.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_fetch_option_chain_async_expirations_cache_stores_date_string():
+    """Mirrors test_fetch_candles_async_cache_stores_date_string for the
+    expirations-list cache inside fetch_option_chain_async."""
+    import app.data.market as mkt
+
+    exp_resp = MagicMock()
+    exp_resp.raise_for_status.return_value = None
+    exp_resp.json.return_value = {"expirations": {"date": [_FUTURE_EXPIRY]}}
+
+    chain_resp = MagicMock()
+    chain_resp.raise_for_status.return_value = None
+    chain_resp.json.return_value = {"options": {"option": []}}
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=[exp_resp, chain_resp])
+
+    saved = dict(mkt._expirations_cache)
+    mkt._expirations_cache.clear()
+    try:
+        with (
+            patch("app.data.ibkr.fetch_iv_metrics_ibkr", return_value=None),
+            patch("app.data.tastytrade_iv.fetch_iv_metrics_tastytrade", return_value=None),
+        ):
+            await mkt.fetch_option_chain_async(mock_client, "AAPL", dte_bounds=(20, 40))
+        _, cache_key = mkt._expirations_cache["AAPL"]
+    finally:
+        mkt._expirations_cache.clear()
+        mkt._expirations_cache.update(saved)
+
+    assert isinstance(cache_key, str), f"Expected str cache key, got {type(cache_key)}"
+    assert cache_key == date.today().isoformat()
+
+
+@pytest.mark.asyncio
+async def test_fetch_option_chain_async_second_sequential_call_skips_expirations_call():
+    """Two SEQUENTIAL chain fetches (one awaited fully before the next starts)
+    for the same symbol on the same day must reuse the cached expirations
+    list -- one expirations HTTP call total, even though each call still
+    makes its own chain HTTP call (the chain itself is NOT cached, only the
+    expirations list).
+
+    Deliberately does NOT claim this holds for concurrent calls: scan.py's
+    _build_spreads fetches the put and call legs for the same symbol via
+    asyncio.gather (concurrently), so on a cache-cold symbol both coroutines
+    can race past the cache-empty check before either writes to it, each
+    issuing its own expirations call. This is a known, accepted gap in the
+    cache's coverage for that one specific concurrent call site, not a bug in
+    the cache itself -- subsequent calls (same day) still hit the now-warm
+    cache. Not fixed here to avoid adding a lock/coalescing mechanism for a
+    single-pair edge case."""
+    import app.data.market as mkt
+
+    exp_resp = MagicMock()
+    exp_resp.raise_for_status.return_value = None
+    exp_resp.json.return_value = {"expirations": {"date": [_FUTURE_EXPIRY]}}
+
+    chain_resp = MagicMock()
+    chain_resp.raise_for_status.return_value = None
+    chain_resp.json.return_value = {"options": {"option": []}}
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=[exp_resp, chain_resp, chain_resp])
+
+    saved = dict(mkt._expirations_cache)
+    mkt._expirations_cache.clear()
+    try:
+        with (
+            patch("app.data.ibkr.fetch_iv_metrics_ibkr", return_value=None),
+            patch("app.data.tastytrade_iv.fetch_iv_metrics_tastytrade", return_value=None),
+        ):
+            await mkt.fetch_option_chain_async(mock_client, "AAPL", dte_bounds=(20, 40))
+            await mkt.fetch_option_chain_async(mock_client, "AAPL", dte_bounds=(20, 40))
+    finally:
+        mkt._expirations_cache.clear()
+        mkt._expirations_cache.update(saved)
+
+    urls_called = [c.args[0] if c.args else c.kwargs.get("url") for c in mock_client.get.call_args_list]
+    expirations_calls = [u for u in urls_called if u and "expirations" in u]
+    assert len(expirations_calls) == 1, f"expected exactly 1 expirations call, got {len(expirations_calls)}"
+    assert mock_client.get.call_count == 3  # 1 expirations + 2 chain
+
+
+@pytest.mark.asyncio
+async def test_fetch_option_chain_async_yesterday_expirations_triggers_new_fetch():
+    """A cache entry stamped with yesterday's date must NOT be served for the
+    expirations list -- fresh HTTP call required."""
+    import app.data.market as mkt
+
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+    exp_resp = MagicMock()
+    exp_resp.raise_for_status.return_value = None
+    exp_resp.json.return_value = {"expirations": {"date": [_FUTURE_EXPIRY]}}
+
+    chain_resp = MagicMock()
+    chain_resp.raise_for_status.return_value = None
+    chain_resp.json.return_value = {"options": {"option": []}}
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=[exp_resp, chain_resp])
+
+    saved = dict(mkt._expirations_cache)
+    mkt._expirations_cache.clear()
+    mkt._expirations_cache["AAPL"] = (["2025-01-17"], yesterday)
+    try:
+        with (
+            patch("app.data.ibkr.fetch_iv_metrics_ibkr", return_value=None),
+            patch("app.data.tastytrade_iv.fetch_iv_metrics_tastytrade", return_value=None),
+        ):
+            await mkt.fetch_option_chain_async(mock_client, "AAPL", dte_bounds=(20, 40))
+    finally:
+        mkt._expirations_cache.clear()
+        mkt._expirations_cache.update(saved)
+
+    urls_called = [c.args[0] if c.args else c.kwargs.get("url") for c in mock_client.get.call_args_list]
+    expirations_calls = [u for u in urls_called if u and "expirations" in u]
+    assert len(expirations_calls) == 1
+
+
 # ── O-7: Rate-limit yfinance IV chain fallback ────────────────────────────────
 
 

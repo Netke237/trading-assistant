@@ -146,6 +146,33 @@ def _reset_strategy_param_cache():
 
 
 @pytest.fixture(autouse=True)
+def _reset_market_data_caches():
+    """Clear market.py's module-level day-scoped caches before and after every
+    test.
+
+    Without this, a test that calls fetch_candles_async / fetch_company_name_async
+    / fetch_fundamentals_calendar / fetch_option_chain_async with a real symbol
+    (most commonly "AAPL", reused across dozens of tests) warms one of these
+    caches as a side effect. The next test to use the same symbol then gets a
+    cache hit instead of hitting its own mocked HTTP response, silently
+    consuming a mocked side_effect list out of order or skipping an assertion's
+    expected call entirely. Caught directly: test_fetch_option_chain_async_falls_back_to_tastytrade_when_ibkr_unavailable
+    passed in isolation but failed when run after other AAPL-using tests, once
+    _expirations_cache/_fundamentals_calendar_cache were added.
+    """
+    from app.data import market as mkt
+    mkt._candles_cache.clear()
+    mkt._company_cache.clear()
+    mkt._fundamentals_calendar_cache.clear()
+    mkt._expirations_cache.clear()
+    yield
+    mkt._candles_cache.clear()
+    mkt._company_cache.clear()
+    mkt._fundamentals_calendar_cache.clear()
+    mkt._expirations_cache.clear()
+
+
+@pytest.fixture(autouse=True)
 def _default_fast_heston_calibration():
     """calibrate_heston became a real, callable name in app.routers.scan once
     the scan pipeline started calibrating it. Default it to an instant canned
