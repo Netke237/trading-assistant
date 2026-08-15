@@ -108,10 +108,85 @@ async def test_armed_holding_emits_nothing():
          patch("app.services.strategy_watch_evaluator.get_bars",
                new_callable=AsyncMock, return_value=_bars(102.0)), \
          patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
-                    {"pullback_ema": lambda bars, **k: _signal()}):
+                    {"pullback_ema": lambda bars, direction, **k: _signal(direction) if direction == "Bullish" else None}):
         events = await evaluate_all()
     assert events == []
     store.update_state.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_armed_opposite_direction_signal_fires_reversal():
+    """The only way a reversal can be genuine: the OPPOSITE direction's signal
+    fires while armed (not stop/target hit). Before this fix, the evaluator
+    only ever computed the signal for the watch's own fixed direction, so
+    signal.direction could never disagree with state['direction'] and this
+    branch was dead code."""
+    store = MagicMock()
+    store.list_watches.return_value = [_watch("armed", direction="Bullish",
+                                              entry_price=100.0, stop_price=95.0,
+                                              target_price=110.0)]
+
+    def fake_signal(bars, direction, **k):
+        # Bullish primary signal: nothing new (price is holding, not re-triggering).
+        # Bearish (opposite) signal: fires -- this is the reversal.
+        if direction == "Bearish":
+            return _signal(direction="Bearish", entry=102.0, stop=108.0, target=90.0)
+        return None
+
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(102.0)), \
+         patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
+                    {"pullback_ema": fake_signal}):
+        events = await evaluate_all()
+
+    assert len(events) == 1
+    assert events[0].event_type == "reversal"
+    assert events[0].direction == "Bearish"
+    updated_state = store.update_state.call_args[0][1]
+    assert updated_state["phase"] == "armed"
+    assert updated_state["direction"] == "Bearish"
+
+
+@pytest.mark.asyncio
+async def test_armed_no_opposite_signal_emits_nothing():
+    """Holding steady (no stop/target hit, no opposite-direction signal) must
+    still emit nothing -- confirms the new opposite-direction check doesn't
+    fire spuriously when there's genuinely no reversal."""
+    store = MagicMock()
+    store.list_watches.return_value = [_watch("armed", direction="Bullish",
+                                              entry_price=100.0, stop_price=95.0,
+                                              target_price=110.0)]
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(102.0)), \
+         patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
+                    {"pullback_ema": lambda bars, direction, **k: None}):
+        events = await evaluate_all()
+    assert events == []
+    store.update_state.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_stop_hit_takes_priority_over_opposite_direction_signal():
+    """If the stop is hit AND the opposite direction would also signal, the
+    exit_stop transition must win -- reversal is only checked as the final
+    elif, after both stop_hit and target_hit."""
+    store = MagicMock()
+    store.list_watches.return_value = [_watch("armed", direction="Bullish",
+                                              entry_price=100.0, stop_price=95.0,
+                                              target_price=110.0)]
+
+    def fake_signal(bars, direction, **k):
+        return _signal(direction="Bearish") if direction == "Bearish" else None
+
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(94.0)), \
+         patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
+                    {"pullback_ema": fake_signal}):
+        events = await evaluate_all()
+    assert events[0].event_type == "exit_stop"
 
 
 @pytest.mark.asyncio
