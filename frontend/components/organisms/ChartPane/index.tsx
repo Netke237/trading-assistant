@@ -45,6 +45,7 @@ interface ThemeColors {
   textDim: string;
   passColor: string;
   rejColor: string;
+  accent: string;
 }
 
 function readThemeColors(): ThemeColors {
@@ -54,6 +55,12 @@ function readThemeColors(): ThemeColors {
     textDim:   token('--text-secondary') || '#888',
     passColor: token('--pass')           || '#4caf50',
     rejColor:  token('--reject')         || '#e05050',
+    // Neutral default for an unstyled Line series (e.g. ChartWorkspace's main
+    // price line in Line-chart mode, which passes no cfg.color). Deliberately
+    // NOT passColor/rejColor — those are PASS/REJECT status colors and would
+    // make a plain price line always read as "passing" regardless of price
+    // action.
+    accent:    token('--accent')         || '#4f8ef7',
   };
 }
 
@@ -175,7 +182,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
         // Only restyle indicator series that didn't request an explicit
         // color — one that did (cfg.color set) keeps the caller's choice.
         (s as ISeriesApi<'Line' | 'Histogram'>).applyOptions({
-          color: cfg.type === 'Line' ? colors.passColor : colors.gridSoft,
+          color: cfg.type === 'Line' ? colors.accent : colors.gridSoft,
         });
       }
     });
@@ -187,7 +194,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    const { passColor, rejColor } = colorsRef.current;
+    const { passColor, rejColor, accent } = colorsRef.current;
 
     // Remove series not in current config
     seriesMap.current.forEach((s, id) => {
@@ -237,7 +244,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
           }, cfg.paneIndex ?? 0);
         } else {
           s = chart.addSeries(LineSeries, {
-            color: cfg.color ?? passColor,
+            color: cfg.color ?? accent,
             lineWidth: 1,
             priceScaleId: cfg.priceScaleId ?? 'right',
           }, cfg.paneIndex ?? 0);

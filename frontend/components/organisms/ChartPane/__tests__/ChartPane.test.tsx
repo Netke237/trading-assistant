@@ -9,6 +9,7 @@ const TOKENS: Record<string, string> = {
   '--text-secondary': '#5A6070',
   '--pass': '#1A9188',
   '--reject': '#D32F2F',
+  '--accent': '#2962FF',
 };
 
 function mockComputedStyle(tokens: Record<string, string>) {
@@ -97,7 +98,12 @@ describe('ChartPane — theme token colors', () => {
     const defaultLineSeries = chart.addSeries.mock.results[0].value;
     const customLineSeries = chart.addSeries.mock.results[1].value;
 
-    mockComputedStyle({ ...TOKENS, '--pass': '#00FF00' });
+    // Creation-time default must be the neutral --accent token, not --pass —
+    // a plain price/indicator line isn't a PASS/CAUTION/REJECT status.
+    const [, defaultLineCreateOptions] = chart.addSeries.mock.calls[0];
+    expect(defaultLineCreateOptions.color).toBe(TOKENS['--accent']);
+
+    mockComputedStyle({ ...TOKENS, '--accent': '#00FF00' });
     useThemeStore.setState({ theme: 'light' });
     rerender(
       <ChartPane
@@ -108,6 +114,8 @@ describe('ChartPane — theme token colors', () => {
       />,
     );
 
+    // Neutral --accent, not --pass/--reject -- an unstyled price/indicator
+    // line must not always render as "PASS green" regardless of price action.
     expect(defaultLineSeries.applyOptions).toHaveBeenCalledWith(
       expect.objectContaining({ color: '#00FF00' }),
     );

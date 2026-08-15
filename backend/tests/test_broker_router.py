@@ -326,3 +326,50 @@ async def test_stock_order_does_not_block_event_loop():
         f"tick_soon() took {tick_elapsed['seconds']:.3f}s to resolve — "
         f"the order handler is still blocking the event loop"
     )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_duplicate_orders_are_deduped_not_both_executed():
+    """Regression: once router_.execute() moved to a worker thread
+    (asyncio.to_thread), the event loop yields between the idempotency check
+    and the idempotency record, so two near-simultaneous identical requests
+    (e.g. a client retry racing the original submission) could both pass the
+    check before either recorded a result -- placing two real orders instead
+    of deduping to one, defeating the whole point of the idempotency guard."""
+    import time as _time
+    from app.routers.broker import _idempotency_cache, _idempotency_inflight
+    _idempotency_cache.clear()
+    _idempotency_inflight.clear()
+    call_count = {"n": 0}
+
+    class SlowAdapter:
+        def place_order(self, order):
+            call_count["n"] += 1
+            _time.sleep(0.2)
+            return OrderResult(order_id="ONLY1", status="ok", broker="ibkr_paper")
+
+    router = BrokerRouter(adapters={"ibkr_paper": SlowAdapter()})
+    payload = {
+        "broker": "ibkr_paper", "symbol": "AAPL",
+        "action": "BUY", "effect": "OPEN", "quantity": 1, "order_type": "MKT",
+    }
+    with patch("app.routers.broker.build_router_from_credentials", return_value=router):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp1_task = asyncio.create_task(client.post("/broker/stock-order", json=payload))
+            resp2_task = asyncio.create_task(client.post("/broker/stock-order", json=payload))
+            resp1, resp2 = await asyncio.gather(resp1_task, resp2_task)
+
+    assert call_count["n"] == 1, (
+        f"place_order was called {call_count['n']} times for the same natural "
+        f"key within the dedup window -- a duplicate order was placed"
+    )
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
+    assert resp1.json()["order_id"] == "ONLY1"
+    assert resp2.json()["order_id"] == "ONLY1"
+    deduped_flags = {resp1.json()["deduped"], resp2.json()["deduped"]}
+    assert deduped_flags == {False, True}, (
+        "exactly one of the two concurrent requests should be the 'leader' "
+        "(deduped=False) and the other should get the deduped result"
+    )
