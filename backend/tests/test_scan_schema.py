@@ -27,6 +27,18 @@ def test_confidence_overrides_default_none():
     assert req.confidence_reject_below is None
 
 
+def test_scan_request_accepts_bearish_fundamentals_overrides():
+    req = ScanRequest.model_validate({
+        "universe": ["AAPL"],
+        "direction": "Bearish",
+        "horizon": "Swing",
+        "fundamentals_caution_above": 65,
+        "fundamentals_reject_above": 85,
+    })
+    assert req.fundamentals_caution_above == 65
+    assert req.fundamentals_reject_above == 85
+
+
 def test_trade_card_has_optional_confidence_fields():
     assert "confidence" in TradeCardData.model_fields
     assert "confidenceText" in TradeCardData.model_fields

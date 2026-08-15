@@ -145,6 +145,27 @@ describe('RunScanButton — conflict suppression wiring', () => {
     const conflicted = useScanStore.getState().conflictedSymbols;
     expect(conflicted).toHaveLength(0);
   });
+
+  it('sends Step-3 bearish-fundamentals slider values as top-level filters for Options scans', async () => {
+    useScanStore.setState({
+      screenerMode: 'options',
+      context: { direction: 'Bearish', horizonPreset: 'Swing', holdMin: 5, holdMax: 15, universe: 'SP500' },
+      scanOverrides: { fundamentals_caution_above: 65, fundamentals_reject_above: 85 },
+    } as any);
+    mockPostScan.mockResolvedValue({ scan_id: 'S1', timestamp: 't', candidates: [], rejected: [] });
+
+    render(<RunScanButton />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run scan/i }));
+      await Promise.resolve();
+    });
+
+    const [, , , , filters, overrides] = mockPostScan.mock.calls[0];
+    expect((filters as Record<string, number>).fundamentals_caution_above).toBe(65);
+    expect((filters as Record<string, number>).fundamentals_reject_above).toBe(85);
+    expect(overrides).not.toHaveProperty('fundamentals_caution_above');
+    expect(overrides).not.toHaveProperty('fundamentals_reject_above');
+  });
 });
 
 describe('RunScanButton — hold days', () => {

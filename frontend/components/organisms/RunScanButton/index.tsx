@@ -143,6 +143,7 @@ export function RunScanButton() {
     // Strip them here so they don't pollute the backend overrides map.
     const { confidence_caution_below: _cb, confidence_reject_below: _rb,
             confidence_atr_mult_target: _amt, confidence_atr_mult_stop: _ams,
+            fundamentals_caution_above: _fca, fundamentals_reject_above: _fra,
             ...scoreOnlyOverrides } = scanOverrides;
     const effectiveOverrides = { ...scoreOnlyOverrides, shortlist_max_candidates: shortlistMaxCandidates };
 
@@ -181,6 +182,17 @@ export function RunScanButton() {
     filters.fundamentals_caution_below = fGate.cautionBelow;
     filters.fundamentals_reject_below  = fGate.rejectBelow;
     filters.fundamentals_de_reject     = fGate.deReject;
+
+    // Bearish-fundamentals override (BEARISH SCANS ONLY) — Step-3 Execution
+    // Parameters sliders. Must ride in top-level filters (ScanRequest fields),
+    // not the generic overrides dict, which the Options fundamentals gate
+    // never reads (see resolve_fundamentals_gate in fundamentals_gate.py).
+    if (typeof scanOverrides.fundamentals_caution_above === 'number') {
+      filters.fundamentals_caution_above = scanOverrides.fundamentals_caution_above;
+    }
+    if (typeof scanOverrides.fundamentals_reject_above === 'number') {
+      filters.fundamentals_reject_above = scanOverrides.fundamentals_reject_above;
+    }
 
     const t0 = Date.now();
     const startISO = nowLocalISO();        // capture start time before the async call

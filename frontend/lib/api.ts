@@ -399,6 +399,8 @@ export const api = {
       fundamentals_caution_below?: number;
       fundamentals_reject_below?: number;
       fundamentals_de_reject?: number;
+      fundamentals_caution_above?: number;
+      fundamentals_reject_above?:  number;
     },
     overrides?: Record<string, number | boolean | string>,
     spreads?: {
