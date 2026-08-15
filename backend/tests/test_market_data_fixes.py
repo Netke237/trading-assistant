@@ -606,6 +606,45 @@ async def test_fetch_fundamentals_calendar_yesterday_entry_triggers_new_fetch():
 
 
 @pytest.mark.asyncio
+async def test_fetch_fundamentals_calendar_network_failure_not_cached():
+    """A transient HTTP failure (timeout, 5xx, etc.) must NOT be memoized --
+    unlike a genuine empty response, it should not poison same-day calls for
+    this symbol. The second call (a fresh, successful response) must make its
+    own HTTP call rather than reusing a cached None from the first failure."""
+    import app.data.market as mkt
+    import httpx
+
+    fail_resp = MagicMock()
+    fail_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "server error", request=MagicMock(), response=MagicMock(status_code=503)
+    )
+
+    ok_resp = MagicMock()
+    ok_resp.raise_for_status.return_value = None
+    ok_resp.json.return_value = [{"results": [{"tables": {"earnings": {"report_date": "2026-09-01"}}}]}]
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=[fail_resp, ok_resp])
+
+    saved = dict(mkt._fundamentals_calendar_cache)
+    mkt._fundamentals_calendar_cache.clear()
+    try:
+        first = await mkt.fetch_fundamentals_calendar(mock_client, "AAPL")
+        second = await mkt.fetch_fundamentals_calendar(mock_client, "AAPL")
+    finally:
+        mkt._fundamentals_calendar_cache.clear()
+        mkt._fundamentals_calendar_cache.update(saved)
+
+    assert first is None
+    assert second is not None
+    assert mock_client.get.call_count == 2, (
+        "the failed first call must not have cached a None result -- the "
+        "second call should have retried against Tradier, not served a "
+        "cached failure"
+    )
+
+
+@pytest.mark.asyncio
 async def test_fetch_option_chain_async_expirations_cache_stores_date_string():
     """Mirrors test_fetch_candles_async_cache_stores_date_string for the
     expirations-list cache inside fetch_option_chain_async."""

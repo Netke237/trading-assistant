@@ -1417,7 +1417,6 @@ async def fetch_fundamentals_calendar(
         if cached_date == date.today().isoformat():
             return data
 
-    result: dict | None = None
     try:
         resp = await client.get(
             f"{_tradier_base()}/beta/markets/fundamentals/calendars",
@@ -1426,6 +1425,7 @@ async def fetch_fundamentals_calendar(
         )
         resp.raise_for_status()
         data = resp.json()
+        result: dict | None = None
         if data and isinstance(data, list):
             for entry in data:
                 for r in entry.get("results", []):
@@ -1433,11 +1433,15 @@ async def fetch_fundamentals_calendar(
                     break
                 if result is not None:
                     break
+        # Only a genuine response (even a legitimately empty one -- Tradier
+        # successfully answered "no calendar entries for this symbol") gets
+        # cached. A transient failure below (timeout, 5xx, bad JSON) must NOT
+        # be memoized as "no data" for the rest of the day -- matches
+        # _candles_cache/_company_cache, which likewise only write on success.
+        _fundamentals_calendar_cache[symbol] = (result, date.today().isoformat())
+        return result
     except Exception:
-        result = None
-
-    _fundamentals_calendar_cache[symbol] = (result, date.today().isoformat())
-    return result
+        return None
 
 
 def _extract_earnings_date(fund_data: dict | None) -> Optional[date]:
