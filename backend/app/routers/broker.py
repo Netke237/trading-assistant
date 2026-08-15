@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from typing import Literal, Optional
@@ -119,7 +120,7 @@ async def place_stock_order(req: StockOrderRequest) -> dict:
         sec_type="STK",
     )
     try:
-        result = router_.execute(req.broker, order)
+        result = await asyncio.to_thread(router_.execute, req.broker, order)
     except ValueError as exc:
         log_event("broker_order_failed", rec_id, {
             "kind": "stock", "broker": req.broker, "symbol": req.symbol,
@@ -180,7 +181,7 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
         option_symbol=req.option_symbol,
     )
     try:
-        result = router_.execute(req.broker, order)
+        result = await asyncio.to_thread(router_.execute, req.broker, order)
     except ValueError as exc:
         log_event("broker_order_failed", rec_id, {
             "kind": "option", "broker": req.broker, "symbol": req.symbol,

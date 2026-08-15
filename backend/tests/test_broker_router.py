@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from unittest.mock import MagicMock
 from app.services.broker_router import BrokerRouter
@@ -282,3 +284,45 @@ def test_alpaca_payload_unaffected_by_effect():
     close_order = BrokerOrder(symbol="AAPL", action="SELL", effect="CLOSE", quantity=1,
                                order_type="MKT", limit_price=None, sec_type="STK")
     assert adapter._build_payload(open_order) == adapter._build_payload(close_order)
+
+
+@pytest.mark.asyncio
+async def test_stock_order_does_not_block_event_loop():
+    """Regression for the High finding: router_.execute() ran straight on the
+    event loop with no to_thread hop, so a slow synchronous adapter call (e.g.
+    IBKR/Tradier/Alpaca's blocking httpx.post) froze every other coroutine —
+    scans, price fetches, websocket alerts — for the whole round trip."""
+    import time as _time
+
+    class SlowAdapter:
+        def place_order(self, order):
+            _time.sleep(0.3)  # simulates a slow synchronous httpx.post
+            return OrderResult(order_id="SLOW1", status="ok", broker="ibkr_paper")
+
+    router = BrokerRouter(adapters={"ibkr_paper": SlowAdapter()})
+    tick_elapsed: dict[str, float] = {}
+    loop = asyncio.get_running_loop()
+    t0 = loop.time()
+
+    async def tick_soon():
+        await asyncio.sleep(0.05)
+        tick_elapsed["seconds"] = loop.time() - t0
+
+    with patch("app.routers.broker.build_router_from_credentials", return_value=router):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            order_task = asyncio.create_task(client.post("/broker/stock-order", json={
+                "broker": "ibkr_paper", "symbol": "AAPL",
+                "action": "BUY", "effect": "OPEN", "quantity": 1, "order_type": "MKT",
+            }))
+            tick_task = asyncio.create_task(tick_soon())
+            resp = await order_task
+            await tick_task
+    assert resp.status_code == 200
+    # If the handler blocked the loop for the adapter's full 0.3s synchronous
+    # sleep, the concurrent 0.05s tick couldn't resolve until that block
+    # cleared, landing tick_elapsed near/after 0.3s instead of ~0.05s.
+    assert tick_elapsed["seconds"] < 0.2, (
+        f"tick_soon() took {tick_elapsed['seconds']:.3f}s to resolve — "
+        f"the order handler is still blocking the event loop"
+    )
