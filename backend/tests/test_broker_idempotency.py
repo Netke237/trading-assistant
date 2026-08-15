@@ -7,8 +7,9 @@ from app.data.ibkr_paper import OrderResult
 
 
 def _make_app():
-    from app.routers.broker import router, _idempotency_cache
-    _idempotency_cache.clear()  # tests must not leak state between runs
+    from app.routers.broker import router, _idempotency_cache, _idempotency_inflight
+    _idempotency_cache.clear()     # tests must not leak state between runs
+    _idempotency_inflight.clear()
     app = FastAPI()
     app.include_router(router)
     return app

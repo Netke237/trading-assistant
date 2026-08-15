@@ -373,3 +373,39 @@ async def test_concurrent_duplicate_orders_are_deduped_not_both_executed():
         "exactly one of the two concurrent requests should be the 'leader' "
         "(deduped=False) and the other should get the deduped result"
     )
+
+
+@pytest.mark.asyncio
+async def test_unexpected_exception_releases_the_idempotency_claim():
+    """Regression: _release_claim() was only being called from inside the
+    enumerated ValueError/RuntimeError except blocks. Any OTHER exception
+    escaping router_.execute() (e.g. a malformed broker response raising
+    AttributeError, or asyncio.CancelledError on client disconnect) left the
+    asyncio.Event reservation in _idempotency_inflight permanently
+    unreleased -- every future request for that exact natural key would then
+    hang in `await event.wait()` forever, since nothing ever calls
+    event.set() or removes the stale reservation. Proven here with a bounded
+    asyncio.wait_for: if the claim leaked, the second identical request times
+    out instead of raising the adapter's own exception again."""
+    from app.routers.broker import _idempotency_cache, _idempotency_inflight
+    _idempotency_cache.clear()
+    _idempotency_inflight.clear()
+
+    class BrokenAdapter:
+        def place_order(self, order):
+            raise AttributeError("malformed broker response")
+
+    router = BrokerRouter(adapters={"ibkr_paper": BrokenAdapter()})
+    payload = {
+        "broker": "ibkr_paper", "symbol": "AAPL",
+        "action": "BUY", "effect": "OPEN", "quantity": 1, "order_type": "MKT",
+    }
+    with patch("app.routers.broker.build_router_from_credentials", return_value=router):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            with pytest.raises(AttributeError):
+                await asyncio.wait_for(client.post("/broker/stock-order", json=payload), timeout=2.0)
+            # Second identical request must NOT hang waiting on a stale
+            # reservation left behind by the first (failed) request's claim.
+            with pytest.raises(AttributeError):
+                await asyncio.wait_for(client.post("/broker/stock-order", json=payload), timeout=2.0)

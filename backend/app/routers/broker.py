@@ -61,7 +61,14 @@ async def _claim_or_wait(key: tuple) -> tuple[dict | None, bool]:
       (already tagged deduped=True).
     - (None, True): caller is now the leader for this key and MUST call
       _release_claim(key, ...) exactly once when it finishes (success or
-      failure) so waiters are released and future requests aren't stuck.
+      failure) so waiters are released and future requests aren't stuck. Both
+      route handlers below enforce this structurally via try/finally around
+      the entire leader body — not just by convention — specifically because
+      an exception type neither handler catches (anything other than the
+      HTTPException/ValueError/RuntimeError cases each already handles, e.g.
+      a malformed broker response or a cancelled request) must still release
+      the claim; an enumerated except-clause allowlist alone would leave a
+      permanently stuck reservation for that natural key.
 
     A concurrent duplicate that arrives while a leader is executing waits on
     that leader's event rather than racing it — if the leader succeeds, the
@@ -141,48 +148,53 @@ async def place_stock_order(req: StockOrderRequest) -> dict:
         "action": req.action, "quantity": req.quantity,
         "order_type": req.order_type, "limit_price": req.limit_price, "tif": req.tif,
     })
+    # response stays None unless execution succeeds — the finally below
+    # releases the claim unconditionally (success, a handled ValueError/
+    # RuntimeError, OR any other exception that escapes this block, e.g. a
+    # malformed broker response or a cancelled request) so a stuck
+    # reservation can never permanently wedge this natural key.
+    response: dict | None = None
     try:
-        router_ = build_router_from_credentials()
-    except Exception as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 503, "error": f"credentials: {exc}",
+        try:
+            router_ = build_router_from_credentials()
+        except Exception as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 503, "error": f"credentials: {exc}",
+            })
+            raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
+        order = BrokerOrder(
+            symbol=req.symbol,
+            action=req.action,
+            effect=req.effect,
+            quantity=req.quantity,
+            order_type=req.order_type,
+            limit_price=req.limit_price,
+            tif=req.tif,
+            sec_type="STK",
+        )
+        try:
+            result = await asyncio.to_thread(router_.execute, req.broker, order)
+        except ValueError as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 400, "error": str(exc),
+            })
+            raise HTTPException(status_code=400, detail=str(exc))
+        except RuntimeError as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 502, "error": str(exc),
+            })
+            raise HTTPException(status_code=502, detail=str(exc))
+        log_event("broker_order_filled", rec_id, {
+            "kind": "stock", "broker": result.broker, "symbol": req.symbol,
+            "order_id": result.order_id, "status": result.status,
         })
-        _release_claim(idem_key, None)
-        raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
-    order = BrokerOrder(
-        symbol=req.symbol,
-        action=req.action,
-        effect=req.effect,
-        quantity=req.quantity,
-        order_type=req.order_type,
-        limit_price=req.limit_price,
-        tif=req.tif,
-        sec_type="STK",
-    )
-    try:
-        result = await asyncio.to_thread(router_.execute, req.broker, order)
-    except ValueError as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 400, "error": str(exc),
-        })
-        _release_claim(idem_key, None)
-        raise HTTPException(status_code=400, detail=str(exc))
-    except RuntimeError as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 502, "error": str(exc),
-        })
-        _release_claim(idem_key, None)
-        raise HTTPException(status_code=502, detail=str(exc))
-    log_event("broker_order_filled", rec_id, {
-        "kind": "stock", "broker": result.broker, "symbol": req.symbol,
-        "order_id": result.order_id, "status": result.status,
-    })
-    response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
-    _release_claim(idem_key, response)
-    return response
+        response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
+        return response
+    finally:
+        _release_claim(idem_key, response)
 
 
 @router.post("/option-order")
@@ -203,50 +215,53 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
         "quantity": req.quantity, "order_type": req.order_type,
         "limit_price": req.limit_price, "tif": req.tif,
     })
+    # See place_stock_order's matching comment — the finally below releases
+    # the claim unconditionally so a stuck reservation can never permanently
+    # wedge this natural key.
+    response: dict | None = None
     try:
-        router_ = build_router_from_credentials()
-    except Exception as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "option", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 503, "error": f"credentials: {exc}",
+        try:
+            router_ = build_router_from_credentials()
+        except Exception as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "option", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 503, "error": f"credentials: {exc}",
+            })
+            raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
+        order = BrokerOrder(
+            symbol=req.symbol,
+            action=req.action,
+            effect=req.effect,
+            quantity=req.quantity,
+            order_type=req.order_type,
+            limit_price=req.limit_price,
+            tif=req.tif,
+            conid=req.conid,
+            sec_type="OPT",
+            option_symbol=req.option_symbol,
+        )
+        try:
+            result = await asyncio.to_thread(router_.execute, req.broker, order)
+        except ValueError as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "option", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 400, "error": str(exc),
+            })
+            raise HTTPException(status_code=400, detail=str(exc))
+        except RuntimeError as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "option", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 502, "error": str(exc),
+            })
+            raise HTTPException(status_code=502, detail=str(exc))
+        log_event("broker_order_filled", rec_id, {
+            "kind": "option", "broker": result.broker, "symbol": req.symbol,
+            "order_id": result.order_id, "status": result.status,
         })
-        _release_claim(idem_key, None)
-        raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
-    order = BrokerOrder(
-        symbol=req.symbol,
-        action=req.action,
-        effect=req.effect,
-        quantity=req.quantity,
-        order_type=req.order_type,
-        limit_price=req.limit_price,
-        tif=req.tif,
-        conid=req.conid,
-        sec_type="OPT",
-        option_symbol=req.option_symbol,
-    )
-    try:
-        result = await asyncio.to_thread(router_.execute, req.broker, order)
-    except ValueError as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "option", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 400, "error": str(exc),
-        })
-        _release_claim(idem_key, None)
-        raise HTTPException(status_code=400, detail=str(exc))
-    except RuntimeError as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "option", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 502, "error": str(exc),
-        })
-        _release_claim(idem_key, None)
-        raise HTTPException(status_code=502, detail=str(exc))
-    log_event("broker_order_filled", rec_id, {
-        "kind": "option", "broker": result.broker, "symbol": req.symbol,
-        "order_id": result.order_id, "status": result.status,
-    })
-    response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
-    _release_claim(idem_key, response)
-    return response
+        response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
+        return response
+    finally:
+        _release_claim(idem_key, response)
 
 
 @router.get("/status")
