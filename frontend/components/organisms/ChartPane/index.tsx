@@ -11,6 +11,7 @@ import {
   type Time,
 } from 'lightweight-charts';
 import type { Candle, Point } from '@/lib/indicators';
+import { useThemeStore } from '@/lib/theme';
 import styles from './ChartPane.module.css';
 
 export interface SeriesConfig {
@@ -32,12 +33,41 @@ interface Props {
   onSeriesReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void;
 }
 
+/** Read a CSS custom property off :root. Mirrors CandlestickChart's helper. */
+function token(name: string): string {
+  if (typeof window === 'undefined') return '';
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+interface ThemeColors {
+  bg: string;
+  gridSoft: string;
+  textDim: string;
+  passColor: string;
+  rejColor: string;
+}
+
+function readThemeColors(): ThemeColors {
+  return {
+    bg:        token('--bg-surface')     || '#0b0b14',
+    gridSoft:  token('--border-subtle')  || '#1e1e35',
+    textDim:   token('--text-secondary') || '#888',
+    passColor: token('--pass')           || '#4caf50',
+    rejColor:  token('--reject')         || '#e05050',
+  };
+}
+
 export default function ChartPane({ series, onCrosshairMove, height = 0, chartApiRef, mainSeriesRef, onSeriesReady }: Props) {
+  const theme = useThemeStore((s) => s.theme);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const colorsRef = useRef<ThemeColors>(readThemeColors());
   const seriesMap = useRef<Map<string, ISeriesApi<'Candlestick' | 'Bar' | 'Line' | 'Histogram'>>>(new Map());
   const onCrosshairMoveRef = useRef(onCrosshairMove);
   const prevPaneCountRef = useRef(0);
+  const isFirstThemeRunRef = useRef(true);
+  const seriesRef = useRef(series);
+  useEffect(() => { seriesRef.current = series; }, [series]);
   useEffect(() => { onCrosshairMoveRef.current = onCrosshairMove; }, [onCrosshairMove]);
   const onSeriesReadyRef = useRef(onSeriesReady);
   useEffect(() => { onSeriesReadyRef.current = onSeriesReady; }, [onSeriesReady]);
@@ -49,18 +79,20 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
 
   const initChart = useCallback(() => {
     if (!containerRef.current) return;
+    const colors = readThemeColors();
+    colorsRef.current = colors;
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { color: '#0b0b14' },
-        textColor: '#888',
+        background: { color: colors.bg },
+        textColor: colors.textDim,
       },
       grid: {
-        vertLines: { color: '#1e1e35' },
-        horzLines: { color: '#1e1e35' },
+        vertLines: { color: colors.gridSoft },
+        horzLines: { color: colors.gridSoft },
       },
       crosshair: { mode: 1 },
-      rightPriceScale: { borderColor: '#1e1e35' },
-      timeScale: { borderColor: '#1e1e35', timeVisible: true },
+      rightPriceScale: { borderColor: colors.gridSoft },
+      timeScale: { borderColor: colors.gridSoft, timeVisible: true },
       width: containerRef.current.clientWidth,
       height: getHeight(),
     });
@@ -77,8 +109,13 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
       });
       onCrosshairMoveRef.current?.(String(param.time), values);
     });
-  }, [getHeight]);
+  }, [getHeight, chartApiRef]);
 
+  // Chart lifecycle — mount/unmount ONLY. Colors are read once at creation
+  // time (correct for the common case: theme was already set in Settings
+  // before this component ever mounted). Deliberately NOT keyed on `theme` —
+  // see the live-restyle effect below for why a full recreate-on-toggle is
+  // avoided here.
   useEffect(() => {
     initChart();
     const observer = new ResizeObserver(() => {
@@ -95,12 +132,62 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
       chartRef.current?.remove();
       chartRef.current = null;
       seriesMap.current.clear();
+      prevPaneCountRef.current = 0;
     };
   }, [initChart]);
+
+  // Live theme toggle while already mounted — restyle in place via
+  // lightweight-charts' own applyOptions API, never remove()/createChart()
+  // again. ChartWorkspace hangs volume-profile/preview overlays, drag
+  // handlers, and a regime-overlay series off this exact chart/series
+  // instance; a full teardown-and-recreate on every toggle would put all of
+  // that at risk for a color change. Only series tracked in seriesMap (this
+  // component's own `series` prop) are restyled; series ChartWorkspace adds
+  // directly to the chart outside that prop are untouched, same as before.
+  useEffect(() => {
+    if (isFirstThemeRunRef.current) { isFirstThemeRunRef.current = false; return; }
+    const chart = chartRef.current;
+    if (!chart) return;
+    const colors = readThemeColors();
+    colorsRef.current = colors;
+    chart.applyOptions({
+      layout: { background: { color: colors.bg }, textColor: colors.textDim },
+      grid: {
+        vertLines: { color: colors.gridSoft },
+        horzLines: { color: colors.gridSoft },
+      },
+      rightPriceScale: { borderColor: colors.gridSoft },
+      timeScale: { borderColor: colors.gridSoft },
+    });
+    seriesMap.current.forEach((s, id) => {
+      const cfg = seriesRef.current.find((c) => c.id === id);
+      if (!cfg) return;
+      if (cfg.type === 'Candlestick') {
+        (s as ISeriesApi<'Candlestick'>).applyOptions({
+          upColor: colors.passColor, downColor: colors.rejColor,
+          wickUpColor: colors.passColor, wickDownColor: colors.rejColor,
+        });
+      } else if (cfg.type === 'Bar') {
+        (s as ISeriesApi<'Bar'>).applyOptions({
+          upColor: colors.passColor, downColor: colors.rejColor,
+        });
+      } else if (!cfg.color) {
+        // Only restyle indicator series that didn't request an explicit
+        // color — one that did (cfg.color set) keeps the caller's choice.
+        (s as ISeriesApi<'Line' | 'Histogram'>).applyOptions({
+          color: cfg.type === 'Line' ? colors.passColor : colors.gridSoft,
+        });
+      }
+    });
+    // theme is the only real trigger here — series is read via seriesRef
+    // (not a dep) so this doesn't refire on every live data tick, only on
+    // an actual theme toggle.
+  }, [theme]);
 
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
+    const { passColor, rejColor } = colorsRef.current;
 
     // Remove series not in current config
     seriesMap.current.forEach((s, id) => {
@@ -125,11 +212,11 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
       if (!s) {
         if (cfg.type === 'Candlestick') {
           s = chart.addSeries(CandlestickSeries, {
-            upColor: '#4caf50',
-            downColor: '#e05050',
+            upColor: passColor,
+            downColor: rejColor,
             borderVisible: false,
-            wickUpColor: '#4caf50',
-            wickDownColor: '#e05050',
+            wickUpColor: passColor,
+            wickDownColor: rejColor,
           }, cfg.paneIndex ?? 0);
           if ((cfg.paneIndex ?? 0) === 0) {
             if (mainSeriesRef) mainSeriesRef.current = s as ISeriesApi<'Candlestick'>;
@@ -137,7 +224,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
           }
         } else if (cfg.type === 'Bar') {
           s = chart.addSeries(BarSeries, {
-            upColor: '#4caf50', downColor: '#e05050',
+            upColor: passColor, downColor: rejColor,
           }, cfg.paneIndex ?? 0);
           if ((cfg.paneIndex ?? 0) === 0) {
             if (mainSeriesRef) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
@@ -145,12 +232,12 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
           }
         } else if (cfg.type === 'Histogram') {
           s = chart.addSeries(HistogramSeries, {
-            color: cfg.color ?? '#4a4a6a',
+            color: cfg.color ?? colorsRef.current.gridSoft,
             priceScaleId: cfg.priceScaleId ?? 'right',
           }, cfg.paneIndex ?? 0);
         } else {
           s = chart.addSeries(LineSeries, {
-            color: cfg.color ?? '#4f8ef7',
+            color: cfg.color ?? passColor,
             lineWidth: 1,
             priceScaleId: cfg.priceScaleId ?? 'right',
           }, cfg.paneIndex ?? 0);
@@ -192,7 +279,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
         }
       }
     }
-  }, [series, getHeight]);
+  }, [series, getHeight, mainSeriesRef]);
 
   return (
     <div
