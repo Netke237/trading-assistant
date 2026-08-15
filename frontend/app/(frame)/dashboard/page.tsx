@@ -179,7 +179,7 @@ export default function DashboardPage() {
             <Tooltip key={m.label} text={regimeMetricTooltip(m.label, m.status)}>
               <div className={styles.metric}>
                 <Text size={11} tone="secondary">{m.label}</Text>
-                <Data size={13} weight={500} tone={toneFor(m.status)}>{m.value}</Data>
+                <Data size={13} weight={500} tone={toneForStatus(m.status)}>{m.value}</Data>
               </div>
             </Tooltip>
           ))}
@@ -379,13 +379,6 @@ function Stat({
       <Data size={18} weight={500} tone={tone}>{value}</Data>
     </div>
   );
-}
-
-function toneFor(status: string): 'pass' | 'caution' | 'reject' | undefined {
-  if (status === 'PASS')    return 'pass';
-  if (status === 'CAUTION') return 'caution';
-  if (status === 'REJECT')  return 'reject';
-  return undefined;
 }
 
 function timeAgo(iso: string): string {
