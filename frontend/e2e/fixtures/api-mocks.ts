@@ -44,22 +44,43 @@ export async function setupApiMocks(page: Page): Promise<void> {
     });
   });
 
-  // Regime - PASS by default
-  await page.route('**/api/regime', async (route) => {
+  // Step 1 charts fetch QQQ for the NDX panel (page.tsx getCandles('QQQ'))
+  await page.route('**/api/candles/QQQ', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        overall: 'PASS',
-        headline: 'Market conditions favourable for directional trades',
-        metrics: [
-          { label: 'SPX Trend', value: '4,185.22', status: 'PASS', trend: 'up' },
-          { label: 'NDX Trend', value: '14,221.55', status: 'PASS', trend: 'up' },
-          { label: 'VIX', value: '14.2', status: 'PASS', trend: 'down' },
-        ],
-      }),
+      body: JSON.stringify(loadCandles('NVDA')),
     });
   });
+
+  // Regime - PASS by default.
+  // Register bare + query-string patterns separately so /api/regime/series
+  // and /api/regime/intraday-series are not swallowed by a trailing wildcard.
+  // omm.state: 'Bull' so alignmentVerdict('Bullish', 'Bull') → PASS (combinedRegime
+  // is driven by omm, not overall — see step-1-regime/page.tsx fetchRegime).
+  const regimePassBody = JSON.stringify({
+    overall: 'PASS',
+    headline: 'Market conditions favourable for directional trades',
+    metrics: [
+      { label: 'SPX Trend', value: '4,185.22', status: 'PASS', trend: 'up' },
+      { label: 'NDX Trend', value: '14,221.55', status: 'PASS', trend: 'up' },
+      { label: 'VIX', value: '14.2', status: 'PASS', trend: 'down' },
+    ],
+    omm: {
+      state: 'Bull',
+      p_stay: 0.8,
+      stability: 'Stable',
+      regime_age_days: 10,
+      avg_regime_duration: 15,
+      transition_row: [0.8, 0.1, 0.1],
+      state_order: ['Bull', 'Bear', 'Choppy'],
+    },
+  });
+  const fulfillRegimePass = async (route: { fulfill: (opts: { status: number; contentType: string; body: string }) => Promise<void> }) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: regimePassBody });
+  };
+  await page.route('**/api/regime', fulfillRegimePass);
+  await page.route('**/api/regime?*', fulfillRegimePass);
 
   // Sectors
   await page.route('**/api/sectors', async (route) => {

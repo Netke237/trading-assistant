@@ -92,7 +92,6 @@ describe('RunScanButton — conflict suppression wiring', () => {
   });
 
   it('shows a toast and does not call runStockScan when Stocks mode has no activeStrategy selected (M6)', async () => {
-    const { runStockScan } = require('@/lib/stockScan');
     useScanStore.setState({ screenerMode: 'stocks', activeStrategy: null } as any);
     const addToastSpy = jest.spyOn(useAlertStore.getState(), 'addToast');
 

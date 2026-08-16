@@ -169,7 +169,7 @@ export default function Step1RegimePage() {
       )}
 
       {/* 1. Overall banner */}
-      <section className={`${pageStyles.banner} ${pageStyles[`banner_${combinedStatus}`]}`}>
+      <section data-testid="regime-banner" className={`${pageStyles.banner} ${pageStyles[`banner_${combinedStatus}`]}`}>
         <div className={pageStyles.bannerLeft}>
           <StatusBadge status={combinedStatus} label={`REGIME ${combinedStatus}`} tooltip={regimeStatusTooltip(combinedStatus)} />
           {regime?.regime_direction && (
@@ -222,7 +222,7 @@ export default function Step1RegimePage() {
               </Data>
             </div>
           </header>
-          <div className={pageStyles.indexChart}>
+          <div data-testid="spx-chart" className={pageStyles.indexChart}>
             <CandlestickChart data={spxCandles} height="auto" showToggles={false} defaultIndicators={[]} />
           </div>
         </div>
@@ -236,7 +236,7 @@ export default function Step1RegimePage() {
               </Data>
             </div>
           </header>
-          <div className={pageStyles.indexChart}>
+          <div data-testid="ndx-chart" className={pageStyles.indexChart}>
             <CandlestickChart data={ndxCandles} height="auto" showToggles={false} defaultIndicators={[]} />
           </div>
         </div>
@@ -247,7 +247,7 @@ export default function Step1RegimePage() {
         <Text size={13} weight={600}>EMA / VIX</Text>
         <Text size={12} tone="secondary">SPX &amp; NDX vs 200-day EMA, plus VIX level</Text>
       </div>
-      <div className={pageStyles.grid}>
+      <div data-testid="regime-metric-grid" className={pageStyles.grid}>
         {(regime?.metrics ?? []).map((m) => (
           <div key={m.label} className={pageStyles.metricCard}>
             <Text size={12} tone="secondary">{m.label}</Text>
@@ -394,7 +394,7 @@ export default function Step1RegimePage() {
           {sectorsUp} up · {sectorsDown} down · today
         </Text>
       </div>
-      <div className={pageStyles.sectors}>
+      <div data-testid="sector-heatmap" className={pageStyles.sectors}>
         {sectors.map((s) => (
           <div
             key={s.key}

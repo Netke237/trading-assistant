@@ -69,25 +69,25 @@ export class ScreenerPage {
     }
   }
 
-  // Step 3
+  // Step 1
   get regimeBanner(): Locator {
-    return this.page.locator('section').first();
+    return this.page.getByTestId('regime-banner');
   }
 
   get spxChart(): Locator {
-    return this.page.locator('canvas').first();
+    return this.page.getByTestId('spx-chart').locator('canvas').first();
   }
 
   get ndxChart(): Locator {
-    return this.page.locator('canvas').nth(1);
+    return this.page.getByTestId('ndx-chart').locator('canvas').first();
   }
 
   get metricGrid(): Locator {
-    return this.page.locator('[class*="grid"]').first();
+    return this.page.getByTestId('regime-metric-grid');
   }
 
   get sectorHeatmap(): Locator {
-    return this.page.locator('[class*="sectors"]').first();
+    return this.page.getByTestId('sector-heatmap');
   }
 
   get rejectDialog(): Locator {

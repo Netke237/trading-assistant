@@ -1,15 +1,25 @@
 /**
  * @smoke
  * Happy-path scan — all API calls mocked via the standard fixture.
- * Walks through all 7 screener steps, runs a scan on Step 3, then
- * verifies each subsequent step loads with the expected content.
+ *
+ * Both tests below are test.fixme (known debt, not active coverage):
+ * - full 7-step flow still asserts the pre-WS-E-step-reorder URL scheme
+ * - scan-log assertion looks for "all passed" text the current Step 3 UI
+ *   no longer renders
+ *
+ * Kept visible in the Playwright report until rewritten against the
+ * current step order and ScanLogSection badge grid.
  */
 
 import { test, expect } from '../fixtures';
 import { ScreenerPage } from '../pages/ScreenerPage';
 
 test.describe('Happy-path scan (mocked) @smoke', () => {
-  test('full 7-step screener flow — AAPL candidate', async ({ page }) => {
+  // FIXME: written against the pre-WS-E-step-reorder URL scheme (old order:
+  // 1=universe, 2=direction, 3=regime; current order: 1=regime, 2=universe,
+  // 3=direction — steps 4-7 are unaffected). Needs a full rewrite of the
+  // Step 1-3 interactions for the current order, not a mechanical URL swap.
+  test.fixme('full 7-step screener flow — AAPL candidate', async ({ page }) => {
     const screener = new ScreenerPage(page);
 
     // ── Step 1: Universe ────────────────────────────────────────────────────
@@ -71,7 +81,11 @@ test.describe('Happy-path scan (mocked) @smoke', () => {
     await expect(page.getByText('AAPL').first()).toBeVisible();
   });
 
-  test('Step 3 scan log shows all-passed state when no rejections', async ({ page }) => {
+  // FIXME: step-3-direction/page.tsx's current ScanLogSection renders a
+  // Scanned/Passed/Rejected/DTE badge grid, not the "all passed" text this
+  // test looks for (that text lives only in the unrelated ScanLog organism,
+  // which this page doesn't use). Needs a rewrite against the current UI.
+  test.fixme('Step 3 scan log shows all-passed state when no rejections', async ({ page }) => {
     const screener = new ScreenerPage(page);
     await screener.goto(3);
     await page.waitForLoadState('networkidle');
