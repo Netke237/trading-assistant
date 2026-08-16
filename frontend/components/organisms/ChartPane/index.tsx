@@ -151,44 +151,58 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
   // that at risk for a color change. Only series tracked in seriesMap (this
   // component's own `series` prop) are restyled; series ChartWorkspace adds
   // directly to the chart outside that prop are untouched, same as before.
+  //
+  // The actual color read is deferred to the next tick (setTimeout 0), not
+  // done synchronously in this effect body. ThemeProvider (an ancestor) sets
+  // <html data-theme> — which is what the CSS custom properties read here
+  // resolve against — inside its OWN useEffect(..., [theme]). React fires a
+  // descendant's passive effects before an ancestor's for the same commit,
+  // so this effect runs before ThemeProvider's; reading getComputedStyle
+  // synchronously here would see the STALE data-theme attribute and apply
+  // last theme's colors, one toggle behind. By the next tick, the whole
+  // effect flush for this commit (including ThemeProvider's) has already
+  // run, so the DOM attribute — and therefore the tokens — are current.
   useEffect(() => {
     if (isFirstThemeRunRef.current) { isFirstThemeRunRef.current = false; return; }
-    const chart = chartRef.current;
-    if (!chart) return;
-    const colors = readThemeColors();
-    colorsRef.current = colors;
-    chart.applyOptions({
-      layout: { background: { color: colors.bg }, textColor: colors.textDim },
-      grid: {
-        vertLines: { color: colors.gridSoft },
-        horzLines: { color: colors.gridSoft },
-      },
-      rightPriceScale: { borderColor: colors.gridSoft },
-      timeScale: { borderColor: colors.gridSoft },
-    });
-    seriesMap.current.forEach((s, id) => {
-      const cfg = seriesRef.current.find((c) => c.id === id);
-      if (!cfg) return;
-      if (cfg.type === 'Candlestick') {
-        (s as ISeriesApi<'Candlestick'>).applyOptions({
-          upColor: colors.passColor, downColor: colors.rejColor,
-          wickUpColor: colors.passColor, wickDownColor: colors.rejColor,
-        });
-      } else if (cfg.type === 'Bar') {
-        (s as ISeriesApi<'Bar'>).applyOptions({
-          upColor: colors.passColor, downColor: colors.rejColor,
-        });
-      } else if (!cfg.color) {
-        // Only restyle indicator series that didn't request an explicit
-        // color — one that did (cfg.color set) keeps the caller's choice.
-        (s as ISeriesApi<'Line' | 'Histogram'>).applyOptions({
-          color: cfg.type === 'Line' ? colors.accent : colors.gridSoft,
-        });
-      }
-    });
+    const timer = setTimeout(() => {
+      const chart = chartRef.current;
+      if (!chart) return;
+      const colors = readThemeColors();
+      colorsRef.current = colors;
+      chart.applyOptions({
+        layout: { background: { color: colors.bg }, textColor: colors.textDim },
+        grid: {
+          vertLines: { color: colors.gridSoft },
+          horzLines: { color: colors.gridSoft },
+        },
+        rightPriceScale: { borderColor: colors.gridSoft },
+        timeScale: { borderColor: colors.gridSoft },
+      });
+      seriesMap.current.forEach((s, id) => {
+        const cfg = seriesRef.current.find((c) => c.id === id);
+        if (!cfg) return;
+        if (cfg.type === 'Candlestick') {
+          (s as ISeriesApi<'Candlestick'>).applyOptions({
+            upColor: colors.passColor, downColor: colors.rejColor,
+            wickUpColor: colors.passColor, wickDownColor: colors.rejColor,
+          });
+        } else if (cfg.type === 'Bar') {
+          (s as ISeriesApi<'Bar'>).applyOptions({
+            upColor: colors.passColor, downColor: colors.rejColor,
+          });
+        } else if (!cfg.color) {
+          // Only restyle indicator series that didn't request an explicit
+          // color — one that did (cfg.color set) keeps the caller's choice.
+          (s as ISeriesApi<'Line' | 'Histogram'>).applyOptions({
+            color: cfg.type === 'Line' ? colors.accent : colors.gridSoft,
+          });
+        }
+      });
+    }, 0);
     // theme is the only real trigger here — series is read via seriesRef
     // (not a dep) so this doesn't refire on every live data tick, only on
     // an actual theme toggle.
+    return () => clearTimeout(timer);
   }, [theme]);
 
   useEffect(() => {
