@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from typing import Literal, Optional
@@ -23,9 +24,33 @@ BrokerKey = Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_p
 # same-shaped order seconds later (e.g. scaling into a position) is NOT
 # treated as a duplicate. No frontend change (no client-supplied
 # idempotency-key header) is required.
+#
+# Order execution runs in a worker thread (asyncio.to_thread — see the two
+# route handlers below), which yields the event loop for the whole broker
+# call. That means a second, near-simultaneous identical request can reach
+# this guard before the first has finished — a plain check-then-later-record
+# is not atomic across that yield. _claim_or_wait() closes that gap: the
+# first request atomically reserves the key (under _idempotency_lock, a
+# non-blocking dict operation) before it ever awaits anything, and any
+# concurrent duplicate waits on that reservation's asyncio.Event instead of
+# also passing the check and placing a second real order.
+#
+# Known limitation, accepted rather than solved here: asyncio.to_thread
+# cannot forcibly stop its worker thread. If the request coroutine is ever
+# cancelled (client disconnect, server shutdown) while router_.execute() is
+# running in that thread, the claim is still released correctly (try/finally
+# in the route handlers), but the abandoned thread keeps running and can
+# still place a real order after the HTTP response is gone — and a
+# subsequent identical request would become a new leader and could place a
+# second one. This is a pre-existing property of thread-based execution, not
+# a regression: before order execution moved off the event loop, a client
+# couldn't even cancel a slow order call at all (the whole server was frozen
+# for it). Revisit only if genuine concurrent/networked use emerges — not
+# relevant for this tool's single local user today.
 _IDEMPOTENCY_WINDOW_SECONDS = 3.0
 _idempotency_lock = threading.Lock()
-_idempotency_cache: dict[tuple, tuple[float, dict]] = {}  # natural_key -> (ts, response)
+_idempotency_cache: dict[tuple, tuple[float, dict]] = {}     # natural_key -> (ts, response)
+_idempotency_inflight: dict[tuple, asyncio.Event] = {}        # natural_key -> event, while a leader is executing
 
 
 def _natural_order_key(kind: str, req: "StockOrderRequest | OptionOrderRequest") -> tuple:
@@ -40,23 +65,59 @@ def _natural_order_key(kind: str, req: "StockOrderRequest | OptionOrderRequest")
     return base
 
 
-def _check_idempotency(key: tuple) -> dict | None:
-    """Return a cached response (tagged deduped=True) if this exact order was
-    submitted within the dedup window, else None. Never mutates the stored
-    copy so the original response's `deduped: False` stays accurate."""
-    now = time.monotonic()
-    with _idempotency_lock:
-        # Opportunistic cleanup of stale entries.
-        for k in [k for k, (ts, _) in _idempotency_cache.items()
-                  if now - ts > _IDEMPOTENCY_WINDOW_SECONDS]:
-            del _idempotency_cache[k]
-        hit = _idempotency_cache.get(key)
-        return {**hit[1], "deduped": True} if hit else None
+async def _claim_or_wait(key: tuple) -> tuple[dict | None, bool]:
+    """Atomically claim leadership for `key`, or return a deduped cached
+    response if one already exists.
+
+    Returns (response, claimed):
+    - (cached_response, False): caller should return cached_response as-is
+      (already tagged deduped=True).
+    - (None, True): caller is now the leader for this key and MUST call
+      _release_claim(key, ...) exactly once when it finishes (success or
+      failure) so waiters are released and future requests aren't stuck. Both
+      route handlers below enforce this structurally via try/finally around
+      the entire leader body — not just by convention — specifically because
+      an exception type neither handler catches (anything other than the
+      HTTPException/ValueError/RuntimeError cases each already handles, e.g.
+      a malformed broker response or a cancelled request) must still release
+      the claim; an enumerated except-clause allowlist alone would leave a
+      permanently stuck reservation for that natural key.
+
+    A concurrent duplicate that arrives while a leader is executing waits on
+    that leader's event rather than racing it — if the leader succeeds, the
+    waiter loops back around and finds the now-populated cache entry; if the
+    leader fails (no cache entry gets written — see _release_claim), the
+    waiter loops back, finds no reservation, and becomes the new leader
+    itself.
+    """
+    while True:
+        with _idempotency_lock:
+            now = time.monotonic()
+            for k in [k for k, (ts, _) in _idempotency_cache.items()
+                      if now - ts > _IDEMPOTENCY_WINDOW_SECONDS]:
+                del _idempotency_cache[k]
+            hit = _idempotency_cache.get(key)
+            if hit is not None:
+                return {**hit[1], "deduped": True}, False
+            event = _idempotency_inflight.get(key)
+            if event is None:
+                _idempotency_inflight[key] = asyncio.Event()
+                return None, True
+        await event.wait()
 
 
-def _record_idempotency(key: tuple, response: dict) -> None:
+def _release_claim(key: tuple, response: dict | None) -> None:
+    """Release leadership claimed via _claim_or_wait(). On success, pass the
+    real response so it's cached for waiters (and future dedup hits) with
+    `deduped: False` preserved as originally recorded. On failure, pass None
+    so no cache entry is written — a waiter that loops back around will find
+    no reservation and become the new leader, retrying the call itself."""
     with _idempotency_lock:
-        _idempotency_cache[key] = (time.monotonic(), response)
+        if response is not None:
+            _idempotency_cache[key] = (time.monotonic(), response)
+        event = _idempotency_inflight.pop(key, None)
+    if event is not None:
+        event.set()
 
 
 class StockOrderRequest(BaseModel):
@@ -88,8 +149,8 @@ async def place_stock_order(req: StockOrderRequest) -> dict:
     """Place a paper stock order on the specified broker."""
     rec_id = new_rec_id()
     idem_key = _natural_order_key("stock", req)
-    cached = _check_idempotency(idem_key)
-    if cached is not None:
+    cached, claimed = await _claim_or_wait(idem_key)
+    if not claimed:
         log_event("broker_order_deduped", rec_id, {
             "kind": "stock", "broker": req.broker, "symbol": req.symbol,
             "note": "duplicate submission within dedup window — returning cached result",
@@ -100,45 +161,53 @@ async def place_stock_order(req: StockOrderRequest) -> dict:
         "action": req.action, "quantity": req.quantity,
         "order_type": req.order_type, "limit_price": req.limit_price, "tif": req.tif,
     })
+    # response stays None unless execution succeeds — the finally below
+    # releases the claim unconditionally (success, a handled ValueError/
+    # RuntimeError, OR any other exception that escapes this block, e.g. a
+    # malformed broker response or a cancelled request) so a stuck
+    # reservation can never permanently wedge this natural key.
+    response: dict | None = None
     try:
-        router_ = build_router_from_credentials()
-    except Exception as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 503, "error": f"credentials: {exc}",
+        try:
+            router_ = build_router_from_credentials()
+        except Exception as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 503, "error": f"credentials: {exc}",
+            })
+            raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
+        order = BrokerOrder(
+            symbol=req.symbol,
+            action=req.action,
+            effect=req.effect,
+            quantity=req.quantity,
+            order_type=req.order_type,
+            limit_price=req.limit_price,
+            tif=req.tif,
+            sec_type="STK",
+        )
+        try:
+            result = await asyncio.to_thread(router_.execute, req.broker, order)
+        except ValueError as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 400, "error": str(exc),
+            })
+            raise HTTPException(status_code=400, detail=str(exc))
+        except RuntimeError as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 502, "error": str(exc),
+            })
+            raise HTTPException(status_code=502, detail=str(exc))
+        log_event("broker_order_filled", rec_id, {
+            "kind": "stock", "broker": result.broker, "symbol": req.symbol,
+            "order_id": result.order_id, "status": result.status,
         })
-        raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
-    order = BrokerOrder(
-        symbol=req.symbol,
-        action=req.action,
-        effect=req.effect,
-        quantity=req.quantity,
-        order_type=req.order_type,
-        limit_price=req.limit_price,
-        tif=req.tif,
-        sec_type="STK",
-    )
-    try:
-        result = router_.execute(req.broker, order)
-    except ValueError as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 400, "error": str(exc),
-        })
-        raise HTTPException(status_code=400, detail=str(exc))
-    except RuntimeError as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 502, "error": str(exc),
-        })
-        raise HTTPException(status_code=502, detail=str(exc))
-    log_event("broker_order_filled", rec_id, {
-        "kind": "stock", "broker": result.broker, "symbol": req.symbol,
-        "order_id": result.order_id, "status": result.status,
-    })
-    response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
-    _record_idempotency(idem_key, response)
-    return response
+        response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
+        return response
+    finally:
+        _release_claim(idem_key, response)
 
 
 @router.post("/option-order")
@@ -146,8 +215,8 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
     """Place a paper options order on the specified broker."""
     rec_id = new_rec_id()
     idem_key = _natural_order_key("option", req)
-    cached = _check_idempotency(idem_key)
-    if cached is not None:
+    cached, claimed = await _claim_or_wait(idem_key)
+    if not claimed:
         log_event("broker_order_deduped", rec_id, {
             "kind": "option", "broker": req.broker, "symbol": req.symbol,
             "note": "duplicate submission within dedup window — returning cached result",
@@ -159,47 +228,53 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
         "quantity": req.quantity, "order_type": req.order_type,
         "limit_price": req.limit_price, "tif": req.tif,
     })
+    # See place_stock_order's matching comment — the finally below releases
+    # the claim unconditionally so a stuck reservation can never permanently
+    # wedge this natural key.
+    response: dict | None = None
     try:
-        router_ = build_router_from_credentials()
-    except Exception as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "option", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 503, "error": f"credentials: {exc}",
+        try:
+            router_ = build_router_from_credentials()
+        except Exception as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "option", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 503, "error": f"credentials: {exc}",
+            })
+            raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
+        order = BrokerOrder(
+            symbol=req.symbol,
+            action=req.action,
+            effect=req.effect,
+            quantity=req.quantity,
+            order_type=req.order_type,
+            limit_price=req.limit_price,
+            tif=req.tif,
+            conid=req.conid,
+            sec_type="OPT",
+            option_symbol=req.option_symbol,
+        )
+        try:
+            result = await asyncio.to_thread(router_.execute, req.broker, order)
+        except ValueError as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "option", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 400, "error": str(exc),
+            })
+            raise HTTPException(status_code=400, detail=str(exc))
+        except RuntimeError as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "option", "broker": req.broker, "symbol": req.symbol,
+                "http_status": 502, "error": str(exc),
+            })
+            raise HTTPException(status_code=502, detail=str(exc))
+        log_event("broker_order_filled", rec_id, {
+            "kind": "option", "broker": result.broker, "symbol": req.symbol,
+            "order_id": result.order_id, "status": result.status,
         })
-        raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
-    order = BrokerOrder(
-        symbol=req.symbol,
-        action=req.action,
-        effect=req.effect,
-        quantity=req.quantity,
-        order_type=req.order_type,
-        limit_price=req.limit_price,
-        tif=req.tif,
-        conid=req.conid,
-        sec_type="OPT",
-        option_symbol=req.option_symbol,
-    )
-    try:
-        result = router_.execute(req.broker, order)
-    except ValueError as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "option", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 400, "error": str(exc),
-        })
-        raise HTTPException(status_code=400, detail=str(exc))
-    except RuntimeError as exc:
-        log_event("broker_order_failed", rec_id, {
-            "kind": "option", "broker": req.broker, "symbol": req.symbol,
-            "http_status": 502, "error": str(exc),
-        })
-        raise HTTPException(status_code=502, detail=str(exc))
-    log_event("broker_order_filled", rec_id, {
-        "kind": "option", "broker": result.broker, "symbol": req.symbol,
-        "order_id": result.order_id, "status": result.status,
-    })
-    response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
-    _record_idempotency(idem_key, response)
-    return response
+        response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
+        return response
+    finally:
+        _release_claim(idem_key, response)
 
 
 @router.get("/status")

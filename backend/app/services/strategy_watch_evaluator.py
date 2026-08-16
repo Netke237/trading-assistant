@@ -3,10 +3,14 @@
 
 The state machine (per watch) is the dedup mechanism: it only returns events on a
 genuine transition (idle→entry, armed→exit_stop/exit_target, armed→reversal), so a
-standing setup never re-alerts. Reversal is wired but still dormant in practice:
-each watch's direction (Bullish/Bearish) is fixed at creation and there is no
-endpoint to change it later, so the signal function is evaluated with the same
-direction every tick and can never disagree with the armed state's direction.
+standing setup never re-alerts. Each watch's direction (Bullish/Bearish) is fixed
+at creation, so a reversal can't be detected by comparing the primary signal
+(always evaluated in the watch's own fixed direction) against the armed state's
+direction -- those can never disagree. Instead, while armed (and neither stop nor
+target has hit), the evaluator also evaluates the signal function for the
+OPPOSITE direction, using that direction's own tuned params (get_active). If the
+opposite-direction signal fires, that's a genuine reversal and the watch re-arms
+in the new direction.
 """
 from __future__ import annotations
 
@@ -195,19 +199,35 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
                     reason=f"{symbol}: {_strategy_label(key)} target hit at {close} (target {target_price})",
                 )
                 state = {"phase": "idle", "last_event": "exit_target", "last_event_at": _now_iso()}
-            elif signal is not None and signal.direction != state.get("direction"):
-                event = WatchEvent(
-                    watch_id=w["id"], symbol=symbol, strategy_key=key,
-                    event_type="reversal", direction=signal.direction,
-                    entry=signal.entry_price, stop=signal.stop_price,
-                    target=signal.target_price, rr_ratio=round(signal.rr_ratio, 2),
-                    close=close,
-                    reason=f"{symbol}: {_strategy_label(key)} reversal to {signal.direction} at {close}",
-                )
-                state = {"phase": "armed", "direction": signal.direction,
-                         "entry_price": signal.entry_price, "stop_price": signal.stop_price,
-                         "target_price": signal.target_price, "last_event": "reversal",
-                         "last_event_at": _now_iso()}
+            else:
+                # NOTE: no hysteresis/cooldown here -- if both directions' signal
+                # functions are "sticky" (true for several consecutive days, common
+                # for trend/breakout signals), a watch can in principle whipsaw
+                # Bullish<->Bearish on consecutive ticks, notifying each time.
+                # Accepted as a known limitation of this fix (making reversal
+                # reachable, not adding debounce) -- revisit if this proves noisy.
+                opposite_dir = "Bearish" if sdir == "Bullish" else "Bullish"
+                try:
+                    opp_params = get_active(key, opposite_dir)
+                    opp_params.update(params_override)
+                    opp_signal = fn(bars, direction=opposite_dir, **opp_params)
+                except Exception as exc:
+                    logger.warning("strategy-watch: %s reversal signal failed for %s — %s",
+                                    key, symbol, exc)
+                    opp_signal = None
+                if opp_signal is not None:
+                    event = WatchEvent(
+                        watch_id=w["id"], symbol=symbol, strategy_key=key,
+                        event_type="reversal", direction=opposite_dir,
+                        entry=opp_signal.entry_price, stop=opp_signal.stop_price,
+                        target=opp_signal.target_price, rr_ratio=round(opp_signal.rr_ratio, 2),
+                        close=close,
+                        reason=f"{symbol}: {_strategy_label(key)} reversal to {opposite_dir} at {close}",
+                    )
+                    state = {"phase": "armed", "direction": opposite_dir,
+                             "entry_price": opp_signal.entry_price, "stop_price": opp_signal.stop_price,
+                             "target_price": opp_signal.target_price, "last_event": "reversal",
+                             "last_event_at": _now_iso()}
 
         if event is not None:
             strategy_watch_store.update_state(w["id"], state)

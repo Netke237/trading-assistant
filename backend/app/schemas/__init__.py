@@ -506,6 +506,11 @@ class ScanRequest(BaseModel):
     fundamentals_caution_below:  Optional[float] = None
     fundamentals_reject_below:   Optional[float] = None
     fundamentals_de_reject:      Optional[float] = None
+    # Per-scan bearish-fundamentals overrides (Step-3 "Fundamentals Bearish"
+    # sliders, BEARISH SCANS ONLY) — health score too high to short safely.
+    # Mirrors StockScanRequest's fields of the same name (schemas/stock_scan.py).
+    fundamentals_caution_above: Optional[float] = None
+    fundamentals_reject_above:  Optional[float] = None
     # Bearish spread construction params (used by Pass 2 for bearish candidates)
     spread_width:        float = 5.0
     short_leg_delta:     float = 0.30
