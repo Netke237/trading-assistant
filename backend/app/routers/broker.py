@@ -34,6 +34,19 @@ BrokerKey = Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_p
 # non-blocking dict operation) before it ever awaits anything, and any
 # concurrent duplicate waits on that reservation's asyncio.Event instead of
 # also passing the check and placing a second real order.
+#
+# Known limitation, accepted rather than solved here: asyncio.to_thread
+# cannot forcibly stop its worker thread. If the request coroutine is ever
+# cancelled (client disconnect, server shutdown) while router_.execute() is
+# running in that thread, the claim is still released correctly (try/finally
+# in the route handlers), but the abandoned thread keeps running and can
+# still place a real order after the HTTP response is gone — and a
+# subsequent identical request would become a new leader and could place a
+# second one. This is a pre-existing property of thread-based execution, not
+# a regression: before order execution moved off the event loop, a client
+# couldn't even cancel a slow order call at all (the whole server was frozen
+# for it). Revisit only if genuine concurrent/networked use emerges — not
+# relevant for this tool's single local user today.
 _IDEMPOTENCY_WINDOW_SECONDS = 3.0
 _idempotency_lock = threading.Lock()
 _idempotency_cache: dict[tuple, tuple[float, dict]] = {}     # natural_key -> (ts, response)
