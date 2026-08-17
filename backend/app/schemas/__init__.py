@@ -1,7 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.scan import (
     ContinuousScanConfig,
@@ -372,6 +372,16 @@ class TargetLevel(BaseModel):
     rrContribution: float = Field(
         validation_alias=AliasChoices('rrContribution', 'rr_contribution'),
     )
+
+    @field_validator('pricingMethod', mode='before')
+    @classmethod
+    def normalize_legacy_pricing_method(cls, value: object) -> object:
+        """Accept codes from old persisted scan sessions and emit the current enum."""
+        return {
+            'heston': PricingMethod.HESTON,
+            'delta-approx': PricingMethod.DELTA_APPROX,
+            'manual': PricingMethod.UNAVAILABLE,
+        }.get(value, value) if isinstance(value, str) else value
 
 
 # ── Trade cards ──────────────────────────────────────────────────────────────

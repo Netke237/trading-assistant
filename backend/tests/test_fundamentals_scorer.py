@@ -157,3 +157,102 @@ def test_quality_label_thresholds_configurable():
     assert tightened.quality_label != "Strong", (
         "raising quality_label_thresholds.strong to 90 should demote this snapshot's label"
     )
+
+
+# ── T1: metric strong/weak pairs must be read from cfg['thresholds'] ─────────
+
+def test_metric_thresholds_configurable_via_cfg():
+    """Metric strong/weak pairs must come from cfg['thresholds'] — raising the
+    revenue/EPS-growth 'strong' threshold must change the growth bucket score
+    (0.12 growth = 80/100 under default 0.15, but 30/100 under 0.40)."""
+    snap = _snap(revenue_growth_yoy=0.12, eps_growth_yoy=0.12)
+    baseline = score_fundamentals(snap, "Bullish")
+    assert baseline.growth_score == 80, "test needs the default 0.15 strong threshold"
+
+    custom = {
+        "weights": {"growth": 0.35, "quality": 0.35, "risk": 0.30},
+        "safety": {"reject_on_negative_equity": True, "debt_to_equity_reject": 3.0},
+        "quality_label_thresholds": {"strong": 65, "neutral": 40},
+        "thresholds": {
+            "revenue_growth_yoy": {"strong": 0.40, "weak": 0.0},
+            "eps_growth_yoy": {"strong": 0.40, "weak": 0.0},
+        },
+    }
+    tightened = score_fundamentals(snap, "Bullish", cfg=custom)
+    assert tightened.growth_score == 30, (
+        f"raised strong threshold should cut growth_score to 30, got {tightened.growth_score}"
+    )
+    assert tightened.growth_score < baseline.growth_score
+
+
+def test_yaml_thresholds_take_effect():
+    """The cfg=None path must read thresholds from the YAML loader — injecting
+    modified thresholds via the module-level `_load_yaml_cfg` alias must move a
+    bucket score (patch the alias itself, not signal_confidence._cfg)."""
+    snap = _snap(revenue_growth_yoy=0.12, eps_growth_yoy=0.12)
+    baseline = score_fundamentals(snap, "Bullish")
+
+    injected_cfg = {
+        "weights": {"growth": 0.35, "quality": 0.35, "risk": 0.30},
+        "safety": {"reject_on_negative_equity": True, "debt_to_equity_reject": 3.0},
+        "quality_label_thresholds": {"strong": 65, "neutral": 40},
+        "thresholds": {
+            "revenue_growth_yoy": {"strong": 0.40, "weak": 0.0},
+            "eps_growth_yoy": {"strong": 0.40, "weak": 0.0},
+        },
+    }
+    with patch(
+        "app.scoring.fundamentals_scorer._load_yaml_cfg",
+        return_value={"fundamentals_gate": injected_cfg},
+    ):
+        tightened = score_fundamentals(snap, direction="Bullish", cfg=None)
+
+    assert tightened.growth_score == 30, (
+        f"YAML-injected thresholds should change growth_score, got {tightened.growth_score}"
+    )
+    assert tightened.growth_score < baseline.growth_score
+
+
+# ── T2: risk_label boundaries must match the score's inclusive thresholds ────
+
+def test_risk_label_boundaries_follow_thresholds():
+    """risk_label uses the same inclusive boundaries as _metric_score's invert
+    branch: None → Low (historical), de == strong → Low, de == weak → High."""
+    none_de = score_fundamentals(_snap(debt_to_equity=None), "Bullish")
+    assert none_de.risk_label == "Low"
+
+    at_strong = score_fundamentals(_snap(debt_to_equity=0.5), "Bullish")
+    assert at_strong.risk_label == "Low", "de == strong (0.5) scores 100 and must label Low"
+
+    at_weak = score_fundamentals(_snap(debt_to_equity=2.0), "Bullish")
+    assert at_weak.risk_label == "High", "de == weak (2.0) scores 0 and must label High"
+
+
+def test_custom_debt_thresholds_drive_risk_label():
+    baseline = score_fundamentals(_snap(debt_to_equity=0.30), "Bullish")
+    custom = score_fundamentals(
+        _snap(debt_to_equity=0.30),
+        "Bullish",
+        cfg={"thresholds": {"debt_to_equity": {"strong": 0.25, "weak": 1.0}}},
+    )
+    assert baseline.risk_label == "Low"
+    assert custom.risk_label == "Medium"
+
+
+def test_malformed_threshold_pairs_fall_back_to_known_defaults():
+    snap = _snap(revenue_growth_yoy=0.12, eps_growth_yoy=0.12, debt_to_equity=0.30)
+    baseline = score_fundamentals(snap, "Bullish")
+    malformed = score_fundamentals(
+        snap,
+        "Bullish",
+        cfg={
+            "thresholds": {
+                "revenue_growth_yoy": {"strong": "not-a-number", "weak": 0.0},
+                "gross_margin": {"strong": 0.20, "weak": 0.40},
+                "debt_to_equity": {"strong": float("nan"), "weak": 2.0},
+            },
+        },
+    )
+    assert malformed.growth_score == baseline.growth_score
+    assert malformed.quality_score == baseline.quality_score
+    assert malformed.risk_score == baseline.risk_score

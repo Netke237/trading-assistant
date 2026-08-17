@@ -1,12 +1,16 @@
 'use client';
 import { Text, Data } from '@/components/primitives';
+import type { DataTone } from '@/components/primitives/Data';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { fundamentalScoreTooltip, safetyFlagTooltip } from '@/lib/statusTooltips';
+import { toneForScore, FUNDAMENTAL_BAND } from '@/lib/status';
 import type { FundamentalsOut } from '@/types/domain';
 import styles from './FundamentalHealthCard.module.css';
 
-function healthTone(score: number): 'pass' | 'caution' | 'reject' {
-  return score >= 65 ? 'pass' : score >= 40 ? 'caution' : 'reject';
+function healthTone(score: number): DataTone {
+  // Fundamentals health intentionally uses the stricter 65/40 band —
+  // see FUNDAMENTAL_BAND's docstring in lib/status.ts.
+  return toneForScore(score, FUNDAMENTAL_BAND);
 }
 
 export function FundamentalHealthCard({ f }: { f: FundamentalsOut | null | undefined }) {

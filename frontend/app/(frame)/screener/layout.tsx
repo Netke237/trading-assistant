@@ -18,6 +18,7 @@
 
 import { useScanStore } from '@/lib/scanStore';
 import { StepNavBar } from '@/components/organisms/StepNavBar';
+import { ScreenerStepGate } from '@/components/organisms/ScreenerStepGate';
 import styles from './screenerLayout.module.css';
 
 export default function ScreenerLayout({ children }: { children: React.ReactNode }) {
@@ -48,7 +49,9 @@ export default function ScreenerLayout({ children }: { children: React.ReactNode
           Pre-Breakout
         </button>
       </div>
-      <div className={styles.scroll}>{children}</div>
+      <div className={styles.scroll}>
+        <ScreenerStepGate>{children}</ScreenerStepGate>
+      </div>
       <StepNavBar />
     </div>
   );

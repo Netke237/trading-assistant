@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
@@ -24,6 +24,22 @@ export function AutoTradeArm({ card, broker }: AutoTradeArmProps) {
   const { autoMode, setAutoMode, armed, setArmed, lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api.getAutoTradeStatus()
+      .then((status) => {
+        if (!active) return;
+        setArmed(status.armed);
+        if (status.armed) setAutoMode('armed');
+      })
+      .catch(() => {
+        // Keep the safe local defaults when the backend is unavailable.
+      });
+    return () => {
+      active = false;
+    };
+  }, [setArmed, setAutoMode]);
 
   const contractId = card.contract;
   // NOTE: option_symbol should be OCC format for real broker APIs; card.contract is

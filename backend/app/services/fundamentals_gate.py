@@ -19,7 +19,12 @@ def resolve_fundamentals_gate(req) -> dict:
     short a company whose fundamentals are too strong") are applied only when
     req.direction is Bearish, matching the Step-3 slider's documented scope.
     """
-    g = copy.deepcopy(load_scoring_cfg().get("fundamentals_gate", {}))
+    base = load_scoring_cfg().get("fundamentals_gate")
+    if not isinstance(base, dict):
+        raise RuntimeError(
+            "Missing or invalid 'fundamentals_gate' in backend/config/scoring_rules.yaml"
+        )
+    g = copy.deepcopy(base)
     if req.fundamentals_enabled is not None:
         g["enabled"] = req.fundamentals_enabled
     if req.fundamentals_caution_below is not None:

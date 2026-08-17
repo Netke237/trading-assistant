@@ -1,3 +1,5 @@
+import pytest
+
 from app.schemas import ScanRequest
 from app.services.fundamentals_gate import resolve_fundamentals_gate
 
@@ -31,3 +33,12 @@ def test_absent_overrides_leave_yaml_defaults_untouched():
     default_gate = load_scoring_cfg().get("fundamentals_gate", {})
     assert gate.get("cautionAbove") == default_gate.get("cautionAbove")
     assert gate.get("rejectAbove") == default_gate.get("rejectAbove")
+
+
+def test_missing_gate_config_fails_closed(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.fundamentals_gate.load_scoring_cfg",
+        lambda: {},
+    )
+    with pytest.raises(RuntimeError, match="fundamentals_gate"):
+        resolve_fundamentals_gate(_req())

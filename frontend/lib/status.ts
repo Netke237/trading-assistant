@@ -23,11 +23,40 @@ export const STATUS_LABEL: Record<Status, string> = {
  * Input: percentage-like value (0–100).
  * Output: which status color to paint the fill.
  */
+
+/**
+ * Shared 0–100 band for composite scores (55/35). `statusForScore` derives its
+ * thresholds from this so the band has exactly one source of truth in this file.
+ */
+export const SCORE_BAND = { passAt: 55, cautionAt: 35 } as const;
+
+/**
+ * Fundamentals health deliberately uses a STRICTER band than composite scores
+ * (65/40 vs 55/35): a mediocre balance sheet deserves a louder caution signal
+ * than a mediocre trend score. Mirrors backend/app/scoring/fundamentals_scorer.py
+ * — see also fundamentalScoreTooltip's strong/middling/weak vocabulary.
+ */
+export const FUNDAMENTAL_BAND = { passAt: 65, cautionAt: 40 } as const;
+
 export function statusForScore(value: number, max = 100): Status {
   const pct = (value / max) * 100;
-  if (pct >= 55) return 'PASS';
-  if (pct >= 35) return 'CAUTION';
+  if (pct >= SCORE_BAND.passAt) return 'PASS';
+  if (pct >= SCORE_BAND.cautionAt) return 'CAUTION';
   return 'REJECT';
+}
+
+/**
+ * Raw 0–100 score → Data tone, with the band thresholds as the single source
+ * of truth. `band` defaults to SCORE_BAND; pass FUNDAMENTAL_BAND for the
+ * stricter fundamentals-health band.
+ */
+export function toneForScore(
+  value: number,
+  band: { passAt: number; cautionAt: number } = SCORE_BAND,
+): DataTone {
+  if (value >= band.passAt) return 'pass';
+  if (value >= band.cautionAt) return 'caution';
+  return 'reject';
 }
 
 /**

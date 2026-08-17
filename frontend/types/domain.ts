@@ -173,7 +173,11 @@ export interface TargetLevel {
   stockPrice: number;            // underlying price at this target
   targetPrice?: number;          // new backend field name; optional for backward compat
   estimatedOptionPrice?: number; // model-based or approximation
-  pricingMethod?: 'Heston repriced' | 'BS repriced (IV-derived)' | 'Unavailable' | 'heston' | 'delta-approx' | 'manual';
+  // Backend PricingMethod enum values (backend/app/schemas/__init__.py). Legacy
+  // lowercase codes ('heston' / 'delta-approx' / 'manual') may still appear in
+  // old persisted scan sessions; they're rendered as raw strings, so the narrowed
+  // type only affects compile-time checking, not runtime display.
+  pricingMethod?: 'Heston repriced' | 'BS repriced (IV-derived)' | 'Unavailable';
   contractsToSell?: number;      // how many contracts to close here
   status?: string;               // 'PENDING' | 'HIT' | 'MISSED' or undefined
   rrContribution?: number;       // estimated reward / risk contribution

@@ -14,6 +14,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { regimeFitTooltip, stockScanGateTooltip, fundamentalScoreTooltip, winRateTooltip } from '@/lib/statusTooltips';
+import { toneForScore, FUNDAMENTAL_BAND } from '@/lib/status';
 import { computeStockDeltas, type StockDelta } from '@/lib/stockDelta';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog, type StockDraftOrder } from '@/components/organisms/StockSendDialog';
@@ -375,7 +376,7 @@ export default function Step4StocksPage() {
                     <Data size={12} tone="reject">{Math.abs(bt.max_drawdown_pct).toFixed(1)}%</Data>
                     {c.fundamentals ? (
                       <Tooltip text={fundamentalScoreTooltip('overall', c.fundamentals.score)}>
-                        <Data size={12} tone={c.fundamentals.score >= 65 ? 'pass' : c.fundamentals.score >= 40 ? 'caution' : 'reject'}>
+                        <Data size={12} tone={toneForScore(c.fundamentals.score, FUNDAMENTAL_BAND)}>
                           {c.fundamentals.score}
                         </Data>
                       </Tooltip>

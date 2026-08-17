@@ -319,15 +319,12 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
                 "alignment": alignment(omm.state, dh.state if dh else None), "insufficient_data": False,
             }
 
-    # Fundamentals — apply bearish overrides (same logic as _process_stock lines 521-527).
+    # Fundamentals — the gate already carries the bearish cautionAbove/rejectAbove
+    # overrides (applied once in services/fundamentals_gate.resolve_fundamentals_gate);
+    # no per-site re-application here. Note: if the YAML fundamentals_gate block is
+    # ever removed, the resolver returns {} and scoring would run on all-default cfg
+    # instead of being skipped — acceptable, documented.
     fund_gate = None if is_index else _resolve_fundamentals_gate(req)
-    if fund_gate is not None and req.direction.lower() in ("bearish", "bear"):
-        _fg = dict(fund_gate)
-        if req.fundamentals_caution_above is not None:
-            _fg["cautionAbove"] = req.fundamentals_caution_above
-        if req.fundamentals_reject_above is not None:
-            _fg["rejectAbove"] = req.fundamentals_reject_above
-        fund_gate = _fg if _fg else None
     _fh = None
     if fund_gate is not None and req.horizon.lower() != "intraday":
         _snap = await _get_fundamentals(symbol, staleness_days=fund_gate.get("staleness_days", 90))
@@ -680,14 +677,9 @@ async def _process_stock(
                         "insufficient_data": False,
                     }
 
-            # ── Fundamentals (skipped for intraday) ───────────────────────────
-            _fund_gate = dict(fund_gate) if fund_gate else {}
-            if req.direction.lower() in ("bearish", "bear"):
-                if req.fundamentals_caution_above is not None:
-                    _fund_gate["cautionAbove"] = req.fundamentals_caution_above
-                if req.fundamentals_reject_above is not None:
-                    _fund_gate["rejectAbove"] = req.fundamentals_reject_above
-            fund_gate = _fund_gate if _fund_gate else None
+            # Fundamentals (skipped for intraday) — the gate already carries the
+            # bearish overrides from services/fundamentals_gate.resolve_fundamentals_gate
+            # (see the matching note in _analyze_core); no per-site re-application.
 
             _fh: FundamentalHealth | None = None
             if req.horizon.lower() != "intraday" and fund_gate is not None:

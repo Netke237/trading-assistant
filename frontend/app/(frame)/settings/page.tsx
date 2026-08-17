@@ -29,7 +29,7 @@ const SECTIONS: { key: Section; label: string; desc: string }[] = [
   { key: 'theme',   label: 'Appearance', desc: 'Theme + density' },
   { key: 'scan',    label: 'Scan',       desc: 'Continuous scan + cadence' },
   { key: 'strategy',  label: 'Strategy scan',   desc: 'Signal tolerances + backtest thresholds' },
-  { key: 'brokers', label: 'Brokers',   desc: 'Paper trading accounts + live IBKR preparation' },
+  { key: 'brokers', label: 'Brokers',   desc: 'Paper trading accounts + live Tradier market-data token (other Live sections locked)' },
   { key: 'risk',    label: 'Risk',       desc: 'Exposure limits and portfolio value' },
   { key: 'regime',  label: 'Regime',     desc: 'Daily OMM parameters' },
   { key: 'notifications', label: 'Notifications', desc: 'Gmail + Telegram alert delivery' },

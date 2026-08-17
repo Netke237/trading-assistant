@@ -1,6 +1,8 @@
 """Fundamental health scorer — pure function, no I/O."""
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -52,6 +54,44 @@ def _metric_score(
         return round(100 * (value - weak) / (strong - weak))
 
 
+def _thr(cfg: dict, metric: str, key: str, default: float) -> float:
+    """Threshold lookup: cfg['thresholds'][metric][key], falling back per-key to
+    the scorer's historical hardcoded values (which match scoring_rules.yaml's
+    fundamentals_gate.thresholds block). Tolerates a missing 'thresholds' block
+    and missing per-metric keys, so partial/custom cfgs keep working. Malformed
+    values fall back too, because a bad local YAML edit must not crash a scan."""
+    thresholds = cfg.get("thresholds")
+    metric_cfg = thresholds.get(metric) if isinstance(thresholds, Mapping) else None
+    value = metric_cfg.get(key) if isinstance(metric_cfg, Mapping) else default
+    if isinstance(value, bool):
+        return default
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if math.isfinite(parsed) else default
+
+
+def _threshold_pair(
+    cfg: dict,
+    metric: str,
+    strong_default: float,
+    weak_default: float,
+    *,
+    invert: bool = False,
+) -> tuple[float, float]:
+    """Read and validate one metric's strong/weak pair.
+
+    Higher-is-better metrics need strong > weak; inverted metrics need strong <
+    weak. If a partial config violates that ordering, use the complete known-good
+    pair rather than producing a misleading or negative score.
+    """
+    strong = _thr(cfg, metric, "strong", strong_default)
+    weak = _thr(cfg, metric, "weak", weak_default)
+    valid = strong < weak if invert else strong > weak
+    return (strong, weak) if valid else (strong_default, weak_default)
+
+
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
@@ -88,19 +128,60 @@ def score_fundamentals(
             )
 
     # ---- Growth bucket -------------------------------------------------------
-    rev_s = _metric_score(snap.revenue_growth_yoy, strong=0.15, weak=0.0)
-    eps_s = _metric_score(snap.eps_growth_yoy, strong=0.15, weak=0.0)
+    rev_strong, rev_weak = _threshold_pair(cfg, "revenue_growth_yoy", 0.15, 0.0)
+    eps_strong, eps_weak = _threshold_pair(cfg, "eps_growth_yoy", 0.15, 0.0)
+    rev_s = _metric_score(
+        snap.revenue_growth_yoy,
+        strong=rev_strong,
+        weak=rev_weak,
+    )
+    eps_s = _metric_score(
+        snap.eps_growth_yoy,
+        strong=eps_strong,
+        weak=eps_weak,
+    )
     growth_score = round((rev_s + eps_s) / 2)
 
     # ---- Quality bucket ------------------------------------------------------
-    gm_s = _metric_score(snap.gross_margin, strong=0.40, weak=0.20)
-    om_s = _metric_score(snap.operating_margin, strong=0.15, weak=0.0)
+    gm_strong, gm_weak = _threshold_pair(cfg, "gross_margin", 0.40, 0.20)
+    om_strong, om_weak = _threshold_pair(cfg, "operating_margin", 0.15, 0.0)
+    gm_s = _metric_score(
+        snap.gross_margin,
+        strong=gm_strong,
+        weak=gm_weak,
+    )
+    om_s = _metric_score(
+        snap.operating_margin,
+        strong=om_strong,
+        weak=om_weak,
+    )
     quality_score = round((gm_s + om_s) / 2)
 
     # ---- Risk bucket (lower metrics = better = invert where applicable) ------
-    de_s = _metric_score(snap.debt_to_equity, strong=0.5, weak=2.0, invert=True)
-    cr_s = _metric_score(snap.current_ratio, strong=2.0, weak=1.0)  # higher is better
-    sg_s = _metric_score(snap.share_growth_yoy, strong=0.0, weak=0.03, invert=True)
+    de_strong, de_weak = _threshold_pair(
+        cfg, "debt_to_equity", 0.5, 2.0, invert=True,
+    )
+    cr_strong, cr_weak = _threshold_pair(cfg, "current_ratio", 2.0, 1.0)
+    sg_strong, sg_weak = _threshold_pair(
+        cfg, "share_growth_yoy", 0.0, 0.03, invert=True,
+    )
+    de_s = _metric_score(
+        snap.debt_to_equity,
+        strong=de_strong,
+        weak=de_weak,
+        invert=True,
+    )
+    cr_s = _metric_score(
+        snap.current_ratio,
+        strong=cr_strong,
+        weak=cr_weak,
+    )  # higher is better
+    sg_s = _metric_score(
+        snap.share_growth_yoy,
+        strong=sg_strong,
+        weak=sg_weak,
+        invert=True,
+    )
     risk_score = round((de_s + cr_s + sg_s) / 3)
 
     # ---- Combined weighted score ---------------------------------------------
@@ -122,9 +203,12 @@ def score_fundamentals(
         quality_label = "Weak"
 
     de = snap.debt_to_equity
-    if de is None or de < 0.5:
+    # Boundaries align with _metric_score's inclusive invert branch (score 100
+    # at <= strong, 0 at >= weak) so the label can never contradict the score;
+    # missing debt data keeps the historical "Low" label.
+    if de is None or de <= de_strong:
         risk_label = "Low"
-    elif de > 2.0:
+    elif de >= de_weak:
         risk_label = "High"
     else:
         risk_label = "Medium"

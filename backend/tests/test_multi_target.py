@@ -1,6 +1,6 @@
 import pytest
 from app.scoring.reward_risk import estimate_targets
-from app.schemas import PricingMethod
+from app.schemas import PricingMethod, TargetLevel
 
 
 def test_three_targets_returned():
@@ -68,3 +68,22 @@ def test_stock_price_equals_target_price():
     )
     for t in targets:
         assert t.stockPrice == t.targetPrice
+
+
+@pytest.mark.parametrize(
+    ('legacy', 'current'),
+    [
+        ('heston', PricingMethod.HESTON),
+        ('delta-approx', PricingMethod.DELTA_APPROX),
+        ('manual', PricingMethod.UNAVAILABLE),
+    ],
+)
+def test_target_level_normalizes_legacy_pricing_codes(legacy, current):
+    target = TargetLevel(
+        targetPrice=100,
+        stockPrice=100,
+        estimatedOptionPrice=2,
+        pricingMethod=legacy,
+        rrContribution=1,
+    )
+    assert target.pricingMethod == current

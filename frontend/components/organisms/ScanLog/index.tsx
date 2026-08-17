@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { useScanStore, type RejectedEntry } from '@/lib/scanStore';
+import { toneForScore } from '@/lib/status';
 import styles from './index.module.css';
 
 // Mirrors backend/config/scoring_rules.yaml weights per horizon
@@ -76,8 +77,7 @@ function BreakdownRows({
         const raw = breakdown[key] ?? 0;
         const wt  = weights[key] ?? 0;
         const pts = (raw * wt) / 100;
-        const tone: 'pass' | 'caution' | 'reject' =
-          raw >= 55 ? 'pass' : raw >= 35 ? 'caution' : 'reject';
+        const tone = toneForScore(raw);
         return (
           <div key={key} className={styles.breakdownRow}>
             <Text size={11} tone="secondary">{COMPONENT_LABELS[key]}</Text>

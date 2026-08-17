@@ -11,6 +11,7 @@ jest.mock('@/lib/api', () => ({
     armAutoTrade: jest.fn().mockResolvedValue({ armed: true }),
     disarmAutoTrade: jest.fn().mockResolvedValue({ armed: false }),
     fireAutoTrade: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
+    getAutoTradeStatus: jest.fn().mockResolvedValue({ armed: false }),
   },
 }));
 
@@ -58,5 +59,13 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
     const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
     expect(payload.portfolio_value).toBe(73_000);
+  });
+
+  it('reflects an already-armed backend state after reload', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce({ armed: true });
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" />);
+
+    await waitFor(() => expect(screen.getByText('Armed — waiting for next trigger')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Disarm' })).toBeInTheDocument();
   });
 });

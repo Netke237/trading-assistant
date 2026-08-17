@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ToastItem, AlertConfig, AlertType } from '@/types/domain';
 
-interface AlertStoreState {
+export interface AlertStoreState {
   toasts: ToastItem[];
   config: AlertConfig;
   firedAlerts: Record<string, number>;
@@ -147,6 +147,31 @@ function playBeep(): void {
   }
 }
 
+export function migrateAlerts(persistedState: unknown, _version: number): Partial<AlertStoreState> {
+  const prev = (persistedState as Partial<AlertStoreState> | null) ?? {};
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+  return {
+    ...prev,
+    toasts: Array.isArray(prev.toasts)
+      ? prev.toasts.filter((toast): toast is ToastItem =>
+          typeof toast === 'object'
+          && toast !== null
+          && typeof toast.firedAt === 'string'
+          && typeof toast.recId === 'string'
+          && typeof toast.alertType === 'string',
+        )
+      : [],
+    config: isRecord(prev.config) ? { ...DEFAULT_CONFIG, ...prev.config } : { ...DEFAULT_CONFIG },
+    suppressedAlerts: isRecord(prev.suppressedAlerts)
+      ? prev.suppressedAlerts as Record<string, true>
+      : {},
+    firedAlerts: isRecord(prev.firedAlerts)
+      ? prev.firedAlerts as Record<string, number>
+      : {},
+  };
+}
+
 export const useAlertStore = create<AlertStoreState>()(
   persist(
     (set, get) => ({
@@ -281,6 +306,8 @@ export const useAlertStore = create<AlertStoreState>()(
     {
       name: 'bamendjou-alerts-v2',
       skipHydration: true,
+      version: 2,
+      migrate: migrateAlerts,
       partialize: (state) => ({
         toasts: state.toasts,
         config: state.config,
@@ -288,13 +315,13 @@ export const useAlertStore = create<AlertStoreState>()(
         firedAlerts: state.firedAlerts,
       }),
       merge: (persistedState, currentState) => {
-        const ps = persistedState as Partial<AlertStoreState> | undefined;
+        const ps = migrateAlerts(persistedState, 2);
         const merged = {
           ...currentState,
-          toasts: ps?.toasts ?? [],
-          config: { ...DEFAULT_CONFIG, ...(ps?.config ?? {}) },
-          suppressedAlerts: ps?.suppressedAlerts ?? {},
-          firedAlerts: ps?.firedAlerts ?? {},
+          toasts: ps.toasts ?? [],
+          config: { ...DEFAULT_CONFIG, ...(ps.config ?? {}) },
+          suppressedAlerts: ps.suppressedAlerts ?? {},
+          firedAlerts: ps.firedAlerts ?? {},
         };
         // purge old alerts, then collapse any pre-existing duplicate pile-up
         const cutoff = Date.now() - merged.config.keepAlertsDays * 86_400_000;

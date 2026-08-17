@@ -36,3 +36,24 @@ describe('scanStore persisted migrate(): v9 -> v10', () => {
     expect(migrated.context).toBeNull();
   });
 });
+
+describe('scanStore persisted migrate(): legacy pricing methods', () => {
+  it('normalizes legacy target pricing codes in persisted scan results', () => {
+    const migrated = migrate({
+      scanResult: {
+        candidates: [{ exit: { targets: [{ pricingMethod: 'delta-approx' }] } }],
+      },
+      previousRun: {
+        candidates: [{ exit: { targets: [{ pricingMethod: 'heston' }] } }],
+      },
+    }, 11) as {
+      scanResult: { candidates: Array<{ exit: { targets: Array<{ pricingMethod: string }> } }> };
+      previousRun: { candidates: Array<{ exit: { targets: Array<{ pricingMethod: string }> } }> };
+    };
+
+    expect(migrated.scanResult.candidates[0].exit.targets[0].pricingMethod)
+      .toBe('BS repriced (IV-derived)');
+    expect(migrated.previousRun.candidates[0].exit.targets[0].pricingMethod)
+      .toBe('Heston repriced');
+  });
+});

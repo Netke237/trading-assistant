@@ -293,8 +293,8 @@ export async function setupApiMocks(page: Page): Promise<void> {
               premiumStop: 1.0,
               timeStopDays: 30,
               targets: [
-                { id: 'tp1', stockPrice: 194.25, estimatedOptionPrice: 3.5, pricingMethod: 'delta-approx', contractsToSell: 1, status: 'PENDING' },
-                { id: 'tp2', stockPrice: 195, estimatedOptionPrice: 4.2, pricingMethod: 'delta-approx', contractsToSell: 1, status: 'PENDING' },
+                { id: 'tp1', stockPrice: 194.25, estimatedOptionPrice: 3.5, pricingMethod: 'BS repriced (IV-derived)', contractsToSell: 1, status: 'PENDING' },
+                { id: 'tp2', stockPrice: 195, estimatedOptionPrice: 4.2, pricingMethod: 'BS repriced (IV-derived)', contractsToSell: 1, status: 'PENDING' },
               ],
             },
             rrRatio: 2.5,

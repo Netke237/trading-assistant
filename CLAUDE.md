@@ -96,7 +96,7 @@ frontend/
 |---|---|
 | `scanStore.ts` | Scan state, scan context (universe/direction/horizon), regime status, `screenerMode` ('options'\|'stocks'\|'prebreakout') |
 | `scanParamsStore.ts` | Execution parameters (strategy params, horizon preset) fed into stock scan |
-| `settingsStore.ts` | Broker config (IBKR/Tradier/Alpaca/Tastytrade paper+live), `premiumStopPct`, IV thresholds, `confidenceGate`, `fundamentalsGate`, `markov` config, shortlist/contract/price limits |
+| `settingsStore.ts` | Broker config (IBKR/Tradier/Alpaca/Tastytrade paper+live), `premiumStopPct`, `confidenceGate`, `fundamentalsGate`, `markov` config, shortlist/contract/price limits |
 | `watchlistStore.ts` | Starred symbols — symmetric add/remove, versioned migrate |
 | `watchedContractsStore.ts` | Starred contracts |
 | `portfolioStore.ts` | Open positions — `addPosition` merges duplicate contracts |
@@ -152,7 +152,7 @@ Pre-Breakout is a single self-contained step 4 with no steps 5–7 (see below).
 |---|---|---|
 | 1 | `step-1-regime` | Market regime — Markov/HMM banner, SPX/NDX charts, EMA/VIX metric grid, horizon regime card, sector heatmap, market news |
 | 2 | `step-2-universe` | Universe picker (SP500, NDX100, DOW30, custom) + price/cap min-max filters |
-| 3 | `step-3-direction` | Direction (Bullish/Bearish) + horizon preset, Execution Parameters panel (34 params), Run Scan button |
+| 3 | `step-3-direction` | Direction (Bullish/Bearish) + horizon preset, Execution Parameters panel (62 param definitions), Run Scan button |
 
 ### Options path (steps 4–7)
 
@@ -215,7 +215,7 @@ Config: `scoring_rules.yaml` (scorer weights/thresholds), `strategy_params.yaml`
 | Tradier | `tradier_paper.py`, `tradier_stream.py` | Paper trading + streaming quotes |
 | IBKR | `ibkr.py`, `ibkr_paper.py` | Client Portal API paper trading |
 | Alpaca | `alpaca.py`, `alpaca_paper_execution.py` | Paper trading |
-| Tastytrade | `tastytrade_bridge.py`, `tastytrade_session.py`, `tastytrade_iv.py`, `tastytrade_paper.py` | Paper trading + real IV Rank/Percentile; `tastytrade_bridge.py` routes every sync-to-async tastytrade call through one persistent background event loop, since tastytrade's SDK is reached from synchronous code paths (unlike the other rate-limited providers, all called from async code on the app's single event loop) |
+| Tastytrade | `tastytrade_bridge.py`, `tastytrade_session.py`, `tastytrade_iv.py`, `tastytrade_paper.py` | Paper trading + real IV Rank/Percentile; `tastytrade_bridge.py` routes every sync-to-async tastytrade call through one persistent background event loop — the SDK itself is async, but three code paths reach it from sync code (`tastytrade_iv.py`'s module-level fetch wrapper, `tastytrade_paper.py`'s order adapter, and the `_probe_tastytrade` health probe in `routers/data_sources.py`), so the bridge composes with `asyncio.to_thread` in `market.py`'s IV fetches rather than replacing it. Order execution: `/broker/stock-order` and `/broker/option-order` run broker adapters in worker threads (`asyncio.to_thread`); the auto-trade `/fire` path still executes broker calls synchronously inside the endpoint (known limitation) |
 | Tiingo | `tiingo.py` | EOD/intraday price data |
 
 Credentials stored via `credential_store.py`; broker routing via `broker_router.py`.
@@ -233,7 +233,7 @@ Credentials stored via `credential_store.py`; broker routing via `broker_router.
 
 ### Notifications (`backend/app/services/notifications/`)
 
-Dispatch layer supports Gmail, Telegram, and in-app websocket alerts (`ws_alerts` router).
+Dispatch layer (`notifications/dispatch.py`) sends Gmail + Telegram only. In-app websocket alerts are a separate path: `alert_service.broadcast` from `portfolio_alert_monitor.py` / `regime_monitor.py` via the `ws_alerts` router.
 
 ---
 
@@ -241,7 +241,7 @@ Dispatch layer supports Gmail, Telegram, and in-app websocket alerts (`ws_alerts
 
 Sub-nav (`SECTIONS` in `app/(frame)/settings/page.tsx`): Appearance (theme + density), Scan
 (continuous scan + cadence), Strategy scan (signal tolerances + backtest thresholds), Brokers
-(paper trading accounts + live IBKR preparation), Risk (exposure limits + portfolio value),
+(paper trading accounts + live Tradier market-data token; other Live sections locked), Risk (exposure limits + portfolio value),
 Regime (Markov/HMM preset parameters), Notifications (Gmail + Telegram alert delivery), Data
 (nightly OHLCV ingestion schedule), Strategy Tuning (walk-forward parameter optimization).
 

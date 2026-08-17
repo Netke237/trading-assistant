@@ -69,6 +69,40 @@ export interface ScanResult {
   dte_window?: DteWindow;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeLegacyPricingMethod(value: unknown): unknown {
+  if (value === 'heston') return 'Heston repriced';
+  if (value === 'delta-approx') return 'BS repriced (IV-derived)';
+  if (value === 'manual') return 'Unavailable';
+  return value;
+}
+
+function normalizePersistedScanResult(value: unknown): unknown {
+  if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
+  return {
+    ...value,
+    candidates: value.candidates.map((candidate) => {
+      if (!isRecord(candidate) || !isRecord(candidate.exit) || !Array.isArray(candidate.exit.targets)) {
+        return candidate;
+      }
+      return {
+        ...candidate,
+        exit: {
+          ...candidate.exit,
+          targets: candidate.exit.targets.map((target) => (
+            isRecord(target)
+              ? { ...target, pricingMethod: normalizeLegacyPricingMethod(target.pricingMethod) }
+              : target
+          )),
+        },
+      };
+    }),
+  };
+}
+
 /** Last-run metadata for a scan session (options or stock mode) — from
  *  GET /api/scan/last-run and /api/stock-scan/last-run. `status` means
  *  different things per mode: for options, "running"/"stopped" reflect the
@@ -273,7 +307,7 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 11,
+       version: 12,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -314,6 +348,13 @@ export const useScanStore = create<ScanStoreState>()(
             lastStockScanStatus: null,
             lastStockScanUpdatedAt: null,
             lastStockScanStrategy: null,
+          };
+        }
+        if (version < 12) {
+          s = {
+            ...s,
+            scanResult: normalizePersistedScanResult(s.scanResult),
+            previousRun: normalizePersistedScanResult(s.previousRun),
           };
         }
         return s;

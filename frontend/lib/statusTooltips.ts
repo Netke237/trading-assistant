@@ -6,6 +6,7 @@
  * the badge's color instead of drifting into stale hardcoded copy.
  */
 import type { Status } from '@/lib/status';
+import { FUNDAMENTAL_BAND, SCORE_BAND } from '@/lib/status';
 import type { OptionContract, ContractScoreBreakdown } from '@/types/domain';
 import type { ScanState } from '@/lib/scanStore';
 import type { PortfolioRiskMetrics, RiskLimits } from '@/types/domain';
@@ -57,9 +58,9 @@ export function positionStatusTooltip(status: Status): string {
  *  server-side, so a CAUTION/REJECT badge doesn't necessarily mean the raw score
  *  itself was borderline. Don't state the band as the sole explanation. */
 export function stockStatusTooltip(status: Status, score: number): string {
-  const band = score >= 55 ? 'PASS' : score >= 35 ? 'CAUTION' : 'REJECT';
+  const band = score >= SCORE_BAND.passAt ? 'PASS' : score >= SCORE_BAND.cautionAt ? 'CAUTION' : 'REJECT';
   const capped = band !== status;
-  return `Composite stock score: ${score}/100 (≥55 PASS, 35-54 CAUTION, <35 REJECT — raw band: ${band})`
+  return `Composite stock score: ${score}/100 (≥${SCORE_BAND.passAt} PASS, ${SCORE_BAND.cautionAt}-${SCORE_BAND.passAt - 1} CAUTION, <${SCORE_BAND.cautionAt} REJECT — raw band: ${band})`
     + (capped ? `, capped to ${status} by a confidence/regime/fundamentals/pullback-timing gate.` : '.')
     + ` ${GENERIC_STATUS_TOOLTIP[status]}`;
 }
@@ -266,7 +267,7 @@ export function safetyFlagTooltip(flag: string): string {
 
 /** FundamentalHealthCard's 4 score cells (overall/growth/quality/risk). */
 export function fundamentalScoreTooltip(kind: 'overall' | 'growth' | 'quality' | 'risk', score: number): string {
-  const band = score >= 65 ? 'strong' : score >= 40 ? 'middling' : 'weak';
+  const band = score >= FUNDAMENTAL_BAND.passAt ? 'strong' : score >= FUNDAMENTAL_BAND.cautionAt ? 'middling' : 'weak';
   switch (kind) {
     case 'overall': return `Overall fundamental health, 0–100 (${band}). Blends growth (35%), quality (35%), and risk (30%).`;
     case 'growth':  return `Growth sub-score, 0–100 (${band}) — revenue/earnings trajectory from EDGAR filings.`;

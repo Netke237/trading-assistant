@@ -4,8 +4,9 @@
  * Screener Step 3 — Direction + Horizon.
  * Directional bias + holding-horizon preset picker, plus a Custom option
  * for explicit (min..max) day ranges.
- * Round 5: full 34-param Execution Parameters panel — Stocks / Options sections,
- * per-subgroup collapse, Score Weights from Settings migrated here.
+ * Round 5: full 62-definition Execution Parameters panel — Stocks / Options sections,
+ * per-subgroup collapse, Score Weights from Settings migrated here (some rows are
+ * display-only or conditionally visible per trend method).
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';

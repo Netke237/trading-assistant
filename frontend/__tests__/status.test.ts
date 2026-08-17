@@ -1,4 +1,4 @@
-import { statusForScore, toneForStatus } from '@/lib/status';
+import { statusForScore, toneForStatus, toneForScore, SCORE_BAND, FUNDAMENTAL_BAND } from '@/lib/status';
 import type { Status } from '@/lib/status';
 
 describe('statusForScore', () => {
@@ -37,5 +37,31 @@ describe('toneForStatus', () => {
 
   it.each(cases)('maps %s to tone %s', (status, tone) => {
     expect(toneForStatus(status)).toBe(tone);
+  });
+});
+
+describe('toneForScore', () => {
+  it('uses the shared 55/35 band by default', () => {
+    expect(toneForScore(55)).toBe('pass');
+    expect(toneForScore(35)).toBe('caution');
+    expect(toneForScore(34)).toBe('reject');
+    expect(toneForScore(100)).toBe('pass');
+    expect(toneForScore(0)).toBe('reject');
+  });
+
+  it('default band matches SCORE_BAND constants', () => {
+    expect(toneForScore(SCORE_BAND.passAt)).toBe('pass');
+    expect(toneForScore(SCORE_BAND.cautionAt)).toBe('caution');
+    expect(toneForScore(SCORE_BAND.cautionAt - 1)).toBe('reject');
+  });
+
+  it('applies the stricter fundamentals band when passed', () => {
+    expect(toneForScore(65, FUNDAMENTAL_BAND)).toBe('pass');
+    expect(toneForScore(64, FUNDAMENTAL_BAND)).toBe('caution');
+    expect(toneForScore(40, FUNDAMENTAL_BAND)).toBe('caution');
+    expect(toneForScore(39, FUNDAMENTAL_BAND)).toBe('reject');
+    // 60 passes the composite band but is only caution for fundamentals
+    expect(toneForScore(60)).toBe('pass');
+    expect(toneForScore(60, FUNDAMENTAL_BAND)).toBe('caution');
   });
 });

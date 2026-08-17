@@ -13,6 +13,7 @@ import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import { statusForScore } from '@/lib/status';
 import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
+import { ScreenerStepGate } from '@/components/organisms/ScreenerStepGate';
 import type { TradeCardData, WatchlistRow } from '@/types/domain';
 import type { Status } from '@/lib/status';
 import styles from './page.module.css';
@@ -131,7 +132,8 @@ export default function TradeCardContextRail() {
   const gates = candidate ? buildChecklist(candidate, wlRow, regime, horizonKey, ivThresholds) : [];
 
   return (
-    <>
+    <ScreenerStepGate>
+      <>
       <RailSection title={selectedSymbol ? `Pre-trade checklist · ${selectedSymbol}` : 'Pre-trade checklist'}>
         {!candidate ? (
           <Text size={12} tone="dim">Run a scan to populate the checklist.</Text>
@@ -159,6 +161,7 @@ export default function TradeCardContextRail() {
       </RailSection>
 
       <RailQuickLook />
-    </>
+      </>
+    </ScreenerStepGate>
   );
 }
