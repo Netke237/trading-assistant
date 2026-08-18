@@ -372,7 +372,7 @@ This entire task is DONE only when ALL of the following checkboxes can be ticked
 with attached runtime proof for each:
 
 - [ ] start-frontend.bat exists in project root, stays open, serves localhost:3001
-- [ ] start-backend.bat activates .venv correctly and serves :8000/health
+- [x] start-backend.bat activates .venv correctly and serves :8000/health — Resolved 2026-08-18: start-backend.bat now invokes `.venv\Scripts\python.exe` directly (no activation step; the old `venv\` reference predated the hmmlearn stack). Runtime proof: `/api/regime` returns `intraday_hmm_status='ok'` and `hmm_state='Bull'`, `alignment='Aligned'` from the `.venv`-launched server.
 - [ ] Both desktop shortcuts launch the correct bat files with correct Start-in path
 - [ ] No lockfile warning appears on frontend npm run dev startup
 - [ ] 50-symbol scan completes in under 30 seconds (async refactor confirmed)
