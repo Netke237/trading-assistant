@@ -1,5 +1,5 @@
 """Measures how long test_rule's per-candle regime recompute takes at the cap.
-Run: cd backend && venv/Scripts/python.exe scripts/bench_test_rule_candles.py"""
+Run: cd backend && .venv/Scripts/python.exe scripts/bench_test_rule_candles.py"""
 import sys
 import time
 import random

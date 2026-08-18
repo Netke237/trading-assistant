@@ -5,8 +5,8 @@ these cause 500s), columns the DB has that the model lacks (orphan — harmless
 but messy), and tables the model declares that the DB lacks entirely.
 
 Run against the current DATABASE_URL, or pass one:
-    cd backend && venv/Scripts/python.exe scripts/audit_schema_drift.py
-    cd backend && DATABASE_URL='sqlite+aiosqlite:///./dev.db' venv/.../python.exe scripts/audit_schema_drift.py
+    cd backend && .venv/Scripts/python.exe scripts/audit_schema_drift.py
+    cd backend && DATABASE_URL='sqlite+aiosqlite:///./dev.db' .venv/.../python.exe scripts/audit_schema_drift.py
 """
 import asyncio
 import importlib

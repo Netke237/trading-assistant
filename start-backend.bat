@@ -12,10 +12,10 @@ netstat -ano 2>nul | findstr /L "127.0.0.1:8000" | findstr /L "LISTENING" >nul 2
 if not errorlevel 1 goto kill_8000
 
 echo Running database migrations...
-call venv\Scripts\python.exe -m alembic -c migrations/alembic.ini upgrade head
+call .venv\Scripts\python.exe -m alembic -c migrations/alembic.ini upgrade head
 if errorlevel 1 (
     echo WARNING: Alembic migration failed. Continuing anyway...
 )
 
-call venv\Scripts\python.exe -m uvicorn app.main:app --ws websockets-sansio --host 127.0.0.1 --port 8000
+call .venv\Scripts\python.exe -m uvicorn app.main:app --ws websockets-sansio --host 127.0.0.1 --port 8000
 pause
