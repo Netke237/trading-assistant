@@ -20,7 +20,31 @@ All parameters are horizon-aware. Defaults below are for the **Swing** horizon (
 
 **Purpose:** Confirm the stock's medium-term trend supports the selected direction.
 
-### MA pair (default: Swing)
+**`trend.method` selects the algorithm; `additive` is what's actually configured for all three horizons today** (`method: additive` in `backend/config/scoring_rules.yaml` for swing/intraday/position — confirmed against `stock_scorer.py::_rule_trend`'s `cfg["trend"].get("method", "additive")` dispatch). The `crossover` algorithm below still exists in code (`_trend_crossover()`) and can be selected per-horizon by setting `trend.method: crossover`, but is not active for any horizon in the live config — it's documented in its own subsection further down, not as the default.
+
+### Additive method (default — Swing horizon shown; see Section 8 for the full per-horizon parameter matrix)
+
+Three independently-scored components, summed and rescaled to 0–100:
+
+| Component | Points available (Swing) | Condition for full credit |
+|---|---|---|
+| Price vs. MA | 40 | Close on the trade-direction side of a 20-period SMA (`ma_period`/`ma_type`) |
+| MA slope | 30 | Slope of that MA over the last 10 bars (`slope_lookback`) points in the trade direction |
+| ADX strength | 30 (full) / 15 (half) / 0 | ADX(14) ≥ 25 (`adx_pass`) → full; ≥ 20 (`adx_caution`) → half; below → zero |
+
+`score = price_pts + slope_pts + adx_pts` (0–100, since the three point-maxes sum to 100 for Swing). This is a **component-level** score distinct from the overall stock score in Section 7 — it becomes one of the five weighted inputs to that total.
+
+### Additive scoring thresholds (component-level `status_pass`/`status_caution`)
+| Score | Status |
+|---|---|
+| ≥ 70 | PASS |
+| 40–69 | CAUTION |
+| < 40 | REJECT |
+
+### Alternate: crossover method (not currently active for any horizon)
+
+Selectable via `trend.method: crossover`, but no horizon in the live config uses it today. Kept here for reference in case it's re-enabled.
+
 | Parameter | Value |
 |---|---|
 | Fast MA | 50-period EMA (daily) |
@@ -29,18 +53,12 @@ All parameters are horizon-aware. Defaults below are for the **Swing** horizon (
 | Slow MA slope | **Required** — 200 EMA must be rising |
 | Fast MA slope | **Preferred** — if flat (not declining) → CAUTION not REJECT |
 
-### Scoring
 | Condition | Status |
 |---|---|
 | 50 EMA > 200 EMA, both rising | PASS |
 | 50 EMA > 200 EMA, 200 rising, 50 flat | CAUTION |
 | 50 EMA > 200 EMA, 200 flat or declining | REJECT |
 | 50 EMA ≤ 200 EMA | REJECT |
-
-### Available MA options (configurable)
-- Option A: 200 EMA only (conservative long-term)
-- Option B: 50 EMA above 200 EMA — **default**
-- Option C: 21 EMA + 50 EMA (faster, swing-oriented)
 
 ---
 
@@ -179,8 +197,9 @@ All parameters that differ by horizon. The YAML config file contains one section
 
 | Parameter | Intraday (4H) | Swing (Daily) | Position (Weekly) |
 |---|---|---|---|
-| **Trend** | | | |
-| MA pair | 20 EMA / 50 EMA | 50 EMA / 200 EMA | 50 EMA / 200 EMA (weekly bars) |
+| **Trend** (additive method — see Section 1) | | | |
+| MA | 9-period EMA | 20-period SMA | 50-period SMA |
+| ADX PASS / CAUTION floor | 20 / 15 | 25 / 20 | 25 / 15 |
 | **Pullback** | | | |
 | Swing high lookback (bars) | 20 | 40 | 75 |
 | Max time in pullback | 3 days | 20 days | 60 days |

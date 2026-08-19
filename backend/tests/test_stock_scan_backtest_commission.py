@@ -1,6 +1,9 @@
 import asyncio
 import concurrent.futures
+import functools
 from unittest.mock import MagicMock, patch
+
+from app.services.strategy_backtest import run_strategy_backtest
 
 
 def _fake_signal():
@@ -80,6 +83,37 @@ def test_process_stock_passes_commission_from_get_costs():
     assert captured["commission"] == 0.005, (
         f"expected commission = fee_pct(0.002) + slippage_pct(0.003) = 0.005, got {captured['commission']}"
     )
+
+
+def test_run_strategy_backtest_with_commission_works_through_real_process_pool():
+    """Production call-shape check (2026-08-19 adversarial audit finding):
+    every commission test above swaps stock_scan.py's real _BACKTEST_POOL
+    (a ProcessPoolExecutor) for a ThreadPoolExecutor because a MagicMock
+    side_effect isn't picklable across a process boundary — which means no
+    test exercised the actual production dispatch path. This test uses the
+    real run_strategy_backtest (no mocks) submitted to a real
+    ProcessPoolExecutor via the same run_in_executor(pool, functools.partial(...))
+    shape stock_scan.py uses in production, proving the function + a float
+    commission kwarg genuinely round-trip across a process boundary."""
+    bars = [
+        {"time": f"2022-01-{(i % 28) + 1:02d}", "open": (50 + i * 0.05) * 0.998,
+         "high": (50 + i * 0.05) * 1.01, "low": (50 + i * 0.05) * 0.99,
+         "close": 50 + i * 0.05, "volume": 1000 + i}
+        for i in range(500)
+    ]
+
+    async def run():
+        loop = asyncio.get_running_loop()
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as pool:
+            return await loop.run_in_executor(
+                pool,
+                functools.partial(run_strategy_backtest, bars, strategy="ma_crossover",
+                                  direction="Bullish", commission=0.002),
+            )
+
+    result = asyncio.run(run())
+    assert result.n_trades > 0, "fixture must produce real trades to prove the round-trip actually ran"
+    assert isinstance(result.total_return_pct, float)
 
 
 def test_backtest_key_differs_by_commission():
