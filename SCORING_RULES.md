@@ -60,6 +60,10 @@ Selectable via `trend.method: crossover`, but no horizon in the live config uses
 | 50 EMA > 200 EMA, 200 flat or declining | REJECT |
 | 50 EMA ≤ 200 EMA | REJECT |
 
+### Alternate: relative_strength method (not currently active for any horizon)
+
+A third `trend.method` option, also fully implemented and fully configured for all three horizons but not selected by the live config. Scores the stock's rate-of-change against a benchmark (`rs_period`-bar ROC delta, direction-adjusted): PASS if the delta beats `rs_pass_threshold`, CAUTION if it's still above `rs_caution_threshold`, REJECT below that. Swing: 20-bar period, pass 2.0 / caution -1.0, benchmark NDX. Intraday: 2-bar period, pass 1.0 / caution -0.5, benchmark NDX. Position: 50-bar period, pass 3.0 / caution -1.5, benchmark SPX.
+
 ---
 
 ## 2. Pullback Rule
@@ -69,6 +73,7 @@ Selectable via `trend.method: crossover`, but no horizon in the live config uses
 ### Fibonacci retracement (primary)
 | Band | Retracement depth | Status |
 |---|---|---|
+| Not pulled back yet | < 23.6% of prior swing | CAUTION (`no_pullback_yet`/`no_bounce_yet`) |
 | Shallow | 23.6%–38.2% of prior swing | CAUTION |
 | Standard | 38.2%–50.0% | CAUTION |
 | Golden zone | 50.0%–61.8% | **PASS** |
@@ -114,7 +119,7 @@ Three bands, driven by `pullback.atr_pass_min`/`atr_pass_max`/`atr_caution_max` 
 
 | Signal | Parameters | Trigger |
 |---|---|---|
-| MACD histogram | Fast 8, Slow 21, Signal 9, source: close | Histogram sign-flip (negative → positive), rising (bar[0] > bar[-1]) |
+| MACD histogram | Fast 8, Slow 21, Signal 5, source: close | Histogram sign-flip (negative → positive), rising (bar[0] > bar[-1]) |
 | RSI | Period 14 | Crosses above 38 from below OR bullish divergence: price lower low + RSI higher low within 15-bar window |
 | Stochastic | K=14, D=3, Smooth=3 | K crosses above D from oversold zone (≤ 31.5; oversold=30, tolerance=5%) |
 
@@ -127,7 +132,7 @@ Three bands, driven by `pullback.atr_pass_min`/`atr_pass_max`/`atr_caution_max` 
 | Parameter | Value |
 |---|---|
 | All signals must occur within | 8 daily bars of each other |
-| Divergence validity window | 15 bars (regular div), 15 bars (RSI pivot), 12 bars (OB/OS cross) |
+| RSI divergence window (`rsi_div_window_bars`) | 15 bars — the only windowed divergence parameter in code; the Stochastic K/D check is a same-bar/prior-bar crossover, not a windowed divergence |
 
 ### Scoring
 | Condition | Status |
