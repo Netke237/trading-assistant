@@ -51,7 +51,7 @@ def test_iv_rank_none_is_not_rejected():
 
 
 def test_caution_tier_stock_score_hard_rejects():
-    """A CAUTION-tier stock score (35-49, below the documented >=50 gate but
+    """A CAUTION-tier stock score (35-54, below the documented >=55 gate but
     above the separate REJECT-status cutoff elsewhere) must reject here —
     previously this parameter was accepted but never checked."""
     card = validate_contract(_base_contract(), stock_score=45)
@@ -60,9 +60,19 @@ def test_caution_tier_stock_score_hard_rejects():
 
 
 def test_stock_score_at_threshold_passes():
-    """stock_score exactly at the gate (50) should not be rejected on this basis."""
-    card = validate_contract(_base_contract(), stock_score=50)
+    """stock_score exactly at the gate (55, matching scoring_rules.yaml's stock
+    `pass` bar) should not be rejected on this basis."""
+    card = validate_contract(_base_contract(), stock_score=55)
     assert "stock_score_below_threshold" not in card.reject_reasons
+
+
+def test_stock_score_just_below_new_threshold_rejects():
+    """stock_score=50 passed under the old 50-point gate; after raising
+    min_stock_score to 55 (matching the stock pass bar), a CAUTION-grade
+    underlying (35-54) no longer qualifies for an options recommendation."""
+    card = validate_contract(_base_contract(), stock_score=50)
+    assert card.status == "REJECT"
+    assert "stock_score_below_threshold" in card.reject_reasons
 
 
 def test_override_raises_max_iv_rank():
@@ -73,6 +83,19 @@ def test_override_raises_max_iv_rank():
         overrides={"max_iv_rank": 80},
     )
     assert "iv_rank_too_high" not in card.reject_reasons
+
+
+def test_override_lowers_min_stock_score():
+    """Caller can override min_stock_score to relax the gate — mirrors
+    frontend/e2e/tests/ws-f-full-flow.spec.ts's real-backend e2e run, which
+    sends this override specifically so it can get candidates when live
+    stock scores are below the default gate."""
+    card = validate_contract(
+        _base_contract(),
+        stock_score=20,
+        overrides={"min_stock_score": 20},
+    )
+    assert "stock_score_below_threshold" not in card.reject_reasons
 
 
 def test_preferred_dte_min_intentionally_matches_hard_reject_floor():

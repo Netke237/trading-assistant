@@ -232,7 +232,8 @@ def validate_contract(
     Args:
         contract:    Option contract dict (see Section 3 for shape)
         stock_score: Aggregate stock score from StockScoreCard (0–100).
-                     Contracts are only recommended when stock_score >= 50.
+                     Contracts are only recommended when stock_score >= 55
+                     (matches the stock `pass` bar in scoring_rules.yaml).
         overrides:   Optional dict of hard-reject parameter overrides.
 
     Returns:
@@ -255,6 +256,7 @@ def validate_contract(
             elif key == "max_iv_rank":          hr["max_iv_rank"]            = float(val)
             elif key == "preferred_dte_min":    sr["preferred_dte_min"]      = int(val)
             elif key == "preferred_dte_max":    sr["preferred_dte_max"]      = int(val)
+            elif key == "min_stock_score":      hr["min_stock_score"]        = int(val)
     contract_id = _contract_id(contract)
 
     reject_reasons = _hard_reject_reasons(contract, cfg)
