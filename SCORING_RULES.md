@@ -82,14 +82,16 @@ Selectable via `trend.method: crossover`, but no horizon in the live config uses
 
 > **Option-specific note:** pullbacks dragging past 20 days bleed theta on long calls. Flag as CAUTION at 15 days, REJECT at 20 days.
 
-### ATR-based fallback (used when no qualifying swing high found in lookback)
-| Range | Status |
+### ATR-based fallback (used when the Fibonacci retracement bounced too far or too deep to score directly — see `_rule_pullback` in `backend/app/scoring/stock_scorer.py`)
+
+Three bands, driven by `pullback.atr_pass_min`/`atr_pass_max`/`atr_caution_max` (Swing values shown; see Section 8 for the full per-horizon matrix):
+
+| Range (Swing: `atr_pass_min`=1.0, `atr_pass_max`=2.0, `atr_caution_max`=2.5) | Status |
 |---|---|
-| < 1.0× ATR14 | REJECT (noise, not a pullback) |
-| 1.0×–1.25× ATR14 | CAUTION (shallow) |
-| 1.25×–2.0× ATR14 | **PASS** |
+| < 1.0× ATR14 | REJECT (too shallow) |
+| 1.0×–2.0× ATR14 | **PASS** |
 | 2.0×–2.5× ATR14 | CAUTION (deep) |
-| > 2.5× ATR14 | REJECT |
+| > 2.5× ATR14 | REJECT (too deep) |
 
 | Parameter | Value |
 |---|---|
@@ -268,10 +270,19 @@ horizons:
       event: 0.15
       vol: 0.10
     trend:
-      fast_ema: 50
-      slow_ema: 200
-      slow_slope_required: true
-      fast_slope_required: false      # CAUTION if flat, not REJECT
+      method: additive
+      additive:
+        ma_period: 20
+        ma_type: SMA
+        slope_lookback: 10
+        adx_period: 14
+        adx_pass: 25
+        adx_caution: 20
+        price_max: 40
+        slope_max: 30
+        adx_max: 30
+        status_pass: 70
+        status_caution: 40
     pullback:
       fib_shallow_min: 0.236
       fib_shallow_max: 0.382
@@ -321,10 +332,19 @@ horizons:
       event: 0.05
       vol: 0.10
     trend:
-      fast_ema: 20
-      slow_ema: 50
-      slow_slope_required: true
-      fast_slope_required: false
+      method: additive
+      additive:
+        ma_period: 9
+        ma_type: EMA
+        slope_lookback: 3
+        adx_period: 7
+        adx_pass: 20
+        adx_caution: 15
+        price_max: 40
+        slope_max: 30
+        adx_max: 30
+        status_pass: 70
+        status_caution: 40
     pullback:
       fib_shallow_min: 0.236
       fib_shallow_max: 0.382
@@ -374,10 +394,19 @@ horizons:
       event: 0.20
       vol: 0.10
     trend:
-      fast_ema: 50
-      slow_ema: 200
-      slow_slope_required: true
-      fast_slope_required: true          # both required on weekly
+      method: additive
+      additive:
+        ma_period: 50
+        ma_type: SMA
+        slope_lookback: 20
+        adx_period: 14
+        adx_pass: 25
+        adx_caution: 15
+        price_max: 40
+        slope_max: 30
+        adx_max: 30
+        status_pass: 70
+        status_caution: 40
     pullback:
       fib_shallow_min: 0.236
       fib_shallow_max: 0.382
