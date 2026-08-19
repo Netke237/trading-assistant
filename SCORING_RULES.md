@@ -2,7 +2,9 @@
 
 > **Source of truth for WS-20.** All numeric thresholds, weights, and decision boundaries are defined here.
 > Values are seeded into `backend/config/scoring_rules.yaml`. Do not hardcode any of these numbers in Python.
-> Last updated: 2026-04-30.
+> Last updated: 2026-08-19. If a number here and in `backend/config/scoring_rules.yaml` ever
+> disagree, the YAML file is authoritative — this doc had drifted materially out of sync with
+> it for several months before this update (see `TRADING_QUALITY_BENCHMARK.md`).
 
 ---
 
@@ -93,7 +95,7 @@ All parameters are horizon-aware. Defaults below are for the **Swing** horizon (
 | Signal | Parameters | Trigger |
 |---|---|---|
 | MACD histogram | Fast 8, Slow 21, Signal 9, source: close | Histogram sign-flip (negative → positive), rising (bar[0] > bar[-1]) |
-| RSI | Period 14 | Crosses above 44 from below OR bullish divergence: price lower low + RSI higher low within 15-bar window |
+| RSI | Period 14 | Crosses above 38 from below OR bullish divergence: price lower low + RSI higher low within 15-bar window |
 | Stochastic | K=14, D=3, Smooth=3 | K crosses above D from oversold zone (≤ 31.5; oversold=30, tolerance=5%) |
 
 ### Volume (bonus — not required)
@@ -121,12 +123,12 @@ All parameters are horizon-aware. Defaults below are for the **Swing** horizon (
 
 **Purpose:** Prevent entries close to binary risk events (earnings, dividends).
 
-### Thresholds (earnings and dividends treated identically)
+### Thresholds (earnings and dividends treated identically; Swing horizon shown — see Section 8 for the full per-horizon matrix)
 | Days to event | Status |
 |---|---|
-| > 21 days (or no event) | PASS |
-| 7–21 days | CAUTION |
-| < 7 days | REJECT |
+| > 45 days (or no event) | PASS |
+| 21–45 days | CAUTION |
+| < 21 days | REJECT |
 
 ---
 
@@ -165,9 +167,9 @@ Applied after weighted sum is computed. Horizon-neutral.
 
 | Score | Status |
 |---|---|
-| ≥ 70 | PASS — strong setup, proceed to contract evaluation |
-| 50–69 | CAUTION — proceed with awareness, consider smaller size |
-| < 50 | REJECT — skip |
+| ≥ 55 | PASS — strong setup, proceed to contract evaluation |
+| 35–54 | CAUTION — proceed with awareness, consider smaller size |
+| < 35 | REJECT — skip |
 
 ---
 
@@ -180,18 +182,18 @@ All parameters that differ by horizon. The YAML config file contains one section
 | **Trend** | | | |
 | MA pair | 20 EMA / 50 EMA | 50 EMA / 200 EMA | 50 EMA / 200 EMA (weekly bars) |
 | **Pullback** | | | |
-| Swing high lookback (bars) | 20 | 40 | 15 |
+| Swing high lookback (bars) | 20 | 40 | 75 |
 | Max time in pullback | 3 days | 20 days | 60 days |
 | **Reversal trigger** | | | |
 | MACD periods (fast/slow/signal) | 5 / 13 / 3 | 8 / 21 / 5 | 12 / 26 / 9 |
-| RSI floor | 44 | 44 | 48 |
+| RSI floor | 40 | 38 | 37 |
 | Stochastic (K/D/Smooth) | 14 / 3 / 3 | 14 / 3 / 3 | 14 / 3 / 3 |
 | Setup window (bars) | 10 | 8 | 5 |
 | RSI divergence window (bars) | 10 | 15 | 20 |
 | Momentum signals for PASS | 1 of 3 | 2 of 3 | 2 of 3 |
 | **Event context** | | | |
-| Earnings/dividend REJECT | < 1 day | < 7 days | < 30 days |
-| Earnings/dividend CAUTION | 1–3 days | 7–21 days | 30–60 days |
+| Earnings/dividend REJECT | < 1 day | < 21 days | < 30 days |
+| Earnings/dividend CAUTION | 1–3 days | 21–45 days | 30–60 days |
 | **Volatility context** | | | |
 | IV Rank PASS ceiling | (not scored) | 34 | 44 |
 | IV Rank CAUTION ceiling | (not scored) | 55 | 65 |
@@ -228,12 +230,15 @@ Sourced from validated Dual-Engine Confluence strategy (prior system).
 Seed values for `backend/config/scoring_rules.yaml`. The stock scorer reads from this file; no numeric values appear in Python code.
 
 ```yaml
-# backend/config/scoring_rules.yaml
-# Generated from SCORING_RULES.md — 2026-04-30
+# Abbreviated illustration of backend/config/scoring_rules.yaml's shape —
+# NOT a complete copy (the real file additionally nests trend scoring under
+# method: additive/crossover/relative_strength, and has rsi_ceiling /
+# stoch_overbought fields for bearish signals not shown here). See that file
+# for the authoritative, complete structure. Numbers below last synced 2026-08-19.
 
-score_thresholds:
-  pass: 70
-  caution: 50
+stock_score_thresholds:
+  pass: 55
+  caution: 35
 
 horizons:
   swing:
@@ -269,7 +274,7 @@ horizons:
       macd_signal: 5
       macd_histogram_rising: true
       rsi_period: 14
-      rsi_floor: 44
+      rsi_floor: 38
       rsi_div_window_bars: 15
       stoch_k: 14
       stoch_d: 3
@@ -279,11 +284,11 @@ horizons:
       setup_window_bars: 8
       momentum_signals_for_pass: 2
       volume_lookback_bars: 20
-      volume_multiplier: 1.20
+      volume_multiplier: 1.50
       volume_bonus_pts: 10
     event:
-      reject_days: 7
-      caution_days: 21
+      reject_days: 21
+      caution_days: 45
     vol:
       iv_rank_compressed_caution: 5
       iv_rank_pass_max: 34
@@ -322,7 +327,7 @@ horizons:
       macd_signal: 3
       macd_histogram_rising: true
       rsi_period: 14
-      rsi_floor: 44
+      rsi_floor: 40
       rsi_div_window_bars: 10
       stoch_k: 14
       stoch_d: 3
@@ -361,7 +366,7 @@ horizons:
       fib_standard_max: 0.500
       fib_golden_min: 0.500
       fib_golden_max: 0.618
-      swing_high_lookback_bars: 15
+      swing_high_lookback_bars: 75
       swing_high_min_bars_ago: 3
       max_days_in_pullback: 60
       theta_caution_days: 45
@@ -375,7 +380,7 @@ horizons:
       macd_signal: 9
       macd_histogram_rising: true
       rsi_period: 14
-      rsi_floor: 48
+      rsi_floor: 37
       rsi_div_window_bars: 20
       stoch_k: 14
       stoch_d: 3
@@ -385,7 +390,7 @@ horizons:
       setup_window_bars: 5
       momentum_signals_for_pass: 2
       volume_lookback_bars: 20
-      volume_multiplier: 1.20
+      volume_multiplier: 1.50
       volume_bonus_pts: 10
     event:
       reject_days: 30
