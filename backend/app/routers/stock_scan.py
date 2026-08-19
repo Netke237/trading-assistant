@@ -45,7 +45,7 @@ from app.services.strategy_engine import (
     breakout_setup_signal,
 )
 from app.services.strategy_backtest import run_strategy_backtest
-from app.services.strategy_param_store import get_active
+from app.services.strategy_param_store import get_active, get_costs
 from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, set_cached
 from app.scoring.signal_confidence import compute_confidence, interpret
 from app.services.regime_omm import compute_omm
@@ -138,6 +138,15 @@ _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
     "mean_reversion_vwap":   lambda r: {"interval": "15m"},
     "mean_reversion_bb":  lambda r: {"require_choppy_regime": r.require_choppy_regime},
 }
+
+def _backtest_commission() -> float:
+    """Per-leg cost drag sourced from the same strategy_params.yaml `costs`
+    block the WFO tuner (strategy_param_optimizer.py) already uses — keeps
+    the Step-6 trader-facing backtest gate cost-aware instead of the
+    commission-free number it showed before (2026-08-18 audit finding)."""
+    costs = get_costs()
+    return costs.get("fee_pct", 0.001) + costs.get("slippage_pct", 0.001)
+
 
 def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
     """Adopted defaults for this direction, overridden by per-request kwargs."""
@@ -378,7 +387,8 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
                 _BACKTEST_POOL,
                 functools.partial(run_strategy_backtest, _bt_bars, strategy=req.strategy,
                                   direction=req.direction, min_trades=req.bt_min_trades,
-                                  min_win_rate=req.bt_min_win_rate, params=signal_kwargs))
+                                  min_win_rate=req.bt_min_win_rate, params=signal_kwargs,
+                                  commission=_backtest_commission()))
             _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
         if not bt_result.passes_gate:
             gate_flags.append({"gate": "backtest", "status": "CAUTION", "detail": bt_result.summary_text})
@@ -793,7 +803,7 @@ async def _process_stock(
                         run_strategy_backtest, bt_bars,
                         strategy=_bt_strategy, direction=req.direction,
                         min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
-                        params=_bt_params,
+                        params=_bt_params, commission=_backtest_commission(),
                     ),
                 )
                 _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
