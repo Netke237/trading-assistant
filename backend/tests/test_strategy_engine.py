@@ -519,12 +519,20 @@ def test_mean_reversion_rsi_signal_never_inverts_stop_bearish():
 
 def _breakout_base_bars_with_ratio(base_range_over_atr: float):
     """26 bars: 5 flat warmup + 20-bar base whose (high-low) range is
-    `base_range_over_atr` * ATR(14), + 1 breakout bar on 2x volume.
+    `base_range_over_atr` * ATR(14) (approximately), + 1 breakout bar on 2x
+    volume.
 
-    Each bar has a fixed 1.0 high-low span (keeps true-range ~= 1.0 per bar,
-    so ATR(14) ~= 1.0), while the 20 base-bar closes drift by
-    `(base_range_over_atr - 1.0)` total across the window — so
-    base_high - base_low = drift + 1.0 = base_range_over_atr * ATR.
+    Each bar has a fixed 1.0 high-low span, and base_high - base_low is
+    constructed to equal `base_range_over_atr` exactly. But `_atr(bars)` is
+    computed over the *whole* bars list, including the appended breakout
+    bar — whose own true range (~2.0, from its gap up) enters the ATR(14)
+    window (13 base-to-base TRs of ~1.0 each + 1 breakout-bar TR of ~2.0,
+    averaged over 14) and pushes ATR to ~1.0714 rather than the naively
+    assumed 1.0. So the *realized* base_range/ATR ratio actually produced by
+    this helper is `base_range_over_atr * 14/15` (about 7% lower than the
+    `base_range_over_atr` argument's face value) — e.g. an argument of 3.3
+    realizes ~3.08x, and 10.0 realizes ~9.33x. Callers should treat the
+    argument as an approximate dial, not an exact realized ratio.
     """
     bars = []
     for _ in range(5):
@@ -548,11 +556,17 @@ def test_breakout_base_signal_fires_at_realistic_base_tightness():
     look like (2026-08-18 audit: observed minimum 2.77x-3.22x across 4 real
     symbols over a full year). breakout_base_signal must be able to fire on
     a base this tight — if this test fails with signal is None, atr_tight_max
-    has regressed back to a value real data can never satisfy."""
+    has regressed back to a value real data can never satisfy.
+
+    Note: passing 3.3 to the helper realizes a ~3.08x base_range/ATR ratio,
+    not exactly 3.3x — see `_breakout_base_bars_with_ratio`'s docstring for
+    why (the breakout bar's own true range inflates ATR by ~7%). 3.08x still
+    lands comfortably inside the audit's observed 2.77x-3.22x real-data
+    range, so the test remains a faithful stand-in for a realistic base."""
     bars = _breakout_base_bars_with_ratio(3.3)
     signal = breakout_base_signal(bars, direction="Bullish")
     assert signal is not None, (
-        "breakout_base_signal returned None on a 3.3x-ATR base — this is "
+        "breakout_base_signal returned None on a ~3.08x-ATR base — this is "
         "within the range real market data actually produces (2.77x-3.22x "
         "observed), so atr_tight_max must be loose enough to admit it."
     )
@@ -560,7 +574,10 @@ def test_breakout_base_signal_fires_at_realistic_base_tightness():
 
 def test_breakout_base_signal_still_rejects_a_genuinely_wide_base():
     """Sanity check the gate still rejects a base that is NOT tight by any
-    reasonable definition (10x ATR)."""
+    reasonable definition. Passing 10.0 to the helper realizes a ~9.33x
+    base_range/ATR ratio (not exactly 10x — see
+    `_breakout_base_bars_with_ratio`'s docstring), which is still far
+    outside any plausible "tight base" definition."""
     bars = _breakout_base_bars_with_ratio(10.0)
     signal = breakout_base_signal(bars, direction="Bullish")
     assert signal is None
