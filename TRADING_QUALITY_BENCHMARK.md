@@ -11,7 +11,7 @@
 
 | Axis | Grade |
 |---|---|
-| 1. Code quality | **PASS** — 1508 passed, 3 skipped, 0 failures (backend); 73 suites / 593 tests, 0 failures (frontend); typecheck/build all green |
+| 1. Code quality | **PASS** — 1526 passed, 3 skipped, 0 failures (backend); 77 suites / 611 tests, 0 failures (frontend); typecheck/build all green |
 | 2. Trading-logic (algorithmic) soundness | **CAUTION** — mechanism sound; `breakout_base` calibration and the live-vs-WFO cost-modeling gap (this round's original findings) were already fixed on `worktree-fix-strategy-scoring-findings`, not re-derived (see "Since last run"). Real-data evidence re-measured post-fix (see axis 2) — a genuine data-availability gap, not a code defect, is what keeps this axis at CAUTION rather than PASS. |
 | 3. Config / settings sanity ("as a trader", best-effort) | **PASS** — `SCORING_RULES.md` drift already fixed on `worktree-fix-strategy-scoring-findings`; the two remaining Low findings are closed (DTE: confirmed intentional design) or fixed (`min_stock_score` raised to 55) |
 
@@ -63,17 +63,17 @@ None of the three Medium/Low bug findings originally flagged "new this round" (`
 
 ## Axis 1 — Code quality — **PASS**
 
-Clean-room methodology followed per the skill: fresh `npm install`, full `npm run build` (not skipped), backend run via `backend/.venv/Scripts/python.exe` (not bare `pytest`). This table reflects the `worktree-fix-strategy-scoring-findings` branch **after this round's fixes** (Tasks 3-4) — every check below was re-run from scratch afterward, so unlike a normal incremental round this is a genuine fresh clean-room pass, not a carried-over number.
+Clean-room methodology followed per the skill: fresh `npm install`, full `npm run build` (not skipped), backend run via `backend/.venv/Scripts/python.exe` (not bare `pytest`). This round's fixes (Tasks 3-4) were verified on the `worktree-fix-strategy-scoring-findings` branch first, then re-verified once more here after that branch was merged into `chore/consolidate-backend-venv` — the counts below are from that final, post-merge run on `chore/consolidate-backend-venv` itself, which is why they're higher than the pre-merge worktree numbers (`chore/consolidate-backend-venv` already carried its own additional tests from its own unrelated prior commits, e.g. `test_fundamentals_scorer.py`, `test_intraday_omm_fallback.py`, `ScreenerStepGate`'s test suite).
 
 | Check | Result |
 |---|---|
 | `npm install` (frontend) | Clean — `up to date, audited 690 packages`, 0 vulnerabilities added |
 | `npm run typecheck` | **PASS** — exit 0, 0 errors |
-| `npm run test -- --ci` | **PASS** — 73 suites, 593 tests, 0 failures |
+| `npm run test -- --ci` | **PASS** — 77 suites, 611 tests, 0 failures |
 | `npm run build` | **PASS** — exit 0, 0 errors, 45 non-blocking ESLint warnings (fixed one real blocking error along the way — a leftover `require()` in `RunScanButton.test.tsx` was tripping `@typescript-eslint/no-require-imports` as a hard build failure, unrelated to this round's findings but blocking this verification gate; removed) |
 | `npm audit` | 1 high (`xlsx` — Prototype Pollution + ReDoS, no fix available upstream; documented as low-risk write-only usage) |
 | Backend `.venv` sanity | Python 3.12.13, `fastapi`/`hmmlearn` import cleanly — matches CLAUDE.md's post-migration `.venv` documentation |
-| `pytest -q` (backend, full, via `.venv`) | **PASS** — 1508 passed, 3 skipped, 0 failures |
+| `pytest -q` (backend, full, via `.venv`) | **PASS** — 1526 passed, 3 skipped, 0 failures |
 | Working tree after all checks | Clean — confirmed via `git status` |
 
 CI workflow (`.github/workflows/ci.yml`) re-checked: backend job installs `backend/requirements.txt` and runs bare `pytest` on Python 3.11 (not 3.12, and not scoped to the `.venv`) — frontend job runs `npm ci` → `typecheck` → `test -- --ci` → `build`, matching what was verified above. This is the actual gate; not re-audited beyond confirming the commands match.
@@ -174,7 +174,7 @@ Best-effort stand-in for the user's own local settings-audit skill, not a substi
 | `risk_rules.yaml:4,10` | `max_total_exposure_pct: 0.25`, `max_single_position_pct: 0.05` | Both enforced in `portfolio_risk.py:88-106`; aggregate cap binds correctly before 5 positions could exceed it |
 | `scoring_rules.yaml:10-11` | `pass: 55, caution: 35` | Real 20-point middle band, live-enforced |
 | `scoring_rules.yaml` event windows | Swing 21/45d, intraday 1/3d, position 30/60d | Genuinely horizon-differentiated, matches CLAUDE.md's current description |
-| `contract_rules.yaml:23` vs `:36` | `hard_reject.min_dte: 21` == `soft_rank.preferred_dte_min: 21` | **Closed, not a bug** — deliberate: `dte_window.py`'s `widen_contract_overrides_for_dte()` always sets both to the same widened value on purpose, to avoid double-penalizing a contract the hard-reject check already forgave near the window edge. Documented in place (config + code comments, plus a regression test) rather than changed. |
+| `contract_rules.yaml:23` vs `:38` | `hard_reject.min_dte: 21` == `soft_rank.preferred_dte_min: 21` | **Closed, not a bug** — deliberate: `dte_window.py`'s `widen_contract_overrides_for_dte()` always sets both to the same widened value on purpose, to avoid double-penalizing a contract the hard-reject check already forgave near the window edge. Documented in place (config + code comments, plus a regression test) rather than changed. |
 | `contract_rules.yaml:27` | `hard_reject.min_stock_score: 55` (was 50) | **Fixed this round** — raised to match the stock `pass` bar exactly; options are no longer recommended on CAUTION-grade (35-54) underlyings |
 | `strategy_params.yaml:19-20` | `optimization.min_trades: 20, min_consistency: 0.5` | Matches code defaults exactly (`strategy_param_optimizer.py:212-213`, `strategy_param_store.py:87`) — genuinely wired through, not a stale mirror |
 | `strategy_params.yaml:1-4` | `windows: rolling, train_months: 12, test_months: 3` | Matches `strategy_param_store.get_windows()` fallback; `walk_forward.py` confirmed to use these as real parameters |
