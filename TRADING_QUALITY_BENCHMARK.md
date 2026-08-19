@@ -1,7 +1,7 @@
 # Trading Quality Benchmark — Bamendjou
 
 **Date**: 2026-08-19 (round 4, finalized)
-**Branch**: `chore/consolidate-backend-venv` (this file is being finalized on `worktree-fix-strategy-scoring-findings`, then merged back — see the implementation plan `docs/superpowers/plans/2026-08-19-round4-benchmark-sync-and-fix.md`)
+**Branch**: `chore/consolidate-backend-venv` (finalized on `worktree-fix-strategy-scoring-findings` and merged in — see the implementation plan `docs/superpowers/plans/2026-08-19-round4-benchmark-sync-and-fix.md`)
 **Method**: `.claude/skills/K-quality-benchmark`
 **Standards**: code correctness, algorithmic trading-logic soundness, config/settings sanity — judged against what Bamendjou actually aims to be: a screener whose core promise is surfacing real, non-overfit, well-calibrated trade setups, not just a working UI.
 
@@ -98,7 +98,7 @@ No Medium+ findings open in this axis.
 |---|---|---|
 | Lookahead safety | `backtesting.py`'s internal loop sets `data._set_length(i+1)` before calling `strategy.next()` (bars 0..i visible only); any order queued in `next()` fills at the **next** iteration's `broker.next()`, never retroactively on the current bar | `backend/.venv/Lib/site-packages/backtesting/backtesting.py:1327,1334,1339` |
 | Signal function window | `_Strategy.next()` builds `slice_bars` from `range(start, n)` where `n = len(self.data.Close)` — exactly bars 0..current | `strategy_backtest.py:97-120` |
-| Order fill realism | `commission=0.0`, `trade_on_close` defaults `False` (next-bar fill); limit/SL/TP fills use next-bar High/Low/Open | `strategy_backtest.py:123`; library `:915,883-938` |
+| Order fill realism | `commission` parameter defaults to `0.0` (`strategy_backtest.py:66`), passed through to `Backtest(...)` at the call site; `trade_on_close` defaults `False` (next-bar fill); limit/SL/TP fills use next-bar High/Low/Open | `strategy_backtest.py:66,124`; library `:915,883-938` |
 | Cost modeling | Live/UI backtest path (`stock_scan.py` → Step-6) and the WFO tuner path now share the same cost model — `run_strategy_backtest()` accepts a `commission` parameter, applied and cache-keyed correctly | `strategy_backtest.py:66,123`; `strategy_param_optimizer.py:109-114` — **fixed** — already committed on `worktree-fix-strategy-scoring-findings` (`d4d837c`, `a0cc6a3`), re-verified present |
 | Backtest gates | `_MIN_TRADES=10`, `_MIN_WIN_RATE=0.45`, `_MIN_EXPECTANCY=0.0` | `strategy_backtest.py:24-26` |
 | Walk-forward fold validity | Genuinely non-overlapping — rolling folds slide `train_start` by `test_months`, `test_start == train_end` always; anchored keeps `train_start` fixed | `walk_forward.py:70-81`; `tests/test_walk_forward.py` still passing |
@@ -138,7 +138,7 @@ Round 3 flagged this as "worth a second look, unexplained by warmup." This round
 | NVDA | 0/226 | 3.02 |
 | SPY | 0/226 | 2.77 |
 
-`breakout_base_signal`'s `atr_tight_max` gate (`strategy_engine.py:368`, was **1.5**) never once passed on any symbol over a full year — the observed minimum ratio (2.77) was nearly double the old ceiling. Even the WFO search grid for this parameter (`strategy_params.yaml`, `[1.0, 1.5, 2.0]`) topped out below the observed minimum, so no value the optimizer was even allowed to try could produce a signal on this data. Root cause: a 20-bar range (`base_lookback=20`) compared against a 1-bar ATR(14) with only a 1.5× multiplier — for a random walk, a 20-bar range scales roughly with `sqrt(20)×ATR ≈ 4.5×ATR`, so 1.5× was arithmetically near-impossible for this lookback length. Confirmed by contrast with the sibling `breakout_setup_signal` (used by the Step-4 pre-breakout scanner), which pairs a shorter 10-bar lookback with `range_atr_mult=3.0` — much closer to the `sqrt(10)≈3.16` sane heuristic.
+`breakout_base_signal`'s `atr_tight_max` gate (`strategy_engine.py:344` default, `:372` conditional, was **1.5**) never once passed on any symbol over a full year — the observed minimum ratio (2.77) was nearly double the old ceiling. Even the WFO search grid for this parameter (`strategy_params.yaml`, `[1.0, 1.5, 2.0]`) topped out below the observed minimum, so no value the optimizer was even allowed to try could produce a signal on this data. Root cause: a 20-bar range (`base_lookback=20`) compared against a 1-bar ATR(14) with only a 1.5× multiplier — for a random walk, a 20-bar range scales roughly with `sqrt(20)×ATR ≈ 4.5×ATR`, so 1.5× was arithmetically near-impossible for this lookback length. Confirmed by contrast with the sibling `breakout_setup_signal` (used by the Step-4 pre-breakout scanner), which pairs a shorter 10-bar lookback with `range_atr_mult=3.0` — much closer to the `sqrt(10)≈3.16` sane heuristic.
 
 **Status: fixed.** `worktree-fix-strategy-scoring-findings` already carries the fix (`26068d5`): `atr_tight_max` raised from 1.5 to 4.0, close to the `sqrt(20)≈4.47` heuristic. Brought into `chore/consolidate-backend-venv` by merging that branch directly (see "Since last run" above) and re-verified present (`strategy_engine.py:344` now reads `atr_tight_max: float = 4.0`). Re-measured against real data post-fix (see "Real-data evidence" above): the gate now fires occasionally (1 trade on SPY, still 0 on AAPL/MSFT/NVDA) — no longer mathematically impossible, though still far short of statistical significance on this ~1-year fixture set.
 
