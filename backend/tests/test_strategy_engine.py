@@ -515,3 +515,52 @@ def test_mean_reversion_rsi_signal_never_inverts_stop_bearish():
         assert signal.entry_price < signal.stop_price, (
             f"bearish stop {signal.stop_price} must be above entry {signal.entry_price}"
         )
+
+
+def _breakout_base_bars_with_ratio(base_range_over_atr: float):
+    """26 bars: 5 flat warmup + 20-bar base whose (high-low) range is
+    `base_range_over_atr` * ATR(14), + 1 breakout bar on 2x volume.
+
+    Each bar has a fixed 1.0 high-low span (keeps true-range ~= 1.0 per bar,
+    so ATR(14) ~= 1.0), while the 20 base-bar closes drift by
+    `(base_range_over_atr - 1.0)` total across the window — so
+    base_high - base_low = drift + 1.0 = base_range_over_atr * ATR.
+    """
+    bars = []
+    for _ in range(5):
+        bars.append({"open": 100.0, "high": 100.5, "low": 99.5,
+                      "close": 100.0, "volume": 1_000_000})
+    drift = base_range_over_atr - 1.0
+    step = drift / 19
+    for i in range(20):
+        close = 100.0 + step * i
+        bars.append({"open": close, "high": close + 0.5, "low": close - 0.5,
+                      "close": close, "volume": 1_000_000})
+    base_high = max(b["high"] for b in bars[-20:])
+    bars.append({"open": base_high + 0.5, "high": base_high + 1.5,
+                 "low": base_high - 0.1, "close": base_high + 1.0,
+                 "volume": 2_000_000})
+    return bars
+
+
+def test_breakout_base_signal_fires_at_realistic_base_tightness():
+    """A base range of ~3.3x ATR is what real 20-bar consolidations actually
+    look like (2026-08-18 audit: observed minimum 2.77x-3.22x across 4 real
+    symbols over a full year). breakout_base_signal must be able to fire on
+    a base this tight — if this test fails with signal is None, atr_tight_max
+    has regressed back to a value real data can never satisfy."""
+    bars = _breakout_base_bars_with_ratio(3.3)
+    signal = breakout_base_signal(bars, direction="Bullish")
+    assert signal is not None, (
+        "breakout_base_signal returned None on a 3.3x-ATR base — this is "
+        "within the range real market data actually produces (2.77x-3.22x "
+        "observed), so atr_tight_max must be loose enough to admit it."
+    )
+
+
+def test_breakout_base_signal_still_rejects_a_genuinely_wide_base():
+    """Sanity check the gate still rejects a base that is NOT tight by any
+    reasonable definition (10x ATR)."""
+    bars = _breakout_base_bars_with_ratio(10.0)
+    signal = breakout_base_signal(bars, direction="Bullish")
+    assert signal is None
