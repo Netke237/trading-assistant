@@ -235,7 +235,7 @@ def test_stock_scan_bearish_direction_threads_to_signal(stock_client):
     """Bearish direction must be passed to the signal fn and produce stop>entry>target."""
     import time
     from app.routers.stock_scan import (
-        _BACKTEST_CACHE, _BACKTEST_TTL, _backtest_key,
+        _BACKTEST_CACHE, _BACKTEST_TTL, _backtest_key, _backtest_commission,
     )
 
     bearish_bars = _make_bearish_bars(130)
@@ -254,7 +254,13 @@ def test_stock_scan_bearish_direction_threads_to_signal(stock_client):
         "ema_period": 50, "trend_ema": 100, "atr_stop_mult": 1.5, "rr_target_mult": 2.0,
         "tolerance": 0.08, "ma_type": "EMA", "require_reversal": False,
     }
-    bt_key = _backtest_key("TSLA", "pullback_ema", "Bearish", bearish_bars, _fixed_params)
+    # commission is folded into the cache key (see _backtest_key) and the router
+    # doesn't mock get_costs() in this test, so the key must be built with the
+    # same real commission value the router will compute via _backtest_commission()
+    # — otherwise this pre-populated entry is never hit and the real (uncached)
+    # backtest runs instead, which produces 0 trades on this fixture.
+    bt_key = _backtest_key("TSLA", "pullback_ema", "Bearish", bearish_bars, _fixed_params,
+                            commission=_backtest_commission())
     _BACKTEST_CACHE[bt_key] = (_pass_bt(), time.time() + _BACKTEST_TTL)
 
     try:

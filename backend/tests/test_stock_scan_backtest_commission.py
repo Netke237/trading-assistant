@@ -82,6 +82,22 @@ def test_process_stock_passes_commission_from_get_costs():
     )
 
 
+def test_backtest_key_differs_by_commission():
+    """_backtest_key must fold commission into the cache key — otherwise a
+    strategy_params.yaml costs.fee_pct/slippage_pct edit leaves stale
+    pre-edit BacktestResult entries (including passes_gate) served out of
+    _BACKTEST_CACHE for up to _BACKTEST_TTL (24h) under an unchanged key."""
+    from app.routers.stock_scan import _backtest_key
+
+    bars = [{"close": 150.0, "open": 148.0, "high": 152.0, "low": 147.0,
+             "volume": 1_000_000, "time": i} for i in range(30)]
+    params = {"tolerance": 0.04}
+
+    key_low = _backtest_key("AAPL", "pullback_ema", "Bullish", bars, params, commission=0.001)
+    key_high = _backtest_key("AAPL", "pullback_ema", "Bullish", bars, params, commission=0.01)
+    assert key_low != key_high
+
+
 def test_analyze_core_passes_commission_from_get_costs():
     """_analyze_core's run_strategy_backtest call (stock_scan.py ~line 379)
     must pass the same commission= as _process_stock."""
