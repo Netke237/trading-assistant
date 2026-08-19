@@ -315,3 +315,38 @@ def test_expectancy_avg_win_loss_independent_of_drawdown_magnitude():
         result = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish")
 
     assert result.expectancy > 0
+
+
+def test_commission_reduces_return_versus_zero_commission():
+    """A non-zero commission must actually drag down the backtest's reported
+    return relative to commission=0.0 — proves the parameter is threaded
+    into backtesting.py's Backtest(...) call, not just accepted and ignored."""
+    bars = _synth_bars(500, trend=True)
+    free = run_strategy_backtest(bars, strategy="ma_crossover", direction="Bullish", commission=0.0)
+    costly = run_strategy_backtest(bars, strategy="ma_crossover", direction="Bullish", commission=0.01)
+    assert free.n_trades >= 10, "fixture must produce enough trades for this comparison to be meaningful"
+    # This fixture drives ma_crossover to near-total ruin (~-99.97% equity) under
+    # backtesting.py's default full-equity position sizing (no explicit `size=`
+    # passed to self.buy/self.sell in strategy_backtest.py). That means the tiny
+    # per-trade equity difference commission introduces can, near the ruin edge,
+    # tip a handful of later orders into/out of "insufficient margin" rejection —
+    # verified empirically across commission values 0.0001-0.02, none of which
+    # reproduce free.n_trades exactly. A wide tolerance still catches the failure
+    # mode this test exists to guard against (commission=0.0 being silently
+    # ignored, which would leave costly identical to free), while not asserting
+    # an invariant the underlying library doesn't actually provide here.
+    assert abs(costly.n_trades - free.n_trades) <= 10, (
+        "commission must not wildly change which trades fire, only drag on their P&L"
+    )
+    assert costly.total_return_pct < free.total_return_pct
+    assert costly.expectancy < free.expectancy
+
+
+def test_commission_defaults_to_zero():
+    """Backward compatibility: existing callers that don't pass commission=
+    must see identical behavior to before this change."""
+    bars = _synth_bars(500, trend=True)
+    default = run_strategy_backtest(bars, strategy="ma_crossover", direction="Bullish")
+    explicit_zero = run_strategy_backtest(bars, strategy="ma_crossover", direction="Bullish", commission=0.0)
+    assert default.total_return_pct == explicit_zero.total_return_pct
+    assert default.n_trades == explicit_zero.n_trades

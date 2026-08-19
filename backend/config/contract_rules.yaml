@@ -24,7 +24,9 @@ hard_reject:
   max_dte: 90                   # calendar days to expiry — above this = too long
   max_iv_rank: 70               # long-premium strategy: never buy when IV rank > 70
   max_soft_fail_count: 3        # reject if this many soft rules fail
-  min_stock_score: 50           # contracts only recommended when the underlying's stock score is at least this
+  min_stock_score: 55           # contracts only recommended when the underlying's stock score is at least this
+                                 # (matches scoring_rules.yaml's stock `pass` bar exactly — CAUTION-grade
+                                 # underlyings, 35-54, no longer qualify for options recommendations)
 
 # Soft-rank rules (FR-25) — penalise score but do not block
 soft_rank:
@@ -33,7 +35,15 @@ soft_rank:
   preferred_spread_pct_max: 0.08     # above this = soft penalty
   preferred_delta_min: 0.30          # below this = soft penalty (edge of golden zone)
   preferred_delta_max: 0.70          # above this = soft penalty
-  preferred_dte_min: 21              # below this = soft penalty
+  preferred_dte_min: 21              # intentionally equals hard_reject.min_dte above. Every
+                                      # horizon-derived override (dte_window.py's
+                                      # widen_contract_overrides_for_dte) sets both to the same
+                                      # widened value on purpose, so a contract the hard-reject
+                                      # check already forgives near the window edge isn't then
+                                      # soft-penalized as if it were far outside it. This default
+                                      # mirrors that for the no-override case. Do not space this
+                                      # apart from min_dte without revisiting dte_window.py first —
+                                      # see contract_validator.py's _score_dte for the mechanics.
   preferred_dte_max: 60              # above this = soft penalty
   preferred_iv_rank_max: 55          # above this = soft penalty (expensive premium)
 

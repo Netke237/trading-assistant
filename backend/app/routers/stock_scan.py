@@ -45,7 +45,7 @@ from app.services.strategy_engine import (
     breakout_setup_signal,
 )
 from app.services.strategy_backtest import run_strategy_backtest
-from app.services.strategy_param_store import get_active
+from app.services.strategy_param_store import get_active, get_costs
 from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, set_cached
 from app.scoring.signal_confidence import compute_confidence, interpret
 from app.services.regime_omm import compute_omm
@@ -139,6 +139,15 @@ _SIGNAL_KWARGS: dict[str, Callable[[StockScanRequest], dict[str, Any]]] = {
     "mean_reversion_bb":  lambda r: {"require_choppy_regime": r.require_choppy_regime},
 }
 
+def _backtest_commission() -> float:
+    """Per-leg cost drag sourced from the same strategy_params.yaml `costs`
+    block the WFO tuner (strategy_param_optimizer.py) already uses — keeps
+    the Step-6 trader-facing backtest gate cost-aware instead of the
+    commission-free number it showed before (2026-08-18 audit finding)."""
+    costs = get_costs()
+    return costs.get("fee_pct", 0.001) + costs.get("slippage_pct", 0.001)
+
+
 def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
     """Adopted defaults for this direction, overridden by per-request kwargs."""
     merged = get_active(strategy, direction)
@@ -215,12 +224,17 @@ async def restore_stock_from_db() -> None:
         _last_stock_updated_at = row.updated_at.isoformat() if row.updated_at else None
 
 
-def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], params: dict | None = None) -> str:
+def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], params: dict | None = None,
+                   commission: float = 0.0) -> str:
     bars_hash = hashlib.md5(
         str([(b["time"], b["close"]) for b in bars[-20:]]).encode()
     ).hexdigest()[:8]
     params_hash = hashlib.md5(str(sorted((params or {}).items())).encode()).hexdigest()[:8]
-    return f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{params_hash}"
+    # commission is folded into the key (not just the run_strategy_backtest call)
+    # so that editing strategy_params.yaml's costs.fee_pct/slippage_pct doesn't
+    # leave a stale pre-edit BacktestResult (including passes_gate) served out of
+    # _BACKTEST_CACHE for up to _BACKTEST_TTL (24h) under an unchanged key.
+    return f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{params_hash}|{commission:.6f}"
 
 
 def _get_backtest_cached(key: str):
@@ -368,14 +382,17 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     conf_val = conf_txt = None
     if signal is not None:
         _bt_bars = _intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
-        _bt_key = _backtest_key(symbol, req.strategy, req.direction, _bt_bars, signal_kwargs)
+        _bt_commission = _backtest_commission()
+        _bt_key = _backtest_key(symbol, req.strategy, req.direction, _bt_bars, signal_kwargs,
+                                 commission=_bt_commission)
         bt_result = _get_backtest_cached(_bt_key)
         if bt_result is None:
             bt_result = await asyncio.get_running_loop().run_in_executor(
                 _BACKTEST_POOL,
                 functools.partial(run_strategy_backtest, _bt_bars, strategy=req.strategy,
                                   direction=req.direction, min_trades=req.bt_min_trades,
-                                  min_win_rate=req.bt_min_win_rate, params=signal_kwargs))
+                                  min_win_rate=req.bt_min_win_rate, params=signal_kwargs,
+                                  commission=_bt_commission))
             _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
         if not bt_result.passes_gate:
             gate_flags.append({"gate": "backtest", "status": "CAUTION", "detail": bt_result.summary_text})
@@ -776,7 +793,9 @@ async def _process_stock(
                 bt_bars = intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
                 _bt_params = signal_kwargs
 
-            _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bt_bars, _bt_params)
+            _bt_commission = _backtest_commission()
+            _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bt_bars, _bt_params,
+                                     commission=_bt_commission)
             bt_result = _get_backtest_cached(_bt_key)
             if bt_result is None:
                 bt_result = await asyncio.get_running_loop().run_in_executor(
@@ -785,7 +804,7 @@ async def _process_stock(
                         run_strategy_backtest, bt_bars,
                         strategy=_bt_strategy, direction=req.direction,
                         min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
-                        params=_bt_params,
+                        params=_bt_params, commission=_bt_commission,
                     ),
                 )
                 _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
