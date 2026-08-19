@@ -101,7 +101,7 @@ All parameters are horizon-aware. Defaults below are for the **Swing** horizon (
 ### Volume (bonus — not required)
 | Condition | Effect |
 |---|---|
-| Reversal bar volume > 1.2× 20-bar average | +10 pts added to trigger component score |
+| Reversal bar volume > 1.5× 20-bar average | +10 pts added to trigger component score |
 
 ### Setup window
 | Parameter | Value |
