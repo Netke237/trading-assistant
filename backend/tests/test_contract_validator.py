@@ -75,6 +75,19 @@ def test_override_raises_max_iv_rank():
     assert "iv_rank_too_high" not in card.reject_reasons
 
 
+def test_preferred_dte_min_intentionally_matches_hard_reject_floor():
+    """contract_rules.yaml's soft_rank.preferred_dte_min is deliberately kept equal to
+    hard_reject.min_dte (both 21 by default) — see the comment on that key and
+    dte_window.py's widen_contract_overrides_for_dte(), which always widens both to the
+    same value. This test exists so a future edit that spaces them apart (reintroducing a
+    live below-window soft-penalty branch in _score_dte, and the double-penalty behavior
+    dte_window.py was written to eliminate) is a deliberate, reviewed choice — not an
+    accidental drift caught only by re-reading the YAML."""
+    from app.scoring.contract_validator import _load_config
+    cfg = _load_config()
+    assert cfg["soft_rank"]["preferred_dte_min"] == cfg["hard_reject"]["min_dte"]
+
+
 from datetime import date, timedelta
 
 

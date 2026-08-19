@@ -33,7 +33,15 @@ soft_rank:
   preferred_spread_pct_max: 0.08     # above this = soft penalty
   preferred_delta_min: 0.30          # below this = soft penalty (edge of golden zone)
   preferred_delta_max: 0.70          # above this = soft penalty
-  preferred_dte_min: 21              # below this = soft penalty
+  preferred_dte_min: 21              # intentionally equals hard_reject.min_dte above. Every
+                                      # horizon-derived override (dte_window.py's
+                                      # widen_contract_overrides_for_dte) sets both to the same
+                                      # widened value on purpose, so a contract the hard-reject
+                                      # check already forgives near the window edge isn't then
+                                      # soft-penalized as if it were far outside it. This default
+                                      # mirrors that for the no-override case. Do not space this
+                                      # apart from min_dte without revisiting dte_window.py first —
+                                      # see contract_validator.py's _score_dte for the mechanics.
   preferred_dte_max: 60              # above this = soft penalty
   preferred_iv_rank_max: 55          # above this = soft penalty (expensive premium)
 
