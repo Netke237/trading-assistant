@@ -63,6 +63,7 @@ def run_strategy_backtest(
     min_trades: int = _MIN_TRADES,
     min_win_rate: float = _MIN_WIN_RATE,
     params: dict | None = None,
+    commission: float = 0.0,
 ) -> BacktestResult:
     """Run a full entry+stop+target backtest using backtesting.py."""
     from backtesting import Backtest, Strategy as BtStrategy
@@ -120,7 +121,7 @@ def run_strategy_backtest(
                         self.sell(limit=sig.entry_price, sl=sig.stop_price, tp=sig.target_price)
 
     try:
-        bt = Backtest(df, _Strategy, cash=100_000, commission=0.0, exclusive_orders=True)
+        bt = Backtest(df, _Strategy, cash=100_000, commission=commission, exclusive_orders=True)
         stats = bt.run()
     except Exception as exc:
         logger.warning("Backtest failed for %s: %s", strategy, exc)

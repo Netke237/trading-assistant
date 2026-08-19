@@ -341,7 +341,7 @@ def breakout_base_signal(
     bars: list[dict],
     *,
     base_lookback: int = 20,
-    atr_tight_max: float = 1.5,
+    atr_tight_max: float = 4.0,
     volume_mult: float = 1.5,
     rr_target_mult: float = 2.0,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
@@ -364,7 +364,11 @@ def breakout_base_signal(
     base_low  = min(b["low"]  for b in base_bars)
     base_range_pct = (base_high - base_low) / base_low if base_low > 0 else 99
     atr = _atr(bars)
-    # Tight base: range < atr_tight_max * ATR
+    # Tight base: range < atr_tight_max * ATR. A 20-bar range scales roughly
+    # with sqrt(base_lookback) ~= 4.5x ATR on a random walk — 1.5 (the old
+    # default) was unfireable on any real data (2026-08-18 audit: observed
+    # minimum 2.77x-3.22x across 4 real symbols over a full year). 4.0 keeps
+    # this selective while staying reachable.
     if atr > 0 and (base_high - base_low) > atr_tight_max * atr:
         return None
     current = closes[-1]
