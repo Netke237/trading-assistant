@@ -198,9 +198,16 @@ def _score_iv_rank(contract: dict, cfg: dict) -> tuple[int, list[str]]:
 
     max_pref = sr["preferred_iv_rank_max"]
     if iv_rank <= max_pref:
-        score = int(100 * (1 - iv_rank / max_pref))
+        # Denominator guard: max_pref == 0 divides by zero when iv_rank <= 0
+        # too. Upper-clamped to 100 since a very negative iv_rank would
+        # otherwise push the score above the function's 0-100 contract.
+        denom = max(max_pref, 1e-9)
+        score = max(0, min(100, int(100 * (1 - iv_rank / denom))))
     else:
-        score = max(0, int(20 * (1 - (iv_rank - max_pref) / (100 - max_pref))))
+        # Denominator guard: max_pref == 100 divides by zero for any rank > 100
+        # (reachable now that the tastytrade adapter no longer clamps).
+        denom = max(100 - max_pref, 1e-9)
+        score = max(0, min(100, int(20 * (1 - (iv_rank - max_pref) / denom))))
         flags.append("iv_rank_elevated")
     return score, flags
 

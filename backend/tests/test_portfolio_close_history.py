@@ -126,9 +126,15 @@ async def test_partial_close_reduces_qty_and_keeps_open(client):
                           json={"qtyToClose": 2, "exitPrice": 2.00, "exitDate": "2026-05-31"})
     assert r.status_code == 201, r.text
     assert r.json()["qtyClosed"] == 2
-    open_positions = (await client.get("/api/portfolio")).json()
+    # Non-integer ivRank exercises the int() cast at portfolio.py's enrichment
+    # assignment — must round to a plain int, never leak the raw float (which
+    # would trip a Pydantic serialization warning against the Optional[int] field).
+    with patch("app.routers.portfolio.fetch_contract_quote_async",
+               new=AsyncMock(return_value={"price": 1.80, "delta": 0.5, "theta": -0.05, "ivRank": 40.9})):
+        open_positions = (await client.get("/api/portfolio")).json()
     assert len(open_positions) == 1
     assert open_positions[0]["qty"] == 3        # 5 - 2 remaining
+    assert open_positions[0]["ivRank"] == 41
     hist = (await client.get("/api/portfolio/history")).json()
     assert len(hist) == 1 and hist[0]["qtyClosed"] == 2
 

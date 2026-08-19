@@ -86,7 +86,7 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
             schema.currentPrice = quote.get("price") or 0.0
             schema.delta        = quote.get("delta")
             schema.theta        = quote.get("theta")
-            schema.ivRank       = quote.get("ivRank")
+            schema.ivRank       = int(round(iv)) if (iv := quote.get("ivRank")) is not None else None
             if schema.entryPrice:
                 mult = _contract_multiplier(schema.contract)
                 schema.pnlDollar = round(
