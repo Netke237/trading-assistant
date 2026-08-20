@@ -25,6 +25,7 @@ type BackendPosition = {
   createdAt: string;
   // Live fields enriched by GET /portfolio via Tradier
   currentPrice?: number;
+  currentStockPrice?: number | null;
   pnlDollar?: number;
   pnlPct?: number;
   dteRemaining?: number;
@@ -52,6 +53,7 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     status:       'PENDING',
     recId:        p.recId,
     currentPrice: p.currentPrice ?? 0,
+    currentStockPrice: p.currentStockPrice ?? undefined,
     pnlDollar:    p.pnlDollar ?? 0,
     pnlPct:       p.pnlPct ?? 0,
     delta:        p.delta ?? undefined,

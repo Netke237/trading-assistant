@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 import app.models  # noqa: F401  (registers all tables on Base.metadata)
 from app.database import Base, get_db
+from app.models.portfolio import PortfolioPositionModel
 from app.routers.portfolio import router as portfolio_router
 
 
@@ -38,6 +39,29 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     test_app.dependency_overrides[get_db] = _get_db
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://t") as c:
         yield c
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def client_with_session():
+    """Same as `client`, but also yields the sessionmaker so a test can insert a
+    row directly — needed to construct portfolio states the risk engine would
+    reject via the public POST endpoint (see max_same_symbol_positions: 1)."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:",
+                                 connect_args={"check_same_thread": False})
+    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async def _get_db():
+        async with Session() as s:
+            yield s
+
+    test_app = FastAPI()
+    test_app.include_router(portfolio_router)
+    test_app.dependency_overrides[get_db] = _get_db
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://t") as c:
+        yield c, Session
     await engine.dispose()
 
 
@@ -129,12 +153,16 @@ async def test_partial_close_reduces_qty_and_keeps_open(client):
     # Non-integer ivRank exercises the int() cast at portfolio.py's enrichment
     # assignment — must round to a plain int, never leak the raw float (which
     # would trip a Pydantic serialization warning against the Optional[int] field).
-    with patch("app.routers.portfolio.fetch_contract_quote_async",
-               new=AsyncMock(return_value={"price": 1.80, "delta": 0.5, "theta": -0.05, "ivRank": 40.9})):
+    with (
+        patch("app.routers.portfolio.fetch_contract_quote_async",
+              new=AsyncMock(return_value={"price": 1.80, "delta": 0.5, "theta": -0.05, "ivRank": 40.9})),
+        patch("app.routers.portfolio.fetch_price_async", new=AsyncMock(return_value=150.0)),
+    ):
         open_positions = (await client.get("/api/portfolio")).json()
     assert len(open_positions) == 1
     assert open_positions[0]["qty"] == 3        # 5 - 2 remaining
     assert open_positions[0]["ivRank"] == 41
+    assert open_positions[0]["currentStockPrice"] == 150.0
     hist = (await client.get("/api/portfolio/history")).json()
     assert len(hist) == 1 and hist[0]["qtyClosed"] == 2
 
@@ -170,8 +198,10 @@ async def test_performance_buckets_and_curve(client):
 @pytest.mark.asyncio
 async def test_get_portfolio_upserts_one_snapshot_per_day(client):
     await _add(client, qty=1, entry=1.00)
-    with patch("app.routers.portfolio.fetch_contract_quote_async",
-               return_value={"price": 1.20}):
+    with (
+        patch("app.routers.portfolio.fetch_contract_quote_async", return_value={"price": 1.20}),
+        patch("app.routers.portfolio.fetch_price_async", return_value=100.0),
+    ):
         await client.get("/api/portfolio")
         await client.get("/api/portfolio")  # second call same day must not duplicate
     perf = (await client.get("/api/portfolio/performance")).json()
@@ -179,3 +209,68 @@ async def test_get_portfolio_upserts_one_snapshot_per_day(client):
     assert len(perf["equityCurve"]) == 1
     # total = realized(0) + open(1.20*100*1 = 120)
     assert perf["equityCurve"][0]["value"] == 120.0
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_dedupes_stock_price_fetch_by_symbol(client_with_session):
+    """Two option contracts on the same underlying must fetch the live stock price
+    ONCE, not once per contract — proves the option_symbols dedup actually dedupes.
+    The second position is inserted directly (see fixture docstring): the risk engine
+    blocks creating it via POST, so this specific two-same-symbol-options state can only
+    arise from data already in the DB (a pre-existing row, or a risk-config change), not
+    from the live add flow — the dedup logic is still real code worth covering directly."""
+    client, Session = client_with_session
+    with patch("app.routers.portfolio.fetch_contract_quote_async", new=AsyncMock(return_value=None)):
+        await _add(client, contract="AAPL|180|2026-09-18|C", rec="REC-A1")
+
+    async with Session() as s:
+        s.add(PortfolioPositionModel(
+            rec_id="REC-A2", symbol="AAPL", contract="AAPL|190|2026-09-18|C",
+            direction="Bullish", entry_price=1.0, qty=1, entry_date="2026-05-01",
+            stop=None, targets=[], dte_total=140,
+        ))
+        await s.commit()
+
+    call_count = {"n": 0}
+    async def _fake_price(client, symbol):
+        call_count["n"] += 1
+        return 175.0
+
+    with (
+        patch("app.routers.portfolio.fetch_contract_quote_async",
+              new=AsyncMock(return_value={"price": 1.0, "delta": 0.5, "theta": -0.05, "ivRank": 40})),
+        patch("app.routers.portfolio.fetch_price_async", new=_fake_price),
+    ):
+        open_positions = (await client.get("/api/portfolio")).json()
+
+    assert len(open_positions) == 2
+    assert call_count["n"] == 1  # one AAPL fetch, not two
+    assert {p["currentStockPrice"] for p in open_positions} == {175.0}
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_stock_leg_mirrors_current_price_not_fetched_separately(client):
+    """A |STOCK position's currentStockPrice must equal its own currentPrice, and must
+    NOT trigger a separate fetch_price_async call (it's not in option_symbols).
+
+    Uses an explicit call-count (not a raising side_effect) — get_portfolio calls
+    fetch_price_async inside `asyncio.gather(..., return_exceptions=True)`, so a raised
+    exception would just be swallowed as a captured result rather than failing the test."""
+    with patch("app.routers.portfolio.fetch_contract_quote_async", new=AsyncMock(return_value=None)):
+        await _add(client, contract="MSFT|STOCK", rec="REC-S1")
+
+    call_count = {"n": 0}
+    async def _fake_price(client, symbol):
+        call_count["n"] += 1
+        return 999.0
+
+    with (
+        patch("app.routers.portfolio.fetch_contract_quote_async",
+              new=AsyncMock(return_value={"price": 410.5})),
+        patch("app.routers.portfolio.fetch_price_async", new=_fake_price),
+    ):
+        open_positions = (await client.get("/api/portfolio")).json()
+
+    assert call_count["n"] == 0  # not called for a stock-only portfolio
+    assert open_positions[0]["currentPrice"] == 410.5
+    assert open_positions[0]["currentStockPrice"] == 410.5

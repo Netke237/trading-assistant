@@ -735,6 +735,17 @@ describe('portfolioStore', () => {
       expect(usePortfolioStore.getState().positions).toHaveLength(0);
     });
 
+    it('maps currentStockPrice from the backend response, not currentPrice', async () => {
+      usePortfolioStore.setState({ positions: [] } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(
+        jsonResponse([{ ...makeBackendPosition(), currentPrice: 5.25, currentStockPrice: 182.4 }])
+      );
+      await usePortfolioStore.getState().syncFromBackend();
+      const p = usePortfolioStore.getState().positions[0];
+      expect(p.currentPrice).toBe(5.25);
+      expect(p.currentStockPrice).toBe(182.4);   // must NOT equal currentPrice
+    });
+
     it('keeps a row synced AFTER this GET started (poll-race safe)', async () => {
       usePortfolioStore.setState({
         positions: [mkLocal('FRESH', { syncStatus: 'synced', syncedAt: Date.now() + 60_000 })],

@@ -5,6 +5,10 @@ export interface AlertPosition {
   symbol: string;
   contract: string;
   currentPrice: number;
+  /** Live underlying stock price — see PortfolioPosition.currentStockPrice. For a stock
+   *  position this always mirrors `currentPrice` (including its 0.0 fallback on a failed
+   *  quote fetch); for an option position it's undefined when no live fetch has landed. */
+  currentStockPrice?: number;
   entryPrice: number;
   stop: number | null;
   targets: TargetLevel[];
@@ -68,21 +72,31 @@ export function scanPortfolio(
     }
 
     // STOP_REACHED — direction-aware: puts/shorts are invalidated when price rises above stop.
+    // `stop` is always an underlying STOCK price. For an option position, `currentPrice` is the
+    // option PREMIUM, not comparable to `stop` — use `currentStockPrice` (the live underlying
+    // price fetched separately by the backend) instead. For a stock position (`|STOCK` contract)
+    // `currentPrice` already IS the stock price, so it's used directly. Falls back to
+    // `currentPrice` when `currentStockPrice` is unset (stale cached data pre-dating this fix,
+    // or a failed live fetch) — this matches prior behavior rather than silently skipping the
+    // check; do not "fix" this fallback away, every pre-existing test in alertEngine.test.ts
+    // relies on it.
     // `stop != null` guards positions with no stop set — matches the backend's
     // equivalent check (alert_generator.py: `pos.stop is not None`) explicitly,
     // rather than relying on a `stop > 0` proxy for "unset" (that proxy broke
     // once `AlertPosition.stop`/`PortfolioPosition.stop` stopped being coerced
     // from null to 0 upstream in portfolioStore.ts).
+    const isStock = p.contract.endsWith('|STOCK');
+    const referencePrice = isStock ? p.currentPrice : (p.currentStockPrice ?? p.currentPrice);
     const stop = p.stop;
-    const stopBreached = stop != null && (isBearish ? p.currentPrice >= stop : p.currentPrice <= stop);
+    const stopBreached = stop != null && (isBearish ? referencePrice >= stop : referencePrice <= stop);
     if (stopBreached && stop != null) {
       out.push({
         recId: p.recId,
         kind: 'Critical',
         symbol: p.symbol,
         alertType: 'STOP_REACHED',
-        reason: `Stop breached — ${p.symbol} ${isBearish ? 'above' : 'below'} $${stop.toFixed(2)} (price $${p.currentPrice.toFixed(2)})`,
-        price: p.currentPrice,
+        reason: `Stop breached — ${p.symbol} ${isBearish ? 'above' : 'below'} $${stop.toFixed(2)} (price $${referencePrice.toFixed(2)})`,
+        price: referencePrice,
         referenceValue: stop,
         direction: p.direction,
         contract: p.contract,

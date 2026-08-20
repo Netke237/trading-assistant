@@ -654,6 +654,7 @@ class PortfolioPositionSchema(BaseModel):
     createdAt: str
     # Live fields — populated by GET /portfolio via Tradier option quote
     currentPrice: float = 0.0
+    currentStockPrice: Optional[float] = None   # live underlying price (options only; equals currentPrice for stock legs)
     pnlDollar: float = 0.0
     pnlPct: float = 0.0
     dteRemaining: int = 0

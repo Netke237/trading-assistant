@@ -74,7 +74,10 @@ async def client(db_session):
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
-    with patch("app.routers.portfolio.fetch_contract_quote_async", new=AsyncMock(return_value=None)):
+    with (
+        patch("app.routers.portfolio.fetch_contract_quote_async", new=AsyncMock(return_value=None)),
+        patch("app.routers.portfolio.fetch_price_async", new=AsyncMock(return_value=None)),
+    ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             yield ac
     app.dependency_overrides.clear()

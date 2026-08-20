@@ -128,4 +128,47 @@ describe('scanPortfolio', () => {
     expect(eventRisk).toMatchObject({ referenceValue: 2, note: 'Earnings' });
     expect(eventRisk?.price).toBeUndefined();
   });
+
+  // currentStockPrice: an option position's `currentPrice` is the PREMIUM, not comparable to
+  // `stop` (always a stock price) — see alertEngine.ts's STOP_REACHED comment. These tests cover
+  // the fix directly; every test above this point deliberately never sets `currentStockPrice`,
+  // so the fallback (`currentStockPrice ?? currentPrice`) keeps them passing unmodified.
+  it('uses currentStockPrice, not the option premium, for STOP_REACHED on an option position', () => {
+    // Premium (currentPrice) is far below any realistic stop — if the bug were still present
+    // this would fire immediately. The real stock price is what must be compared.
+    const position = makePosition({
+      currentPrice: 5,          // option premium — NOT comparable to a stock-price stop
+      currentStockPrice: 150,   // live underlying price
+      stop: 140,                // Bullish: breached when stock price <= stop
+      direction: 'Bullish',
+    });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(false); // 150 > 140, not breached
+  });
+
+  it('fires STOP_REACHED using currentStockPrice when the underlying actually breaches the stop', () => {
+    const position = makePosition({
+      currentPrice: 5,
+      currentStockPrice: 130,   // now below stop
+      stop: 140,
+      direction: 'Bullish',
+    });
+    const out = scanPortfolio([position]);
+    const alert = out.find((a) => a.alertType === 'STOP_REACHED');
+    expect(alert).toBeDefined();
+    expect(alert?.price).toBe(130);           // reports the stock price, not the premium
+    expect(alert?.reason).toContain('$130.00');
+  });
+
+  it('uses currentPrice (not currentStockPrice) for STOP_REACHED on a stock position', () => {
+    const position = makePosition({
+      contract: 'NVDA|STOCK',
+      currentPrice: 90,
+      currentStockPrice: 999,   // must be ignored for a stock leg
+      stop: 95,
+      direction: 'Bullish',
+    });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(true); // 90 <= 95
+  });
 });

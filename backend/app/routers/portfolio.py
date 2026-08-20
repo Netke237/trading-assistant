@@ -65,13 +65,30 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
     if not schemas:
         return schemas
 
-    # Enrich with live option quotes — all positions fetched concurrently
+    # Enrich with live option quotes — all positions fetched concurrently. Also fetch a live
+    # underlying stock price for every distinct symbol with an open OPTION position: `stop` is
+    # always a stock price, but currentPrice for an option leg is the premium — the frontend
+    # STOP_REACHED check needs the real stock price to compare against, not the premium (see
+    # currentStockPrice below). Deduped by symbol so multiple contracts on the same underlying
+    # fetch it once. Both fetch groups run concurrently in one AsyncClient context, same pattern
+    # as add_position's live save-time refetch.
     today = date.today()
+    option_symbols = sorted({s.symbol for s in schemas if not s.contract.endswith("|STOCK")})
     async with httpx.AsyncClient(timeout=10) as client:
-        quotes = await asyncio.gather(
-            *[fetch_contract_quote_async(client, s.contract) for s in schemas],
-            return_exceptions=True,
+        quotes, stock_price_results = await asyncio.gather(
+            asyncio.gather(
+                *[fetch_contract_quote_async(client, s.contract) for s in schemas],
+                return_exceptions=True,
+            ),
+            asyncio.gather(
+                *[fetch_price_async(client, sym) for sym in option_symbols],
+                return_exceptions=True,
+            ),
         )
+    stock_prices = {
+        sym: (price if isinstance(price, (int, float)) else None)
+        for sym, price in zip(option_symbols, stock_price_results)
+    }
 
     for schema, quote in zip(schemas, quotes):
         # dteRemaining from contract string: SYMBOL|STRIKE|EXPIRY|C/P
@@ -95,6 +112,11 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
                 schema.pnlPct = round(
                     (schema.currentPrice - schema.entryPrice) / schema.entryPrice * 100, 2
                 )
+
+        schema.currentStockPrice = (
+            schema.currentPrice if schema.contract.endswith("|STOCK")
+            else stock_prices.get(schema.symbol)
+        )
 
     open_value = sum(s.currentPrice * _contract_multiplier(s.contract) * s.qty for s in schemas)
     open_pnl = sum(s.pnlDollar or 0.0 for s in schemas)
