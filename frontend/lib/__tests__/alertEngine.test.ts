@@ -171,4 +171,61 @@ describe('scanPortfolio', () => {
     const out = scanPortfolio([position]);
     expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(true); // 90 <= 95
   });
+
+  // TP_HIT has the identical premium-vs-stock-price bug as STOP_REACHED above — same fix,
+  // same referencePrice. These tests mirror the currentStockPrice tests above.
+  it('uses currentStockPrice, not the option premium, for TP_HIT on an option position', () => {
+    // Premium (currentPrice) is far below the target — if the bug were still present this
+    // would fire immediately for a Bearish position. The real stock price is what must be used.
+    const short = makePosition({
+      direction: 'Bearish',
+      currentPrice: 5,          // option premium — NOT comparable to a stock-price target
+      currentStockPrice: 160,   // live underlying price — above the target, not hit
+      targets: [{ id: 't1', stockPrice: 150, contractsToSell: 1, status: 'PENDING' }],
+    });
+    const out = scanPortfolio([short]);
+    expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(false); // 160 > 150, not hit
+  });
+
+  it('fires TP_HIT using currentStockPrice when the underlying actually hits the target', () => {
+    const short = makePosition({
+      direction: 'Bearish',
+      currentPrice: 5,
+      currentStockPrice: 140,   // now at/below target
+      targets: [{ id: 't1', stockPrice: 150, contractsToSell: 1, status: 'PENDING' }],
+    });
+    const out = scanPortfolio([short]);
+    const alert = out.find((a) => a.alertType === 'TP_HIT');
+    expect(alert).toBeDefined();
+    expect(alert?.price).toBe(140);           // reports the stock price, not the premium
+    expect(alert?.reason).toContain('$140.00');
+  });
+
+  it('uses currentPrice (not currentStockPrice) for TP_HIT on a stock position', () => {
+    const position = makePosition({
+      contract: 'NVDA|STOCK',
+      currentPrice: 155,
+      currentStockPrice: 5,     // must be ignored for a stock leg
+      targets: [{ id: 't1', stockPrice: 150, contractsToSell: 1, status: 'PENDING' }],
+    });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(true); // 155 >= 150
+  });
+
+  it('fires TP_HIT for a Bullish option position via currentStockPrice when the premium alone would never trigger it', () => {
+    // Under the old bug, a Bullish option's premium (currentPrice) essentially never satisfies
+    // `>= target.stockPrice`, so a real target hit was silently never flagged (under-firing,
+    // not a false positive — the opposite failure mode from the Bearish case above).
+    const position = makePosition({
+      direction: 'Bullish',
+      currentPrice: 5,          // premium — would never satisfy >= 150 under the old bug
+      currentStockPrice: 155,   // live underlying price — has hit the target
+      targets: [{ id: 't1', stockPrice: 150, contractsToSell: 1, status: 'PENDING' }],
+    });
+    const out = scanPortfolio([position]);
+    const alert = out.find((a) => a.alertType === 'TP_HIT');
+    expect(alert).toBeDefined();
+    expect(alert?.price).toBe(155);
+    expect(alert?.reason).toContain('$155.00');
+  });
 });

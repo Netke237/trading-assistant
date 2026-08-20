@@ -52,10 +52,22 @@ export function scanPortfolio(
   for (const p of positions) {
     const isBearish = p.direction === 'Bearish';
 
+    // Shared by TP_HIT (below) and STOP_REACHED (further below) — both compare against an
+    // underlying STOCK price (`firstTarget.stockPrice` / `stop`). For an option position,
+    // `currentPrice` is the option PREMIUM, not comparable to either — use `currentStockPrice`
+    // (the live underlying price fetched separately by the backend) instead. For a stock
+    // position (`|STOCK` contract) `currentPrice` already IS the stock price, so it's used
+    // directly. Falls back to `currentPrice` when `currentStockPrice` is unset (stale cached
+    // data pre-dating this fix, or a failed live fetch) — this matches prior behavior rather
+    // than silently skipping the check; do not "fix" this fallback away, every pre-existing
+    // test in alertEngine.test.ts relies on it.
+    const isStock = p.contract.endsWith('|STOCK');
+    const referencePrice = isStock ? p.currentPrice : (p.currentStockPrice ?? p.currentPrice);
+
     // TP_HIT — direction-aware: bullish targets are above current price, bearish below
     const firstTarget = p.targets[0];
     const tpHit = firstTarget
-      ? (isBearish ? p.currentPrice <= firstTarget.stockPrice : p.currentPrice >= firstTarget.stockPrice)
+      ? (isBearish ? referencePrice <= firstTarget.stockPrice : referencePrice >= firstTarget.stockPrice)
       : false;
     if (tpHit) {
       out.push({
@@ -63,8 +75,8 @@ export function scanPortfolio(
         kind: 'Action',
         symbol: p.symbol,
         alertType: 'TP_HIT',
-        reason: `Target reached — ${p.symbol} at $${p.currentPrice.toFixed(2)}`,
-        price: p.currentPrice,
+        reason: `Target reached — ${p.symbol} at $${referencePrice.toFixed(2)}`,
+        price: referencePrice,
         referenceValue: firstTarget?.stockPrice,
         direction: p.direction,
         contract: p.contract,
@@ -72,21 +84,11 @@ export function scanPortfolio(
     }
 
     // STOP_REACHED — direction-aware: puts/shorts are invalidated when price rises above stop.
-    // `stop` is always an underlying STOCK price. For an option position, `currentPrice` is the
-    // option PREMIUM, not comparable to `stop` — use `currentStockPrice` (the live underlying
-    // price fetched separately by the backend) instead. For a stock position (`|STOCK` contract)
-    // `currentPrice` already IS the stock price, so it's used directly. Falls back to
-    // `currentPrice` when `currentStockPrice` is unset (stale cached data pre-dating this fix,
-    // or a failed live fetch) — this matches prior behavior rather than silently skipping the
-    // check; do not "fix" this fallback away, every pre-existing test in alertEngine.test.ts
-    // relies on it.
     // `stop != null` guards positions with no stop set — matches the backend's
     // equivalent check (alert_generator.py: `pos.stop is not None`) explicitly,
     // rather than relying on a `stop > 0` proxy for "unset" (that proxy broke
     // once `AlertPosition.stop`/`PortfolioPosition.stop` stopped being coerced
     // from null to 0 upstream in portfolioStore.ts).
-    const isStock = p.contract.endsWith('|STOCK');
-    const referencePrice = isStock ? p.currentPrice : (p.currentStockPrice ?? p.currentPrice);
     const stop = p.stop;
     const stopBreached = stop != null && (isBearish ? referencePrice >= stop : referencePrice <= stop);
     if (stopBreached && stop != null) {
