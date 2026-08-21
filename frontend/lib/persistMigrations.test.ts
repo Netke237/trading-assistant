@@ -18,6 +18,18 @@ describe('persist migrations', () => {
     expect(migrateAlerts(null, 0).config?.keepAlertsDays).toBe(30);
   });
 
+  it('alertStore migration backfills STRUCTURAL_STOP_BREACHED into a pre-v3 enabledTypes list, once', () => {
+    const preV3 = { config: { enabledTypes: ['TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP'] } };
+    expect(migrateAlerts(preV3, 2).config?.enabledTypes).toEqual(
+      expect.arrayContaining(['TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'STRUCTURAL_STOP_BREACHED']),
+    );
+
+    // Already on v3+ (e.g. the user explicitly unchecked it after the v2->v3
+    // migration ran once) -> must NOT be silently re-added.
+    const postV3 = { config: { enabledTypes: ['TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP'] } };
+    expect(migrateAlerts(postV3, 3).config?.enabledTypes).toEqual(['TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP']);
+  });
+
   it('riskStore migration restores missing nested limits', () => {
     const state = { limits: { maxDailyRecommendations: 5 } };
     expect(migrateRisk(state, 1)).toMatchObject({

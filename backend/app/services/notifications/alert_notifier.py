@@ -39,7 +39,7 @@ _TZ_LABEL = 'CET'
 _SETTINGS_PATH = Path(__file__).parent.parent.parent.parent / 'config' / 'settings.yaml'
 
 _DEFAULT_ENABLED_TYPES = [
-    'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP', 'EVENT_RISK', 'REGIME_CHANGE',
+    'TP_HIT', 'STOP_REACHED', 'STRUCTURAL_STOP_BREACHED', 'PREMIUM_STOP', 'TIME_STOP', 'EVENT_RISK', 'REGIME_CHANGE',
 ]
 # While a condition stays true we re-send (remind) at most once per this window.
 _DEFAULT_REMINDER_HOURS = 4
@@ -129,6 +129,7 @@ def _format_dt(timestamp: str | None) -> tuple[str, str]:
 _ALERT_TYPE_LABELS = {
     'TP_HIT': 'Target reached',
     'STOP_REACHED': 'Stop hit',
+    'STRUCTURAL_STOP_BREACHED': 'Structural stop hit',
     'PREMIUM_STOP': 'Option premium stop hit',
     'TIME_STOP': 'Time stop hit',
     'EVENT_RISK': 'Event risk warning',

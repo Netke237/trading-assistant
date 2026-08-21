@@ -11,6 +11,7 @@ export interface AlertPosition {
   currentStockPrice?: number;
   entryPrice: number;
   stop: number | null;
+  structuralStop?: number | null;
   targets: TargetLevel[];
   dteRemaining: number;
   dteTotal: number;
@@ -100,6 +101,26 @@ export function scanPortfolio(
         reason: `Stop breached — ${p.symbol} ${isBearish ? 'above' : 'below'} $${stop.toFixed(2)} (price $${referencePrice.toFixed(2)})`,
         price: referencePrice,
         referenceValue: stop,
+        direction: p.direction,
+        contract: p.contract,
+      });
+    }
+
+    // STRUCTURAL_STOP_BREACHED — same direction-aware comparison as STOP_REACHED,
+    // against the structural (order-block/swing) level instead of the
+    // premium-based invalidation. `structuralStop != null` guards positions where
+    // "Check structure" was never run before sending to broker — optional, unlike `stop`.
+    const structuralStop = p.structuralStop;
+    const structuralBreached = structuralStop != null && (isBearish ? referencePrice >= structuralStop : referencePrice <= structuralStop);
+    if (structuralBreached && structuralStop != null) {
+      out.push({
+        recId: p.recId,
+        kind: 'Critical',
+        symbol: p.symbol,
+        alertType: 'STRUCTURAL_STOP_BREACHED',
+        reason: `Structural stop breached — ${p.symbol} ${isBearish ? 'above' : 'below'} $${structuralStop.toFixed(2)} (price $${referencePrice.toFixed(2)})`,
+        price: referencePrice,
+        referenceValue: structuralStop,
         direction: p.direction,
         contract: p.contract,
       });

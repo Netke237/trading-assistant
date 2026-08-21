@@ -139,6 +139,34 @@ async def test_portfolio_create_rejects_invalid_direction(client):
     assert resp2.status_code == 422, resp2.text
 
 
+@pytest.mark.asyncio
+async def test_portfolio_add_reanchors_stop_and_structural_stop_to_live_price(client):
+    """add_position() re-anchors stop/structuralStop/targets by the delta between
+    scanStockPrice and the live-fetched underlying price at save time (see the
+    "Two live fetches at save time" comment in portfolio.py). Untested before —
+    exercise it explicitly for both stop AND structuralStop, since they must
+    shift by the same delta."""
+    payload = {
+        **_POSITION_PAYLOAD,
+        "recId": "REC-REANCHOR-001",
+        "scanStockPrice": 190.0,
+        "stop": 178.0,
+        "structuralStop": 182.0,
+        "targets": [{"id": "tp1", "stockPrice": 200.0, "contractsToSell": 1, "status": "PENDING"}],
+    }
+    # Live price is $2 above the scan-time price -> every level shifts +2.00.
+    with (
+        patch("app.routers.portfolio.fetch_contract_quote_async", new=AsyncMock(return_value=None)),
+        patch("app.routers.portfolio.fetch_price_async", new=AsyncMock(return_value=192.0)),
+    ):
+        resp = await client.post("/api/portfolio", json=payload)
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["stop"] == 180.0
+    assert body["structuralStop"] == 184.0
+    assert body["targets"][0]["stockPrice"] == 202.0
+
+
 # ── Test 2: Portfolio delete ──────────────────────────────────────────────────
 
 @pytest.mark.asyncio

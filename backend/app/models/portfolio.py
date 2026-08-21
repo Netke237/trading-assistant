@@ -18,6 +18,7 @@ class PortfolioPositionModel(Base):
     qty = Column(Integer, nullable=False, default=1)
     entry_date = Column(String, nullable=False)
     stop = Column(Float, nullable=True)
+    structural_stop = Column(Float, nullable=True)
     targets = Column(JSON, nullable=True, default=list)
     dte_total = Column(Integer, nullable=True)
     entry_stock_price = Column(Float, nullable=True)

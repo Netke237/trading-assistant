@@ -609,6 +609,7 @@ class PortfolioPositionCreate(BaseModel):
     qty: int = Field(default=1)
     entryDate: str = Field(alias="entry_date")
     stop: Optional[float] = None
+    structuralStop: Optional[float] = Field(alias="structural_stop", default=None)
     targets: list[dict] = []
     dteTotal: Optional[int] = Field(alias="dte_total", default=None)
     portfolioValue: float = Field(alias="portfolio_value", default=50000.0)
@@ -622,6 +623,7 @@ class PortfolioPositionCreate(BaseModel):
             "rec_id": "recId",
             "entry_price": "entryPrice",
             "entry_date": "entryDate",
+            "structural_stop": "structuralStop",
             "dte_total": "dteTotal",
             "portfolio_value": "portfolioValue",
             "scan_stock_price": "scanStockPrice",
@@ -649,6 +651,7 @@ class PortfolioPositionSchema(BaseModel):
     adjustedQty: Optional[int] = None
     entryDate: str
     stop: Optional[float] = None
+    structuralStop: Optional[float] = None
     targets: list[dict] = []
     dteTotal: Optional[int] = None
     createdAt: str
@@ -674,6 +677,7 @@ class PortfolioPositionSchema(BaseModel):
             qty=obj.qty,
             entryDate=obj.entry_date,
             stop=obj.stop,
+            structuralStop=obj.structural_stop,
             targets=obj.targets or [],
             dteTotal=obj.dte_total,
             createdAt=obj.created_at.isoformat() if obj.created_at else "",

@@ -483,6 +483,12 @@ function EditDrawer({
           value={position.stop ?? 0}
           onChange={(n) => onChange({ stop: n })}
         />
+        <EditField
+          label="Structural stop"
+          hint="Tighter, chart-based stop (order block / swing level) from Check structure. Optional — 0 means none was captured."
+          value={position.structuralStop ?? 0}
+          onChange={(n) => onChange({ structuralStop: n > 0 ? n : null })}
+        />
         <TargetEditor
           targets={position.targets}
           onChange={(targets) => onChange({ targets })}

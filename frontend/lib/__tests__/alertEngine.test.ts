@@ -37,6 +37,31 @@ describe('scanPortfolio', () => {
     expect(stopAlert?.reason).toContain('$80.00');
   });
 
+  it('fires STRUCTURAL_STOP_BREACHED when price crosses the structural stop', () => {
+    const out = scanPortfolio([pos({ stop: null, structuralStop: 92, currentPrice: 90 })]);
+    expect(out.some((a) => a.alertType === 'STRUCTURAL_STOP_BREACHED')).toBe(true);
+  });
+
+  it('does NOT fire STRUCTURAL_STOP_BREACHED when unset — optional, unlike stop', () => {
+    const out = scanPortfolio([pos({ structuralStop: undefined, currentPrice: 1 })]);
+    expect(out.some((a) => a.alertType === 'STRUCTURAL_STOP_BREACHED')).toBe(false);
+  });
+
+  it('fires STRUCTURAL_STOP_BREACHED for a Bearish position when price rises above it, not below', () => {
+    const above = scanPortfolio([pos({ direction: 'Bearish', stop: null, structuralStop: 100, currentPrice: 101 })]);
+    expect(above.some((a) => a.alertType === 'STRUCTURAL_STOP_BREACHED')).toBe(true);
+    const below = scanPortfolio([pos({ direction: 'Bearish', stop: null, structuralStop: 100, currentPrice: 99 })]);
+    expect(below.some((a) => a.alertType === 'STRUCTURAL_STOP_BREACHED')).toBe(false);
+  });
+
+  it('STRUCTURAL_STOP_BREACHED reason includes the triggering price and the structural level', () => {
+    const out = scanPortfolio([pos({ stop: null, structuralStop: 85, currentPrice: 80 })]);
+    const alert = out.find((a) => a.alertType === 'STRUCTURAL_STOP_BREACHED');
+    expect(alert?.reason).toContain('$85.00');
+    expect(alert?.reason).toContain('$80.00');
+    expect(alert?.kind).toBe('Critical');
+  });
+
   it('fires PREMIUM_STOP when pnlPct crosses the 60% stop threshold', () => {
     const position = makePosition({ pnlPct: -65 });  // beyond -60% threshold
     const results = scanPortfolio([position], { premiumStopPct: 0.60 });

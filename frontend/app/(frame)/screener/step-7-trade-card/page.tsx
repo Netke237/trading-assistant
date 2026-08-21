@@ -67,7 +67,7 @@ function tradeCardSnapshotOf(card: TradeCardData): Record<string, unknown> {
   };
 }
 
-function positionFromOrder(order: DraftOrder): PortfolioPosition {
+function positionFromOrder(order: DraftOrder, structuralStop: number | null = null): PortfolioPosition {
   const c   = order.card;
   const cd  = c.contractDetails;
   const mid = cd?.mid ?? c.entry.limit;
@@ -85,6 +85,7 @@ function positionFromOrder(order: DraftOrder): PortfolioPosition {
     pnlDollar:     0,
     pnlPct:        0,
     stop:          c.exit.invalidation,
+    structuralStop,
     targets:       c.exit.targets,
     status:        c.finalStatus,
     ivRank:        cd?.ivRank,
@@ -115,6 +116,29 @@ export default function Step7Page() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [toast, setToast]         = useState<ToastState | null>(null);
   const [recIdMap, setRecIdMap]   = useState<Record<string, string>>({});
+  // Structural stop price captured per symbol from the active TradeCard's "Check
+  // structure" — attached to the position if/when that symbol is sent to the
+  // broker. Only ever populated for whichever symbol is/was the active card, since
+  // "Check structure" is a single-card, user-triggered action (see TradeCard's
+  // onStructuralStopChange doc comment). Undefined (never fetched/reset) leaves a
+  // symbol's entry untouched rather than clearing it, so navigating away and back
+  // to an already-checked candidate doesn't lose its captured level.
+  const [structuralStopBySymbol, setStructuralStopBySymbol] = useState<Record<string, number | null>>({});
+  // The onStructuralStopChange prop passed to TradeCard below is a fresh inline
+  // closure every render (matching this file's existing style for onSendToBroker
+  // etc.), and TradeCard's own effect depends on that prop reference — so calling
+  // this on every invocation, unconditionally, would re-trigger a parent render
+  // every time TradeCard re-renders for ANY reason, which re-creates the prop,
+  // which re-fires the effect... an infinite loop once structuralStop first
+  // settles to a non-undefined value. Bailing out (returning the SAME `prev`
+  // object) when the value hasn't actually changed breaks that cascade: React
+  // skips the re-render on an identical state reference, so a no-op call here
+  // is genuinely a no-op, not just a smaller one.
+  const handleStructuralStopChange = (symbol: string, stop: { price: number } | null | undefined) => {
+    if (stop === undefined) return;
+    const next = stop?.price ?? null;
+    setStructuralStopBySymbol((prev) => (prev[symbol] === next ? prev : { ...prev, [symbol]: next }));
+  };
 
   useEffect(() => {
     setRecIdMap((prev) => {
@@ -463,6 +487,7 @@ export default function Step7Page() {
       pnlDollar:     0,
       pnlPct:        0,
       stop:          card.exit.invalidation,
+      structuralStop: structuralStopBySymbol[card.symbol] ?? null,
       targets:       card.exit.targets,
       status:        card.finalStatus,
       ivRank:        cd?.ivRank,
@@ -564,7 +589,8 @@ export default function Step7Page() {
       // One canonical recId per order: addPosition syncs it to the backend
       // (a single POST), so there is no second POST to conflict (409) with.
       const recId = recIdMap[o.card.symbol] ?? generateRecId();
-      const res = await addPosition({ ...positionFromOrder(o), recId });
+      const structuralStop = structuralStopBySymbol[o.card.symbol] ?? null;
+      const res = await addPosition({ ...positionFromOrder(o, structuralStop), recId });
 
       if (res.status === 'rejected') {
         // Backend refused it and the optimistic row was dropped — a real failure.
@@ -667,6 +693,7 @@ export default function Step7Page() {
               onSendToBroker={() => !basketEmpty && !basketPlansPending && setDialogOpen(true)}
               sendLabel={sendLabel}
               sendDisabled={basketEmpty || basketPlansPending}
+              onStructuralStopChange={(stop) => handleStructuralStopChange(effectiveCard.symbol, stop)}
             />
           )}
           {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (

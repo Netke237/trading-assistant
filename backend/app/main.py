@@ -63,6 +63,17 @@ async def lifespan(app: FastAPI):
             "Run with --workers 1 or migrate to a shared lock backend.",
             _web_concurrency,
         )
+    # ── One-time settings migrations (see app/services/settings_migrations.py
+    # for why these must run exactly once, ever, not on every startup) ────────
+    try:
+        from pathlib import Path as _Path
+        from app.services.settings_migrations import migrate_structural_stop_breached_enabled_types
+        migrate_structural_stop_breached_enabled_types(
+            _Path(__file__).parent.parent / "config" / "settings.yaml"
+        )
+    except Exception as _exc:
+        logger.warning("settings.yaml migration failed: %s", _exc)
+
     from app.routers.scan import restore_from_db, _scheduler, _scheduled_scan
     from app.routers.stock_scan import restore_stock_from_db
     status = await restore_from_db()

@@ -204,6 +204,10 @@ export interface PortfolioPosition {
   pnlDollar:     number;
   pnlPct:        number;
   stop:          number | null;
+  /** Structural (order-block/swing) stop level — set only when "Check structure"
+   *  was run on the trade card before sending to broker. Optional/opt-in, unlike
+   *  `stop` (the premium-based invalidation). */
+  structuralStop?: number | null;
   targets:       TargetLevel[];
   status:        Status;
   // Options-specific fields surfaced in the portfolio table.
@@ -488,6 +492,7 @@ export interface AlertConfig {
 export type AlertType =
   | 'TP_HIT'
   | 'STOP_REACHED'
+  | 'STRUCTURAL_STOP_BREACHED'
   | 'PREMIUM_STOP'
   | 'TIME_STOP_APPROACHING'
   | 'EARNINGS_APPROACHING'

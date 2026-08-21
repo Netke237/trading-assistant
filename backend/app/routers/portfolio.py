@@ -155,6 +155,7 @@ async def add_position(
     # a position could be approved against one price and stored at a materially
     # different one, silently bypassing the exposure gate.
     adjusted_stop = body.stop
+    adjusted_structural_stop = body.structuralStop
     adjusted_targets = list(body.targets or [])
     entry_stock_price = body.scanStockPrice
     entry_price = body.entryPrice
@@ -188,6 +189,8 @@ async def add_position(
         delta = live_price - body.scanStockPrice
         if adjusted_stop is not None:
             adjusted_stop = round(adjusted_stop + delta, 2)
+        if adjusted_structural_stop is not None:
+            adjusted_structural_stop = round(adjusted_structural_stop + delta, 2)
         adjusted_targets = [
             {
                 **t,
@@ -248,6 +251,7 @@ async def add_position(
         qty=risk.adjusted_size or body.qty,
         entry_date=body.entryDate,
         stop=adjusted_stop,
+        structural_stop=adjusted_structural_stop,
         targets=adjusted_targets,
         dte_total=body.dteTotal,
         entry_stock_price=entry_stock_price,

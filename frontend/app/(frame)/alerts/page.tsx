@@ -41,6 +41,7 @@ function fmtDate(iso: string): string {
 const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   TP_HIT:                 'Target reached',
   STOP_REACHED:           'Stop-loss breach',
+  STRUCTURAL_STOP_BREACHED: 'Structural stop breach',
   PREMIUM_STOP:           'Premium stop',
   TIME_STOP_APPROACHING:  'Time stop approaching',
   TIME_STOP:              'Time stop (≤3 DTE)',

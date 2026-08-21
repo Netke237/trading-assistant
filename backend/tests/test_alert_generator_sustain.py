@@ -69,6 +69,31 @@ async def test_stop_reached_clock_resets_when_price_recovers():
 
 
 @pytest.mark.asyncio
+async def test_structural_stop_breached_not_fired_on_first_sustain_check():
+    """Mirrors the STOP_REACHED sustain tests above -- _sustained() is generic
+    over alert_type (keyed purely by the string passed in), so this proves the
+    same debounce mechanics apply to STRUCTURAL_STOP_BREACHED, not just the
+    alert type the mechanism happened to be built against."""
+    Session = await _make_session_factory()
+    async with Session() as db:
+        db.add(_position(structural_stop=135.0))
+        await db.commit()
+        alerts = await generate_alerts(db, {'AAPL': 130.0}, sustain_minutes=5)
+    assert not any(a.alertType == 'STRUCTURAL_STOP_BREACHED' for a in alerts)
+
+
+@pytest.mark.asyncio
+async def test_structural_stop_breached_fires_after_sustain_window_elapses():
+    Session = await _make_session_factory()
+    async with Session() as db:
+        past = (datetime.now(timezone.utc) - timedelta(minutes=6)).isoformat()
+        db.add(_position(structural_stop=135.0, alert_state={'STRUCTURAL_STOP_BREACHED': past}))
+        await db.commit()
+        alerts = await generate_alerts(db, {'AAPL': 130.0}, sustain_minutes=5)
+    assert any(a.alertType == 'STRUCTURAL_STOP_BREACHED' for a in alerts)
+
+
+@pytest.mark.asyncio
 async def test_zero_sustain_minutes_fires_instantly_as_before():
     Session = await _make_session_factory()
     async with Session() as db:

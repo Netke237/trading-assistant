@@ -20,6 +20,7 @@ type BackendPosition = {
   qty: number;
   entryDate: string;
   stop: number | null;
+  structuralStop?: number | null;
   targets: TargetLevel[];
   dteTotal: number | null;
   createdAt: string;
@@ -47,6 +48,7 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     entryDate:    p.entryDate,
     expiry,
     stop:         p.stop,
+    structuralStop: p.structuralStop ?? null,
     targets:      p.targets ?? [],
     dteTotal:     p.dteTotal ?? 0,
     dteRemaining: p.dteRemaining ?? 0,
@@ -120,6 +122,7 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     qty:            p.contracts ?? 1,
     entryDate:      p.entryDate ?? new Date().toISOString().slice(0, 10),
     stop:           p.stop != null && p.stop > 0 ? p.stop : null,
+    structuralStop: p.structuralStop != null && p.structuralStop > 0 ? p.structuralStop : null,
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,

@@ -17,6 +17,7 @@ alert_delivery:
   enabledTypes:
     - TP_HIT
     - STOP_REACHED
+    - STRUCTURAL_STOP_BREACHED
     - PREMIUM_STOP
     - TIME_STOP
     - EVENT_RISK
