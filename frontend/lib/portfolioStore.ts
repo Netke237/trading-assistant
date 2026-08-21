@@ -315,6 +315,13 @@ async function _flushOne(recId: string): Promise<void> {
   const run = async (): Promise<void> => {
     if (previous) await previous.catch(() => {});
     const result = await patchPosition(recId, entry.payload);
+    // `cancelPendingPositionPatch` (called by closePosition/closePositionRemote)
+    // only drops a not-yet-sent debounced edit — it can't cancel one already
+    // in flight. If the position was closed while this PATCH was in the air,
+    // the edit is moot: don't surface a "could not be saved" toast for a row
+    // the user just successfully closed, and don't bother resyncing it back.
+    const stillOpen = usePortfolioStore.getState().positions.some((p) => p.recId === recId);
+    if (!stillOpen) return;
     if (!result.ok) {
       usePortfolioStore.setState({
         lastSyncError: {

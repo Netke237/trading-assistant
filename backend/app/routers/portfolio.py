@@ -32,6 +32,15 @@ import logging as _logging
 _log = _logging.getLogger(__name__)
 
 
+# A stock price is never <= 0, so a non-positive stop/structuralStop can only
+# mean "unset" — used at both the creation (POST) and edit (PATCH) boundaries
+# so neither can persist a value that would make STOP_REACHED / STRUCTURAL_
+# STOP_BREACHED's `is not None` gate treat a Bearish position as permanently
+# breached (referencePrice >= 0 is true for any real price).
+def _floor_stop(value: Optional[float]) -> Optional[float]:
+    return value if value is not None and value > 0 else None
+
+
 # ── Broker integration (NOT ACTIVE YET) ───────────────────────────────────────
 # Future feature: when a trade is closed, optionally route the closing order to
 # the connected broker — mirrors the "Send basket to broker" flow in Step 7,
@@ -251,8 +260,8 @@ async def add_position(
         entry_price=entry_price,
         qty=risk.adjusted_size or body.qty,
         entry_date=body.entryDate,
-        stop=adjusted_stop,
-        structural_stop=adjusted_structural_stop,
+        stop=_floor_stop(adjusted_stop),
+        structural_stop=_floor_stop(adjusted_structural_stop),
         targets=adjusted_targets,
         dte_total=body.dteTotal,
         entry_stock_price=entry_stock_price,
@@ -372,16 +381,9 @@ async def update_position(
         else:
             position.qty = qty
     if "stop" in updates:
-        # A stock price is never <= 0, so treat one the same as "unset" —
-        # matches structuralStop's existing "0 means none" convention below,
-        # and stops a cleared-then-abandoned edit (a client-side control
-        # briefly holding 0 while a user retypes the value) from persisting a
-        # stop that both alert engines' `stop is not None` gate would then
-        # treat as permanently breached for a Bearish position.
-        stop = updates["stop"]
-        position.stop = stop if stop is not None and stop > 0 else None
+        position.stop = _floor_stop(updates["stop"])
     if "structuralStop" in updates:
-        position.structural_stop = updates["structuralStop"]
+        position.structural_stop = _floor_stop(updates["structuralStop"])
     if "targets" in updates:
         position.targets = updates["targets"]
 

@@ -1163,6 +1163,52 @@ describe('portfolioStore', () => {
       });
     });
 
+    it('does not surface an error or force a resync for a PATCH whose position was closed while in flight', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-CLOSED', contract: 'AAPL 190C 05/16' });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+
+      let resolvePatch: (() => void) | null = null;
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockImplementation((_url: string, init?: { method?: string }) => {
+          if ((init?.method ?? 'GET') === 'PATCH') {
+            return new Promise((resolve) => {
+              resolvePatch = () => resolve(jsonResponse({ detail: 'rejected' }, false, 422));
+            });
+          }
+          return Promise.resolve(jsonResponse([]));
+        });
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { stop: 100 });
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+      // PATCH is now in flight, unresolved.
+
+      // The position is removed locally (e.g. a close completing) while that
+      // stale PATCH is still in the air — cancelPendingPositionPatch can only
+      // drop a not-yet-sent edit, not one already sent.
+      act(() => {
+        usePortfolioStore.setState({ positions: [] });
+      });
+
+      await act(async () => {
+        resolvePatch?.();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(usePortfolioStore.getState().lastSyncError).toBeNull();
+      const getCalls = (global.fetch as jest.Mock).mock.calls.filter(
+        ([, init]) => (init?.method ?? 'GET') === 'GET'
+      );
+      expect(getCalls).toHaveLength(0); // no moot forced resync for a row that's already gone
+    });
+
     it('flushPendingPositionPatches sends immediately without waiting for the debounce', async () => {
       const { flushPendingPositionPatches } = await import('@/lib/portfolioStore');
       const { result } = renderHook(() => usePortfolioStore());
