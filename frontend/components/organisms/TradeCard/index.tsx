@@ -13,7 +13,7 @@ import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk } from '@/lib/risk';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
-import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate } from '@/types/domain';
+import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageTarget } from '@/types/domain';
 import {
   triggerDetailText,
   pullbackDetailText,
@@ -68,8 +68,9 @@ function computeEditedRR(
   overlay: EditOverlay,
   data: TradeCardData,
 ): { rr: number; model: string } {
-  const risk = overlay.entryLimit;
-  if (risk <= 0) return { rr: 0, model: 'Edit (delta approx)' };
+  const entryPrice = overlay.entryLimit;
+  const riskBasis = overlay.premiumStop;
+  if (entryPrice <= 0 || riskBasis <= 0) return { rr: 0, model: 'Edit (delta approx)' };
   if (overlay.targets.length === 0) return { rr: data.rrRatio, model: data.rrModel };
 
   const cd = data.contractDetails;
@@ -84,12 +85,15 @@ function computeEditedRR(
       ? 0.5
       : 0.3;
   const priceMove = Math.abs(targetStockPrice - currentStockPrice);
-  const estOptionPrice = Math.max(0.01, risk + delta * priceMove);
-  const reward = estOptionPrice - risk;
-  // Mirrors the backend's reward_risk.py M2 fix: a negative reward's sign/
-  // magnitude is preserved, not flattened to 0 (risk<=0 above is the only
-  // genuinely not-computable case).
-  const rr = Math.round((reward / risk) * 100) / 100;
+  const estOptionPrice = Math.max(0.01, entryPrice + delta * priceMove);
+  const reward = estOptionPrice - entryPrice;
+  // Risk basis is the planned dollar stop (premiumStop), not the full entry
+  // price — matches the backend's estimate_rr(): risk = current_premium *
+  // premium_stop_pct. Mirrors the backend's reward_risk.py M2 fix: a
+  // negative reward's sign/magnitude is preserved, not flattened to 0
+  // (entryPrice<=0 or riskBasis<=0 above are the only genuinely
+  // not-computable cases).
+  const rr = Math.round((reward / riskBasis) * 100) / 100;
 
   return { rr, model: 'Edit (delta approx)' };
 }
@@ -113,19 +117,36 @@ function recomputeTargetEstOption(
 }
 
 function rrContribution(
-  targetStockPrice: number,
   estOptionPrice: number,
   entryLimit: number,
+  riskBasis: number,
 ): number {
+  // Risk basis is the planned dollar stop (entryLimit * premium_stop_pct,
+  // already computed backend-side and surfaced as overlay.premiumStop) —
+  // NOT the full entry price. Matches the backend's own reward_risk.py
+  // estimate_targets(): risk_basis = current_premium * premium_stop_pct.
   // Mirrors the backend's reward_risk.py M2 fix: a negative reward's sign/
   // magnitude is preserved, not flattened to 0 — a target priced below entry
   // is a real loss the trader should see, not an indistinguishable "no data".
-  // Only risk<=0 (a degenerate/missing entry price) is genuinely not
-  // computable.
-  const risk = entryLimit;
-  const reward = estOptionPrice - risk;
-  if (risk <= 0) return 0;
-  return Math.round((reward / risk) * 10) / 10;
+  // Guards both operands (not just riskBasis) for symmetry with
+  // computeEditedRR's equivalent guard, even though today's UI already
+  // clamps entryLimit to a positive minimum before it can reach here.
+  if (riskBasis <= 0 || entryLimit <= 0) return 0;
+  const reward = estOptionPrice - entryLimit;
+  return Math.round((reward / riskBasis) * 10) / 10;
+}
+
+function normalizeStructuralStopResponse(res: {
+  available: boolean;
+  price: number | null;
+  source: 'order_block' | 'swing_low' | 'swing_high' | null;
+  confidence: number | null;
+  distancePct: number | null;
+}): StructuralStop | null {
+  return res.available && res.price != null && res.source != null
+    && res.confidence != null && res.distancePct != null
+    ? { price: res.price, source: res.source, confidence: res.confidence, distancePct: res.distancePct }
+    : null;
 }
 
 interface TradeCardProps {
@@ -136,6 +157,11 @@ interface TradeCardProps {
   sendDisabled?: boolean;
   contracts?: number;
   onEditsChange?: (overlay: EditOverlay) => void;
+  /** Fired whenever the "Check structure" result changes for the current contract
+   *  (including being reset to `undefined` on a contract switch, or `null` when no
+   *  structural level was found) — lets the parent capture the level so it can be
+   *  attached to the position if/when this trade is sent to the broker. */
+  onStructuralStopChange?: (stop: StructuralStop | null | undefined) => void;
 }
 
 function targetStatusTooltip(statusVal: TargetLevel['status']): string {
@@ -156,6 +182,7 @@ export function TradeCard({
   sendDisabled,
   contracts: initialContracts = 1,
   onEditsChange,
+  onStructuralStopChange,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
   const [altOpen, setAltOpen] = useState(false);
@@ -228,6 +255,33 @@ export function TradeCard({
   useEffect(() => () => structuralRequestRef.current?.abort(), []);
   useEffect(() => () => firstPassageRequestRef.current?.abort(), []);
 
+  // Surface every structuralStop change (including the reset to `undefined`/`null`
+  // above) to the parent, so it can attach the level to the position if/when this
+  // trade is sent to the broker — TradeCard itself never writes back to `data`.
+  //
+  // Deliberately split into two effects (a ref sync + a ref-reading effect)
+  // instead of one effect depending on both `structuralStop` and
+  // `onStructuralStopChange`: the parent (step-7-trade-card/page.tsx) passes a
+  // fresh inline closure on every render, bound to whatever symbol is active
+  // AT THAT RENDER. On a Prev/Next contract switch, `data`/`onStructuralStopChange`
+  // update in one commit, but `structuralStop` itself doesn't reset until the
+  // contract-change effect ABOVE schedules it — a full render later. A single
+  // effect keyed on both would fire in that in-between commit using THIS
+  // render's (new-symbol) callback together with the STALE (old-symbol)
+  // structuralStop value still sitting in state, silently attaching the old
+  // candidate's structural stop price to the new one. Keying the
+  // value-surfacing effect on `structuralStop` ALONE — reading the callback
+  // out of a ref that a separate, harmless effect keeps current — means it
+  // only ever fires when the state itself genuinely changes, by which point
+  // the ref has already caught up to the current symbol's callback.
+  const onStructuralStopChangeRef = useRef(onStructuralStopChange);
+  useEffect(() => {
+    onStructuralStopChangeRef.current = onStructuralStopChange;
+  }, [onStructuralStopChange]);
+  useEffect(() => {
+    onStructuralStopChangeRef.current?.(structuralStop);
+  }, [structuralStop]);
+
   const estimateFirstPassage = useCallback(async () => {
     firstPassageRequestRef.current?.abort();
     const controller = new AbortController();
@@ -248,12 +302,52 @@ export function TradeCard({
         api.getContractQuote(data.symbol, cd.strike, cd.expiry, cd.right, controller.signal).catch(() => null),
       ]);
       if (controller.signal.aborted) return;
+      const referenceStockPrice = stockQuote?.price ?? data.price;
       const premium = contractQuote?.price ?? cd.mid;
       const delta = contractQuote?.delta ?? cd.delta;
+
+      // The Profit Targets card always shows R:R-vs-structural-stop alongside
+      // the estimate now. If it hasn't already been fetched separately
+      // (structuralStop is still the initial "never fetched" sentinel,
+      // undefined), fetch it here too — reusing referenceStockPrice (just
+      // obtained above) instead of an independent getStockQuote call, so
+      // this adds exactly one extra network call, not two. Fired once per
+      // Estimate click, not on every render/navigation — same click-gated
+      // model as before, just triggered from one button instead of two.
+      // Deliberately not awaited before continuing to the first-passage
+      // fetch below — it manages its own loading/error state independently
+      // via structuralRequestRef, same as a manual "Check structure" click
+      // would, and that ref-swap means the existing contract-change cleanup
+      // effect still aborts it correctly if the user navigates away.
+      if (structuralStop === undefined && !structuralLoading) {
+        structuralRequestRef.current?.abort();
+        const structuralController = new AbortController();
+        structuralRequestRef.current = structuralController;
+        setStructuralLoading(true);
+        setStructuralError(false);
+        api.getStructuralStop({
+          symbol: data.symbol,
+          direction: data.direction,
+          stock_price: referenceStockPrice,
+        }, structuralController.signal)
+          .then((res) => {
+            if (structuralController.signal.aborted) return;
+            setStructuralStop(normalizeStructuralStopResponse(res));
+            setStructuralStopStockPrice(referenceStockPrice);
+          })
+          .catch(() => {
+            if (structuralController.signal.aborted) return;
+            setStructuralError(true);
+          })
+          .finally(() => {
+            if (!structuralController.signal.aborted) setStructuralLoading(false);
+          });
+      }
+
       const res = await api.getFirstPassageEstimate({
         symbol: data.symbol,
         direction: data.direction,
-        stock_price: stockQuote?.price ?? data.price,
+        stock_price: referenceStockPrice,
         strike: cd.strike,
         dte: cd.dte,
         premium,
@@ -276,7 +370,7 @@ export function TradeCard({
     } finally {
       if (!controller.signal.aborted) setFirstPassageLoading(false);
     }
-  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, targetPct]);
+  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, targetPct, structuralStop, structuralLoading]);
 
   // R:R using the structural stop (order block / swing level) as the risk
   // basis instead of the original fixed "premium * 60%" assumption — only
@@ -332,12 +426,7 @@ export function TradeCard({
         stock_price: referenceStockPrice,
       }, controller.signal);
       if (controller.signal.aborted) return;
-      setStructuralStop(
-        res.available && res.price != null && res.source != null
-          && res.confidence != null && res.distancePct != null
-          ? { price: res.price, source: res.source, confidence: res.confidence, distancePct: res.distancePct }
-          : null,
-      );
+      setStructuralStop(normalizeStructuralStopResponse(res));
       setStructuralStopStockPrice(referenceStockPrice);
     } catch {
       if (controller.signal.aborted) return;
@@ -618,7 +707,7 @@ export function TradeCard({
         </section>
 
         {/* 5c. Profit-target first-passage estimate */}
-        <section className={styles.planCard}>
+        <section className={`${styles.planCard} ${styles.fullWidth}`}>
           <Text size={14} weight={600}>Profit Targets</Text>
           <Text size={10} tone="dim">Monte Carlo estimate — independent of the Sell-to-Close Plan below; the two can disagree.</Text>
           <div className={styles.targetPctRow}>
@@ -656,45 +745,43 @@ export function TradeCard({
             {firstPassageError && (
               <Text size={11} tone="reject">Couldn&apos;t compute an estimate — try again.</Text>
             )}
-            {firstPassage && (
-              <dl className={styles.kvList}>
-                {firstPassage.targets.map((t, i) => (
-                  <KV
-                    key={`${t.pct}-${i}`}
-                    label={`T${Math.round(t.pct * 100)}% — probability of hitting before expiry`}
-                    value={
-                      t.stockPrice != null
-                        ? `$${t.stockPrice.toFixed(2)} · ${(t.probability * 100).toFixed(0)}% · ${t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}`
-                        : `not reachable in this timeframe · ${(t.probability * 100).toFixed(0)}%`
-                    }
-                    mono
-                  />
-                ))}
-                <KV
-                  label="Probability of hitting invalidation before expiry"
-                  value={`${(firstPassage.invalidation.probability * 100).toFixed(0)}% · ${firstPassage.invalidation.expectedDays != null ? `~${Math.round(firstPassage.invalidation.expectedDays)}d` : 'unlikely'}`}
-                  mono
-                />
-              </dl>
-            )}
-            {!structuralRR && (structuralStop || firstPassage) && (
-              <Text size={11} tone="dim">
-                Check structure and Estimate first to see R:R against the structural stop.
-              </Text>
-            )}
-            {structuralRR && (
-              <dl className={styles.kvList}>
-                {structuralRR.map((r, i) => (
-                  <KV
-                    key={`${r.pct}-${i}`}
-                    label={`T${Math.round(r.pct * 100)}% R:R vs. structural stop`}
-                    value={r.rr != null ? `${r.rr.toFixed(1)}×` : '—'}
-                    mono
-                  />
-                ))}
-              </dl>
-            )}
           </div>
+          {firstPassage && (
+            <div className={styles.targetsTable}>
+              {firstPassage.targets.map((t, i) => (
+                <ProfitTargetRow
+                  key={`${t.pct}-${i}`}
+                  target={t}
+                  structuralRRValue={structuralRR?.find((r) => r.pct === t.pct)?.rr ?? null}
+                  structuralPending={structuralLoading}
+                  structuralUnavailable={structuralStop === null}
+                  structuralZeroRisk={
+                    structuralStop != null && structuralStopStockPrice != null
+                    && firstPassageContext != null && structuralRR == null && !structuralLoading
+                  }
+                />
+              ))}
+              <div className={styles.targetRow}>
+                <div className={styles.targetMain}>
+                  <div className={styles.targetId}>
+                    <Text size={12} weight={600}>Invalidation</Text>
+                  </div>
+                  <div className={styles.targetValues}>
+                    <KV
+                      label="Probability before expiry"
+                      value={`${(firstPassage.invalidation.probability * 100).toFixed(0)}%`}
+                      mono
+                    />
+                    <KV
+                      label="Expected time"
+                      value={firstPassage.invalidation.expectedDays != null ? `~${Math.round(firstPassage.invalidation.expectedDays)}d` : 'unlikely'}
+                      mono
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* 5b. Sell-to-close plan */}
@@ -709,6 +796,7 @@ export function TradeCard({
                 index={i}
                 editedStockPrice={overlay.targets[i] ?? t.targetPrice ?? t.stockPrice}
                 entryLimit={overlay.entryLimit}
+                premiumStop={overlay.premiumStop}
                 data={data}
                 onStockPriceChange={(v) => {
                   const next = [...overlay.targets];
@@ -825,6 +913,7 @@ function EditableTargetRow({
   index,
   editedStockPrice,
   entryLimit,
+  premiumStop,
   data,
   onStockPriceChange,
   totalContracts,
@@ -833,6 +922,7 @@ function EditableTargetRow({
   index: number;
   editedStockPrice: number;
   entryLimit: number;
+  premiumStop: number;
   data: TradeCardData;
   onStockPriceChange: (v: number) => void;
   totalContracts: number;
@@ -868,7 +958,7 @@ function EditableTargetRow({
     ? recomputeTargetEstOption(editedStockPrice, entryLimit, data)
     : (target.estimatedOptionPrice ?? 0);
 
-  const rr = rrContribution(editedStockPrice, estOptionPrice, entryLimit);
+  const rr = rrContribution(estOptionPrice, entryLimit, premiumStop);
 
   const statusVal = target.status;
   const rowTone = statusVal === 'HIT' ? 'pass' : statusVal === 'MISSED' ? 'reject' : undefined;
@@ -925,7 +1015,7 @@ function EditableTargetRow({
           {estOptionPrice > 0 && (
             <KV label="Est. option" value={`$${estOptionPrice.toFixed(2)}`} mono tone={rowTone} />
           )}
-          {estOptionPrice > 0 && entryLimit > 0 && (
+          {estOptionPrice > 0 && entryLimit > 0 && premiumStop > 0 && (
             <KV label="R:R" value={`${rr.toFixed(1)}x`} mono tone={rr < 0 ? 'reject' : undefined} />
           )}
           {target.contractsToSell !== undefined && (
@@ -1109,6 +1199,61 @@ function KV({
       {mono
         ? <Data size={13} weight={500} tone={tone}>{value}</Data>
         : <Text size={13} weight={500}>{value}</Text>}
+    </div>
+  );
+}
+
+function ProfitTargetRow({
+  target,
+  structuralRRValue,
+  structuralPending,
+  structuralUnavailable,
+  structuralZeroRisk,
+}: {
+  target: FirstPassageTarget;
+  structuralRRValue: number | null;
+  structuralPending: boolean;
+  structuralUnavailable: boolean;
+  structuralZeroRisk: boolean;
+}) {
+  const label = `T${Math.round(target.pct * 100)}%`;
+  // Order matters: a stop that resolved to exactly the current stock price
+  // (structuralZeroRisk) is a completed check with an undefined ratio, not
+  // "not yet checked" — it must be distinguished from the true not-yet-run
+  // fallback ('—', which should be unreachable once every real state above
+  // it is covered, kept only as a defensive catch-all).
+  const structuralValue = structuralRRValue != null
+    ? `${structuralRRValue.toFixed(1)}×`
+    : structuralPending
+      ? 'Checking…'
+      : structuralUnavailable
+        ? 'No structural stop found'
+        : structuralZeroRisk
+          ? 'N/A (stop = price)'
+          : '—';
+
+  return (
+    <div className={styles.targetRow}>
+      <div className={styles.targetMain}>
+        <div className={styles.targetId}>
+          <Text size={12} weight={600}>{label}</Text>
+        </div>
+        <div className={styles.targetValues}>
+          <KV label="Est. option" value={`$${target.optionPrice.toFixed(2)}`} mono />
+          <KV
+            label="Stock price"
+            value={target.stockPrice != null ? `$${target.stockPrice.toFixed(2)}` : 'not reachable'}
+            mono
+          />
+          <KV label="Probability" value={`${(target.probability * 100).toFixed(0)}%`} mono />
+          <KV
+            label="Expected time"
+            value={target.expectedDays != null ? `~${Math.round(target.expectedDays)}d` : 'unlikely'}
+            mono
+          />
+          <KV label="R:R vs. structural stop" value={structuralValue} mono />
+        </div>
+      </div>
     </div>
   );
 }

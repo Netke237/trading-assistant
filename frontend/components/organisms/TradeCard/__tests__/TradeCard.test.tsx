@@ -95,19 +95,19 @@ describe('TradeCard', () => {
   it('shows a negative per-target R:R instead of hiding the row (M2 parity)', () => {
     // Mirrors the backend's reward_risk.py M2 fix: a target priced below
     // entry (estimatedOptionPrice=1.0 < entry.limit=2.5, reward=-1.5,
-    // rr=-1.5/2.5=-0.6) is a real loss the trader should see, not silently
-    // omitted the way `rr > 0`-gated rendering used to.
+    // rr=-1.5/premiumStop(1.5)=-1.0) is a real loss the trader should see,
+    // not silently omitted the way `rr > 0`-gated rendering used to.
     const dataWithLosingTarget: TradeCardData = {
       ...mockTradeCard,
       exit: {
         ...mockTradeCard.exit,
         targets: [
-          { id: 'tp1', stockPrice: 195.0, targetPrice: 195.0, estimatedOptionPrice: 1.0, contractsToSell: 1, status: 'PENDING', rrContribution: -0.6 },
+          { id: 'tp1', stockPrice: 195.0, targetPrice: 195.0, estimatedOptionPrice: 1.0, contractsToSell: 1, status: 'PENDING', rrContribution: -1.0 },
         ],
       },
     };
     render(<TradeCard data={dataWithLosingTarget} />);
-    expect(screen.getByText('-0.6x')).toBeInTheDocument();
+    expect(screen.getByText('-1.0x')).toBeInTheDocument();
   });
 
   it('renders symbol and company in header', () => {
@@ -155,6 +155,14 @@ describe('TradeCard', () => {
     (api.getStockQuote as jest.Mock).mockResolvedValue({ symbol: 'AAPL', price: mockTradeCard.price });
     (api.getContractQuote as jest.Mock).mockResolvedValue({
       price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    // Default: no structural stop found. Estimate now auto-triggers this
+    // fetch (Task 4) whenever it hasn't already been fetched, so every test
+    // that clicks "Estimate" needs a resolvable mock even if it doesn't care
+    // about structural-stop content. Individual tests override with their
+    // own mockResolvedValueOnce for the structural-stop-specific assertions.
+    (api.getStructuralStop as jest.Mock).mockResolvedValue({
+      available: false, price: null, source: null, confidence: null, distancePct: null,
     });
   });
 
@@ -256,6 +264,42 @@ describe('TradeCard', () => {
     expect(screen.queryByText(/Structural stop — Order Block/)).not.toBeInTheDocument();
   });
 
+  it('does not surface the previous candidate\'s structural stop to the new one after switching', async () => {
+    // Regression test: the parent (step-7-trade-card/page.tsx) passes a fresh
+    // onStructuralStopChange closure on every render, bound to whichever
+    // symbol is currently active — CandidateNav's Prev/Next changes `data`
+    // AND that closure in the same commit, one render before the
+    // contract-change effect resets local `structuralStop` state back to
+    // undefined. A version of this wiring that read the callback straight out
+    // of props (instead of via a ref updated in its own effect) fired the
+    // surfacing effect using THAT commit's new-symbol callback together with
+    // the STILL-STALE old-symbol structuralStop value, silently attaching the
+    // previous candidate's price to the new one.
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6,
+    });
+    const onChangeForAAPL = jest.fn();
+    const { rerender } = render(<TradeCard data={mockTradeCard} onStructuralStopChange={onChangeForAAPL} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    });
+    await waitFor(() => {
+      expect(onChangeForAAPL).toHaveBeenCalledWith(expect.objectContaining({ price: 178.5 }));
+    });
+
+    // Switch to a different, never-checked candidate — a fresh callback,
+    // exactly as the real parent would pass.
+    const nextCard: TradeCardData = { ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT 300C 06/19' };
+    const onChangeForMSFT = jest.fn();
+    rerender(<TradeCard data={nextCard} onStructuralStopChange={onChangeForMSFT} />);
+
+    await waitFor(() => {
+      expect(onChangeForMSFT).toHaveBeenCalled();
+    });
+    expect(onChangeForMSFT).not.toHaveBeenCalledWith(expect.objectContaining({ price: 178.5 }));
+  });
+
   it('renders an Estimate button that does not fire on its own', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByRole('button', { name: /^estimate$/i })).toBeInTheDocument();
@@ -298,12 +342,16 @@ describe('TradeCard', () => {
       );
     });
     await waitFor(() => {
-      expect(screen.getByText(/T20% — probability of hitting before expiry/)).toBeInTheDocument();
+      expect(screen.getByText('T20%')).toBeInTheDocument();
     });
-    expect(screen.getByText('$190.50 · 72% · ~5d')).toBeInTheDocument();
-    expect(screen.getByText('$193.20 · 55% · ~9d')).toBeInTheDocument();
-    expect(screen.getByText('not reachable in this timeframe · 10%')).toBeInTheDocument();
-    expect(screen.getByText('30% · ~4d')).toBeInTheDocument();
+    expect(screen.getByText('$3.30')).toBeInTheDocument();     // T20% Est. option
+    expect(screen.getByText('$190.50')).toBeInTheDocument();   // T20% Stock price
+    expect(screen.getByText('72%')).toBeInTheDocument();       // T20% Probability
+    expect(screen.getByText('~5d')).toBeInTheDocument();       // T20% Expected time
+    expect(screen.getByText('$193.20')).toBeInTheDocument();   // T35% Stock price
+    expect(screen.getByText('not reachable')).toBeInTheDocument(); // T50% Stock price (null)
+    expect(screen.getByText('30%')).toBeInTheDocument();       // Invalidation probability
+    expect(screen.getByText('~4d')).toBeInTheDocument();       // Invalidation expected time
     // Purely additive: the premium-based invalidation must be untouched.
     expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
   });
@@ -367,10 +415,10 @@ describe('TradeCard', () => {
       });
     });
 
-    expect(screen.queryByText(/T20% — probability of hitting before expiry/)).not.toBeInTheDocument();
+    expect(screen.queryByText('T20%')).not.toBeInTheDocument();
   });
 
-  it('shows a hint instead of R:R vs structural stop until both checks have run', async () => {
+  it('shows no Profit Targets rows (and no stale two-click hint) until Estimate has been run', async () => {
     (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
       available: true, price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6,
     });
@@ -379,8 +427,11 @@ describe('TradeCard', () => {
     await waitFor(() => {
       expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
     });
-    expect(screen.getByText(/Check structure and Estimate first to see R:R/)).toBeInTheDocument();
+    // Check structure alone (no Estimate click yet) — no Profit Targets rows,
+    // no leftover "click both" hint text (removed as part of this redesign).
+    expect(screen.queryByText(/Check structure and Estimate first/)).not.toBeInTheDocument();
     expect(screen.queryByText(/R:R vs\. structural stop/)).not.toBeInTheDocument();
+    expect(screen.queryByText('T20%')).not.toBeInTheDocument();
   });
 
   it('computes R:R vs structural stop using the FRESH quotes, not the stale scan-time values', async () => {
@@ -414,7 +465,7 @@ describe('TradeCard', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
     await waitFor(() => {
-      expect(screen.getByText('T20% R:R vs. structural stop')).toBeInTheDocument();
+      expect(screen.getAllByText('R:R vs. structural stop').length).toBe(3);
     });
 
     // stockMove = |190 - 200| = 10; deltaEst = 0.5; risk = 5.0
@@ -455,7 +506,7 @@ describe('TradeCard', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
     await waitFor(() => {
-      expect(screen.getByText('T20% R:R vs. structural stop')).toBeInTheDocument();
+      expect(screen.getAllByText('R:R vs. structural stop').length).toBeGreaterThanOrEqual(1);
     });
 
     // stockMove = |190 - 200| = 10; deltaEst = 0.5; risk = 5.0
@@ -494,7 +545,7 @@ describe('TradeCard', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
     await waitFor(() => {
-      expect(screen.getByText('T20% R:R vs. structural stop')).toBeInTheDocument();
+      expect(screen.getAllByText('R:R vs. structural stop').length).toBeGreaterThanOrEqual(1);
     });
 
     // risk = min(50 * 0.5, 5.0) = 5.0 (clamped, not 25.0)
@@ -529,10 +580,17 @@ describe('TradeCard', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
     await waitFor(() => {
-      expect(screen.getByText(/T20% — probability of hitting before expiry/)).toBeInTheDocument();
+      expect(screen.getByText('T20%')).toBeInTheDocument();
     });
 
-    expect(screen.queryByText(/R:R vs\. structural stop/)).not.toBeInTheDocument();
+    // structuralRR is null when stockMove is 0 (division guard in the
+    // useMemo), but the structural stop WAS found and both checks HAVE
+    // completed — ProfitTargetRow's structuralZeroRisk branch distinguishes
+    // this from "not checked yet", so every row shows the explicit
+    // "N/A (stop = price)" placeholder rather than an actual ratio. (Not
+    // asserting a page-wide absence of "×" text here — the top Risk/Reward
+    // badge legitimately renders its own unrelated ratio, e.g. "2.5×".)
+    expect(screen.getAllByText('N/A (stop = price)').length).toBe(3);
   });
 
   it('does not affect the original R:R card or the sell-to-close R:R column', async () => {
@@ -558,12 +616,13 @@ describe('TradeCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
     await waitFor(() => screen.getByText(/Structural stop — Order Block/));
     fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
-    await waitFor(() => screen.getByText('T20% R:R vs. structural stop'));
+    await waitFor(() => screen.getAllByText('R:R vs. structural stop'));
 
     // The top Risk/Reward card (fixed ladder) is untouched.
     expect(screen.getByText('2.5×')).toBeInTheDocument();
-    // The Sell-to-Close-Plan's own per-target R:R (rrContribution: 1.0 in the fixture) is untouched.
-    expect(screen.getByText('1.0x')).toBeInTheDocument();
+    // The Sell-to-Close-Plan's own per-target R:R now uses premiumStop (1.5)
+    // as its risk basis: reward=5.0-2.5=2.5, rr=2.5/1.5=1.666...→1.7.
+    expect(screen.getByText('1.7x')).toBeInTheDocument();
   });
 
   it('renders sell-to-close plan with editable target', () => {
