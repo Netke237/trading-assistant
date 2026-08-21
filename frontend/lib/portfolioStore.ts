@@ -117,14 +117,19 @@ function accountValue(): number {
 // alertEngine.ts's `stop != null` gate treats an unfloored 0 as a permanent
 // STOP_REACHED/STRUCTURAL_STOP_BREACHED for a Bearish position, so this must
 // run at EVERY point a stop value enters store state, not just the ones that
-// happen to go over the network. That completeness claim was wrong three
-// times before it was actually true (rounds 2-4 each missed a site) — so
-// this is an exhaustive, checkable list, not prose to trust on faith. Call
-// sites, kept in sync with the code, not just this comment:
+// happen to go over the network. A "this is now the complete list" comment
+// here has been wrong FOUR times running (rounds 2-5 each missed at least
+// one site — most recently addPosition's own optimistic set(), which let
+// paperTrade.ts's buildPaperStockPosition() send stop: 0 straight into live
+// state for every paper stock buy). Treat any future "found the last one"
+// claim, including this one, as unverified until re-derived from the code —
+// this list is a snapshot, not a guarantee:
 //   - fromBackend (GET /api/portfolio reconcile — syncFromBackend)
 //   - toBackendPayload (POST /api/portfolio)
 //   - toUpdatePayload (PATCH /api/portfolio/{recId})
 //   - updatePosition's optimistic set() (local state, before the PATCH fires)
+//   - addPosition's optimistic set() (local state, before the POST fires)
+//   - hydrate (no live caller today, floored anyway — the next one may not audit first)
 //   - migratePortfolioPersist (localStorage version migration)
 //   - the persist `merge` callback (every rehydration, migration or not —
 //     the backstop for a pre-round-2 stop:0 already sitting in a browser)
@@ -507,9 +512,11 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
       clearSyncError: () => set({ lastSyncError: null }),
       hydrate: (positions) =>
         set({
-          positions: positions.map((p) =>
-            (p as PortfolioPosition).recId ? p : { ...p, recId: generateRecId() }
-          ),
+          positions: positions.map((p) => ({
+            ...((p as PortfolioPosition).recId ? p : { ...p, recId: generateRecId() }),
+            stop: floorStop(p.stop),
+            structuralStop: floorStop(p.structuralStop),
+          })),
         }),
       addPosition: async (p, opts) => {
         const recId = (p as PortfolioPosition & { recId?: string }).recId || generateRecId();
@@ -530,6 +537,14 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         set((s) => {
           const incoming: PortfolioPosition = {
             ...p, recId, syncStatus: 'pending', syncPendingSince: Date.now(),
+            // Round-6 audit finding: this optimistic write landed the caller's
+            // raw stop/structuralStop straight into live state, unfloored —
+            // paperTrade.ts's buildPaperStockPosition() sends stop: 0 for
+            // every paper stock buy, and this was the one write site that
+            // let it straight through to a real false STOP_REACHED on the
+            // dashboard before the next sync corrected it.
+            stop: floorStop(p.stop),
+            structuralStop: floorStop(p.structuralStop),
           };
 
           const idxByRecId = s.positions.findIndex((x) => x.recId === recId);

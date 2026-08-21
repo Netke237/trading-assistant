@@ -93,6 +93,33 @@ describe('portfolioStore', () => {
     expect(result.current.positions[0].symbol).toBe('AAPL');
   });
 
+  it('floors stop/structuralStop of 0 in addPosition\'s own optimistic write', async () => {
+    // Round-6 audit finding: buildPaperStockPosition (paperTrade.ts) sends
+    // stop: 0 for every paper stock buy, and addPosition's optimistic set()
+    // was the one write site of eight that let it straight through to live
+    // state, unfloored — a real false STOP_REACHED on the dashboard for a
+    // Bearish position, before the next sync corrected it.
+    const { result } = renderHook(() => usePortfolioStore());
+
+    await act(async () => {
+      await result.current.addPosition(makePosition({ direction: 'Bearish', stop: 0, structuralStop: 0 }));
+    });
+
+    expect(result.current.positions[0].stop).toBeNull();
+    expect(result.current.positions[0].structuralStop).toBeNull();
+  });
+
+  it('floors stop/structuralStop of 0 passed to hydrate', () => {
+    const { result } = renderHook(() => usePortfolioStore());
+
+    act(() => {
+      result.current.hydrate([makePosition({ recId: 'REC-HYDRATE-ZERO', stop: 0, structuralStop: 0 })]);
+    });
+
+    expect(result.current.positions[0].stop).toBeNull();
+    expect(result.current.positions[0].structuralStop).toBeNull();
+  });
+
   it('merges duplicate contracts by adding contract counts', async () => {
     const { result } = renderHook(() => usePortfolioStore());
 
