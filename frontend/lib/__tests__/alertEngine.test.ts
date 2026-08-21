@@ -2,11 +2,17 @@ import { scanPortfolio, type AlertPosition } from '@/lib/alertEngine';
 import { useScanStore } from '@/lib/scanStore';
 
 function makePosition(overrides: Partial<AlertPosition> = {}): AlertPosition {
+  // Defaults currentStockPrice to currentPrice so pre-existing tests that don't care about the
+  // premium-vs-stock-price distinction keep exercising STOP_REACHED/TP_HIT via an explicit
+  // currentStockPrice, not the (now-guarded) fallback. Tests that DO care pass currentStockPrice
+  // explicitly in overrides, which wins over this default.
+  const currentPrice = overrides.currentPrice ?? 90;
   return {
     recId: 'r1',
     symbol: 'NVDA',
     contract: 'NVDA|100|2026-12-18|C',
-    currentPrice: 90,
+    currentPrice,
+    currentStockPrice: currentPrice,
     entryPrice: 5,
     stop: 95,          // currentPrice 90 <= stop 95  => STOP_REACHED
     targets: [],
@@ -156,8 +162,104 @@ describe('scanPortfolio', () => {
 
   // currentStockPrice: an option position's `currentPrice` is the PREMIUM, not comparable to
   // `stop` (always a stock price) — see alertEngine.ts's STOP_REACHED comment. These tests cover
-  // the fix directly; every test above this point deliberately never sets `currentStockPrice`,
-  // so the fallback (`currentStockPrice ?? currentPrice`) keeps them passing unmodified.
+  // the fix directly; every test above this point relies on makePosition()'s default, which
+  // mirrors currentStockPrice to currentPrice so it isn't exercising the premium/stock distinction.
+  it('does NOT fire STOP_REACHED on an option position with no currentStockPrice (fresh open, or a stuck quote fetch)', () => {
+    // The FTNT case: currentPrice is still the entry premium ($14), currentStockPrice is unset —
+    // either because the position was just opened and no live underlying quote has landed yet,
+    // or because the quote fetch has been failing outright. Either way, without the
+    // hasReferencePrice guard the premium gets compared against the stock-price stop and
+    // falsely breaches it.
+    const position = makePosition({
+      currentPrice: 14.18,       // option premium, not a stock price
+      currentStockPrice: undefined,
+      stop: 146.27,
+      direction: 'Bullish',
+    });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(false);
+  });
+
+  it('does NOT fire TP_HIT on an option position with no currentStockPrice', () => {
+    // currentPrice (10) is set ABOVE the target (8) deliberately: without the hasReferencePrice
+    // guard, the old fallback (currentStockPrice ?? currentPrice) would use the premium as
+    // referencePrice and satisfy `10 >= 8`, firing a false TP_HIT — so this actually fails if
+    // the guard regresses, unlike a premium-below-target value which passes either way.
+    const position = makePosition({
+      currentPrice: 10,
+      currentStockPrice: undefined,
+      targets: [{ id: 't1', stockPrice: 8, contractsToSell: 1, status: 'PENDING' }],
+      direction: 'Bullish',
+    });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(false);
+  });
+
+  it('does NOT fire STRUCTURAL_STOP_BREACHED on an option position with no currentStockPrice', () => {
+    const position = makePosition({
+      currentPrice: 5,
+      currentStockPrice: undefined,
+      stop: null,
+      structuralStop: 100,
+      direction: 'Bullish',
+    });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'STRUCTURAL_STOP_BREACHED')).toBe(false);
+  });
+
+  it('does NOT fire STOP_REACHED on an option position when currentStockPrice is literally 0', () => {
+    // Nothing in the backend currently sends currentStockPrice: 0 (a failed fetch omits the
+    // field entirely) — but hasReferencePrice treats 0 the same as unset for both branches on
+    // purpose, so this pins that in case a future change ever does send a literal 0.
+    const position = makePosition({
+      currentPrice: 5,
+      currentStockPrice: 0,
+      stop: 140,
+      direction: 'Bullish',   // 0 <= 140 would satisfy a Bullish STOP_REACHED without the guard
+    });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(false);
+  });
+
+  it('does NOT fire STOP_REACHED on a stock position when currentPrice is 0 (failed quote fetch)', () => {
+    // portfolioStore.ts coerces a missing/failed price to 0 (`p.currentPrice ?? 0`) — 0 is never
+    // a real stock price, and without the isStock branch of hasReferencePrice this would satisfy
+    // `0 <= stop` for essentially any Bullish stop and fire immediately.
+    const position = makePosition({
+      contract: 'NVDA|STOCK',
+      currentPrice: 0,
+      stop: 95,
+      direction: 'Bullish',
+    });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(false);
+  });
+
+  it('does NOT fire TP_HIT on a stock position when currentPrice is 0 (failed quote fetch)', () => {
+    // Same isStock branch of hasReferencePrice as the STOP_REACHED case above, covered
+    // separately since TP_HIT/STOP_REACHED/STRUCTURAL_STOP_BREACHED could regress independently.
+    const position = makePosition({
+      contract: 'NVDA|STOCK',
+      currentPrice: 0,
+      targets: [{ id: 't1', stockPrice: 8, contractsToSell: 1, status: 'PENDING' }],
+      direction: 'Bearish',   // 0 <= 8 would satisfy a Bearish TP_HIT without the guard
+    });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(false);
+  });
+
+  it('does NOT fire STRUCTURAL_STOP_BREACHED on a stock position when currentPrice is 0 (failed quote fetch)', () => {
+    const position = makePosition({
+      contract: 'NVDA|STOCK',
+      currentPrice: 0,
+      stop: null,
+      structuralStop: 95,
+      direction: 'Bullish',
+    });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'STRUCTURAL_STOP_BREACHED')).toBe(false);
+  });
+
   it('uses currentStockPrice, not the option premium, for STOP_REACHED on an option position', () => {
     // Premium (currentPrice) is far below any realistic stop — if the bug were still present
     // this would fire immediately. The real stock price is what must be compared.

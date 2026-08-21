@@ -58,16 +58,27 @@ export function scanPortfolio(
     // `currentPrice` is the option PREMIUM, not comparable to either — use `currentStockPrice`
     // (the live underlying price fetched separately by the backend) instead. For a stock
     // position (`|STOCK` contract) `currentPrice` already IS the stock price, so it's used
-    // directly. Falls back to `currentPrice` when `currentStockPrice` is unset (stale cached
-    // data pre-dating this fix, or a failed live fetch) — this matches prior behavior rather
-    // than silently skipping the check; do not "fix" this fallback away, every pre-existing
-    // test in alertEngine.test.ts relies on it.
+    // directly. `hasReferencePrice` suppresses these checks when no usable reference price is
+    // available yet — for an option leg, that's `currentStockPrice` still unset (position just
+    // opened and no live underlying quote has landed, or the quote fetch has been failing);
+    // for a stock leg, `currentPrice` gets coerced to 0 on a failed fetch (portfolioStore.ts:
+    // `p.currentPrice ?? 0`), and 0 is never a real stock price. `currentStockPrice` gets the
+    // same `> 0` treatment for consistency, even though nothing currently sends it as exactly 0
+    // — no reason for the two branches to rely on different "no real price" sentinels. Without
+    // this guard a stale/missing reference price gets compared against the stop/target directly
+    // — that false-fired a STOP_REACHED on a brand-new FTNT position where the $14 premium
+    // tripped a $146 stock-price stop before the live underlying quote had loaded.
     const isStock = p.contract.endsWith('|STOCK');
-    const referencePrice = isStock ? p.currentPrice : (p.currentStockPrice ?? p.currentPrice);
+    const hasReferencePrice = isStock ? p.currentPrice > 0 : (p.currentStockPrice ?? 0) > 0;
+    // NaN, not p.currentPrice, when unusable: every consumer below already gates on
+    // hasReferencePrice, but a future check added without that gate should get a value that
+    // safely compares false everywhere (NaN <= x and NaN >= x are both false) instead of
+    // silently falling back to the option premium — the exact bug this guard exists to prevent.
+    const referencePrice = hasReferencePrice ? (isStock ? p.currentPrice : p.currentStockPrice!) : NaN;
 
     // TP_HIT — direction-aware: bullish targets are above current price, bearish below
     const firstTarget = p.targets[0];
-    const tpHit = firstTarget
+    const tpHit = hasReferencePrice && firstTarget
       ? (isBearish ? referencePrice <= firstTarget.stockPrice : referencePrice >= firstTarget.stockPrice)
       : false;
     if (tpHit) {
@@ -91,7 +102,7 @@ export function scanPortfolio(
     // once `AlertPosition.stop`/`PortfolioPosition.stop` stopped being coerced
     // from null to 0 upstream in portfolioStore.ts).
     const stop = p.stop;
-    const stopBreached = stop != null && (isBearish ? referencePrice >= stop : referencePrice <= stop);
+    const stopBreached = hasReferencePrice && stop != null && (isBearish ? referencePrice >= stop : referencePrice <= stop);
     if (stopBreached && stop != null) {
       out.push({
         recId: p.recId,
@@ -111,7 +122,7 @@ export function scanPortfolio(
     // premium-based invalidation. `structuralStop != null` guards positions where
     // "Check structure" was never run before sending to broker — optional, unlike `stop`.
     const structuralStop = p.structuralStop;
-    const structuralBreached = structuralStop != null && (isBearish ? referencePrice >= structuralStop : referencePrice <= structuralStop);
+    const structuralBreached = hasReferencePrice && structuralStop != null && (isBearish ? referencePrice >= structuralStop : referencePrice <= structuralStop);
     if (structuralBreached && structuralStop != null) {
       out.push({
         recId: p.recId,
