@@ -12,6 +12,7 @@ problem for the frontend's own persisted config via a zustand version bump).
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import yaml
@@ -43,6 +44,7 @@ def migrate_structural_stop_breached_enabled_types(settings_path: Path) -> None:
             cfg["alert_delivery"] = delivery
 
     cfg["_settingsMigrations"] = [*done, STRUCTURAL_STOP_BREACHED_MIGRATION_ID]
-    with open(settings_path, "w") as f:
-        yaml.dump(cfg, f, default_flow_style=False)
+    tmp = settings_path.with_suffix(".yaml.tmp")
+    tmp.write_text(yaml.dump(cfg, default_flow_style=False))
+    os.replace(tmp, settings_path)
     logger.info("startup: ran one-time settings migration %s", STRUCTURAL_STOP_BREACHED_MIGRATION_ID)

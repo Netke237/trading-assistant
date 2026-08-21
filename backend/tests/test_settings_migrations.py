@@ -67,6 +67,22 @@ def test_noop_when_settings_file_does_not_exist(tmp_path):
     assert not settings_path.exists()
 
 
+def test_write_is_atomic_no_leftover_temp_file(tmp_path):
+    """Guards against a plain truncate-and-write, which two uvicorn workers
+    racing on startup (a supported deployment mode per main.py's own
+    WEB_CONCURRENCY warning) could interleave into corrupted YAML. The fix
+    writes to a .yaml.tmp sibling and os.replace()s it into place, so the
+    real path is never observed half-written and no temp file is left behind."""
+    settings_path = tmp_path / "settings.yaml"
+    _write(settings_path, {"alert_delivery": {"enabledTypes": ["TP_HIT", "STOP_REACHED"]}})
+
+    migrate_structural_stop_breached_enabled_types(settings_path)
+
+    assert not (tmp_path / "settings.yaml.tmp").exists()
+    cfg = _read(settings_path)
+    assert "STRUCTURAL_STOP_BREACHED" in cfg["alert_delivery"]["enabledTypes"]
+
+
 def test_noop_when_enabled_types_already_missing_or_not_a_list(tmp_path):
     """No alert_delivery block at all -- nothing to backfill, but the
     migration still must not raise, and marks itself done so it doesn't keep

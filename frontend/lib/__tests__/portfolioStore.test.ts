@@ -1036,6 +1036,133 @@ describe('portfolioStore', () => {
       expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('2 contracts');
     });
 
+    it('reverts the optimistic update via a forced resync when the backend rejects the PATCH', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({
+        recId: 'REC-PATCH-ROLLBACK', contract: 'AAPL 190C 05/16', symbol: 'AAPL', contracts: 5,
+      });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockImplementation((_url: string, init?: { method?: string }) => {
+          if ((init?.method ?? 'GET') === 'PATCH') {
+            return Promise.resolve(jsonResponse({ detail: 'exposure limit exceeded' }, false, 422));
+          }
+          // The forced resync (GET /api/portfolio) — the backend's true, unchanged qty.
+          return Promise.resolve(jsonResponse([{
+            ...makeBackendPosition(),
+            recId: 'REC-PATCH-ROLLBACK', contract: 'AAPL 190C 05/16', symbol: 'AAPL', qty: 5,
+          }]));
+        });
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { contracts: 20 });
+      });
+      // Optimistic update lands immediately, before the PATCH even fires.
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-ROLLBACK')?.contracts).toBe(20);
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const calls = (global.fetch as jest.Mock).mock.calls;
+      expect(calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(1);
+      expect(calls.filter(([, init]) => (init?.method ?? 'GET') === 'GET').length).toBeGreaterThanOrEqual(1);
+      // The rejected value must not linger — the forced resync snaps it back
+      // to what the backend actually holds, not just surface an error toast.
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-ROLLBACK')?.contracts).toBe(5);
+    });
+
+    it('serializes overlapping PATCHes so an in-flight edit is never overtaken by a newer one', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-RACE', contract: 'AAPL 190C 05/16' });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+
+      const calls: Array<{ body: unknown; resolve: () => void }> = [];
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockImplementation((_url: string, init?: { body?: string }) => new Promise((resolve) => {
+          calls.push({ body: JSON.parse(init!.body as string), resolve: () => resolve(jsonResponse({})) });
+        }));
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { stop: 100 });
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+      expect(calls).toHaveLength(1); // first PATCH sent, left unresolved (in flight)
+
+      // A second edit arrives WHILE the first PATCH is still in flight.
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { stop: 90 });
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+      // Must wait for the in-flight request rather than firing a second,
+      // independent one whose response could land before the first's.
+      expect(calls).toHaveLength(1);
+
+      await act(async () => {
+        calls[0].resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(calls).toHaveLength(2);
+      expect(calls[1].body).toEqual({ stop: 90 });
+
+      await act(async () => {
+        calls[1].resolve();
+        await Promise.resolve();
+      });
+    });
+
+    it('syncFromBackend keeps the local value while a PATCH is in flight, not only while debounced', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-INFLIGHT', contract: 'AAPL 190C 05/16', stop: 100 });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+
+      let resolvePatch: (() => void) | null = null;
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockImplementation((_url: string, init?: { method?: string }) => {
+          if ((init?.method ?? 'GET') === 'PATCH') {
+            return new Promise((resolve) => { resolvePatch = () => resolve(jsonResponse({})); });
+          }
+          // The poll — backend still has the OLD stop, since the in-flight
+          // PATCH hasn't landed yet.
+          return Promise.resolve(jsonResponse([{
+            ...makeBackendPosition(), recId: 'REC-PATCH-INFLIGHT', contract: 'AAPL 190C 05/16', stop: 100,
+          }]));
+        });
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { stop: 95 });
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-INFLIGHT')?.stop).toBe(95);
+
+      // The 30s poll fires while the PATCH above is still in flight.
+      await act(async () => {
+        await usePortfolioStore.getState().syncFromBackend();
+      });
+      expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-INFLIGHT')?.stop).toBe(95);
+
+      await act(async () => {
+        resolvePatch?.();
+        await Promise.resolve();
+      });
+    });
+
     it('flushPendingPositionPatches sends immediately without waiting for the debounce', async () => {
       const { flushPendingPositionPatches } = await import('@/lib/portfolioStore');
       const { result } = renderHook(() => usePortfolioStore());

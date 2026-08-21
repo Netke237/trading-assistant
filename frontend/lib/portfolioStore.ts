@@ -295,42 +295,70 @@ type PendingPatch = {
 // network-scheduling plumbing, not UI state.
 const _pendingPatches = new Map<string, PendingPatch>();
 
+// Tracks the in-flight PATCH request for a recId, from the moment it leaves
+// `_pendingPatches` (debounce fired) until its response settles. Two jobs:
+//  1. A second edit arriving mid-flight awaits this promise before sending its
+//     own PATCH, so responses can never resolve out of order and silently let
+//     an older edit overwrite a newer one.
+//  2. `syncFromBackend`'s poll guard checks this alongside `_pendingPatches` —
+//     without it, the poll's stale-value protection ends the instant the
+//     debounce timer fires, not once the request actually completes.
+const _inFlightPatches = new Map<string, Promise<void>>();
+
 async function _flushOne(recId: string): Promise<void> {
   const entry = _pendingPatches.get(recId);
   if (!entry) return;
   _pendingPatches.delete(recId);
-  const result = await patchPosition(recId, entry.payload);
-  if (!result.ok) {
-    usePortfolioStore.setState({
-      lastSyncError: {
-        symbol: entry.symbol,
-        contract: entry.contract,
-        detail: result.detail ?? 'Edit could not be saved',
-        at: Date.now(),
-      },
-    });
-    return;
-  }
-  if (result.adjustedQty != null) {
-    // The backend's exposure gate approved the qty increase at a SMALLER size
-    // than requested (mirrors addPosition's own adjustedQty handling above).
-    // Correct the local value immediately rather than leaving the drawer show
-    // the requested size until the next 30s sync poll silently snaps it back
-    // with no explanation — same failure mode Step 4 below prevents for an
-    // in-flight edit, but this is a resolved edit the poll would otherwise
-    // still be free to overwrite without warning.
-    usePortfolioStore.setState((s) => ({
-      positions: s.positions.map((p) =>
-        p.recId === recId ? { ...p, contracts: result.adjustedQty } : p
-      ),
-      lastSyncError: {
-        symbol: entry.symbol,
-        contract: entry.contract,
-        detail: `Size reduced to ${result.adjustedQty} contracts to fit your exposure limit.`,
-        at: Date.now(),
-      },
-    }));
-  }
+
+  const previous = _inFlightPatches.get(recId);
+
+  const run = async (): Promise<void> => {
+    if (previous) await previous.catch(() => {});
+    const result = await patchPosition(recId, entry.payload);
+    if (!result.ok) {
+      usePortfolioStore.setState({
+        lastSyncError: {
+          symbol: entry.symbol,
+          contract: entry.contract,
+          detail: result.detail ?? 'Edit could not be saved',
+          at: Date.now(),
+        },
+      });
+      // The optimistic update `updatePosition` already applied locally was
+      // never true — the backend rejected it (e.g. the exposure gate on a qty
+      // increase). Force a resync so the drawer/table snap back to whatever
+      // the backend actually holds, rather than keeping the rejected value
+      // on screen until the next 30s poll happens to run.
+      void usePortfolioStore.getState().syncFromBackend(true);
+      return;
+    }
+    if (result.adjustedQty != null) {
+      // The backend's exposure gate approved the qty increase at a SMALLER size
+      // than requested (mirrors addPosition's own adjustedQty handling above).
+      // Correct the local value immediately rather than leaving the drawer show
+      // the requested size until the next 30s sync poll silently snaps it back
+      // with no explanation — same failure mode Step 4 below prevents for an
+      // in-flight edit, but this is a resolved edit the poll would otherwise
+      // still be free to overwrite without warning.
+      usePortfolioStore.setState((s) => ({
+        positions: s.positions.map((p) =>
+          p.recId === recId ? { ...p, contracts: result.adjustedQty } : p
+        ),
+        lastSyncError: {
+          symbol: entry.symbol,
+          contract: entry.contract,
+          detail: `Size reduced to ${result.adjustedQty} contracts to fit your exposure limit.`,
+          at: Date.now(),
+        },
+      }));
+    }
+  };
+
+  const promise = run().finally(() => {
+    if (_inFlightPatches.get(recId) === promise) _inFlightPatches.delete(recId);
+  });
+  _inFlightPatches.set(recId, promise);
+  return promise;
 }
 
 function scheduleRemotePositionPatch(
@@ -713,10 +741,11 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             const remote: BackendPosition[] = await res.json();
             const localForPending = usePortfolioStore.getState().positions;
             const remotePositions = remote.map(fromBackend).map((rp) => {
-              if (!_pendingPatches.has(rp.recId)) return rp;
-              // An edit for this row is debounced but hasn't reached the
-              // backend yet — keep the local value instead of snapping a
-              // focused input back to what the server still has.
+              if (!_pendingPatches.has(rp.recId) && !_inFlightPatches.has(rp.recId)) return rp;
+              // An edit for this row is debounced, or its PATCH is still in
+              // flight, and hasn't been confirmed by the backend yet — keep
+              // the local value instead of snapping a focused input back to
+              // what the server still has.
               return localForPending.find((p) => p.recId === rp.recId) ?? rp;
             });
             const remoteContracts = new Set(remotePositions.map((p) => p.contract));
