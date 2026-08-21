@@ -16,7 +16,7 @@ class PositionAlertHistoryModel(Base):
     app/services/position_alert_log.py for the writer and its own dedup.
 
     reference_value's unit depends on reference_kind:
-      "price" (TP_HIT/STOP_REACHED/PREMIUM_STOP) -> a dollar amount
+      "price" (TP_HIT/STOP_REACHED/STRUCTURAL_STOP_BREACHED/PREMIUM_STOP) -> a dollar amount
       "days"  (TIME_STOP/EVENT_RISK)              -> a day count
       "regime" (REGIME_CHANGE)                    -> unused, see `note`
     """

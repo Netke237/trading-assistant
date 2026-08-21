@@ -56,3 +56,105 @@ def test_intraday_omm_present_when_hmm_unavailable():
     assert omm["state"] in ("Bull", "Bear", "Choppy")
     assert 0.0 <= omm["p_stay"] <= 1.0
     assert omm["stability"] in ("Stable", "Fragile")
+
+
+def test_intraday_status_unavailable_when_hmmlearn_missing():
+    """hmmlearn absent → 'unavailable' + fit never attempted; OMM fallback still runs."""
+    import importlib.util as _ilu
+    from app.main import app
+
+    real_find_spec = _ilu.find_spec
+
+    def fake_find_spec(name, *args, **kwargs):
+        if name == "hmmlearn":
+            return None
+        return real_find_spec(name, *args, **kwargs)
+
+    with (
+        patch("app.routers.regime.fetch_intraday_candles", return_value=_make_bars(500)),
+        # create=True: regime.py only gains find_spec with the status-label fix —
+        # pre-fix this patch is inert; the RED comes from the mocked compute below.
+        patch("app.routers.regime.find_spec", side_effect=fake_find_spec, create=True),
+        patch("app.routers.regime.compute_intraday_hmm", return_value=None) as mock_hmm,
+        patch("app.routers.regime.fetch_candles", return_value=_make_bars(300)),
+        patch("app.routers.regime.fetch_price", return_value=None),
+    ):
+        client = TestClient(app)
+        resp = client.get("/api/regime")
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data.get("intraday_hmm_status") == "unavailable", data
+    mock_hmm.assert_not_called()   # hmmlearn "missing" → fit must not be attempted
+    assert data.get("intraday_omm") is not None, "OMM fallback must still run"
+
+
+def test_intraday_status_insufficient_when_few_bars():
+    """Fewer than MIN_BARS 15-min bars → 'insufficient_data' (a real data shortage)."""
+    from app.main import app
+
+    with (
+        patch("app.routers.regime.fetch_intraday_candles", return_value=_make_bars(100)),
+        patch("app.routers.regime.fetch_candles", return_value=_make_bars(300)),
+        patch("app.routers.regime.fetch_price", return_value=None),
+    ):
+        client = TestClient(app)
+        resp = client.get("/api/regime")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json().get("intraday_hmm_status") == "insufficient_data"
+
+
+def test_intraday_status_unavailable_when_fetch_empty():
+    """Zero intraday bars → 'unavailable'."""
+    from app.main import app
+
+    with (
+        patch("app.routers.regime.fetch_intraday_candles", return_value=[]),
+        patch("app.routers.regime.fetch_candles", return_value=_make_bars(300)),
+        patch("app.routers.regime.fetch_price", return_value=None),
+    ):
+        client = TestClient(app)
+        resp = client.get("/api/regime")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json().get("intraday_hmm_status") == "unavailable"
+
+
+def test_intraday_status_unavailable_when_fit_returns_none():
+    """hmmlearn present + enough bars + fit returns None → 'unavailable' (fit/env failure)."""
+    from app.main import app
+
+    with (
+        patch("app.routers.regime.fetch_intraday_candles", return_value=_make_bars(500)),
+        patch("app.routers.regime.compute_intraday_hmm", return_value=None),
+        patch("app.routers.regime.fetch_candles", return_value=_make_bars(300)),
+        patch("app.routers.regime.fetch_price", return_value=None),
+    ):
+        client = TestClient(app)
+        resp = client.get("/api/regime")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json().get("intraday_hmm_status") == "unavailable"
+
+
+def test_intraday_status_ok_when_hmm_succeeds():
+    """Fit succeeds → 'ok' and intraday_hmm payload populated."""
+    from app.main import app
+    from app.services.regime_hmm import HmmResult
+
+    fake_hmm = HmmResult(state="Trending", p_stay=0.9,
+                         p_transition=[{"to": "Choppy", "prob": 0.1}])
+    with (
+        patch("app.routers.regime.fetch_intraday_candles", return_value=_make_bars(500)),
+        patch("app.routers.regime.compute_intraday_hmm", return_value=fake_hmm),
+        patch("app.routers.regime.fetch_candles", return_value=_make_bars(300)),
+        patch("app.routers.regime.fetch_price", return_value=None),
+    ):
+        client = TestClient(app)
+        resp = client.get("/api/regime")
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data.get("intraday_hmm_status") == "ok"
+    assert data["intraday_hmm"]["state"] == "Trending"

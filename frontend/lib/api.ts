@@ -342,8 +342,10 @@ export const api = {
       rrRatio: number;
       rrModel: TradeCardData['rrModel'];
     }>('/api/contracts/recompute-plan', req, signal),
-  /** On-demand structural (order block / swing) invalidation lookup — fired only by the
-   *  trade card's "Check structure" button, never automatically. */
+  /** On-demand structural (order block / swing) invalidation lookup — fired by the
+   *  trade card's "Check structure" button, or by its "Estimate" button when a
+   *  structural stop hasn't been fetched yet for the current candidate. Never fired
+   *  automatically on candidate navigation. */
   getStructuralStop: (req: {
     symbol: string;
     direction: 'Bullish' | 'Bearish';

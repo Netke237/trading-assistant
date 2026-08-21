@@ -156,6 +156,42 @@ async def generate_alerts(
                 contract=pos.contract,
             ))
 
+        # STRUCTURAL_STOP_BREACHED — same direction-aware comparison as STOP_REACHED,
+        # but against the structural (order-block/swing) level instead of the
+        # premium-based invalidation. Optional: only fires for positions where the
+        # user ran "Check structure" before sending to the broker.
+        structural_breached_raw = (
+            (price >= pos.structural_stop) if is_bearish
+            else (price <= pos.structural_stop)
+        ) if (pos.structural_stop is not None and price is not None) else False
+        if pos.structural_stop is not None and price is not None and _sustained("STRUCTURAL_STOP_BREACHED", structural_breached_raw):
+            counter += 1
+            log_event("alert_fired", pos.rec_id, {
+                "symbol": symbol,
+                "alertType": "STRUCTURAL_STOP_BREACHED",
+                "price": price,
+                "structuralStop": pos.structural_stop,
+                "direction": pos.direction,
+            })
+            await log_position_alert(
+                db, rec_id=pos.rec_id, symbol=symbol, alert_type="STRUCTURAL_STOP_BREACHED",
+                source="backend", price=price, reference_value=pos.structural_stop,
+                reference_kind="price", direction=pos.direction, contract=pos.contract,
+            )
+            alerts.append(AlertItem(
+                id=f"a{counter}",
+                kind="Critical",
+                symbol=symbol,
+                reason=f"Structural stop breached — {symbol} {'above' if is_bearish else 'below'} ${pos.structural_stop:.2f} (price ${price:.2f})",
+                timestamp=now_iso,
+                recId=pos.rec_id,
+                alertType="STRUCTURAL_STOP_BREACHED",
+                price=price,
+                referenceValue=pos.structural_stop,
+                direction=pos.direction,
+                contract=pos.contract,
+            ))
+
         # PREMIUM_STOP
         premium_hit_raw = bool(
             opt_price is not None and pos.entry_price > 0

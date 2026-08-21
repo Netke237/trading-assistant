@@ -109,6 +109,57 @@ async def test_stop_reached_fires(db_session):
     assert "Stop breached" in stop_alerts[0].reason
 
 
+# ── Test 2b: STRUCTURAL_STOP_BREACHED when current_price <= structural_stop ────
+
+@pytest.mark.asyncio
+async def test_structural_stop_breached_fires(db_session):
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(db_session, symbol="AAPL", structural_stop=182.0)
+    prices = {"AAPL": 181.0}
+    alerts = await generate_alerts(db_session, prices)
+    structural_alerts = [a for a in alerts if a.alertType == "STRUCTURAL_STOP_BREACHED"]
+    assert len(structural_alerts) == 1
+    assert structural_alerts[0].kind == "Critical"
+    assert "Structural stop breached" in structural_alerts[0].reason
+
+
+# ── Test 2c: STRUCTURAL_STOP_BREACHED does not fire when unset (optional field) ─
+
+@pytest.mark.asyncio
+async def test_structural_stop_breached_absent_when_unset(db_session):
+    from app.services.alert_generator import generate_alerts
+    # structural_stop left at its default (None) -- position never ran "Check structure".
+    await _insert_position(db_session, symbol="AAPL", stop=180.0)
+    prices = {"AAPL": 100.0}   # far below every plausible stop -- would fire if the guard were missing
+    alerts = await generate_alerts(db_session, prices)
+    assert not [a for a in alerts if a.alertType == "STRUCTURAL_STOP_BREACHED"]
+
+
+# ── Test 2d: Short stock STRUCTURAL_STOP_BREACHED fires on price rise, not fall ─
+
+@pytest.mark.asyncio
+async def test_short_stock_structural_stop_triggers_on_price_rise(db_session):
+    """Mirrors test_short_stock_stop_triggers_on_price_rise for STOP_REACHED:
+    a short (Bearish) position's structural stop must trigger when price rises
+    above it, not below."""
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(
+        db_session, symbol="XYZ", contract="XYZ|STOCK", direction="Bearish",
+        stop=None, structural_stop=105.0, targets=[],
+    )
+
+    # Price rose above the short's structural stop (105) -> must alert.
+    alerts = await generate_alerts(db_session, current_prices={"XYZ": 106.0})
+    structural_alerts = [a for a in alerts if a.alertType == "STRUCTURAL_STOP_BREACHED"]
+    assert len(structural_alerts) == 1
+    assert structural_alerts[0].symbol == "XYZ"
+    assert "above" in structural_alerts[0].reason
+
+    # Price still below it -> must not alert.
+    alerts = await generate_alerts(db_session, current_prices={"XYZ": 104.0})
+    assert not [a for a in alerts if a.alertType == "STRUCTURAL_STOP_BREACHED"]
+
+
 # ── Test 3: PREMIUM_STOP when option has lost >= 60% of entry premium ──────────
 
 @pytest.mark.asyncio

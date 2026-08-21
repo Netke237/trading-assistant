@@ -193,9 +193,21 @@ export interface PortfolioPosition {
   dteTotal:      number;
   entryPrice:    number;
   currentPrice: number;
+  /** Live underlying stock price, refreshed on every portfolio sync — distinct from
+   *  `scanStockPrice` (the one-time anchor captured when the position was opened).
+   *  For a stock position this always mirrors `currentPrice` (including its 0.0
+   *  fallback on a failed quote fetch — unchanged pre-existing behavior for stock
+   *  legs). For an option position it's fetched separately since `currentPrice`
+   *  there is the option premium; undefined there on stale/pre-fix cached data or
+   *  when the live underlying-price fetch specifically failed. */
+  currentStockPrice?: number;
   pnlDollar:     number;
   pnlPct:        number;
   stop:          number | null;
+  /** Structural (order-block/swing) stop level — set only when "Check structure"
+   *  was run on the trade card before sending to broker. Optional/opt-in, unlike
+   *  `stop` (the premium-based invalidation). */
+  structuralStop?: number | null;
   targets:       TargetLevel[];
   status:        Status;
   // Options-specific fields surfaced in the portfolio table.
@@ -480,6 +492,7 @@ export interface AlertConfig {
 export type AlertType =
   | 'TP_HIT'
   | 'STOP_REACHED'
+  | 'STRUCTURAL_STOP_BREACHED'
   | 'PREMIUM_STOP'
   | 'TIME_STOP_APPROACHING'
   | 'EARNINGS_APPROACHING'

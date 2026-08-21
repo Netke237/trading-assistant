@@ -735,6 +735,17 @@ describe('portfolioStore', () => {
       expect(usePortfolioStore.getState().positions).toHaveLength(0);
     });
 
+    it('maps currentStockPrice from the backend response, not currentPrice', async () => {
+      usePortfolioStore.setState({ positions: [] } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(
+        jsonResponse([{ ...makeBackendPosition(), currentPrice: 5.25, currentStockPrice: 182.4 }])
+      );
+      await usePortfolioStore.getState().syncFromBackend();
+      const p = usePortfolioStore.getState().positions[0];
+      expect(p.currentPrice).toBe(5.25);
+      expect(p.currentStockPrice).toBe(182.4);   // must NOT equal currentPrice
+    });
+
     it('keeps a row synced AFTER this GET started (poll-race safe)', async () => {
       usePortfolioStore.setState({
         positions: [mkLocal('FRESH', { syncStatus: 'synced', syncedAt: Date.now() + 60_000 })],
@@ -856,6 +867,223 @@ describe('portfolioStore', () => {
       applyPersistedPosition({ ok: false, offline: true }, pos, addPosition);
 
       expect(addPosition).not.toHaveBeenCalledWith(pos, { skipPost: true });
+    });
+  });
+
+  // Every test below that needs the debounced patch to actually fire uses
+  // `await jest.advanceTimersByTimeAsync(600)`, NOT `jest.advanceTimersByTime(600)`
+  // followed by a bare `await Promise.resolve()`. The debounced callback chains
+  // through `_flushOne` -> `patchPosition`'s `await fetch()` -> `await res.json()`
+  // -> the outer `await patchPosition(...)` in `_flushOne` — more microtask turns
+  // than a single `Promise.resolve()` unwinds. `advanceTimersByTimeAsync` yields
+  // to the event loop after each timer fires, draining that whole chain before
+  // the `act()` block returns; using the sync form here would leave assertions
+  // that depend on a post-await side effect (e.g. `lastSyncError`) checking state
+  // before it actually updates.
+  describe('updatePosition persists to the backend', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.runOnlyPendingTimers();
+      jest.useRealTimers();
+    });
+
+    it('debounces a PATCH to /api/portfolio/{recId} after inactivity', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-1', contract: 'AAPL 190C 05/16' });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos] });
+      });
+
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue(jsonResponse({}));
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { stop: 185 });
+      });
+      expect(global.fetch).not.toHaveBeenCalled();
+
+      await act(async () => {
+        // The async variant (not sync advanceTimersByTime + one Promise.resolve())
+        // — see the note above the first test in this block for why.
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+      expect(url).toContain('/api/portfolio/REC-PATCH-1');
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body)).toEqual({ stop: 185 });
+    });
+
+    it('coalesces rapid edits into a single PATCH with the merged fields', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-2', contract: 'AAPL 190C 05/16' });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos] });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue(jsonResponse({}));
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { stop: 185 });
+      });
+      act(() => {
+        jest.advanceTimersByTime(200);
+        result.current.updatePosition('AAPL 190C 05/16', { structuralStop: 182 });
+      });
+
+      await act(async () => {
+        // The async variant (not sync advanceTimersByTime + one Promise.resolve())
+        // — see the note above the first test in this block for why.
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+      expect(JSON.parse(init.body)).toEqual({ stop: 185, structuralStop: 182 });
+    });
+
+    it('includes portfolioValue when the patch touches contracts (qty), for the backend risk re-check', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-QTY', contract: 'AAPL 190C 05/16' });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos] });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue(jsonResponse({}));
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { contracts: 3 });
+      });
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+      // portfolioValue: 50000 is set on useRiskStore in the outer beforeEach.
+      expect(JSON.parse(init.body)).toEqual({ qty: 3, portfolioValue: 50000 });
+    });
+
+    it('does not call the backend for a patch with no persistable fields', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-3', contract: 'AAPL 190C 05/16' });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos] });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue(jsonResponse({}));
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { currentPrice: 5.5, pnlDollar: 10, pnlPct: 1 });
+      });
+
+      await act(async () => {
+        // The async variant (not sync advanceTimersByTime + one Promise.resolve())
+        // — see the note above the first test in this block for why.
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('surfaces lastSyncError when the backend rejects the PATCH', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-4', contract: 'AAPL 190C 05/16', symbol: 'AAPL' });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue(jsonResponse({ detail: 'qty must be at least 1.' }, false, 422));
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { contracts: 0 });
+      });
+
+      await act(async () => {
+        // The async variant (not sync advanceTimersByTime + one Promise.resolve())
+        // — see the note above the first test in this block for why.
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      expect(usePortfolioStore.getState().lastSyncError?.detail).toBe('qty must be at least 1.');
+      expect(usePortfolioStore.getState().lastSyncError?.symbol).toBe('AAPL');
+    });
+
+    it('corrects local contracts and surfaces a notice when the backend soft-reduces a qty increase', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-ADJ', contract: 'AAPL 190C 05/16', contracts: 5 });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue(jsonResponse({ adjustedQty: 2 }));
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { contracts: 5 });
+      });
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      const updated = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-ADJ');
+      expect(updated?.contracts).toBe(2);
+      expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('2 contracts');
+    });
+
+    it('flushPendingPositionPatches sends immediately without waiting for the debounce', async () => {
+      const { flushPendingPositionPatches } = await import('@/lib/portfolioStore');
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-5', contract: 'AAPL 190C 05/16' });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos] });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue(jsonResponse({}));
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { stop: 185 });
+      });
+      expect(global.fetch).not.toHaveBeenCalled();
+
+      await act(async () => {
+        flushPendingPositionPatches('REC-PATCH-5');
+        await Promise.resolve();
+      });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('closePosition cancels a pending patch instead of sending it after the DELETE', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-6', contract: 'AAPL 190C 05/16' });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos] });
+      });
+      const fetchMock = jest.fn().mockResolvedValue(jsonResponse({}));
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { stop: 185 });
+      });
+      act(() => {
+        result.current.closePosition('AAPL 190C 05/16');
+      });
+
+      await act(async () => {
+        // The async variant (not sync advanceTimersByTime + one Promise.resolve())
+        // — see the note above the first test in this block for why.
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      // Only the DELETE fired — the debounced PATCH for the same recId was cancelled.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][1]?.method).toBe('DELETE');
     });
   });
 });

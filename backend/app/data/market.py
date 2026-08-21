@@ -610,8 +610,9 @@ def fetch_option_chain(
         except Exception:
             pass  # keep existing fallback values
 
-        # IBKR unavailable — try tastytrade's real IV Rank/Percentile before
-        # falling back to the raw-IV-as-proxy values set above.
+        # IBKR unavailable — try tastytrade's real IV Rank/Percentile (adapter
+        # returns 0-100 scale, normalized from tastytrade's 0-1 wire fractions)
+        # before falling back to the raw-IV-as-proxy values set above.
         if not _ibkr_iv:
             try:
                 from .tastytrade_iv import fetch_iv_metrics_tastytrade
@@ -1270,8 +1271,9 @@ async def fetch_option_chain_async(
         except Exception:
             pass
 
-        # IBKR unavailable — try tastytrade's real IV Rank/Percentile before
-        # falling back to the raw-IV-as-proxy values set above. Wrapped in
+        # IBKR unavailable — try tastytrade's real IV Rank/Percentile (adapter
+        # returns 0-100 scale, normalized from tastytrade's 0-1 wire fractions)
+        # before falling back to the raw-IV-as-proxy values set above. Wrapped in
         # asyncio.to_thread purely to avoid blocking this coroutine's event
         # loop while fetch_iv_metrics_tastytrade's run_coro() call blocks its
         # calling thread waiting on the shared bridge loop (Task 6).

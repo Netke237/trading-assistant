@@ -78,7 +78,7 @@ async def _run_once() -> None:
         return
 
     enabled_types: list[str] = delivery.get('enabledTypes', [
-        'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP', 'REGIME_CHANGE',
+        'TP_HIT', 'STOP_REACHED', 'STRUCTURAL_STOP_BREACHED', 'PREMIUM_STOP', 'TIME_STOP', 'REGIME_CHANGE',
     ])
 
     alerts: list[AlertItem] = []

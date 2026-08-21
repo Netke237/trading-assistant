@@ -49,6 +49,7 @@ class AlertNotifyRequest(BaseModel):
 _REFERENCE_KIND_BY_TYPE = {
     "TP_HIT": "price",
     "STOP_REACHED": "price",
+    "STRUCTURAL_STOP_BREACHED": "price",
     "PREMIUM_STOP": "price",
     "TIME_STOP": "days",
     "EVENT_RISK": "days",

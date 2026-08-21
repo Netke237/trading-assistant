@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from importlib.util import find_spec
+
 import numpy as np
 from fastapi import APIRouter, Query
 
@@ -10,7 +12,7 @@ _log = logging.getLogger(__name__)
 from app.schemas import MarketRegime, RegimeMetric, OmmData, IntraHmmData, IntraHmmTransition
 from app.data.market import fetch_price, fetch_candles, fetch_intraday_candles
 from app.services.regime_omm import compute_omm
-from app.services.regime_hmm import compute_intraday_hmm
+from app.services.regime_hmm import MIN_BARS as HMM_MIN_BARS, compute_intraday_hmm
 from app.services.regime_hmm_daily import compute_directional_hmm as _compute_directional_hmm, alignment as _regime_alignment
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -229,20 +231,34 @@ async def get_regime(
     try:
         intra_bars = await asyncio.to_thread(fetch_intraday_candles, 'SPY', interval='15min', days=55)
         if intra_bars:
-            result_hmm = compute_intraday_hmm(intra_bars)
-            if result_hmm:
-                intraday_hmm_out = IntraHmmData(
-                    state=result_hmm.state,
-                    p_stay=result_hmm.p_stay,
-                    p_transition=[
-                        IntraHmmTransition(to=t['to'], prob=t['prob'])
-                        for t in result_hmm.p_transition
-                    ],
-                )
-                intraday_hmm_status = 'ok'
-            else:
-                # Fetch returned some bars but HMM returned None (insufficient_data)
+            if len(intra_bars) < HMM_MIN_BARS:
+                # Genuinely not enough 15-min history to fit the model
                 intraday_hmm_status = 'insufficient_data'
+            elif find_spec('hmmlearn') is None:
+                # Model library not importable in this environment (e.g. backend
+                # started from the wrong venv) — not a data shortage
+                _log.warning("hmmlearn not importable — intraday HMM unavailable")
+                intraday_hmm_status = 'unavailable'
+            else:
+                result_hmm = compute_intraday_hmm(intra_bars)
+                if result_hmm:
+                    intraday_hmm_out = IntraHmmData(
+                        state=result_hmm.state,
+                        p_stay=result_hmm.p_stay,
+                        p_transition=[
+                            IntraHmmTransition(to=t['to'], prob=t['prob'])
+                            for t in result_hmm.p_transition
+                        ],
+                    )
+                    intraday_hmm_status = 'ok'
+                else:
+                    # Bars >= MIN_BARS and hmmlearn importable, yet no result —
+                    # environment/fit failure, not a data shortage
+                    _log.warning(
+                        "compute_intraday_hmm returned None with %d bars and hmmlearn present",
+                        len(intra_bars),
+                    )
+                    intraday_hmm_status = 'unavailable'
         # else: intra_bars is empty → status stays 'unavailable'
     except Exception:
         pass

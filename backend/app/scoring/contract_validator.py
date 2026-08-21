@@ -158,6 +158,17 @@ def _score_delta(contract: dict, cfg: dict) -> tuple[int, list[str]]:
 
 
 def _score_dte(contract: dict, cfg: dict) -> tuple[int, int, list[str]]:
+    # sr["preferred_dte_min"] intentionally equals cfg["hard_reject"]["min_dte"] in the
+    # shipped default (contract_rules.yaml) and in every override dte_window.py's
+    # widen_contract_overrides_for_dte() produces — that function always sets both to the
+    # same widened value on purpose (see its docstring). That makes the `dte < d_min` half
+    # of the distance-decay branch below unreachable today for any contract that has
+    # already cleared the hard-reject min_dte check. Left in place (not deleted): the
+    # `overrides` dict `validate_contract()` accepts (ScanRequest.overrides is an
+    # unconstrained free-form dict) already lets a caller set min_dte/preferred_dte_min
+    # independently, so a caller diverging them is a real reachable path via the public
+    # API today, not just a hypothetical future one — no shipped frontend code path does
+    # this yet, but this comment shouldn't claim otherwise.
     sr = cfg["soft_rank"]
     expiry_str = contract.get("expiry", "")
     flags = []
@@ -198,9 +209,16 @@ def _score_iv_rank(contract: dict, cfg: dict) -> tuple[int, list[str]]:
 
     max_pref = sr["preferred_iv_rank_max"]
     if iv_rank <= max_pref:
-        score = int(100 * (1 - iv_rank / max_pref))
+        # Denominator guard: max_pref == 0 divides by zero when iv_rank <= 0
+        # too. Upper-clamped to 100 since a very negative iv_rank would
+        # otherwise push the score above the function's 0-100 contract.
+        denom = max(max_pref, 1e-9)
+        score = max(0, min(100, int(100 * (1 - iv_rank / denom))))
     else:
-        score = max(0, int(20 * (1 - (iv_rank - max_pref) / (100 - max_pref))))
+        # Denominator guard: max_pref == 100 divides by zero for any rank > 100
+        # (reachable now that the tastytrade adapter no longer clamps).
+        denom = max(100 - max_pref, 1e-9)
+        score = max(0, min(100, int(20 * (1 - (iv_rank - max_pref) / denom))))
         flags.append("iv_rank_elevated")
     return score, flags
 
@@ -221,7 +239,8 @@ def validate_contract(
     Args:
         contract:    Option contract dict (see Section 3 for shape)
         stock_score: Aggregate stock score from StockScoreCard (0–100).
-                     Contracts are only recommended when stock_score >= 50.
+                     Contracts are only recommended when stock_score >= 55
+                     (matches the stock `pass` bar in scoring_rules.yaml).
         overrides:   Optional dict of hard-reject parameter overrides.
 
     Returns:
@@ -244,6 +263,7 @@ def validate_contract(
             elif key == "max_iv_rank":          hr["max_iv_rank"]            = float(val)
             elif key == "preferred_dte_min":    sr["preferred_dte_min"]      = int(val)
             elif key == "preferred_dte_max":    sr["preferred_dte_max"]      = int(val)
+            elif key == "min_stock_score":      hr["min_stock_score"]        = int(val)
     contract_id = _contract_id(contract)
 
     reject_reasons = _hard_reject_reasons(contract, cfg)

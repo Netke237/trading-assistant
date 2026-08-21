@@ -20,11 +20,13 @@ type BackendPosition = {
   qty: number;
   entryDate: string;
   stop: number | null;
+  structuralStop?: number | null;
   targets: TargetLevel[];
   dteTotal: number | null;
   createdAt: string;
   // Live fields enriched by GET /portfolio via Tradier
   currentPrice?: number;
+  currentStockPrice?: number | null;
   pnlDollar?: number;
   pnlPct?: number;
   dteRemaining?: number;
@@ -46,12 +48,14 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     entryDate:    p.entryDate,
     expiry,
     stop:         p.stop,
+    structuralStop: p.structuralStop ?? null,
     targets:      p.targets ?? [],
     dteTotal:     p.dteTotal ?? 0,
     dteRemaining: p.dteRemaining ?? 0,
     status:       'PENDING',
     recId:        p.recId,
     currentPrice: p.currentPrice ?? 0,
+    currentStockPrice: p.currentStockPrice ?? undefined,
     pnlDollar:    p.pnlDollar ?? 0,
     pnlPct:       p.pnlPct ?? 0,
     delta:        p.delta ?? undefined,
@@ -118,6 +122,7 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     qty:            p.contracts ?? 1,
     entryDate:      p.entryDate ?? new Date().toISOString().slice(0, 10),
     stop:           p.stop != null && p.stop > 0 ? p.stop : null,
+    structuralStop: p.structuralStop != null && p.structuralStop > 0 ? p.structuralStop : null,
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,
@@ -230,6 +235,139 @@ async function deletePosition(recId: string): Promise<void> {
   try {
     await fetch(`${_BASE_URL()}/api/portfolio/${recId}`, { method: 'DELETE' });
   } catch { /* network unavailable */ }
+}
+
+/** Whitelists the drawer's persistable fields out of an `updatePosition` patch.
+ *  `currentPrice`/`pnlDollar`/`pnlPct` are deliberately excluded — they're
+ *  live-computed by the backend from a broker quote on every GET, so a manual
+ *  override here would just be overwritten by the next sync anyway.
+ *
+ *  `contracts` (-> `qty`) always carries `portfolioValue` alongside it — the
+ *  backend re-runs the exposure gate when a PATCH increases qty (same gate
+ *  POST /api/portfolio enforces at creation) and requires it for that check,
+ *  the same way the store's own `postPosition` already does for a new order. */
+function toUpdatePayload(patch: Partial<PortfolioPosition>): Record<string, unknown> | null {
+  const body: Record<string, unknown> = {};
+  if ('stop' in patch) body.stop = patch.stop;
+  if ('structuralStop' in patch) body.structuralStop = patch.structuralStop;
+  if ('targets' in patch) body.targets = patch.targets;
+  if ('contracts' in patch) {
+    body.qty = patch.contracts;
+    body.portfolioValue = accountValue();
+  }
+  return Object.keys(body).length > 0 ? body : null;
+}
+
+async function patchPosition(
+  recId: string,
+  payload: Record<string, unknown>,
+): Promise<{ ok: boolean; detail?: string; adjustedQty?: number }> {
+  try {
+    const res = await fetch(`${_BASE_URL()}/api/portfolio/${recId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const adjustedQty = (body as { adjustedQty?: number }).adjustedQty;
+      return typeof adjustedQty === 'number' ? { ok: true, adjustedQty } : { ok: true };
+    }
+    const body = await res.json().catch(() => ({}));
+    return { ok: false, detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
+  } catch {
+    return { ok: false, detail: 'Could not reach the backend — edit was not saved.' };
+  }
+}
+
+const REMOTE_PATCH_DEBOUNCE_MS = 600;
+
+type PendingPatch = {
+  timer: ReturnType<typeof setTimeout>;
+  payload: Record<string, unknown>;
+  symbol: string;
+  contract: string;
+};
+
+// Debounces `updatePosition` edits per recId so rapid keystrokes in the drawer
+// coalesce into one PATCH instead of one per keystroke. Module-level (not store
+// state) — timers are not serializable Zustand state, and this is purely
+// network-scheduling plumbing, not UI state.
+const _pendingPatches = new Map<string, PendingPatch>();
+
+async function _flushOne(recId: string): Promise<void> {
+  const entry = _pendingPatches.get(recId);
+  if (!entry) return;
+  _pendingPatches.delete(recId);
+  const result = await patchPosition(recId, entry.payload);
+  if (!result.ok) {
+    usePortfolioStore.setState({
+      lastSyncError: {
+        symbol: entry.symbol,
+        contract: entry.contract,
+        detail: result.detail ?? 'Edit could not be saved',
+        at: Date.now(),
+      },
+    });
+    return;
+  }
+  if (result.adjustedQty != null) {
+    // The backend's exposure gate approved the qty increase at a SMALLER size
+    // than requested (mirrors addPosition's own adjustedQty handling above).
+    // Correct the local value immediately rather than leaving the drawer show
+    // the requested size until the next 30s sync poll silently snaps it back
+    // with no explanation — same failure mode Step 4 below prevents for an
+    // in-flight edit, but this is a resolved edit the poll would otherwise
+    // still be free to overwrite without warning.
+    usePortfolioStore.setState((s) => ({
+      positions: s.positions.map((p) =>
+        p.recId === recId ? { ...p, contracts: result.adjustedQty } : p
+      ),
+      lastSyncError: {
+        symbol: entry.symbol,
+        contract: entry.contract,
+        detail: `Size reduced to ${result.adjustedQty} contracts to fit your exposure limit.`,
+        at: Date.now(),
+      },
+    }));
+  }
+}
+
+function scheduleRemotePositionPatch(
+  recId: string,
+  symbol: string,
+  contract: string,
+  payload: Record<string, unknown>,
+): void {
+  const existing = _pendingPatches.get(recId);
+  if (existing) clearTimeout(existing.timer);
+  const merged = { ...(existing?.payload ?? {}), ...payload };
+  const timer = setTimeout(() => { void _flushOne(recId); }, REMOTE_PATCH_DEBOUNCE_MS);
+  _pendingPatches.set(recId, { timer, payload: merged, symbol, contract });
+}
+
+/** Sends a pending debounced edit immediately instead of waiting out the
+ *  debounce window — called when the drawer closes (or switches to editing a
+ *  different row) so a fast edit-then-navigate is never silently dropped.
+ *  With no `recId`, flushes every pending edit. */
+export function flushPendingPositionPatches(recId?: string): void {
+  const ids = recId ? [recId] : Array.from(_pendingPatches.keys());
+  for (const id of ids) {
+    const entry = _pendingPatches.get(id);
+    if (!entry) continue;
+    clearTimeout(entry.timer);
+    void _flushOne(id);
+  }
+}
+
+/** Drops a pending debounced edit without sending it — used when the position
+ *  is being deleted (closePosition/closePositionRemote), so a stale PATCH
+ *  never races a DELETE for the same recId. */
+function cancelPendingPositionPatch(recId: string): void {
+  const entry = _pendingPatches.get(recId);
+  if (!entry) return;
+  clearTimeout(entry.timer);
+  _pendingPatches.delete(recId);
 }
 
 function generateRecId(): string {
@@ -421,25 +559,43 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         // network — leave the row pending; the reconcile retries it. Never silently dropped.
         return { ok: false, status: 'pending' as const, detail: 'queued — will retry when the backend is reachable' };
       },
-      updatePosition: (contract, patch) =>
-        set((s) => ({
-          positions: s.positions.map((r) =>
-            r.contract === contract ? { ...r, ...patch } : r
-          ),
-        })),
+      updatePosition: (contract, patch) => {
+        // Capture the pre-patch row during the set() updater (the same closure
+        // pattern closePosition below already uses), but fire the network side
+        // effect AFTER set() returns rather than from inside the updater —
+        // every other action in this file (closePosition, addPosition) does
+        // its network call after the state update, not inside it.
+        let target: PortfolioPosition | undefined;
+        set((s) => {
+          target = s.positions.find((r) => r.contract === contract);
+          return {
+            positions: s.positions.map((r) =>
+              r.contract === contract ? { ...r, ...patch } : r
+            ),
+          };
+        });
+        if (target) {
+          const payload = toUpdatePayload(patch);
+          if (payload) scheduleRemotePositionPatch(target.recId, target.symbol, target.contract, payload);
+        }
+      },
       closePosition: (contract) => {
         let closedRecId: string | undefined;
         set((s) => {
           closedRecId = s.positions.find((r) => r.contract === contract)?.recId;
           return { positions: s.positions.filter((r) => r.contract !== contract) };
         });
-        if (closedRecId) deletePosition(closedRecId);
+        if (closedRecId) {
+          cancelPendingPositionPatch(closedRecId);
+          deletePosition(closedRecId);
+        }
       },
       closePositionRemote: async (recId, opts) => {
         const existing = _inFlightCloses.get(recId);
         if (existing) return existing;
 
         const run = async (): Promise<{ ok: boolean; detail?: string }> => {
+          cancelPendingPositionPatch(recId);
           const doClose = async (id: string): Promise<Response> =>
             fetch(`${_BASE_URL()}/api/portfolio/${id}/close`, {
               method: 'POST',
@@ -555,7 +711,14 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             const res = await fetch(`${_BASE_URL()}/api/portfolio`);
             if (!res.ok) return false;
             const remote: BackendPosition[] = await res.json();
-            const remotePositions = remote.map(fromBackend);
+            const localForPending = usePortfolioStore.getState().positions;
+            const remotePositions = remote.map(fromBackend).map((rp) => {
+              if (!_pendingPatches.has(rp.recId)) return rp;
+              // An edit for this row is debounced but hasn't reached the
+              // backend yet — keep the local value instead of snapping a
+              // focused input back to what the server still has.
+              return localForPending.find((p) => p.recId === rp.recId) ?? rp;
+            });
             const remoteContracts = new Set(remotePositions.map((p) => p.contract));
 
             const snapshot = usePortfolioStore.getState().positions;
@@ -582,9 +745,13 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                 // Confirmed after this GET's snapshot could have been taken — keep
                 // (the GET simply predates it); avoids the 30s-poll race dropping it.
                 keep.push(p);
+              } else {
+                // A synced row confirmed before this snapshot but absent from the
+                // backend is a genuine phantom (e.g. legacy row, DB reset) — drop it,
+                // and cancel any edit still debounced for it so a stale PATCH doesn't
+                // fire against a rec_id we just forgot.
+                cancelPendingPositionPatch(p.recId);
               }
-              // else: a synced row confirmed before this snapshot but absent from the
-              // backend is a genuine phantom (e.g. legacy row, DB reset) — drop it.
             }
 
             // Preserve any row inserted into the store DURING the awaited retry

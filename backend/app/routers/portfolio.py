@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from datetime import date, datetime, timezone
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,11 +14,11 @@ from app.data.market import fetch_price_async
 from app.models.portfolio import PortfolioPositionModel
 from app.models.closed_position import ClosedPositionModel, EquitySnapshotModel
 from app.schemas import (
-    PortfolioPositionCreate, PortfolioPositionSchema,
+    PortfolioPositionCreate, PortfolioPositionSchema, PortfolioPositionUpdate,
     ClosePositionRequest, ClosedPositionSchema,
     PerformanceResponse, PerformancePoint,
 )
-from app.services.portfolio_risk import check_position_risk, PortfolioPosition as RiskPosition
+from app.services.portfolio_risk import check_position_risk, orm_positions_to_risk, PortfolioPosition as RiskPosition
 from app.services.portfolio_performance import (
     realized_pnl, bucket_realized_by_calendar, cumulative_curve, _contract_multiplier,
 )
@@ -65,13 +66,30 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
     if not schemas:
         return schemas
 
-    # Enrich with live option quotes — all positions fetched concurrently
+    # Enrich with live option quotes — all positions fetched concurrently. Also fetch a live
+    # underlying stock price for every distinct symbol with an open OPTION position: `stop` is
+    # always a stock price, but currentPrice for an option leg is the premium — the frontend
+    # STOP_REACHED check needs the real stock price to compare against, not the premium (see
+    # currentStockPrice below). Deduped by symbol so multiple contracts on the same underlying
+    # fetch it once. Both fetch groups run concurrently in one AsyncClient context, same pattern
+    # as add_position's live save-time refetch.
     today = date.today()
+    option_symbols = sorted({s.symbol for s in schemas if not s.contract.endswith("|STOCK")})
     async with httpx.AsyncClient(timeout=10) as client:
-        quotes = await asyncio.gather(
-            *[fetch_contract_quote_async(client, s.contract) for s in schemas],
-            return_exceptions=True,
+        quotes, stock_price_results = await asyncio.gather(
+            asyncio.gather(
+                *[fetch_contract_quote_async(client, s.contract) for s in schemas],
+                return_exceptions=True,
+            ),
+            asyncio.gather(
+                *[fetch_price_async(client, sym) for sym in option_symbols],
+                return_exceptions=True,
+            ),
         )
+    stock_prices = {
+        sym: (price if isinstance(price, (int, float)) else None)
+        for sym, price in zip(option_symbols, stock_price_results)
+    }
 
     for schema, quote in zip(schemas, quotes):
         # dteRemaining from contract string: SYMBOL|STRIKE|EXPIRY|C/P
@@ -86,7 +104,7 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
             schema.currentPrice = quote.get("price") or 0.0
             schema.delta        = quote.get("delta")
             schema.theta        = quote.get("theta")
-            schema.ivRank       = quote.get("ivRank")
+            schema.ivRank       = int(round(iv)) if (iv := quote.get("ivRank")) is not None else None
             if schema.entryPrice:
                 mult = _contract_multiplier(schema.contract)
                 schema.pnlDollar = round(
@@ -95,6 +113,11 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
                 schema.pnlPct = round(
                     (schema.currentPrice - schema.entryPrice) / schema.entryPrice * 100, 2
                 )
+
+        schema.currentStockPrice = (
+            schema.currentPrice if schema.contract.endswith("|STOCK")
+            else stock_prices.get(schema.symbol)
+        )
 
     open_value = sum(s.currentPrice * _contract_multiplier(s.contract) * s.qty for s in schemas)
     open_pnl = sum(s.pnlDollar or 0.0 for s in schemas)
@@ -133,6 +156,7 @@ async def add_position(
     # a position could be approved against one price and stored at a materially
     # different one, silently bypassing the exposure gate.
     adjusted_stop = body.stop
+    adjusted_structural_stop = body.structuralStop
     adjusted_targets = list(body.targets or [])
     entry_stock_price = body.scanStockPrice
     entry_price = body.entryPrice
@@ -166,6 +190,8 @@ async def add_position(
         delta = live_price - body.scanStockPrice
         if adjusted_stop is not None:
             adjusted_stop = round(adjusted_stop + delta, 2)
+        if adjusted_structural_stop is not None:
+            adjusted_structural_stop = round(adjusted_structural_stop + delta, 2)
         adjusted_targets = [
             {
                 **t,
@@ -226,6 +252,7 @@ async def add_position(
         qty=risk.adjusted_size or body.qty,
         entry_date=body.entryDate,
         stop=adjusted_stop,
+        structural_stop=adjusted_structural_stop,
         targets=adjusted_targets,
         dte_total=body.dteTotal,
         entry_stock_price=entry_stock_price,
@@ -274,6 +301,92 @@ async def add_position(
     resp = PortfolioPositionSchema.from_orm_model(position)
     if risk.adjusted_size is not None:
         resp.adjustedQty = risk.adjusted_size
+    return resp
+
+
+@router.patch('/portfolio/{rec_id}', response_model=PortfolioPositionSchema)
+async def update_position(
+    rec_id: str,
+    body: PortfolioPositionUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> PortfolioPositionSchema:
+    position = (await db.execute(
+        select(PortfolioPositionModel).where(PortfolioPositionModel.rec_id == rec_id)
+    )).scalar_one_or_none()
+    if position is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Position with rec_id '{rec_id}' not found.")
+
+    # exclude_unset (not exclude_none) so a field the client never sent is left
+    # alone, while `{"structuralStop": null}` still clears it — the drawer's
+    # "0 means none" control relies on being able to null this back out.
+    updates = body.model_dump(exclude_unset=True)
+    # Set only when the risk gate approved a qty increase at a SMALLER size
+    # than requested — mirrors POST /api/portfolio's resp.adjustedQty above,
+    # which exists so a caller is never silently shown a size the backend
+    # didn't actually persist.
+    adjusted_qty: Optional[int] = None
+    # A rejected qty must NOT block stop/structuralStop/targets from saving.
+    # The frontend debounces edits per recId and merges whatever fields
+    # changed within the same ~600ms window into one PATCH — a user who
+    # tweaks Stop and then, moments later, types a Contracts value that fails
+    # the exposure gate would otherwise have BOTH edits silently dropped by a
+    # single early `raise`, with no indication the valid Stop edit was ever
+    # lost. Instead: apply every other field unconditionally, commit, and
+    # only raise for qty at the very end — so a qty rejection still reports
+    # as a 422 (the frontend must not treat it as success), but the fields
+    # that WERE valid are durably saved either way.
+    qty_error: Optional[str] = None
+
+    if "qty" in updates:
+        qty = updates["qty"]
+        if qty is None or qty < 1:
+            qty_error = "qty must be an integer of at least 1."
+        elif qty > position.qty:
+            # Increasing size is new risk, not a correction — re-run the same
+            # exposure gate POST /api/portfolio enforces at creation. A decrease
+            # only ever reduces exposure, so it skips this gate entirely and
+            # doesn't need portfolioValue at all.
+            if body.portfolioValue is None:
+                qty_error = "portfolioValue is required to increase qty."
+            else:
+                others = (await db.execute(
+                    select(PortfolioPositionModel).where(PortfolioPositionModel.id != position.id)
+                )).scalars().all()
+                risk = check_position_risk(
+                    symbol=position.symbol,
+                    contract_id=position.contract,
+                    proposed_contracts=qty,
+                    entry_premium=position.entry_price,
+                    current_price=position.entry_price,
+                    portfolio=orm_positions_to_risk(others),
+                    portfolio_value=body.portfolioValue,
+                )
+                if not risk.approved:
+                    qty_error = " ".join(risk.reasons)
+                else:
+                    if risk.adjusted_size is not None:
+                        adjusted_qty = risk.adjusted_size
+                        qty = risk.adjusted_size
+                    position.qty = qty
+        else:
+            position.qty = qty
+    if "stop" in updates:
+        position.stop = updates["stop"]
+    if "structuralStop" in updates:
+        position.structural_stop = updates["structuralStop"]
+    if "targets" in updates:
+        position.targets = updates["targets"]
+
+    await db.commit()
+    await db.refresh(position)
+
+    if qty_error is not None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=qty_error)
+
+    resp = PortfolioPositionSchema.from_orm_model(position)
+    if adjusted_qty is not None:
+        resp.adjustedQty = adjusted_qty
     return resp
 
 

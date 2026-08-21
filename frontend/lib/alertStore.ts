@@ -30,7 +30,7 @@ export const DEFAULT_CONFIG: AlertConfig = {
   positionSustainMinutes: 0,
   positionAlertRetentionDays: 30,
   enabledTypes: [
-    'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP',
+    'TP_HIT', 'STOP_REACHED', 'STRUCTURAL_STOP_BREACHED', 'PREMIUM_STOP', 'TIME_STOP',
     'EVENT_RISK', 'REGIME_CHANGE', 'SCAN_COMPLETE', 'SCAN_FAILED',
     'TIME_STOP_APPROACHING', 'EARNINGS_APPROACHING', 'EXPIRATION_APPROACHING',
   ],
@@ -64,7 +64,7 @@ function collapseToasts(toasts: ToastItem[]): ToastItem[] {
 // Portfolio alert types that should trigger an email/Telegram. Scan lifecycle
 // types (SCAN_COMPLETE/SCAN_FAILED) are deliberately excluded.
 const NOTIFIABLE_TYPES = new Set<string>([
-  'TP_HIT', 'STOP_REACHED', 'PREMIUM_STOP', 'TIME_STOP', 'EVENT_RISK', 'REGIME_CHANGE',
+  'TP_HIT', 'STOP_REACHED', 'STRUCTURAL_STOP_BREACHED', 'PREMIUM_STOP', 'TIME_STOP', 'EVENT_RISK', 'REGIME_CHANGE',
 ]);
 
 const NOTIFY_BASE_URL = () =>
@@ -147,10 +147,31 @@ function playBeep(): void {
   }
 }
 
+// Bump alongside `version` below. migrate() is called by zustand with the true
+// stored version, so it's the sole owner of the one-time backfill inside
+// migrateAlerts below; merge() (called on EVERY hydration, not just version
+// upgrades — see the ALERT_STORE_VERSION usage in `merge`) must pass this same
+// current value, never a hardcoded old one, or every hydration would re-run
+// the "was this version bump ever applied" check and always answer yes.
+const ALERT_STORE_VERSION = 3;
+
 export function migrateAlerts(persistedState: unknown, _version: number): Partial<AlertStoreState> {
   const prev = (persistedState as Partial<AlertStoreState> | null) ?? {};
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
+  let config = isRecord(prev.config) ? { ...DEFAULT_CONFIG, ...prev.config } : { ...DEFAULT_CONFIG };
+  // v2 -> v3: a persisted config predating STRUCTURAL_STOP_BREACHED has its own
+  // explicit enabledTypes array, so the DEFAULT_CONFIG spread above never adds
+  // it back in (arrays replace, not merge). Backfill it ONCE here, on the
+  // version bump, rather than on every load/fetch — the Alerts page's own
+  // GET /settings/alert-delivery sync (which backfills the same way server-side)
+  // would otherwise keep re-adding it after every explicit uncheck, since
+  // there's no way to tell "predates this feature" from "user turned it off"
+  // from the list alone. A one-time migration avoids that fight: after this
+  // runs, the type is present, and if the user unchecks it, it stays off.
+  if (_version < ALERT_STORE_VERSION && Array.isArray(config.enabledTypes) && !config.enabledTypes.includes('STRUCTURAL_STOP_BREACHED')) {
+    config = { ...config, enabledTypes: [...config.enabledTypes, 'STRUCTURAL_STOP_BREACHED'] };
+  }
   return {
     ...prev,
     toasts: Array.isArray(prev.toasts)
@@ -162,7 +183,7 @@ export function migrateAlerts(persistedState: unknown, _version: number): Partia
           && typeof toast.alertType === 'string',
         )
       : [],
-    config: isRecord(prev.config) ? { ...DEFAULT_CONFIG, ...prev.config } : { ...DEFAULT_CONFIG },
+    config,
     suppressedAlerts: isRecord(prev.suppressedAlerts)
       ? prev.suppressedAlerts as Record<string, true>
       : {},
@@ -306,7 +327,7 @@ export const useAlertStore = create<AlertStoreState>()(
     {
       name: 'bamendjou-alerts-v2',
       skipHydration: true,
-      version: 2,
+      version: ALERT_STORE_VERSION,
       migrate: migrateAlerts,
       partialize: (state) => ({
         toasts: state.toasts,
@@ -315,7 +336,13 @@ export const useAlertStore = create<AlertStoreState>()(
         firedAlerts: state.firedAlerts,
       }),
       merge: (persistedState, currentState) => {
-        const ps = migrateAlerts(persistedState, 2);
+        // merge() runs on every hydration, not just on a version bump — pass
+        // the CURRENT version (never a hardcoded old one) so migrateAlerts's
+        // one-time enabledTypes backfill only ever fires via the real
+        // migrate() callback above, not on every single app load (which would
+        // silently undo a user's later opt-out — see the comment above
+        // ALERT_STORE_VERSION and inside migrateAlerts).
+        const ps = migrateAlerts(persistedState, ALERT_STORE_VERSION);
         const merged = {
           ...currentState,
           toasts: ps.toasts ?? [],
