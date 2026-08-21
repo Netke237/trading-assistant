@@ -14,20 +14,26 @@ down_revision = 'a9c3f5d1e872'
 branch_labels = None
 depends_on = None
 
+# A stock price is never <= 0, so any row that ended up with stop=0 or
+# structural_stop=0 (the exact bug the app-level PATCH/POST fix in this same
+# change closes) can only be a stale artifact of that bug -- never a
+# legitimate value. STOP_REACHED / STRUCTURAL_STOP_BREACHED gate on
+# `is not None`, not `> 0`, so left in place a Bearish position with either
+# field at 0 fires a real notification on every sustained cycle.
+#
+# Exposed as a module-level constant (not inlined in upgrade()) so
+# backend/tests/test_backfill_zero_stop_migration.py can import and run the
+# exact statements instead of hand-copying them -- a future edit here can't
+# silently diverge from what the test verifies.
+BACKFILL_STATEMENTS = (
+    "UPDATE portfolio_positions SET stop = NULL WHERE stop = 0",
+    "UPDATE portfolio_positions SET structural_stop = NULL WHERE structural_stop = 0",
+)
+
 
 def upgrade() -> None:
-    # A stock price is never <= 0, so any row that ended up with stop=0 or
-    # structural_stop=0 (the exact bug the app-level PATCH/POST fix in this
-    # same change closes) can only be a stale artifact of that bug -- never a
-    # legitimate value. STOP_REACHED / STRUCTURAL_STOP_BREACHED gate on
-    # `is not None`, not `> 0`, so left in place a Bearish position with
-    # either field at 0 fires a real notification on every sustained cycle.
-    op.execute(
-        "UPDATE portfolio_positions SET stop = NULL WHERE stop = 0"
-    )
-    op.execute(
-        "UPDATE portfolio_positions SET structural_stop = NULL WHERE structural_stop = 0"
-    )
+    for statement in BACKFILL_STATEMENTS:
+        op.execute(statement)
 
 
 def downgrade() -> None:

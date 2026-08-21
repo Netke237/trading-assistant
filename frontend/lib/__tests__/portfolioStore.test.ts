@@ -918,6 +918,40 @@ describe('portfolioStore', () => {
       expect(JSON.parse(init.body)).toEqual({ stop: 185 });
     });
 
+    it('floors stop/structuralStop to null at the store level, not just in the drawer UI', async () => {
+      // Round-4 audit finding: only the drawer's EditField coerced 0 -> null
+      // inline before calling updatePosition — any OTHER caller reaching this
+      // action directly (a future call site, a test, a bulk edit) would have
+      // put stop: 0 straight into local state, which alertEngine.ts reads as
+      // a permanent breach independent of what gets sent over the network.
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({
+        recId: 'REC-PATCH-FLOOR', contract: 'AAPL 190C 05/16', stop: 150, structuralStop: 148,
+      });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos] });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue(jsonResponse({}));
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', { stop: 0, structuralStop: 0 });
+      });
+
+      // Local optimistic state is floored immediately, before the PATCH even fires.
+      const local = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-FLOOR');
+      expect(local?.stop).toBeNull();
+      expect(local?.structuralStop).toBeNull();
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+      expect(JSON.parse(init.body)).toEqual({ stop: null, structuralStop: null });
+    });
+
     it('coalesces rapid edits into a single PATCH with the merged fields', async () => {
       const { result } = renderHook(() => usePortfolioStore());
       const pos = makePosition({ recId: 'REC-PATCH-2', contract: 'AAPL 190C 05/16' });

@@ -7,13 +7,20 @@ STRUCTURAL_STOP_BREACHED gate on `is not None`, not `> 0` -- left in the
 database, such a row keeps firing real notifications for a Bearish position
 even after the app-level fix ships.
 
-Runs the migration's exact UPDATE statements directly against a schema built
-from the current ORM models, rather than through `alembic upgrade` -- this
-codebase's SQLite test databases bootstrap via Base.metadata.create_all() and
-never execute Alembic at all (see test_alembic_heads.py's docstring), so
-there is no existing harness for driving a real upgrade() end-to-end.
+Runs the migration's own BACKFILL_STATEMENTS constant directly against a
+schema built from the current ORM models, rather than through
+`alembic upgrade` -- this codebase's SQLite test databases bootstrap via
+Base.metadata.create_all() and never execute Alembic at all (see
+test_alembic_heads.py's docstring), so there is no existing harness for
+driving a real upgrade() end-to-end. Importing the statements from the
+migration module itself (instead of hand-copying the SQL as a literal
+string) means a future edit to the migration can't silently diverge from
+what this test verifies.
 """
 from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -22,10 +29,23 @@ import app.models  # noqa: F401  (registers all tables on Base.metadata)
 from app.database import Base
 from app.models.portfolio import PortfolioPositionModel
 
-_BACKFILL_SQL = (
-    "UPDATE portfolio_positions SET stop = NULL WHERE stop = 0",
-    "UPDATE portfolio_positions SET structural_stop = NULL WHERE structural_stop = 0",
+_MIGRATION_PATH = (
+    Path(__file__).parent.parent / "migrations" / "versions"
+    / "28b49e5ff040_backfill_zero_stop_and_structural_stop_.py"
 )
+
+
+def _load_migration():
+    # The migration's filename starts with a digit (Alembic's own revision-id
+    # convention), which isn't a valid module name for a plain `import` --
+    # load it by file path instead.
+    spec = importlib.util.spec_from_file_location("backfill_zero_stop_migration", _MIGRATION_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    return module
+
+
+_BACKFILL_SQL = _load_migration().BACKFILL_STATEMENTS
 
 
 def test_backfill_nulls_zero_stop_and_preserves_real_and_null_values(tmp_path):

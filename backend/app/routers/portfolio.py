@@ -199,8 +199,24 @@ async def add_position(
         delta = live_price - body.scanStockPrice
         if adjusted_stop is not None:
             adjusted_stop = round(adjusted_stop + delta, 2)
+            if body.stop and body.stop > 0 and adjusted_stop <= 0:
+                # _floor_stop below will silently store this as None (a stock
+                # price is never <= 0, so a non-positive value can't be a real
+                # stop) -- log it so a user-specified stop being dropped is
+                # traceable instead of just vanishing.
+                _log.warning(
+                    "add_position: live-price reanchor pushed stop non-positive for %s "
+                    "(requested %.2f, reanchored %.2f, delta %.2f) -- stored as unset",
+                    body.contract, body.stop, adjusted_stop, delta,
+                )
         if adjusted_structural_stop is not None:
             adjusted_structural_stop = round(adjusted_structural_stop + delta, 2)
+            if body.structuralStop and body.structuralStop > 0 and adjusted_structural_stop <= 0:
+                _log.warning(
+                    "add_position: live-price reanchor pushed structuralStop non-positive for %s "
+                    "(requested %.2f, reanchored %.2f, delta %.2f) -- stored as unset",
+                    body.contract, body.structuralStop, adjusted_structural_stop, delta,
+                )
         adjusted_targets = [
             {
                 **t,

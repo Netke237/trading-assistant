@@ -112,6 +112,17 @@ function accountValue(): number {
   return useRiskStore.getState().limits.portfolioValue || 100_000;
 }
 
+// A stock price is never <= 0, so a non-positive stop/structuralStop can only
+// mean "unset" — mirrors the backend's own `_floor_stop` (portfolio.py). Used
+// at every point a stop value enters the store (not just the network payload
+// builders below) so the LOCAL state itself can never hold a 0 that the
+// frontend's own alertEngine.ts would immediately read as a permanent
+// STOP_REACHED/STRUCTURAL_STOP_BREACHED for a Bearish position — the backend
+// floor alone doesn't help until the next resync lands.
+function floorStop(value: number | null | undefined): number | null {
+  return value != null && value > 0 ? value : null;
+}
+
 function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
   return {
     recId:          p.recId,
@@ -121,8 +132,8 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     entryPrice:     p.entryPrice,
     qty:            p.contracts ?? 1,
     entryDate:      p.entryDate ?? new Date().toISOString().slice(0, 10),
-    stop:           p.stop != null && p.stop > 0 ? p.stop : null,
-    structuralStop: p.structuralStop != null && p.structuralStop > 0 ? p.structuralStop : null,
+    stop:           floorStop(p.stop),
+    structuralStop: floorStop(p.structuralStop),
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,
@@ -248,8 +259,8 @@ async function deletePosition(recId: string): Promise<void> {
  *  the same way the store's own `postPosition` already does for a new order. */
 function toUpdatePayload(patch: Partial<PortfolioPosition>): Record<string, unknown> | null {
   const body: Record<string, unknown> = {};
-  if ('stop' in patch) body.stop = patch.stop;
-  if ('structuralStop' in patch) body.structuralStop = patch.structuralStop;
+  if ('stop' in patch) body.stop = floorStop(patch.stop);
+  if ('structuralStop' in patch) body.structuralStop = floorStop(patch.structuralStop);
   if ('targets' in patch) body.targets = patch.targets;
   if ('contracts' in patch) {
     body.qty = patch.contracts;
@@ -595,6 +606,15 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         return { ok: false, status: 'pending' as const, detail: 'queued — will retry when the backend is reachable' };
       },
       updatePosition: (contract, patch) => {
+        // Floor stop/structuralStop once, up front, so the SAME value lands
+        // in both the optimistic local state below and the network payload —
+        // relying on every future call site to remember its own inline
+        // coercion (as the drawer's EditField does today) is exactly the gap
+        // that produced the round-2 stop=0 bug.
+        const flooredPatch: Partial<PortfolioPosition> = { ...patch };
+        if ('stop' in flooredPatch) flooredPatch.stop = floorStop(flooredPatch.stop);
+        if ('structuralStop' in flooredPatch) flooredPatch.structuralStop = floorStop(flooredPatch.structuralStop);
+
         // Capture the pre-patch row during the set() updater (the same closure
         // pattern closePosition below already uses), but fire the network side
         // effect AFTER set() returns rather than from inside the updater —
@@ -605,12 +625,12 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           target = s.positions.find((r) => r.contract === contract);
           return {
             positions: s.positions.map((r) =>
-              r.contract === contract ? { ...r, ...patch } : r
+              r.contract === contract ? { ...r, ...flooredPatch } : r
             ),
           };
         });
         if (target) {
-          const payload = toUpdatePayload(patch);
+          const payload = toUpdatePayload(flooredPatch);
           if (payload) scheduleRemotePositionPatch(target.recId, target.symbol, target.contract, payload);
         }
       },
