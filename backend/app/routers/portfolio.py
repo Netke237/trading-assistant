@@ -372,7 +372,14 @@ async def update_position(
         else:
             position.qty = qty
     if "stop" in updates:
-        position.stop = updates["stop"]
+        # A stock price is never <= 0, so treat one the same as "unset" —
+        # matches structuralStop's existing "0 means none" convention below,
+        # and stops a cleared-then-abandoned edit (a client-side control
+        # briefly holding 0 while a user retypes the value) from persisting a
+        # stop that both alert engines' `stop is not None` gate would then
+        # treat as permanently breached for a Bearish position.
+        stop = updates["stop"]
+        position.stop = stop if stop is not None and stop > 0 else None
     if "structuralStop" in updates:
         position.structural_stop = updates["structuralStop"]
     if "targets" in updates:

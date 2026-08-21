@@ -489,7 +489,7 @@ function EditDrawer({
           label="Stop"
           hint="Exit if the underlying stock drops below this price (invalidates the trade thesis)."
           value={position.stop ?? 0}
-          onChange={(n) => onChange({ stop: n })}
+          onChange={(n) => onChange({ stop: n > 0 ? n : null })}
         />
         <EditField
           label="Structural stop"

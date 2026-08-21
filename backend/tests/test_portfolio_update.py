@@ -66,6 +66,20 @@ async def test_patch_updates_stop(client):
 
 
 @pytest.mark.asyncio
+async def test_patch_coerces_a_zero_stop_to_null_instead_of_persisting_it(client):
+    """Round-2 audit finding: the drawer's Stop field had no floor, unlike its
+    structuralStop sibling. A stock price is never <= 0, so a stop of 0 can
+    only mean a cleared-but-unfinished edit (e.g. flushed on drawer unmount
+    mid-retype) — persisting it verbatim would leave both alert engines'
+    `stop is not None` gate treating a Bearish position as permanently
+    breached (referencePrice >= 0 is true for any real price)."""
+    await _add(client, rec="REC-ZEROSTOP", stop=150.0)
+    r = await client.patch("/api/portfolio/REC-ZEROSTOP", json={"stop": 0})
+    assert r.status_code == 200, r.text
+    assert r.json()["stop"] is None
+
+
+@pytest.mark.asyncio
 async def test_patch_updates_structural_stop_and_can_clear_it(client):
     await _add(client, rec="REC-SSTOP", structural_stop=170.0)
     r = await client.patch("/api/portfolio/REC-SSTOP", json={"structuralStop": None})
