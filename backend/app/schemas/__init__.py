@@ -634,6 +634,37 @@ class PortfolioPositionCreate(BaseModel):
         super().__init__(**mapped)
 
 
+class PortfolioPositionUpdate(BaseModel):
+    """Partial update for a persisted position — only the fields the drawer
+    exposes as editable. A field omitted from the request body is left alone;
+    the router distinguishes "omitted" from "explicitly null" via
+    `model_dump(exclude_unset=True)`, since `{"structuralStop": null}` must
+    still be able to clear a previously-set structural stop.
+
+    `qty` IS `Optional[int]` here too (so `{"qty": null}` still validates and
+    is tracked in `model_fields_set`, rather than pydantic rejecting it before
+    the router ever sees it) — but unlike `stop`/`structuralStop`, there is no
+    meaningful "clear the quantity" operation, so the router does NOT treat a
+    present-but-null `qty` as a no-op the way it does for those fields. It
+    explicitly checks `qty is None or qty < 1` and returns a clean 422 for
+    either case — that guard is load-bearing, not redundant, precisely
+    because this field's type alone doesn't rule out `None` reaching it.
+    `exclude_unset=True` still means an omitted `qty` key never touches this
+    field at all.
+
+    `portfolioValue` is only required by the router when `qty` is being
+    increased (it re-runs the exposure gate in that case, same as
+    `POST /api/portfolio`); a `qty` decrease or an edit that never sends `qty`
+    doesn't need it."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    stop: Optional[float] = None
+    structuralStop: Optional[float] = Field(alias="structural_stop", default=None)
+    targets: Optional[list[dict]] = None
+    qty: Optional[int] = None
+    portfolioValue: Optional[float] = Field(alias="portfolio_value", default=None)
+
+
 class PortfolioPositionSchema(BaseModel):
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 

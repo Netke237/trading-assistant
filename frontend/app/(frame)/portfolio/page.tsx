@@ -13,7 +13,7 @@ import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
-import { usePortfolioStore } from '@/lib/portfolioStore';
+import { usePortfolioStore, flushPendingPositionPatches } from '@/lib/portfolioStore';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
@@ -469,6 +469,14 @@ function EditDrawer({
   onChange: (patch: Partial<PortfolioPosition>) => void;
   onRemove: () => void;
 }) {
+  // Send any debounced-but-not-yet-fired edit immediately when this drawer
+  // instance goes away — covers both its own close button and the parent
+  // swapping `editing` to a different row (which unmounts this instance
+  // without ever calling `onClose`).
+  useEffect(() => {
+    return () => { flushPendingPositionPatches(position.recId); };
+  }, [position.recId]);
+
   return (
     <div className={styles.editDrawer}>
       <div className={styles.editHeader}>
@@ -515,7 +523,7 @@ function EditDrawer({
 
       <div className={styles.editFooter}>
         <Text size={11} tone="secondary">
-          Changes stay local to this session. Hooking broker write APIs is a Phase 7 task.
+          Stop, structural stop, targets, and contract count save to your account automatically.
         </Text>
         <button type="button" className={styles.editRemove} onClick={onRemove}>
           Close position
