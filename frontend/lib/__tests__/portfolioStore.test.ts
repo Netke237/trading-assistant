@@ -263,6 +263,35 @@ describe('portfolioStore', () => {
     expect(positions[0].recId).toBe('REC-A');
   });
 
+  it('floors a stop/structuralStop of 0 already in localStorage on rehydrate, even with no version bump', async () => {
+    // Round-5 audit finding: `merge` runs on EVERY rehydration (migrate only
+    // runs on a version change), so it's the actual backstop for a browser
+    // that already has a pre-round-2 stop:0 row saved — this must floor
+    // independent of whatever migratePortfolioPersist does.
+    localStorage.setItem(
+      'bamendjou-portfolio-v1',
+      JSON.stringify({
+        version: 2, // current version — migrate will NOT run
+        state: {
+          positions: [
+            makePosition({
+              symbol: 'ABT', contract: 'ABT|97|2027-01-15|C', recId: 'REC-STALE-ZERO',
+              direction: 'Bearish', stop: 0, structuralStop: 0,
+            }),
+          ],
+        },
+      }),
+    );
+
+    await act(async () => {
+      await usePortfolioStore.persist.rehydrate();
+    });
+
+    const position = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-STALE-ZERO');
+    expect(position?.stop).toBeNull();
+    expect(position?.structuralStop).toBeNull();
+  });
+
   it('reports a 409 as a rejection so a re-entry is not counted as saved', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
@@ -500,6 +529,23 @@ describe('portfolioStore', () => {
       ) as { positions: Array<Record<string, unknown>> };
       expect(migrated.positions[0]!.syncStatus).toBe('synced');
       expect(migrated.positions[0]!.syncedAt).toBe(0);
+    });
+
+    it('floors a stop/structuralStop of 0 already sitting in a pre-round-2 localStorage row', () => {
+      // Round-5 audit finding: a row saved to localStorage before the
+      // stop=0 fix (round 2) rehydrates straight into live state on every
+      // app load — floor it here too, not just on the live write paths.
+      const migrated = migratePortfolioPersist(
+        {
+          positions: [{
+            recId: 'LEGACY-ZERO', symbol: 'ABT', contract: 'ABT|97|2027-01-15|C',
+            direction: 'Bearish', stop: 0, structuralStop: 0,
+          }],
+        },
+        0,
+      ) as { positions: Array<Record<string, unknown>> };
+      expect(migrated.positions[0]!.stop).toBeNull();
+      expect(migrated.positions[0]!.structuralStop).toBeNull();
     });
   });
 
@@ -744,6 +790,21 @@ describe('portfolioStore', () => {
       const p = usePortfolioStore.getState().positions[0];
       expect(p.currentPrice).toBe(5.25);
       expect(p.currentStockPrice).toBe(182.4);   // must NOT equal currentPrice
+    });
+
+    it('floors a stray stop/structuralStop of 0 in the backend GET response before it reaches state', async () => {
+      // Round-5 audit finding: fromBackend was a raw passthrough for `stop`
+      // and only coerced null/undefined (not 0) for `structuralStop` — any
+      // GET response carrying a stray 0 (a not-yet-migrated row, a bug in
+      // some other write path) landed straight in local state on every poll.
+      usePortfolioStore.setState({ positions: [] } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(
+        jsonResponse([{ ...makeBackendPosition(), stop: 0, structuralStop: 0 }])
+      );
+      await usePortfolioStore.getState().syncFromBackend();
+      const p = usePortfolioStore.getState().positions[0];
+      expect(p.stop).toBeNull();
+      expect(p.structuralStop).toBeNull();
     });
 
     it('keeps a row synced AFTER this GET started (poll-race safe)', async () => {

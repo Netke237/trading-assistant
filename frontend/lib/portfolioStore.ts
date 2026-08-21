@@ -47,8 +47,8 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     contracts:    p.qty,
     entryDate:    p.entryDate,
     expiry,
-    stop:         p.stop,
-    structuralStop: p.structuralStop ?? null,
+    stop:         floorStop(p.stop),
+    structuralStop: floorStop(p.structuralStop),
     targets:      p.targets ?? [],
     dteTotal:     p.dteTotal ?? 0,
     dteRemaining: p.dteRemaining ?? 0,
@@ -113,12 +113,21 @@ function accountValue(): number {
 }
 
 // A stock price is never <= 0, so a non-positive stop/structuralStop can only
-// mean "unset" — mirrors the backend's own `_floor_stop` (portfolio.py). Used
-// at every point a stop value enters the store (not just the network payload
-// builders below) so the LOCAL state itself can never hold a 0 that the
-// frontend's own alertEngine.ts would immediately read as a permanent
-// STOP_REACHED/STRUCTURAL_STOP_BREACHED for a Bearish position — the backend
-// floor alone doesn't help until the next resync lands.
+// mean "unset" — mirrors the backend's own `_floor_stop` (portfolio.py).
+// alertEngine.ts's `stop != null` gate treats an unfloored 0 as a permanent
+// STOP_REACHED/STRUCTURAL_STOP_BREACHED for a Bearish position, so this must
+// run at EVERY point a stop value enters store state, not just the ones that
+// happen to go over the network. That completeness claim was wrong three
+// times before it was actually true (rounds 2-4 each missed a site) — so
+// this is an exhaustive, checkable list, not prose to trust on faith. Call
+// sites, kept in sync with the code, not just this comment:
+//   - fromBackend (GET /api/portfolio reconcile — syncFromBackend)
+//   - toBackendPayload (POST /api/portfolio)
+//   - toUpdatePayload (PATCH /api/portfolio/{recId})
+//   - updatePosition's optimistic set() (local state, before the PATCH fires)
+//   - migratePortfolioPersist (localStorage version migration)
+//   - the persist `merge` callback (every rehydration, migration or not —
+//     the backstop for a pre-round-2 stop:0 already sitting in a browser)
 function floorStop(value: number | null | undefined): number | null {
   return value != null && value > 0 ? value : null;
 }
@@ -464,9 +473,16 @@ export function migratePortfolioPersist(state: unknown, _version: number): unkno
     ...s,
     positions: s.positions.map((p) => {
       const po = p as Record<string, unknown>;
-      return po.syncStatus
-        ? po
-        : { ...po, syncStatus: 'synced', syncedAt: 0 };
+      const synced = po.syncStatus ? po : { ...po, syncStatus: 'synced', syncedAt: 0 };
+      // A row saved to localStorage before the stop=0 fix (round 2 onward) can
+      // still hold a literal 0 — floor it here too, not just on the live write
+      // paths, since this rehydrates straight into state on every app load,
+      // before syncFromBackend has had a chance to overwrite it with a clean
+      // backend value. See floorStop's own comment for why 0 is never real.
+      const floored = { ...synced } as Record<string, unknown>;
+      if ('stop' in floored) floored.stop = floorStop(floored.stop as number | null | undefined);
+      if ('structuralStop' in floored) floored.structuralStop = floorStop(floored.structuralStop as number | null | undefined);
+      return floored;
     }),
   };
 }
@@ -863,9 +879,14 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         if (!ps || !Array.isArray(ps.positions)) {
           return currentState;
         }
-        const valid = validatePositions(ps.positions).map((p) =>
-          p.recId ? p : { ...p, recId: generateRecId() }
-        );
+        const valid = validatePositions(ps.positions).map((p) => ({
+          ...(p.recId ? p : { ...p, recId: generateRecId() }),
+          // Guaranteed to run on every rehydration (unlike migrate, which only
+          // fires on a version bump) — the last-resort backstop against a
+          // stray persisted stop=0/structuralStop=0 reaching live state.
+          stop: floorStop(p.stop),
+          structuralStop: floorStop(p.structuralStop),
+        }));
         return {
           ...currentState,
           positions: dedupePositions(valid),
