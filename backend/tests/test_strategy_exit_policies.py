@@ -170,3 +170,34 @@ def test_breakout_base_survives_a_zero_height_base():
     assert sig.detail["base_height"] == 0.0
     assert _entry_side("Bullish", entry=sig.entry_price,
                        sl=sig.stop_price, tp=sig.target_price) == "buy"
+
+
+# ── ma_crossover ──────────────────────────────────────────────────────────────
+
+def test_ma_crossover_primary_target_is_unchanged_at_three_atr():
+    """Regression guard: this is the ONE strategy whose rung 1 must not move,
+    because it has no thesis price target to move to."""
+    from app.services.strategy_engine import ma_crossover_signal, _atr
+
+    # A monotonically rising series never crosses — the fast MA is above the slow
+    # MA from the first comparable bar, so ma_crossover_signal returns None and a
+    # `pytest.skip` test would pass while proving nothing. Use the flat-then-step
+    # shape that tests/test_strategy_params.py::_crossover_bars already relies on:
+    # the cross happens on the first stepped bar, 5 bars from the end.
+    bars = [{"open": 99.9, "high": 100.5, "low": 99.5, "close": 100.0, "volume": 1_000}
+            for _ in range(100)]
+    bars += [{"open": 199.9, "high": 200.5, "low": 199.5, "close": 200.0, "volume": 1_000}
+             for _ in range(5)]
+    sig = ma_crossover_signal(bars, fast=20, slow=50, lookback=10)
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+
+    atr = _atr(bars)
+    expected = round(sig.entry_price + atr * 3.0, 2)
+    assert sig.target_price == pytest.approx(expected, abs=0.02)
+    assert sig.detail["exit_rule"] == "cross_back"
+    assert sig.detail["cross_back_level"] > 0
+    # 3 / 4.5 / 6 ATR all survive: this stop sits at the slow MA, so `risk` here
+    # is many times ATR — precisely the case an R-relative floor would have broken.
+    assert len(sig.targets) == 3
+    assert sig.targets[1] == pytest.approx(round(sig.entry_price + atr * 4.5, 2), abs=0.02)
+    assert sig.targets[2] == pytest.approx(round(sig.entry_price + atr * 6.0, 2), abs=0.02)

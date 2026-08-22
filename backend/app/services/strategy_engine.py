@@ -619,6 +619,7 @@ def ma_crossover_signal(
     fast: int = 20,
     slow: int = 50,
     lookback: int = 10,
+    atr_target_mult: float = 3.0,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
     current_price: float | None = None,  # accepted for router compat; not used (crossover uses close)
 ) -> StrategySignal | None:
@@ -647,13 +648,38 @@ def ma_crossover_signal(
                 risk   = current - stop
                 if risk <= 0:
                     return None
-                target = current + atr * 3.0
             else:
                 stop   = slow_ma[-1] + atr * 0.5
                 risk   = stop - current
                 if risk <= 0:
                     return None
-                target = current - atr * 3.0
+            # A moving-average cross has no natural PRICE objective — its thesis
+            # exit is a condition ("cross back"), not a level. So rung 1 keeps
+            # the multiple this strategy has always used (3.0 ATR, now tunable as
+            # atr_target_mult) and the ladder extends outward from there, rather
+            # than inventing a nearer price target with no thesis behind it.
+            #
+            # This is the one strategy whose primary target is numerically
+            # unchanged by this rework — which is only true because
+            # _build_target_ladder applies no R-relative floor by default. This
+            # strategy's stop sits at the slow MA, so right after a fast cross
+            # `risk` can be several times ATR and a 0.5R floor would exceed the
+            # 3-ATR objective, dropping it and promoting the 6-ATR extension.
+            _sign = 1 if direction == "Bullish" else -1
+            targets = _build_target_ladder(
+                entry=current, stop=stop, direction=direction,
+                primary=current + _sign * atr * atr_target_mult,
+                extensions=[
+                    current + _sign * atr * atr_target_mult * 1.5,
+                    current + _sign * atr * atr_target_mult * 2.0,
+                ],
+                # atr == 0 drops every rung; fall back to the R multiple the
+                # other strategies use so a degenerate series still trades.
+                fallback_mult=2.0,
+            )
+            if not targets:
+                return None
+            target = targets[0]
             return StrategySignal(
                 strategy="ma_crossover",
                 direction=direction,
@@ -661,7 +687,19 @@ def ma_crossover_signal(
                 stop_price=round(stop, 2),
                 target_price=round(target, 2),
                 atr=round(atr, 2),
-                detail={f"sma_{fast}": round(fast_ma[-1], 2), f"sma_{slow}": round(slow_ma[-1], 2)},
+                targets=targets,
+                detail={
+                    f"sma_{fast}": round(fast_ma[-1], 2),
+                    f"sma_{slow}": round(slow_ma[-1], 2),
+                    # The "cross back down" exit the Step-4 picker promises is a
+                    # CONDITION, not a price, and evaluating it needs per-bar
+                    # state this stateless signal_fn(bars) -> levels shape does
+                    # not have. The level is emitted for display so the card can
+                    # show it; acting on it is Approach E's job (the strategy-
+                    # watch state machine), explicitly deferred by this plan.
+                    "cross_back_level": round(slow_ma[-1], 2),
+                    "exit_rule": "cross_back",
+                },
             )
     return None
 
