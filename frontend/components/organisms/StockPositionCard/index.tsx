@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
+import { _horizonEnum } from '@/lib/analysisStore';
 import { winRateTooltip } from '@/lib/statusTooltips';
-import type { PositionCardData } from '@/types/stockDomain';
+import type { PositionCardData, StockFirstPassageEstimate } from '@/types/stockDomain';
 import type { Direction } from '@/types/domain';
 import { StockAutoTradeArm } from '@/components/organisms/StockAutoTradeArm';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
@@ -37,6 +38,14 @@ interface StockPositionCardProps {
 }
 
 type ExecMode = 'recommendation' | 'ibkr_paper' | 'tradier_paper' | 'alpaca_paper' | 'tastytrade_paper';
+
+/** The subset of `/api/contracts/structural-stop`'s response this card keeps. */
+interface StructuralStopResult {
+  price: number;
+  source: 'order_block' | 'swing_low' | 'swing_high' | null;
+  confidence: number | null;
+  distancePct: number | null;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -143,7 +152,11 @@ export function StockPositionCard({
 }: StockPositionCardProps) {
   const [overlay, setOverlay] = useState<StockEditOverlay>(() => defaultOverlay(card));
 
-  // Reset overlay and per-symbol outcome state when the selected symbol changes
+  // Reset overlay and per-symbol outcome state when the selected symbol changes.
+  // The two on-demand results (estimate, structural stop) are per-SYMBOL and
+  // per-overlay, so showing AAPL's numbers under MSFT's header would be worse
+  // than showing none. Their in-flight requests are aborted for the same reason:
+  // a slow response for the previous symbol must never land on the new one.
   useEffect(() => {
     setOverlay(defaultOverlay(card));
     setAdded(false);
@@ -151,6 +164,16 @@ export function StockPositionCard({
     setQueued(false);
     setAdding(false);
     setOrderId(null);
+    estimateReq.current?.abort();
+    estimateReq.current = null;
+    structuralReq.current?.abort();
+    structuralReq.current = null;
+    setEstimate(null);
+    setEstimateErr(null);
+    setEstimating(false);
+    setStructural(null);
+    setStructuralErr(null);
+    setCheckingStructure(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.symbol]);
 
@@ -166,6 +189,8 @@ export function StockPositionCard({
     riskPerShare > 0 ? Math.abs(t - overlay.entry) / riskPerShare : 0;
 
   // Store selectors
+  // Display label like "Swing (5–15d)"; _horizonEnum maps it to the backend enum.
+  const scanHorizonLabel = useScanStore((s) => s.context?.horizon ?? null);
   const stockBasket  = useScanStore((s) => s.stockBasket);
   const addToBasket  = useScanStore((s) => s.addToStockBasket);
   const removeBasket = useScanStore((s) => s.removeFromStockBasket);
@@ -182,6 +207,23 @@ export function StockPositionCard({
   const [adding, setAdding]             = useState(false);
   const [alpacaConfigured, setAlpacaConfigured] = useState(false);
   const [tastytradeConfigured, setTastytradeConfigured] = useState(false);
+
+  // ── On-demand analytics (Approach B) ──────────────────────────────────────
+  const [estimate, setEstimate]             = useState<StockFirstPassageEstimate | null>(null);
+  const [estimating, setEstimating]         = useState(false);
+  const [estimateErr, setEstimateErr]       = useState<string | null>(null);
+  const [structural, setStructural]         = useState<StructuralStopResult | null>(null);
+  const [checkingStructure, setCheckingStructure] = useState(false);
+  const [structuralErr, setStructuralErr]   = useState<string | null>(null);
+  const estimateReq   = useRef<AbortController | null>(null);
+  const structuralReq = useRef<AbortController | null>(null);
+
+  // Abort anything still in flight when the card unmounts, so a late resolve
+  // cannot setState on an unmounted component.
+  useEffect(() => () => {
+    estimateReq.current?.abort();
+    structuralReq.current?.abort();
+  }, []);
 
   const pinned            = stockBasket.some((c) => c.symbol === card.symbol);
   const ibkrConfigured    = !!ibkrPaper.accountId && !!ibkrPaper.baseUrl;
@@ -219,6 +261,81 @@ export function StockPositionCard({
     }
   }
 
+  async function onEstimate() {
+    if (estimating) return;
+    estimateReq.current?.abort();
+    const ctrl = new AbortController();
+    estimateReq.current = ctrl;
+    setEstimating(true);
+    setEstimateErr(null);
+    try {
+      const res = await api.getStockFirstPassage({
+        symbol: card.symbol,
+        direction: card.direction as Direction,
+        horizon: _horizonEnum(scanHorizonLabel ?? undefined),
+        strategy: card.strategy.strategy,
+        // The EDITED overlay, not the pristine signal: the overlay is what the
+        // user intends to trade, so it is what the probabilities must describe.
+        stock_price: overlay.entry,
+        stop_price: overlay.stop,
+        targets: [overlay.t1, overlay.t2, overlay.t3],
+        // `stock_score` is the 5-rule composite (trend / pullback / trigger /
+        // event / vol), NOT a pure trend score — the parameter name is the
+        // estimator's, inherited from the options path. It is the only 0-100
+        // conviction number this card has, and the estimator uses it solely as a
+        // drift scale (mu = sign * (score - 50) / 50 * max_drift_pct), so a
+        // composite conviction is a defensible proxy. It is still a proxy.
+        trend_score: card.stock_score,
+      }, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+      setEstimate(res);
+    } catch (e) {
+      if (ctrl.signal.aborted) return;
+      setEstimateErr(String(e));
+    } finally {
+      if (estimateReq.current === ctrl) {
+        estimateReq.current = null;
+        setEstimating(false);
+      }
+    }
+  }
+
+  async function onCheckStructure() {
+    if (checkingStructure) return;
+    structuralReq.current?.abort();
+    const ctrl = new AbortController();
+    structuralReq.current = ctrl;
+    setCheckingStructure(true);
+    setStructuralErr(null);
+    try {
+      // The existing /api/contracts/structural-stop — instrument-agnostic despite
+      // the legacy /contracts/ prefix (find_structural_stop takes only candles,
+      // direction and a reference price). Deliberately NOT forked into an alias.
+      const res = await api.getStructuralStop({
+        symbol: card.symbol,
+        direction: card.direction as Direction,
+        stock_price: overlay.entry,
+      }, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+      setStructural(
+        res.available && res.price != null && res.price > 0
+          ? { price: res.price, source: res.source, confidence: res.confidence, distancePct: res.distancePct }
+          : null,
+      );
+      if (!res.available || res.price == null || res.price <= 0) {
+        setStructuralErr('No structural level found on recent candles.');
+      }
+    } catch (e) {
+      if (ctrl.signal.aborted) return;
+      setStructuralErr(String(e));
+    } finally {
+      if (structuralReq.current === ctrl) {
+        structuralReq.current = null;
+        setCheckingStructure(false);
+      }
+    }
+  }
+
   async function onAddToPortfolio() {
     if (adding || added || queued) return; // guards against a double-click firing two adds
     setAdding(true);
@@ -245,6 +362,11 @@ export function StockPositionCard({
               { price: overlay.t2, shares: overlay.sharesT2 },
               { price: overlay.t3, shares: overlay.sharesT3 },
             ],
+            // Only ever set when the user explicitly ran "Check structure" — it
+            // is a chart-level REFERENCE, not the risk basis (that stays
+            // `stop`). This is what lets STRUCTURAL_STOP_BREACHED fire for a
+            // stock position, which it never could before.
+            structuralStop: structural?.price ?? null,
           },
         ),
       );
@@ -370,6 +492,97 @@ export function StockPositionCard({
             </div>
           );
         })}
+      </div>
+
+      {/* Section 2b — On-demand analytics: first-passage estimate + structural stop.
+          Both are explicit user actions, never fired by the scan — the Monte
+          Carlo is CPU work and the structural lookup is a candle fetch. */}
+      <div className={styles.targetsSection}>
+        <div className={styles.targetsHeading}>
+          <Text size={11} tone="dim">PROBABILITY &amp; STRUCTURE</Text>
+        </div>
+
+        <div className={styles.actionRow}>
+          <button
+            type="button"
+            className={styles.actionBtn}
+            onClick={onEstimate}
+            disabled={estimating}
+          >
+            <Text size={12}>{estimating ? 'Estimating…' : 'Estimate'}</Text>
+          </button>
+          <button
+            type="button"
+            className={styles.actionBtn}
+            onClick={onCheckStructure}
+            disabled={checkingStructure}
+          >
+            <Text size={12}>{checkingStructure ? 'Checking…' : 'Check structure'}</Text>
+          </button>
+        </div>
+
+        {estimateErr && <Text size={11} tone="reject">{estimateErr}</Text>}
+
+        {estimate && (
+          <div className={styles.estimateBlock}>
+            {/* A probability without its window is meaningless, so the window is
+                never optional chrome. Trading days, not calendar days — the
+                window comes from confidence_backtest.n_days, which counts bars. */}
+            <Text size={11} tone="dim">
+              Chance of reaching each target within {estimate.horizonDays} trading days
+            </Text>
+            {estimate.targets.map((t, i) => (
+              <div key={`fp-${i}`} className={styles.estimateRow}>
+                <Text size={11} tone="dim">T{i + 1}</Text>
+                <Data size={12}>{t.price.toFixed(2)}</Data>
+                <Data size={12} tone={t.probability >= 0.5 ? 'pass' : t.probability >= 0.25 ? 'caution' : 'reject'}>
+                  {(t.probability * 100).toFixed(0)}%
+                </Data>
+                <Data size={12} tone="dim">
+                  {t.expectedDays != null ? `~${t.expectedDays.toFixed(0)}d` : 'unlikely'}
+                </Data>
+              </div>
+            ))}
+            <div className={styles.estimateRow}>
+              <Text size={11} tone="dim">STOP</Text>
+              <Data size={12}>{overlay.stop.toFixed(2)}</Data>
+              <Data size={12} tone={estimate.invalidation.probability >= 0.5 ? 'reject' : 'caution'}>
+                {(estimate.invalidation.probability * 100).toFixed(0)}%
+              </Data>
+              <Data size={12} tone="dim">
+                {estimate.invalidation.expectedDays != null
+                  ? `~${estimate.invalidation.expectedDays.toFixed(0)}d`
+                  : 'unlikely'}
+              </Data>
+            </div>
+            {estimate.modelCaveat && (
+              <Text size={11} tone="caution">{estimate.modelCaveat}</Text>
+            )}
+          </div>
+        )}
+
+        {structuralErr && <Text size={11} tone="caution">{structuralErr}</Text>}
+
+        {structural && (
+          <div className={styles.estimateBlock}>
+            <div className={styles.estimateRow}>
+              <Text size={11} tone="dim">STRUCTURAL</Text>
+              <Data size={12}>{structural.price.toFixed(2)}</Data>
+              <Text size={11} tone="dim">{structural.source ?? '—'}</Text>
+              <Data size={12} tone="dim">
+                {/* Guarded: a structural level that lands exactly on entry would
+                    otherwise divide by zero and render Infinity. */}
+                {Math.abs(overlay.entry - structural.price) > 0
+                  ? `${(Math.abs(overlay.t1 - overlay.entry) / Math.abs(overlay.entry - structural.price)).toFixed(1)}× R:R`
+                  : '—'}
+              </Data>
+            </div>
+            <Text size={11} tone="dim">
+              Reference level only — the risk basis stays your STOP. Saved with the
+              position so STRUCTURAL STOP BREACHED can fire.
+            </Text>
+          </div>
+        )}
       </div>
 
       <MarketSentiment s={card.sentiment} />

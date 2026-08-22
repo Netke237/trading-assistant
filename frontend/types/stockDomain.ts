@@ -49,3 +49,21 @@ export interface StockScanResult {
   shortlist_truncated?: boolean;
   direction_banner?: string;
 }
+
+export interface StockFirstPassageTarget {
+  price:        number;
+  probability:  number;         // 0-1
+  expectedDays: number | null;  // median TRADING days to hit; null if probability is 0
+}
+
+export interface StockFirstPassageEstimate {
+  targets:      StockFirstPassageTarget[];
+  invalidation: { probability: number; expectedDays: number | null };
+  /** Length of the simulated holding window, in TRADING days — from
+   *  scoring_rules.yaml's `confidence_backtest.<horizon>.n_days`. A probability
+   *  without its window is meaningless, so this is always rendered alongside. */
+  horizonDays:  number;
+  /** Non-null when the model is a poor fit for this strategy (mean_reversion_*).
+   *  Rendered verbatim; the decision of WHEN to set it lives in the backend. */
+  modelCaveat:  string | null;
+}

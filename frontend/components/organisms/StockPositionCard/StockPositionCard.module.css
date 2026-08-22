@@ -32,6 +32,24 @@
 /* display:contents lets target value cells participate directly in the 5-col grid */
 .targetValues { display: contents; }
 
+/* On-demand analytics (first-passage estimate + structural stop). Bordered, not
+   shadowed — this codebase uses `1px solid var(--border-subtle)` for separation. */
+.estimateBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.estimateRow {
+  display: grid;
+  grid-template-columns: 80px 1fr 1fr 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
 .actionRow { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .actionBtn {
