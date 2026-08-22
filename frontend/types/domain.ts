@@ -168,6 +168,22 @@ export interface FirstPassageEstimate {
   invalidation: { probability: number; expectedDays: number | null };
 }
 
+/** The inputs a `FirstPassageEstimate` was actually computed against — captured
+ *  at request time, not re-read afterwards. `premium`/`delta` are the FRESH
+ *  quote values (not `contractDetails.mid`/`.delta`, which are scan-time
+ *  snapshots), so a later R:R-vs-structural-stop calc subtracts the matching
+ *  baseline; `targetPct` is the T1/T2/T3 fraction trio the request carried, so
+ *  a restored estimate's rows and its % inputs can never disagree.
+ *  `targetPct`'s shape is written structurally rather than importing
+ *  `TargetProfitPct` from `lib/settingsStore` — this module must not depend on
+ *  a Zustand store. The two shapes are structurally identical, so values flow
+ *  both ways without a cast. */
+export interface FirstPassageContext {
+  premium:   number;
+  delta:     number;
+  targetPct: { t1: number; t2: number; t3: number };
+}
+
 export interface TargetLevel {
   id?: string;                   // optional — backend doesn't always send it
   stockPrice: number;            // underlying price at this target
@@ -295,6 +311,16 @@ export interface TradeCardData {
     structuralStop?: StructuralStop | null;
     /** Populated only after the user presses "Estimate" — never set by the scan itself. */
     firstPassage?: FirstPassageEstimate | null;
+    /** The fresh underlying price `structuralStop` above was derived from. Client-only,
+     *  like `structuralStop` itself: spliced in by step-7-trade-card/page.tsx when it
+     *  restores a cached "Check structure" result on candidate re-navigation, so
+     *  TradeCard's R:R-vs-structural-stop calc has the matching price and not a null.
+     *  Never sent by the backend. */
+    structuralStopStockPrice?: number | null;
+    /** The inputs `firstPassage` above was computed against. Client-only, same
+     *  restore-on-re-navigation path as `structuralStopStockPrice`. Never sent by
+     *  the backend. */
+    firstPassageContext?: FirstPassageContext | null;
   };
   nextEventDays?:  number | null;
   nextEventLabel?: string | null;
