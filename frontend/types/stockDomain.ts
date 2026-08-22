@@ -4,6 +4,14 @@ import type { SentimentData, FundamentalsOut } from '@/types/domain';
 export interface StrategySignalData {
   strategy: string; entry_price: number; stop_price: number;
   target_price: number; rr_ratio: number; atr: number; detail: Record<string, unknown>;
+  /** Backend-computed nearest-first exit ladder; `targets[0] === target_price`.
+   *  OPTIONAL, and it must stay optional: `scanStore` persists `stockScanResult`
+   *  to localStorage, so a result saved before this field existed rehydrates
+   *  without it. Every read site falls back to `[target_price]`, which is why no
+   *  store version bump / `migrate()` branch is needed here. Read sites must use
+   *  `targets?.length ? … : …` rather than `?? …` — an empty array is also a
+   *  "no ladder" case and `??` would not catch it. */
+  targets?: number[];
 }
 export interface BacktestData {
   n_trades: number; win_rate: number; total_return_pct: number;

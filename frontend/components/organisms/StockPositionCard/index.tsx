@@ -208,8 +208,29 @@ export function StockPositionCard({
     setAdding(true);
     setErr(null);
     try {
+      // The user's EDITED overlay is what gets persisted as the live stop/targets —
+      // it is what they intend to trade, and it is what TP_HIT / STOP_REACHED will
+      // fire on. The pristine signal rides along inside the snapshot for the audit
+      // trail. stockPositionLevels() drops anything non-positive or on the wrong
+      // side of entry, so a half-edited overlay can never send a 0 stop.
       const res = await addPosition(
-        buildPaperStockPosition(card.symbol, overlay.entry, overlay.shares, card.direction as Direction, stockCardSnapshotOf(card)),
+        buildPaperStockPosition(
+          card.symbol, overlay.entry, overlay.shares, card.direction as Direction,
+          stockCardSnapshotOf(card, {
+            entry: overlay.entry,
+            stop: overlay.stop,
+            targets: [overlay.t1, overlay.t2, overlay.t3],
+            shares: overlay.shares,
+          }),
+          {
+            stop: overlay.stop,
+            targets: [
+              { price: overlay.t1, shares: overlay.sharesT1 },
+              { price: overlay.t2, shares: overlay.sharesT2 },
+              { price: overlay.t3, shares: overlay.sharesT3 },
+            ],
+          },
+        ),
       );
       if (res.status === 'rejected') {
         setErr(res.detail ?? 'Portfolio rejected this position.');

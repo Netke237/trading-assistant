@@ -181,7 +181,20 @@ export default function Step4StocksPage() {
     const adjusted: string[] = [];
     for (const c of res.candidates) {
       if (afterScanArmedSymbols.has(c.symbol)) {
-        const addRes = await addPosition(buildPaperStockPosition(c.symbol, c.strategy.entry_price, c.shares, c.direction as Direction));
+        // Auto-execute fires with no human in the loop, so there is no overlay to
+        // prefer — send the pristine strategy levels. Note this path also did not
+        // attach a snapshot before; it still does not, deliberately (the scan result
+        // it came from is already persisted in scanStore).
+        //
+        // `?.length ?` not `??` — an empty targets array must fall back too.
+        const addRes = await addPosition(buildPaperStockPosition(
+          c.symbol, c.strategy.entry_price, c.shares, c.direction as Direction, undefined,
+          {
+            stop: c.strategy.stop_price,
+            targets: (c.strategy.targets?.length ? c.strategy.targets : [c.strategy.target_price])
+              .map((price) => ({ price })),
+          },
+        ));
         if (addRes.status === 'rejected') failures.push(`${c.symbol}: ${addRes.detail ?? 'not saved'}`);
         else if (addRes.status === 'pending') queued.push(c.symbol);
         else if (addRes.adjustedQty != null) adjusted.push(`${c.symbol} (${addRes.adjustedQty} sh)`);

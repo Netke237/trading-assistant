@@ -30,6 +30,20 @@ interface Props {
   onSubmit: (orders: StockDraftOrder[]) => void;
 }
 
+// Both add-to-portfolio paths below send the PRISTINE strategy levels: this dialog
+// has no per-row level editor, so there is no overlay to prefer. `strategy.targets`
+// is the backend exit ladder; the fallback covers a scan result restored from
+// localStorage that predates that field.
+//
+// `?.length ? … : …`, NOT `?? …`: nullish coalescing does not catch an EMPTY array,
+// and a backend (or a rehydrated scan result) carrying `targets: []` would otherwise
+// persist a position with no take-profit at all.
+const pristineLevels = (c: PositionCardData) => ({
+  stop: c.strategy.stop_price,
+  targets: (c.strategy.targets?.length ? c.strategy.targets : [c.strategy.target_price])
+    .map((price) => ({ price })),
+});
+
 export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   const [rows, setRows] = useState<Record<string, RowState>>(() =>
     Object.fromEntries(cards.map((c) => [c.symbol, { shares: c.shares, autoSend: true }])),
@@ -103,7 +117,10 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
       if (!r.autoSend) {
         // Manual → paper portfolio
         const res = await addPosition(
-          buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction, stockCardSnapshotOf(c)),
+          buildPaperStockPosition(
+            c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
+            stockCardSnapshotOf(c), pristineLevels(c),
+          ),
         );
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
@@ -126,7 +143,10 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
       } else {
         // Auto-send but broker = recommendation → fall back to paper
         const res = await addPosition(
-          buildPaperStockPosition(c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction, stockCardSnapshotOf(c)),
+          buildPaperStockPosition(
+            c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
+            stockCardSnapshotOf(c), pristineLevels(c),
+          ),
         );
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
