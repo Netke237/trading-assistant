@@ -285,7 +285,10 @@ describe('TradeCard', () => {
       fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
     });
     await waitFor(() => {
-      expect(onChangeForAAPL).toHaveBeenCalledWith(expect.objectContaining({ price: 178.5 }));
+      // Second arg is the fresh stock price the level was measured against —
+      // 185.2 here, from the default getStockQuote mock in beforeEach. The
+      // parent caches the pair, so this assertion pins both halves.
+      expect(onChangeForAAPL).toHaveBeenCalledWith(expect.objectContaining({ price: 178.5 }), 185.2);
     });
 
     // Switch to a different, never-checked candidate — a fresh callback,
@@ -297,7 +300,14 @@ describe('TradeCard', () => {
     await waitFor(() => {
       expect(onChangeForMSFT).toHaveBeenCalled();
     });
-    expect(onChangeForMSFT).not.toHaveBeenCalledWith(expect.objectContaining({ price: 178.5 }));
+    // Asserted over the recorded calls rather than with `.not.toHaveBeenCalledWith`,
+    // which matches on the full argument list and would therefore pass vacuously
+    // for any future arity change — the exact way this regression test could go
+    // quietly dead.
+    const sawAaplStop = onChangeForMSFT.mock.calls.some(
+      ([stop]) => (stop as { price?: number } | null | undefined)?.price === 178.5,
+    );
+    expect(sawAaplStop).toBe(false);
   });
 
   it('renders an Estimate button that does not fire on its own', () => {
@@ -416,6 +426,120 @@ describe('TradeCard', () => {
     });
 
     expect(screen.queryByText('T20%')).not.toBeInTheDocument();
+  });
+
+  it('restores a cached first-passage estimate from data.exit on a contract switch, without refetching', async () => {
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    // The api mocks in this file are NEVER cleared between tests (no
+    // clearMocks in jest.config.ts, no jest.clearAllMocks() in beforeEach), so
+    // `expect(api.X).not.toHaveBeenCalled()` would fail here purely because
+    // EARLIER tests in this file already called all three. Snapshot the counts
+    // and assert they don't move — which is the real claim anyway: restoring
+    // from the cache issues no NEW request.
+    const callsBefore = {
+      firstPassage:   (api.getFirstPassageEstimate as jest.Mock).mock.calls.length,
+      structuralStop: (api.getStructuralStop as jest.Mock).mock.calls.length,
+      stockQuote:     (api.getStockQuote as jest.Mock).mock.calls.length,
+    };
+
+    // Simulate CandidateNav switching to a contract the parent HAS a cached
+    // estimate for — the parent splices it (and its context) into exit.*, the
+    // exact fields TradeCard's contract-change reset already reads.
+    const cachedCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        firstPassage: {
+          targets: [{ pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 }],
+          invalidation: { probability: 0.30, expectedDays: 4 },
+        },
+        firstPassageContext: { premium: 2.75, delta: 0.42, targetPct: { t1: 0.10, t2: 0.35, t3: 0.50 } },
+        structuralStop: { price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6 },
+        structuralStopStockPrice: 190.0,
+      },
+    };
+    rerender(<TradeCard data={cachedCard} />);
+
+    // Rows are back. The restore happens inside the contract-change useEffect,
+    // whose setState schedules a further render — waitFor rather than a bare
+    // sync assertion, matching how every other post-effect assertion in this
+    // file is written.
+    await waitFor(() => {
+      expect(screen.getByText('T20%')).toBeInTheDocument();
+    });
+    expect(screen.getByText('$3.30')).toBeInTheDocument();
+    // ...the % inputs show the percentages the estimate was RUN at (10, not the
+    // 20 the settings default would reset them to)...
+    expect(screen.getByLabelText('T1 profit target %')).toHaveValue(10);
+    // ...and the structural R:R column is computed, not stuck on the
+    // "not yet checked" placeholder: stockMove = |178.5 - 190| = 11.5,
+    // deltaEst = 0.42, risk = min(11.5 * 0.42, 2.75) = min(4.83, 2.75) = 2.75
+    // (clamped to premium), reward = 3.3 - 2.75 = 0.55 -> rr = 0.2.
+    expect(screen.getByText('0.2×')).toBeInTheDocument();
+    // Nothing was re-fetched to get any of that back.
+    expect((api.getFirstPassageEstimate as jest.Mock).mock.calls.length).toBe(callsBefore.firstPassage);
+    expect((api.getStructuralStop as jest.Mock).mock.calls.length).toBe(callsBefore.structuralStop);
+    expect((api.getStockQuote as jest.Mock).mock.calls.length).toBe(callsBefore.stockQuote);
+  });
+
+  it('surfaces a completed first-passage estimate and its context to onFirstPassageChange', async () => {
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    const estimate = {
+      targets: [{ pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 }],
+      invalidation: { probability: 0.30, expectedDays: 4 },
+    };
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce(estimate);
+
+    const onFirstPassageChange = jest.fn();
+    render(<TradeCard data={mockTradeCard} onFirstPassageChange={onFirstPassageChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+
+    await waitFor(() => {
+      expect(onFirstPassageChange).toHaveBeenCalledWith(
+        expect.objectContaining({ targets: estimate.targets }),
+        // Fresh quote values, plus the % trio the request actually carried —
+        // this pair is what the parent caches per contract.
+        { premium: 2.75, delta: 0.42, targetPct: { t1: 0.20, t2: 0.35, t3: 0.50 } },
+      );
+    });
+  });
+
+  it('never surfaces the previous candidate\'s estimate under the new contract\'s callback', async () => {
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [{ pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 }],
+      invalidation: { probability: 0.30, expectedDays: 4 },
+    });
+    const onChangeForAAPL = jest.fn();
+    const { rerender } = render(<TradeCard data={mockTradeCard} onFirstPassageChange={onChangeForAAPL} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    });
+    await waitFor(() => {
+      expect(onChangeForAAPL).toHaveBeenCalledWith(
+        expect.objectContaining({ targets: expect.any(Array) }),
+        expect.objectContaining({ premium: expect.any(Number) }),
+      );
+    });
+
+    // Switch to a never-estimated candidate with a fresh callback, exactly as
+    // the real parent does — the new contract's callback must only ever see the
+    // reset sentinel, never AAPL's estimate (which would cache AAPL's premiums
+    // under MSFT's contract key).
+    const nextCard: TradeCardData = { ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT 300C 06/19' };
+    const onChangeForMSFT = jest.fn();
+    rerender(<TradeCard data={nextCard} onFirstPassageChange={onChangeForMSFT} />);
+
+    await waitFor(() => {
+      expect(onChangeForMSFT).toHaveBeenCalled();
+    });
+    const sawAaplEstimate = onChangeForMSFT.mock.calls.some(([estimate]) => estimate != null);
+    expect(sawAaplEstimate).toBe(false);
   });
 
   it('shows no Profit Targets rows (and no stale two-click hint) until Estimate has been run', async () => {
