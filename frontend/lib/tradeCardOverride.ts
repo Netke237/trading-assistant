@@ -6,7 +6,9 @@
  * override reached the single-card buttons but not the basket path, since
  * the basket cards were built straight from the raw scan candidates).
  */
-import type { TradeCardData, OptionContract } from '@/types/domain';
+import type {
+  TradeCardData, OptionContract, StructuralStop, FirstPassageEstimate, FirstPassageContext,
+} from '@/types/domain';
 
 export type OverriddenCard = TradeCardData & { _userOverride?: boolean };
 export type RecomputedPlanShape = {
@@ -112,4 +114,52 @@ export function rrOverridesFrom(
     if (typeof v === 'number') out[key] = v;
   }
   return out;
+}
+
+/** One cached "Estimate" result, keyed by CONTRACT (contractKeyFor) — the
+ *  estimate is priced off that contract's premium/strike/dte, so a symbol-level
+ *  key would show contract A's numbers on contract B's card. */
+export type CachedFirstPassage = {
+  estimate: FirstPassageEstimate;
+  context:  FirstPassageContext | null;
+};
+
+/** One cached "Check structure" result, keyed by SYMBOL — the structural level is
+ *  a function of (symbol, direction, stock_price) only; the contract never reaches
+ *  api.getStructuralStop. `stop: null` is a real, cacheable answer ("checked, no
+ *  order block or swing level found"), distinct from "never checked" (no entry). */
+export type CachedStructural = {
+  stop:       StructuralStop | null;
+  stockPrice: number | null;
+};
+
+/**
+ * Splice cached "Estimate" / "Check structure" results into the card's
+ * `exit.*` fields — the same fields TradeCard already reads for its initial
+ * state and its contract-change reset, so restoring costs TradeCard no extra
+ * code and works for a re-render AND a remount alike.
+ *
+ * MUST be applied AFTER mergePlan: mergePlan replaces `exit` wholesale with the
+ * recomputed plan's, which would silently discard anything spliced in earlier.
+ * Returns the card unchanged (same reference) when there is nothing cached, so
+ * it never invents object churn for the common case.
+ */
+export function withCachedEstimate<T extends TradeCardData>(
+  card: T | undefined,
+  estimate: CachedFirstPassage | undefined,
+  structural: CachedStructural | undefined,
+): T | undefined {
+  if (!card || (!estimate && !structural)) return card;
+  return {
+    ...card,
+    exit: {
+      ...card.exit,
+      ...(estimate
+        ? { firstPassage: estimate.estimate, firstPassageContext: estimate.context }
+        : {}),
+      ...(structural
+        ? { structuralStop: structural.stop, structuralStopStockPrice: structural.stockPrice }
+        : {}),
+    },
+  };
 }

@@ -1,4 +1,6 @@
-import { applyPickedContract, contractKeyFor, mergePlan, resolveBasketCards } from '../tradeCardOverride';
+import {
+  applyPickedContract, contractKeyFor, mergePlan, resolveBasketCards, withCachedEstimate,
+} from '../tradeCardOverride';
 import type { TradeCardData, OptionContract } from '@/types/domain';
 
 function makeCard(overrides: Partial<TradeCardData> = {}): TradeCardData {
@@ -200,5 +202,62 @@ describe('resolveBasketCards', () => {
     const { cards, pending } = resolveBasketCards(['NOPE'], cardIndex, {}, {}, {});
     expect(cards).toHaveLength(0);
     expect(pending).toBe(false);
+  });
+});
+
+describe('withCachedEstimate', () => {
+  const estimate = {
+    estimate: {
+      targets: [{ pct: 0.2, stockPrice: 340, optionPrice: 25.94, probability: 0.62, expectedDays: 12 }],
+      invalidation: { probability: 0.18, expectedDays: 40 },
+    },
+    context: { premium: 21.62, delta: 0.5, targetPct: { t1: 0.2, t2: 0.35, t3: 0.5 } },
+  };
+  const structural = {
+    stop: { price: 294.5, source: 'order_block' as const, confidence: 71, distancePct: 7.6 },
+    stockPrice: 318.9,
+  };
+
+  it('returns the same card reference when nothing is cached', () => {
+    const card = makeCard();
+    expect(withCachedEstimate(card, undefined, undefined)).toBe(card);
+  });
+
+  it('returns undefined for an undefined card', () => {
+    expect(withCachedEstimate(undefined, estimate, structural)).toBeUndefined();
+  });
+
+  it('splices both cached results into exit without touching the rest of exit', () => {
+    const card = makeCard();
+    const out = withCachedEstimate(card, estimate, structural)!;
+    expect(out.exit.firstPassage).toBe(estimate.estimate);
+    expect(out.exit.firstPassageContext).toBe(estimate.context);
+    expect(out.exit.structuralStop).toBe(structural.stop);
+    expect(out.exit.structuralStopStockPrice).toBe(318.9);
+    // Untouched plan fields.
+    expect(out.exit.invalidation).toBe(card.exit.invalidation);
+    expect(out.exit.premiumStop).toBe(card.exit.premiumStop);
+    expect(out.entry).toBe(card.entry);
+    // The input card is never mutated.
+    expect(card.exit.firstPassage).toBeUndefined();
+  });
+
+  it('splices only the half that is cached', () => {
+    const out = withCachedEstimate(makeCard(), undefined, structural)!;
+    expect(out.exit.structuralStop).toBe(structural.stop);
+    expect(out.exit.firstPassage).toBeUndefined();
+    expect(out.exit.firstPassageContext).toBeUndefined();
+  });
+
+  it('preserves a cached "checked, nothing found" structural result as null, not absent', () => {
+    const out = withCachedEstimate(makeCard(), undefined, { stop: null, stockPrice: 318.9 })!;
+    expect(out.exit.structuralStop).toBeNull();
+    expect(out.exit.structuralStopStockPrice).toBe(318.9);
+  });
+
+  it('preserves _userOverride on an overridden card', () => {
+    const overridden = { ...makeCard(), _userOverride: true };
+    const out = withCachedEstimate(overridden, estimate, undefined)!;
+    expect(out._userOverride).toBe(true);
   });
 });
