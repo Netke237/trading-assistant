@@ -1086,6 +1086,106 @@ def mean_reversion_vwap_daily_signal(
     )
 
 
+# ── Multi-signal resolution ──────────────────────────────────────────────────
+
+def resolve_multi_signal(
+    fired: list[StrategySignal],
+    *,
+    strategy: str = "mean_reversion_multi",
+    fallback_mult: float = 2.0,
+) -> StrategySignal | None:
+    """Combine several confirming variant signals into one, deterministically.
+
+    Replaces ``dataclasses.replace(fired[0], ...)``, which took its entry, stop
+    and target from whichever variant the CALLER happened to list first. That is
+    not non-deterministic — the same request always produced the same answer —
+    but it is arbitrary: reordering the variant checkboxes in the UI silently
+    moved every stop and every target. This function's answer depends only on the
+    SET of fired variants, never on their order.
+
+    Resolution rule (the conservative pairing):
+      * stop   = the WIDEST of the variants' stops (furthest from entry). If any
+                 one variant's invalidation has not been hit, the thesis is
+                 intact, so the position should not already be stopped out.
+      * ladder = every variant's rungs pooled as ``extensions`` (there is no
+                 ``primary`` here — no single variant's objective outranks
+                 another's) and re-sanitized against the resolved entry/stop,
+                 which yields the TIGHTEST surviving rung first. Taking the
+                 tightest target with the widest stop is deliberately the low-R:R
+                 pairing: for a multi-confirmation entry the edge is the
+                 confirmation count, not the R:R, and the alternative (tight stop
+                 + far target) would flatter the numbers by pairing two levels no
+                 single variant ever claimed together.
+      * entry  = the anchor variant's. All variants that can appear here read the
+                 same last close, so entries agree; the anchor is chosen by
+                 alphabetical strategy name purely so the tie-break is stable.
+
+    This is the ONE caller that passes a non-zero ``min_rung_r``. Everywhere else
+    a rung is the strategy's own objective measured against its own stop, and the
+    ladder builder deliberately does not second-guess it. Here a rung derived
+    against one variant's tight stop is being re-used against a stop that may be
+    many times wider, so a 0.6R target can become a 0.06R target that no variant
+    ever proposed. Half an R is the floor for a rung to survive that transplant.
+
+    KNOWN LIMITATION, recorded rather than hidden: nothing backtests this
+    resolution. ``stock_scan.py`` deliberately uses ``mean_reversion_rsi`` as the
+    canonical backtest proxy for ``mean_reversion_multi`` (so the gate is
+    order-independent), which means the RSI variant's own ladder is what the
+    Step-6 win rate measures, not the resolved one. That predates this change and
+    is unchanged by it; it is why the resolution rule is chosen to be
+    conservative rather than optimised.
+
+    Returns None when ``fired`` is empty or the resolved risk is non-positive.
+    """
+    if not fired:
+        return None
+
+    ordered = sorted(fired, key=lambda s: s.strategy)
+    anchor = ordered[0]
+    direction = anchor.direction
+    entry = anchor.entry_price
+
+    if direction == "Bullish":
+        stop = min(s.stop_price for s in ordered)
+    else:
+        stop = max(s.stop_price for s in ordered)
+
+    if abs(entry - stop) <= 0:
+        return None
+
+    pooled: list[float | None] = []
+    for s in ordered:
+        pooled.extend(s.targets or [s.target_price])
+
+    targets = _build_target_ladder(
+        entry=entry, stop=stop, direction=direction,
+        primary=None, extensions=pooled,
+        fallback_mult=fallback_mult, min_rung_r=0.5,
+    )
+    if not targets:
+        return None
+
+    detail = {
+        **anchor.detail,
+        "confirmations": len(ordered),
+        # Sorted, so this field is order-independent too — it was previously the
+        # caller's request order.
+        "fired": [s.strategy for s in ordered],
+        "resolution": "widest_stop_tightest_target",
+    }
+
+    return StrategySignal(
+        strategy=strategy,
+        direction=direction,
+        entry_price=round(entry, 2),
+        stop_price=round(stop, 2),
+        target_price=targets[0],
+        atr=anchor.atr,
+        targets=targets,
+        detail=detail,
+    )
+
+
 # ── Strategy 7: Pre-breakout setup scanner ────────────────────────────────────
 
 def breakout_setup_signal(

@@ -43,6 +43,7 @@ from app.services.strategy_engine import (
     mean_reversion_vwap_signal,
     mean_reversion_vwap_daily_signal,
     breakout_setup_signal,
+    resolve_multi_signal,
 )
 from app.services.strategy_backtest import run_strategy_backtest
 from app.services.strategy_param_store import get_active, get_costs, get_exit
@@ -772,11 +773,12 @@ async def _process_stock(
                         fired.append(sig)
                 if len(fired) < req.mean_reversion_min_confirmations:
                     return {"symbol": symbol, "reason": f"no mean_reversion_multi: {len(fired)}/{len(valid_variants)} signals fired"}
-                signal = dataclasses.replace(
-                    fired[0],
-                    strategy="mean_reversion_multi",
-                    detail={**fired[0].detail, "confirmations": len(fired), "fired": [s.strategy for s in fired]},
-                )
+                # Order-independent resolution: widest stop, tightest target,
+                # pooled ladder. Previously this took fired[0]'s levels verbatim,
+                # so reordering the variant checkboxes changed every level.
+                signal = resolve_multi_signal(fired, strategy="mean_reversion_multi")
+                if signal is None:
+                    return {"symbol": symbol, "reason": "mean_reversion_multi: variants produced no valid combined levels"}
                 # Use RSI as canonical backtest proxy for multi-signal — deterministic regardless of fired order
                 _bt_strategy = "mean_reversion_rsi"
                 bt_bars = bars
