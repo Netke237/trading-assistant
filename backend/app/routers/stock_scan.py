@@ -566,6 +566,7 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
         strategy_out = StrategySignalOut(
             strategy=core.signal.strategy, entry_price=core.signal.entry_price,
             stop_price=core.signal.stop_price, target_price=core.signal.target_price,
+            targets=list(core.signal.targets),
             rr_ratio=round(core.signal.rr_ratio, 2), atr=core.signal.atr, detail=core.signal.detail)
     if core.bt_result is not None:
         bt = core.bt_result
@@ -895,6 +896,7 @@ async def _process_stock(
                 strategy=StrategySignalOut(
                     strategy=signal.strategy, entry_price=signal.entry_price,
                     stop_price=signal.stop_price, target_price=signal.target_price,
+                    targets=list(signal.targets),
                     rr_ratio=round(signal.rr_ratio, 2), atr=signal.atr, detail=signal.detail,
                 ),
                 backtest=BacktestOut(

@@ -37,24 +37,30 @@ function _labelWithDate(iso: string): string {
   return sameYear ? `${mon} ${day} · ${timeStr}` : `${mon} ${day} ${scan.getFullYear()} · ${timeStr}`;
 }
 
+// `stop:` and `exit:` describe what strategy_engine.py actually computes — these
+// strings are the user's only explanation of where their money comes off the
+// table, so they are kept in sync with the signal functions deliberately, not
+// written as marketing. Exit rung 1 is `signal.targets[0]` (== target_price, the
+// only rung the backtest and TP_HIT observe); the rest are the ladder's
+// extensions. See docs/superpowers/plans/2026-08-22-stock-exit-targets-plan.md.
 const STRATEGIES_BULLISH = [
-  { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady uptrends',        entry: 'Dip to 20-EMA + reversal candle in uptrend',              stop: 'Below recent swing low', exit: 'Prior high / trailing stop under higher lows' },
-  { key: 'breakout_base',         label: 'Breakout from tight base',  when: 'Momentum stocks',        entry: 'Break above N-day high after narrow range + volume spike', stop: 'Below the base low',     exit: 'Measured move / trailing stop' },
-  { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses above 50-SMA',                             stop: 'Below 50-SMA',           exit: 'Cross back down' },
-  { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Oversold in uptrend',    entry: 'RSI < 30 while above 200-SMA',                            stop: 'Below recent swing low', exit: 'RSI returns to mid / take-profit target' },
-  { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches lower Bollinger Band + reversal signal',     stop: 'Below lower band',       exit: 'Return to mid-band / upper band' },
-  { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% below VWAP + reversal bar',           stop: '0.5 ATR below entry',    exit: '2× risk above VWAP' },
-  { key: 'mean_reversion_multi',  label: 'Mean Reversion Multi-Signal', when: 'High-conviction oversold entries', entry: 'RSI + BB + VWAP daily all confirm simultaneously', stop: 'Below recent swing low', exit: 'Return to mid-band / take-profit target' },
+  { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady uptrends',        entry: 'Dip to 20-EMA + reversal candle in uptrend',              stop: 'Below the pullback MA by 1.5 ATR', exit: 'Prior swing high, then 2R / 3R extensions' },
+  { key: 'breakout_base',         label: 'Breakout from tight base',  when: 'Momentum stocks',        entry: 'Break above N-day high after narrow range + volume spike', stop: 'Below the base low',     exit: 'Measured move — base height projected off the breakout' },
+  { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses above 50-SMA',                             stop: 'Below 50-SMA',           exit: '3 / 4.5 / 6 ATR ladder (cross-back level shown)' },
+  { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Oversold in uptrend',    entry: 'RSI < 30 while above 200-SMA',                            stop: 'Below recent swing low', exit: 'Return to the 20-SMA, then 2.5 / 3.75 ATR' },
+  { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches lower Bollinger Band + reversal signal',     stop: 'Below lower band',       exit: 'Mid-band, then upper band' },
+  { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% below VWAP + reversal bar',           stop: '0.5 ATR below entry',    exit: 'VWAP, then 0.5 ATR past it' },
+  { key: 'mean_reversion_multi',  label: 'Mean Reversion Multi-Signal', when: 'High-conviction oversold entries', entry: 'RSI + BB + VWAP daily all confirm simultaneously', stop: "Widest of the fired variants' stops", exit: "Tightest of the fired variants' targets" },
 ];
 
 const STRATEGIES_BEARISH = [
-  { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady downtrends',      entry: 'Bounce to 20-EMA + reversal candle in downtrend',          stop: 'Above recent swing high', exit: 'Prior low / trailing stop above lower highs' },
-  { key: 'breakout_base',         label: 'Breakdown from tight base', when: 'Momentum shorts',        entry: 'Break below N-day low after narrow range + volume spike',  stop: 'Above the base high',    exit: 'Measured move / trailing stop' },
-  { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses below 50-SMA',                             stop: 'Above 50-SMA',           exit: 'Cross back up' },
-  { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Overbought in downtrend', entry: 'RSI > 70 while below 200-SMA',                           stop: 'Above recent swing high', exit: 'RSI returns to mid / take-profit target' },
-  { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches upper Bollinger Band + reversal signal',     stop: 'Above upper band',       exit: 'Return to mid-band / lower band' },
-  { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% above VWAP + reversal bar',           stop: '0.5 ATR above entry',    exit: '2× risk below VWAP' },
-  { key: 'mean_reversion_multi',  label: 'Mean Reversion Multi-Signal', when: 'High-conviction overbought entries', entry: 'RSI + BB + VWAP daily all confirm simultaneously', stop: 'Above recent swing high', exit: 'Return to mid-band / take-profit target' },
+  { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady downtrends',      entry: 'Bounce to 20-EMA + reversal candle in downtrend',          stop: 'Above the pullback MA by 1.5 ATR', exit: 'Prior swing low, then 2R / 3R extensions' },
+  { key: 'breakout_base',         label: 'Breakdown from tight base', when: 'Momentum shorts',        entry: 'Break below N-day low after narrow range + volume spike',  stop: 'Above the base high',    exit: 'Measured move — base height projected off the breakdown' },
+  { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses below 50-SMA',                             stop: 'Above 50-SMA',           exit: '3 / 4.5 / 6 ATR ladder (cross-back level shown)' },
+  { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Overbought in downtrend', entry: 'RSI > 70 while below 200-SMA',                           stop: 'Above recent swing high', exit: 'Return to the 20-SMA, then 2.5 / 3.75 ATR' },
+  { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches upper Bollinger Band + reversal signal',     stop: 'Above upper band',       exit: 'Mid-band, then lower band' },
+  { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% above VWAP + reversal bar',           stop: '0.5 ATR above entry',    exit: 'VWAP, then 0.5 ATR past it' },
+  { key: 'mean_reversion_multi',  label: 'Mean Reversion Multi-Signal', when: 'High-conviction overbought entries', entry: 'RSI + BB + VWAP daily all confirm simultaneously', stop: "Widest of the fired variants' stops", exit: "Tightest of the fired variants' targets" },
 ];
 
 type RegimeFit = 'PASS' | 'CAUTION' | 'REJECT';

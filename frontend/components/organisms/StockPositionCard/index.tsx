@@ -46,9 +46,25 @@ function defaultOverlay(card: PositionCardData): StockEditOverlay {
   const risk  = Math.abs(entry - stop);
   const dir   = card.direction;
   const sign  = dir === 'Bullish' ? 1 : -1;
-  const t1    = card.strategy.target_price;
-  const t2    = Math.round((entry + sign * 2 * risk) * 100) / 100;
-  const t3    = Math.round((entry + sign * 3 * risk) * 100) / 100;
+  // T2/T3 used to be invented here as a flat 2R/3R — not strategy-derived, not
+  // validated by any backtest, and invisible to the WFO tuner. They now come
+  // from the backend ladder, which is built from each strategy's own exit
+  // thesis. The R-step fill survives only as the fallback for a scan result
+  // rehydrated from localStorage before `targets` existed (`?.length`, not
+  // `??`: an empty array must fall back too).
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  const ladder = card.strategy.targets?.length
+    ? card.strategy.targets
+    : [card.strategy.target_price];
+  // Missing rungs are filled by stepping ONE MORE R past the previous rung, not
+  // by measuring 2R/3R from entry. Measuring from entry can place T2 nearer than
+  // a strategy-derived T1 (a prior swing high 4R away leaves T2 = 2R behind it),
+  // and stockPositionLevels() sorts the ladder nearest-first on the way into the
+  // portfolio — so the persisted targets[0], which is the ONLY rung TP_HIT
+  // fires on, would not be the rung the card showed as T1.
+  const t1    = round2(ladder[0] ?? card.strategy.target_price);
+  const t2    = round2(ladder[1] ?? t1 + sign * risk);
+  const t3    = round2(ladder[2] ?? t2 + sign * risk);
   const s     = card.shares;
   const s1    = Math.floor(s / 3);
   const s2    = Math.floor(s / 3);

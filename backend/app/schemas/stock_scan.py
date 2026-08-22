@@ -86,6 +86,10 @@ class StrategySignalOut(BaseModel):
     entry_price:  float
     stop_price:   float
     target_price: float
+    #: Full nearest-first exit ladder; targets[0] == target_price. Defaults to []
+    #: so a scan result deserialized from an older persisted session still
+    #: validates.
+    targets:      list[float] = Field(default_factory=list)
     rr_ratio:     float
     atr:          float
     detail:       dict

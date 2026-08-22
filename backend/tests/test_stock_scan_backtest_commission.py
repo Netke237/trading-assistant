@@ -11,6 +11,7 @@ def _fake_signal():
     sig.entry_price = 150.0
     sig.stop_price = 145.0
     sig.target_price = 160.0
+    sig.targets = [160.0]
     sig.rr_ratio = 2.0
     sig.atr = 3.0
     sig.detail = {}

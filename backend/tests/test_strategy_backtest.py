@@ -214,6 +214,7 @@ async def test_process_stock_uses_process_pool_for_backtest():
     mock_signal.entry_price = 185.0
     mock_signal.stop_price  = 180.0
     mock_signal.target_price = 195.0
+    mock_signal.targets     = [195.0]
     mock_signal.rr_ratio    = 2.0
     mock_signal.atr         = 3.0
     mock_signal.detail      = {}
