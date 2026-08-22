@@ -7,7 +7,7 @@
 **Architecture:** Three layers, shipped in dependency order.
 
 - **A — plumbing (Tasks 1–2).** `frontend/lib/paperTrade.ts`'s `buildPaperStockPosition()` gains an optional `levels` argument and a sanitizer (`stockPositionLevels()`) that turns an entry / stop / target-ladder triple into a `{ stop: number | null; targets: TargetLevel[] }` pair, dropping anything non-positive or on the wrong side of entry and sorting targets nearest-first. All four call sites pass real levels. No backend change, no domain-type change.
-- **D — declarative per-strategy exit policies (Tasks 3–12).** One new shared helper in `backend/app/services/strategy_engine.py`, `_build_target_ladder()`, plus one new `exit:` block per strategy in `backend/config/strategy_params.yaml` read through a new `strategy_param_store.get_exit()`. Each signal function derives its ladder from inputs it *already computes* and currently throws away, sets `target_price = ladder[0]`, and carries the full ladder on a new `StrategySignal.targets` field. `mean_reversion_multi`'s "inherits `fired[0]`" resolution is replaced by an order-independent `resolve_multi_signal()`.
+- **D — declarative per-strategy exit policies (Tasks 3–12).** One new shared helper in `backend/app/services/strategy_engine.py`, `_build_target_ladder()`, plus one new `exit:` block per strategy in `backend/config/strategy_params.yaml` read through a new `strategy_param_store.get_exit()`. Each signal function derives its ladder from inputs it *already computes* and currently throws away, passing its thesis level as the helper's **`primary`** and its outward continuations as **`extensions`**, sets `target_price = ladder[0]`, and carries the full ladder on a new `StrategySignal.targets` field. `mean_reversion_multi`'s "inherits `fired[0]`" resolution is replaced by an order-independent `resolve_multi_signal()`.
 - **B — probability veneer (Tasks 13–15).** `estimate_stock_first_passage()` alongside `estimate_first_passage()` in `backend/app/scoring/first_passage.py`, keeping the ATR→σ, trend-score→drift and GBM+barrier machinery and dropping the three option-pricing stages. One new endpoint. `StockPositionCard` gains an "Estimate" affordance and a "Check structure" affordance (the latter reusing the *existing* `/api/contracts/structural-stop`, which is already instrument-agnostic).
 
 **Tech Stack:** FastAPI + Pydantic v2, PyYAML config, NumPy/SciPy (already a dependency of `first_passage.py`), pytest; Next.js 15 / React client components, TypeScript strict, Zustand, Jest + Testing Library.
@@ -104,6 +104,9 @@ the working tree; **corrections to the brainstorm are called out in bold.**
 | `scoring_rules.yaml` has `confidence_backtest.<horizon>.n_days` | `backend/config/scoring_rules.yaml:20-40`; read by `signal_confidence.load_backtest_cfg()` (`signal_confidence.py:29-30`) | ✅ — keys are **lowercase** (`swing`/`position`/`intraday`), values 10 / 40 / 5 |
 | `PortfolioPosition.structuralStop` already has a working alert | `frontend/types/domain.ts:206-210` + `alert_generator.py:159-193` + `portfolio.py:403-404` (PATCH) | ✅ |
 | `mean_reversion_multi` "inherits `fired[0]`" | `backend/app/routers/stock_scan.py:765-769` | ⚠️ **the bug is real but the brainstorm's wording is wrong.** It is not *non-deterministic*: `fired` is built by iterating `req.mean_reversion_variants` (line 747), so the same request always yields the same answer. It is **order-dependent and arbitrary** — the levels come from whichever variant the caller happened to list first, and reordering the checkbox list in the UI silently changes every stop and target. `detail["fired"]` (line 768) inherits the same request-order dependence. Still worth fixing; fixed in Task 9 for the right reason. |
+| `StockScanRequest`'s backtest gate defaults | `backend/app/schemas/stock_scan.py:37-38` (`bt_min_trades: int = 5`, `bt_min_win_rate: float = 0.45`) | ✅ — note `strategy_backtest._MIN_TRADES` is **10**, but the live scan always passes the request value (5), so 5 is the number that actually gates candidates |
+| `adopt()` replaces the whole `active[direction]` dict | `strategy_param_store.py:118-120` (`active[direction.lower()] = copy.deepcopy(params)`) | ⚠️ **a key this plan relies on.** A parameter removed from `search:` is therefore **deleted from `active:`** by the next tuner adopt (the winning combo contains only grid keys), silently reverting to the Python default. This is why every rung-2/3 parameter also goes into the `exit:` block — see Task 12. |
+| `adopt()` rewrites the YAML via `yaml.safe_dump` | `strategy_param_store.py:121-123` | ⚠️ **all comments in `strategy_params.yaml` are destroyed on the first adopt.** Data (including `exit:` blocks) survives; prose does not. Task 12 Step 2's re-tune note is therefore best-effort documentation, not a durable record — the durable copies are this plan and `get_exit()`'s docstring. |
 | `rr_target_mult` is in the WFO `search:` grid | `strategy_params.yaml:50` (pullback_ema), `:69` (breakout_base), `:124` (mean_reversion_bb) | ⚠️ **three strategies, not four.** The brainstorm said "four" while citing three line numbers. `ma_crossover` and `mean_reversion_rsi` have no `rr_target_mult` at all (they use hardcoded `atr × 3.0` / `atr × 2.5`); `mean_reversion_vwap` has an `rr_target_mult` in `active:` but **no `search:` block at all** (`strategy_params.yaml:140`, excluded from WFO as intraday-only). |
 | `StockPositionCard` invents T2/T3 client-side | `frontend/components/organisms/StockPositionCard/index.tsx:43-56` (`defaultOverlay`) | ✅ — `t1 = card.strategy.target_price`, then `t2 = entry + sign·2·risk`, `t3 = entry + sign·3·risk`, where `risk = |entry − stop|`. Not persisted, not backtested, not backend-derived. |
 | The backtest already consumes `target_price` | `strategy_backtest.py:113-121` (`self.buy(limit=…, sl=…, tp=…)`) | ✅ — so **any change to `target_price` immediately changes every historical win rate**; see the coupling section below |
@@ -117,6 +120,28 @@ Three further facts the brainstorm did not surface, all of which materially shap
   on the wrong side of entry (a gapping breakout can open above `base_high + H`; a Bollinger squeeze
   can put `mid` within pennies of entry). This is why Task 3's `_build_target_ladder()` exists and
   why it *drops* bad rungs rather than clamping them into place.
+- **Sorting a mixed thesis list nearest-first would silently demote the thesis rung.** This is the single
+  most important design constraint in Approach D, and the reason `_build_target_ladder()` takes a
+  `primary` separately from `extensions` rather than one flat `thesis` list. If every candidate rung
+  were pooled and sorted by distance from entry, the generic R/ATR extension would become `ladder[0]`
+  — and therefore `target_price`, and therefore the only thing the backtest measures — whenever it
+  happens to be nearer than the strategy's own objective. That is not hypothetical: for
+  `mean_reversion_vwap` the entry gate requires price to be at least `vwap_dev_pct` (1.5%) away from
+  VWAP while `risk = stop_atr_mult × atr` (0.5 ATR on 15-minute bars), so `entry + 2R = entry + 1 ATR`
+  is almost always nearer than VWAP. The same inversion is reachable for `pullback_ema` (2R vs the
+  prior swing high), `mean_reversion_bb` (2R vs the mid-band), `mean_reversion_rsi` (2.5 ATR vs the
+  20-SMA) and `mean_reversion_vwap_daily` (2R vs the mirror deviation). **The primary, when it is
+  valid, is always rung 1; extensions are kept only if they are strictly beyond the rung before them.**
+- **An R-relative "minimum distance" floor must not be applied to a strategy's own primary rung.**
+  `ma_crossover`'s stop is anchored at the slow MA, which right after a fast cross can sit far below
+  price — a 0.5R floor there is 47 points while its 3-ATR objective is 24, so a floor applied to the
+  primary would drop the one rung this plan promises is numerically unchanged and promote a 6-ATR
+  extension in its place. The only thing `_entry_side` and `TP_HIT` actually require is that a rung is
+  finite, positive and *strictly* beyond entry after rounding. A poor R:R on a strategy's declared
+  objective is real information, and it is already surfaced honestly by `rr_ratio` and by the
+  backtest; the ladder builder is not the place to second-guess it. The optional `min_rung_r` floor
+  therefore defaults to **0** and is used by exactly one caller — `resolve_multi_signal()`, where a
+  rung genuinely *is* being re-used against a stop no variant derived it with.
 - **WFO calls the signal function with the grid combo only.** `walk_forward.train_fold()` (line 212)
   calls `run_strategy_backtest(train_bars, strategy=…, direction=…, params=combo)`, where `combo`
   contains **only** the `search:` keys — not `active:`. `run_strategy_backtest` then does
@@ -157,19 +182,26 @@ identical backtests and then let `consensus()` write a median of pure noise into
 strictly worse than not tuning it. The rule this plan adopts, and applies uniformly:
 
 > **`search:` may contain only parameters that influence `ladder[0]` or `stop_price`. Parameters
-> that only scale rungs 2–3 stay in `active:` (where they are documented, editable and still shipped
-> to the live scan) but leave the grid.**
+> that only scale rungs 2–3 leave the grid, and are written into BOTH `active:` and the new `exit:`
+> block.**
+
+The "and `exit:`" half is not belt-and-braces — it is load-bearing. `adopt()` replaces
+`active[direction]` wholesale with the winning grid combo, so a parameter that is no longer in
+`search:` is *deleted from `active:`* the first time the tuner adopts a proposal, and silently
+reverts to the signal function's Python default. `exit:` is never touched by `adopt()`, and the
+merge order is `exit < active < request`, so putting the value there gives it a durable configured
+baseline that an adopt cannot erase and an explicit override can still beat.
 
 Applied per strategy:
 
 | Strategy | `rr_target_mult` today | After this plan | Grid change |
 |---|---|---|---|
-| `pullback_ema` | in `search:` (line 50), sets the only target | stays in `active:` (2.0) scaling rungs 2–3; **removed from `search:`**. Replaced in the grid by `exit_swing_lookback: [10, 20, 30]`, which sets rung 1 (the prior swing high) | 432 → 324 combos |
-| `breakout_base` | in `search:` (line 69), sets the only target | stays in `active:` (2.0) as the degenerate-case fallback only; **removed from `search:`**. Replaced by `measured_move_mult: [0.75, 1.0, 1.25, 1.5]`, which sets rung 1 | 144 → 144 combos |
-| `mean_reversion_bb` | in `search:` (line 124), sets the only target | stays in `active:` (2.0) scaling rung 3; **removed from `search:`**, with **no replacement** — rung 1 is the mid-band, already fully determined by `bb_period`/`bb_std`, which are already in the grid and now genuinely drive the exit | 162 → 54 combos |
-| `ma_crossover` | absent (hardcoded `atr × 3.0`) | the hardcoded 3.0 becomes `atr_target_mult`, **added** to `active:` (3.0) and `search:` `[2.0, 3.0, 4.0]` — it sets rung 1 | 8 → 24 combos |
-| `mean_reversion_rsi` | absent (hardcoded `atr × 2.5`) | the hardcoded 2.5 becomes `atr_target_mult` in `active:` (2.5, **not** in `search:` — it scales rung 2 now); `exit_sma_period: [10, 20]` **added** to `search:`, it sets rung 1 | 12 → 24 combos |
-| `mean_reversion_vwap` | in `active:` only, no `search:` block | unchanged — still no `search:` block (intraday-only, excluded from WFO); `rr_target_mult` now scales rung 3 | n/a |
+| `pullback_ema` | in `search:` (line 50), sets the only target | stays in `active:` **and moves into `exit:`** (2.0), scaling rungs 2–3; **removed from `search:`**. Replaced in the grid by `exit_swing_lookback: [10, 20, 30]`, which sets rung 1 (the prior swing high) | 432 → 324 combos |
+| `breakout_base` | in `search:` (line 69), sets the only target | stays in `active:` **and `exit:`** (2.0) as the degenerate-case fallback only; **removed from `search:`**. Replaced by `measured_move_mult: [0.75, 1.0, 1.25, 1.5]`, which sets rung 1 | 144 → 144 combos |
+| `mean_reversion_bb` | in `search:` (line 124), sets the only target | stays in `active:` **and `exit:`** (2.0) scaling rung 3; **removed from `search:`**, with **no replacement** — rung 1 is the mid-band, already fully determined by `bb_period`/`bb_std`, which are already in the grid and now genuinely drive the exit | 162 → 54 combos |
+| `ma_crossover` | absent (hardcoded `atr × 3.0`) | the hardcoded 3.0 becomes `atr_target_mult`, **added** to `active:`, `exit:` (3.0) and `search:` `[2.0, 3.0, 4.0]` — it sets rung 1 | 8 → 24 combos |
+| `mean_reversion_rsi` | absent (hardcoded `atr × 2.5`) | the hardcoded 2.5 becomes `atr_target_mult` in `active:` **and `exit:`** (2.5, **not** in `search:` — it scales rung 2 now); `exit_sma_period: [10, 20]` **added** to `search:`, it sets rung 1 | 12 → 24 combos |
+| `mean_reversion_vwap` | in `active:` only, no `search:` block | unchanged — still no `search:` block (intraday-only, excluded from WFO); `rr_target_mult` (also mirrored into `exit:`) now scales rung 3 | n/a |
 | `mean_reversion_vwap_daily` | has **no entry in `strategy_params.yaml` at all** | gains an `exit:`-only entry; still no `active:`/`search:` | n/a |
 | `mean_reversion_multi` | not a key in `strategy_params.yaml` (assembled in `stock_scan.py` from variants) | unchanged — it inherits each variant's own policy, then resolves | n/a |
 
@@ -191,6 +223,10 @@ Two rejected alternatives, recorded so they are not re-litigated:
 - *Make `target_price` the furthest rung.* Rejected: it would make win rates worse than today across
   the board for no thesis reason, and `TP_HIT`'s `targets[0]` convention (verified above) already
   establishes nearest-first as this codebase's ordering.
+- *Pool every candidate rung into one list and sort nearest-first.* Rejected — see the third
+  "further fact" above. It reads as the simplest implementation and is the one bug that would make
+  the whole approach a no-op for the strategies most in need of it, because a generic 2R extension is
+  frequently nearer than the strategy's own objective. Hence `primary` + `extensions`.
 
 `ma_crossover` is the one strategy whose primary rung is deliberately left numerically unchanged
 (`atr × 3.0` by default): a moving-average cross has no natural price objective — its thesis exit is
@@ -205,7 +241,10 @@ per-function; the two claims the brainstorm made about specific lines both check
 `+1` for Bullish and `−1` for Bearish throughout; `risk = |entry − stop|`, which every function
 already guarantees is `> 0` before it constructs a signal.
 
-| Strategy | Rung 1 (`target_price`) | Rung 2 | Rung 3 | Already-computed input |
+Rung 1 is the helper's `primary`; rungs 2 and 3 are its `extensions`, and an extension that is not
+strictly beyond the rung before it is dropped rather than reordered ahead of the thesis.
+
+| Strategy | Rung 1 = `primary` (`target_price`) | Extension A | Extension B | Already-computed input |
 |---|---|---|---|---|
 | `pullback_ema` | prior swing extreme: `_swing_high(bars, exit_swing_lookback)` / `_swing_low(…)` | `entry + sign·risk·rr_target_mult` | `entry + sign·risk·rr_target_mult·1.5` | `bars`, `risk`; `_swing_high`/`_swing_low` are existing module helpers (lines 53-60) |
 | `breakout_base` | measured move off the breakout level: `base_high + H·measured_move_mult` / `base_low − …`, `H = base_high − base_low` | `base_high + H·(measured_move_mult + 0.5)` | `base_high + H·(measured_move_mult + 1.0)` | `base_high`/`base_low` at lines 363-364 |
@@ -213,8 +252,8 @@ already guarantees is `> 0` before it constructs a signal.
 | `mean_reversion_rsi` | return to the short-term mean: `_sma(closes, exit_sma_period)[-1]` | `entry + sign·atr·atr_target_mult` (2.5 — today's target) | `entry + sign·atr·atr_target_mult·1.5` | `closes` (line 482), `atr` (line 495); `_sma` is an existing helper (line 18) |
 | `mean_reversion_bb` | mid-band `mid[-1]` | opposite band (`upper[-1]` bullish / `lower[-1]` bearish) | `entry + sign·risk·rr_target_mult` | all three at line 553 |
 | `mean_reversion_vwap` | VWAP itself | `vwap + sign·atr·vwap_extension_atr` | `entry + sign·risk·rr_target_mult` | `vwap` (line 635), `atr` (638) |
-| `mean_reversion_vwap_daily` | symmetric overshoot: `vwap·(1 + sign·dev_frac)` | `entry + sign·risk·rr_target_mult` | `entry + sign·risk·rr_target_mult·1.5` | `vwap` (699), `prev` (704) → `dev_frac` (730) |
-| `mean_reversion_multi` | tightest rung-1 across fired variants, against the widest stop | merged ladder, sanitized | " | resolved in `resolve_multi_signal()` |
+| `mean_reversion_vwap_daily` | symmetric overshoot: `vwap·(1 + sign·dev_pct)` | `entry + sign·risk·rr_target_mult` | `entry + sign·risk·rr_target_mult·1.5` | `vwap` (699), `prev` (704) → `dev_pct` (730 — a *fraction*, despite the name; `detail` stores it ×100) |
+| `mean_reversion_multi` | no `primary` — every fired variant's rungs are pooled as `extensions` and re-sanitized against the resolved entry/stop, so the tightest surviving rung leads | " | " | resolved in `resolve_multi_signal()` |
 
 Two of these need their reasoning spelled out, because the obvious formula is wrong:
 
@@ -227,8 +266,8 @@ Two of these need their reasoning spelled out, because the obvious formula is wr
 - **`mean_reversion_vwap_daily` must NOT target VWAP.** Its Bullish gate is `current > vwap` (line
   712) — the bar has *already reclaimed* the rolling VWAP; VWAP is below entry and the "return to
   VWAP" target is already achieved at entry. Its thesis is a reclaim-and-overshoot, so rung 1 is the
-  mirror of the deviation that triggered it: price deviated `dev_frac` below VWAP, so it targets
-  `dev_frac` above VWAP. Its intraday sibling (`mean_reversion_vwap`) has the opposite gate — price
+  mirror of the deviation that triggered it: price deviated `dev_pct` below VWAP (a fraction,
+  despite the name), so it targets `dev_pct` above VWAP. Its intraday sibling (`mean_reversion_vwap`) has the opposite gate — price
   is still *below* VWAP when it fires (line 644) — so for that one, VWAP itself is correct.
 
 ### Edge cases every formula must survive
@@ -238,16 +277,16 @@ has to:
 
 | Hazard | Where it comes from | Handling |
 |---|---|---|
-| `atr == 0` | `_atr()` returns `0.0` on a single-bar list (line 48-49); a genuinely flat series also gives 0 | ATR-derived rungs collapse onto `entry`, fail the minimum-distance floor, and are dropped |
+| `atr == 0` | `_atr()` returns `0.0` on a single-bar list (line 48-49); a genuinely flat series also gives 0 | ATR-derived rungs collapse onto `entry`, fail the strict "beyond entry after rounding" test, and are dropped |
 | `atr < 0` | not reachable (`_atr` sums non-negative true ranges) but guarded anyway | `sign·atr·k` lands on the wrong side of entry → dropped |
-| base height `H <= 0` | a perfectly flat base (`base_high == base_low`) | `H_eff = H if H > 0 else atr`; if that is also `<= 0`, all measured-move rungs are dropped and the fallback rung applies |
-| `mid`/band within pennies of entry | Bollinger squeeze | fails the `min_target_r · risk` floor → dropped |
+| base height `H <= 0` | a perfectly flat base (`base_high == base_low`) | `H_eff = H if H > 0 else atr`; if that is also `<= 0`, all measured-move rungs land on the breakout level, are dropped, and the fallback rung applies |
+| `mid`/band within pennies of entry | Bollinger squeeze | kept, if it is still strictly above `entry` at 2dp — it is the strategy's own declared objective, the backtest measures it honestly, and `rr_ratio` shows the resulting poor reward:risk. Only `resolve_multi_signal` applies an R-relative floor, and only because it re-uses rungs against a stop no variant derived them with |
 | `vwap` unavailable | `_vwap()` returns `0.0` when total volume is 0 (line 79); both VWAP functions already `return None` on `vwap <= 0` (lines 636-637, 700-701) | unreachable — the signal never gets built |
-| `_sma(closes, exit_sma_period)` returns `[]` | fewer bars than the period | guarded at the call site (`if short_mean:`), rung omitted |
-| a thesis rung lands exactly on `entry` after rounding | rounding to 2dp | post-rounding re-check nudges by `0.01` in the `sign` direction, so `_entry_side`'s strict inequality always holds |
-| every rung is dropped | any combination of the above | ladder falls back to `[entry + sign·risk·max(fallback_mult, min_target_r)]` — always valid, because `risk > 0` is a precondition every caller already enforces |
-| duplicate rungs | mid-band ≈ measured move ≈ 2R on some bar | deduped within 0.1% of each other, nearer rung kept |
-| rungs out of order | thesis rung further than the 2R extension | sorted by signed distance from entry, nearest first — which is what `TP_HIT` requires |
+| `_sma(closes, exit_sma_period)` returns `[]` | fewer bars than the period | the call site passes `None` as `primary`; the helper ignores `None`, and the first surviving extension leads |
+| a rung lands exactly on `entry` after rounding | rounding to 2dp | dropped (not nudged) — `_entry_side` needs a strict inequality, and a one-cent target would be worse than no rung. The fallback guarantees the ladder is still non-empty |
+| every rung is dropped | any combination of the above | ladder falls back to `[entry + sign·risk·max(fallback_mult, 0.5)]`; if even that rounds onto entry (sub-cent risk) it is nudged one cent. Always valid, because `risk > 0` is a precondition every caller already enforces |
+| duplicate rungs | mid-band ≈ measured move ≈ 2R on some bar | extensions within 0.1% of the previous kept rung are dropped |
+| an extension nearer than the primary | 2R inside the prior swing high; 1 ATR inside VWAP | dropped, **never** reordered ahead of the primary — this is the whole reason `primary` is a separate argument |
 | `NaN` / `inf` | not currently reachable but cheap to guard | `math.isfinite` filter |
 
 ### The four sites that mint a stock `PortfolioPosition`
@@ -329,7 +368,7 @@ authoritative and be systematically wrong for `mean_reversion_rsi` / `_bb` / `_v
 - `backend/config/strategy_params.yaml` — one `exit:` block per strategy; `search:` realignment.
 - `backend/app/services/strategy_param_store.py` — `get_exit()`.
 - `backend/app/services/strategy_backtest.py` — merge the exit policy into `params` before calling the signal function.
-- `backend/app/services/strategy_watch_evaluator.py`, `backend/app/services/composite_trigger_evaluator.py` — same merge, so all four consumers agree.
+- `backend/app/services/strategy_watch_evaluator.py` — same merge, so all three param-resolving consumers agree. (`composite_trigger_evaluator.py` is **not** modified — see Task 4 Step 3(c).)
 - `backend/app/routers/stock_scan.py` — `_merge_strategy_params` picks up `exit:`; `mean_reversion_multi` uses `resolve_multi_signal`; `targets` surfaced on `StrategySignalOut`; new `POST /api/stocks/first-passage`.
 - `backend/app/schemas/stock_scan.py` — `StrategySignalOut.targets`.
 - `backend/app/scoring/first_passage.py` — `estimate_stock_first_passage()` and its result dataclasses.
@@ -535,9 +574,9 @@ Replace with:
 import { buildPaperStockPosition, stockPositionLevels } from './paperTrade';
 ```
 
-Then read the two existing tests. **They currently assert `stop === 0` / `targets` length 0** —
-update those two assertions to `stop === null` and keep the length assertion (a no-levels call still
-produces an empty ladder), then append:
+The two existing tests assert only `symbol` / `contract` / `entryPrice` / `contracts` / `direction`
+— **neither touches `stop` or `targets`, so neither needs changing.** (An earlier draft of this plan
+claimed they assert `stop === 0`; re-read the file, they do not.) Append:
 
 ```typescript
 describe('stockPositionLevels', () => {
@@ -718,7 +757,12 @@ byte-identical after the change too. First add a helper just above `async functi
   // result restored from localStorage that predates that field.
   const pristineLevels = (c: PositionCardData) => ({
     stop: c.strategy.stop_price,
-    targets: (c.strategy.targets ?? [c.strategy.target_price]).map((price) => ({ price })),
+    // `?.length ? … : …`, NOT `?? …`: nullish coalescing does not catch an EMPTY
+    // array, and an older backend (or a scan result rehydrated from
+    // localStorage) can send `targets: []`, which would silently persist a
+    // position with no take-profit at all.
+    targets: (c.strategy.targets?.length ? c.strategy.targets : [c.strategy.target_price])
+      .map((price) => ({ price })),
   });
 ```
 
@@ -760,7 +804,9 @@ Replace with:
           c.symbol, c.strategy.entry_price, c.shares, c.direction as Direction, undefined,
           {
             stop: c.strategy.stop_price,
-            targets: (c.strategy.targets ?? [c.strategy.target_price]).map((price) => ({ price })),
+            // `?.length ?` not `??` — an empty array must fall back too.
+            targets: (c.strategy.targets?.length ? c.strategy.targets : [c.strategy.target_price])
+              .map((price) => ({ price })),
           },
         ));
 ```
@@ -812,95 +858,137 @@ Insert immediately before the `# ── Signal dataclass ──` banner (`strate
 _LADDER_MAX_RUNGS = 3
 
 
+_LADDER_MIN_FALLBACK_R = 0.5
+
+
 def _build_target_ladder(
     *,
     entry: float,
     stop: float,
     direction: str,
-    thesis: list[float | None],
+    primary: float | None,
+    extensions: list[float | None],
     fallback_mult: float,
-    min_target_r: float = 0.5,
+    min_rung_r: float = 0.0,
 ) -> list[float]:
-    """Turn a strategy's raw exit thesis into a validated, nearest-first ladder.
+    """Turn a strategy's exit thesis into a validated, nearest-first ladder.
 
     Single place where every degenerate case is handled, so no individual signal
-    function has to. Callers pass whatever their thesis produces — including
-    ``None`` and values that may land on the wrong side of entry — and get back a
-    ladder that is guaranteed non-empty, strictly on the profitable side of entry,
-    strictly monotonic, and ordered nearest-first.
+    function has to. Callers pass their own objective as ``primary`` and their
+    outward continuations as ``extensions`` — including ``None`` and values that
+    may land on the wrong side of entry — and get back a ladder that is
+    guaranteed non-empty, strictly on the profitable side of entry, strictly
+    monotonic, and ordered nearest-first.
+
+    WHY ``primary`` IS A SEPARATE ARGUMENT — the one thing not to "simplify".
+    Pooling every candidate into one list and sorting by distance would let a
+    generic R/ATR extension become ``ladder[0]`` whenever it happens to be
+    nearer than the strategy's own objective, which is exactly the thing this
+    rework exists to stop: ``ladder[0]`` is ``target_price``, and
+    ``target_price`` is the only exit ``strategy_backtest`` can observe (it
+    issues ``tp=sig.target_price``). It is not hypothetical — for
+    ``mean_reversion_vwap`` the entry gate puts VWAP >= 1.5% away while
+    ``risk = 0.5 ATR``, so ``entry + 2R`` is almost always nearer than VWAP.
+    The primary leads whenever it is valid; an extension that is not strictly
+    beyond the rung before it is DROPPED, never reordered ahead of it.
 
     Nearest-first is load-bearing, not cosmetic: ``alert_generator.py`` fires
-    ``TP_HIT`` against ``targets[0]`` and nothing else, and ``strategy_backtest``
-    uses ``target_price`` (= ``ladder[0]``) as its ``tp=``.
+    ``TP_HIT`` against ``targets[0]`` and nothing else.
 
     Rungs are DROPPED, never clamped, when they fail a test. Clamping a
-    wrong-side thesis value into place would manufacture a target the strategy
-    never claimed; dropping it lets the next rung — or the fallback — take over
+    wrong-side value into place would manufacture a target the strategy never
+    claimed; dropping it lets the next rung — or the fallback — take over
     honestly.
+
+    WHY THERE IS NO R-RELATIVE FLOOR BY DEFAULT. The only thing ``_entry_side``
+    and ``TP_HIT`` require is that a rung is finite, positive and *strictly*
+    beyond entry after rounding. An R-relative "must be at least 0.5R away"
+    floor sounds prudent and is actively harmful applied to a primary:
+    ``ma_crossover``'s stop sits at the slow MA, which right after a fast cross
+    can be far below price, so 0.5R there can exceed its 3-ATR objective — the
+    floor would silently drop the one rung this plan promises is numerically
+    unchanged and promote a 6-ATR extension instead. A poor reward:risk on a
+    strategy's declared objective is real information; ``rr_ratio`` and the
+    backtest are where it belongs. ``min_rung_r`` therefore defaults to 0 and
+    has exactly one caller: ``resolve_multi_signal``, where a rung genuinely IS
+    being re-used against a stop no variant derived it with.
 
     Args:
         entry:  signal entry price (> 0, caller-guaranteed).
         stop:   signal stop price. ``risk = abs(entry - stop)`` must be > 0;
                 every caller already returns None before reaching here otherwise.
         direction: "Bullish" or "Bearish".
-        thesis: candidate rungs, in the strategy's own preferred order. ``None``
-                entries are ignored, so a caller can pass an optional level
-                unconditionally.
-        fallback_mult: R multiple used for the guaranteed rung when every thesis
-                rung is dropped.
-        min_target_r: minimum distance from entry, in R, for a rung to count. A
-                target inside this floor makes the backtest's win rate look good
-                for no economic reason, and can round onto entry itself, which
-                ``_entry_side`` rejects outright (producing zero trades rather
-                than worse ones).
+        primary: the strategy's own exit objective, or ``None`` when it is
+                unavailable on this bar (e.g. too few bars for the short SMA).
+        extensions: outward continuations, in the caller's own order; they are
+                sorted nearest-first among themselves. ``None`` entries are
+                ignored so a caller can pass an optional level unconditionally.
+        fallback_mult: R multiple used for the guaranteed rung when every
+                supplied rung is dropped. Floored at 0.5R.
+        min_rung_r: optional minimum distance from entry, in R, applied to every
+                supplied rung (primary included). Defaults to 0 — see above.
 
     Returns:
-        1..3 prices, rounded to 2dp, strictly ordered away from entry.
+        1..3 prices, rounded to 2dp, strictly ordered away from entry. Empty
+        only when the inputs are degenerate (``risk <= 0`` or ``entry <= 0``).
     """
     sign = 1.0 if direction == "Bullish" else -1.0
     risk = abs(entry - stop)
-    if risk <= 0 or not math.isfinite(risk) or entry <= 0:
+    if risk <= 0 or not math.isfinite(risk) or entry <= 0 or not math.isfinite(entry):
         # Unreachable via the signal functions (each returns None on risk <= 0),
         # but this helper is public enough to be called from a future consumer.
         return []
 
-    floor = entry + sign * min_target_r * risk
+    entry_r = round(entry, 2)
+    floor = entry + sign * min_rung_r * risk
 
-    kept: list[float] = []
-    for value in thesis:
+    def _valid(value: float | None) -> float | None:
+        """Round to 2dp and keep only if strictly beyond entry (and the floor)."""
         if value is None or not math.isfinite(value) or value <= 0:
-            continue
-        if sign * (value - floor) < 0:
-            continue
-        kept.append(float(value))
-
-    if not kept:
-        kept = [entry + sign * risk * max(fallback_mult, min_target_r)]
-
-    # Nearest-first by signed distance from entry.
-    kept.sort(key=lambda v: sign * (v - entry))
+            return None
+        if min_rung_r > 0 and sign * (value - floor) < 0:
+            return None
+        rounded = round(value, 2)
+        # A rung that rounds onto (or behind) entry is dropped rather than
+        # nudged: _entry_side needs a strict inequality, and a one-cent target
+        # would be worse than letting the next rung or the fallback take over.
+        if sign * (rounded - entry_r) <= 0:
+            return None
+        return rounded
 
     ladder: list[float] = []
-    for value in kept:
-        rounded = round(value, 2)
-        if ladder:
-            # Dedupe rungs within 0.1% of the previous one — a squeezed
-            # mid-band and a 2R extension really can coincide on some bars, and
-            # two identical rungs in the UI is noise.
-            prev = ladder[-1]
-            if prev > 0 and abs(rounded - prev) / prev < 0.001:
-                continue
-            if sign * (rounded - prev) <= 0:
-                continue
-        # Rounding can collapse a very near rung onto entry; _entry_side needs a
-        # STRICT inequality, so nudge by a cent rather than emitting a no-trade.
-        if sign * (rounded - round(entry, 2)) <= 0:
-            rounded = round(round(entry, 2) + sign * 0.01, 2)
-            if ladder and sign * (rounded - ladder[-1]) <= 0:
-                continue
-        ladder.append(rounded)
-        if len(ladder) == _LADDER_MAX_RUNGS:
+
+    head = _valid(primary)
+    if head is not None:
+        ladder.append(head)
+
+    ext = sorted(
+        (v for v in (_valid(e) for e in extensions) if v is not None),
+        key=lambda v: sign * (v - entry),
+    )
+    for value in ext:
+        if len(ladder) >= _LADDER_MAX_RUNGS:
             break
+        if ladder:
+            prev = ladder[-1]
+            # Strictly beyond the previous rung — an extension that is nearer
+            # than the primary is dropped, never reordered ahead of it.
+            if sign * (value - prev) <= 0:
+                continue
+            # Dedupe within 0.1% of the previous rung: a squeezed mid-band and a
+            # 2R extension really can coincide on some bars, and two
+            # indistinguishable rungs in the UI is noise.
+            if prev > 0 and abs(value - prev) / prev < 0.001:
+                continue
+        ladder.append(value)
+
+    if not ladder:
+        fallback = entry + sign * risk * max(fallback_mult, _LADDER_MIN_FALLBACK_R)
+        rounded = round(fallback, 2)
+        if sign * (rounded - entry_r) <= 0:
+            # Sub-cent risk. One tick is the smallest thing _entry_side accepts.
+            rounded = round(entry_r + sign * 0.01, 2)
+        ladder.append(rounded)
 
     return ladder
 ```
@@ -966,61 +1054,90 @@ import pytest
 from app.services.strategy_engine import _build_target_ladder
 
 
-def test_ladder_is_nearest_first_bullish():
+def test_ladder_puts_the_primary_first_and_sorts_extensions_bullish():
     out = _build_target_ladder(entry=100, stop=95, direction="Bullish",
-                               thesis=[120, 105, 110], fallback_mult=2.0)
+                               primary=105, extensions=[120, 110], fallback_mult=2.0)
     assert out == [105.0, 110.0, 120.0]
 
 
-def test_ladder_is_nearest_first_bearish():
+def test_ladder_puts_the_primary_first_and_sorts_extensions_bearish():
     out = _build_target_ladder(entry=100, stop=105, direction="Bearish",
-                               thesis=[80, 95, 90], fallback_mult=2.0)
+                               primary=95, extensions=[80, 90], fallback_mult=2.0)
     assert out == [95.0, 90.0, 80.0]
+
+
+def test_ladder_never_reorders_a_nearer_extension_ahead_of_the_primary():
+    """THE regression this design exists for: a generic 2R extension nearer than
+    the strategy's own objective must be dropped, not promoted to target_price."""
+    out = _build_target_ladder(entry=100, stop=99, direction="Bullish",
+                               primary=110, extensions=[102, 115], fallback_mult=2.0)
+    assert out[0] == 110.0
+    assert 102.0 not in out
+    assert out == [110.0, 115.0]
+
+
+def test_ladder_never_reorders_a_nearer_extension_ahead_of_the_primary_bearish():
+    out = _build_target_ladder(entry=100, stop=101, direction="Bearish",
+                               primary=90, extensions=[98, 85], fallback_mult=2.0)
+    assert out == [90.0, 85.0]
 
 
 def test_ladder_drops_wrong_side_rungs():
     out = _build_target_ladder(entry=100, stop=95, direction="Bullish",
-                               thesis=[99, 110], fallback_mult=2.0)
+                               primary=99, extensions=[110], fallback_mult=2.0)
     assert out == [110.0]
 
 
-def test_ladder_drops_rungs_inside_the_minimum_r_floor():
-    # risk = 5, min_target_r 0.5 -> floor at 102.5; 101 is inside it.
+def test_ladder_keeps_a_primary_inside_half_an_r_by_default():
+    """No R-relative floor by default — a squeezed mid-band a few cents above
+    entry is the strategy's own objective and is measured honestly."""
     out = _build_target_ladder(entry=100, stop=95, direction="Bullish",
-                               thesis=[101, 112], fallback_mult=2.0)
+                               primary=100.4, extensions=[112], fallback_mult=2.0)
+    assert out == [100.4, 112.0]
+
+
+def test_ladder_min_rung_r_drops_rungs_inside_the_floor_when_asked():
+    # risk = 5, min_rung_r 0.5 -> floor at 102.5; 101 is inside it.
+    out = _build_target_ladder(entry=100, stop=95, direction="Bullish",
+                               primary=101, extensions=[112], fallback_mult=2.0,
+                               min_rung_r=0.5)
     assert out == [112.0]
 
 
 def test_ladder_falls_back_when_every_rung_is_dropped():
     out = _build_target_ladder(entry=100, stop=95, direction="Bullish",
-                               thesis=[None, 90, float("nan"), 0], fallback_mult=2.0)
+                               primary=None, extensions=[90, float("nan"), 0],
+                               fallback_mult=2.0)
     assert out == [110.0]     # entry + 2R
 
 
-def test_ladder_fallback_respects_the_minimum_r_floor():
+def test_ladder_fallback_respects_the_minimum_fallback_floor():
     out = _build_target_ladder(entry=100, stop=95, direction="Bullish",
-                               thesis=[], fallback_mult=0.0)
-    assert out == [102.5]     # max(fallback_mult, min_target_r) = 0.5R
+                               primary=None, extensions=[], fallback_mult=0.0)
+    assert out == [102.5]     # max(fallback_mult, 0.5R)
 
 
 def test_ladder_handles_zero_atr_derived_rungs():
     # atr == 0 collapses every ATR rung onto entry; all are dropped.
     entry, atr = 100.0, 0.0
     out = _build_target_ladder(entry=entry, stop=95, direction="Bullish",
-                               thesis=[entry + atr * 2.5, entry + atr * 3.75],
+                               primary=entry + atr * 3.0,
+                               extensions=[entry + atr * 4.5, entry + atr * 6.0],
                                fallback_mult=2.0)
     assert out == [110.0]
 
 
 def test_ladder_dedupes_near_identical_rungs():
     out = _build_target_ladder(entry=100, stop=95, direction="Bullish",
-                               thesis=[110.0, 110.05, 120.0], fallback_mult=2.0)
+                               primary=110.0, extensions=[110.05, 120.0],
+                               fallback_mult=2.0)
     assert out == [110.0, 120.0]
 
 
 def test_ladder_caps_at_three_rungs():
     out = _build_target_ladder(entry=100, stop=95, direction="Bullish",
-                               thesis=[105, 110, 115, 120, 125], fallback_mult=2.0)
+                               primary=105, extensions=[110, 115, 120, 125],
+                               fallback_mult=2.0)
     assert len(out) == 3
 
 
@@ -1028,13 +1145,19 @@ def test_ladder_first_rung_always_satisfies_entry_side_gate():
     from app.services.strategy_backtest import _entry_side
     for direction, stop in (("Bullish", 95.0), ("Bearish", 105.0)):
         out = _build_target_ladder(entry=100.0, stop=stop, direction=direction,
-                                   thesis=[], fallback_mult=2.0)
+                                   primary=None, extensions=[], fallback_mult=2.0)
         assert _entry_side(direction, entry=100.0, sl=stop, tp=out[0]) is not None
+
+
+def test_ladder_drops_a_rung_that_rounds_onto_entry():
+    out = _build_target_ladder(entry=100.0, stop=95.0, direction="Bullish",
+                               primary=100.001, extensions=[], fallback_mult=2.0)
+    assert out == [110.0]
 
 
 def test_ladder_returns_empty_on_zero_risk():
     assert _build_target_ladder(entry=100, stop=100, direction="Bullish",
-                                thesis=[110], fallback_mult=2.0) == []
+                                primary=110, extensions=[], fallback_mult=2.0) == []
 ```
 
 - [ ] **Step 4: Run and commit**
@@ -1055,7 +1178,7 @@ git commit -m "feat(strategy-engine): add validated exit-target ladder builder a
 - Modify: `backend/app/services/strategy_backtest.py`
 - Modify: `backend/app/routers/stock_scan.py`
 - Modify: `backend/app/services/strategy_watch_evaluator.py`
-- Modify: `backend/app/services/composite_trigger_evaluator.py`
+- Verify only (no edit): `backend/app/services/composite_trigger_evaluator.py`
 
 - [ ] **Step 1: Add `get_exit()` to the param store**
 
@@ -1087,6 +1210,19 @@ def get_exit(strategy: str) -> dict:
     Merged UNDER request/grid params at every call site, so an explicit override
     always wins. Returns {} for a strategy with no ``exit:`` block, in which case
     the signal function's own Python defaults apply.
+
+    DURABILITY, which is half the reason this block exists: ``adopt()`` replaces
+    ``active[direction]`` wholesale with the WFO tuner's winning grid combo, so a
+    parameter that is not in ``search:`` is DELETED from ``active:`` the first
+    time a proposal is adopted. ``exit:`` is never touched by ``adopt()``, so a
+    rung-2/3 parameter written here keeps its configured value across every
+    re-tune instead of silently reverting to the Python default.
+
+    Note also that ``adopt()`` rewrites the whole YAML with ``yaml.safe_dump``,
+    which destroys every comment in the file. Configuration prose in
+    strategy_params.yaml is therefore best-effort; the durable record of why
+    these values exist is this docstring and
+    docs/superpowers/plans/2026-08-22-stock-exit-targets-plan.md.
     """
     return dict(_load().get("strategies", {}).get(strategy, {}).get("exit", {}))
 ```
@@ -1096,6 +1232,9 @@ def get_exit(strategy: str) -> dict:
 Insert an `exit:` block into each strategy, between its `active:` and `search:` blocks. Full values
 are given per-strategy in Tasks 5–10; add them all now so the merge points can be wired in one pass:
 
+Every rung-2/3 parameter appears here **as well as** in `active:` — `exit:` is the copy that
+survives a tuner `adopt()`.
+
 ```yaml
 strategies:
   pullback_ema:
@@ -1104,14 +1243,18 @@ strategies:
     # Exit policy — see docs/superpowers/plans/2026-08-22-stock-exit-targets-plan.md.
     # Direction-symmetric by design; the Bullish/Bearish mirror lives in the signal
     # function, not here. Merged UNDER active:/request params, so an override wins.
+    # adopt() never rewrites this block, so it is the durable home for any exit
+    # parameter that is not in search: (adopt replaces active: wholesale).
     exit:
       exit_swing_lookback: 20      # rung 1: prior swing high/low over this many bars
+      rr_target_mult: 2.0          # rungs 2-3: R extensions past the swing extreme
     search:
       # ... see Task 12 for the realignment ...
 
   breakout_base:
     exit:
       measured_move_mult: 1.0      # rung 1: base height projected off the breakout level
+      rr_target_mult: 2.0          # degenerate-case fallback only (flat base AND zero ATR)
 
   ma_crossover:
     exit:
@@ -1124,29 +1267,33 @@ strategies:
 
   mean_reversion_bb:
     exit:
-      {}                           # rung 1 = mid-band, rung 2 = opposite band: no tunable of its own
-                                   # (both follow bb_period/bb_std, already in active:/search:)
+      # rung 1 = mid-band, rung 2 = opposite band: neither has a tunable of its
+      # own (both follow bb_period/bb_std, already in active:/search:).
+      rr_target_mult: 2.0          # rung 3 only
 
   mean_reversion_vwap:
     exit:
       vwap_extension_atr: 0.5      # rung 2: ATR extension past VWAP
+      rr_target_mult: 2.0          # rung 3 only
 
   mean_reversion_vwap_daily:
     exit:
-      {}                           # rung 1 = symmetric overshoot of the entry deviation
+      # rung 1 = symmetric overshoot of the entry deviation; no tunable of its own.
+      rr_target_mult: 2.0          # rungs 2-3 only
 
   breakout_setup:
     # no exit: block — SetupSignal has no levels (see the plan's scope section)
 ```
 
-> **Implementation note:** an empty YAML mapping written as `{}` under a key is valid and loads as
-> `{}`. If a `mean_reversion_vwap_daily` top-level key does not exist yet in the file (it does not
-> today — verify), add it with only an `exit:` child. Before doing so, read
-> `backend/tests/test_strategy_params.py` and `test_strategy_param_store*.py` and confirm none of
-> them asserts an exact set of strategy keys. If one does, extend that test's expected set rather
-> than skipping the block.
+`mean_reversion_vwap_daily` has no top-level key in `strategy_params.yaml` today (verified), so this
+adds one with only an `exit:` child.
 
-- [ ] **Step 3: Merge the exit policy at all four consumer sites**
+> **Implementation note:** verified — `test_strategy_params.py`, `test_strategy_param_store.py` and
+> `test_strategy_param_store_direction.py` contain no assertion over the exact set of strategy keys,
+> so adding a `mean_reversion_vwap_daily` key is safe. `test_strategy_params_config_sanity.py` walks
+> only `active`/`search`, so it never sees `exit:` at all.
+
+- [ ] **Step 3: Merge the exit policy at the three consumer sites that resolve params**
 
 **(a) The live scan** — find (`backend/app/routers/stock_scan.py:151-155`):
 
@@ -1174,8 +1321,12 @@ def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) 
     return merged
 ```
 
-and extend the import at the top of the file (it already imports `get_active` and `get_costs` from
-`app.services.strategy_param_store`) to include `get_exit`.
+and extend the import at the top of the file (`stock_scan.py:47` already imports `get_active` and
+`get_costs` from `app.services.strategy_param_store`) to include `get_exit`.
+
+Note this changes `_backtest_key`'s inputs: `_bt_params` is part of the backtest cache key, so
+every cached `BacktestResult` is invalidated on deploy. That is correct — the exits genuinely
+changed — but it means the first scan after this ships re-runs every backtest.
 
 **(b) The backtester — this is the one that makes the tuner honest.** Find
 (`backend/app/services/strategy_backtest.py:112-114`):
@@ -1189,13 +1340,12 @@ Replace with, and add the resolution just above the `class _Strategy` definition
 (`strategy_backtest.py:94`):
 
 ```python
-    # WFO's train_fold passes ONLY the search-grid combo as `params` — never the
-    # `active:` block — so any exit parameter absent from the grid would fall back
-    # to the Python default during tuning while the live scan used the configured
-    # value. Merging the exit policy HERE (under `params`, so a grid value still
-    # wins) is what keeps the tuner, the scan, the watch evaluator and the
-    # composite evaluator all measuring the same exits.
-    from app.services.strategy_param_store import get_exit
+    # WFO's train_fold (walk_forward.py:212) passes ONLY the search-grid combo as
+    # `params` — never the `active:` block — so any exit parameter absent from the
+    # grid would fall back to the Python default during tuning while the live scan
+    # used the configured value. Merging the exit policy HERE (under `params`, so a
+    # grid value still wins) is what keeps the tuner, the scan and the watch
+    # evaluator all measuring the same exits.
     effective_params = {**get_exit(strategy), **(params or {})}
 
     class _Strategy(BtStrategy):
@@ -1208,20 +1358,45 @@ Replace with, and add the resolution just above the `class _Strategy` definition
                 sig = fn(slice_bars, direction=direction, **effective_params)
 ```
 
-**(c) The strategy-watch evaluator** — it calls `get_active(key, direction)` in two places (the
-entry evaluation and the opposite-direction reversal check at line ~208). Wrap both:
+Put `get_exit` in the existing deferred-import block at the top of the function
+(`strategy_backtest.py:69-74`), alongside `from app.services.strategy_engine import (…)`, so the
+module still has no import-time dependency on the param store. `run_strategy_backtest` also runs
+inside `stock_scan.py`'s `_BACKTEST_POOL` (a **process** pool), so each worker process reads the
+YAML once and then serves it from `strategy_param_store`'s own 60-second cache — no change needed
+for that, just do not be surprised by the per-process read.
+
+**(c) The strategy-watch evaluator** — it calls `get_active(key, …)` in two places: the primary
+signal at `strategy_watch_evaluator.py:114` and the opposite-direction reversal check at `:211`.
+Wrap both:
 
 ```python
                     opp_params = {**get_exit(key), **get_active(key, opposite_dir)}
                     opp_params.update(params_override)
 ```
 
-and the same `{**get_exit(key), **get_active(key, direction)}` shape at the primary-signal site.
-Add `get_exit` to the existing `from app.services.strategy_param_store import get_active` line.
+```python
+            adopted = {**get_exit(key), **get_active(key, wdir)}
+            params_override = w.get("params_override") or {}
+            adopted.update(params_override)  # params_override wins
+```
 
-**(d) The composite trigger evaluator** — apply the identical `{**get_exit(key), **get_active(...)}`
-wrapping wherever it resolves per-strategy params before calling a signal function
-(`composite_trigger_evaluator.py`, around the `_SIGNAL_FNS`-style dispatch at lines 116-124).
+Add `get_exit` to the existing `from app.services.strategy_param_store import get_active` line
+(`:29`).
+
+**(d) The composite trigger evaluator — DO NOT MODIFY IT.** An earlier draft of this plan called for
+the same wrapping here, on the belief that it resolved per-strategy params "around the
+`_SIGNAL_FNS`-style dispatch at lines 116-124". **It does not.** `_matched_strategy_signals`
+(`composite_trigger_evaluator.py:108-145`) calls `fn(slice_bars, direction=direction)` with the
+signal functions' pure Python defaults — no `get_active`, no params dict at all; lines 116-124 are a
+local `_FNS` lookup table, not a param resolution. Merging `get_exit` there without `get_active`
+would be incoherent, and adding `get_active` is an out-of-scope behaviour change to an evaluator
+that has always deliberately used defaults.
+
+It is also unnecessary. This evaluator asks one boolean question — "did this strategy fire in the
+last few bars?" — and no exit parameter can change that answer: `_build_target_ladder` always
+returns at least the fallback rung when `risk > 0`, which every signal function has already
+guaranteed by the time it calls the helper, so the new `if not targets: return None` guard is
+unreachable in practice. Leave the file alone and record this reasoning in the commit message.
 
 - [ ] **Step 4: Run and commit**
 
@@ -1231,9 +1406,8 @@ cd backend && pytest tests/test_strategy_param_store.py tests/test_strategy_para
   tests/test_strategy_watch_evaluator.py -q
 git add backend/config/strategy_params.yaml backend/app/services/strategy_param_store.py \
         backend/app/services/strategy_backtest.py backend/app/routers/stock_scan.py \
-        backend/app/services/strategy_watch_evaluator.py \
-        backend/app/services/composite_trigger_evaluator.py
-git commit -m "feat(config): add per-strategy exit: policy block and resolve it at all four consumers"
+        backend/app/services/strategy_watch_evaluator.py
+git commit -m "feat(config): add per-strategy exit: policy block and resolve it at all three consumers"
 ```
 
 ---
@@ -1270,18 +1444,20 @@ it is. Then, immediately before the `ma_label = ma_type.upper()` line (322), ins
     # no longer in the WFO grid — see the plan's coupling section).
     #
     # _swing_high/_swing_low look at bars[-lookback:], which includes today. In a
-    # valid pullback today's high is below the prior high by construction, so
-    # including it is harmless; on the edge case where a live current_price has
-    # already exceeded the prior high, that rung fails the minimum-R floor and is
-    # dropped, and the R extensions carry the ladder.
+    # valid pullback today's high is at or below the prior high by construction,
+    # so including it is harmless; in the edge case where the swing extreme
+    # equals the entry close (or a live current_price has already exceeded it)
+    # the rung rounds onto/behind entry, is dropped, and the R extensions carry
+    # the ladder.
     prior_extreme = (_swing_high(bars, lookback=exit_swing_lookback) if direction == "Bullish"
                      else _swing_low(bars, lookback=exit_swing_lookback))
+    _sign = 1 if direction == "Bullish" else -1
     targets = _build_target_ladder(
         entry=current, stop=stop, direction=direction,
-        thesis=[
-            prior_extreme,
-            current + (1 if direction == "Bullish" else -1) * risk * rr_target_mult,
-            current + (1 if direction == "Bullish" else -1) * risk * rr_target_mult * 1.5,
+        primary=prior_extreme,
+        extensions=[
+            current + _sign * risk * rr_target_mult,
+            current + _sign * risk * rr_target_mult * 1.5,
         ],
         fallback_mult=rr_target_mult,
     )
@@ -1331,8 +1507,8 @@ def test_pullback_ema_targets_the_prior_swing_high():
     assert risk > 0, "risk must be positive (stop below entry)"
     assert signal.target_price == signal.targets[0]
     assert signal.target_price > signal.entry_price
-    # Either the prior swing extreme carried rung 1, or it was dropped for being
-    # inside the 0.5R floor and the 2R extension took over. Both are correct.
+    # Either the prior swing extreme carried rung 1, or it rounded onto entry
+    # and was dropped so the 2R extension took over. Both are correct.
     prior = signal.detail["prior_swing_extreme"]
     assert signal.target_price in (
         round(prior, 2),
@@ -1403,18 +1579,19 @@ at line 396:
     # previously used only for the stop and the detail blob.
     base_height = base_high - base_low
     # A perfectly flat base gives height 0; one ATR is the natural stand-in for
-    # "how far this thing travels". If ATR is also 0 (degenerate data) every
-    # measured-move rung collapses onto the breakout level and gets dropped by
-    # the ladder's minimum-R floor, leaving the rr_target_mult fallback.
+    # "how far this thing travels". A gapping open can also put `current` above
+    # anchor + height, in which case that rung is behind entry and is dropped.
+    # If ATR is also 0 (degenerate data) every measured-move rung collapses onto
+    # the breakout level and is dropped, leaving the rr_target_mult fallback.
     height = base_height if base_height > 0 else atr
-    sign = 1 if direction == "Bullish" else -1
+    _sign = 1 if direction == "Bullish" else -1
     anchor = base_high if direction == "Bullish" else base_low
     targets = _build_target_ladder(
         entry=current, stop=stop, direction=direction,
-        thesis=[
-            anchor + sign * height * measured_move_mult,
-            anchor + sign * height * (measured_move_mult + 0.5),
-            anchor + sign * height * (measured_move_mult + 1.0),
+        primary=anchor + _sign * height * measured_move_mult,
+        extensions=[
+            anchor + _sign * height * (measured_move_mult + 0.5),
+            anchor + _sign * height * (measured_move_mult + 1.0),
         ],
         fallback_mult=rr_target_mult,
     )
@@ -1452,14 +1629,16 @@ def test_breakout_base_rung_one_is_the_measured_move_off_the_base_high():
 
     bars = _flat_base_then_breakout()
     sig = breakout_base_signal(bars, base_lookback=20, atr_tight_max=99.0, volume_mult=1.5)
-    if sig is None:
-        pytest.skip("breakout did not fire on synthetic data")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
     height = sig.detail["base_height"]
     anchor = sig.detail["measured_move_anchor"]
     assert height == pytest.approx(4.0, abs=0.01)
-    # Rung 1 = anchor + 1.0 x height, unless it fell inside the ladder's floor.
     assert sig.target_price == pytest.approx(round(anchor + height, 2), abs=0.01)
     assert sig.targets[0] == sig.target_price
+    # The two outward extensions survive: anchor + 1.5H and anchor + 2H.
+    assert sig.targets == [round(anchor + height, 2),
+                           round(anchor + height * 1.5, 2),
+                           round(anchor + height * 2.0, 2)]
 
 
 def test_breakout_base_survives_a_zero_height_base():
@@ -1471,8 +1650,8 @@ def test_breakout_base_survives_a_zero_height_base():
 
     bars = _flat_base_then_breakout(base_high=100.0, base_low=100.0)
     sig = breakout_base_signal(bars, base_lookback=20, atr_tight_max=99.0, volume_mult=1.5)
-    if sig is None:
-        pytest.skip("breakout did not fire on synthetic data")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+    assert sig.detail["base_height"] == 0.0
     assert _entry_side("Bullish", entry=sig.entry_price,
                        sl=sig.stop_price, tp=sig.target_price) == "buy"
 ```
@@ -1514,12 +1693,16 @@ and insert, immediately before the `return StrategySignal(` at line 450:
             # atr_target_mult) and the ladder extends outward from there, rather
             # than inventing a nearer price target with no thesis behind it.
             # This is the one strategy whose primary target is numerically
-            # unchanged by this rework.
+            # unchanged by this rework — which is only true because
+            # _build_target_ladder applies no R-relative floor by default. This
+            # strategy's stop sits at the slow MA, so right after a fast cross
+            # `risk` can be several times ATR and a 0.5R floor would exceed the
+            # 3-ATR objective, dropping it and promoting the 6-ATR extension.
             _sign = 1 if direction == "Bullish" else -1
             targets = _build_target_ladder(
                 entry=current, stop=stop, direction=direction,
-                thesis=[
-                    current + _sign * atr * atr_target_mult,
+                primary=current + _sign * atr * atr_target_mult,
+                extensions=[
                     current + _sign * atr * atr_target_mult * 1.5,
                     current + _sign * atr * atr_target_mult * 2.0,
                 ],
@@ -1570,18 +1753,28 @@ def test_ma_crossover_primary_target_is_unchanged_at_three_atr():
     because it has no thesis price target to move to."""
     from app.services.strategy_engine import ma_crossover_signal, _atr
 
-    # Rising series that produces a golden cross in the last `lookback` bars.
-    closes = [50 + i * 0.6 for i in range(40)] + [74 + i * 1.4 for i in range(30)]
-    bars = [{"open": c, "high": c + 0.5, "low": c - 0.5, "close": c, "volume": 1_000_000}
-            for c in closes]
+    # A monotonically rising series never crosses — the fast MA is above the slow
+    # MA from the first comparable bar, so ma_crossover_signal returns None and a
+    # `pytest.skip` test would pass while proving nothing. Use the flat-then-step
+    # shape that tests/test_strategy_params.py::_crossover_bars already relies on:
+    # the cross happens on the first stepped bar, 5 bars from the end.
+    bars = [{"open": 99.9, "high": 100.5, "low": 99.5, "close": 100.0, "volume": 1_000}
+            for _ in range(100)]
+    bars += [{"open": 199.9, "high": 200.5, "low": 199.5, "close": 200.0, "volume": 1_000}
+             for _ in range(5)]
     sig = ma_crossover_signal(bars, fast=20, slow=50, lookback=10)
-    if sig is None:
-        pytest.skip("no crossover on synthetic data")
-    expected = round(sig.entry_price + _atr(bars) * 3.0, 2)
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+
+    atr = _atr(bars)
+    expected = round(sig.entry_price + atr * 3.0, 2)
     assert sig.target_price == pytest.approx(expected, abs=0.02)
     assert sig.detail["exit_rule"] == "cross_back"
     assert sig.detail["cross_back_level"] > 0
+    # 3 / 4.5 / 6 ATR all survive: this stop sits at the slow MA, so `risk` here
+    # is ~11x ATR — precisely the case an R-relative floor would have broken.
     assert len(sig.targets) == 3
+    assert sig.targets[1] == pytest.approx(round(sig.entry_price + atr * 4.5, 2), abs=0.02)
+    assert sig.targets[2] == pytest.approx(round(sig.entry_price + atr * 6.0, 2), abs=0.02)
 ```
 
 - [ ] **Step 5: Run and commit**
@@ -1620,14 +1813,15 @@ and insert immediately before the `return StrategySignal(` at line 514:
     # (oversold WITHIN an uptrend), so the 200-SMA sits BELOW entry — targeting it
     # would be targeting a loss. RSI is low precisely because price is stretched
     # below its short mean, so that mean is the level the snap-back reaches for.
-    _closes = closes
-    short_mean_series = _sma(_closes, exit_sma_period)
+    short_mean_series = _sma(closes, exit_sma_period)
     short_mean = short_mean_series[-1] if short_mean_series else None
     _sign = 1 if direction == "Bullish" else -1
     targets = _build_target_ladder(
         entry=current, stop=stop, direction=direction,
-        thesis=[
-            short_mean,
+        # None when there are fewer bars than exit_sma_period — the helper
+        # ignores it and the ATR extensions carry the ladder.
+        primary=short_mean,
+        extensions=[
             current + _sign * atr * atr_target_mult,
             current + _sign * atr * atr_target_mult * 1.5,
         ],
@@ -1661,20 +1855,29 @@ def test_mean_reversion_rsi_never_targets_the_trend_sma():
     targeting it would be targeting a loss. Rung 1 must be above entry."""
     from app.services.strategy_engine import mean_reversion_rsi_signal
 
-    # Long uptrend, then a sharp multi-bar dip that drives RSI under 30 while
-    # price stays above the 200-SMA, with the final bar ticking back up.
-    closes = [50 + i * 0.12 for i in range(260)]
-    closes += [closes[-1] - 1.6 * (i + 1) for i in range(8)]
-    closes += [closes[-1] + 0.4]
+    # A STEEP long uptrend, then a short sharp dip that drives RSI under 30 while
+    # price stays comfortably above the 200-SMA, with the final bar ticking back
+    # up so the "RSI recovering" gate passes.
+    #
+    # The slope and the dip depth are both load-bearing: with a shallow ramp
+    # (0.12/bar) and an 8-bar dip the close lands BELOW the 200-SMA, the uptrend
+    # gate rejects, and the signal never fires — an earlier draft of this test
+    # used exactly those numbers and silently skipped every run. If this ever
+    # starts skipping again, fix the fixture, do not relax the test.
+    closes = [50 + i * 0.45 for i in range(260)]
+    closes += [closes[-1] - 2.5 * (i + 1) for i in range(4)]
+    closes += [closes[-1] + 0.5]
     bars = [{"open": c, "high": c + 0.4, "low": c - 0.4, "close": c, "volume": 1_000_000}
             for c in closes]
     sig = mean_reversion_rsi_signal(bars, rsi_period=14, rsi_oversold=30, trend_sma=200)
-    if sig is None:
-        pytest.skip("RSI setup did not fire on synthetic data")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
     trend_sma_val = sig.detail["sma_200"]
+    assert sig.entry_price > trend_sma_val, "bullish gate: entry is above the trend SMA"
     assert sig.target_price > sig.entry_price
     assert sig.target_price > trend_sma_val
     assert sig.targets[0] == sig.target_price
+    # Rung 1 is the SHORT-term mean, and the detail dict reports it.
+    assert sig.target_price == pytest.approx(sig.detail["sma_20"], abs=0.02)
 ```
 
 - [ ] **Step 5: Run and commit**
@@ -1706,15 +1909,20 @@ which are already in `active:` **and** `search:`. Find (`strategy_engine.py:566-
     #
     # The entry gates guarantee the mid-band is on the profitable side: Bullish
     # requires lower[-1] < current < mid[-1] (lines 571-574), Bearish requires
-    # mid[-1] < current < upper[-1] (lines 586-588). A band squeeze can still put
-    # the mid within the ladder's minimum-R floor, in which case that rung is
-    # dropped and the opposite band becomes rung 1 — correct, not a fallback.
+    # mid[-1] < current < upper[-1] (lines 585-588). So the primary is always
+    # valid unless a squeeze puts the mid within half a cent of entry, in which
+    # case it rounds onto entry, is dropped, and the opposite band leads.
+    #
+    # Note the 2R extension is deliberately an EXTENSION, not a co-equal rung:
+    # with stop_atr_mult 0.5 the risk here is small, so entry + 2R is routinely
+    # NEARER than the mid-band. Pooling and sorting would make an arbitrary R
+    # multiple the target again, which is exactly what this rework removes.
     _sign = 1 if direction == "Bullish" else -1
     opposite_band = upper[-1] if direction == "Bullish" else lower[-1]
     targets = _build_target_ladder(
         entry=current, stop=stop, direction=direction,
-        thesis=[
-            mid[-1],
+        primary=mid[-1],
+        extensions=[
             opposite_band,
             current + _sign * risk * rr_target_mult,
         ],
@@ -1741,25 +1949,27 @@ def test_mean_reversion_bb_targets_the_real_mid_band_then_the_opposite_band():
     rung 2 the opposite band — not an R multiple that happens to be nearby."""
     from app.services.strategy_engine import mean_reversion_bb_signal
 
-    import random
-    random.seed(7)
-    # Uptrend above a 200-SMA, then a dip that tags the lower band and closes
-    # back inside it but still below the midline.
-    closes = [80 + i * 0.09 + random.uniform(-0.4, 0.4) for i in range(240)]
-    closes += [closes[-1] - 3.2, closes[-1] - 1.4]
+    # Deterministic (no `random`): a steady uptrend well above its 200-SMA, then
+    # a two-bar dip whose FIRST bar's low tags the lower band and whose second
+    # bar closes back inside the band but still under the midline — the exact
+    # three gates at strategy_engine.py:569-574. Tune the two dip magnitudes
+    # until the signal fires; do not settle for a skip.
+    closes = [80 + i * 0.09 for i in range(240)]
+    closes += [closes[-1] - 3.2, closes[-1] - 3.2 + 1.8]
     bars = [{"open": c, "high": c + 0.5, "low": c - 1.2, "close": c, "volume": 1_000_000}
             for c in closes]
     sig = mean_reversion_bb_signal(bars, bb_period=20, bb_std=2.0, trend_sma=200)
-    if sig is None:
-        pytest.skip("BB setup did not fire on synthetic data")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
 
     mid = sig.detail["bb_mid"]
     upper = sig.detail["bb_upper"]
-    # Rung 1 is the mid-band, unless the squeeze put it inside the 0.5R floor.
-    assert sig.target_price in (round(mid, 2), round(upper, 2)) or \
-        sig.target_price == pytest.approx(mid, abs=0.02)
+    # Rung 1 IS the mid-band the signal itself reports — not an R multiple that
+    # happens to be nearby, and not the opposite band.
+    assert sig.target_price == pytest.approx(mid, abs=0.02)
     assert sig.targets[0] == sig.target_price
+    assert sig.targets[1] == pytest.approx(upper, abs=0.02)
     assert all(t > sig.entry_price for t in sig.targets)
+    assert sig.targets == sorted(sig.targets)
 ```
 
 - [ ] **Step 4: Run and commit**
@@ -1790,11 +2000,18 @@ Add `vwap_extension_atr: float = 0.5,` to the signature after `rr_target_mult`
     # DEVIATED from VWAP by vwap_dev_pct (lines 643-645 / 655-657), so VWAP sits
     # on the profitable side of entry. Its daily sibling has the opposite gate;
     # see below.
+    #
+    # This is THE strategy that proves why `primary` must be a separate argument:
+    # the gate puts VWAP at least vwap_dev_pct (1.5%) away, while
+    # risk = stop_atr_mult * atr (0.5 ATR on 15-minute bars). `entry + 2R` is
+    # therefore almost always NEARER than VWAP, and a pooled nearest-first sort
+    # would silently make an arbitrary 1-ATR multiple the target again — leaving
+    # this strategy's exits exactly as they were before the rework.
     _sign = 1 if direction == "Bullish" else -1
     targets = _build_target_ladder(
         entry=current, stop=stop, direction=direction,
-        thesis=[
-            vwap,
+        primary=vwap,
+        extensions=[
             vwap + _sign * atr * vwap_extension_atr,
             current + _sign * risk * rr_target_mult,
         ],
@@ -1825,8 +2042,8 @@ lines (718, 728), and insert immediately after the existing `dev_pct = abs(vwap 
     _sign = 1 if direction == "Bullish" else -1
     targets = _build_target_ladder(
         entry=current, stop=stop, direction=direction,
-        thesis=[
-            vwap * (1 + _sign * dev_pct),
+        primary=vwap * (1 + _sign * dev_pct),
+        extensions=[
             current + _sign * risk * rr_target_mult,
             current + _sign * risk * rr_target_mult * 1.5,
         ],
@@ -1854,12 +2071,15 @@ def test_mean_reversion_vwap_intraday_rung_one_is_vwap_itself():
     bars.append({"open": 97.5, "high": 97.6, "low": 96.9, "close": 97.0, "volume": 10_000})
     bars.append({"open": 97.0, "high": 97.9, "low": 97.0, "close": 97.8, "volume": 10_000})
     sig = mean_reversion_vwap_signal(bars, vwap_dev_pct=1.5, reversal_pct=0.3, interval="15m")
-    if sig is None:
-        pytest.skip("VWAP setup did not fire on synthetic data")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
     vwap = sig.detail["vwap"]
-    assert sig.target_price == pytest.approx(vwap, abs=0.02) or sig.target_price > vwap
+    # Rung 1 IS VWAP. This assertion is the regression guard for the pooled-sort
+    # bug: here `entry + 2R` (~1 ATR) is nearer than VWAP (>=1.5% away), so a
+    # nearest-first pool would put the R multiple first and this would fail.
+    assert sig.target_price == pytest.approx(vwap, abs=0.02)
     assert sig.targets[0] == sig.target_price
     assert all(t > sig.entry_price for t in sig.targets)
+    assert sig.targets == sorted(sig.targets)
 
 
 def test_mean_reversion_vwap_daily_never_targets_vwap_itself():
@@ -1873,9 +2093,12 @@ def test_mean_reversion_vwap_daily_never_targets_vwap_itself():
     bars.append({"open": 98, "high": 98.5, "low": 97, "close": 97.5, "volume": 10_000})
     bars.append({"open": 97.5, "high": 101.5, "low": 97.5, "close": 101.0, "volume": 10_000})
     sig = mean_reversion_vwap_daily_signal(bars, vwap_lookback=20, vwap_deviation_pct=0.02)
-    if sig is None:
-        pytest.skip("daily VWAP setup did not fire on synthetic data")
-    assert sig.target_price > sig.entry_price > sig.detail["rolling_vwap"]
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+    vwap = sig.detail["rolling_vwap"]
+    assert sig.target_price > sig.entry_price > vwap
+    # Rung 1 is the MIRROR of the entry deviation, not VWAP itself.
+    dev_frac = sig.detail["deviation_pct"] / 100.0
+    assert sig.target_price == pytest.approx(round(vwap * (1 + dev_frac), 2), abs=0.02)
     assert _entry_side("Bullish", entry=sig.entry_price,
                        sl=sig.stop_price, tp=sig.target_price) == "buy"
 ```
@@ -1922,17 +2145,33 @@ def resolve_multi_signal(
       * stop   = the WIDEST of the variants' stops (furthest from entry). If any
                  one variant's invalidation has not been hit, the thesis is
                  intact, so the position should not already be stopped out.
-      * ladder = every variant's rungs pooled and re-sanitized against the
-                 resolved entry/stop, which yields the TIGHTEST rung first (the
-                 ladder builder sorts nearest-first). Taking the tightest target
-                 with the widest stop is deliberately the low-R:R pairing: for a
-                 multi-confirmation entry the edge is the confirmation count, not
-                 the R:R, and the alternative (tight stop + far target) would
-                 flatter the numbers by pairing two levels no single variant ever
-                 claimed together.
+      * ladder = every variant's rungs pooled as ``extensions`` (there is no
+                 ``primary`` here — no single variant's objective outranks
+                 another's) and re-sanitized against the resolved entry/stop,
+                 which yields the TIGHTEST surviving rung first. Taking the
+                 tightest target with the widest stop is deliberately the low-R:R
+                 pairing: for a multi-confirmation entry the edge is the
+                 confirmation count, not the R:R, and the alternative (tight stop
+                 + far target) would flatter the numbers by pairing two levels no
+                 single variant ever claimed together.
       * entry  = the anchor variant's. All variants that can appear here read the
                  same last close, so entries agree; the anchor is chosen by
                  alphabetical strategy name purely so the tie-break is stable.
+
+    This is the ONE caller that passes a non-zero ``min_rung_r``. Everywhere else
+    a rung is the strategy's own objective measured against its own stop, and the
+    ladder builder deliberately does not second-guess it. Here a rung derived
+    against one variant's tight stop is being re-used against a stop that may be
+    many times wider, so a 0.6R target can become a 0.06R target that no variant
+    ever proposed. Half an R is the floor for a rung to survive that transplant.
+
+    KNOWN LIMITATION, recorded rather than hidden: nothing backtests this
+    resolution. ``stock_scan.py`` deliberately uses ``mean_reversion_rsi`` as the
+    canonical backtest proxy for ``mean_reversion_multi`` (so the gate is
+    order-independent), which means the RSI variant's own ladder is what the
+    Step-6 win rate measures, not the resolved one. That predates this plan and
+    is unchanged by it; it is why the resolution rule is chosen to be
+    conservative rather than optimised.
 
     Returns None when ``fired`` is empty or the resolved risk is non-positive.
     """
@@ -1958,7 +2197,8 @@ def resolve_multi_signal(
 
     targets = _build_target_ladder(
         entry=entry, stop=stop, direction=direction,
-        thesis=pooled, fallback_mult=fallback_mult,
+        primary=None, extensions=pooled,
+        fallback_mult=fallback_mult, min_rung_r=0.5,
     )
     if not targets:
         return None
@@ -2012,9 +2252,13 @@ Replace with:
 ```
 
 Add `resolve_multi_signal` to the `from app.services.strategy_engine import (…)` block at
-`stock_scan.py:40-44`. If `dataclasses` becomes unused in this module after the change, leave the
-import alone only if something else uses it — grep for `dataclasses.` before removing it (there is a
-`dataclasses.replace(card, status="CAUTION")` at line 845, so it stays).
+`stock_scan.py:38-45`. `dataclasses` stays imported — `dataclasses.replace(card, status="CAUTION")`
+at line 845 still uses it (verified).
+
+Leave the `_bt_strategy = "mean_reversion_rsi"` proxy and its comment exactly as they are: the
+backtest gate for multi is deliberately measured against the RSI variant so that it, too, is
+order-independent. Note in the commit message that this means the resolved multi ladder is not
+itself backtested — see `resolve_multi_signal`'s KNOWN LIMITATION note.
 
 - [ ] **Step 3: Test order-independence**
 
@@ -2060,9 +2304,10 @@ def test_resolve_multi_signal_bearish_widest_stop_is_the_highest():
 
 
 def test_resolve_multi_signal_drops_rungs_inside_the_widened_floor():
-    """Widening the stop widens the minimum-R floor, which can invalidate a rung
-    that was fine against a variant's own tighter stop. That must not produce a
-    target at or behind entry."""
+    """Widening the stop widens the 0.5R floor this caller passes, which can
+    invalidate a rung that was fine against a variant's own tighter stop. That
+    must not produce a target at or behind entry, and must not let a rung no
+    variant ever proposed against THIS stop become the target."""
     from app.services.strategy_engine import StrategySignal, resolve_multi_signal
     from app.services.strategy_backtest import _entry_side
 
@@ -2108,13 +2353,22 @@ specifies. Concretely:
   pullback_ema:
     active:
       bullish:
-        # ... unchanged; rr_target_mult: 2.0 STAYS here (it scales rungs 2-3) ...
+        ema_period: 50
+        trend_ema: 100
+        atr_stop_mult: 1.5
+        rr_target_mult: 2.0          # rungs 2-3 only; also in exit: so adopt() can't drop it
+        tolerance: 0.04
         exit_swing_lookback: 20
       bearish:
-        # ... unchanged ...
+        ema_period: 35
+        trend_ema: 100
+        atr_stop_mult: 1.5
+        rr_target_mult: 2.0
+        tolerance: 0.04
         exit_swing_lookback: 20
     exit:
       exit_swing_lookback: 20
+      rr_target_mult: 2.0
     search:
       ema_period: [20, 35, 50]
       trend_ema: [100, 150, 200]
@@ -2122,8 +2376,7 @@ specifies. Concretely:
       # rr_target_mult REMOVED from the grid: it no longer influences
       # target_price (= ladder[0], now the prior swing extreme), and
       # strategy_backtest can only observe ladder[0]. Tuning it here would let
-      # consensus() write a median of pure noise into active:. It stays in
-      # active: because it still scales rungs 2-3, which the UI displays.
+      # consensus() write a median of pure noise into active:.
       exit_swing_lookback: [10, 20, 30]
       tolerance: [0.02, 0.04, 0.06, 0.08]
 
@@ -2143,6 +2396,7 @@ specifies. Concretely:
         measured_move_mult: 1.0
     exit:
       measured_move_mult: 1.0
+      rr_target_mult: 2.0
     search:
       base_lookback: [15, 20, 30]
       atr_tight_max: [3.0, 3.5, 4.0, 4.5]
@@ -2153,8 +2407,16 @@ specifies. Concretely:
 
   ma_crossover:
     active:
-      bullish: { fast: 20, slow: 50, lookback: 10, atr_target_mult: 3.0 }
-      bearish: { fast: 20, slow: 50, lookback: 10, atr_target_mult: 3.0 }
+      bullish:
+        fast: 20
+        slow: 50
+        lookback: 10
+        atr_target_mult: 3.0
+      bearish:
+        fast: 20
+        slow: 50
+        lookback: 10
+        atr_target_mult: 3.0
     exit:
       atr_target_mult: 3.0
     search:
@@ -2175,7 +2437,12 @@ specifies. Concretely:
         exit_sma_period: 20
         atr_target_mult: 2.5         # scales rung 2 only — not in the grid
       bearish:
-        # ... same additions ...
+        rsi_period: 14
+        rsi_oversold: 30
+        trend_sma: 200
+        require_choppy_regime: false
+        exit_sma_period: 20
+        atr_target_mult: 2.5
     exit:
       exit_sma_period: 20
       atr_target_mult: 2.5
@@ -2187,7 +2454,8 @@ specifies. Concretely:
 
   mean_reversion_bb:
     # active: unchanged (rr_target_mult: 2.0 stays, now scaling rung 3)
-    exit: {}
+    exit:
+      rr_target_mult: 2.0
     search:
       bb_period: [15, 20, 25]
       bb_std: [1.5, 2.0, 2.5]
@@ -2199,12 +2467,36 @@ specifies. Concretely:
 
   mean_reversion_vwap:
     active:
-      bullish: { ..., vwap_extension_atr: 0.5 }
-      bearish: { ..., vwap_extension_atr: 0.5 }
+      bullish:
+        vwap_dev_pct: 1.5
+        reversal_pct: 0.3
+        stop_atr_mult: 0.5
+        rr_target_mult: 2.0
+        interval: '15m'
+        vwap_extension_atr: 0.5
+      bearish:
+        vwap_dev_pct: 1.5
+        reversal_pct: 0.3
+        stop_atr_mult: 0.5
+        rr_target_mult: 2.0
+        interval: '15m'
+        vwap_extension_atr: 0.5
     exit:
       vwap_extension_atr: 0.5
+      rr_target_mult: 2.0
     # still no search block — intraday-only; excluded from WFO
+
+  mean_reversion_vwap_daily:
+    # No active:/search: — this variant is only reachable through
+    # mean_reversion_multi, which supplies vwap_lookback/vwap_deviation_pct from
+    # the request. It gets an exit: block so its ladder is configurable.
+    exit:
+      rr_target_mult: 2.0
 ```
+
+`ma_crossover` and `mean_reversion_rsi` are written with block mappings rather than the flow-style
+`{ … }` the plan draft used, so the file stays consistent with the rest of `strategies:` — and
+because `adopt()` will rewrite them as block mappings anyway.
 
 > **Critical:** `test_strategy_params_config_sanity.py` asserts every `active.<direction>.<key>` that
 > also appears in `search` is one of the searched values. So every value added to `active:` above
@@ -2214,7 +2506,11 @@ specifies. Concretely:
 
 - [ ] **Step 2: Record the re-tune expectation in the config itself**
 
-Add at the top of `backend/config/strategy_params.yaml`, above `windows:`:
+Add at the top of `backend/config/strategy_params.yaml`, above `windows:`. **Caveat, stated so it is
+not mistaken for a durable record:** `strategy_param_store.adopt()` rewrites this file with
+`yaml.safe_dump`, which destroys every comment in it — so this note survives only until the first
+tuner adopt. It is still worth writing (it will be read by whoever looks at the file before the next
+adopt), but the durable copies are this plan and `get_exit()`'s docstring.
 
 ```yaml
 # NOTE (2026-08-22, stock exit-targets rework): every `active:` value below was
@@ -2258,6 +2554,23 @@ def test_no_backtest_invisible_param_is_in_a_search_grid():
     assert not violations, (
         "These params only affect exit-ladder rungs 2-3, which the backtest "
         "cannot observe, so tuning them produces noise:\n" + "\n".join(violations)
+    )
+
+
+def test_rung_2_3_params_survive_a_tuner_adopt():
+    """adopt() replaces active[direction] wholesale with the winning grid combo,
+    so a param that is not in search: is DELETED from active: on the first adopt
+    and silently reverts to the signal function's Python default. exit: is never
+    rewritten by adopt(), so every such param must be mirrored there."""
+    strategies = _load_strategies()
+    missing = []
+    for strat_name, keys in _RUNG_2_3_ONLY.items():
+        exit_block = strategies.get(strat_name, {}).get("exit") or {}
+        for key in sorted(keys - set(exit_block)):
+            missing.append(f"{strat_name}.exit.{key}")
+    assert not missing, (
+        "Rung-2/3 params absent from their exit: block — a tuner adopt would "
+        "erase them from active: with no durable fallback:\n" + "\n".join(missing)
     )
 
 
@@ -2415,15 +2728,22 @@ function defaultOverlay(card: PositionCardData): StockEditOverlay {
   // T2/T3 used to be invented here as a flat 2R/3R — not strategy-derived, not
   // validated by any backtest, and invisible to the WFO tuner. They now come
   // from the backend ladder, which is built from each strategy's own exit
-  // thesis. The R-multiple ladder survives only as the fallback for a scan
-  // result rehydrated from localStorage before `targets` existed.
+  // thesis. The R-step fill survives only as the fallback for a scan result
+  // rehydrated from localStorage before `targets` existed (`?.length`, not
+  // `??`: an empty array must fall back too).
   const round2 = (v: number) => Math.round(v * 100) / 100;
-  const ladder = card.strategy.targets && card.strategy.targets.length > 0
+  const ladder = card.strategy.targets?.length
     ? card.strategy.targets
-    : [card.strategy.target_price, entry + sign * 2 * risk, entry + sign * 3 * risk];
+    : [card.strategy.target_price];
+  // Missing rungs are filled by stepping ONE MORE R past the previous rung, not
+  // by measuring 2R/3R from entry. Measuring from entry can place T2 nearer than
+  // a strategy-derived T1 (a prior swing high 4R away leaves T2 = 2R behind it),
+  // and stockPositionLevels() sorts the ladder nearest-first on the way into the
+  // portfolio — so the persisted targets[0], which is the ONLY rung TP_HIT
+  // fires on, would not be the rung the card showed as T1.
   const t1 = round2(ladder[0] ?? card.strategy.target_price);
-  const t2 = round2(ladder[1] ?? entry + sign * 2 * risk);
-  const t3 = round2(ladder[2] ?? entry + sign * 3 * risk);
+  const t2 = round2(ladder[1] ?? t1 + sign * risk);
+  const t3 = round2(ladder[2] ?? t2 + sign * risk);
   const s     = card.shares;
   const s1    = Math.floor(s / 3);
   const s2    = Math.floor(s / 3);
@@ -2539,6 +2859,16 @@ def estimate_stock_first_passage(
     takes to resolve" — reusing it keeps the Monte Carlo window consistent with
     the empirical confidence window rather than inventing a second answer.
 
+    UNITS — the one place this deliberately differs from its option sibling.
+    ``n_days`` counts TRADING days (signal_confidence walks forward N bars), and
+    ``sigma_stock`` is annualized from a daily ATR with ``sqrt(252)``, so the
+    time step here is ``1/252``. The option version steps at ``1/365`` because
+    its window is ``dte``, which is CALENDAR days to expiry. Both are internally
+    consistent — annualized vol times the right year fraction — and copying
+    ``1/365`` here would have understated the simulated variance over the window
+    by 252/365 (about 20% in vol terms). ``expected_days`` is therefore also in
+    trading days; the endpoint and the card say so.
+
     NOTE ON MODEL VALIDITY: a constant drift derived from a trend score is a poor
     generative model for the mean_reversion_* strategies, whose whole thesis is
     that the recent drift is transient. That caveat is surfaced to the user by the
@@ -2552,6 +2882,12 @@ def estimate_stock_first_passage(
     if stock_price > 0:
         sigma_stock = max(sigma_floor, min(sigma_ceiling, (atr / stock_price) * math.sqrt(252)))
 
+    # trend_score is DIRECTION-ALIGNED by the time it reaches here: the stock
+    # scorer scores in the requested direction, so 80 means "strongly favours
+    # this trade" for a Bearish scan just as much as for a Bullish one. Hence
+    # sign * (score - 50): a favourable score drifts WITH the trade, an
+    # unfavourable one drifts against it. Same construction as the option
+    # sibling's `direction_sign * (trend_score - 50)`.
     mu = sign * (trend_score - 50) / 50 * max_drift_pct
 
     clean_targets = [float(t) for t in targets if t is not None and math.isfinite(t) and t > 0]
@@ -2568,7 +2904,7 @@ def estimate_stock_first_passage(
         )
 
     rng = np.random.default_rng(seed)
-    dt = 1 / 365
+    dt = 1 / 252   # horizon_days is a TRADING-day count — see the docstring
     z = rng.standard_normal((n_paths, horizon_days))
     log_returns = (mu - 0.5 * sigma_stock ** 2) * dt + sigma_stock * math.sqrt(dt) * z
     stock_paths = stock_price * np.exp(np.cumsum(log_returns, axis=1))
@@ -2631,11 +2967,24 @@ def test_nearer_targets_are_more_likely_than_farther_ones():
 
 def test_bearish_targets_are_below_and_the_comparison_flips():
     res = estimate_stock_first_passage(
-        stock_price=100.0, direction="Bearish", trend_score=20.0, stop_price=105.0,
+        stock_price=100.0, direction="Bearish", trend_score=80.0, stop_price=105.0,
         targets=[98.0, 90.0], candles=_candles(), horizon_days=10, seed=1,
     )
     assert res.targets[0].probability >= res.targets[1].probability
-    assert res.mu < 0     # bearish + weak trend score => downward drift
+    # trend_score is direction-ALIGNED: 80 on a Bearish scan means "strongly
+    # bearish", so the drift must point down. (An earlier draft asserted this
+    # with trend_score=20, which yields mu = -1 * -0.6 * 0.4 = +0.24 — an UPWARD
+    # drift, and the assertion would have failed.)
+    assert res.mu < 0
+
+
+def test_an_unfavourable_trend_score_drifts_against_the_trade():
+    """The mirror of the above, pinned so the sign convention can't silently flip."""
+    res = estimate_stock_first_passage(
+        stock_price=100.0, direction="Bearish", trend_score=20.0, stop_price=105.0,
+        targets=[90.0], candles=_candles(), horizon_days=10, seed=1,
+    )
+    assert res.mu > 0
 
 
 def test_is_deterministic_for_a_given_seed():
@@ -2934,17 +3283,25 @@ it.** The section needs:
   the overlay is what the user intends to trade, matching this plan's pristine-vs-edited decision —
   plus `strategy: card.strategy.strategy`, `direction`, `horizon` from
   `useScanStore(s => s.context?.horizon) ?? 'Swing'`, and `trend_score: card.stock_score`.
+  Be honest about that last one in the code comment: `stock_score` is the 5-rule composite
+  (trend / pullback / trigger / event / vol), not a pure trend score. It is the only 0–100 conviction
+  number the stock card actually has, and the estimator only uses it as a drift scale
+  (`mu = sign · (score − 50) / 50 · max_drift_pct`), so a composite conviction is a defensible proxy
+  — but it is a proxy, and the parameter name should not be allowed to imply otherwise.
 - Rows rendering, per target: price, `probability` as a percentage, `expectedDays` as `~Nd` or
   `unlikely`, using `<Data>` / `<Text>` primitives at the sizes the rest of this file uses.
 - A stop-out row: "Probability of stopping out first" + expected days.
-- The horizon window rendered inline — *"within {horizonDays} days"*. A probability without its
-  window is meaningless, so it is not optional chrome.
+- The horizon window rendered inline — *"within {horizonDays} trading days"*. A probability without
+  its window is meaningless, so it is not optional chrome; and the unit is trading days, not
+  calendar days, because `confidence_backtest.n_days` counts bars (see
+  `estimate_stock_first_passage`'s UNITS note). `expectedDays` is in the same unit.
 - `estimate.modelCaveat` rendered verbatim as `<Text size={11} tone="caution">` when non-null.
 - `Check structure` calls the existing `api.getStructuralStop({ symbol, direction, stock_price:
   overlay.entry })`, renders the level, its source and `R:R vs structural = |t1 − entry| / |entry −
-  structuralPrice|`, and — when available — is passed into the add-to-portfolio call from Task 2
-  Step 2 as `{ …, structuralStop: structural.price }`, which is what lets
-  `STRUCTURAL_STOP_BREACHED` fire for a stock position.
+  structuralPrice|`. **This task then amends the `buildPaperStockPosition(…)` call Task 2 Step 2
+  wrote**, adding `structuralStop: structural?.price ?? null` to its `levels` argument — that is what
+  lets `STRUCTURAL_STOP_BREACHED` fire for a stock position. Guard the R:R division against
+  `|entry − structuralPrice| === 0`.
 
 CSS: reuse the existing classes in `StockPositionCard.module.css` wherever possible; any new class
 must use `border: 1px solid var(--border-subtle)` (no card shadows) and tokens from
@@ -3050,6 +3407,131 @@ git commit -m "fix(stocks): address issues found in exit-targets verification"
 ```
 
 ---
+
+## Adversarial-audit corrections (round 1)
+
+The following were found by a hostile re-read of this plan against the working tree, after the
+Self-Review Notes below were written. They are recorded separately because several of them
+*contradict* those notes, and a reader should see the contradiction rather than a quietly patched
+document.
+
+1. **[critical] Sorting one flat `thesis` list nearest-first demotes the thesis rung.** The original
+   `_build_target_ladder(thesis=[...])` pooled the strategy's objective with its generic R/ATR
+   extensions and sorted them all by distance from entry. For `mean_reversion_vwap` that is not a
+   corner case — the entry gate puts VWAP ≥ 1.5% away while `risk = 0.5 ATR`, so `entry + 2R` is
+   almost always nearer and would have become `target_price`, leaving that strategy's exits
+   unchanged while the Step-4 copy claimed otherwise. Reachable for `pullback_ema`,
+   `mean_reversion_bb`, `mean_reversion_rsi` and `mean_reversion_vwap_daily` too. **Fixed:** the
+   helper now takes `primary` and `extensions` separately; the primary always leads when valid and
+   an extension nearer than the rung before it is dropped, never reordered ahead.
+2. **[high] A 0.5R floor on the primary silently changes `ma_crossover`.** Its stop sits at the slow
+   MA, so right after a fast cross `risk` can be ~11× ATR and 0.5R exceeds the 3-ATR objective — the
+   floor would drop the one rung this plan promises is numerically unchanged and promote the 6-ATR
+   extension. **Fixed:** `min_rung_r` now defaults to 0; the only validity test applied to a
+   strategy's own objective is "finite, positive, strictly beyond entry at 2dp". `resolve_multi_signal`
+   is the single caller that passes `min_rung_r=0.5`, and only because it re-uses rungs against a
+   stop no variant derived them with.
+3. **[high] `composite_trigger_evaluator.py` does not resolve per-strategy params at all.** Task 4
+   Step 3(d) claimed it did, "around the `_SIGNAL_FNS`-style dispatch at lines 116-124"; those lines
+   are a local `_FNS` lookup table and `_matched_strategy_signals` calls
+   `fn(slice_bars, direction=direction)` with pure Python defaults. **Fixed:** the file is no longer
+   modified; the reasoning (exit params cannot change whether a signal fires) is recorded in place.
+   "All four consumers" is now three.
+4. **[high] Removing a param from `search:` deletes it from `active:` on the next tuner adopt.**
+   `adopt()` sets `active[direction] = params` — a whole-dict replace with the winning grid combo —
+   so `rr_target_mult` and `atr_target_mult` would vanish and revert to Python defaults, contradicting
+   the plan's "stays in `active:`". **Fixed:** every rung-2/3 param is mirrored into `exit:` (which
+   `adopt()` never touches), and `test_rung_2_3_params_survive_a_tuner_adopt` enforces it.
+5. **[medium] `adopt()` destroys every comment in `strategy_params.yaml`** (`yaml.safe_dump`). The
+   Task 12 Step 2 re-tune note is therefore best-effort, not durable. **Fixed:** caveat stated; the
+   durable copy lives in `get_exit()`'s docstring and this plan.
+6. **[medium] The claim that `paperTrade.test.ts` asserts `stop === 0` is false.** Its two tests
+   touch only `symbol`/`contract`/`entryPrice`/`contracts`/`direction`. **Fixed.**
+7. **[high] Two thesis-test fixtures could never fire, so those tests would always `pytest.skip`.**
+   `ma_crossover`'s used a monotonically rising series, which never crosses (the fast MA is above the
+   slow MA at every comparable bar); `mean_reversion_rsi`'s 0.12/bar ramp with an 8-bar dip lands the
+   close *below* the 200-SMA and fails the uptrend gate. Both would have passed green while proving
+   nothing — exactly the soft spot the Self-Review Notes flagged, realised twice. **Fixed:** both
+   fixtures replaced, and every new thesis test now asserts `sig is not None` instead of skipping.
+8. **[medium] `mean_reversion_multi`'s resolution is not backtested.** `stock_scan.py` uses
+   `mean_reversion_rsi` as the canonical backtest proxy, so the Step-6 win rate measures the RSI
+   variant's ladder, not the resolved one. Pre-existing and unchanged, but the plan never said so.
+   **Fixed:** recorded as a KNOWN LIMITATION in `resolve_multi_signal`'s docstring.
+9. **[low] Line-number and naming nits.** `TargetLevel` is `domain.ts:170-183` (not 171-183);
+   `PortfolioPosition` starts at 185 and runs past 226; `mean_reversion_bb`'s bearish gates are at
+   585/587 (not 586-588); the analysis-path `StrategySignalOut` is at `stock_scan.py:555`; the
+   variable at `strategy_engine.py:730` is `dev_pct` (a fraction) not `dev_frac`. **Fixed.**
+10. **[low] `trend_score: card.stock_score` is a proxy, not a trend score.** `stock_score` is the
+   5-rule composite. Defensible as a drift scale, but the plan now says so out loud rather than
+   letting the parameter name imply otherwise. **Fixed.**
+11. **[low, retracted]** The Background's "`bt_min_win_rate` 0.45, `bt_min_trades` 5" looked wrong
+   against `strategy_backtest._MIN_TRADES = 10`, but `StockScanRequest` defaults to 5 and the live
+   scan always passes it. The plan was right; a clarifying row was added to the facts table.
+
+## Adversarial-audit corrections (round 2)
+
+A second hostile pass, run against the round-1 revision:
+
+12. **[high] The `mu` sign test asserted the wrong direction.**
+   `test_bearish_targets_are_below_and_the_comparison_flips` used `trend_score=20` and asserted
+   `mu < 0`, but `trend_score` is direction-*aligned* (the stock scorer scores in the requested
+   direction), so 20 on a Bearish scan means the trend *opposes* the trade and
+   `mu = −1 · (20−50)/50 · 0.40 = +0.24`. **Fixed:** the test now uses 80, and a mirror test pins the
+   unfavourable case at `mu > 0` so the convention cannot silently flip.
+13. **[high] `dt = 1/365` is wrong for a trading-day horizon.** `horizon_days` comes from
+   `confidence_backtest.<horizon>.n_days`, which counts bars, and `sigma_stock` is annualized with
+   `sqrt(252)` — so stepping at 1/365 understates the simulated variance over the window by 252/365
+   (≈20% in vol terms). The option sibling's 1/365 is correct *there* because `dte` is calendar days.
+   **Fixed:** `dt = 1/252`, documented, and both the endpoint and the card now say "trading days".
+14. **[medium] `?? [c.strategy.target_price]` does not catch an empty array.** `StockSendDialog` and
+   the Step-4 auto-execute both used `??`, which only fires on `null`/`undefined` — a backend or
+   rehydrated scan result carrying `targets: []` would have persisted a position with no take-profit
+   at all. **Fixed:** `?.length ? … : …` at all three sites (including `defaultOverlay`).
+15. **[medium] `defaultOverlay`'s 2R/3R fill can put T2 nearer than a strategy-derived T1.** A prior
+   swing high 4R away leaves the old `entry + 2R` fill *behind* T1, and `stockPositionLevels()` sorts
+   nearest-first on the way into the portfolio — so the persisted `targets[0]`, the only rung
+   `TP_HIT` fires on, would not be the rung the card labelled T1. **Fixed:** missing rungs step one
+   more R past the *previous rung*, not from entry. (This also fixes the pre-existing legacy case,
+   where `t1 = target_price = entry + 2R` duplicated `t2`.)
+16. **[low] Task 16 amends a call site Task 2 already wrote.** Made explicit, plus a divide-by-zero
+   guard on the structural R:R.
+
+## Adversarial-audit corrections (round 3)
+
+A third pass found no new defects. What it checked, so the clean result is auditable rather than
+asserted, plus two residual risks now recorded rather than left implicit:
+
+- **Grid-size changes break nothing.** `test_walk_forward.py::test_param_combos_cartesian` uses a
+  synthetic 2×2 space, not the shipped grids; no test asserts a combo count for a real strategy.
+- **A strategy with no `search:` block is skipped cleanly** by `strategy_param_optimizer.run_optimization`
+  (`strategy_param_optimizer.py:241-247` — `if not search_space: … continue`), and
+  `strategy_tuning.py:64` enumerates `cfg["strategies"].keys()` without assuming any sub-block, so
+  adding a `mean_reversion_vwap_daily` key that has only `exit:` is safe.
+- **`test_strategy_params_config_sanity.py`'s existing assertion still passes** for every value this
+  plan adds to `active:`: `exit_swing_lookback` 20 ∈ [10,20,30]; `measured_move_mult` 1.0 ∈
+  [0.75,1.0,1.25,1.5]; `atr_target_mult` 3.0 ∈ [2.0,3.0,4.0]; `exit_sma_period` 20 ∈ [10,20];
+  `rr_target_mult`/`atr_target_mult` where no grid entry exists are skipped by that test's own rule.
+- **`stock_scan.py` has no `/stocks/…` route today** and `test_routes.py` asserts no route inventory,
+  so `POST /api/stocks/first-passage` collides with nothing.
+- **No import cycle** from `stock_scan.py` importing `FirstPassageInvalidationOut` out of
+  `contracts.py`: `contracts.py` imports nothing from `stock_scan.py` (verified by grep), and
+  `main.py` registers `contracts_router` before `stock_scan_router`.
+
+**Residual risk 1 — a moved fill price can put a validated stop on the wrong side of the real entry.**
+`add_position` overwrites `entry_price` with the live quote (`portfolio.py:230-234`), while
+`stockPositionLevels()` validated the stop against the card's entry. If the live quote has already
+crossed the stop, `STOP_REACHED` fires immediately. That is **correct** — the position genuinely is
+beyond its invalidation the moment it opens — and it is not the failure mode the sanitizer exists to
+prevent (a stop stored on the wrong side of a *stationary* entry). Recorded so a future reader does
+not mistake one for the other. It is equally true of the options path today and is not changed here.
+
+**Residual risk 2 — the new exit parameters are not exposed in the Step-3 Execution Parameters panel.**
+`exit_swing_lookback`, `measured_move_mult`, `atr_target_mult`, `exit_sma_period` and
+`vwap_extension_atr` are configurable via `strategy_params.yaml` and tunable (where they set rung 1)
+via WFO, but there is no per-scan UI override for them. Deliberate: the panel already carries 62
+definitions and adding five more is a separate design question, not part of making exits
+strategy-aware. `_merge_strategy_params`'s `request_kwargs` layer already accepts them, so wiring the
+UI later needs no backend change.
 
 ## Self-Review Notes (completed by the plan author, not a task for the implementer)
 
