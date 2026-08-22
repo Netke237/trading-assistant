@@ -118,9 +118,12 @@ export function rrOverridesFrom(
 
 /** One cached "Estimate" result, keyed by CONTRACT (contractKeyFor) — the
  *  estimate is priced off that contract's premium/strike/dte, so a symbol-level
- *  key would show contract A's numbers on contract B's card. */
+ *  key would show contract A's numbers on contract B's card. `estimate: null`
+ *  is a real, cacheable answer (a failed re-estimate that must overwrite a
+ *  stale one — see cacheFirstPassage), the same role `CachedStructural.stop:
+ *  null` plays below. */
 export type CachedFirstPassage = {
-  estimate: FirstPassageEstimate;
+  estimate: FirstPassageEstimate | null;
   context:  FirstPassageContext | null;
 };
 
@@ -169,12 +172,25 @@ export function cacheStructural(
  * CONTRACT — the estimate is priced off that contract's premium, so a
  * symbol-level key would show contract A's numbers on contract B's card.
  *
- * Same two invariants as `cacheStructural`, with two specifics:
+ * Same two invariants as `cacheStructural` — including the SAME `undefined`
+ * vs. `null` distinction (`undefined` is ignored; `null` is a real, cacheable
+ * answer) — plus one specific to this cache:
  * - `key === null` means the card has no resolvable contract (no
  *   `contractDetails`), in which case the Estimate button is disabled anyway —
  *   nothing to key an entry by, so nothing is written.
- * - Both `undefined` (reset on contract switch) and `null` are sentinels here,
- *   so the guard is `estimate == null`, not `=== undefined`.
+ *
+ * `null` was originally ignored here too (a stricter `estimate == null`
+ * guard), on the reasoning that nothing in this codebase ever produces a
+ * genuine "checked, confirmed no estimate" result the way a structural check
+ * can genuinely find no order block or swing level. That reasoning covered
+ * TradeCard's OWN render, but not what happens after this cache restores a
+ * value on a later navigation: a failed re-estimate has to be able to
+ * overwrite a stale cached entry the same way a failed structural re-check
+ * does, or the stale premium/delta silently rides along under whatever the
+ * OTHER cache (structural) resolves to next — the same bug class
+ * `cacheStructural`'s docstring above describes, just on this cache's data.
+ * TradeCard's failure path writes `null` specifically to force that
+ * overwrite, so the guard here is strict `=== undefined` to match.
  *
  * The unchanged-comparison is by REFERENCE on both halves, which is exactly
  * right: TradeCard stores one object per successful estimate and holds it until
@@ -187,7 +203,7 @@ export function cacheFirstPassage(
   estimate: FirstPassageEstimate | null | undefined,
   context: FirstPassageContext | null,
 ): Record<string, CachedFirstPassage> {
-  if (!key || estimate == null) return prev;
+  if (!key || estimate === undefined) return prev;
   const cur = prev[key];
   if (cur && cur.estimate === estimate && cur.context === context) return prev;
   return { ...prev, [key]: { estimate, context } };

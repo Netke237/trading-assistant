@@ -283,9 +283,13 @@ describe('cacheStructural', () => {
     expect(cacheStructural(prev, 'AAPL', undefined, null)).toBe(prev);
   });
 
-  it('leaves a previously cached level intact when a re-check fails', () => {
-    // checkStructure sets stop=undefined before fetching and leaves it there on
-    // failure, so the only call the cache sees is the sentinel above.
+  it('leaves a previously cached level intact for an in-flight (not-yet-resolved) re-check', () => {
+    // checkStructure sets stop=undefined before fetching (still in flight, no
+    // answer yet) — that write must not disturb the cache. Once the fetch
+    // actually resolves (success OR failure) it writes something else: a real
+    // value on success, or an explicit `null` on failure (see the dedicated
+    // "a failed re-check" test below) — `undefined` is never checkStructure's
+    // LAST word on a request that has actually completed.
     const prev: Record<string, CachedStructural> = { AAPL: { stop: stopA, stockPrice: 318.9 } };
     const after = cacheStructural(prev, 'AAPL', undefined, null);
     expect(after.AAPL).toEqual({ stop: stopA, stockPrice: 318.9 });
@@ -346,10 +350,17 @@ describe('cacheFirstPassage', () => {
     expect(cacheFirstPassage(prev, KEY, undefined, null)).toBe(prev);
   });
 
-  it('ignores a `null` estimate — a failed estimate must not destroy the cached one', () => {
+  it('writes a `null` estimate as a real overwrite — a failed re-estimate must not leave a stale one cached', () => {
+    // Mirrors cacheStructural's undefined-vs-null distinction: `undefined`
+    // (the previous test) is a "don't touch, still in flight" sentinel;
+    // `null` is TradeCard's explicit "this refresh determined the previous
+    // value can no longer be vouched for" signal, and must actually clear
+    // the stale entry rather than being silently ignored like `undefined` —
+    // otherwise the stale estimateA/contextA pair rides along under
+    // whatever the structural cache resolves to on a later navigation.
     const prev: Record<string, CachedFirstPassage> = { [KEY]: { estimate: estimateA, context: contextA } };
-    expect(cacheFirstPassage(prev, KEY, null, null)).toBe(prev);
-    expect(prev[KEY]!.estimate).toBe(estimateA);
+    const out = cacheFirstPassage(prev, KEY, null, null);
+    expect(out[KEY]).toEqual({ estimate: null, context: null });
   });
 
   it('ignores a null key (card with no resolvable contract) rather than keying on "null"', () => {

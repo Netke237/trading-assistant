@@ -661,6 +661,68 @@ describe('TradeCard', () => {
     });
   });
 
+  it('does not render a mixed-vintage R:R when a FRESH Check-structure lands next to a still-restored estimate', async () => {
+    // Regression test for a MEDIUM finding from a fourth independent audit
+    // round: rounds 1-3 fixed every path where structuralStop could be the
+    // stale half of the pair, but nothing protected the OTHER direction —
+    // firstPassage/firstPassageContext restored from cache (never refreshed
+    // this visit) sitting next to a structuralStop the user just fetched
+    // fresh via "Check structure" alone. structuralRR combined them exactly
+    // as readily as the already-fixed cases. The fix gates structuralRR on
+    // pairRestoredTogetherRef (both halves still untouched since the same
+    // restore) OR both isFreshRefs being true (both independently confirmed
+    // fresh this mount) — a fresh check against a stale estimate satisfies
+    // neither, so no R:R renders until the user's own next Estimate click
+    // (which auto-skips re-checking structure, already fresh) brings both
+    // sides current.
+    const cachedCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        firstPassage: {
+          targets: [{ pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 }],
+          invalidation: { probability: 0.30, expectedDays: 4 },
+        },
+        firstPassageContext: { premium: 2.75, delta: 0.42, targetPct: { t1: 0.20, t2: 0.35, t3: 0.50 } },
+      },
+    };
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    rerender(<TradeCard data={cachedCard} />);
+    await waitFor(() => {
+      expect(screen.getByText('T20%')).toBeInTheDocument();
+    });
+
+    // A genuinely fresh "Check structure" — a very different stock price
+    // than whatever the restored estimate's premium/delta were computed
+    // against.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'MSFT', price: 280 });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 270.0, source: 'swing_low', confidence: 60, distancePct: 3.6,
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Swing Low/)).toBeInTheDocument();
+    });
+    // The fresh stop is real and displayed — but nowhere does the specific
+    // computed ratio appear that combining it with the still-stale estimate
+    // context would produce. (stockMove=|270-280|=10, deltaEst=0.42,
+    // risk=min(4.2,2.75)=2.75, reward=3.3-2.75=0.55 -> if wrongly combined
+    // this would render "0.2×" — the top Risk/Reward badge legitimately
+    // renders its OWN unrelated ratio elsewhere on the page, so this asserts
+    // the specific wrong value's absence, not a page-wide absence of "×".)
+    expect(screen.queryByText('0.2×')).not.toBeInTheDocument();
+    // And the cell doesn't misreport this as "the stop sits at the current
+    // price" (structuralZeroRisk) — that label means something specific and
+    // this isn't it.
+    expect(screen.queryByText('N/A (stop = price)')).not.toBeInTheDocument();
+  });
+
   it('surfaces a completed first-passage estimate and its context to onFirstPassageChange', async () => {
     (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
     (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
