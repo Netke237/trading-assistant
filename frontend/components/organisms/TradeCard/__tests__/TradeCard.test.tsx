@@ -601,8 +601,64 @@ describe('TradeCard', () => {
     // ...and the R:R-vs-structural-stop cell falls back to the defensive
     // placeholder instead of showing a number computed from the stale
     // $178.50/$190 pair against the fresh $7.00 estimate (which would render
-    // as a specific, plausible-looking, and wrong ratio here).
-    expect(screen.getByText('—')).toBeInTheDocument();
+    // as a specific, plausible-looking, and wrong ratio here). structuralStop
+    // is cleared to `null` (not `undefined`) so the parent's cache actually
+    // overwrites the stale entry — see the `.catch` handler's comment — which
+    // is what makes this cell read as "unavailable" rather than "—".
+    expect(screen.getByText('No structural stop found')).toBeInTheDocument();
+  });
+
+  it('clears to null (not undefined) so a failed refresh actually overwrites the parent cache, surviving a second navigation', async () => {
+    // Regression test for a MEDIUM finding from a third independent audit
+    // round: clearing to `undefined` fixed the display for THIS render, but
+    // `undefined` is the exact sentinel the parent's cache reducer
+    // (cacheStructural) is designed to ignore — so the stale cached entry
+    // would survive untouched, and the very next navigate-away-and-back
+    // would restore it again, paired with whatever firstPassageContext is
+    // cached by then. `null` is a real, cacheable value (the same shape a
+    // genuine "nothing found" result produces), so this asserts the
+    // onFirstPassageChange-style write-back actually carries `null` out of
+    // TradeCard, which is what lets the parent's cache reducer treat it as
+    // a real overwrite instead of a no-op.
+    const onStructuralStopChange = jest.fn();
+    const cachedCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        structuralStop: { price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6 },
+        structuralStopStockPrice: 190.0,
+      },
+    };
+    const { rerender } = render(
+      <TradeCard data={mockTradeCard} onStructuralStopChange={onStructuralStopChange} />,
+    );
+    rerender(<TradeCard data={cachedCard} onStructuralStopChange={onStructuralStopChange} />);
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'MSFT', price: 300 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 40, spread: 0.1, volume: 50,
+    });
+    (api.getStructuralStop as jest.Mock).mockRejectedValueOnce(new Error('network error'));
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [{ pct: 0.20, stockPrice: 310, optionPrice: 7.0, probability: 0.6, expectedDays: 6 }],
+      invalidation: { probability: 0.25, expectedDays: 5 },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    });
+
+    await waitFor(() => {
+      // The last call after the failed refresh must carry `null`, not
+      // `undefined` — that's the one distinction the parent's cache
+      // reducer actually branches on.
+      expect(onStructuralStopChange).toHaveBeenLastCalledWith(null, null);
+    });
   });
 
   it('surfaces a completed first-passage estimate and its context to onFirstPassageChange', async () => {

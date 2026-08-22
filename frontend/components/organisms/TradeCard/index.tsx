@@ -430,9 +430,27 @@ export function TradeCard({
             // fresh premium/delta by the time this rejection lands —
             // structuralRR would otherwise silently render a mixed-vintage
             // number with no staleness cue, the exact failure mode this
-            // whole mechanism exists to prevent. Clearing falls back to the
-            // defensive "not currently known" placeholder instead.
-            setStructuralStop(undefined);
+            // whole mechanism exists to prevent.
+            //
+            // Deliberately `null`, not `undefined`. The parent's cache
+            // reducer (cacheStructural) treats `undefined` as "ignore, don't
+            // touch the cache" BY DESIGN — that's what lets an in-flight or
+            // failed re-run leave an existing good value alone elsewhere.
+            // Here that same protection backfires: it would leave the STALE
+            // restored entry sitting in the parent's cache forever, so the
+            // very next navigate-away-and-back would restore it again — the
+            // one moment the local component clears itself would be
+            // invisible outside this render. `null` is not a "nothing
+            // happened" sentinel to this cache, it's the same shape a
+            // genuine "checked, found nothing" result already produces
+            // (see checkStructure's success path below), so writing it here
+            // forces the parent to actually overwrite the stale entry. The
+            // cost is a slightly imprecise placeholder next time ("No order
+            // block or swing level found nearby" rather than "check
+            // failed") — an acceptable trade for never re-serving a value
+            // this refresh specifically determined it could no longer vouch
+            // for.
+            setStructuralStop(null);
             setStructuralStopStockPrice(null);
           })
           .finally(() => {
