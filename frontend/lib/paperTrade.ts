@@ -1,10 +1,91 @@
-import type { Direction, PortfolioPosition } from '@/types/domain';
+import type { Direction, PortfolioPosition, TargetLevel } from '@/types/domain';
 import type { PositionCardData } from '@/types/stockDomain';
+
+/** One rung of a stock exit ladder, before sanitizing. */
+export interface StockTargetInput {
+  price:   number;
+  shares?: number;
+}
+
+export interface StockLevels {
+  stop:    number | null;
+  targets: TargetLevel[];
+}
+
+/**
+ * Turn a raw (entry, stop, ladder) triple into the exact `{ stop, targets }` pair
+ * `PortfolioPosition` wants, dropping anything that would be meaningless or actively
+ * dangerous downstream.
+ *
+ * Why each rule exists:
+ *  - `portfolioStore.floorStop()` maps any non-positive stop to `null` ("unset") at all
+ *    eight of its documented entry points, so sending `0` LOOKS like it worked and
+ *    silently no-ops. This returns `null` explicitly instead, never `0`.
+ *  - A stop on the wrong side of entry (bullish stop above entry) is a data error, and
+ *    `alert_generator.py`'s STOP_REACHED comparison would treat it as breached on the
+ *    very first tick — a real notification for a position that is fine. Dropped.
+ *  - `alert_generator.py:93` fires TP_HIT against `targets[0]` and nothing else, so the
+ *    ladder MUST be nearest-first; a user is free to type T1 > T2 in the card, so the
+ *    ordering is enforced here rather than trusted. Share allocations travel with their
+ *    price through the sort.
+ *  - Both `stockPrice` and `targetPrice` are written. Only `stockPrice` is read today
+ *    (by TP_HIT and the portfolio drawer), but `POST /api/portfolio`'s re-anchor branch
+ *    does `(t.get("targetPrice") or 0) + delta`, which would turn a missing field into a
+ *    bogus small number if that branch is ever enabled for stocks.
+ */
+export function stockPositionLevels(
+  entry: number,
+  direction: Direction,
+  stop: number | null | undefined,
+  targets: ReadonlyArray<StockTargetInput> = [],
+): StockLevels {
+  const sign = direction === 'Bullish' ? 1 : -1;
+  const entryOk = Number.isFinite(entry) && entry > 0;
+
+  const safeStop =
+    entryOk && stop != null && Number.isFinite(stop) && stop > 0 && sign * (entry - stop) > 0
+      ? Math.round(stop * 100) / 100
+      : null;
+
+  const rungs = entryOk
+    ? targets
+        .filter((t) => Number.isFinite(t.price) && t.price > 0 && sign * (t.price - entry) > 0)
+        .map((t) => ({
+          price: Math.round(t.price * 100) / 100,
+          shares: t.shares != null && Number.isFinite(t.shares) && t.shares > 0
+            ? Math.round(t.shares)
+            : undefined,
+        }))
+        .sort((a, b) => sign * (a.price - b.price))
+    : [];
+
+  return {
+    stop: safeStop,
+    targets: rungs.map((r, i) => ({
+      id: `T${i + 1}`,
+      stockPrice: r.price,
+      targetPrice: r.price,
+      ...(r.shares != null ? { contractsToSell: r.shares } : {}),
+      status: 'PENDING',
+    })),
+  };
+}
 
 // The "why was this bought" snapshot for the stocks path — attached once at
 // buy time so it survives independent of later scans overwriting scanStore.
-export function stockCardSnapshotOf(c: PositionCardData): Record<string, unknown> {
+//
+// This carries the PRISTINE strategy signal (`strategy`), which is the analytics /
+// audit copy of the levels. The user's EDITED levels go into the live
+// `PortfolioPosition.stop` / `.targets` fields, which are what the alert engine
+// actually fires on. Passing `edited` here records the diff between the two, so the
+// audit answer to "why was this bought, and at what levels" is complete rather than
+// just a baseline. See the plan's "Pristine or edited?" decision.
+export function stockCardSnapshotOf(
+  c: PositionCardData,
+  edited?: { entry: number; stop: number; targets: number[]; shares: number },
+): Record<string, unknown> {
   return {
+    ...(edited ? { edited } : {}),
     stock_score: c.stock_score,
     stock_status: c.stock_status,
     strategy: c.strategy,
@@ -22,8 +103,22 @@ export function buildPaperStockPosition(
   shares: number,
   direction: Direction,
   snapshot?: Record<string, unknown>,
+  levels?: {
+    stop?: number | null;
+    targets?: ReadonlyArray<StockTargetInput>;
+    /** Optional chart-structure level; only set when the user ran "Check structure". */
+    structuralStop?: number | null;
+  },
 ): PortfolioPosition {
   const today = new Date().toISOString().slice(0, 10);
+  // Levels are OPTIONAL by design: ChartWorkspace's manual buy has no strategy and
+  // therefore genuinely has no stop. `null` (not 0) is what every layer already means
+  // by "unset" — floorStop(), toBackendPayload(), and the backend's own _floor_stop.
+  const { stop, targets } = stockPositionLevels(price, direction, levels?.stop, levels?.targets ?? []);
+  const structuralStop =
+    levels?.structuralStop != null && Number.isFinite(levels.structuralStop) && levels.structuralStop > 0
+      ? Math.round(levels.structuralStop * 100) / 100
+      : null;
   return {
     symbol,
     contract:     `${symbol}|STOCK`,
@@ -32,8 +127,9 @@ export function buildPaperStockPosition(
     contracts:    shares,
     entryDate:    today,
     expiry:       '',
-    stop:         0,
-    targets:      [],
+    stop,
+    structuralStop,
+    targets,
     dteTotal:     0,
     dteRemaining: 0,
     status:       'PENDING',
