@@ -72,6 +72,7 @@ def run_strategy_backtest(
         ma_crossover_signal, mean_reversion_rsi_signal,
         mean_reversion_bb_signal, mean_reversion_vwap_signal,
     )
+    from app.services.strategy_param_store import get_exit
 
     _signal_fn = {
         "pullback_ema":          pullback_ema_signal,
@@ -90,6 +91,17 @@ def run_strategy_backtest(
 
     df = _bars_to_df(bars)
     fn = _signal_fn
+
+    # WFO's train_fold (walk_forward.py:212) passes ONLY the search-grid combo as
+    # `params` — never the `active:` block — so any exit parameter absent from the
+    # grid would fall back to the Python default during tuning while the live scan
+    # used the configured value. Merging the exit policy HERE (under `params`, so a
+    # grid value still wins) is what keeps the tuner, the scan and the watch
+    # evaluator all measuring the same exits.
+    #
+    # The live scan already merges `exit:` via _merge_strategy_params, so for that
+    # caller this is a no-op re-application of identical values.
+    effective_params = {**get_exit(strategy), **(params or {})}
 
     class _Strategy(BtStrategy):
         def init(self):
@@ -111,7 +123,7 @@ def run_strategy_backtest(
                 for i in range(start, n)
             ]
             if not self.position:
-                sig = fn(slice_bars, direction=direction, **(params or {}))
+                sig = fn(slice_bars, direction=direction, **effective_params)
                 if sig is not None:
                     side = _entry_side(direction, entry=sig.entry_price,
                                        sl=sig.stop_price, tp=sig.target_price)

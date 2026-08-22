@@ -45,7 +45,7 @@ from app.services.strategy_engine import (
     breakout_setup_signal,
 )
 from app.services.strategy_backtest import run_strategy_backtest
-from app.services.strategy_param_store import get_active, get_costs
+from app.services.strategy_param_store import get_active, get_costs, get_exit
 from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, set_cached
 from app.scoring.signal_confidence import compute_confidence, interpret
 from app.services.regime_omm import compute_omm
@@ -149,8 +149,18 @@ def _backtest_commission() -> float:
 
 
 def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
-    """Adopted defaults for this direction, overridden by per-request kwargs."""
-    merged = get_active(strategy, direction)
+    """Exit policy, then adopted defaults for this direction, then per-request kwargs.
+
+    Precedence is deliberately exit < active < request: the exit block is a
+    baseline the tuner may later override into `active:` (WFO's adopt() writes
+    there), and an explicit per-scan override always wins over both.
+
+    Note this widens `_backtest_key`'s inputs — `_bt_params` is part of the
+    backtest cache key — so every cached BacktestResult is invalidated the first
+    time this ships. That is correct: the exits genuinely changed.
+    """
+    merged = get_exit(strategy)
+    merged.update(get_active(strategy, direction))
     merged.update({k: v for k, v in request_kwargs.items() if v is not None})
     return merged
 

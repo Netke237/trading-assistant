@@ -60,6 +60,37 @@ def get_search_space(strategy: str) -> dict:
     return dict(_load().get("strategies", {}).get(strategy, {}).get("search", {}))
 
 
+def get_exit(strategy: str) -> dict:
+    """Exit-policy params for a strategy — the ``exit:`` block, a sibling of
+    ``active:``/``search:``.
+
+    Deliberately NOT direction-keyed. Every exit thesis in ``strategy_engine`` is
+    a mirror pair (measured move up / measured move down, mid-band from below /
+    from above) implemented by the function's own ``if direction ==`` branch, so
+    the tunables — how far to project, which lookback, which extension multiple —
+    are direction-symmetric. Keeping them flat avoids a second place for the two
+    directions to silently drift apart.
+
+    Merged UNDER request/grid params at every call site, so an explicit override
+    always wins. Returns {} for a strategy with no ``exit:`` block, in which case
+    the signal function's own Python defaults apply.
+
+    DURABILITY, which is half the reason this block exists: ``adopt()`` replaces
+    ``active[direction]`` wholesale with the WFO tuner's winning grid combo, so a
+    parameter that is not in ``search:`` is DELETED from ``active:`` the first
+    time a proposal is adopted. ``exit:`` is never touched by ``adopt()``, so a
+    rung-2/3 parameter written here keeps its configured value across every
+    re-tune instead of silently reverting to the Python default.
+
+    Note also that ``adopt()`` rewrites the whole YAML with ``yaml.safe_dump``,
+    which destroys every comment in the file. Configuration prose in
+    strategy_params.yaml is therefore best-effort; the durable record of why
+    these values exist is this docstring and
+    docs/superpowers/plans/2026-08-22-stock-exit-targets-plan.md.
+    """
+    return dict(_load().get("strategies", {}).get(strategy, {}).get("exit", {}))
+
+
 def get_windows() -> dict:
     """Get rolling window configuration."""
     return dict(

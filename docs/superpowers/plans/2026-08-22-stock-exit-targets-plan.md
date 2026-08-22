@@ -1227,7 +1227,24 @@ def get_exit(strategy: str) -> dict:
     return dict(_load().get("strategies", {}).get(strategy, {}).get("exit", {}))
 ```
 
-- [ ] **Step 2: Add the `exit:` blocks to `strategy_params.yaml`**
+- [ ] **Step 2: ~~Add the `exit:` blocks to `strategy_params.yaml`~~ — MOVED TO TASK 12**
+
+> **Implementation-order correction (found while implementing).** Writing the `exit:` blocks here,
+> before Tasks 5–10 add the matching keyword parameters, breaks the tree: `active:`/`exit:` values are
+> splatted straight into the signal function, so `atr_target_mult: 3.0` reaching an
+> `ma_crossover_signal` that does not yet accept it is an immediate `TypeError`, and
+> `run_strategy_backtest` swallows it into a zero-trade `_empty_result`. Verified empirically — five
+> `test_strategy_backtest.py` tests fail at this point with
+> `"ma_crossover_signal() got an unexpected keyword argument 'atr_target_mult'"`.
+>
+> The plumbing below (Step 1's `get_exit`, Step 3's three merge sites) is safe on its own:
+> `get_exit()` returns `{}` for every strategy until the blocks exist. **So Task 4 ships the plumbing
+> only, and the entire YAML edit — `exit:` blocks and `search:` realignment together — happens in
+> Task 12, after every signature exists.** They were always one coherent edit to one file; splitting
+> them across two tasks was the mistake.
+>
+> The full `exit:` block content is specified in Task 12 Step 1. It is reproduced here for reference
+> only — do not write it yet:
 
 Insert an `exit:` block into each strategy, between its `active:` and `search:` blocks. Full values
 are given per-strategy in Tasks 5–10; add them all now so the merge points can be wired in one pass:
@@ -1398,16 +1415,17 @@ returns at least the fallback rung when `risk > 0`, which every signal function 
 guaranteed by the time it calls the helper, so the new `if not targets: return None` guard is
 unreachable in practice. Leave the file alone and record this reasoning in the commit message.
 
-- [ ] **Step 4: Run and commit**
+- [ ] **Step 4: Run and commit** (plumbing only — no YAML in this commit)
 
 ```bash
 cd backend && pytest tests/test_strategy_param_store.py tests/test_strategy_params.py \
   tests/test_strategy_params_config_sanity.py tests/test_strategy_backtest.py \
-  tests/test_strategy_watch_evaluator.py -q
-git add backend/config/strategy_params.yaml backend/app/services/strategy_param_store.py \
+  tests/test_strategy_backtest_bearish.py tests/test_strategy_watch_evaluator.py \
+  tests/test_strategy_param_optimizer.py -q
+git add backend/app/services/strategy_param_store.py \
         backend/app/services/strategy_backtest.py backend/app/routers/stock_scan.py \
         backend/app/services/strategy_watch_evaluator.py
-git commit -m "feat(config): add per-strategy exit: policy block and resolve it at all three consumers"
+git commit -m "feat(config): add get_exit() and resolve the exit policy at all three consumers"
 ```
 
 ---
