@@ -548,6 +548,63 @@ describe('TradeCard', () => {
     expect(screen.queryByText(/Structural stop — Order Block/)).not.toBeInTheDocument();
   });
 
+  it('does not render a mixed-vintage R:R when the post-restore refresh fails', async () => {
+    // Companion regression test, found in a follow-up independent audit of
+    // the fix above: the auto-refresh's failure path must not leave the
+    // stale, cache-restored structuralStop sitting next to firstPassageContext
+    // once THAT has moved on to this click's fresh premium/delta — otherwise
+    // structuralRR silently combines an hours-old stock move with a
+    // seconds-old option price, which is the exact bug the fix exists to
+    // prevent, just reachable via the error path instead of the happy path.
+    const cachedCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        structuralStop: { price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6 },
+        structuralStopStockPrice: 190.0,
+      },
+    };
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    rerender(<TradeCard data={cachedCard} />);
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+
+    // The refresh this Estimate click triggers fails; the estimate itself
+    // still succeeds, so firstPassageContext gets a fresh premium/delta
+    // while the structural refresh comes back empty-handed.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'MSFT', price: 300 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 40, spread: 0.1, volume: 50,
+    });
+    (api.getStructuralStop as jest.Mock).mockRejectedValueOnce(new Error('network error'));
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [{ pct: 0.20, stockPrice: 310, optionPrice: 7.0, probability: 0.6, expectedDays: 6 }],
+      invalidation: { probability: 0.25, expectedDays: 5 },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    });
+
+    // The rows render (the estimate itself succeeded)...
+    await waitFor(() => {
+      expect(screen.getByText('T20%')).toBeInTheDocument();
+    });
+    // ...the stale level is gone rather than silently paired with the fresh
+    // estimate...
+    expect(screen.queryByText(/Structural stop — Order Block/)).not.toBeInTheDocument();
+    // ...the failure is visible...
+    expect(screen.getByText("Couldn't check structure — try again.")).toBeInTheDocument();
+    // ...and the R:R-vs-structural-stop cell falls back to the defensive
+    // placeholder instead of showing a number computed from the stale
+    // $178.50/$190 pair against the fresh $7.00 estimate (which would render
+    // as a specific, plausible-looking, and wrong ratio here).
+    expect(screen.getByText('—')).toBeInTheDocument();
+  });
+
   it('surfaces a completed first-passage estimate and its context to onFirstPassageChange', async () => {
     (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
     (api.getContractQuote as jest.Mock).mockResolvedValueOnce({

@@ -391,15 +391,17 @@ export function TradeCard({
       // Estimate click, not on every render/navigation — same click-gated
       // model as before, just triggered from one button instead of two. A
       // restored value stays on screen (no flash to blank) while this runs
-      // and is only replaced once the fresh pair actually lands, so the
-      // eventual structuralRR calc always combines a same-vintage stop price
-      // with THIS click's premium/delta rather than silently mixing a stale
-      // check against a fresh estimate. Deliberately not awaited before
-      // continuing to the first-passage fetch below — it manages its own
-      // loading/error state independently via structuralRequestRef, same as
-      // a manual "Check structure" click would, and that ref-swap means the
-      // existing contract-change cleanup effect still aborts it correctly if
-      // the user navigates away.
+      // and is only replaced once the fresh pair actually lands — and if the
+      // refresh fails instead, its `.catch` below clears structuralStop
+      // rather than leaving the old one in place. Either way structuralRR
+      // never combines a stop it can't vouch for as fresh with THIS click's
+      // premium/delta: it either gets a same-vintage pair or nothing to
+      // compute from, never a silent mismatch. Deliberately not awaited
+      // before continuing to the first-passage fetch below — it manages its
+      // own loading/error state independently via structuralRequestRef, same
+      // as a manual "Check structure" click would, and that ref-swap means
+      // the existing contract-change cleanup effect still aborts it
+      // correctly if the user navigates away.
       if (!structuralIsFreshRef.current && !structuralLoading) {
         structuralRequestRef.current?.abort();
         const structuralController = new AbortController();
@@ -420,6 +422,18 @@ export function TradeCard({
           .catch(() => {
             if (structuralController.signal.aborted) return;
             setStructuralError(true);
+            // This refresh only ever runs because structuralIsFreshRef was
+            // false — i.e. whatever structuralStop currently holds (a cache
+            // restore, or nothing) was never confirmed fresh this mount. On
+            // failure, don't leave that unconfirmed pair sitting next to
+            // firstPassageContext, which below may already hold THIS click's
+            // fresh premium/delta by the time this rejection lands —
+            // structuralRR would otherwise silently render a mixed-vintage
+            // number with no staleness cue, the exact failure mode this
+            // whole mechanism exists to prevent. Clearing falls back to the
+            // defensive "not currently known" placeholder instead.
+            setStructuralStop(undefined);
+            setStructuralStopStockPrice(null);
           })
           .finally(() => {
             if (!structuralController.signal.aborted) setStructuralLoading(false);
