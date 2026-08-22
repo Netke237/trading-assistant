@@ -13,7 +13,7 @@ import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk } from '@/lib/risk';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
-import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageTarget } from '@/types/domain';
+import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget } from '@/types/domain';
 import {
   triggerDetailText,
   pullbackDetailText,
@@ -199,8 +199,13 @@ export function TradeCard({
   // persisted (not just used transiently) so a later R:R-vs-structural-stop
   // calc can reuse the SAME fresh price the backend actually used, instead of
   // falling back to data.price (the scan-time snapshot checkStructure was
-  // specifically written to avoid).
-  const [structuralStopStockPrice, setStructuralStopStockPrice] = useState<number | null>(null);
+  // specifically written to avoid). Seeded from data.exit alongside
+  // structuralStop above, so a cached structure check the parent splices back
+  // in on re-navigation restores BOTH halves — restoring the stop alone would
+  // leave structuralRR null and every row's R:R cell showing the defensive '—'.
+  const [structuralStopStockPrice, setStructuralStopStockPrice] = useState<number | null>(
+    data.exit.structuralStopStockPrice ?? null,
+  );
   // Tracks the in-flight "Check structure" request (if any) so a stale response
   // for a contract the user has since navigated away from (via CandidateNav
   // Prev/Next) can never overwrite the display for the new one — same class of
@@ -208,18 +213,26 @@ export function TradeCard({
   const structuralRequestRef = useRef<AbortController | null>(null);
 
   const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
-  const [targetPct, setTargetPct] = useState(defaultTargetPct);
+  // Seeded from the restored estimate's own context when the parent splices a
+  // cached estimate back in — otherwise the % inputs would show the settings
+  // default while the restored rows show the percentages the estimate was
+  // actually run at, and a follow-up Estimate click would silently re-run at
+  // different percentages than the numbers on screen.
+  const [targetPct, setTargetPct] = useState(data.exit.firstPassageContext?.targetPct ?? defaultTargetPct);
   const [firstPassage, setFirstPassage] = useState<FirstPassageEstimate | null | undefined>(
     data.exit.firstPassage,
   );
   const [firstPassageLoading, setFirstPassageLoading] = useState(false);
   const [firstPassageError, setFirstPassageError] = useState(false);
-  // The fresh premium/delta estimateFirstPassage fetched — optionPrice in
-  // each firstPassage.targets entry is premium*(1+pct) computed off THIS
-  // premium (see first_passage.py), not data.contractDetails.mid, which can
-  // differ once a fresh quote has been fetched. Persisted so a later R:R
-  // calc subtracts the matching baseline instead of a stale one.
-  const [firstPassageContext, setFirstPassageContext] = useState<{ premium: number; delta: number } | null>(null);
+  // The inputs estimateFirstPassage actually used — optionPrice in each
+  // firstPassage.targets entry is premium*(1+pct) computed off THIS premium
+  // (see first_passage.py), not data.contractDetails.mid, which can differ
+  // once a fresh quote has been fetched. Persisted so a later R:R calc
+  // subtracts the matching baseline instead of a stale one, and seeded from
+  // data.exit so a restored estimate carries its baseline with it.
+  const [firstPassageContext, setFirstPassageContext] = useState<FirstPassageContext | null>(
+    data.exit.firstPassageContext ?? null,
+  );
   // Same stale-response guard as structuralRequestRef above.
   const firstPassageRequestRef = useRef<AbortController | null>(null);
 
@@ -237,13 +250,20 @@ export function TradeCard({
       structuralRequestRef.current?.abort();
       firstPassageRequestRef.current?.abort();
       setOverlay({ ...defaultOverlay(data), contracts: initialContracts });
+      // Every one of these five reads data.exit — for a candidate nothing has
+      // been run on they are all absent and this is still a full reset (the
+      // pre-existing behaviour). When the parent has a cached result for the
+      // incoming contract it splices all of them in together, so the estimate,
+      // its baseline premium/delta, its % inputs, the structural stop and the
+      // price that stop was measured against are restored as ONE consistent
+      // set — never a half-restore that would leave structuralRR null.
       setStructuralStop(data.exit.structuralStop);
-      setStructuralStopStockPrice(null);
+      setStructuralStopStockPrice(data.exit.structuralStopStockPrice ?? null);
       setStructuralError(false);
       setStructuralLoading(false);
-      setTargetPct(defaultTargetPct);
+      setTargetPct(data.exit.firstPassageContext?.targetPct ?? defaultTargetPct);
       setFirstPassage(data.exit.firstPassage);
-      setFirstPassageContext(null);
+      setFirstPassageContext(data.exit.firstPassageContext ?? null);
       setFirstPassageError(false);
       setFirstPassageLoading(false);
       prevSymbolRef.current = data.symbol;
@@ -363,7 +383,10 @@ export function TradeCard({
       // optionPrice in each target is premium*(1+pct) built from THIS
       // premium (first_passage.py) — persist it so a later R:R calc
       // subtracts the matching baseline, not data.contractDetails.mid.
-      setFirstPassageContext({ premium, delta });
+      // targetPct is snapshotted here (not read back later) so the trio
+      // stored alongside the estimate is exactly the trio the request above
+      // carried, even if the user edited an input while it was in flight.
+      setFirstPassageContext({ premium, delta, targetPct: { ...targetPct } });
     } catch {
       if (controller.signal.aborted) return;
       setFirstPassageError(true);
