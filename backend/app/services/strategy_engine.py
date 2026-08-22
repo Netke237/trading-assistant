@@ -850,7 +850,6 @@ def mean_reversion_bb_signal(
         risk = current - stop
         if risk <= 0:
             return None
-        target = current + risk * rr_target_mult
     else:  # Bearish
         if closes[-1] >= trend[-1]:
             return None  # must be below trend (downtrend context)
@@ -864,7 +863,35 @@ def mean_reversion_bb_signal(
         risk = stop - current
         if risk <= 0:
             return None
-        target = current - risk * rr_target_mult
+
+    # Exit thesis: "return to mid-band / opposite band" — literally what the
+    # Step-4 picker tells the user, and both levels are already computed above by
+    # `upper, mid, lower = _bollinger(closes, bb_period, bb_std)`.
+    #
+    # The entry gates guarantee the mid-band is on the profitable side: Bullish
+    # requires lower[-1] < current < mid[-1], Bearish requires
+    # mid[-1] < current < upper[-1]. So the primary is always valid unless a
+    # squeeze puts the mid within half a cent of entry, in which case it rounds
+    # onto entry, is dropped, and the opposite band leads.
+    #
+    # Note the 2R extension is deliberately an EXTENSION, not a co-equal rung:
+    # with stop_atr_mult 0.5 the risk here is small, so entry + 2R is routinely
+    # NEARER than the mid-band. Pooling and sorting would make an arbitrary R
+    # multiple the target again, which is exactly what this rework removes.
+    _sign = 1 if direction == "Bullish" else -1
+    opposite_band = upper[-1] if direction == "Bullish" else lower[-1]
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        primary=mid[-1],
+        extensions=[
+            opposite_band,
+            current + _sign * risk * rr_target_mult,
+        ],
+        fallback_mult=rr_target_mult,
+    )
+    if not targets:
+        return None
+    target = targets[0]
 
     return StrategySignal(
         strategy="mean_reversion_bb",
@@ -873,6 +900,7 @@ def mean_reversion_bb_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
+        targets=targets,
         detail={
             "bb_upper": round(upper[-1], 2),
             "bb_mid": round(mid[-1], 2),

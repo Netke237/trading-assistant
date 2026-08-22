@@ -258,3 +258,41 @@ def test_mean_reversion_rsi_drops_atr_extensions_that_sit_inside_the_short_mean(
     assert all(t > sig.entry_price for t in sig.targets)
     # Whatever survives, the short mean leads — never an ATR multiple.
     assert sig.targets[0] == pytest.approx(sig.detail["sma_20"], abs=0.02)
+
+
+# ── mean_reversion_bb ─────────────────────────────────────────────────────────
+
+def _bb_dip_and_reclaim() -> list[dict]:
+    """Deterministic (no `random`): a steady uptrend well above its 200-SMA, then
+    a two-bar dip whose first bar's low tags the lower band and whose second bar
+    closes back inside the band but still under the midline — the three gates at
+    mean_reversion_bb_signal's Bullish branch.
+
+    The dip/bounce magnitudes and the 1.2 low-pad were chosen by checking the
+    signal actually fires AND that the 2R extension lands outside the upper band,
+    so rung 2 is genuinely the opposite band. Do not tweak them casually.
+    """
+    closes = [80 + i * 0.09 for i in range(240)]
+    closes.append(closes[-1] - 2.5)
+    closes.append(closes[-1] + 0.6)
+    return [{"open": c, "high": c + 0.5, "low": c - 1.2, "close": c, "volume": 1_000_000}
+            for c in closes]
+
+
+def test_mean_reversion_bb_targets_the_real_mid_band_then_the_opposite_band():
+    """Rung 1 must equal the mid-band the signal itself reports in detail, and
+    rung 2 the opposite band — not an R multiple that happens to be nearby."""
+    from app.services.strategy_engine import mean_reversion_bb_signal
+
+    sig = mean_reversion_bb_signal(_bb_dip_and_reclaim(), bb_period=20, bb_std=2.0, trend_sma=200)
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+
+    mid = sig.detail["bb_mid"]
+    upper = sig.detail["bb_upper"]
+    # Rung 1 IS the mid-band the signal itself reports — not an R multiple that
+    # happens to be nearby, and not the opposite band.
+    assert sig.target_price == pytest.approx(mid, abs=0.02)
+    assert sig.targets[0] == sig.target_price
+    assert sig.targets[1] == pytest.approx(upper, abs=0.02)
+    assert all(t > sig.entry_price for t in sig.targets)
+    assert sig.targets == sorted(sig.targets)
