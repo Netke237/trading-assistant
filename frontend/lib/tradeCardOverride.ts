@@ -134,6 +134,66 @@ export type CachedStructural = {
 };
 
 /**
+ * Cache-write reducer for a "Check structure" result, keyed by SYMBOL.
+ *
+ * Two invariants live here, both load-bearing, which is why this is a pure
+ * function next to the read side rather than an inline closure in the page:
+ *
+ * 1. `stop === undefined` is the "reset on contract switch" / "cleared at the
+ *    start of a re-check" sentinel, NOT an answer — it is ignored, never
+ *    written. So an in-flight or failed re-check leaves the previously cached
+ *    level intact instead of destroying what the user could still see a moment
+ *    ago. (`stop === null` IS an answer — "checked, nothing found" — and is
+ *    cached.)
+ * 2. When nothing actually changed it returns the IDENTICAL `prev` object. The
+ *    callback prop the page hands TradeCard is a fresh inline closure every
+ *    render and TradeCard keeps a ref synced to it, so a write that always
+ *    produced a new object would re-render the parent on every TradeCard
+ *    render, re-create the prop, re-fire the sync effect... an unbounded
+ *    cascade. Returning `prev` lets React skip the re-render entirely.
+ */
+export function cacheStructural(
+  prev: Record<string, CachedStructural>,
+  symbol: string,
+  stop: StructuralStop | null | undefined,
+  stockPrice: number | null,
+): Record<string, CachedStructural> {
+  if (stop === undefined) return prev;
+  const cur = prev[symbol];
+  if (cur && cur.stop === stop && cur.stockPrice === stockPrice) return prev;
+  return { ...prev, [symbol]: { stop, stockPrice } };
+}
+
+/**
+ * Cache-write reducer for an "Estimate" (first-passage) result, keyed by
+ * CONTRACT — the estimate is priced off that contract's premium, so a
+ * symbol-level key would show contract A's numbers on contract B's card.
+ *
+ * Same two invariants as `cacheStructural`, with two specifics:
+ * - `key === null` means the card has no resolvable contract (no
+ *   `contractDetails`), in which case the Estimate button is disabled anyway —
+ *   nothing to key an entry by, so nothing is written.
+ * - Both `undefined` (reset on contract switch) and `null` are sentinels here,
+ *   so the guard is `estimate == null`, not `=== undefined`.
+ *
+ * The unchanged-comparison is by REFERENCE on both halves, which is exactly
+ * right: TradeCard stores one object per successful estimate and holds it until
+ * the next one, and on a restore the page splices those very same objects back
+ * in — so the post-restore effect fire compares equal and bails.
+ */
+export function cacheFirstPassage(
+  prev: Record<string, CachedFirstPassage>,
+  key: string | null,
+  estimate: FirstPassageEstimate | null | undefined,
+  context: FirstPassageContext | null,
+): Record<string, CachedFirstPassage> {
+  if (!key || estimate == null) return prev;
+  const cur = prev[key];
+  if (cur && cur.estimate === estimate && cur.context === context) return prev;
+  return { ...prev, [key]: { estimate, context } };
+}
+
+/**
  * Splice cached "Estimate" / "Check structure" results into the card's
  * `exit.*` fields — the same fields TradeCard already reads for its initial
  * state and its contract-change reset, so restoring costs TradeCard no extra

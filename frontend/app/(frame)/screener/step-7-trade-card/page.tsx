@@ -29,6 +29,7 @@ import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api }               from '@/lib/api';
 import {
   applyPickedContract, contractKeyFor, mergePlan, resolveBasketCards, rrOverridesFrom, withCachedEstimate,
+  cacheStructural, cacheFirstPassage,
   type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural,
 } from '@/lib/tradeCardOverride';
 import styles from '../screener.module.css';
@@ -135,49 +136,31 @@ export default function Step7Page() {
   // premium*(1+pct) off that contract's own premium), so they're keyed by
   // contractKeyFor, the same identity plansBySymbol tags its entries with.
   const [estimatesByContract, setEstimatesByContract] = useState<Record<string, CachedFirstPassage>>({});
-  // Both handlers below: the callback props passed to TradeCard are fresh inline
-  // closures every render (matching this file's existing style for onSendToBroker
-  // etc.), and TradeCard keeps a ref synced to them via its own effect — so calling
-  // these on every invocation, unconditionally, would re-trigger a parent render
-  // every time TradeCard re-renders for ANY reason, which re-creates the props,
-  // which re-fires that sync effect... an infinite loop once a value first settles
-  // to a non-undefined value. Bailing out (returning the SAME `prev` object) when
-  // nothing actually changed breaks that cascade: React skips the re-render on an
-  // identical state reference, so a no-op call here is genuinely a no-op, not just
-  // a smaller one. For the estimate the comparison is by REFERENCE on both halves,
-  // which is exactly right: TradeCard stores one object per successful estimate and
-  // holds it until the next one, and on a restore we splice those very same objects
-  // back in — so the post-restore effect fire compares equal and bails.
+  // Both write paths delegate to a pure reducer in lib/tradeCardOverride.ts,
+  // alongside the read side (withCachedEstimate) — the two rules they enforce are
+  // the highest-consequence logic in this feature and are unit-tested there rather
+  // than living as untestable inline closures here:
+  //   1. a `undefined`/`null` sentinel (reset on contract switch, or cleared at the
+  //      start of a re-run) is IGNORED, so an in-flight or failed re-run never
+  //      destroys the value already on screen;
+  //   2. an unchanged write returns the IDENTICAL `prev` object, which is what
+  //      breaks the render cascade — the callback props passed to TradeCard below
+  //      are fresh inline closures every render (matching this file's existing
+  //      style for onSendToBroker etc.) and TradeCard keeps a ref synced to them
+  //      via its own effect, so a write that always produced a new object would
+  //      re-render the parent on every TradeCard render, re-create the props,
+  //      re-fire that sync effect... unbounded. React skips the re-render on an
+  //      identical state reference, so a no-op call here is genuinely a no-op.
   const handleStructuralStopChange = (
     symbol: string,
     stop: StructuralStop | null | undefined,
     stockPrice: number | null,
-  ) => {
-    if (stop === undefined) return;
-    setStructuralBySymbol((prev) => {
-      const cur = prev[symbol];
-      if (cur && cur.stop === stop && cur.stockPrice === stockPrice) return prev;
-      return { ...prev, [symbol]: { stop, stockPrice } };
-    });
-  };
-  // `key` is null only when the card has no resolvable contract (contractDetails
-  // missing) — in which case the Estimate button is disabled anyway. An
-  // undefined/null estimate is the "reset on contract switch" or "cleared at the
-  // start of a re-estimate" sentinel: ignored, never written, so an in-flight or
-  // failed re-estimate leaves the previously cached value intact rather than
-  // destroying what the user could still see a moment ago.
+  ) => setStructuralBySymbol((prev) => cacheStructural(prev, symbol, stop, stockPrice));
   const handleFirstPassageChange = (
     key: string | null,
     estimate: FirstPassageEstimate | null | undefined,
     context: FirstPassageContext | null,
-  ) => {
-    if (!key || estimate == null) return;
-    setEstimatesByContract((prev) => {
-      const cur = prev[key];
-      if (cur && cur.estimate === estimate && cur.context === context) return prev;
-      return { ...prev, [key]: { estimate, context } };
-    });
-  };
+  ) => setEstimatesByContract((prev) => cacheFirstPassage(prev, key, estimate, context));
 
   useEffect(() => {
     setRecIdMap((prev) => {
