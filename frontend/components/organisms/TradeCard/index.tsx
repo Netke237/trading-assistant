@@ -160,8 +160,23 @@ interface TradeCardProps {
   /** Fired whenever the "Check structure" result changes for the current contract
    *  (including being reset to `undefined` on a contract switch, or `null` when no
    *  structural level was found) — lets the parent capture the level so it can be
-   *  attached to the position if/when this trade is sent to the broker. */
-  onStructuralStopChange?: (stop: StructuralStop | null | undefined) => void;
+   *  attached to the position if/when this trade is sent to the broker, AND cache it
+   *  per symbol so re-navigating to this candidate restores it instead of wiping it.
+   *  `stockPrice` is the fresh underlying price the level was measured against
+   *  (`null` whenever `stop` is `undefined`); the parent must cache it alongside the
+   *  level or a restored stop cannot produce an R:R-vs-structural-stop figure. */
+  onStructuralStopChange?: (stop: StructuralStop | null | undefined, stockPrice: number | null) => void;
+  /** Fired whenever the "Estimate" (first-passage) result changes for the current
+   *  contract, including the reset to `undefined` on a contract switch and the
+   *  reset to `undefined` at the start of a re-estimate. The parent caches the
+   *  pair per CONTRACT (not per symbol — the estimate is priced off this
+   *  contract's premium) and must ignore an `undefined`/`null` estimate rather
+   *  than clearing its slot, so an in-flight or failed re-estimate never destroys
+   *  the value already on screen. */
+  onFirstPassageChange?: (
+    estimate: FirstPassageEstimate | null | undefined,
+    context: FirstPassageContext | null,
+  ) => void;
 }
 
 function targetStatusTooltip(statusVal: TargetLevel['status']): string {
@@ -183,6 +198,7 @@ export function TradeCard({
   contracts: initialContracts = 1,
   onEditsChange,
   onStructuralStopChange,
+  onFirstPassageChange,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
   const [altOpen, setAltOpen] = useState(false);
@@ -290,17 +306,39 @@ export function TradeCard({
   // render's (new-symbol) callback together with the STALE (old-symbol)
   // structuralStop value still sitting in state, silently attaching the old
   // candidate's structural stop price to the new one. Keying the
-  // value-surfacing effect on `structuralStop` ALONE — reading the callback
-  // out of a ref that a separate, harmless effect keeps current — means it
-  // only ever fires when the state itself genuinely changes, by which point
-  // the ref has already caught up to the current symbol's callback.
+  // value-surfacing effect on the VALUES ALONE — reading the callback out of a
+  // ref that a separate, harmless effect keeps current — means it only ever
+  // fires when the state itself genuinely changes, by which point the ref has
+  // already caught up to the current symbol's callback.
+  //
+  // `structuralStopStockPrice` is a dependency as well as `structuralStop`
+  // because the parent caches the pair: the two are always set in the same
+  // batch, so this normally fires once with a matched pair, and if they ever
+  // landed in separate commits the second fire would correct the first rather
+  // than leaving a half-written cache entry.
   const onStructuralStopChangeRef = useRef(onStructuralStopChange);
   useEffect(() => {
     onStructuralStopChangeRef.current = onStructuralStopChange;
   }, [onStructuralStopChange]);
   useEffect(() => {
-    onStructuralStopChangeRef.current?.(structuralStop);
-  }, [structuralStop]);
+    onStructuralStopChangeRef.current?.(structuralStop, structuralStopStockPrice);
+  }, [structuralStop, structuralStopStockPrice]);
+
+  // Same two-effect discipline, same reasoning, for the first-passage estimate —
+  // the parent caches it per contract so re-navigating to this candidate restores
+  // the Profit Targets rows instead of forcing another Monte Carlo round-trip.
+  // `firstPassage` and `firstPassageContext` are BOTH dependencies because the
+  // pair is what the cache stores; `targetPct` deliberately is NOT, because it
+  // already travels inside `firstPassageContext` (snapshotted at request time),
+  // so editing a % input after an estimate can never rewrite that estimate's
+  // cached percentages.
+  const onFirstPassageChangeRef = useRef(onFirstPassageChange);
+  useEffect(() => {
+    onFirstPassageChangeRef.current = onFirstPassageChange;
+  }, [onFirstPassageChange]);
+  useEffect(() => {
+    onFirstPassageChangeRef.current?.(firstPassage, firstPassageContext);
+  }, [firstPassage, firstPassageContext]);
 
   const estimateFirstPassage = useCallback(async () => {
     firstPassageRequestRef.current?.abort();
