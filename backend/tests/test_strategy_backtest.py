@@ -17,6 +17,44 @@ def _synth_bars(n=400, trend=True):
     return bars
 
 
+def _flat_bars(n=400):
+    """Genuinely flat/oscillating bars on a strictly increasing date index.
+
+    NOT `_synth_bars(trend=False)`. That helper stamps every bar with
+    `2022-01-{(i % 28) + 1}`, so a 400-bar fixture carries only 28 distinct
+    dates, ~14 bars deep each. `_bars_to_df` turns `time` into a DatetimeIndex
+    and `backtesting.Backtest` silently sorts a non-monotonic index, which
+    regroups those bars by day-of-month — and because `price` is a function of
+    `i % 7` while the date is a function of `i % 28`, every bar within a date
+    group has the SAME price. The sorted series is therefore not an oscillation
+    at all but a 28-step staircase, on which pullback_ema really does find two
+    pullback-to-EMA setups.
+
+    Those two signals fired on the old exit formula too; they simply never
+    became trades, because the old `entry + 2R` target (~53.4) was unreachable
+    on a series whose high never exceeds ~50.9, so both positions sat open and
+    `# Trades` stayed 0. The strategy-aware target (the prior swing extreme,
+    ~50.7) IS reachable, so the same two signals now close as real trades. That
+    is the intended consequence of the exit rework, not a regression in the NaN
+    guard this test exists to protect — so the fixture is fixed instead of the
+    assertion being weakened. With unique sequential dates there is no re-sort,
+    the series is the flat oscillation the docstring always claimed, and
+    pullback_ema produces zero *signals* (verified), which is a far more robust
+    zero-trade precondition than an unreachable target.
+    """
+    from datetime import date, timedelta
+    d0 = date(2022, 1, 3)
+    bars = []
+    for i in range(n):
+        price = 50.0 + (i % 7 - 3) * 0.1
+        bars.append({
+            "time": (d0 + timedelta(days=i)).isoformat(),
+            "open": price * 0.998, "high": price * 1.01,
+            "low":  price * 0.99,  "close": price, "volume": 1000 + i,
+        })
+    return bars
+
+
 def test_zero_trades_does_not_produce_nan_stats():
     """A window with zero trades makes the underlying `backtesting` library
     return NaN for Win Rate/Sharpe internally (division by zero trades) --
@@ -26,7 +64,7 @@ def test_zero_trades_does_not_produce_nan_stats():
     reliably produce zero trades for pullback_ema (no pullback-to-EMA setup
     ever fires)."""
     import math
-    bars = _synth_bars(400, trend=False)
+    bars = _flat_bars(400)
     result = run_strategy_backtest(bars, strategy="pullback_ema", direction="Bullish")
     assert result.n_trades == 0, "fixture must produce zero trades for this test to be meaningful"
     assert not math.isnan(result.win_rate)
