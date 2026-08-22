@@ -110,3 +110,17 @@ def test_ladder_drops_a_rung_that_rounds_onto_entry():
 def test_ladder_returns_empty_on_zero_risk():
     assert _build_target_ladder(entry=100, stop=100, direction="Bullish",
                                 primary=110, extensions=[], fallback_mult=2.0) == []
+
+
+# ── pullback_ema ──────────────────────────────────────────────────────────────
+
+def test_pullback_ema_ladder_is_monotonic_and_starts_at_target_price():
+    from tests.test_strategy_engine import _uptrend_pullback_bars
+    from app.services.strategy_engine import pullback_ema_signal
+
+    sig = pullback_ema_signal(_uptrend_pullback_bars(), tolerance=0.04)
+    if sig is None:
+        pytest.skip("setup did not fire on synthetic data")
+    assert sig.targets and sig.targets[0] == sig.target_price
+    assert all(b > a for a, b in zip(sig.targets, sig.targets[1:]))
+    assert all(t > sig.entry_price for t in sig.targets)

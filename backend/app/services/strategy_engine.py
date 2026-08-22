@@ -392,6 +392,7 @@ def pullback_ema_signal(
     trend_ema: int = 100,
     atr_stop_mult: float = 1.5,
     rr_target_mult: float = 2.0,
+    exit_swing_lookback: int = 20,
     tolerance: float = 0.04,
     ma_type: str = "EMA",
     require_reversal: bool = False,
@@ -446,7 +447,6 @@ def pullback_ema_signal(
         risk = current - stop
         if risk <= 0:
             return None
-        target = current + risk * rr_target_mult
     else:  # Bearish — mirror logic
         # Trend: price below ema_period-MA, ema_period-MA below trend_ema-MA (downtrend stack)
         if current >= fast_val:
@@ -463,7 +463,34 @@ def pullback_ema_signal(
         risk = stop - current
         if risk <= 0:
             return None
-        target = current - risk * rr_target_mult
+
+    # Exit thesis: "prior high / trailing stop under higher lows" — the exit the
+    # Step-4 picker has always shown the user. Rung 1 is the prior swing extreme
+    # the pullback interrupted; rungs 2 and 3 are R extensions past it, which is
+    # where rr_target_mult now lives (it no longer sets the only target, so it is
+    # no longer in the WFO grid — see the plan's coupling section).
+    #
+    # _swing_high/_swing_low look at bars[-lookback:], which includes today. In a
+    # valid pullback today's high is at or below the prior high by construction,
+    # so including it is harmless; in the edge case where the swing extreme
+    # equals the entry close (or a live current_price has already exceeded it)
+    # the rung rounds onto/behind entry, is dropped, and the R extensions carry
+    # the ladder.
+    prior_extreme = (_swing_high(bars, lookback=exit_swing_lookback) if direction == "Bullish"
+                     else _swing_low(bars, lookback=exit_swing_lookback))
+    _sign = 1 if direction == "Bullish" else -1
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        primary=prior_extreme,
+        extensions=[
+            current + _sign * risk * rr_target_mult,
+            current + _sign * risk * rr_target_mult * 1.5,
+        ],
+        fallback_mult=rr_target_mult,
+    )
+    if not targets:
+        return None
+    target = targets[0]
 
     ma_label = ma_type.upper()
     return StrategySignal(
@@ -473,9 +500,11 @@ def pullback_ema_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
+        targets=targets,
         detail={
             f"{ma_label.lower()}_{ema_period}": round(fast_val, 2),
             f"{ma_label.lower()}_{trend_ema}":  round(slow_val, 2),
+            "prior_swing_extreme": round(prior_extreme, 2),
         },
     )
 
