@@ -293,6 +293,11 @@ async def structural_stop(req: StructuralStopRequest) -> StructuralStopResponse:
     only by an explicit user action ("Check structure") on the trade card, never
     on every contract swap, so it never adds latency to the scan or to Step 6
     contract overrides.
+
+    NOT options-specific despite the /contracts/ prefix (a legacy namespace
+    artefact): find_structural_stop() takes only candles, direction and a
+    reference price. The stocks-mode StockPositionCard calls this same endpoint
+    for its own "Check structure" affordance — do not fork an alias route.
     """
     async with httpx.AsyncClient(timeout=8) as client:
         candles = await fetch_candles_async(client, req.symbol.upper())

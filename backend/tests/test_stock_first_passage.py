@@ -118,3 +118,71 @@ def test_sigma_is_clamped_by_the_ceiling_on_a_wild_series():
         sigma_ceiling=1.50, seed=1,
     )
     assert res.sigma_stock == pytest.approx(1.50)
+
+
+# ── POST /api/stocks/first-passage ────────────────────────────────────────────
+
+class TestStockFirstPassageEndpoint:
+    """Route-level smoke tests. `fetch_candles_async` is patched out so the test
+    never reaches a real market-data provider; everything downstream of it (the
+    seed, the estimator, the caveat rule) is exercised for real."""
+
+    def _client(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.routers.stock_scan import router
+        app = FastAPI()
+        app.include_router(router)
+        return TestClient(app)
+
+    def _post(self, **overrides):
+        from unittest.mock import patch, AsyncMock
+        payload = {
+            "symbol": "AAPL", "direction": "Bullish", "horizon": "Swing",
+            "strategy": "pullback_ema", "stock_price": 100.0, "stop_price": 95.0,
+            "targets": [105.0, 110.0, 120.0], "trend_score": 70.0,
+        }
+        payload.update(overrides)
+        with patch("app.routers.stock_scan.fetch_candles_async",
+                   AsyncMock(return_value=_candles())):
+            return self._client().post("/api/stocks/first-passage", json=payload)
+
+    def test_returns_one_estimate_per_target(self):
+        r = self._post()
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert [t["price"] for t in body["targets"]] == [105.0, 110.0, 120.0]
+        for t in body["targets"]:
+            assert 0.0 <= t["probability"] <= 1.0
+        assert 0.0 <= body["invalidation"]["probability"] <= 1.0
+
+    def test_horizon_days_comes_from_scoring_rules(self):
+        """Swing -> confidence_backtest.swing.n_days. Pinned so the Monte Carlo
+        window can't silently decouple from the empirical confidence window."""
+        from app.scoring.signal_confidence import load_backtest_cfg
+        assert self._post(horizon="Swing").json()["horizonDays"] == \
+            int(load_backtest_cfg("Swing")["n_days"])
+        assert self._post(horizon="Position").json()["horizonDays"] == \
+            int(load_backtest_cfg("Position")["n_days"])
+
+    def test_mean_reversion_strategies_carry_the_gbm_caveat(self):
+        from app.routers.stock_scan import _MEAN_REVERSION_CAVEAT
+        assert self._post(strategy="mean_reversion_bb").json()["modelCaveat"] == \
+            _MEAN_REVERSION_CAVEAT
+
+    def test_trend_following_strategies_carry_no_caveat(self):
+        assert self._post(strategy="breakout_base").json()["modelCaveat"] is None
+
+    def test_identical_requests_return_identical_estimates(self):
+        """The seed is derived from the request, so repeated presses of Estimate
+        must not show the user drifting Monte Carlo noise."""
+        assert self._post().json()["targets"] == self._post().json()["targets"]
+
+    def test_a_non_positive_stop_is_rejected(self):
+        assert self._post(stop_price=0.0).status_code == 422
+
+    def test_an_empty_target_ladder_is_rejected(self):
+        assert self._post(targets=[]).status_code == 422
+
+    def test_an_out_of_range_trend_score_is_rejected(self):
+        assert self._post(trend_score=150.0).status_code == 422

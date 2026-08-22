@@ -11,12 +11,12 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path as _Path
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import httpx
 import yaml as _yaml
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,7 +33,10 @@ from app.schemas.stock_scan import (
 from app.data.sector_map import sector_for_symbol
 from app.routers.regime import _ema as _regime_ema, compute_overall_regime
 from app.schemas import SentimentData, ScanSessionStatus
-from app.data.market import fetch_company_name_async, fetch_price_async, fetch_quotes, fetch_intraday_candles
+from app.data.market import (
+    fetch_company_name_async, fetch_price_async, fetch_quotes, fetch_intraday_candles,
+    fetch_candles_async,
+)
 from app.services.historical_store import get_bars as get_historical_bars
 from app.scoring.stock_scorer import score_stock
 from app.services.strategy_engine import (
@@ -48,7 +51,13 @@ from app.services.strategy_engine import (
 from app.services.strategy_backtest import run_strategy_backtest
 from app.services.strategy_param_store import get_active, get_costs, get_exit
 from app.data.confidence_cache import cache_key as conf_cache_key, get_cached, set_cached
-from app.scoring.signal_confidence import compute_confidence, interpret
+from app.scoring.signal_confidence import compute_confidence, interpret, load_backtest_cfg
+from app.scoring.first_passage import estimate_stock_first_passage
+from app.services.config_loader import load_first_passage_cfg as _fp_cfg
+# Reused rather than redeclared: the stock estimate's invalidation block is an
+# exact shape match for the option one, and two copies would drift apart.
+# No cycle — contracts.py does not import this module.
+from app.routers.contracts import FirstPassageInvalidationOut
 from app.services.regime_omm import compute_omm
 from app.services.regime_hmm_daily import compute_directional_hmm, alignment
 from app.services.fundamentals_store import get_fundamentals as _get_fundamentals
@@ -1313,3 +1322,117 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
 
     results.sort(key=lambda r: r["confidence"], reverse=True)
     return results
+
+
+# ── Stock first-passage (Approach B) ──────────────────────────────────────────
+
+class StockFirstPassageRequest(BaseModel):
+    symbol:       str
+    direction:    Literal["Bullish", "Bearish"]
+    horizon:      Literal["Intraday", "Swing", "Position"]
+    strategy:     str
+    stock_price:  float = Field(..., gt=0)
+    stop_price:   float = Field(..., gt=0)
+    targets:      list[float] = Field(..., min_length=1, max_length=5)
+    trend_score:  float = Field(..., ge=0, le=100)
+
+
+class StockFirstPassageTargetOut(BaseModel):
+    price:        float
+    probability:  float
+    expectedDays: Optional[float] = None
+
+
+class StockFirstPassageResponse(BaseModel):
+    targets:      list[StockFirstPassageTargetOut]
+    invalidation: FirstPassageInvalidationOut
+    horizonDays:  int
+    #: Non-null when the GBM model is a poor fit for this strategy; the card
+    #: renders it verbatim. See the plan's "GBM caveat" decision — labelled, not
+    #: suppressed, and decided HERE (next to the model) rather than in the UI so
+    #: the rule lives in exactly one place.
+    modelCaveat:  Optional[str] = None
+
+
+#: Surfaced whenever the requested strategy's thesis contradicts the estimator's
+#: generative model. Kept as a module constant so the endpoint test can assert on
+#: the exact string the user sees rather than a substring guess.
+_MEAN_REVERSION_CAVEAT = (
+    "Approximate for mean-reversion strategies: this model assumes a constant "
+    "drift from the trend score, while a mean-reversion trade's thesis is that "
+    "the recent drift is transient. Treat the target probabilities as a rough "
+    "upper bound; the stop probability is less affected."
+)
+
+
+@router.post('/stocks/first-passage', response_model=StockFirstPassageResponse)
+async def stock_first_passage(req: StockFirstPassageRequest) -> StockFirstPassageResponse:
+    """On-demand Monte Carlo first-passage estimate for a stock position's exit
+    ladder: probability and expected TRADING days to reach each target, and to
+    hit the stop, within this horizon's holding window.
+
+    Fired only by the stock position card's "Estimate" button — never by the scan
+    — for the same latency reasons as the options `/contracts/first-passage`.
+    The holding window comes from scoring_rules.yaml's
+    `confidence_backtest.<horizon>.n_days`, this app's existing definition of how
+    long a signal in that horizon takes to resolve.
+    """
+    fp_cfg = _fp_cfg()
+    try:
+        horizon_days = int(load_backtest_cfg(req.horizon)["n_days"])
+    except (KeyError, TypeError, ValueError):
+        horizon_days = 10   # Swing default; never fail the request over config shape
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        candles = await fetch_candles_async(client, req.symbol.upper())
+
+    # Deterministic per-request seed, same construction and same reasoning as
+    # contracts.py's: identical inputs return an identical answer instead of
+    # visible Monte Carlo noise on repeated presses, while genuinely different
+    # inputs still draw independently. sha256, not hash() — the latter is salted
+    # per process (PYTHONHASHSEED) and so is not stable across restarts/workers.
+    seed_key = (f"{req.symbol.upper()}|{req.direction}|{req.horizon}|"
+                f"{round(req.stock_price, 2)}|{round(req.stop_price, 2)}|"
+                f"{','.join(f'{t:.2f}' for t in req.targets)}")
+    seed = int(hashlib.sha256(seed_key.encode()).hexdigest(), 16) % (2 ** 32)
+
+    # CPU-bound NumPy over n_paths simulated paths. asyncio.to_thread keeps it off
+    # the event loop, matching how this module already offloads compute_confidence
+    # and fetch_intraday_candles. NOT _BACKTEST_POOL — that is a process pool
+    # sized for the backtester, and this work is far too small to justify pickling.
+    result = await asyncio.to_thread(
+        functools.partial(
+            estimate_stock_first_passage,
+            stock_price=req.stock_price,
+            direction=req.direction,
+            trend_score=req.trend_score,
+            stop_price=req.stop_price,
+            targets=req.targets,
+            candles=candles,
+            horizon_days=horizon_days,
+            max_drift_pct=fp_cfg["max_drift_pct"],
+            n_paths=fp_cfg["n_paths"],
+            sigma_floor=fp_cfg["sigma_floor"],
+            sigma_ceiling=fp_cfg["sigma_ceiling"],
+            seed=seed,
+        )
+    )
+
+    caveat = _MEAN_REVERSION_CAVEAT if req.strategy.startswith("mean_reversion") else None
+
+    return StockFirstPassageResponse(
+        targets=[
+            StockFirstPassageTargetOut(
+                price=round(t.price, 2),
+                probability=round(t.probability, 4),
+                expectedDays=t.expected_days,
+            )
+            for t in result.targets
+        ],
+        invalidation=FirstPassageInvalidationOut(
+            probability=round(result.invalidation.probability, 4),
+            expectedDays=result.invalidation.expected_days,
+        ),
+        horizonDays=result.horizon_days,
+        modelCaveat=caveat,
+    )
