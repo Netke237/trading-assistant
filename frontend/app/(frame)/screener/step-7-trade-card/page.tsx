@@ -208,6 +208,16 @@ export default function Step7Page() {
     // NOTE this also clears the levels the order-send path reads — a structural
     // stop checked before a scan no longer rides along into a position opened
     // after it, which is the intended behaviour, not a side effect.
+    //
+    // In practice this line is belt-and-suspenders, not the primary guard:
+    // `setScanResult` has exactly two production callers (RunScanButton, on
+    // the separate step-3-direction route, and StoreHydration's mount-only
+    // effect), so the only way this effect ever runs with a genuinely NEW
+    // scanResult is if the user leaves this page to reach RunScanButton —
+    // which unmounts Step7Page and, with it, these two useState caches,
+    // independent of this call. Kept in case that ever stops being true (an
+    // in-place scan re-run added to this page, a live scan-result push), so
+    // this file doesn't silently rely on an invariant that lives elsewhere.
     setEstimatesByContract({});
     setStructuralBySymbol({});
     if (scanResult?.candidates?.length) {

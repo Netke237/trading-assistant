@@ -484,6 +484,70 @@ describe('TradeCard', () => {
     expect((api.getStockQuote as jest.Mock).mock.calls.length).toBe(callsBefore.stockQuote);
   });
 
+  it('does not let a restored (possibly stale) structural stop suppress a fresh re-check on the next Estimate click', async () => {
+    // Regression test for a HIGH finding from independent post-implementation
+    // review: estimateFirstPassage's auto-trigger for the structural-stop
+    // fetch used to gate on `structuralStop === undefined`, which was only
+    // ever true for "genuinely never fetched" before caching existed. Once a
+    // cached value can populate that field on restore, the same condition is
+    // false for a value that could be hours old, so the auto-trigger silently
+    // stopped refreshing it — the eventual R:R-vs-structural-stop calc then
+    // permanently combined a stale check-time price with a fresh
+    // estimate-time premium. structuralIsFreshRef fixes this: a restored
+    // value still renders immediately (no blank flash) but is never treated
+    // as "already fetched this mount", so the next Estimate click always
+    // fires a real refresh.
+    const cachedCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        structuralStop: { price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6 },
+        structuralStopStockPrice: 190.0,
+      },
+    };
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    rerender(<TradeCard data={cachedCard} />);
+
+    // The restored (possibly stale) level is on screen immediately.
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+
+    const callsBefore = (api.getStructuralStop as jest.Mock).mock.calls.length;
+
+    // A fresh check, at a very different price, is what a real re-check
+    // would now find.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'MSFT', price: 300 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 40, spread: 0.1, volume: 50,
+    });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 295.0, source: 'swing_low', confidence: 60, distancePct: 1.7,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [{ pct: 0.20, stockPrice: 310, optionPrice: 7.0, probability: 0.6, expectedDays: 6 }],
+      invalidation: { probability: 0.25, expectedDays: 5 },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    });
+
+    // The restored value's presence did NOT suppress the refetch — this is
+    // the actual regression: before the fix this call count would never move.
+    await waitFor(() => {
+      expect((api.getStructuralStop as jest.Mock).mock.calls.length).toBe(callsBefore + 1);
+    });
+    // The stale $178.50 order-block level is fully replaced by the fresh
+    // $295 swing-low level, not merely appended alongside it.
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Swing Low/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Structural stop — Order Block/)).not.toBeInTheDocument();
+  });
+
   it('surfaces a completed first-passage estimate and its context to onFirstPassageChange', async () => {
     (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
     (api.getContractQuote as jest.Mock).mockResolvedValueOnce({

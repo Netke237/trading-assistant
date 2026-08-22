@@ -227,6 +227,20 @@ export function TradeCard({
   // Prev/Next) can never overwrite the display for the new one — same class of
   // race step-7-trade-card/page.tsx's recomputePlan effects guard against.
   const structuralRequestRef = useRef<AbortController | null>(null);
+  // Whether the CURRENT structuralStop value was obtained by a fetch performed
+  // during THIS mount, as opposed to a cache-restored (or never-fetched) value.
+  // A restored value can be arbitrarily old — it was measured against whatever
+  // stock price was current the last time this exact contract/symbol was
+  // viewed, which may be minutes, hours, or days ago. Gates
+  // estimateFirstPassage's auto-fetch below: without this, restoring a cached
+  // structuralStop makes `structuralStop === undefined` false, so the
+  // auto-fetch never fires again for this candidate, and structuralRR then
+  // permanently combines that stale check-time price with the FRESH
+  // premium/delta the estimate just fetched — silently overstating or
+  // understating risk by however much the stock has moved since the cache was
+  // written. Not state: it never needs to trigger a render on its own, only
+  // to gate a callback's branch the next time it runs.
+  const structuralIsFreshRef = useRef(false);
 
   const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
   // Seeded from the restored estimate's own context when the parent splices a
@@ -277,6 +291,9 @@ export function TradeCard({
       setStructuralStopStockPrice(data.exit.structuralStopStockPrice ?? null);
       setStructuralError(false);
       setStructuralLoading(false);
+      // A restored value (or the genuine absence of one) is never "fresh this
+      // mount" — see structuralIsFreshRef's declaration.
+      structuralIsFreshRef.current = false;
       setTargetPct(data.exit.firstPassageContext?.targetPct ?? defaultTargetPct);
       setFirstPassage(data.exit.firstPassage);
       setFirstPassageContext(data.exit.firstPassageContext ?? null);
@@ -365,19 +382,25 @@ export function TradeCard({
       const delta = contractQuote?.delta ?? cd.delta;
 
       // The Profit Targets card always shows R:R-vs-structural-stop alongside
-      // the estimate now. If it hasn't already been fetched separately
-      // (structuralStop is still the initial "never fetched" sentinel,
-      // undefined), fetch it here too — reusing referenceStockPrice (just
-      // obtained above) instead of an independent getStockQuote call, so
-      // this adds exactly one extra network call, not two. Fired once per
+      // the estimate now. If a FRESH structural stop hasn't been obtained yet
+      // THIS mount — never fetched, or the current value is a cache-restored
+      // one from a possibly much earlier navigation (structuralIsFreshRef,
+      // see its declaration) — fetch it here too, reusing referenceStockPrice
+      // (just obtained above) instead of an independent getStockQuote call,
+      // so this adds exactly one extra network call, not two. Fired once per
       // Estimate click, not on every render/navigation — same click-gated
-      // model as before, just triggered from one button instead of two.
-      // Deliberately not awaited before continuing to the first-passage
-      // fetch below — it manages its own loading/error state independently
-      // via structuralRequestRef, same as a manual "Check structure" click
-      // would, and that ref-swap means the existing contract-change cleanup
-      // effect still aborts it correctly if the user navigates away.
-      if (structuralStop === undefined && !structuralLoading) {
+      // model as before, just triggered from one button instead of two. A
+      // restored value stays on screen (no flash to blank) while this runs
+      // and is only replaced once the fresh pair actually lands, so the
+      // eventual structuralRR calc always combines a same-vintage stop price
+      // with THIS click's premium/delta rather than silently mixing a stale
+      // check against a fresh estimate. Deliberately not awaited before
+      // continuing to the first-passage fetch below — it manages its own
+      // loading/error state independently via structuralRequestRef, same as
+      // a manual "Check structure" click would, and that ref-swap means the
+      // existing contract-change cleanup effect still aborts it correctly if
+      // the user navigates away.
+      if (!structuralIsFreshRef.current && !structuralLoading) {
         structuralRequestRef.current?.abort();
         const structuralController = new AbortController();
         structuralRequestRef.current = structuralController;
@@ -392,6 +415,7 @@ export function TradeCard({
             if (structuralController.signal.aborted) return;
             setStructuralStop(normalizeStructuralStopResponse(res));
             setStructuralStopStockPrice(referenceStockPrice);
+            structuralIsFreshRef.current = true;
           })
           .catch(() => {
             if (structuralController.signal.aborted) return;
@@ -431,7 +455,7 @@ export function TradeCard({
     } finally {
       if (!controller.signal.aborted) setFirstPassageLoading(false);
     }
-  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, targetPct, structuralStop, structuralLoading]);
+  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, targetPct, structuralLoading]);
 
   // R:R using the structural stop (order block / swing level) as the risk
   // basis instead of the original fixed "premium * 60%" assumption — only
@@ -473,6 +497,7 @@ export function TradeCard({
     setStructuralError(false);
     setStructuralStop(undefined);
     setStructuralStopStockPrice(null);
+    structuralIsFreshRef.current = false;
     try {
       // Fetch a fresh stock price rather than reusing data.price (a scan-time
       // snapshot that may be stale, especially for a contract the user never
@@ -489,6 +514,7 @@ export function TradeCard({
       if (controller.signal.aborted) return;
       setStructuralStop(normalizeStructuralStopResponse(res));
       setStructuralStopStockPrice(referenceStockPrice);
+      structuralIsFreshRef.current = true;
     } catch {
       if (controller.signal.aborted) return;
       setStructuralError(true);
