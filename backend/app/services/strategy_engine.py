@@ -919,6 +919,7 @@ def mean_reversion_vwap_signal(
     reversal_pct: float = 0.3,
     stop_atr_mult: float = 0.5,
     rr_target_mult: float = 2.0,
+    vwap_extension_atr: float = 0.5,
     interval: str = "15m",
     direction: Literal["Bullish", "Bearish"] = "Bullish",
     current_price: float | None = None,  # accepted for router compat; not used (VWAP mean-rev uses close)
@@ -952,7 +953,6 @@ def mean_reversion_vwap_signal(
         risk = current - stop
         if risk <= 0:
             return None
-        target = current + risk * rr_target_mult
     else:  # Bearish
         dev = (current - vwap) / vwap * 100
         if dev < vwap_dev_pct:
@@ -964,7 +964,31 @@ def mean_reversion_vwap_signal(
         risk = stop - current
         if risk <= 0:
             return None
-        target = current - risk * rr_target_mult
+
+    # Exit thesis: VWAP itself, then an extension past it. Valid here — and ONLY
+    # here — because this variant's entry gate requires price to still be
+    # DEVIATED from VWAP by vwap_dev_pct, so VWAP sits on the profitable side of
+    # entry. Its daily sibling has the opposite gate; see below.
+    #
+    # This is THE strategy that proves why `primary` must be a separate argument:
+    # the gate puts VWAP at least vwap_dev_pct (1.5%) away, while
+    # risk = stop_atr_mult * atr (0.5 ATR on 15-minute bars). `entry + 2R` is
+    # therefore almost always NEARER than VWAP, and a pooled nearest-first sort
+    # would silently make an arbitrary 1-ATR multiple the target again — leaving
+    # this strategy's exits exactly as they were before the rework.
+    _sign = 1 if direction == "Bullish" else -1
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        primary=vwap,
+        extensions=[
+            vwap + _sign * atr * vwap_extension_atr,
+            current + _sign * risk * rr_target_mult,
+        ],
+        fallback_mult=rr_target_mult,
+    )
+    if not targets:
+        return None
+    target = targets[0]
 
     return StrategySignal(
         strategy="mean_reversion_vwap",
@@ -973,6 +997,7 @@ def mean_reversion_vwap_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
+        targets=targets,
         detail={"vwap": round(vwap, 2), "deviation_pct": round(dev, 2)},
     )
 
@@ -1017,7 +1042,6 @@ def mean_reversion_vwap_daily_signal(
         risk   = current - stop
         if risk <= 0:
             return None
-        target = current + risk * rr_target_mult
     else:
         if (prev - vwap) / vwap < vwap_deviation_pct:
             return None
@@ -1027,9 +1051,29 @@ def mean_reversion_vwap_daily_signal(
         risk   = stop - current
         if risk <= 0:
             return None
-        target = current - risk * rr_target_mult
 
     dev_pct = abs(vwap - prev) / vwap
+    # Exit thesis: a RECLAIM-and-overshoot, NOT "return to VWAP".
+    #
+    # This variant's Bullish gate is `current > vwap` — the bar has already closed
+    # back ABOVE the rolling VWAP, so VWAP is BELOW entry and the "return to VWAP"
+    # target is achieved at entry. What the thesis actually says is that a
+    # deviation of dev_pct below VWAP should mean-revert to a mirror deviation
+    # above it. That mirror level is rung 1; R extensions follow.
+    _sign = 1 if direction == "Bullish" else -1
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        primary=vwap * (1 + _sign * dev_pct),
+        extensions=[
+            current + _sign * risk * rr_target_mult,
+            current + _sign * risk * rr_target_mult * 1.5,
+        ],
+        fallback_mult=rr_target_mult,
+    )
+    if not targets:
+        return None
+    target = targets[0]
+
     return StrategySignal(
         strategy="mean_reversion_vwap_daily",
         direction=direction,
@@ -1037,6 +1081,7 @@ def mean_reversion_vwap_daily_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
+        targets=targets,
         detail={"rolling_vwap": round(vwap, 2), "deviation_pct": round(dev_pct * 100, 2)},
     )
 

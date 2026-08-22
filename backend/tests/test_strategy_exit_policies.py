@@ -296,3 +296,49 @@ def test_mean_reversion_bb_targets_the_real_mid_band_then_the_opposite_band():
     assert sig.targets[1] == pytest.approx(upper, abs=0.02)
     assert all(t > sig.entry_price for t in sig.targets)
     assert sig.targets == sorted(sig.targets)
+
+
+# ── the two VWAP variants ─────────────────────────────────────────────────────
+
+def test_mean_reversion_vwap_intraday_rung_one_is_vwap_itself():
+    from app.services.strategy_engine import mean_reversion_vwap_signal
+
+    # 40 flat bars establishing VWAP near 100, then a drop to ~97 with the final
+    # bar ticking back up toward it.
+    bars = [{"open": 100, "high": 100.3, "low": 99.7, "close": 100, "volume": 10_000}
+            for _ in range(40)]
+    bars.append({"open": 97.5, "high": 97.6, "low": 96.9, "close": 97.0, "volume": 10_000})
+    bars.append({"open": 97.0, "high": 97.9, "low": 97.0, "close": 97.8, "volume": 10_000})
+    sig = mean_reversion_vwap_signal(bars, vwap_dev_pct=1.5, reversal_pct=0.3, interval="15m")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+
+    vwap = sig.detail["vwap"]
+    # Rung 1 IS VWAP. This assertion is the regression guard for the pooled-sort
+    # bug: here `entry + 2R` (~1 ATR) is nearer than VWAP (>=1.5% away), so a
+    # nearest-first pool would put the R multiple first and this would fail.
+    assert sig.target_price == pytest.approx(vwap, abs=0.02)
+    assert sig.targets[0] == sig.target_price
+    assert all(t > sig.entry_price for t in sig.targets)
+    assert sig.targets == sorted(sig.targets)
+
+
+def test_mean_reversion_vwap_daily_never_targets_vwap_itself():
+    """Its gate is `close > vwap`, so VWAP is BEHIND entry — a VWAP target would
+    be a target already achieved (and would be rejected by _entry_side)."""
+    from app.services.strategy_engine import mean_reversion_vwap_daily_signal
+    from app.services.strategy_backtest import _entry_side
+
+    bars = [{"open": 100, "high": 101, "low": 99, "close": 100, "volume": 10_000}
+            for _ in range(22)]
+    bars.append({"open": 98, "high": 98.5, "low": 97, "close": 97.5, "volume": 10_000})
+    bars.append({"open": 97.5, "high": 101.5, "low": 97.5, "close": 101.0, "volume": 10_000})
+    sig = mean_reversion_vwap_daily_signal(bars, vwap_lookback=20, vwap_deviation_pct=0.02)
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+
+    vwap = sig.detail["rolling_vwap"]
+    assert sig.target_price > sig.entry_price > vwap
+    # Rung 1 is the MIRROR of the entry deviation, not VWAP itself.
+    dev_frac = sig.detail["deviation_pct"] / 100.0
+    assert sig.target_price == pytest.approx(round(vwap * (1 + dev_frac), 2), abs=0.02)
+    assert _entry_side("Bullish", entry=sig.entry_price,
+                       sl=sig.stop_price, tp=sig.target_price) == "buy"

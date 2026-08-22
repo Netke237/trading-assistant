@@ -308,7 +308,21 @@ def test_vwap_daily_just_above_2pct_deviation():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_vwap_daily_custom_atr_multipliers():
-    """Test with custom stop_atr_mult and rr_target_mult."""
+    """Custom stop_atr_mult and rr_target_mult.
+
+    UPDATED by the 2026-08-22 exit-targets rework. This test used to assert that
+    a higher `rr_target_mult` produced a larger `signal.reward`, which was only
+    true because `target_price` WAS `entry + risk * rr_target_mult`. It is now
+    the mirror of the entry deviation off the rolling VWAP (a reclaim-and-
+    overshoot — VWAP itself sits BEHIND entry for this variant, since its gate is
+    `close > vwap`), so `rr_target_mult` no longer touches rung 1 at all: it
+    scales the outward extension rungs, which are dropped entirely when they land
+    inside the thesis rung.
+
+    So the contract asserted here is the new one: rung 1 is invariant under
+    rr_target_mult, and the multiplier's real effect is how far the LADDER
+    reaches.
+    """
     bars = make_bars(25, base_price=100.0, base_volume=1_000_000)
 
     for i in range(len(bars)):
@@ -331,8 +345,6 @@ def test_vwap_daily_custom_atr_multipliers():
     )
 
     assert signal is not None
-    # With higher target multiplier, reward should be larger
-    reward_1x = signal.reward
 
     # Compare to default (0.5, 2.0)
     signal_default = mean_reversion_vwap_daily_signal(
@@ -341,8 +353,18 @@ def test_vwap_daily_custom_atr_multipliers():
         stop_atr_mult=0.5,
         rr_target_mult=2.0,
     )
+    assert signal_default is not None
 
-    assert reward_1x > signal_default.reward
+    # Rung 1 is the thesis level and is identical under both multipliers.
+    assert signal.target_price == signal_default.target_price
+    assert signal.target_price == signal.targets[0]
+
+    # The wider stop genuinely widens the risk...
+    assert signal.risk > signal_default.risk
+    # ...and the higher rr_target_mult pushes the extension rungs out past the
+    # thesis rung, so the ladder reaches further than the default's does.
+    assert signal.targets[-1] > signal_default.targets[-1]
+    assert len(signal.targets) > len(signal_default.targets)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
