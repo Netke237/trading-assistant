@@ -201,3 +201,60 @@ def test_ma_crossover_primary_target_is_unchanged_at_three_atr():
     assert len(sig.targets) == 3
     assert sig.targets[1] == pytest.approx(round(sig.entry_price + atr * 4.5, 2), abs=0.02)
     assert sig.targets[2] == pytest.approx(round(sig.entry_price + atr * 6.0, 2), abs=0.02)
+
+
+# ── mean_reversion_rsi ────────────────────────────────────────────────────────
+
+def test_mean_reversion_rsi_never_targets_the_trend_sma():
+    """The 200-SMA is BELOW entry on a bullish fire (oversold in an uptrend);
+    targeting it would be targeting a loss. Rung 1 must be the SHORT-term mean."""
+    from app.services.strategy_engine import mean_reversion_rsi_signal
+
+    # A long uptrend, then a six-bar dip that drives RSI under 30 while price
+    # stays comfortably above the 200-SMA, with a small final up-tick so the
+    # "RSI recovering" gate (rsi[-1] > rsi[-2]) passes while rsi[-1] is still
+    # below 30.
+    #
+    # Every number here is load-bearing and was chosen by checking the signal
+    # actually fires. An earlier draft used a 0.12/bar ramp with an 8-bar dip:
+    # the close landed BELOW the 200-SMA, the uptrend gate rejected, and the test
+    # silently skipped every run. A 0.5 final tick also pushes RSI back over 30.
+    # If this ever starts skipping, fix the fixture — do not relax the test.
+    closes = [50 + i * 0.35 for i in range(260)]
+    for _ in range(6):
+        closes.append(closes[-1] - 2.0)
+    closes.append(closes[-1] + 0.2)
+    bars = [{"open": c, "high": c + 0.4, "low": c - 0.4, "close": c, "volume": 1_000_000}
+            for c in closes]
+
+    sig = mean_reversion_rsi_signal(bars, rsi_period=14, rsi_oversold=30, trend_sma=200)
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+
+    trend_sma_val = sig.detail["sma_200"]
+    assert sig.entry_price > trend_sma_val, "bullish gate: entry is above the trend SMA"
+    assert sig.target_price > sig.entry_price
+    assert sig.target_price > trend_sma_val
+    assert sig.targets[0] == sig.target_price
+    # Rung 1 is the SHORT-term mean, and the detail dict reports it.
+    assert sig.target_price == pytest.approx(sig.detail["sma_20"], abs=0.02)
+
+
+def test_mean_reversion_rsi_drops_atr_extensions_that_sit_inside_the_short_mean():
+    """The ATR extensions are measured from entry, so when the short mean is
+    further away than 3.75 ATR they are all inside it and are dropped rather than
+    reordered ahead of the thesis rung."""
+    from app.services.strategy_engine import mean_reversion_rsi_signal
+
+    closes = [50 + i * 0.35 for i in range(260)]
+    for _ in range(6):
+        closes.append(closes[-1] - 2.0)
+    closes.append(closes[-1] + 0.2)
+    bars = [{"open": c, "high": c + 0.4, "low": c - 0.4, "close": c, "volume": 1_000_000}
+            for c in closes]
+
+    sig = mean_reversion_rsi_signal(bars, rsi_period=14, rsi_oversold=30, trend_sma=200)
+    assert sig is not None
+    assert sig.targets == sorted(sig.targets)
+    assert all(t > sig.entry_price for t in sig.targets)
+    # Whatever survives, the short mean leads — never an ATR multiple.
+    assert sig.targets[0] == pytest.approx(sig.detail["sma_20"], abs=0.02)

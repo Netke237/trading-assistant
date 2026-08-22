@@ -713,6 +713,8 @@ def mean_reversion_rsi_signal(
     rsi_oversold: float = 30.0,
     rsi_overbought: float = 70.0,
     trend_sma: int = 200,
+    exit_sma_period: int = 20,
+    atr_target_mult: float = 2.5,
     require_choppy_regime: bool = False,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
     current_price: float | None = None,  # accepted for router compat; not used (mean-rev uses close)
@@ -746,7 +748,6 @@ def mean_reversion_rsi_signal(
         risk = current - stop
         if risk <= 0:
             return None
-        target = current + atr * 2.5
     else:  # Bearish — overbought in downtrend
         if closes[-1] >= trend[-1]:        return None   # must be below trend (downtrend context)
         if rsi[-1] <= rsi_overbought:      return None   # must be overbought
@@ -755,7 +756,30 @@ def mean_reversion_rsi_signal(
         risk = stop - current
         if risk <= 0:
             return None
-        target = current - atr * 2.5
+
+    # Exit thesis: "RSI returns to mid". The price proxy for that is the SHORT-term
+    # mean, NOT the trend SMA. The Bullish gate above requires close > trend[-1]
+    # (oversold WITHIN an uptrend), so the 200-SMA sits BELOW entry — targeting it
+    # would be targeting a loss. RSI is low precisely because price is stretched
+    # below its short mean, so that mean is the level the snap-back reaches for.
+    short_mean_series = _sma(closes, exit_sma_period)
+    short_mean = short_mean_series[-1] if short_mean_series else None
+    _sign = 1 if direction == "Bullish" else -1
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        # None when there are fewer bars than exit_sma_period — the helper
+        # ignores it and the ATR extensions carry the ladder.
+        primary=short_mean,
+        extensions=[
+            current + _sign * atr * atr_target_mult,
+            current + _sign * atr * atr_target_mult * 1.5,
+        ],
+        fallback_mult=2.0,
+    )
+    if not targets:
+        return None
+    target = targets[0]
+
     return StrategySignal(
         strategy="mean_reversion_rsi",
         direction=direction,
@@ -763,7 +787,12 @@ def mean_reversion_rsi_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
-        detail={"rsi": round(rsi[-1], 1), f"sma_{trend_sma}": round(trend[-1], 2)},
+        targets=targets,
+        detail={
+            "rsi": round(rsi[-1], 1),
+            f"sma_{trend_sma}": round(trend[-1], 2),
+            **({f"sma_{exit_sma_period}": round(short_mean, 2)} if short_mean is not None else {}),
+        },
     )
 
 
