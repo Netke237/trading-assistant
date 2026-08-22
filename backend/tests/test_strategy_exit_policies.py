@@ -124,3 +124,49 @@ def test_pullback_ema_ladder_is_monotonic_and_starts_at_target_price():
     assert sig.targets and sig.targets[0] == sig.target_price
     assert all(b > a for a, b in zip(sig.targets, sig.targets[1:]))
     assert all(t > sig.entry_price for t in sig.targets)
+
+
+# ── breakout_base ─────────────────────────────────────────────────────────────
+
+def _flat_base_then_breakout(base_high: float = 100.0, base_low: float = 96.0) -> list[dict]:
+    """25 bars of a tight base, then a high-volume close above it."""
+    bars = []
+    mid = (base_high + base_low) / 2
+    for _ in range(25):
+        bars.append({"open": mid, "high": base_high, "low": base_low,
+                     "close": mid, "volume": 1_000_000})
+    bars.append({"open": base_high, "high": base_high + 2, "low": base_high - 0.5,
+                 "close": base_high + 1, "volume": 5_000_000})
+    return bars
+
+
+def test_breakout_base_rung_one_is_the_measured_move_off_the_base_high():
+    from app.services.strategy_engine import breakout_base_signal
+
+    bars = _flat_base_then_breakout()
+    sig = breakout_base_signal(bars, base_lookback=20, atr_tight_max=99.0, volume_mult=1.5)
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+    height = sig.detail["base_height"]
+    anchor = sig.detail["measured_move_anchor"]
+    assert height == pytest.approx(4.0, abs=0.01)
+    assert sig.target_price == pytest.approx(round(anchor + height, 2), abs=0.01)
+    assert sig.targets[0] == sig.target_price
+    # The two outward extensions survive: anchor + 1.5H and anchor + 2H.
+    assert sig.targets == [round(anchor + height, 2),
+                           round(anchor + height * 1.5, 2),
+                           round(anchor + height * 2.0, 2)]
+
+
+def test_breakout_base_survives_a_zero_height_base():
+    """A perfectly flat base (base_high == base_low) must not produce a target
+    at the breakout level itself — _entry_side would reject it and the strategy
+    would silently stop trading."""
+    from app.services.strategy_engine import breakout_base_signal
+    from app.services.strategy_backtest import _entry_side
+
+    bars = _flat_base_then_breakout(base_high=100.0, base_low=100.0)
+    sig = breakout_base_signal(bars, base_lookback=20, atr_tight_max=99.0, volume_mult=1.5)
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+    assert sig.detail["base_height"] == 0.0
+    assert _entry_side("Bullish", entry=sig.entry_price,
+                       sl=sig.stop_price, tp=sig.target_price) == "buy"

@@ -518,6 +518,7 @@ def breakout_base_signal(
     atr_tight_max: float = 4.0,
     volume_mult: float = 1.5,
     rr_target_mult: float = 2.0,
+    measured_move_mult: float = 1.0,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
     current_price: float | None = None,  # accepted for router compat; not used (breakout uses close)
 ) -> StrategySignal | None:
@@ -556,7 +557,6 @@ def breakout_base_signal(
         risk = current - stop
         if risk <= 0:
             return None
-        target = current + risk * rr_target_mult
         detail = {"base_high": round(base_high, 2), "base_range_pct": round(base_range_pct * 100, 1)}
     else:  # Bearish breakdown below base low
         if current >= base_low:
@@ -565,8 +565,40 @@ def breakout_base_signal(
         risk = stop - current
         if risk <= 0:
             return None
-        target = current - risk * rr_target_mult
         detail = {"base_low": round(base_low, 2), "base_range_pct": round(base_range_pct * 100, 1)}
+
+    # Exit thesis: the MEASURED MOVE the Step-4 picker has always promised —
+    # project the base height off the breakout LEVEL (base_high for a breakout,
+    # base_low for a breakdown), not off entry. Projecting off entry would let a
+    # gapping open inflate the target by the size of the gap, which is the
+    # opposite of what a measured move means.
+    #
+    # base_high/base_low are already computed above and were previously used only
+    # for the stop and the detail blob.
+    base_height = base_high - base_low
+    # A perfectly flat base gives height 0; one ATR is the natural stand-in for
+    # "how far this thing travels". A gapping open can also put `current` above
+    # anchor + height, in which case that rung is behind entry and is dropped.
+    # If ATR is also 0 (degenerate data) every measured-move rung collapses onto
+    # the breakout level and is dropped, leaving the rr_target_mult fallback.
+    height = base_height if base_height > 0 else atr
+    _sign = 1 if direction == "Bullish" else -1
+    anchor = base_high if direction == "Bullish" else base_low
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        primary=anchor + _sign * height * measured_move_mult,
+        extensions=[
+            anchor + _sign * height * (measured_move_mult + 0.5),
+            anchor + _sign * height * (measured_move_mult + 1.0),
+        ],
+        fallback_mult=rr_target_mult,
+    )
+    if not targets:
+        return None
+    target = targets[0]
+    detail["base_height"] = round(base_height, 2)
+    detail["measured_move_anchor"] = round(anchor, 2)
+
     return StrategySignal(
         strategy="breakout_base",
         direction=direction,
@@ -574,6 +606,7 @@ def breakout_base_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
+        targets=targets,
         detail=detail,
     )
 
