@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -203,6 +204,144 @@ def _fibonacci_pullback_signal(
 fibonacci_pullback_signal = _fibonacci_pullback_signal
 
 
+# ── Exit-target ladder ────────────────────────────────────────────────────────
+
+_LADDER_MAX_RUNGS = 3
+_LADDER_MIN_FALLBACK_R = 0.5
+
+
+def _build_target_ladder(
+    *,
+    entry: float,
+    stop: float,
+    direction: str,
+    primary: float | None,
+    extensions: list[float | None],
+    fallback_mult: float,
+    min_rung_r: float = 0.0,
+) -> list[float]:
+    """Turn a strategy's exit thesis into a validated, nearest-first ladder.
+
+    Single place where every degenerate case is handled, so no individual signal
+    function has to. Callers pass their own objective as ``primary`` and their
+    outward continuations as ``extensions`` — including ``None`` and values that
+    may land on the wrong side of entry — and get back a ladder that is
+    guaranteed non-empty, strictly on the profitable side of entry, strictly
+    monotonic, and ordered nearest-first.
+
+    WHY ``primary`` IS A SEPARATE ARGUMENT — the one thing not to "simplify".
+    Pooling every candidate into one list and sorting by distance would let a
+    generic R/ATR extension become ``ladder[0]`` whenever it happens to be
+    nearer than the strategy's own objective, which is exactly the thing this
+    rework exists to stop: ``ladder[0]`` is ``target_price``, and
+    ``target_price`` is the only exit ``strategy_backtest`` can observe (it
+    issues ``tp=sig.target_price``). It is not hypothetical — for
+    ``mean_reversion_vwap`` the entry gate puts VWAP >= 1.5% away while
+    ``risk = 0.5 ATR``, so ``entry + 2R`` is almost always nearer than VWAP.
+    The primary leads whenever it is valid; an extension that is not strictly
+    beyond the rung before it is DROPPED, never reordered ahead of it.
+
+    Nearest-first is load-bearing, not cosmetic: ``alert_generator.py`` fires
+    ``TP_HIT`` against ``targets[0]`` and nothing else.
+
+    Rungs are DROPPED, never clamped, when they fail a test. Clamping a
+    wrong-side value into place would manufacture a target the strategy never
+    claimed; dropping it lets the next rung — or the fallback — take over
+    honestly.
+
+    WHY THERE IS NO R-RELATIVE FLOOR BY DEFAULT. The only thing ``_entry_side``
+    and ``TP_HIT`` require is that a rung is finite, positive and *strictly*
+    beyond entry after rounding. An R-relative "must be at least 0.5R away"
+    floor sounds prudent and is actively harmful applied to a primary:
+    ``ma_crossover``'s stop sits at the slow MA, which right after a fast cross
+    can be far below price, so 0.5R there can exceed its 3-ATR objective — the
+    floor would silently drop the one rung this rework leaves numerically
+    unchanged and promote a 6-ATR extension instead. A poor reward:risk on a
+    strategy's declared objective is real information; ``rr_ratio`` and the
+    backtest are where it belongs. ``min_rung_r`` therefore defaults to 0 and
+    has exactly one caller: ``resolve_multi_signal``, where a rung genuinely IS
+    being re-used against a stop no variant derived it with.
+
+    Args:
+        entry:  signal entry price (> 0, caller-guaranteed).
+        stop:   signal stop price. ``risk = abs(entry - stop)`` must be > 0;
+                every caller already returns None before reaching here otherwise.
+        direction: "Bullish" or "Bearish".
+        primary: the strategy's own exit objective, or ``None`` when it is
+                unavailable on this bar (e.g. too few bars for the short SMA).
+        extensions: outward continuations, in the caller's own order; they are
+                sorted nearest-first among themselves. ``None`` entries are
+                ignored so a caller can pass an optional level unconditionally.
+        fallback_mult: R multiple used for the guaranteed rung when every
+                supplied rung is dropped. Floored at 0.5R.
+        min_rung_r: optional minimum distance from entry, in R, applied to every
+                supplied rung (primary included). Defaults to 0 — see above.
+
+    Returns:
+        1..3 prices, rounded to 2dp, strictly ordered away from entry. Empty
+        only when the inputs are degenerate (``risk <= 0`` or ``entry <= 0``).
+    """
+    sign = 1.0 if direction == "Bullish" else -1.0
+    risk = abs(entry - stop)
+    if risk <= 0 or not math.isfinite(risk) or entry <= 0 or not math.isfinite(entry):
+        # Unreachable via the signal functions (each returns None on risk <= 0),
+        # but this helper is public enough to be called from a future consumer.
+        return []
+
+    entry_r = round(entry, 2)
+    floor = entry + sign * min_rung_r * risk
+
+    def _valid(value: float | None) -> float | None:
+        """Round to 2dp and keep only if strictly beyond entry (and the floor)."""
+        if value is None or not math.isfinite(value) or value <= 0:
+            return None
+        if min_rung_r > 0 and sign * (value - floor) < 0:
+            return None
+        rounded = round(value, 2)
+        # A rung that rounds onto (or behind) entry is dropped rather than
+        # nudged: _entry_side needs a strict inequality, and a one-cent target
+        # would be worse than letting the next rung or the fallback take over.
+        if sign * (rounded - entry_r) <= 0:
+            return None
+        return rounded
+
+    ladder: list[float] = []
+
+    head = _valid(primary)
+    if head is not None:
+        ladder.append(head)
+
+    ext = sorted(
+        (v for v in (_valid(e) for e in extensions) if v is not None),
+        key=lambda v: sign * (v - entry),
+    )
+    for value in ext:
+        if len(ladder) >= _LADDER_MAX_RUNGS:
+            break
+        if ladder:
+            prev = ladder[-1]
+            # Strictly beyond the previous rung — an extension that is nearer
+            # than the primary is dropped, never reordered ahead of it.
+            if sign * (value - prev) <= 0:
+                continue
+            # Dedupe within 0.1% of the previous rung: a squeezed mid-band and a
+            # 2R extension really can coincide on some bars, and two
+            # indistinguishable rungs in the UI is noise.
+            if prev > 0 and abs(value - prev) / prev < 0.001:
+                continue
+        ladder.append(value)
+
+    if not ladder:
+        fallback = entry + sign * risk * max(fallback_mult, _LADDER_MIN_FALLBACK_R)
+        rounded = round(fallback, 2)
+        if sign * (rounded - entry_r) <= 0:
+            # Sub-cent risk. One tick is the smallest thing _entry_side accepts.
+            rounded = round(entry_r + sign * 0.01, 2)
+        ladder.append(rounded)
+
+    return ladder
+
+
 # ── Signal dataclass ──────────────────────────────────────────────────────────
 
 @dataclass
@@ -214,6 +353,12 @@ class StrategySignal:
     target_price: float
     atr:         float
     detail:      dict = field(default_factory=dict)
+    #: Full nearest-first exit ladder. ``target_price`` is always ``targets[0]``
+    #: — every existing consumer (strategy_backtest's ``tp=``, the strategy-watch
+    #: evaluator, the composite trigger evaluator) reads ``target_price`` and is
+    #: unaffected; ``targets`` is additive. Defaults to ``[]`` so a directly
+    #: constructed signal (several tests do this) stays valid.
+    targets:     list[float] = field(default_factory=list)
 
     @property
     def risk(self) -> float:
