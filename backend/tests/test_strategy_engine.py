@@ -308,8 +308,7 @@ def test_pullback_ema_stop_is_below_fast_ma():
     fast_val = _ema_fn(closes, 50)[-1]
 
     signal = pullback_ema_signal(bars, tolerance=0.04)
-    if signal is None:
-        pytest.skip("setup did not fire on synthetic data")
+    assert signal is not None, "setup must fire on this deterministic fixture"
 
     assert signal.stop_price < fast_val, (
         f"stop {signal.stop_price:.2f} must be below fast MA {fast_val:.2f}"
@@ -318,11 +317,14 @@ def test_pullback_ema_stop_is_below_fast_ma():
 
 def test_pullback_ema_targets_the_prior_swing_high():
     """Rung 1 is the prior swing extreme (the exit the Step-4 picker promises),
-    not a fixed R multiple. The R extensions live on rungs 2 and 3."""
+    not a fixed R multiple. The R extensions live on rungs 2 and 3.
+
+    `_uptrend_pullback_bars()` is deterministic synthetic data, not randomized
+    input — a None here means the setup logic broke, not a flaky fixture, so
+    this asserts fire rather than skipping."""
     bars = _uptrend_pullback_bars()
     signal = pullback_ema_signal(bars, tolerance=0.04)
-    if signal is None:
-        pytest.skip("setup did not fire on synthetic data")
+    assert signal is not None, "setup must fire on this deterministic fixture"
 
     risk = signal.entry_price - signal.stop_price
     assert risk > 0, "risk must be positive (stop below entry)"

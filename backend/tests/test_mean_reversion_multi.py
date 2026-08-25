@@ -526,6 +526,40 @@ def test_resolve_multi_signal_drops_rungs_inside_the_widened_floor():
                        sl=out.stop_price, tp=out.target_price) == "buy"
 
 
+def test_resolve_multi_signal_with_a_single_variant_keeps_its_own_target():
+    """mean_reversion_min_confirmations is user-configurable down to 1, so a
+    single fired variant is a real, reachable call — not just a degenerate
+    edge case. With nothing to merge, the 0.5R floor (there to stop a rung
+    surviving a transplant onto a WIDER stop from another variant) must not
+    apply against the variant's OWN stop and silently discard its own thesis
+    rung. 100.4 is 0.08R from entry/stop (100/95, risk 5) — well inside 0.5R,
+    and exactly the kind of rung mean_reversion_bb's tight (0.5-ATR) stop
+    routinely produces, per its own module docstring."""
+    from app.services.strategy_engine import StrategySignal, resolve_multi_signal
+
+    a = StrategySignal(strategy="mean_reversion_bb", direction="Bullish",
+                       entry_price=100.0, stop_price=95.0, target_price=100.4,
+                       atr=1.0, targets=[100.4, 112.0])
+    out = resolve_multi_signal([a])
+    assert out.target_price == 100.4, "must not fall back to the 2R extension"
+    assert out.targets == [100.4, 112.0]
+    assert out.stop_price == 95.0
+    assert out.detail["confirmations"] == 1
+    assert out.detail["resolution"] == "single_variant_passthrough"
+
+
+def test_resolve_multi_signal_with_a_single_variant_and_no_targets_list():
+    """Mirrors the targets-is-empty fallback test above, for the single-variant
+    passthrough path specifically."""
+    from app.services.strategy_engine import StrategySignal, resolve_multi_signal
+
+    a = StrategySignal(strategy="mean_reversion_bb", direction="Bullish",
+                       entry_price=100.0, stop_price=95.0, target_price=100.4, atr=1.0)
+    out = resolve_multi_signal([a])
+    assert out.targets == [100.4]
+    assert out.target_price == 100.4
+
+
 def test_resolve_multi_signal_returns_none_on_empty():
     from app.services.strategy_engine import resolve_multi_signal
     assert resolve_multi_signal([]) is None

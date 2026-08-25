@@ -178,7 +178,58 @@ export function StockPositionCard({
   }, [card.symbol]);
 
   const patch = useCallback((partial: Partial<StockEditOverlay>) => {
-    setOverlay((prev) => ({ ...prev, ...partial }));
+    setOverlay((prev) => {
+      const next = { ...prev, ...partial };
+      // Each rung's share count is edited independently (one EditableField per
+      // T1/T2/T3 row), so nothing stops sharesT1+T2+T3 from exceeding the
+      // position's total shares — which would tell the sell-to-close plan
+      // (buildPaperStockPosition's contractsToSell) to sell more shares than
+      // the position holds.
+      const allocated = next.sharesT1 + next.sharesT2 + next.sharesT3;
+      if (allocated > next.shares) {
+        const shareKeys = ['sharesT1', 'sharesT2', 'sharesT3'] as const;
+        const editedShareKeys = shareKeys.filter((k) => k in partial);
+        if (editedShareKeys.length > 0) {
+          // The rung the user just edited pushed the total over — clamp THAT
+          // rung down to what's left after the others, rather than silently
+          // shrinking a different rung they didn't touch.
+          const othersSum = shareKeys
+            .filter((k) => !editedShareKeys.includes(k))
+            .reduce((sum, k) => sum + next[k], 0);
+          for (const k of editedShareKeys) next[k] = Math.max(0, next.shares - othersSum);
+        } else if (allocated > 0) {
+          // Total `shares` shrank below the existing allocation — scale every
+          // rung down proportionally rather than favoring one arbitrarily.
+          const scale = next.shares / allocated;
+          next.sharesT1 = Math.floor(next.sharesT1 * scale);
+          next.sharesT2 = Math.floor(next.sharesT2 * scale);
+          next.sharesT3 = Math.max(0, next.shares - next.sharesT1 - next.sharesT2);
+        }
+      }
+      return next;
+    });
+    // A displayed estimate/structural-stop result is a snapshot computed
+    // against the overlay values AT THE MOMENT the user clicked Estimate /
+    // Check structure (onEstimate sends overlay.entry/stop/t1/t2/t3;
+    // onCheckStructure sends overlay.entry as its reference price). Neither
+    // result was ever invalidated by a later overlay edit — an adversarial
+    // audit round caught this: edit the stop after running Estimate and the
+    // card kept showing the OLD probability/expected-days next to the NEW
+    // stop value, silently implying they were computed together. Clear
+    // whichever result depends on what just changed (and abort it if still
+    // in flight, so a late response for the pre-edit values can't land
+    // either) — the user re-runs the click-gated fetch to get numbers that
+    // actually match the edit.
+    if ('entry' in partial || 'stop' in partial || 't1' in partial || 't2' in partial || 't3' in partial) {
+      estimateReq.current?.abort();
+      setEstimate(null);
+      setEstimateErr(null);
+    }
+    if ('entry' in partial) {
+      structuralReq.current?.abort();
+      setStructural(null);
+      setStructuralErr(null);
+    }
   }, []);
 
   // Derived values
@@ -568,6 +619,12 @@ export function StockPositionCard({
             <div className={styles.estimateRow}>
               <Text size={11} tone="dim">STRUCTURAL</Text>
               <Data size={12}>{structural.price.toFixed(2)}</Data>
+              {structural.distancePct != null && (
+                // Same "(N% away)" format the options TradeCard already shows next
+                // to its own structural-stop price — distancePct was captured here
+                // but had never actually been rendered.
+                <Text size={11} tone="dim">({structural.distancePct.toFixed(1)}% away)</Text>
+              )}
               <Text size={11} tone="dim">{structural.source ?? '—'}</Text>
               <Data size={12} tone="dim">
                 {/* Guarded: a structural level that lands exactly on entry would

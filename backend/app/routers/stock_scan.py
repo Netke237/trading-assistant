@@ -1364,6 +1364,19 @@ _MEAN_REVERSION_CAVEAT = (
     "upper bound; the stop probability is less affected."
 )
 
+#: mean_reversion_vwap's signal and backtest run on 15m intraday bars — its
+#: thesis is a same-day reversion — but this estimator always simulates daily
+#: closes over `horizon_days` TRADING days (see fetch_candles_async below,
+#: unconditional on strategy). The sigma/drift inputs describe a slower,
+#: coarser process than the one the strategy actually trades, on top of the
+#: mean-reversion mismatch above.
+_INTRADAY_MEAN_REVERSION_CAVEAT = (
+    _MEAN_REVERSION_CAVEAT + " It also simulates daily closes, not the "
+    "intraday moves this strategy's signal and backtest are based on, so "
+    "treat the probabilities as an even rougher guide than for other "
+    "mean-reversion strategies."
+)
+
 
 @router.post('/stocks/first-passage', response_model=StockFirstPassageResponse)
 async def stock_first_passage(req: StockFirstPassageRequest) -> StockFirstPassageResponse:
@@ -1377,6 +1390,21 @@ async def stock_first_passage(req: StockFirstPassageRequest) -> StockFirstPassag
     `confidence_backtest.<horizon>.n_days`, this app's existing definition of how
     long a signal in that horizon takes to resolve.
     """
+    # The GBM first-passage model assumes a stop below entry and targets above
+    # it (Bullish) or the mirror (Bearish). A target already on the wrong side
+    # of entry isn't a valid exit ladder — it's already "hit," which is what
+    # silently produced a bogus ~100% probability instead of a real error.
+    if req.direction == "Bullish":
+        if req.stop_price >= req.stock_price:
+            raise HTTPException(status_code=422, detail="stop_price must be below stock_price for a Bullish position")
+        if any(t <= req.stock_price for t in req.targets):
+            raise HTTPException(status_code=422, detail="all targets must be above stock_price for a Bullish position")
+    else:
+        if req.stop_price <= req.stock_price:
+            raise HTTPException(status_code=422, detail="stop_price must be above stock_price for a Bearish position")
+        if any(t >= req.stock_price for t in req.targets):
+            raise HTTPException(status_code=422, detail="all targets must be below stock_price for a Bearish position")
+
     fp_cfg = _fp_cfg()
     try:
         horizon_days = int(load_backtest_cfg(req.horizon)["n_days"])
@@ -1418,7 +1446,12 @@ async def stock_first_passage(req: StockFirstPassageRequest) -> StockFirstPassag
         )
     )
 
-    caveat = _MEAN_REVERSION_CAVEAT if req.strategy.startswith("mean_reversion") else None
+    if req.strategy in _INTRADAY_STRATEGIES:
+        caveat = _INTRADAY_MEAN_REVERSION_CAVEAT
+    elif req.strategy.startswith("mean_reversion"):
+        caveat = _MEAN_REVERSION_CAVEAT
+    else:
+        caveat = None
 
     return StockFirstPassageResponse(
         targets=[

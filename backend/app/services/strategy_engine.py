@@ -553,7 +553,20 @@ def breakout_base_signal(
     if direction == "Bullish":
         if current <= base_high:
             return None
-        stop = base_low - atr * 0.2
+        # Stop anchored just under the BREAKOUT LEVEL (base_high), not the far
+        # side of the base (base_low) — an adversarial audit round proved the
+        # base_low anchor makes R:R < 1 for every possible input once the
+        # target became the measured move instead of entry + risk*rr_mult:
+        # risk = (base_high-base_low) + overshoot + buffer, reward =
+        # (base_high-base_low) - overshoot, so risk > reward for any
+        # overshoot > 0, which the entry gate above (current > base_high)
+        # guarantees. Anchoring at base_high — "back inside the level that
+        # was just broken" — is the classic breakout-invalidation pairing:
+        # risk becomes just the overshoot plus a small ATR buffer, so it
+        # scales with how far the breakout has already run rather than with
+        # the whole base's width, and the measured-move target is reachable
+        # at a real R:R again.
+        stop = base_high - atr * 0.2
         risk = current - stop
         if risk <= 0:
             return None
@@ -561,7 +574,9 @@ def breakout_base_signal(
     else:  # Bearish breakdown below base low
         if current >= base_low:
             return None
-        stop = base_high + atr * 0.2
+        # Mirror of the Bullish fix above: anchored at base_low (the
+        # breakdown level), not base_high (the far side of the base).
+        stop = base_low + atr * 0.2
         risk = stop - current
         if risk <= 0:
             return None
@@ -1153,17 +1168,28 @@ def resolve_multi_signal(
     if abs(entry - stop) <= 0:
         return None
 
-    pooled: list[float | None] = []
-    for s in ordered:
-        pooled.extend(s.targets or [s.target_price])
+    if len(ordered) == 1:
+        # Nothing to merge: entry/stop above are exactly this variant's own, so
+        # the 0.5R floor below — there to stop a rung transplanted from one
+        # variant's tight stop surviving against another's much wider one — has
+        # no transplant to guard against here. Applying it anyway would silently
+        # discard this variant's own thesis rung (e.g. mean_reversion_bb's
+        # mid-band, routinely well inside 0.5R of its own 0.5-ATR stop) in favor
+        # of a generic R-multiple extension it never actually proposed as its
+        # target. Keep its own ladder unchanged.
+        targets = list(anchor.targets or [anchor.target_price])
+    else:
+        pooled: list[float | None] = []
+        for s in ordered:
+            pooled.extend(s.targets or [s.target_price])
 
-    targets = _build_target_ladder(
-        entry=entry, stop=stop, direction=direction,
-        primary=None, extensions=pooled,
-        fallback_mult=fallback_mult, min_rung_r=0.5,
-    )
-    if not targets:
-        return None
+        targets = _build_target_ladder(
+            entry=entry, stop=stop, direction=direction,
+            primary=None, extensions=pooled,
+            fallback_mult=fallback_mult, min_rung_r=0.5,
+        )
+        if not targets:
+            return None
 
     detail = {
         **anchor.detail,
@@ -1171,7 +1197,10 @@ def resolve_multi_signal(
         # Sorted, so this field is order-independent too — it was previously the
         # caller's request order.
         "fired": [s.strategy for s in ordered],
-        "resolution": "widest_stop_tightest_target",
+        # Single-variant calls skip the merge entirely (see above), so the
+        # "widest_stop_tightest_target" label would be describing a resolution
+        # that never ran.
+        "resolution": "widest_stop_tightest_target" if len(ordered) > 1 else "single_variant_passthrough",
     }
 
     return StrategySignal(

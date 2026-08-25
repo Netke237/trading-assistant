@@ -173,6 +173,22 @@ class TestStockFirstPassageEndpoint:
     def test_trend_following_strategies_carry_no_caveat(self):
         assert self._post(strategy="breakout_base").json()["modelCaveat"] is None
 
+    def test_intraday_mean_reversion_vwap_carries_the_timeframe_caveat(self):
+        """mean_reversion_vwap's signal/backtest run on 15m bars, but this
+        estimator always simulates daily closes — a bigger mismatch than plain
+        mean-reversion, so it gets its own (longer) caveat, not the generic one."""
+        from app.routers.stock_scan import _INTRADAY_MEAN_REVERSION_CAVEAT, _MEAN_REVERSION_CAVEAT
+        caveat = self._post(strategy="mean_reversion_vwap").json()["modelCaveat"]
+        assert caveat == _INTRADAY_MEAN_REVERSION_CAVEAT
+        assert caveat != _MEAN_REVERSION_CAVEAT
+
+    def test_daily_mean_reversion_vwap_carries_only_the_generic_caveat(self):
+        """mean_reversion_vwap_daily runs on daily bars like the estimator does —
+        no timeframe mismatch, so it gets the plain mean-reversion caveat."""
+        from app.routers.stock_scan import _MEAN_REVERSION_CAVEAT
+        assert self._post(strategy="mean_reversion_vwap_daily").json()["modelCaveat"] == \
+            _MEAN_REVERSION_CAVEAT
+
     def test_identical_requests_return_identical_estimates(self):
         """The seed is derived from the request, so repeated presses of Estimate
         must not show the user drifting Monte Carlo noise."""
@@ -186,3 +202,32 @@ class TestStockFirstPassageEndpoint:
 
     def test_an_out_of_range_trend_score_is_rejected(self):
         assert self._post(trend_score=150.0).status_code == 422
+
+    def test_a_bullish_stop_above_entry_is_rejected(self):
+        """The GBM model assumes a stop below entry on a Bullish trade. A stop on
+        the wrong side isn't a real risk level — reject it rather than silently
+        producing a bogus probability."""
+        r = self._post(stop_price=105.0)
+        assert r.status_code == 422
+        assert "stop_price" in r.json()["detail"]
+
+    def test_a_bullish_target_below_entry_is_rejected(self):
+        """A target already behind entry is already 'hit' — the model would
+        report it at ~100% probability instead of flagging the bad input."""
+        r = self._post(targets=[95.0, 110.0, 120.0])
+        assert r.status_code == 422
+        assert "targets" in r.json()["detail"]
+
+    def test_a_bearish_stop_below_entry_is_rejected(self):
+        r = self._post(direction="Bearish", stop_price=95.0, targets=[90.0])
+        assert r.status_code == 422
+        assert "stop_price" in r.json()["detail"]
+
+    def test_a_bearish_target_above_entry_is_rejected(self):
+        r = self._post(direction="Bearish", stop_price=105.0, targets=[110.0])
+        assert r.status_code == 422
+        assert "targets" in r.json()["detail"]
+
+    def test_a_well_formed_bearish_request_still_passes(self):
+        r = self._post(direction="Bearish", stop_price=105.0, targets=[95.0, 90.0, 80.0])
+        assert r.status_code == 200, r.text

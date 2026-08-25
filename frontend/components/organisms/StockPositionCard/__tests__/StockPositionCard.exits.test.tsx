@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { api } from '@/lib/api';
@@ -225,5 +225,198 @@ describe('StockPositionCard — Check structure', () => {
     render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
     await clickButton(/check structure/i);
     expect(await screen.findByText(/no structural level found/i)).toBeTruthy();
+  });
+
+  it('renders distancePct next to the structural stop price, matching the options TradeCard format', async () => {
+    mockStructural.mockResolvedValue({
+      available: true, price: 143.25, source: 'order_block', confidence: 80, distancePct: -4.5,
+    });
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+    await clickButton(/check structure/i);
+    expect(await screen.findByText('143.25')).toBeTruthy();
+    expect(screen.getByText('(-4.5% away)')).toBeTruthy();
+  });
+});
+
+// ─── Overlay edits invalidate stale on-demand results ────────────────────────
+//
+// A displayed Estimate/Check-structure result is a snapshot computed against
+// the overlay values AT THE MOMENT the button was clicked. An earlier
+// adversarial audit round caught the card silently keeping a stale
+// probability/expected-days on screen next to a since-edited entry/stop/target
+// — implying they were computed together when they weren't. `patch()` now
+// clears whichever result depends on what just changed.
+
+async function editField(label: string, newValue: string) {
+  // The Sizing-grid EditableField for this label is always the FIRST match —
+  // it renders unconditionally near the top of the tree, above the on-demand
+  // result sections that can render their own same-labelled (but read-only)
+  // rows once an Estimate/Check-structure result is showing (e.g. "STOP").
+  const cell = screen.getAllByText(label)[0].closest('div') as HTMLElement;
+  fireEvent.click(within(cell).getByRole('button'));
+  const input = within(cell).getByRole('spinbutton');
+  fireEvent.change(input, { target: { value: newValue } });
+  fireEvent.blur(input);
+}
+
+describe('StockPositionCard — overlay edits invalidate stale on-demand results', () => {
+  beforeEach(() => {
+    usePortfolioStore.setState({ positions: [], lastSyncError: null });
+    mockEstimate.mockReset();
+    mockStructural.mockReset();
+  });
+  afterEach(() => jest.clearAllMocks());
+
+  it('clears a displayed Estimate result when STOP is edited afterward', async () => {
+    mockEstimate.mockResolvedValue(estimateFixture());
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+    await clickButton(/^estimate$/i);
+    expect(await screen.findByText('62%')).toBeTruthy();
+
+    await editField('STOP', '140');
+
+    // The stale estimate — computed against the OLD stop — must not remain
+    // next to the new value, silently implying they were computed together.
+    expect(screen.queryByText('62%')).toBeNull();
+    expect(screen.queryByText('unlikely')).toBeNull();
+  });
+
+  it('clears a displayed Estimate result when T1 TARGET is edited afterward', async () => {
+    mockEstimate.mockResolvedValue(estimateFixture());
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+    await clickButton(/^estimate$/i);
+    expect(await screen.findByText('62%')).toBeTruthy();
+
+    await editField('T1 TARGET', '158');
+
+    expect(screen.queryByText('62%')).toBeNull();
+  });
+
+  it('clears a displayed structural-stop result when ENTRY is edited afterward', async () => {
+    mockStructural.mockResolvedValue({
+      available: true, price: 143.25, source: 'order_block', confidence: 80, distancePct: -4.5,
+    });
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+    await clickButton(/check structure/i);
+    expect(await screen.findByText('143.25')).toBeTruthy();
+
+    await editField('ENTRY', '152');
+
+    // 143.25 was checked against the OLD entry (150); it must not survive as
+    // if it were still the level for the new entry.
+    expect(screen.queryByText('143.25')).toBeNull();
+  });
+
+  it('does NOT clear a displayed structural-stop result when STOP is edited (structural is entry-only)', async () => {
+    mockStructural.mockResolvedValue({
+      available: true, price: 143.25, source: 'order_block', confidence: 80, distancePct: -4.5,
+    });
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+    await clickButton(/check structure/i);
+    expect(await screen.findByText('143.25')).toBeTruthy();
+
+    await editField('STOP', '140');
+
+    // Check-structure only ever sent overlay.entry as its reference price, so
+    // an edit to STOP alone must not invalidate it.
+    expect(screen.getByText('143.25')).toBeTruthy();
+  });
+
+  it('does NOT clear a displayed Estimate result when SHARES is edited (irrelevant to the estimate inputs)', async () => {
+    mockEstimate.mockResolvedValue(estimateFixture());
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+    await clickButton(/^estimate$/i);
+    expect(await screen.findByText('62%')).toBeTruthy();
+
+    await editField('SHARES', '50');
+
+    expect(screen.getByText('62%')).toBeTruthy();
+  });
+
+  it('editing ENTRY clears BOTH the Estimate and the structural-stop result', async () => {
+    mockEstimate.mockResolvedValue(estimateFixture());
+    mockStructural.mockResolvedValue({
+      available: true, price: 143.25, source: 'order_block', confidence: 80, distancePct: -4.5,
+    });
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+    await clickButton(/^estimate$/i);
+    expect(await screen.findByText('62%')).toBeTruthy();
+    await clickButton(/check structure/i);
+    expect(await screen.findByText('143.25')).toBeTruthy();
+
+    await editField('ENTRY', '152');
+
+    expect(screen.queryByText('62%')).toBeNull();
+    expect(screen.queryByText('143.25')).toBeNull();
+  });
+});
+
+// ─── Sell-to-close share allocation never exceeds total shares ──────────────
+//
+// Each T1/T2/T3 row's share count is editable independently, so nothing
+// previously stopped sharesT1+T2+T3 from exceeding the position's total
+// shares — which would tell buildPaperStockPosition's contractsToSell to
+// sell more shares across the ladder than the position actually holds.
+
+async function editRungShares(id: 'T1' | 'T2' | 'T3', newValue: string) {
+  // The row label ("T1"/"T2"/"T3") only appears here in the Sell-to-close
+  // plan — the Estimate result's own "T1"/"T2"/"T3" rows are absent unless
+  // Estimate has been clicked, which these tests never do.
+  const label = screen.getByText(id);
+  const row = label.closest('div')!.parentElement as HTMLElement;
+  // Price and shares are both clickable (role="button"); RR/return% are not.
+  // Shares is the second.
+  const buttons = within(row).getAllByRole('button');
+  fireEvent.click(buttons[1]);
+  const input = within(row).getByRole('spinbutton');
+  fireEvent.change(input, { target: { value: newValue } });
+  fireEvent.blur(input);
+}
+
+describe('StockPositionCard — sell-to-close share allocation is clamped to total shares', () => {
+  beforeEach(() => {
+    usePortfolioStore.setState({ positions: [], lastSyncError: null });
+  });
+  afterEach(() => jest.clearAllMocks());
+
+  it('clamps a rung whose own edit would push the allocation over total shares', async () => {
+    // makeCard's 30 shares default to 10/10/10 across T1/T2/T3 (see
+    // defaultOverlay: s1 = s2 = floor(30/3) = 10, s3 = 30 - 10 - 10 = 10).
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+
+    // Push T1's own share count up so T1(25) + T2(10) + T3(10) = 45 > 30.
+    await editRungShares('T1', '25');
+
+    // T1 must be clamped down to what's left after T2/T3 (30 - 10 - 10 = 10),
+    // not left at 25 (which would oversell) and not silently shrinking T2/T3
+    // (which the user never touched).
+    const t1Row = screen.getByText('T1').closest('div')!.parentElement as HTMLElement;
+    expect(within(t1Row).getByText('10')).toBeTruthy();
+  });
+
+  it('scales every rung down proportionally when total SHARES is reduced below the existing allocation', async () => {
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+
+    // 10/10/10 across T1/T2/T3 -> reduce total shares to 15 (half).
+    await editField('SHARES', '15');
+
+    const t1Row = screen.getByText('T1').closest('div')!.parentElement as HTMLElement;
+    const t2Row = screen.getByText('T2').closest('div')!.parentElement as HTMLElement;
+    const t3Row = screen.getByText('T3').closest('div')!.parentElement as HTMLElement;
+    const t1 = Number(within(t1Row).getAllByRole('button')[1].textContent);
+    const t2 = Number(within(t2Row).getAllByRole('button')[1].textContent);
+    const t3 = Number(within(t3Row).getAllByRole('button')[1].textContent);
+    expect(t1 + t2 + t3).toBeLessThanOrEqual(15);
+    expect(t1 + t2 + t3).toBe(15); // T3 absorbs the rounding remainder, nothing is dropped
+  });
+
+  it('does not clamp when the allocation already fits within total shares', async () => {
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+
+    // 10/10/10 -> edit T1 down to 5; 5+10+10 = 25 <= 30, no clamping needed.
+    await editRungShares('T1', '5');
+
+    const t1Row = screen.getByText('T1').closest('div')!.parentElement as HTMLElement;
+    expect(within(t1Row).getByText('5')).toBeTruthy();
   });
 });

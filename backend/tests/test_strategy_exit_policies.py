@@ -118,12 +118,48 @@ def test_pullback_ema_ladder_is_monotonic_and_starts_at_target_price():
     from tests.test_strategy_engine import _uptrend_pullback_bars
     from app.services.strategy_engine import pullback_ema_signal
 
+    # _uptrend_pullback_bars() is deterministic synthetic data, not randomized
+    # input — same reasoning as the ma_crossover test below: a `pytest.skip`
+    # here would pass while proving nothing.
     sig = pullback_ema_signal(_uptrend_pullback_bars(), tolerance=0.04)
-    if sig is None:
-        pytest.skip("setup did not fire on synthetic data")
+    assert sig is not None, "setup must fire on this deterministic fixture"
     assert sig.targets and sig.targets[0] == sig.target_price
     assert all(b > a for a, b in zip(sig.targets, sig.targets[1:]))
     assert all(t > sig.entry_price for t in sig.targets)
+
+
+def _downtrend_pullback_bars(n=200):
+    """Mirror of `_uptrend_pullback_bars`: steady downtrend, then a shallow
+    bounce near the 50-EMA from below."""
+    bars = []
+    price = 300.0
+    for _ in range(n):
+        price -= 0.6
+        bars.append({"open": price + 0.2, "high": price + 0.5,
+                     "low": price - 0.5, "close": price, "volume": 500_000})
+    from app.services.strategy_engine import _ema as _ema_fn
+    closes = [b["close"] for b in bars]
+    ema_val = _ema_fn(closes, 50)[-1]
+    bounce_price = ema_val * 0.98  # 2% below EMA — inside 4% tolerance
+    for j in range(-10, 0):
+        bars[j]["close"] = bounce_price
+        bars[j]["high"]  = bounce_price + 0.2
+        bars[j]["low"]   = bounce_price - 0.2
+        bars[j]["volume"] = 200_000
+    return bars
+
+
+def test_pullback_ema_ladder_is_monotonic_and_starts_at_target_price_bearish():
+    """Bearish mirror — the Bullish-only pullback_ema thesis tests never
+    exercised this branch, and breakout_base's real stop-anchor bug (fixed
+    separately) lived in exactly this kind of untested Bearish half."""
+    from app.services.strategy_engine import pullback_ema_signal
+
+    sig = pullback_ema_signal(_downtrend_pullback_bars(), tolerance=0.04, direction="Bearish")
+    assert sig is not None, "setup must fire on this deterministic fixture"
+    assert sig.targets and sig.targets[0] == sig.target_price
+    assert all(b < a for a, b in zip(sig.targets, sig.targets[1:]))
+    assert all(t < sig.entry_price for t in sig.targets)
 
 
 # ── breakout_base ─────────────────────────────────────────────────────────────
@@ -172,6 +208,49 @@ def test_breakout_base_survives_a_zero_height_base():
                        sl=sig.stop_price, tp=sig.target_price) == "buy"
 
 
+def _flat_base_then_breakdown(base_high: float = 104.0, base_low: float = 100.0) -> list[dict]:
+    """Mirror of `_flat_base_then_breakout`: 25 bars of a tight base, then a
+    high-volume close below it."""
+    bars = []
+    mid = (base_high + base_low) / 2
+    for _ in range(25):
+        bars.append({"open": mid, "high": base_high, "low": base_low,
+                     "close": mid, "volume": 1_000_000})
+    bars.append({"open": base_low, "high": base_low + 0.5, "low": base_low - 2,
+                 "close": base_low - 1, "volume": 5_000_000})
+    return bars
+
+
+def test_breakout_base_rung_one_is_the_measured_move_off_the_base_low_bearish():
+    """Bearish mirror. This is the exact branch where an earlier audit found
+    breakout_base anchoring the stop on the far side of the base (base_high)
+    instead of the breakdown level (base_low), making R:R < 1 on every input —
+    a Bullish-only test suite could not have caught that."""
+    from app.services.strategy_engine import breakout_base_signal
+
+    bars = _flat_base_then_breakdown()
+    sig = breakout_base_signal(bars, base_lookback=20, atr_tight_max=99.0,
+                               volume_mult=1.5, direction="Bearish")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+    height = sig.detail["base_height"]
+    anchor = sig.detail["measured_move_anchor"]
+    assert height == pytest.approx(4.0, abs=0.01)
+    assert sig.target_price == pytest.approx(round(anchor - height, 2), abs=0.01)
+    assert sig.targets[0] == sig.target_price
+    # Stop must be anchored at the breakdown level (base_low == anchor here),
+    # not the far side of the base (base_high = anchor + height) — risk is the
+    # overshoot plus a small ATR buffer, not the whole base's width.
+    assert sig.stop_price < anchor + height
+    assert sig.stop_price > sig.entry_price
+    # The two outward extensions survive: anchor - 1.5H and anchor - 2H.
+    assert sig.targets == [round(anchor - height, 2),
+                           round(anchor - height * 1.5, 2),
+                           round(anchor - height * 2.0, 2)]
+    reward = sig.entry_price - sig.target_price
+    risk = sig.stop_price - sig.entry_price
+    assert reward / risk > 1.0, "measured-move target must be reachable at a real R:R"
+
+
 # ── ma_crossover ──────────────────────────────────────────────────────────────
 
 def test_ma_crossover_primary_target_is_unchanged_at_three_atr():
@@ -201,6 +280,26 @@ def test_ma_crossover_primary_target_is_unchanged_at_three_atr():
     assert len(sig.targets) == 3
     assert sig.targets[1] == pytest.approx(round(sig.entry_price + atr * 4.5, 2), abs=0.02)
     assert sig.targets[2] == pytest.approx(round(sig.entry_price + atr * 6.0, 2), abs=0.02)
+
+
+def test_ma_crossover_primary_target_is_unchanged_at_three_atr_bearish():
+    """Bearish mirror (death cross) of the guard above."""
+    from app.services.strategy_engine import ma_crossover_signal, _atr
+
+    bars = [{"open": 200.1, "high": 200.5, "low": 199.5, "close": 200.0, "volume": 1_000}
+            for _ in range(100)]
+    bars += [{"open": 100.1, "high": 100.5, "low": 99.5, "close": 100.0, "volume": 1_000}
+             for _ in range(5)]
+    sig = ma_crossover_signal(bars, fast=20, slow=50, lookback=10, direction="Bearish")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+
+    atr = _atr(bars)
+    expected = round(sig.entry_price - atr * 3.0, 2)
+    assert sig.target_price == pytest.approx(expected, abs=0.02)
+    assert sig.detail["exit_rule"] == "cross_back"
+    assert len(sig.targets) == 3
+    assert sig.targets[1] == pytest.approx(round(sig.entry_price - atr * 4.5, 2), abs=0.02)
+    assert sig.targets[2] == pytest.approx(round(sig.entry_price - atr * 6.0, 2), abs=0.02)
 
 
 # ── mean_reversion_rsi ────────────────────────────────────────────────────────
@@ -260,6 +359,30 @@ def test_mean_reversion_rsi_drops_atr_extensions_that_sit_inside_the_short_mean(
     assert sig.targets[0] == pytest.approx(sig.detail["sma_20"], abs=0.02)
 
 
+def test_mean_reversion_rsi_never_targets_the_trend_sma_bearish():
+    """Bearish mirror: overbought in a downtrend. The 200-SMA is ABOVE entry on
+    a bearish fire; targeting it would be targeting a loss."""
+    from app.services.strategy_engine import mean_reversion_rsi_signal
+
+    closes = [400 - i * 0.35 for i in range(260)]
+    for _ in range(6):
+        closes.append(closes[-1] + 2.0)
+    closes.append(closes[-1] - 0.2)
+    bars = [{"open": c, "high": c + 0.4, "low": c - 0.4, "close": c, "volume": 1_000_000}
+            for c in closes]
+
+    sig = mean_reversion_rsi_signal(bars, rsi_period=14, rsi_oversold=30,
+                                    rsi_overbought=70, trend_sma=200, direction="Bearish")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+
+    trend_sma_val = sig.detail["sma_200"]
+    assert sig.entry_price < trend_sma_val, "bearish gate: entry is below the trend SMA"
+    assert sig.target_price < sig.entry_price
+    assert sig.target_price < trend_sma_val
+    assert sig.targets[0] == sig.target_price
+    assert sig.target_price == pytest.approx(sig.detail["sma_20"], abs=0.02)
+
+
 # ── mean_reversion_bb ─────────────────────────────────────────────────────────
 
 def _bb_dip_and_reclaim() -> list[dict]:
@@ -298,6 +421,28 @@ def test_mean_reversion_bb_targets_the_real_mid_band_then_the_opposite_band():
     assert sig.targets == sorted(sig.targets)
 
 
+def test_mean_reversion_bb_targets_the_real_mid_band_then_the_opposite_band_bearish():
+    """Bearish mirror: rung 1 the mid-band, rung 2 the lower band."""
+    from app.services.strategy_engine import mean_reversion_bb_signal
+
+    closes = [400 - i * 0.09 for i in range(240)]
+    closes.append(closes[-1] + 2.5)
+    closes.append(closes[-1] - 0.6)
+    bars = [{"open": c, "high": c + 1.2, "low": c - 0.5, "close": c, "volume": 1_000_000}
+            for c in closes]
+
+    sig = mean_reversion_bb_signal(bars, bb_period=20, bb_std=2.0, trend_sma=200, direction="Bearish")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+
+    mid = sig.detail["bb_mid"]
+    lower = sig.detail["bb_lower"]
+    assert sig.target_price == pytest.approx(mid, abs=0.02)
+    assert sig.targets[0] == sig.target_price
+    assert sig.targets[1] == pytest.approx(lower, abs=0.02)
+    assert all(t < sig.entry_price for t in sig.targets)
+    assert sig.targets == sorted(sig.targets, reverse=True)
+
+
 # ── the two VWAP variants ─────────────────────────────────────────────────────
 
 def test_mean_reversion_vwap_intraday_rung_one_is_vwap_itself():
@@ -322,6 +467,26 @@ def test_mean_reversion_vwap_intraday_rung_one_is_vwap_itself():
     assert sig.targets == sorted(sig.targets)
 
 
+def test_mean_reversion_vwap_intraday_rung_one_is_vwap_itself_bearish():
+    from app.services.strategy_engine import mean_reversion_vwap_signal
+
+    # 40 flat bars establishing VWAP near 100, then a rally to ~103 with the
+    # final bar ticking back down toward it.
+    bars = [{"open": 100, "high": 100.3, "low": 99.7, "close": 100, "volume": 10_000}
+            for _ in range(40)]
+    bars.append({"open": 102.5, "high": 103.1, "low": 102.4, "close": 103.0, "volume": 10_000})
+    bars.append({"open": 103.0, "high": 103.0, "low": 102.1, "close": 102.2, "volume": 10_000})
+    sig = mean_reversion_vwap_signal(bars, vwap_dev_pct=1.5, reversal_pct=0.3,
+                                     interval="15m", direction="Bearish")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+
+    vwap = sig.detail["vwap"]
+    assert sig.target_price == pytest.approx(vwap, abs=0.02)
+    assert sig.targets[0] == sig.target_price
+    assert all(t < sig.entry_price for t in sig.targets)
+    assert sig.targets == sorted(sig.targets, reverse=True)
+
+
 def test_mean_reversion_vwap_daily_never_targets_vwap_itself():
     """Its gate is `close > vwap`, so VWAP is BEHIND entry — a VWAP target would
     be a target already achieved (and would be rejected by _entry_side)."""
@@ -342,3 +507,25 @@ def test_mean_reversion_vwap_daily_never_targets_vwap_itself():
     assert sig.target_price == pytest.approx(round(vwap * (1 + dev_frac), 2), abs=0.02)
     assert _entry_side("Bullish", entry=sig.entry_price,
                        sl=sig.stop_price, tp=sig.target_price) == "buy"
+
+
+def test_mean_reversion_vwap_daily_never_targets_vwap_itself_bearish():
+    """Bearish mirror: gate is `close < vwap`, so VWAP is BEHIND entry (above
+    it) — a VWAP target would be a target already achieved."""
+    from app.services.strategy_engine import mean_reversion_vwap_daily_signal
+    from app.services.strategy_backtest import _entry_side
+
+    bars = [{"open": 100, "high": 101, "low": 99, "close": 100, "volume": 10_000}
+            for _ in range(22)]
+    bars.append({"open": 102, "high": 103, "low": 101.5, "close": 102.5, "volume": 10_000})
+    bars.append({"open": 102.5, "high": 102.5, "low": 98.5, "close": 99.0, "volume": 10_000})
+    sig = mean_reversion_vwap_daily_signal(bars, vwap_lookback=20,
+                                           vwap_deviation_pct=0.02, direction="Bearish")
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+
+    vwap = sig.detail["rolling_vwap"]
+    assert sig.target_price < sig.entry_price < vwap
+    dev_frac = sig.detail["deviation_pct"] / 100.0
+    assert sig.target_price == pytest.approx(round(vwap * (1 - dev_frac), 2), abs=0.02)
+    assert _entry_side("Bearish", entry=sig.entry_price,
+                       sl=sig.stop_price, tp=sig.target_price) == "sell"
