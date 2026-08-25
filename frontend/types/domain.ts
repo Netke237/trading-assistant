@@ -311,10 +311,14 @@ export interface TradeCardData {
     structuralStop?: StructuralStop | null;
     /** Populated only after the user presses "Estimate" — never set by the scan itself. */
     firstPassage?: FirstPassageEstimate | null;
-    /** The fresh underlying price `structuralStop` above was derived from. Client-only,
-     *  like `structuralStop` itself: spliced in by step-7-trade-card/page.tsx when it
-     *  restores a cached "Check structure" result on candidate re-navigation, so
-     *  TradeCard's R:R-vs-structural-stop calc has the matching price and not a null.
+    /** The fresh underlying price `structuralStop` above was derived from, at the time
+     *  it was fetched. Client-only, like `structuralStop` itself. A value RESTORED here
+     *  (spliced in by step-7-trade-card/page.tsx on candidate re-navigation) is inert —
+     *  TradeCard's R:R-vs-structural-stop calc requires the structural stop and the
+     *  estimate independently reconfirmed fresh in the same mount before it will use
+     *  either (see the plan's round 5 audit notes), so a restored value here is only
+     *  ever overwritten by a live fetch, never read. Kept for shape symmetry with
+     *  `structuralStop` and because a future consumer may legitimately want it.
      *  Never sent by the backend. */
     structuralStopStockPrice?: number | null;
     /** The inputs `firstPassage` above was computed against. Client-only, same

@@ -1435,8 +1435,11 @@ function ProfitTargetRow({
   // Order matters: a stop that resolved to exactly the current stock price
   // (structuralZeroRisk) is a completed check with an undefined ratio, not
   // "not yet checked" — it must be distinguished from the true not-yet-run
-  // fallback ('—', which should be unreachable once every real state above
-  // it is covered, kept only as a defensive catch-all).
+  // fallback ('—'). That fallback is NOT a rare defensive catch-all: it is
+  // the routine state for a restored candidate whose structural stop and
+  // estimate haven't both been reconfirmed fresh this mount yet (round 5 of
+  // the plan's audit notes) — a real, truthy structuralStop can be on screen
+  // in the Exit Plan section while this cell still shows '—', by design.
   const structuralValue = structuralRRValue != null
     ? `${structuralRRValue.toFixed(1)}×`
     : structuralPending

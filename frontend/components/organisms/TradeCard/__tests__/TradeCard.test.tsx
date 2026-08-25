@@ -682,13 +682,16 @@ describe('TradeCard', () => {
     // firstPassage/firstPassageContext restored from cache (never refreshed
     // this visit) sitting next to a structuralStop the user just fetched
     // fresh via "Check structure" alone. structuralRR combined them exactly
-    // as readily as the already-fixed cases. The fix gates structuralRR on
-    // pairRestoredTogetherRef (both halves still untouched since the same
-    // restore) OR both isFreshRefs being true (both independently confirmed
-    // fresh this mount) — a fresh check against a stale estimate satisfies
-    // neither, so no R:R renders until the user's own next Estimate click
-    // (which auto-skips re-checking structure, already fresh) brings both
-    // sides current.
+    // as readily as the already-fixed cases. Round 4's fix gated structuralRR
+    // on both isFreshRefs being true OR a "restored pair" exemption; round 5
+    // found that exemption unsound across a second navigation and removed it
+    // (see the plan's round 5 audit notes) — structuralRR now requires BOTH
+    // isFreshRefs unconditionally, so a fresh check against a stale estimate
+    // still satisfies neither, and no R:R renders until the user's own next
+    // Estimate click (which auto-skips re-checking structure, already fresh)
+    // brings both sides current. This test's assertions still hold under the
+    // simplified gate — it exercises the same scenario, just via a gate with
+    // one fewer branch.
     const cachedCard: TradeCardData = {
       ...mockTradeCard,
       symbol: 'MSFT',

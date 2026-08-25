@@ -123,8 +123,11 @@ export default function Step7Page() {
   // structural level is a function of (symbol, direction, stock_price) only, so the
   // contract never enters the key. Serves two readers: the order-send path (which
   // needs just `.stop.price`) and the TradeCard restore path (which needs the whole
-  // level plus the price it was measured against, or the R:R-vs-structural-stop
-  // column can't be recomputed after a re-navigation). Only ever populated for
+  // level plus the price it was measured against, so the Exit Plan section can
+  // still show the restored level itself — the R:R-vs-structural-stop column is
+  // a separate matter: it never recomputes from a restore alone, only from a
+  // fresh Estimate click with both sides independently reconfirmed, see round 5
+  // of the plan's audit notes). Only ever populated for
   // whichever symbol is/was the active card, since "Check structure" is a
   // single-card, user-triggered action (see TradeCard's onStructuralStopChange doc
   // comment). Undefined (never fetched/reset) leaves a symbol's entry untouched
@@ -284,8 +287,12 @@ export default function Step7Page() {
   // The card actually handed to <TradeCard>, with any cached "Estimate" /
   // "Check structure" result for this contract spliced into exit.* — the same
   // fields TradeCard reads for its initial state and its contract-change reset,
-  // so a Prev/Next round trip restores the Profit Targets rows (and the R:R
-  // column, and the T1/T2/T3 inputs) without re-firing a single request.
+  // so a Prev/Next round trip restores the Profit Targets rows (and the
+  // T1/T2/T3 inputs) without re-firing a single request. The R:R-vs-structural-
+  // stop column is NOT restored this way (round 5 audit, see the plan's notes):
+  // it requires both the structural stop and the estimate independently
+  // reconfirmed fresh in the SAME mount before it will compute, so a restored
+  // pair shows '—' until the user's next Estimate click.
   // DELIBERATELY applied after mergePlan (which replaces `exit` wholesale and
   // would otherwise discard the splice) and DELIBERATELY not used anywhere else:
   // ordering, sizing and the order-send path all keep reading `effectiveCard`,
