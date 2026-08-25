@@ -258,23 +258,36 @@ export function TradeCard({
   // adds two unwanted network calls for a user who only asked to check
   // structure, and duplicates a fetch on the very next real Estimate click
   // regardless), this ref instead feeds structuralRR's own gate below:
-  // computing an R:R requires either both sides confirmed fresh THIS mount,
-  // or the pair being a still-untouched cache restore (pairRestoredTogetherRef).
-  // A fresh Check-structure against a stale estimate simply shows no R:R
-  // until the user's own next Estimate click brings both sides current —
-  // conservative, but never wrong.
+  // computing an R:R requires BOTH sides confirmed fresh THIS mount. A fresh
+  // Check-structure against a stale estimate simply shows no R:R until the
+  // user's own next Estimate click brings both sides current — conservative,
+  // but never wrong.
+  //
+  // An earlier version of this gate also accepted a "restored pair" — both
+  // halves still holding whatever a single cache restore last wrote together
+  // — on the reasoning that a restore writes both atomically, so they're
+  // mutually consistent even if old. A fifth independent audit round found
+  // that reasoning doesn't survive a SECOND restore: structuralBySymbol
+  // (symbol-keyed) and estimatesByContract (contract-keyed) in
+  // step-7-trade-card/page.tsx are two independent parent caches, each
+  // writable on its own schedule. A fresh Check-structure-only click (this
+  // ref's whole reason to exist) updates the PARENT's structural cache
+  // without touching its estimate cache; the NEXT restore then pairs that
+  // newly-fresh stop with whatever stale estimate the parent still has
+  // cached for this contract — "restored together" describes the local
+  // component's own two setState calls, not the two independent caches
+  // upstream of them, and there is no cheap way to make it describe that
+  // without threading pairing metadata through both caches (tried in
+  // sketch form; it requires widening both cache entry shapes and both
+  // write-back callback signatures across page.tsx and this file, for a
+  // MEDIUM-severity, multi-navigation-only scenario). Removed rather than
+  // patched again: correctness over convenience. The Estimate rows
+  // themselves (targets, probabilities, option prices) still restore
+  // instantly from cache exactly as before — only the DERIVED
+  // R:R-vs-structural-stop figure now waits for both halves to be
+  // independently reconfirmed fresh, same as it always required after a
+  // genuine (non-cached) first visit.
   const firstPassageIsFreshRef = useRef(false);
-  // True exactly when structuralStop and firstPassageContext both still hold
-  // the values a single cache restore (or the initial absence of either)
-  // last wrote together, so they are known mutually consistent even though
-  // neither is "fresh" by the two refs above. Sole purpose: let structuralRR
-  // combine a restored pair immediately (the entire point of caching this
-  // data) WITHOUT requiring a fresh refetch of either half first. Flipped to
-  // false the moment EITHER side is independently re-fetched (checkStructure
-  // or estimateFirstPassage starting), since that fetch's own completion is
-  // what can introduce a mismatch — see the reset effect and the start of
-  // both fetch functions for where this is set.
-  const pairRestoredTogetherRef = useRef(false);
 
   const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
   // Seeded from the restored estimate's own context when the parent splices a
@@ -329,9 +342,6 @@ export function TradeCard({
       // mount" — see structuralIsFreshRef's declaration.
       structuralIsFreshRef.current = false;
       firstPassageIsFreshRef.current = false;
-      // Both halves were just written together, from the same restore (or
-      // the same genuine absence) — see pairRestoredTogetherRef's declaration.
-      pairRestoredTogetherRef.current = true;
       setTargetPct(data.exit.firstPassageContext?.targetPct ?? defaultTargetPct);
       setFirstPassage(data.exit.firstPassage);
       setFirstPassageContext(data.exit.firstPassageContext ?? null);
@@ -404,7 +414,6 @@ export function TradeCard({
     setFirstPassage(undefined);
     setFirstPassageContext(null);
     firstPassageIsFreshRef.current = false;
-    pairRestoredTogetherRef.current = false;
     try {
       const cd = data.contractDetails;
       if (!cd) throw new Error('no contract selected');
@@ -558,20 +567,18 @@ export function TradeCard({
       return null;
     }
     // Both existing isn't enough on its own — they also have to be safe to
-    // combine. Either they're the SAME still-untouched cache restore
-    // (pairRestoredTogetherRef — the whole point of restoring both together
-    // is showing this immediately, even though neither is "fresh" below), or
-    // EACH has been independently confirmed fresh this mount (both
-    // isFreshRefs). Anything else means one side was refreshed without the
-    // other — a manual "Check structure" landing next to a still-restored
-    // (and now provably older) estimate, or the reverse — and combining them
-    // would be exactly the mixed-vintage number this whole mechanism exists
-    // to prevent. This reads three refs during render, which is safe here
-    // specifically because every path that flips any of them also changes
-    // one of this memo's real dependencies below in the same update, so the
-    // memo is guaranteed to re-evaluate at the moment the answer could
-    // change — see each ref's own declaration for why.
-    if (!pairRestoredTogetherRef.current && !(structuralIsFreshRef.current && firstPassageIsFreshRef.current)) {
+    // combine. EACH must be independently confirmed fresh this mount, or one
+    // side could be a stale restore sitting next to the other's live value —
+    // a manual "Check structure" landing next to a still-restored (and now
+    // provably older) estimate, or the reverse — which is exactly the
+    // mixed-vintage number this whole mechanism exists to prevent. See
+    // firstPassageIsFreshRef's declaration for why this no longer has a
+    // "trust a restored pair" exemption. This reads two refs during render,
+    // which is safe here specifically because every path that flips either
+    // of them also changes one of this memo's real dependencies below in the
+    // same update, so the memo is guaranteed to re-evaluate at the moment the
+    // answer could change.
+    if (!structuralIsFreshRef.current || !firstPassageIsFreshRef.current) {
       return null;
     }
     const stockMove = Math.abs(structuralStop.price - structuralStopStockPrice);
@@ -599,8 +606,7 @@ export function TradeCard({
   // (structuralRR null for a reason OTHER than risk≤0) would wrongly claim
   // the stop sits at the current price. Plain read, not memoized: cheap
   // boolean, and it only needs to be current as of this render anyway.
-  const structuralPairEligible = pairRestoredTogetherRef.current
-    || (structuralIsFreshRef.current && firstPassageIsFreshRef.current);
+  const structuralPairEligible = structuralIsFreshRef.current && firstPassageIsFreshRef.current;
 
   const checkStructure = useCallback(async () => {
     structuralRequestRef.current?.abort();
@@ -611,7 +617,6 @@ export function TradeCard({
     setStructuralStop(undefined);
     setStructuralStopStockPrice(null);
     structuralIsFreshRef.current = false;
-    pairRestoredTogetherRef.current = false;
     try {
       // Fetch a fresh stock price rather than reusing data.price (a scan-time
       // snapshot that may be stale, especially for a contract the user never

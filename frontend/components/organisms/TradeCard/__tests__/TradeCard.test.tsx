@@ -473,11 +473,25 @@ describe('TradeCard', () => {
     // ...the % inputs show the percentages the estimate was RUN at (10, not the
     // 20 the settings default would reset them to)...
     expect(screen.getByLabelText('T1 profit target %')).toHaveValue(10);
-    // ...and the structural R:R column is computed, not stuck on the
-    // "not yet checked" placeholder: stockMove = |178.5 - 190| = 11.5,
-    // deltaEst = 0.42, risk = min(11.5 * 0.42, 2.75) = min(4.83, 2.75) = 2.75
-    // (clamped to premium), reward = 3.3 - 2.75 = 0.55 -> rr = 0.2.
-    expect(screen.getByText('0.2×')).toBeInTheDocument();
+    // ...but the structural R:R column does NOT compute from the restored
+    // pair: a fifth independent audit round found that structuralBySymbol
+    // (symbol-keyed) and estimatesByContract (contract-keyed) in
+    // step-7-trade-card/page.tsx are independent parent caches that can each
+    // be refreshed on their own schedule, so "both halves came from the same
+    // restore" doesn't actually guarantee they were captured together — only
+    // that they're both whatever the two caches currently hold. Computing an
+    // R:R from a merely-restored pair risked silently combining a stop
+    // that's since been refreshed elsewhere with a stale estimate (or the
+    // reverse). The gate now requires BOTH sides independently reconfirmed
+    // fresh this mount, so the cell falls back to the defensive '—'
+    // placeholder instead of a number until the user's next Estimate click.
+    // Not "No structural stop found" — that label specifically means
+    // structuralStop === null (a completed check that found nothing), which
+    // this isn't: a real (merely unconfirmed-fresh) stop is restored and
+    // shown in the Exit Plan section below, just not combined into an R:R.
+    expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.queryByText('0.2×')).not.toBeInTheDocument();
     // Nothing was re-fetched to get any of that back.
     expect((api.getFirstPassageEstimate as jest.Mock).mock.calls.length).toBe(callsBefore.firstPassage);
     expect((api.getStructuralStop as jest.Mock).mock.calls.length).toBe(callsBefore.structuralStop);
