@@ -308,7 +308,21 @@ def test_vwap_daily_just_above_2pct_deviation():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_vwap_daily_custom_atr_multipliers():
-    """Test with custom stop_atr_mult and rr_target_mult."""
+    """Custom stop_atr_mult and rr_target_mult.
+
+    UPDATED by the 2026-08-22 exit-targets rework. This test used to assert that
+    a higher `rr_target_mult` produced a larger `signal.reward`, which was only
+    true because `target_price` WAS `entry + risk * rr_target_mult`. It is now
+    the mirror of the entry deviation off the rolling VWAP (a reclaim-and-
+    overshoot — VWAP itself sits BEHIND entry for this variant, since its gate is
+    `close > vwap`), so `rr_target_mult` no longer touches rung 1 at all: it
+    scales the outward extension rungs, which are dropped entirely when they land
+    inside the thesis rung.
+
+    So the contract asserted here is the new one: rung 1 is invariant under
+    rr_target_mult, and the multiplier's real effect is how far the LADDER
+    reaches.
+    """
     bars = make_bars(25, base_price=100.0, base_volume=1_000_000)
 
     for i in range(len(bars)):
@@ -331,8 +345,6 @@ def test_vwap_daily_custom_atr_multipliers():
     )
 
     assert signal is not None
-    # With higher target multiplier, reward should be larger
-    reward_1x = signal.reward
 
     # Compare to default (0.5, 2.0)
     signal_default = mean_reversion_vwap_daily_signal(
@@ -341,8 +353,18 @@ def test_vwap_daily_custom_atr_multipliers():
         stop_atr_mult=0.5,
         rr_target_mult=2.0,
     )
+    assert signal_default is not None
 
-    assert reward_1x > signal_default.reward
+    # Rung 1 is the thesis level and is identical under both multipliers.
+    assert signal.target_price == signal_default.target_price
+    assert signal.target_price == signal.targets[0]
+
+    # The wider stop genuinely widens the risk...
+    assert signal.risk > signal_default.risk
+    # ...and the higher rr_target_mult pushes the extension rungs out past the
+    # thesis rung, so the ladder reaches further than the default's does.
+    assert signal.targets[-1] > signal_default.targets[-1]
+    assert len(signal.targets) > len(signal_default.targets)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -438,3 +460,120 @@ async def test_multi_signal_rejects_when_min_exceeds_variants():
             "mean_reversion_min_confirmations": 3,
         })
     assert resp.status_code == 422
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# resolve_multi_signal — order-independent variant resolution
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_resolve_multi_signal_is_order_independent():
+    """The bug this replaces: fired[0] made the answer depend on the order the
+    caller listed the variants in."""
+    from app.services.strategy_engine import StrategySignal, resolve_multi_signal
+
+    a = StrategySignal(strategy="mean_reversion_bb", direction="Bullish",
+                       entry_price=100.0, stop_price=96.0, target_price=108.0,
+                       atr=2.0, targets=[108.0, 114.0])
+    b = StrategySignal(strategy="mean_reversion_rsi", direction="Bullish",
+                       entry_price=100.0, stop_price=94.0, target_price=105.0,
+                       atr=2.0, targets=[105.0, 111.0])
+
+    first = resolve_multi_signal([a, b])
+    second = resolve_multi_signal([b, a])
+    assert first == second
+    # Widest stop wins (94, not 96).
+    assert first.stop_price == 94.0
+    # Tightest surviving rung leads. risk = 6, floor = entry + 0.5R = 103.
+    assert first.target_price == 105.0
+    assert first.targets[0] == first.target_price
+    assert first.detail["fired"] == ["mean_reversion_bb", "mean_reversion_rsi"]
+    assert first.detail["resolution"] == "widest_stop_tightest_target"
+
+
+def test_resolve_multi_signal_bearish_widest_stop_is_the_highest():
+    from app.services.strategy_engine import StrategySignal, resolve_multi_signal
+
+    a = StrategySignal(strategy="mean_reversion_bb", direction="Bearish",
+                       entry_price=100.0, stop_price=104.0, target_price=92.0,
+                       atr=2.0, targets=[92.0])
+    b = StrategySignal(strategy="mean_reversion_rsi", direction="Bearish",
+                       entry_price=100.0, stop_price=106.0, target_price=95.0,
+                       atr=2.0, targets=[95.0])
+    out = resolve_multi_signal([a, b])
+    assert out.stop_price == 106.0
+    assert out.target_price == 95.0     # tightest, and outside the 0.5R floor (97)
+    assert all(t < out.entry_price for t in out.targets)
+
+
+def test_resolve_multi_signal_drops_rungs_inside_the_widened_floor():
+    """Widening the stop widens the 0.5R floor this caller passes, which can
+    invalidate a rung that was fine against a variant's own tighter stop. That
+    must not produce a target at or behind entry, and must not let a rung no
+    variant ever proposed against THIS stop become the target."""
+    from app.services.strategy_engine import StrategySignal, resolve_multi_signal
+    from app.services.strategy_backtest import _entry_side
+
+    a = StrategySignal(strategy="mean_reversion_bb", direction="Bullish",
+                       entry_price=100.0, stop_price=99.0, target_price=100.6,
+                       atr=1.0, targets=[100.6])
+    b = StrategySignal(strategy="mean_reversion_rsi", direction="Bullish",
+                       entry_price=100.0, stop_price=90.0, target_price=112.0,
+                       atr=1.0, targets=[112.0])
+    out = resolve_multi_signal([a, b])
+    assert out.stop_price == 90.0
+    assert out.target_price == 112.0    # 100.6 is inside the 5.0 floor, dropped
+    assert _entry_side("Bullish", entry=out.entry_price,
+                       sl=out.stop_price, tp=out.target_price) == "buy"
+
+
+def test_resolve_multi_signal_with_a_single_variant_keeps_its_own_target():
+    """mean_reversion_min_confirmations is user-configurable down to 1, so a
+    single fired variant is a real, reachable call — not just a degenerate
+    edge case. With nothing to merge, the 0.5R floor (there to stop a rung
+    surviving a transplant onto a WIDER stop from another variant) must not
+    apply against the variant's OWN stop and silently discard its own thesis
+    rung. 100.4 is 0.08R from entry/stop (100/95, risk 5) — well inside 0.5R,
+    and exactly the kind of rung mean_reversion_bb's tight (0.5-ATR) stop
+    routinely produces, per its own module docstring."""
+    from app.services.strategy_engine import StrategySignal, resolve_multi_signal
+
+    a = StrategySignal(strategy="mean_reversion_bb", direction="Bullish",
+                       entry_price=100.0, stop_price=95.0, target_price=100.4,
+                       atr=1.0, targets=[100.4, 112.0])
+    out = resolve_multi_signal([a])
+    assert out.target_price == 100.4, "must not fall back to the 2R extension"
+    assert out.targets == [100.4, 112.0]
+    assert out.stop_price == 95.0
+    assert out.detail["confirmations"] == 1
+    assert out.detail["resolution"] == "single_variant_passthrough"
+
+
+def test_resolve_multi_signal_with_a_single_variant_and_no_targets_list():
+    """Mirrors the targets-is-empty fallback test above, for the single-variant
+    passthrough path specifically."""
+    from app.services.strategy_engine import StrategySignal, resolve_multi_signal
+
+    a = StrategySignal(strategy="mean_reversion_bb", direction="Bullish",
+                       entry_price=100.0, stop_price=95.0, target_price=100.4, atr=1.0)
+    out = resolve_multi_signal([a])
+    assert out.targets == [100.4]
+    assert out.target_price == 100.4
+
+
+def test_resolve_multi_signal_returns_none_on_empty():
+    from app.services.strategy_engine import resolve_multi_signal
+    assert resolve_multi_signal([]) is None
+
+
+def test_resolve_multi_signal_falls_back_to_target_price_when_targets_is_empty():
+    """A variant constructed without the additive `targets` field (several older
+    tests do exactly this) must still contribute its rung."""
+    from app.services.strategy_engine import StrategySignal, resolve_multi_signal
+
+    a = StrategySignal(strategy="mean_reversion_bb", direction="Bullish",
+                       entry_price=100.0, stop_price=96.0, target_price=108.0, atr=2.0)
+    b = StrategySignal(strategy="mean_reversion_rsi", direction="Bullish",
+                       entry_price=100.0, stop_price=95.0, target_price=106.0, atr=2.0)
+    out = resolve_multi_signal([a, b])
+    assert out.targets == [106.0, 108.0]
+    assert out.stop_price == 95.0

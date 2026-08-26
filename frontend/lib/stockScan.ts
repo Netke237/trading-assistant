@@ -2,7 +2,23 @@ import { api } from '@/lib/api';
 import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSettingsStore, atrMultForHorizon } from '@/lib/settingsStore';
-import type { StockScanResult } from '@/types/stockDomain';
+import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
+
+/**
+ * React key for a StockPositionCard, incorporating the signal itself — not
+ * just the symbol. `openSymbol` (step-4-stocks) survives a same-symbol
+ * re-scan (onRun() never resets it), and StockPositionCard's own overlay-
+ * reset effect only fires on a `card.symbol` change. Without this, a card
+ * left open across a fresh Run Scan would silently keep showing — and let
+ * the user submit — the PREVIOUS scan's entry/stop/target overlay even
+ * though the signal underneath it just changed. A signal change always
+ * moves at least one of entry/stop/target, so this remounts exactly when it
+ * should and never on an unrelated re-render (e.g. some other page state
+ * updating) that leaves the signal itself unchanged.
+ */
+export function stockPositionCardKey(c: PositionCardData): string {
+  return `${c.symbol}-${c.strategy.entry_price}-${c.strategy.stop_price}-${c.strategy.target_price}`;
+}
 
 /** Optional per-run param overrides (the page passes its locally-edited params). */
 export interface StockScanParamOverrides {

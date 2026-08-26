@@ -1,7 +1,8 @@
-import { runStockScan } from '@/lib/stockScan';
+import { runStockScan, stockPositionCardKey } from '@/lib/stockScan';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
+import type { PositionCardData } from '@/types/stockDomain';
 
 jest.mock('@/lib/api', () => ({
   api: { postStockScan: jest.fn() },
@@ -103,5 +104,46 @@ describe('runStockScan', () => {
     const singleArg = (api.postStockScan as jest.Mock).mock.calls[0][0];
     expect(singleArg.mean_reversion_variants).toBeUndefined();
     expect(singleArg.mean_reversion_min_confirmations).toBeUndefined();
+  });
+});
+
+describe('stockPositionCardKey', () => {
+  function card(overrides: Partial<{ symbol: string; entry: number; stop: number; target: number }> = {}): PositionCardData {
+    const { symbol = 'AAPL', entry = 150, stop = 145, target = 160 } = overrides;
+    return {
+      symbol,
+      strategy: { entry_price: entry, stop_price: stop, target_price: target } as PositionCardData['strategy'],
+    } as PositionCardData;
+  }
+
+  it('changes when the signal changes for the same symbol', () => {
+    // The exact scenario an adversarial audit round found: a card stays open
+    // (openSymbol) across a same-symbol Run Scan, so the key must change
+    // whenever the recomputed signal actually differs, or React reuses the
+    // component and its overlay state goes stale.
+    const before = stockPositionCardKey(card());
+    const after  = stockPositionCardKey(card({ entry: 152 }));
+    expect(before).not.toBe(after);
+  });
+
+  it('stays the same when the signal is unchanged, even across re-renders', () => {
+    expect(stockPositionCardKey(card())).toBe(stockPositionCardKey(card()));
+  });
+
+  it('differs by symbol alone when entry/stop/target coincide', () => {
+    expect(stockPositionCardKey(card({ symbol: 'AAPL' })))
+      .not.toBe(stockPositionCardKey(card({ symbol: 'MSFT' })));
+  });
+
+  it('changes when only the stop moves', () => {
+    const before = stockPositionCardKey(card());
+    const after  = stockPositionCardKey(card({ stop: 143 }));
+    expect(before).not.toBe(after);
+  });
+
+  it('changes when only the target moves', () => {
+    const before = stockPositionCardKey(card());
+    const after  = stockPositionCardKey(card({ target: 165 }));
+    expect(before).not.toBe(after);
   });
 });

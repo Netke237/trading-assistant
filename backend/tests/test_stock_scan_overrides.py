@@ -45,6 +45,7 @@ def test_score_stock_receives_overrides_from_request():
     fake_signal.entry_price = 150.0
     fake_signal.stop_price = 145.0
     fake_signal.target_price = 160.0
+    fake_signal.targets = [160.0]
     fake_signal.rr_ratio = 2.0
     fake_signal.atr = 3.0
     fake_signal.detail = {}

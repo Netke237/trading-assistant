@@ -20,16 +20,16 @@ const STRATEGIES = [
     label: 'Pullback to 20-EMA',
     when: 'Steady uptrends',
     entry: 'Dip to 20-EMA + reversal candle in uptrend',
-    stop: 'Below recent swing low',
-    exit: 'Prior high / trailing stop under higher lows',
+    stop: 'Below the pullback MA by 1.5 ATR',
+    exit: 'Prior swing high, then 2R / 3R extensions',
   },
   {
     key: 'breakout_base',
     label: 'Breakout from tight base',
     when: 'Momentum stocks',
     entry: 'Break above N-day high after narrow range + volume spike',
-    stop: 'Below the base low',
-    exit: 'Measured move / trailing stop',
+    stop: 'Just under the breakout level (base high)',
+    exit: 'Measured move — base height projected off the breakout',
   },
   {
     key: 'ma_crossover',
@@ -37,7 +37,7 @@ const STRATEGIES = [
     when: 'Simple trend entry',
     entry: '20-SMA crosses above 50-SMA',
     stop: 'Below 50-SMA',
-    exit: 'Cross back down',
+    exit: '3 / 4.5 / 6 ATR ladder (cross-back level shown)',
   },
   {
     key: 'mean_reversion_rsi',
@@ -45,7 +45,7 @@ const STRATEGIES = [
     when: 'Oversold in uptrend',
     entry: 'RSI < 30 while above 200-SMA',
     stop: 'Below recent swing low',
-    exit: 'RSI returns to mid / take-profit target',
+    exit: 'Return to the 20-SMA, then 2.5 / 3.75 ATR',
   },
   {
     key: 'mean_reversion_bb',
@@ -61,15 +61,15 @@ const STRATEGIES = [
     when: 'Intraday · 15m session',
     entry: 'Price deviates >1.5% below VWAP + reversal bar toward VWAP (15m bars)',
     stop: '0.5 ATR below entry',
-    exit: '2× risk above VWAP',
+    exit: 'VWAP, then 0.5 ATR past it',
   },
   {
     key: 'mean_reversion_multi',
     label: 'Mean Reversion Multi-Signal',
     when: 'High-conviction oversold entries',
     entry: 'RSI + BB + VWAP daily all confirm simultaneously',
-    stop: 'Below recent swing low',
-    exit: 'Return to mid-band / take-profit target',
+    stop: "Widest of the fired variants' stops",
+    exit: "Tightest of the fired variants' targets",
   },
 ] as const;
 

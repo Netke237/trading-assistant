@@ -1,6 +1,6 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow } from '@/types/domain';
-import type { StockScanResult } from '@/types/stockDomain';
+import type { StockScanResult, StockFirstPassageEstimate } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import type { AlertRule, AlertHistory } from '@/types/alerts';
@@ -378,6 +378,21 @@ export const api = {
       targets: { pct: number; stockPrice: number | null; optionPrice: number; probability: number; expectedDays: number | null }[];
       invalidation: { probability: number; expectedDays: number | null };
     }>('/api/contracts/first-passage', req, signal),
+  /** On-demand Monte Carlo first-passage estimate for a STOCK position's exit
+   *  ladder — fired only by the stock position card's "Estimate" button.
+   *  `targets` is the ladder the user intends to trade (their edited overlay),
+   *  not the pristine strategy signal. */
+  getStockFirstPassage: (req: {
+    symbol: string;
+    direction: 'Bullish' | 'Bearish';
+    horizon: 'Intraday' | 'Swing' | 'Position';
+    strategy: string;
+    stock_price: number;
+    stop_price: number;
+    targets: number[];
+    trend_score: number;
+  }, signal?: AbortSignal) =>
+    post<StockFirstPassageEstimate>('/api/stocks/first-passage', req, signal),
   getCandles:    (symbol: string) => get<Candle[]>(`/api/candles/${encodeURIComponent(symbol)}`),
   getSymbolInfo: (symbol: string) =>
     get<{ symbol: string; name: string }>(`/api/symbol/${encodeURIComponent(symbol)}/info`),

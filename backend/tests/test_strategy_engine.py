@@ -308,27 +308,38 @@ def test_pullback_ema_stop_is_below_fast_ma():
     fast_val = _ema_fn(closes, 50)[-1]
 
     signal = pullback_ema_signal(bars, tolerance=0.04)
-    if signal is None:
-        pytest.skip("setup did not fire on synthetic data")
+    assert signal is not None, "setup must fire on this deterministic fixture"
 
     assert signal.stop_price < fast_val, (
         f"stop {signal.stop_price:.2f} must be below fast MA {fast_val:.2f}"
     )
 
 
-def test_pullback_ema_rr_ratio_is_two_to_one():
-    """R/R must be exactly rr_target_mult (2.0) based on chart risk."""
+def test_pullback_ema_targets_the_prior_swing_high():
+    """Rung 1 is the prior swing extreme (the exit the Step-4 picker promises),
+    not a fixed R multiple. The R extensions live on rungs 2 and 3.
+
+    `_uptrend_pullback_bars()` is deterministic synthetic data, not randomized
+    input — a None here means the setup logic broke, not a flaky fixture, so
+    this asserts fire rather than skipping."""
     bars = _uptrend_pullback_bars()
     signal = pullback_ema_signal(bars, tolerance=0.04)
-    if signal is None:
-        pytest.skip("setup did not fire on synthetic data")
+    assert signal is not None, "setup must fire on this deterministic fixture"
 
-    risk   = signal.entry_price - signal.stop_price
-    reward = signal.target_price - signal.entry_price
+    risk = signal.entry_price - signal.stop_price
     assert risk > 0, "risk must be positive (stop below entry)"
-    assert abs(reward / risk - 2.0) < 0.05, (
-        f"R/R {reward/risk:.2f} should be ~2.0"
+    assert signal.target_price == signal.targets[0]
+    assert signal.target_price > signal.entry_price
+    # Either the prior swing extreme carried rung 1, or it rounded onto entry
+    # and was dropped so the 2R extension took over. Both are correct.
+    prior = signal.detail["prior_swing_extreme"]
+    assert signal.target_price in (
+        round(prior, 2),
+        round(signal.entry_price + risk * 2.0, 2),
     )
+    # The full ladder is strictly increasing and nearest-first.
+    assert signal.targets == sorted(signal.targets)
+    assert len(set(signal.targets)) == len(signal.targets)
 
 
 def test_pullback_ema_stop_never_above_entry():

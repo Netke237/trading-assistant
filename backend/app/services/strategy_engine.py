@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -203,6 +204,144 @@ def _fibonacci_pullback_signal(
 fibonacci_pullback_signal = _fibonacci_pullback_signal
 
 
+# ── Exit-target ladder ────────────────────────────────────────────────────────
+
+_LADDER_MAX_RUNGS = 3
+_LADDER_MIN_FALLBACK_R = 0.5
+
+
+def _build_target_ladder(
+    *,
+    entry: float,
+    stop: float,
+    direction: str,
+    primary: float | None,
+    extensions: list[float | None],
+    fallback_mult: float,
+    min_rung_r: float = 0.0,
+) -> list[float]:
+    """Turn a strategy's exit thesis into a validated, nearest-first ladder.
+
+    Single place where every degenerate case is handled, so no individual signal
+    function has to. Callers pass their own objective as ``primary`` and their
+    outward continuations as ``extensions`` — including ``None`` and values that
+    may land on the wrong side of entry — and get back a ladder that is
+    guaranteed non-empty, strictly on the profitable side of entry, strictly
+    monotonic, and ordered nearest-first.
+
+    WHY ``primary`` IS A SEPARATE ARGUMENT — the one thing not to "simplify".
+    Pooling every candidate into one list and sorting by distance would let a
+    generic R/ATR extension become ``ladder[0]`` whenever it happens to be
+    nearer than the strategy's own objective, which is exactly the thing this
+    rework exists to stop: ``ladder[0]`` is ``target_price``, and
+    ``target_price`` is the only exit ``strategy_backtest`` can observe (it
+    issues ``tp=sig.target_price``). It is not hypothetical — for
+    ``mean_reversion_vwap`` the entry gate puts VWAP >= 1.5% away while
+    ``risk = 0.5 ATR``, so ``entry + 2R`` is almost always nearer than VWAP.
+    The primary leads whenever it is valid; an extension that is not strictly
+    beyond the rung before it is DROPPED, never reordered ahead of it.
+
+    Nearest-first is load-bearing, not cosmetic: ``alert_generator.py`` fires
+    ``TP_HIT`` against ``targets[0]`` and nothing else.
+
+    Rungs are DROPPED, never clamped, when they fail a test. Clamping a
+    wrong-side value into place would manufacture a target the strategy never
+    claimed; dropping it lets the next rung — or the fallback — take over
+    honestly.
+
+    WHY THERE IS NO R-RELATIVE FLOOR BY DEFAULT. The only thing ``_entry_side``
+    and ``TP_HIT`` require is that a rung is finite, positive and *strictly*
+    beyond entry after rounding. An R-relative "must be at least 0.5R away"
+    floor sounds prudent and is actively harmful applied to a primary:
+    ``ma_crossover``'s stop sits at the slow MA, which right after a fast cross
+    can be far below price, so 0.5R there can exceed its 3-ATR objective — the
+    floor would silently drop the one rung this rework leaves numerically
+    unchanged and promote a 6-ATR extension instead. A poor reward:risk on a
+    strategy's declared objective is real information; ``rr_ratio`` and the
+    backtest are where it belongs. ``min_rung_r`` therefore defaults to 0 and
+    has exactly one caller: ``resolve_multi_signal``, where a rung genuinely IS
+    being re-used against a stop no variant derived it with.
+
+    Args:
+        entry:  signal entry price (> 0, caller-guaranteed).
+        stop:   signal stop price. ``risk = abs(entry - stop)`` must be > 0;
+                every caller already returns None before reaching here otherwise.
+        direction: "Bullish" or "Bearish".
+        primary: the strategy's own exit objective, or ``None`` when it is
+                unavailable on this bar (e.g. too few bars for the short SMA).
+        extensions: outward continuations, in the caller's own order; they are
+                sorted nearest-first among themselves. ``None`` entries are
+                ignored so a caller can pass an optional level unconditionally.
+        fallback_mult: R multiple used for the guaranteed rung when every
+                supplied rung is dropped. Floored at 0.5R.
+        min_rung_r: optional minimum distance from entry, in R, applied to every
+                supplied rung (primary included). Defaults to 0 — see above.
+
+    Returns:
+        1..3 prices, rounded to 2dp, strictly ordered away from entry. Empty
+        only when the inputs are degenerate (``risk <= 0`` or ``entry <= 0``).
+    """
+    sign = 1.0 if direction == "Bullish" else -1.0
+    risk = abs(entry - stop)
+    if risk <= 0 or not math.isfinite(risk) or entry <= 0 or not math.isfinite(entry):
+        # Unreachable via the signal functions (each returns None on risk <= 0),
+        # but this helper is public enough to be called from a future consumer.
+        return []
+
+    entry_r = round(entry, 2)
+    floor = entry + sign * min_rung_r * risk
+
+    def _valid(value: float | None) -> float | None:
+        """Round to 2dp and keep only if strictly beyond entry (and the floor)."""
+        if value is None or not math.isfinite(value) or value <= 0:
+            return None
+        if min_rung_r > 0 and sign * (value - floor) < 0:
+            return None
+        rounded = round(value, 2)
+        # A rung that rounds onto (or behind) entry is dropped rather than
+        # nudged: _entry_side needs a strict inequality, and a one-cent target
+        # would be worse than letting the next rung or the fallback take over.
+        if sign * (rounded - entry_r) <= 0:
+            return None
+        return rounded
+
+    ladder: list[float] = []
+
+    head = _valid(primary)
+    if head is not None:
+        ladder.append(head)
+
+    ext = sorted(
+        (v for v in (_valid(e) for e in extensions) if v is not None),
+        key=lambda v: sign * (v - entry),
+    )
+    for value in ext:
+        if len(ladder) >= _LADDER_MAX_RUNGS:
+            break
+        if ladder:
+            prev = ladder[-1]
+            # Strictly beyond the previous rung — an extension that is nearer
+            # than the primary is dropped, never reordered ahead of it.
+            if sign * (value - prev) <= 0:
+                continue
+            # Dedupe within 0.1% of the previous rung: a squeezed mid-band and a
+            # 2R extension really can coincide on some bars, and two
+            # indistinguishable rungs in the UI is noise.
+            if prev > 0 and abs(value - prev) / prev < 0.001:
+                continue
+        ladder.append(value)
+
+    if not ladder:
+        fallback = entry + sign * risk * max(fallback_mult, _LADDER_MIN_FALLBACK_R)
+        rounded = round(fallback, 2)
+        if sign * (rounded - entry_r) <= 0:
+            # Sub-cent risk. One tick is the smallest thing _entry_side accepts.
+            rounded = round(entry_r + sign * 0.01, 2)
+        ladder.append(rounded)
+
+    return ladder
+
+
 # ── Signal dataclass ──────────────────────────────────────────────────────────
 
 @dataclass
@@ -214,6 +353,12 @@ class StrategySignal:
     target_price: float
     atr:         float
     detail:      dict = field(default_factory=dict)
+    #: Full nearest-first exit ladder. ``target_price`` is always ``targets[0]``
+    #: — every existing consumer (strategy_backtest's ``tp=``, the strategy-watch
+    #: evaluator, the composite trigger evaluator) reads ``target_price`` and is
+    #: unaffected; ``targets`` is additive. Defaults to ``[]`` so a directly
+    #: constructed signal (several tests do this) stays valid.
+    targets:     list[float] = field(default_factory=list)
 
     @property
     def risk(self) -> float:
@@ -247,6 +392,7 @@ def pullback_ema_signal(
     trend_ema: int = 100,
     atr_stop_mult: float = 1.5,
     rr_target_mult: float = 2.0,
+    exit_swing_lookback: int = 20,
     tolerance: float = 0.04,
     ma_type: str = "EMA",
     require_reversal: bool = False,
@@ -301,7 +447,6 @@ def pullback_ema_signal(
         risk = current - stop
         if risk <= 0:
             return None
-        target = current + risk * rr_target_mult
     else:  # Bearish — mirror logic
         # Trend: price below ema_period-MA, ema_period-MA below trend_ema-MA (downtrend stack)
         if current >= fast_val:
@@ -318,7 +463,34 @@ def pullback_ema_signal(
         risk = stop - current
         if risk <= 0:
             return None
-        target = current - risk * rr_target_mult
+
+    # Exit thesis: "prior high / trailing stop under higher lows" — the exit the
+    # Step-4 picker has always shown the user. Rung 1 is the prior swing extreme
+    # the pullback interrupted; rungs 2 and 3 are R extensions past it, which is
+    # where rr_target_mult now lives (it no longer sets the only target, so it is
+    # no longer in the WFO grid — see the plan's coupling section).
+    #
+    # _swing_high/_swing_low look at bars[-lookback:], which includes today. In a
+    # valid pullback today's high is at or below the prior high by construction,
+    # so including it is harmless; in the edge case where the swing extreme
+    # equals the entry close (or a live current_price has already exceeded it)
+    # the rung rounds onto/behind entry, is dropped, and the R extensions carry
+    # the ladder.
+    prior_extreme = (_swing_high(bars, lookback=exit_swing_lookback) if direction == "Bullish"
+                     else _swing_low(bars, lookback=exit_swing_lookback))
+    _sign = 1 if direction == "Bullish" else -1
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        primary=prior_extreme,
+        extensions=[
+            current + _sign * risk * rr_target_mult,
+            current + _sign * risk * rr_target_mult * 1.5,
+        ],
+        fallback_mult=rr_target_mult,
+    )
+    if not targets:
+        return None
+    target = targets[0]
 
     ma_label = ma_type.upper()
     return StrategySignal(
@@ -328,9 +500,11 @@ def pullback_ema_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
+        targets=targets,
         detail={
             f"{ma_label.lower()}_{ema_period}": round(fast_val, 2),
             f"{ma_label.lower()}_{trend_ema}":  round(slow_val, 2),
+            "prior_swing_extreme": round(prior_extreme, 2),
         },
     )
 
@@ -344,6 +518,7 @@ def breakout_base_signal(
     atr_tight_max: float = 4.0,
     volume_mult: float = 1.5,
     rr_target_mult: float = 2.0,
+    measured_move_mult: float = 1.0,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
     current_price: float | None = None,  # accepted for router compat; not used (breakout uses close)
 ) -> StrategySignal | None:
@@ -363,7 +538,17 @@ def breakout_base_signal(
     base_high = max(b["high"] for b in base_bars)
     base_low  = min(b["low"]  for b in base_bars)
     base_range_pct = (base_high - base_low) / base_low if base_low > 0 else 99
-    atr = _atr(bars)
+    # Pre-breakout ATR — excludes today's bar, same as base_bars above. A
+    # second independent audit round caught the previous `_atr(bars)` (which
+    # includes today): on a wide-range/gap breakout bar, that single bar can
+    # dominate a 14-period ATR average (a 30-point range against a sub-1-point
+    # base pushed ATR to 2.3+ in a reproduced case), inflating BOTH the tight-
+    # base gate's denominator and the stop's `atr * 0.2` buffer with the very
+    # volatility event the strategy is trying to trade — collapsing R:R back
+    # below 1 even after the base_high/base_low anchor fix. Every other
+    # reference level in this function (base_high, base_low) already excludes
+    # today's bar; ATR was the one inconsistent scale.
+    atr = _atr(bars[:-1])
     # Tight base: range < atr_tight_max * ATR. A 20-bar range scales roughly
     # with sqrt(base_lookback) ~= 4.5x ATR on a random walk — 1.5 (the old
     # default) was unfireable on any real data (2026-08-18 audit: observed
@@ -378,21 +563,79 @@ def breakout_base_signal(
     if direction == "Bullish":
         if current <= base_high:
             return None
-        stop = base_low - atr * 0.2
+        # Stop anchored just under the BREAKOUT LEVEL (base_high), not the far
+        # side of the base (base_low) — an adversarial audit round proved the
+        # base_low anchor makes R:R < 1 for every possible input once the
+        # target became the measured move instead of entry + risk*rr_mult:
+        # risk = (base_high-base_low) + overshoot + buffer, reward =
+        # (base_high-base_low) - overshoot, so risk > reward for any
+        # overshoot > 0, which the entry gate above (current > base_high)
+        # guarantees. Anchoring at base_high — "back inside the level that
+        # was just broken" — is the classic breakout-invalidation pairing:
+        # risk becomes just the overshoot plus a small ATR buffer, so it
+        # scales with how far the breakout has already run rather than with
+        # the whole base's width, and the measured-move target is reachable
+        # at a real R:R again.
+        #
+        # A large GAP on the breakout bar itself (current far above base_high)
+        # still produces a low R:R here on purpose, not as an unfixed bug: the
+        # risk genuinely is entry-back-to-the-breakout-level, and a big gap has
+        # already spent a chunk of the measured move before this signal even
+        # fires. That is real information about a breakout that has already
+        # run, the same "no R-relative floor by default" philosophy
+        # _build_target_ladder documents elsewhere (see also ma_crossover's
+        # stop, which can be several ATR wide by the same reasoning). What is
+        # NOT acceptable — and is what `atr = _atr(bars[:-1])` above fixes — is
+        # a wide-range/wick bar inflating ATR (and therefore the stop buffer)
+        # with volatility from the very bar this signal is trying to trade.
+        stop = base_high - atr * 0.2
         risk = current - stop
         if risk <= 0:
             return None
-        target = current + risk * rr_target_mult
         detail = {"base_high": round(base_high, 2), "base_range_pct": round(base_range_pct * 100, 1)}
     else:  # Bearish breakdown below base low
         if current >= base_low:
             return None
-        stop = base_high + atr * 0.2
+        # Mirror of the Bullish fix above: anchored at base_low (the
+        # breakdown level), not base_high (the far side of the base).
+        stop = base_low + atr * 0.2
         risk = stop - current
         if risk <= 0:
             return None
-        target = current - risk * rr_target_mult
         detail = {"base_low": round(base_low, 2), "base_range_pct": round(base_range_pct * 100, 1)}
+
+    # Exit thesis: the MEASURED MOVE the Step-4 picker has always promised —
+    # project the base height off the breakout LEVEL (base_high for a breakout,
+    # base_low for a breakdown), not off entry. Projecting off entry would let a
+    # gapping open inflate the target by the size of the gap, which is the
+    # opposite of what a measured move means.
+    #
+    # base_high/base_low are already computed above and were previously used only
+    # for the stop and the detail blob.
+    base_height = base_high - base_low
+    # A perfectly flat base gives height 0; one ATR is the natural stand-in for
+    # "how far this thing travels". A gapping open can also put `current` above
+    # anchor + height, in which case that rung is behind entry and is dropped.
+    # If ATR is also 0 (degenerate data) every measured-move rung collapses onto
+    # the breakout level and is dropped, leaving the rr_target_mult fallback.
+    height = base_height if base_height > 0 else atr
+    _sign = 1 if direction == "Bullish" else -1
+    anchor = base_high if direction == "Bullish" else base_low
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        primary=anchor + _sign * height * measured_move_mult,
+        extensions=[
+            anchor + _sign * height * (measured_move_mult + 0.5),
+            anchor + _sign * height * (measured_move_mult + 1.0),
+        ],
+        fallback_mult=rr_target_mult,
+    )
+    if not targets:
+        return None
+    target = targets[0]
+    detail["base_height"] = round(base_height, 2)
+    detail["measured_move_anchor"] = round(anchor, 2)
+
     return StrategySignal(
         strategy="breakout_base",
         direction=direction,
@@ -400,6 +643,7 @@ def breakout_base_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
+        targets=targets,
         detail=detail,
     )
 
@@ -412,6 +656,7 @@ def ma_crossover_signal(
     fast: int = 20,
     slow: int = 50,
     lookback: int = 10,
+    atr_target_mult: float = 3.0,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
     current_price: float | None = None,  # accepted for router compat; not used (crossover uses close)
 ) -> StrategySignal | None:
@@ -440,13 +685,38 @@ def ma_crossover_signal(
                 risk   = current - stop
                 if risk <= 0:
                     return None
-                target = current + atr * 3.0
             else:
                 stop   = slow_ma[-1] + atr * 0.5
                 risk   = stop - current
                 if risk <= 0:
                     return None
-                target = current - atr * 3.0
+            # A moving-average cross has no natural PRICE objective — its thesis
+            # exit is a condition ("cross back"), not a level. So rung 1 keeps
+            # the multiple this strategy has always used (3.0 ATR, now tunable as
+            # atr_target_mult) and the ladder extends outward from there, rather
+            # than inventing a nearer price target with no thesis behind it.
+            #
+            # This is the one strategy whose primary target is numerically
+            # unchanged by this rework — which is only true because
+            # _build_target_ladder applies no R-relative floor by default. This
+            # strategy's stop sits at the slow MA, so right after a fast cross
+            # `risk` can be several times ATR and a 0.5R floor would exceed the
+            # 3-ATR objective, dropping it and promoting the 6-ATR extension.
+            _sign = 1 if direction == "Bullish" else -1
+            targets = _build_target_ladder(
+                entry=current, stop=stop, direction=direction,
+                primary=current + _sign * atr * atr_target_mult,
+                extensions=[
+                    current + _sign * atr * atr_target_mult * 1.5,
+                    current + _sign * atr * atr_target_mult * 2.0,
+                ],
+                # atr == 0 drops every rung; fall back to the R multiple the
+                # other strategies use so a degenerate series still trades.
+                fallback_mult=2.0,
+            )
+            if not targets:
+                return None
+            target = targets[0]
             return StrategySignal(
                 strategy="ma_crossover",
                 direction=direction,
@@ -454,7 +724,19 @@ def ma_crossover_signal(
                 stop_price=round(stop, 2),
                 target_price=round(target, 2),
                 atr=round(atr, 2),
-                detail={f"sma_{fast}": round(fast_ma[-1], 2), f"sma_{slow}": round(slow_ma[-1], 2)},
+                targets=targets,
+                detail={
+                    f"sma_{fast}": round(fast_ma[-1], 2),
+                    f"sma_{slow}": round(slow_ma[-1], 2),
+                    # The "cross back down" exit the Step-4 picker promises is a
+                    # CONDITION, not a price, and evaluating it needs per-bar
+                    # state this stateless signal_fn(bars) -> levels shape does
+                    # not have. The level is emitted for display so the card can
+                    # show it; acting on it is Approach E's job (the strategy-
+                    # watch state machine), explicitly deferred by this plan.
+                    "cross_back_level": round(slow_ma[-1], 2),
+                    "exit_rule": "cross_back",
+                },
             )
     return None
 
@@ -468,6 +750,8 @@ def mean_reversion_rsi_signal(
     rsi_oversold: float = 30.0,
     rsi_overbought: float = 70.0,
     trend_sma: int = 200,
+    exit_sma_period: int = 20,
+    atr_target_mult: float = 2.5,
     require_choppy_regime: bool = False,
     direction: Literal["Bullish", "Bearish"] = "Bullish",
     current_price: float | None = None,  # accepted for router compat; not used (mean-rev uses close)
@@ -501,7 +785,6 @@ def mean_reversion_rsi_signal(
         risk = current - stop
         if risk <= 0:
             return None
-        target = current + atr * 2.5
     else:  # Bearish — overbought in downtrend
         if closes[-1] >= trend[-1]:        return None   # must be below trend (downtrend context)
         if rsi[-1] <= rsi_overbought:      return None   # must be overbought
@@ -510,7 +793,30 @@ def mean_reversion_rsi_signal(
         risk = stop - current
         if risk <= 0:
             return None
-        target = current - atr * 2.5
+
+    # Exit thesis: "RSI returns to mid". The price proxy for that is the SHORT-term
+    # mean, NOT the trend SMA. The Bullish gate above requires close > trend[-1]
+    # (oversold WITHIN an uptrend), so the 200-SMA sits BELOW entry — targeting it
+    # would be targeting a loss. RSI is low precisely because price is stretched
+    # below its short mean, so that mean is the level the snap-back reaches for.
+    short_mean_series = _sma(closes, exit_sma_period)
+    short_mean = short_mean_series[-1] if short_mean_series else None
+    _sign = 1 if direction == "Bullish" else -1
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        # None when there are fewer bars than exit_sma_period — the helper
+        # ignores it and the ATR extensions carry the ladder.
+        primary=short_mean,
+        extensions=[
+            current + _sign * atr * atr_target_mult,
+            current + _sign * atr * atr_target_mult * 1.5,
+        ],
+        fallback_mult=2.0,
+    )
+    if not targets:
+        return None
+    target = targets[0]
+
     return StrategySignal(
         strategy="mean_reversion_rsi",
         direction=direction,
@@ -518,7 +824,12 @@ def mean_reversion_rsi_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
-        detail={"rsi": round(rsi[-1], 1), f"sma_{trend_sma}": round(trend[-1], 2)},
+        targets=targets,
+        detail={
+            "rsi": round(rsi[-1], 1),
+            f"sma_{trend_sma}": round(trend[-1], 2),
+            **({f"sma_{exit_sma_period}": round(short_mean, 2)} if short_mean is not None else {}),
+        },
     )
 
 
@@ -576,7 +887,6 @@ def mean_reversion_bb_signal(
         risk = current - stop
         if risk <= 0:
             return None
-        target = current + risk * rr_target_mult
     else:  # Bearish
         if closes[-1] >= trend[-1]:
             return None  # must be below trend (downtrend context)
@@ -590,7 +900,35 @@ def mean_reversion_bb_signal(
         risk = stop - current
         if risk <= 0:
             return None
-        target = current - risk * rr_target_mult
+
+    # Exit thesis: "return to mid-band / opposite band" — literally what the
+    # Step-4 picker tells the user, and both levels are already computed above by
+    # `upper, mid, lower = _bollinger(closes, bb_period, bb_std)`.
+    #
+    # The entry gates guarantee the mid-band is on the profitable side: Bullish
+    # requires lower[-1] < current < mid[-1], Bearish requires
+    # mid[-1] < current < upper[-1]. So the primary is always valid unless a
+    # squeeze puts the mid within half a cent of entry, in which case it rounds
+    # onto entry, is dropped, and the opposite band leads.
+    #
+    # Note the 2R extension is deliberately an EXTENSION, not a co-equal rung:
+    # with stop_atr_mult 0.5 the risk here is small, so entry + 2R is routinely
+    # NEARER than the mid-band. Pooling and sorting would make an arbitrary R
+    # multiple the target again, which is exactly what this rework removes.
+    _sign = 1 if direction == "Bullish" else -1
+    opposite_band = upper[-1] if direction == "Bullish" else lower[-1]
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        primary=mid[-1],
+        extensions=[
+            opposite_band,
+            current + _sign * risk * rr_target_mult,
+        ],
+        fallback_mult=rr_target_mult,
+    )
+    if not targets:
+        return None
+    target = targets[0]
 
     return StrategySignal(
         strategy="mean_reversion_bb",
@@ -599,6 +937,7 @@ def mean_reversion_bb_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
+        targets=targets,
         detail={
             "bb_upper": round(upper[-1], 2),
             "bb_mid": round(mid[-1], 2),
@@ -617,6 +956,7 @@ def mean_reversion_vwap_signal(
     reversal_pct: float = 0.3,
     stop_atr_mult: float = 0.5,
     rr_target_mult: float = 2.0,
+    vwap_extension_atr: float = 0.5,
     interval: str = "15m",
     direction: Literal["Bullish", "Bearish"] = "Bullish",
     current_price: float | None = None,  # accepted for router compat; not used (VWAP mean-rev uses close)
@@ -650,7 +990,6 @@ def mean_reversion_vwap_signal(
         risk = current - stop
         if risk <= 0:
             return None
-        target = current + risk * rr_target_mult
     else:  # Bearish
         dev = (current - vwap) / vwap * 100
         if dev < vwap_dev_pct:
@@ -662,7 +1001,31 @@ def mean_reversion_vwap_signal(
         risk = stop - current
         if risk <= 0:
             return None
-        target = current - risk * rr_target_mult
+
+    # Exit thesis: VWAP itself, then an extension past it. Valid here — and ONLY
+    # here — because this variant's entry gate requires price to still be
+    # DEVIATED from VWAP by vwap_dev_pct, so VWAP sits on the profitable side of
+    # entry. Its daily sibling has the opposite gate; see below.
+    #
+    # This is THE strategy that proves why `primary` must be a separate argument:
+    # the gate puts VWAP at least vwap_dev_pct (1.5%) away, while
+    # risk = stop_atr_mult * atr (0.5 ATR on 15-minute bars). `entry + 2R` is
+    # therefore almost always NEARER than VWAP, and a pooled nearest-first sort
+    # would silently make an arbitrary 1-ATR multiple the target again — leaving
+    # this strategy's exits exactly as they were before the rework.
+    _sign = 1 if direction == "Bullish" else -1
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        primary=vwap,
+        extensions=[
+            vwap + _sign * atr * vwap_extension_atr,
+            current + _sign * risk * rr_target_mult,
+        ],
+        fallback_mult=rr_target_mult,
+    )
+    if not targets:
+        return None
+    target = targets[0]
 
     return StrategySignal(
         strategy="mean_reversion_vwap",
@@ -671,6 +1034,7 @@ def mean_reversion_vwap_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
+        targets=targets,
         detail={"vwap": round(vwap, 2), "deviation_pct": round(dev, 2)},
     )
 
@@ -715,7 +1079,6 @@ def mean_reversion_vwap_daily_signal(
         risk   = current - stop
         if risk <= 0:
             return None
-        target = current + risk * rr_target_mult
     else:
         if (prev - vwap) / vwap < vwap_deviation_pct:
             return None
@@ -725,9 +1088,29 @@ def mean_reversion_vwap_daily_signal(
         risk   = stop - current
         if risk <= 0:
             return None
-        target = current - risk * rr_target_mult
 
     dev_pct = abs(vwap - prev) / vwap
+    # Exit thesis: a RECLAIM-and-overshoot, NOT "return to VWAP".
+    #
+    # This variant's Bullish gate is `current > vwap` — the bar has already closed
+    # back ABOVE the rolling VWAP, so VWAP is BELOW entry and the "return to VWAP"
+    # target is achieved at entry. What the thesis actually says is that a
+    # deviation of dev_pct below VWAP should mean-revert to a mirror deviation
+    # above it. That mirror level is rung 1; R extensions follow.
+    _sign = 1 if direction == "Bullish" else -1
+    targets = _build_target_ladder(
+        entry=current, stop=stop, direction=direction,
+        primary=vwap * (1 + _sign * dev_pct),
+        extensions=[
+            current + _sign * risk * rr_target_mult,
+            current + _sign * risk * rr_target_mult * 1.5,
+        ],
+        fallback_mult=rr_target_mult,
+    )
+    if not targets:
+        return None
+    target = targets[0]
+
     return StrategySignal(
         strategy="mean_reversion_vwap_daily",
         direction=direction,
@@ -735,7 +1118,122 @@ def mean_reversion_vwap_daily_signal(
         stop_price=round(stop, 2),
         target_price=round(target, 2),
         atr=round(atr, 2),
+        targets=targets,
         detail={"rolling_vwap": round(vwap, 2), "deviation_pct": round(dev_pct * 100, 2)},
+    )
+
+
+# ── Multi-signal resolution ──────────────────────────────────────────────────
+
+def resolve_multi_signal(
+    fired: list[StrategySignal],
+    *,
+    strategy: str = "mean_reversion_multi",
+    fallback_mult: float = 2.0,
+) -> StrategySignal | None:
+    """Combine several confirming variant signals into one, deterministically.
+
+    Replaces ``dataclasses.replace(fired[0], ...)``, which took its entry, stop
+    and target from whichever variant the CALLER happened to list first. That is
+    not non-deterministic — the same request always produced the same answer —
+    but it is arbitrary: reordering the variant checkboxes in the UI silently
+    moved every stop and every target. This function's answer depends only on the
+    SET of fired variants, never on their order.
+
+    Resolution rule (the conservative pairing):
+      * stop   = the WIDEST of the variants' stops (furthest from entry). If any
+                 one variant's invalidation has not been hit, the thesis is
+                 intact, so the position should not already be stopped out.
+      * ladder = every variant's rungs pooled as ``extensions`` (there is no
+                 ``primary`` here — no single variant's objective outranks
+                 another's) and re-sanitized against the resolved entry/stop,
+                 which yields the TIGHTEST surviving rung first. Taking the
+                 tightest target with the widest stop is deliberately the low-R:R
+                 pairing: for a multi-confirmation entry the edge is the
+                 confirmation count, not the R:R, and the alternative (tight stop
+                 + far target) would flatter the numbers by pairing two levels no
+                 single variant ever claimed together.
+      * entry  = the anchor variant's. All variants that can appear here read the
+                 same last close, so entries agree; the anchor is chosen by
+                 alphabetical strategy name purely so the tie-break is stable.
+
+    This is the ONE caller that passes a non-zero ``min_rung_r``. Everywhere else
+    a rung is the strategy's own objective measured against its own stop, and the
+    ladder builder deliberately does not second-guess it. Here a rung derived
+    against one variant's tight stop is being re-used against a stop that may be
+    many times wider, so a 0.6R target can become a 0.06R target that no variant
+    ever proposed. Half an R is the floor for a rung to survive that transplant.
+
+    KNOWN LIMITATION, recorded rather than hidden: nothing backtests this
+    resolution. ``stock_scan.py`` deliberately uses ``mean_reversion_rsi`` as the
+    canonical backtest proxy for ``mean_reversion_multi`` (so the gate is
+    order-independent), which means the RSI variant's own ladder is what the
+    Step-6 win rate measures, not the resolved one. That predates this change and
+    is unchanged by it; it is why the resolution rule is chosen to be
+    conservative rather than optimised.
+
+    Returns None when ``fired`` is empty or the resolved risk is non-positive.
+    """
+    if not fired:
+        return None
+
+    ordered = sorted(fired, key=lambda s: s.strategy)
+    anchor = ordered[0]
+    direction = anchor.direction
+    entry = anchor.entry_price
+
+    if direction == "Bullish":
+        stop = min(s.stop_price for s in ordered)
+    else:
+        stop = max(s.stop_price for s in ordered)
+
+    if abs(entry - stop) <= 0:
+        return None
+
+    if len(ordered) == 1:
+        # Nothing to merge: entry/stop above are exactly this variant's own, so
+        # the 0.5R floor below — there to stop a rung transplanted from one
+        # variant's tight stop surviving against another's much wider one — has
+        # no transplant to guard against here. Applying it anyway would silently
+        # discard this variant's own thesis rung (e.g. mean_reversion_bb's
+        # mid-band, routinely well inside 0.5R of its own 0.5-ATR stop) in favor
+        # of a generic R-multiple extension it never actually proposed as its
+        # target. Keep its own ladder unchanged.
+        targets = list(anchor.targets or [anchor.target_price])
+    else:
+        pooled: list[float | None] = []
+        for s in ordered:
+            pooled.extend(s.targets or [s.target_price])
+
+        targets = _build_target_ladder(
+            entry=entry, stop=stop, direction=direction,
+            primary=None, extensions=pooled,
+            fallback_mult=fallback_mult, min_rung_r=0.5,
+        )
+        if not targets:
+            return None
+
+    detail = {
+        **anchor.detail,
+        "confirmations": len(ordered),
+        # Sorted, so this field is order-independent too — it was previously the
+        # caller's request order.
+        "fired": [s.strategy for s in ordered],
+        # Single-variant calls skip the merge entirely (see above), so the
+        # "widest_stop_tightest_target" label would be describing a resolution
+        # that never ran.
+        "resolution": "widest_stop_tightest_target" if len(ordered) > 1 else "single_variant_passthrough",
+    }
+
+    return StrategySignal(
+        strategy=strategy,
+        direction=direction,
+        entry_price=round(entry, 2),
+        stop_price=round(stop, 2),
+        target_price=targets[0],
+        atr=anchor.atr,
+        targets=targets,
+        detail=detail,
     )
 
 

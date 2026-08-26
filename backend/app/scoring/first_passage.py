@@ -252,3 +252,139 @@ def estimate_first_passage(
         sigma_stock=sigma_stock,
         mu=mu,
     )
+
+
+# ── Stock first-passage ───────────────────────────────────────────────────────
+
+@dataclass
+class StockTargetEstimate:
+    price: float
+    probability: float
+    expected_days: Optional[float]   # None if probability == 0
+
+
+@dataclass
+class StockFirstPassageResult:
+    targets: list[StockTargetEstimate]
+    invalidation: InvalidationEstimate
+    sigma_stock: float
+    mu: float
+    horizon_days: int
+
+
+def estimate_stock_first_passage(
+    *,
+    stock_price: float,
+    direction: str,
+    trend_score: float,
+    stop_price: float,
+    targets: list[float],
+    candles: list[dict],
+    horizon_days: int,
+    max_drift_pct: float = 0.40,
+    n_paths: int = 2000,
+    sigma_floor: float = 0.10,
+    sigma_ceiling: float = 1.50,
+    seed: int = 0,
+) -> StockFirstPassageResult:
+    """Monte Carlo first-passage estimate for a STOCK position's exit ladder.
+
+    Strict subset of estimate_first_passage(): it keeps the three
+    instrument-agnostic stages — ATR -> annualized sigma, trend score -> drift,
+    GBM path simulation — and the barrier test, and drops the three
+    option-specific ones (sigma_iv back-out from premium, the Stage-1 bisection
+    for "what stock price yields premium x (1+pct)", and the per-day
+    Black-Scholes repricing loop). Dropping the repricing loop is why this is
+    materially FASTER than its option sibling, not merely smaller: that loop is
+    the expensive part.
+
+    A stock profit target is the invalidation branch with the comparison flipped
+    (``stock_paths >= target`` instead of ``<=``), which is exactly the shape the
+    option version already uses for its stop barrier.
+
+    horizon_days replaces ``dte``: stocks have no expiry, so the simulation needs
+    an explicit holding window. Callers pass scoring_rules.yaml's
+    ``confidence_backtest.<horizon>.n_days`` (Intraday 5 / Swing 10 / Position
+    40), which is this app's existing definition of "how long a signal in this
+    horizon takes to resolve" — reusing it keeps the Monte Carlo window
+    consistent with the empirical confidence window rather than inventing a
+    second answer.
+
+    UNITS — the one place this deliberately differs from its option sibling.
+    ``n_days`` counts TRADING days (signal_confidence walks forward N bars), and
+    ``sigma_stock`` is annualized from a daily ATR with ``sqrt(252)``, so the
+    time step here is ``1/252``. The option version steps at ``1/365`` because
+    its window is ``dte``, which is CALENDAR days to expiry. Both are internally
+    consistent — annualized vol times the right year fraction — and copying
+    ``1/365`` here would have understated the simulated variance over the window
+    by 252/365 (about 20% in vol terms). ``expected_days`` is therefore also in
+    trading days; the endpoint and the card say so.
+
+    NOTE ON MODEL VALIDITY: a constant drift derived from a trend score is a poor
+    generative model for the mean_reversion_* strategies, whose whole thesis is
+    that the recent drift is transient. That caveat is surfaced to the user by
+    the caller (see the endpoint's ``model_caveat``), not silently absorbed here.
+    """
+    is_bullish = direction == "Bullish"
+    sign = 1.0 if is_bullish else -1.0
+
+    atr = _atr(candles, 14) if candles else 0.0
+    sigma_stock = sigma_floor
+    if stock_price > 0 and math.isfinite(stock_price) and math.isfinite(atr):
+        sigma_stock = max(sigma_floor, min(sigma_ceiling, (atr / stock_price) * math.sqrt(252)))
+
+    # trend_score is DIRECTION-ALIGNED by the time it reaches here: the stock
+    # scorer scores in the requested direction, so 80 means "strongly favours
+    # this trade" for a Bearish scan just as much as for a Bullish one. Hence
+    # sign * (score - 50): a favourable score drifts WITH the trade, an
+    # unfavourable one drifts against it. Same construction as the option
+    # sibling's `direction_sign * (trend_score - 50)`.
+    mu = sign * (trend_score - 50) / 50 * max_drift_pct
+
+    clean_targets = [
+        float(t) for t in targets
+        if t is not None and math.isfinite(float(t)) and float(t) > 0
+    ]
+
+    # Degenerate inputs: a non-positive price or an empty window can't be
+    # simulated. Return zero-probability rather than crashing on median() of an
+    # empty array — the same guard the option version applies at dte < 1.
+    if stock_price <= 0 or not math.isfinite(stock_price) or horizon_days < 1:
+        return StockFirstPassageResult(
+            targets=[StockTargetEstimate(price=t, probability=0.0, expected_days=None)
+                     for t in clean_targets],
+            invalidation=InvalidationEstimate(probability=0.0, expected_days=None),
+            sigma_stock=sigma_stock, mu=mu, horizon_days=max(horizon_days, 0),
+        )
+
+    rng = np.random.default_rng(seed)
+    dt = 1 / 252   # horizon_days is a TRADING-day count — see the docstring
+    z = rng.standard_normal((n_paths, horizon_days))
+    log_returns = (mu - 0.5 * sigma_stock ** 2) * dt + sigma_stock * math.sqrt(dt) * z
+    stock_paths = stock_price * np.exp(np.cumsum(log_returns, axis=1))
+
+    def _barrier(mask: np.ndarray) -> tuple[float, Optional[float]]:
+        ever = mask.any(axis=1)
+        probability = float(ever.mean())
+        if not ever.any():
+            return probability, None
+        first = np.argmax(mask, axis=1)
+        return probability, float(np.median(first[ever]) + 1)   # +1: column 0 == day 1
+
+    target_estimates: list[StockTargetEstimate] = []
+    for t in clean_targets:
+        prob, days = _barrier(stock_paths >= t if is_bullish else stock_paths <= t)
+        target_estimates.append(StockTargetEstimate(price=t, probability=prob, expected_days=days))
+
+    if math.isfinite(stop_price) and stop_price > 0:
+        stop_prob, stop_days = _barrier(
+            stock_paths <= stop_price if is_bullish else stock_paths >= stop_price
+        )
+    else:
+        stop_prob, stop_days = 0.0, None
+
+    return StockFirstPassageResult(
+        targets=target_estimates,
+        invalidation=InvalidationEstimate(probability=stop_prob, expected_days=stop_days),
+        sigma_stock=sigma_stock, mu=mu, horizon_days=horizon_days,
+    )

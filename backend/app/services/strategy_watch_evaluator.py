@@ -26,7 +26,7 @@ from app.services.strategy_engine import (
     mean_reversion_bb_signal,
 )
 from app.services.strategy_watch_store import strategy_watch_store
-from app.services.strategy_param_store import get_active
+from app.services.strategy_param_store import get_active, get_exit
 from app.services.notifications.dispatch import notify_enabled_channels
 
 logger = logging.getLogger(__name__)
@@ -111,7 +111,7 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
         close = float(bars[-1]["close"])
         wdir = w.get("direction", "Bullish")
         try:
-            adopted = get_active(key, wdir)
+            adopted = {**get_exit(key), **get_active(key, wdir)}
             params_override = w.get("params_override") or {}
             adopted.update(params_override)  # params_override wins
             signal = fn(bars, direction=wdir, **adopted)
@@ -208,7 +208,7 @@ async def evaluate_all(sustain_minutes: int = 0) -> list[WatchEvent]:
                 # reachable, not adding debounce) -- revisit if this proves noisy.
                 opposite_dir = "Bearish" if sdir == "Bullish" else "Bullish"
                 try:
-                    opp_params = get_active(key, opposite_dir)
+                    opp_params = {**get_exit(key), **get_active(key, opposite_dir)}
                     opp_params.update(params_override)
                     opp_signal = fn(bars, direction=opposite_dir, **opp_params)
                 except Exception as exc:
