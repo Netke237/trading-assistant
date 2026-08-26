@@ -245,6 +245,35 @@ def test_breakout_base_still_fires_on_a_moderate_gap_with_an_honest_low_rr():
     assert reward / risk < 1.0
 
 
+def test_breakout_base_outrun_guard_matches_the_ladder_builders_own_rounding():
+    """A fourth independent audit round found the outrun guard above compared
+    RAW floats, while _build_target_ladder rounds every candidate (and entry)
+    to 2dp before its own strict-inequality test. In a sub-cent band just
+    below the boundary, the raw comparison said 'proceed' but the ladder
+    builder then rounded the farthest extension down onto (or behind) entry
+    and dropped it too — reopening the exact fabrication bug the guard exists
+    to prevent. base_high=100, base_low=96 -> height=4, farthest=108.00.
+
+    Real (split/dividend-adjusted) prices are not reliably clean to 2dp, so
+    this band is reachable on real data, not just a hand-picked input."""
+    from app.services.strategy_engine import breakout_base_signal
+
+    def _fire(close: float):
+        bars = [{"open": 98.0, "high": 100.0, "low": 96.0, "close": 98.0, "volume": 1_000_000}
+                for _ in range(25)]
+        bars.append({"open": 100.0, "high": close + 0.5, "low": 99.5, "close": close, "volume": 5_000_000})
+        return breakout_base_signal(bars, base_lookback=20, atr_tight_max=99.0, volume_mult=1.5)
+
+    # 107.995 rounds to 108.00 == farthest (108.00) -> must bail, not fabricate.
+    assert _fire(107.995) is None
+    # A cent further out is unambiguously past the boundary either way.
+    assert _fire(108.0) is None
+    # A cent short of the boundary must still fire with the real target.
+    sig = _fire(107.994)
+    assert sig is not None
+    assert sig.target_price == 108.0
+
+
 def test_breakout_base_atr_ignores_todays_own_wide_range_bar():
     """A second independent audit round found the base_high anchor fix (above)
     doesn't hold when the BREAKOUT BAR ITSELF has a wide range/wick relative to

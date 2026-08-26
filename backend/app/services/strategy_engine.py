@@ -643,7 +643,18 @@ def breakout_base_signal(
     # measured-move distance to outrun in the first place — that IS the
     # genuinely degenerate case the generic fallback exists for, and
     # test_breakout_base_survives_a_zero_height_base pins exactly this.
-    if height > 0 and _sign * (farthest - current) <= 0:
+    #
+    # Rounded to 2dp before comparing: a fourth independent audit round found
+    # that comparing raw floats here, while `_build_target_ladder` rounds
+    # every candidate (and entry) to 2dp before its own strict-inequality
+    # test, reopens this exact fabrication bug in a sub-cent band just below
+    # the boundary — close enough that this pre-check says "proceed" but the
+    # ladder builder then rounds `farthest` down onto (or behind) entry and
+    # drops it too, falling through to the same fabricated fallback this
+    # guard exists to prevent. Real (split/dividend-adjusted) prices are not
+    # reliably clean to 2dp, so this band is reachable on real data, not just
+    # a hand-picked test input.
+    if height > 0 and _sign * (round(farthest, 2) - round(current, 2)) <= 0:
         return None
     targets = _build_target_ladder(
         entry=current, stop=stop, direction=direction,

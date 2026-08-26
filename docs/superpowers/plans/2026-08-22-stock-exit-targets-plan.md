@@ -3816,3 +3816,37 @@ preserving its actual intent (verify Bearish direction support).
 
 Backend: 1627 passed, 1 skipped (up from round 3 audit's 1624). Frontend: typecheck clean,
 697 passed (up from 695).
+
+## Post-implementation independent audit (round 4)
+
+A fourth, independently spawned subagent re-verified all three round-3 fixes against `main`
+(confirming the merge itself carried them over byte-for-byte, nothing dropped or corrupted) and
+scrutinized `breakout_base_signal` hardest, having now been touched by three consecutive rounds.
+Two of the three round-3 fixes were CONFIRMED FIXED outright; the outrun guard was found to have a
+narrow but real gap of its own. One HIGH finding and one LOW, both fixed:
+
+- **HIGH — the round-3 outrun guard compared raw, unrounded floats, while `_build_target_ladder`
+  rounds every candidate (and entry) to 2dp before its own strict-inequality test — reopening the
+  identical fabrication bug in a sub-cent band just below the boundary.** With `base_high=100,
+  base_low=96` (`height=4`, `farthest=108.00`), a close of `107.995` rounds to `108.00` and ties
+  with `farthest` — the raw pre-check said "proceed" (`107.995 &lt; 108.0` by float comparison), but
+  `_build_target_ladder` then rounds `farthest` to `108.00`, which no longer strictly exceeds the
+  rounded entry (`108.00`), drops it along with the primary and first extension, and falls through
+  to the same fabricated `entry + risk*2.0` target round 3 fixed. One more cent down (`107.994`,
+  rounding to `107.99`) correctly returns the real `108.00` target. Real split/dividend-adjusted
+  prices are not reliably clean to 2dp, so this band is reachable on real data. Fixed by rounding
+  `farthest` and `current` to 2dp before the guard's comparison, matching `_build_target_ladder`'s
+  own rounding exactly.
+- **LOW — `StockPositionCard`'s `defaultOverlay()` had a dead `?? card.strategy.target_price`
+  fallback on `ladder[0]`, which can never be `undefined` given `ladder`'s own construction two
+  lines above (always non-empty).** Removed; cosmetic only, no behavioral effect.
+
+No issues found in: the `height > 0` gate's interaction with the round-2 pre-breakout-ATR fix (a
+legitimately-zero ATR can only zero out `height` when the base itself is also perfectly flat —
+`base_height > 0` is checked first, so a real, non-degenerate base never falls through to `atr`);
+whether a shorter (1- or 2-rung) backend ladder could let `StockPositionCard`'s client-fabricated
+T2/T3 land on the wrong side of a real T1 (the R-step fill is entry-relative and direction-signed,
+so it structurally cannot, regardless of ladder length).
+
+Backend: 1628 passed, 1 skipped (up from round 4 audit's 1627). Frontend: typecheck clean,
+697 passed (unchanged — the LOW fix needed no new test, covered by existing suite + typecheck).
