@@ -410,6 +410,26 @@ describe('StockPositionCard — sell-to-close share allocation is clamped to tot
     expect(t1 + t2 + t3).toBe(15); // T3 absorbs the rounding remainder, nothing is dropped
   });
 
+  it('scales every rung UP proportionally when total SHARES is increased beyond the existing allocation', async () => {
+    // A fifth independent audit round found the mirror gap: the shrink case
+    // above was fixed, but growing SHARES left the rungs unchanged, silently
+    // leaving the added shares with no planned exit rung at all.
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+
+    // 10/10/10 across T1/T2/T3 (sum 30) -> raise total shares to 60 (double).
+    await editField('SHARES', '60');
+
+    const t1Row = screen.getByText('T1').closest('div')!.parentElement as HTMLElement;
+    const t2Row = screen.getByText('T2').closest('div')!.parentElement as HTMLElement;
+    const t3Row = screen.getByText('T3').closest('div')!.parentElement as HTMLElement;
+    const t1 = Number(within(t1Row).getAllByRole('button')[1].textContent);
+    const t2 = Number(within(t2Row).getAllByRole('button')[1].textContent);
+    const t3 = Number(within(t3Row).getAllByRole('button')[1].textContent);
+    expect(t1).toBe(20);
+    expect(t2).toBe(20);
+    expect(t3 + t1 + t2).toBe(60); // T3 absorbs the rounding remainder, nothing is left uncovered
+  });
+
   it('does not clamp when the allocation already fits within total shares', async () => {
     render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
 

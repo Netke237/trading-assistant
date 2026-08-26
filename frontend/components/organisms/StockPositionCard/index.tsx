@@ -207,6 +207,20 @@ export function StockPositionCard({
           next.sharesT2 = Math.floor(next.sharesT2 * scale);
           next.sharesT3 = Math.max(0, next.shares - next.sharesT1 - next.sharesT2);
         }
+      } else if ('shares' in partial && allocated > 0 && allocated < next.shares) {
+        // A fifth independent audit round found the mirror gap: growing total
+        // SHARES was never topped up to the sell-to-close plan, silently
+        // leaving the added shares with no planned exit rung at all (e.g.
+        // 100 shares allocated 33/33/34, SHARES edited up to 250, rungs stay
+        // at 33/33/34 — 150 shares reach Add to Portfolio uncovered). Scale
+        // every rung UP proportionally, the mirror of the shrink branch
+        // above. `allocated > 0` is a pure division-by-zero guard, not a
+        // reachable UI state — EditableField.save() requires `p > 0`, so a
+        // rung's share count can never actually be edited down to 0.
+        const scale = next.shares / allocated;
+        next.sharesT1 = Math.floor(next.sharesT1 * scale);
+        next.sharesT2 = Math.floor(next.sharesT2 * scale);
+        next.sharesT3 = Math.max(0, next.shares - next.sharesT1 - next.sharesT2);
       }
       return next;
     });
