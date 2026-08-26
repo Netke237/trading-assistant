@@ -13,7 +13,7 @@ import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk } from '@/lib/risk';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
-import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageTarget } from '@/types/domain';
+import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget } from '@/types/domain';
 import {
   triggerDetailText,
   pullbackDetailText,
@@ -160,8 +160,27 @@ interface TradeCardProps {
   /** Fired whenever the "Check structure" result changes for the current contract
    *  (including being reset to `undefined` on a contract switch, or `null` when no
    *  structural level was found) — lets the parent capture the level so it can be
-   *  attached to the position if/when this trade is sent to the broker. */
-  onStructuralStopChange?: (stop: StructuralStop | null | undefined) => void;
+   *  attached to the position if/when this trade is sent to the broker, AND cache it
+   *  per symbol so re-navigating to this candidate restores it instead of wiping it.
+   *  `stockPrice` is the fresh underlying price the level was measured against
+   *  (`null` whenever `stop` is `undefined`); the parent must cache it alongside the
+   *  level or a restored stop cannot produce an R:R-vs-structural-stop figure. */
+  onStructuralStopChange?: (stop: StructuralStop | null | undefined, stockPrice: number | null) => void;
+  /** Fired whenever the "Estimate" (first-passage) result changes for the current
+   *  contract, including the reset to `undefined` on a contract switch/start of a
+   *  re-estimate, and the explicit `null` a FAILED re-estimate writes once it
+   *  actually completes. The parent caches the pair per CONTRACT (not per symbol —
+   *  the estimate is priced off this contract's premium) and must ignore only the
+   *  `undefined` sentinel (still in flight — don't touch the cache), while treating
+   *  `null` as a real answer to write through, the same distinction
+   *  `onStructuralStopChange`'s `stop` parameter above already makes: an in-flight
+   *  re-estimate must never destroy the value already on screen, but a FAILED one
+   *  must actually overwrite a stale cached entry, or it silently reappears on the
+   *  next navigate-away-and-back next to whatever the OTHER cache resolved to. */
+  onFirstPassageChange?: (
+    estimate: FirstPassageEstimate | null | undefined,
+    context: FirstPassageContext | null,
+  ) => void;
 }
 
 function targetStatusTooltip(statusVal: TargetLevel['status']): string {
@@ -183,6 +202,7 @@ export function TradeCard({
   contracts: initialContracts = 1,
   onEditsChange,
   onStructuralStopChange,
+  onFirstPassageChange,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
   const [altOpen, setAltOpen] = useState(false);
@@ -199,27 +219,97 @@ export function TradeCard({
   // persisted (not just used transiently) so a later R:R-vs-structural-stop
   // calc can reuse the SAME fresh price the backend actually used, instead of
   // falling back to data.price (the scan-time snapshot checkStructure was
-  // specifically written to avoid).
-  const [structuralStopStockPrice, setStructuralStopStockPrice] = useState<number | null>(null);
+  // specifically written to avoid). Seeded from data.exit alongside
+  // structuralStop above, so a cached structure check the parent splices back
+  // in on re-navigation restores BOTH halves — restoring the stop alone would
+  // leave structuralRR null and every row's R:R cell showing the defensive '—'.
+  const [structuralStopStockPrice, setStructuralStopStockPrice] = useState<number | null>(
+    data.exit.structuralStopStockPrice ?? null,
+  );
   // Tracks the in-flight "Check structure" request (if any) so a stale response
   // for a contract the user has since navigated away from (via CandidateNav
   // Prev/Next) can never overwrite the display for the new one — same class of
   // race step-7-trade-card/page.tsx's recomputePlan effects guard against.
   const structuralRequestRef = useRef<AbortController | null>(null);
+  // Whether the CURRENT structuralStop value was obtained by a fetch performed
+  // during THIS mount, as opposed to a cache-restored (or never-fetched) value.
+  // A restored value can be arbitrarily old — it was measured against whatever
+  // stock price was current the last time this exact contract/symbol was
+  // viewed, which may be minutes, hours, or days ago. Gates
+  // estimateFirstPassage's auto-fetch below: without this, restoring a cached
+  // structuralStop makes `structuralStop === undefined` false, so the
+  // auto-fetch never fires again for this candidate, and structuralRR then
+  // permanently combines that stale check-time price with the FRESH
+  // premium/delta the estimate just fetched — silently overstating or
+  // understating risk by however much the stock has moved since the cache was
+  // written. Not state: it never needs to trigger a render on its own, only
+  // to gate a callback's branch the next time it runs.
+  const structuralIsFreshRef = useRef(false);
+  // The mirror image of structuralIsFreshRef, tracking the OTHER side of
+  // structuralRR's pairing: whether the current firstPassageContext was
+  // obtained by a fetch performed this mount, as opposed to a cache restore.
+  // estimateFirstPassage already auto-refreshes a not-yet-fresh
+  // structuralStop when Estimate is clicked, so that direction is covered —
+  // but a MANUAL "Check structure" click can independently refresh
+  // structuralStop while a restored (possibly stale) estimate is still on
+  // screen, which is exactly the same mixed-vintage hazard structuralRR
+  // exists to avoid, just from the other side. Rather than also auto-firing
+  // a full Estimate computation from "Check structure" (tried, reverted — it
+  // adds two unwanted network calls for a user who only asked to check
+  // structure, and duplicates a fetch on the very next real Estimate click
+  // regardless), this ref instead feeds structuralRR's own gate below:
+  // computing an R:R requires BOTH sides confirmed fresh THIS mount. A fresh
+  // Check-structure against a stale estimate simply shows no R:R until the
+  // user's own next Estimate click brings both sides current — conservative,
+  // but never wrong.
+  //
+  // An earlier version of this gate also accepted a "restored pair" — both
+  // halves still holding whatever a single cache restore last wrote together
+  // — on the reasoning that a restore writes both atomically, so they're
+  // mutually consistent even if old. A fifth independent audit round found
+  // that reasoning doesn't survive a SECOND restore: structuralBySymbol
+  // (symbol-keyed) and estimatesByContract (contract-keyed) in
+  // step-7-trade-card/page.tsx are two independent parent caches, each
+  // writable on its own schedule. A fresh Check-structure-only click (this
+  // ref's whole reason to exist) updates the PARENT's structural cache
+  // without touching its estimate cache; the NEXT restore then pairs that
+  // newly-fresh stop with whatever stale estimate the parent still has
+  // cached for this contract — "restored together" describes the local
+  // component's own two setState calls, not the two independent caches
+  // upstream of them, and there is no cheap way to make it describe that
+  // without threading pairing metadata through both caches (tried in
+  // sketch form; it requires widening both cache entry shapes and both
+  // write-back callback signatures across page.tsx and this file, for a
+  // MEDIUM-severity, multi-navigation-only scenario). Removed rather than
+  // patched again: correctness over convenience. The Estimate rows
+  // themselves (targets, probabilities, option prices) still restore
+  // instantly from cache exactly as before — only the DERIVED
+  // R:R-vs-structural-stop figure now waits for both halves to be
+  // independently reconfirmed fresh, same as it always required after a
+  // genuine (non-cached) first visit.
+  const firstPassageIsFreshRef = useRef(false);
 
   const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
-  const [targetPct, setTargetPct] = useState(defaultTargetPct);
+  // Seeded from the restored estimate's own context when the parent splices a
+  // cached estimate back in — otherwise the % inputs would show the settings
+  // default while the restored rows show the percentages the estimate was
+  // actually run at, and a follow-up Estimate click would silently re-run at
+  // different percentages than the numbers on screen.
+  const [targetPct, setTargetPct] = useState(data.exit.firstPassageContext?.targetPct ?? defaultTargetPct);
   const [firstPassage, setFirstPassage] = useState<FirstPassageEstimate | null | undefined>(
     data.exit.firstPassage,
   );
   const [firstPassageLoading, setFirstPassageLoading] = useState(false);
   const [firstPassageError, setFirstPassageError] = useState(false);
-  // The fresh premium/delta estimateFirstPassage fetched — optionPrice in
-  // each firstPassage.targets entry is premium*(1+pct) computed off THIS
-  // premium (see first_passage.py), not data.contractDetails.mid, which can
-  // differ once a fresh quote has been fetched. Persisted so a later R:R
-  // calc subtracts the matching baseline instead of a stale one.
-  const [firstPassageContext, setFirstPassageContext] = useState<{ premium: number; delta: number } | null>(null);
+  // The inputs estimateFirstPassage actually used — optionPrice in each
+  // firstPassage.targets entry is premium*(1+pct) computed off THIS premium
+  // (see first_passage.py), not data.contractDetails.mid, which can differ
+  // once a fresh quote has been fetched. Persisted so a later R:R calc
+  // subtracts the matching baseline instead of a stale one, and seeded from
+  // data.exit so a restored estimate carries its baseline with it.
+  const [firstPassageContext, setFirstPassageContext] = useState<FirstPassageContext | null>(
+    data.exit.firstPassageContext ?? null,
+  );
   // Same stale-response guard as structuralRequestRef above.
   const firstPassageRequestRef = useRef<AbortController | null>(null);
 
@@ -237,13 +327,24 @@ export function TradeCard({
       structuralRequestRef.current?.abort();
       firstPassageRequestRef.current?.abort();
       setOverlay({ ...defaultOverlay(data), contracts: initialContracts });
+      // Every one of these five reads data.exit — for a candidate nothing has
+      // been run on they are all absent and this is still a full reset (the
+      // pre-existing behaviour). When the parent has a cached result for the
+      // incoming contract it splices all of them in together, so the estimate,
+      // its baseline premium/delta, its % inputs, the structural stop and the
+      // price that stop was measured against are restored as ONE consistent
+      // set — never a half-restore that would leave structuralRR null.
       setStructuralStop(data.exit.structuralStop);
-      setStructuralStopStockPrice(null);
+      setStructuralStopStockPrice(data.exit.structuralStopStockPrice ?? null);
       setStructuralError(false);
       setStructuralLoading(false);
-      setTargetPct(defaultTargetPct);
+      // A restored value (or the genuine absence of one) is never "fresh this
+      // mount" — see structuralIsFreshRef's declaration.
+      structuralIsFreshRef.current = false;
+      firstPassageIsFreshRef.current = false;
+      setTargetPct(data.exit.firstPassageContext?.targetPct ?? defaultTargetPct);
       setFirstPassage(data.exit.firstPassage);
-      setFirstPassageContext(null);
+      setFirstPassageContext(data.exit.firstPassageContext ?? null);
       setFirstPassageError(false);
       setFirstPassageLoading(false);
       prevSymbolRef.current = data.symbol;
@@ -270,17 +371,39 @@ export function TradeCard({
   // render's (new-symbol) callback together with the STALE (old-symbol)
   // structuralStop value still sitting in state, silently attaching the old
   // candidate's structural stop price to the new one. Keying the
-  // value-surfacing effect on `structuralStop` ALONE — reading the callback
-  // out of a ref that a separate, harmless effect keeps current — means it
-  // only ever fires when the state itself genuinely changes, by which point
-  // the ref has already caught up to the current symbol's callback.
+  // value-surfacing effect on the VALUES ALONE — reading the callback out of a
+  // ref that a separate, harmless effect keeps current — means it only ever
+  // fires when the state itself genuinely changes, by which point the ref has
+  // already caught up to the current symbol's callback.
+  //
+  // `structuralStopStockPrice` is a dependency as well as `structuralStop`
+  // because the parent caches the pair: the two are always set in the same
+  // batch, so this normally fires once with a matched pair, and if they ever
+  // landed in separate commits the second fire would correct the first rather
+  // than leaving a half-written cache entry.
   const onStructuralStopChangeRef = useRef(onStructuralStopChange);
   useEffect(() => {
     onStructuralStopChangeRef.current = onStructuralStopChange;
   }, [onStructuralStopChange]);
   useEffect(() => {
-    onStructuralStopChangeRef.current?.(structuralStop);
-  }, [structuralStop]);
+    onStructuralStopChangeRef.current?.(structuralStop, structuralStopStockPrice);
+  }, [structuralStop, structuralStopStockPrice]);
+
+  // Same two-effect discipline, same reasoning, for the first-passage estimate —
+  // the parent caches it per contract so re-navigating to this candidate restores
+  // the Profit Targets rows instead of forcing another Monte Carlo round-trip.
+  // `firstPassage` and `firstPassageContext` are BOTH dependencies because the
+  // pair is what the cache stores; `targetPct` deliberately is NOT, because it
+  // already travels inside `firstPassageContext` (snapshotted at request time),
+  // so editing a % input after an estimate can never rewrite that estimate's
+  // cached percentages.
+  const onFirstPassageChangeRef = useRef(onFirstPassageChange);
+  useEffect(() => {
+    onFirstPassageChangeRef.current = onFirstPassageChange;
+  }, [onFirstPassageChange]);
+  useEffect(() => {
+    onFirstPassageChangeRef.current?.(firstPassage, firstPassageContext);
+  }, [firstPassage, firstPassageContext]);
 
   const estimateFirstPassage = useCallback(async () => {
     firstPassageRequestRef.current?.abort();
@@ -290,6 +413,7 @@ export function TradeCard({
     setFirstPassageError(false);
     setFirstPassage(undefined);
     setFirstPassageContext(null);
+    firstPassageIsFreshRef.current = false;
     try {
       const cd = data.contractDetails;
       if (!cd) throw new Error('no contract selected');
@@ -307,19 +431,27 @@ export function TradeCard({
       const delta = contractQuote?.delta ?? cd.delta;
 
       // The Profit Targets card always shows R:R-vs-structural-stop alongside
-      // the estimate now. If it hasn't already been fetched separately
-      // (structuralStop is still the initial "never fetched" sentinel,
-      // undefined), fetch it here too — reusing referenceStockPrice (just
-      // obtained above) instead of an independent getStockQuote call, so
-      // this adds exactly one extra network call, not two. Fired once per
+      // the estimate now. If a FRESH structural stop hasn't been obtained yet
+      // THIS mount — never fetched, or the current value is a cache-restored
+      // one from a possibly much earlier navigation (structuralIsFreshRef,
+      // see its declaration) — fetch it here too, reusing referenceStockPrice
+      // (just obtained above) instead of an independent getStockQuote call,
+      // so this adds exactly one extra network call, not two. Fired once per
       // Estimate click, not on every render/navigation — same click-gated
-      // model as before, just triggered from one button instead of two.
-      // Deliberately not awaited before continuing to the first-passage
-      // fetch below — it manages its own loading/error state independently
-      // via structuralRequestRef, same as a manual "Check structure" click
-      // would, and that ref-swap means the existing contract-change cleanup
-      // effect still aborts it correctly if the user navigates away.
-      if (structuralStop === undefined && !structuralLoading) {
+      // model as before, just triggered from one button instead of two. A
+      // restored value stays on screen (no flash to blank) while this runs
+      // and is only replaced once the fresh pair actually lands — and if the
+      // refresh fails instead, its `.catch` below clears structuralStop
+      // rather than leaving the old one in place. Either way structuralRR
+      // never combines a stop it can't vouch for as fresh with THIS click's
+      // premium/delta: it either gets a same-vintage pair or nothing to
+      // compute from, never a silent mismatch. Deliberately not awaited
+      // before continuing to the first-passage fetch below — it manages its
+      // own loading/error state independently via structuralRequestRef, same
+      // as a manual "Check structure" click would, and that ref-swap means
+      // the existing contract-change cleanup effect still aborts it
+      // correctly if the user navigates away.
+      if (!structuralIsFreshRef.current && !structuralLoading) {
         structuralRequestRef.current?.abort();
         const structuralController = new AbortController();
         structuralRequestRef.current = structuralController;
@@ -334,10 +466,41 @@ export function TradeCard({
             if (structuralController.signal.aborted) return;
             setStructuralStop(normalizeStructuralStopResponse(res));
             setStructuralStopStockPrice(referenceStockPrice);
+            structuralIsFreshRef.current = true;
           })
           .catch(() => {
             if (structuralController.signal.aborted) return;
             setStructuralError(true);
+            // This refresh only ever runs because structuralIsFreshRef was
+            // false — i.e. whatever structuralStop currently holds (a cache
+            // restore, or nothing) was never confirmed fresh this mount. On
+            // failure, don't leave that unconfirmed pair sitting next to
+            // firstPassageContext, which below may already hold THIS click's
+            // fresh premium/delta by the time this rejection lands —
+            // structuralRR would otherwise silently render a mixed-vintage
+            // number with no staleness cue, the exact failure mode this
+            // whole mechanism exists to prevent.
+            //
+            // Deliberately `null`, not `undefined`. The parent's cache
+            // reducer (cacheStructural) treats `undefined` as "ignore, don't
+            // touch the cache" BY DESIGN — that's what lets an in-flight or
+            // failed re-run leave an existing good value alone elsewhere.
+            // Here that same protection backfires: it would leave the STALE
+            // restored entry sitting in the parent's cache forever, so the
+            // very next navigate-away-and-back would restore it again — the
+            // one moment the local component clears itself would be
+            // invisible outside this render. `null` is not a "nothing
+            // happened" sentinel to this cache, it's the same shape a
+            // genuine "checked, found nothing" result already produces
+            // (see checkStructure's success path below), so writing it here
+            // forces the parent to actually overwrite the stale entry. The
+            // cost is a slightly imprecise placeholder next time ("No order
+            // block or swing level found nearby" rather than "check
+            // failed") — an acceptable trade for never re-serving a value
+            // this refresh specifically determined it could no longer vouch
+            // for.
+            setStructuralStop(null);
+            setStructuralStopStockPrice(null);
           })
           .finally(() => {
             if (!structuralController.signal.aborted) setStructuralLoading(false);
@@ -363,14 +526,31 @@ export function TradeCard({
       // optionPrice in each target is premium*(1+pct) built from THIS
       // premium (first_passage.py) — persist it so a later R:R calc
       // subtracts the matching baseline, not data.contractDetails.mid.
-      setFirstPassageContext({ premium, delta });
+      // targetPct is snapshotted here (not read back later) so the trio
+      // stored alongside the estimate is exactly the trio the request above
+      // carried, even if the user edited an input while it was in flight.
+      setFirstPassageContext({ premium, delta, targetPct: { ...targetPct } });
+      firstPassageIsFreshRef.current = true;
     } catch {
       if (controller.signal.aborted) return;
       setFirstPassageError(true);
+      // Same reasoning, same fix, as the structural sub-fetch's `.catch`
+      // above — and it applies here even more directly, since this IS the
+      // primary fetch, not a sub-fetch. `firstPassage`/`firstPassageContext`
+      // were already cleared to `undefined`/`null` at the top of this
+      // function (the in-flight state), which `cacheFirstPassage` treats as
+      // "don't touch" — so without this, a failure here leaves the PARENT's
+      // cache holding whatever this contract's last successful estimate was,
+      // unchanged, and it silently reappears (possibly next to a genuinely
+      // fresh structuralStop from this very click's auto-trigger above) on
+      // the next navigate-away-and-back. `null` forces the overwrite instead,
+      // the same way it does for structuralStop.
+      setFirstPassage(null);
+      setFirstPassageContext(null);
     } finally {
       if (!controller.signal.aborted) setFirstPassageLoading(false);
     }
-  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, targetPct, structuralStop, structuralLoading]);
+  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, targetPct, structuralLoading]);
 
   // R:R using the structural stop (order block / swing level) as the risk
   // basis instead of the original fixed "premium * 60%" assumption — only
@@ -384,6 +564,21 @@ export function TradeCard({
   // R:R is only as consistent as how close together the user ran both.
   const structuralRR = useMemo(() => {
     if (!structuralStop || structuralStopStockPrice == null || !firstPassage || !firstPassageContext) {
+      return null;
+    }
+    // Both existing isn't enough on its own — they also have to be safe to
+    // combine. EACH must be independently confirmed fresh this mount, or one
+    // side could be a stale restore sitting next to the other's live value —
+    // a manual "Check structure" landing next to a still-restored (and now
+    // provably older) estimate, or the reverse — which is exactly the
+    // mixed-vintage number this whole mechanism exists to prevent. See
+    // firstPassageIsFreshRef's declaration for why this no longer has a
+    // "trust a restored pair" exemption. This reads two refs during render,
+    // which is safe here specifically because every path that flips either
+    // of them also changes one of this memo's real dependencies below in the
+    // same update, so the memo is guaranteed to re-evaluate at the moment the
+    // answer could change.
+    if (!structuralIsFreshRef.current || !firstPassageIsFreshRef.current) {
       return null;
     }
     const stockMove = Math.abs(structuralStop.price - structuralStopStockPrice);
@@ -404,6 +599,15 @@ export function TradeCard({
     });
   }, [structuralStop, structuralStopStockPrice, firstPassage, firstPassageContext]);
 
+  // Re-derives the SAME pairing eligibility structuralRR's memo checks
+  // internally, for the render below: structuralZeroRisk's "N/A (stop =
+  // price)" label specifically means "this pair WAS eligible and the risk
+  // still came out ≤0" — without this, a pair blocked purely for staleness
+  // (structuralRR null for a reason OTHER than risk≤0) would wrongly claim
+  // the stop sits at the current price. Plain read, not memoized: cheap
+  // boolean, and it only needs to be current as of this render anyway.
+  const structuralPairEligible = structuralIsFreshRef.current && firstPassageIsFreshRef.current;
+
   const checkStructure = useCallback(async () => {
     structuralRequestRef.current?.abort();
     const controller = new AbortController();
@@ -412,6 +616,7 @@ export function TradeCard({
     setStructuralError(false);
     setStructuralStop(undefined);
     setStructuralStopStockPrice(null);
+    structuralIsFreshRef.current = false;
     try {
       // Fetch a fresh stock price rather than reusing data.price (a scan-time
       // snapshot that may be stale, especially for a contract the user never
@@ -428,9 +633,18 @@ export function TradeCard({
       if (controller.signal.aborted) return;
       setStructuralStop(normalizeStructuralStopResponse(res));
       setStructuralStopStockPrice(referenceStockPrice);
+      structuralIsFreshRef.current = true;
     } catch {
       if (controller.signal.aborted) return;
       setStructuralError(true);
+      // Same fix as estimateFirstPassage's structural sub-fetch `.catch`:
+      // this function cleared to `undefined` above (in-flight state, which
+      // cacheStructural treats as "don't touch"), so without an explicit
+      // `null` here on actual failure, a stale cached level would survive in
+      // the PARENT untouched and silently reappear on the next
+      // navigate-away-and-back.
+      setStructuralStop(null);
+      setStructuralStopStockPrice(null);
     } finally {
       if (!controller.signal.aborted) setStructuralLoading(false);
     }
@@ -758,6 +972,7 @@ export function TradeCard({
                   structuralZeroRisk={
                     structuralStop != null && structuralStopStockPrice != null
                     && firstPassageContext != null && structuralRR == null && !structuralLoading
+                    && structuralPairEligible
                   }
                 />
               ))}
@@ -1220,8 +1435,11 @@ function ProfitTargetRow({
   // Order matters: a stop that resolved to exactly the current stock price
   // (structuralZeroRisk) is a completed check with an undefined ratio, not
   // "not yet checked" — it must be distinguished from the true not-yet-run
-  // fallback ('—', which should be unreachable once every real state above
-  // it is covered, kept only as a defensive catch-all).
+  // fallback ('—'). That fallback is NOT a rare defensive catch-all: it is
+  // the routine state for a restored candidate whose structural stop and
+  // estimate haven't both been reconfirmed fresh this mount yet (round 5 of
+  // the plan's audit notes) — a real, truthy structuralStop can be on screen
+  // in the Exit Plan section while this cell still shows '—', by design.
   const structuralValue = structuralRRValue != null
     ? `${structuralRRValue.toFixed(1)}×`
     : structuralPending

@@ -20,14 +20,17 @@ import { contractId as buildContractId } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
 import { logAudit } from '@/lib/audit';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
-import type { PortfolioPosition, TradeCardData } from '@/types/domain';
+import type {
+  PortfolioPosition, TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext,
+} from '@/types/domain';
 import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api }               from '@/lib/api';
 import {
-  applyPickedContract, contractKeyFor, mergePlan, resolveBasketCards, rrOverridesFrom,
-  type OverriddenCard, type RecomputedPlanShape,
+  applyPickedContract, contractKeyFor, mergePlan, resolveBasketCards, rrOverridesFrom, withCachedEstimate,
+  cacheStructural, cacheFirstPassage,
+  type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural,
 } from '@/lib/tradeCardOverride';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
@@ -116,29 +119,51 @@ export default function Step7Page() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [toast, setToast]         = useState<ToastState | null>(null);
   const [recIdMap, setRecIdMap]   = useState<Record<string, string>>({});
-  // Structural stop price captured per symbol from the active TradeCard's "Check
-  // structure" — attached to the position if/when that symbol is sent to the
-  // broker. Only ever populated for whichever symbol is/was the active card, since
-  // "Check structure" is a single-card, user-triggered action (see TradeCard's
-  // onStructuralStopChange doc comment). Undefined (never fetched/reset) leaves a
-  // symbol's entry untouched rather than clearing it, so navigating away and back
-  // to an already-checked candidate doesn't lose its captured level.
-  const [structuralStopBySymbol, setStructuralStopBySymbol] = useState<Record<string, number | null>>({});
-  // The onStructuralStopChange prop passed to TradeCard below is a fresh inline
-  // closure every render (matching this file's existing style for onSendToBroker
-  // etc.), and TradeCard's own effect depends on that prop reference — so calling
-  // this on every invocation, unconditionally, would re-trigger a parent render
-  // every time TradeCard re-renders for ANY reason, which re-creates the prop,
-  // which re-fires the effect... an infinite loop once structuralStop first
-  // settles to a non-undefined value. Bailing out (returning the SAME `prev`
-  // object) when the value hasn't actually changed breaks that cascade: React
-  // skips the re-render on an identical state reference, so a no-op call here
-  // is genuinely a no-op, not just a smaller one.
-  const handleStructuralStopChange = (symbol: string, stop: { price: number } | null | undefined) => {
-    if (stop === undefined) return;
-    const next = stop?.price ?? null;
-    setStructuralStopBySymbol((prev) => (prev[symbol] === next ? prev : { ...prev, [symbol]: next }));
-  };
+  // "Check structure" results captured from the active TradeCard, per SYMBOL — the
+  // structural level is a function of (symbol, direction, stock_price) only, so the
+  // contract never enters the key. Serves two readers: the order-send path (which
+  // needs just `.stop.price`) and the TradeCard restore path (which needs the whole
+  // level plus the price it was measured against, so the Exit Plan section can
+  // still show the restored level itself — the R:R-vs-structural-stop column is
+  // a separate matter: it never recomputes from a restore alone, only from a
+  // fresh Estimate click with both sides independently reconfirmed, see round 5
+  // of the plan's audit notes). Only ever populated for
+  // whichever symbol is/was the active card, since "Check structure" is a
+  // single-card, user-triggered action (see TradeCard's onStructuralStopChange doc
+  // comment). Undefined (never fetched/reset) leaves a symbol's entry untouched
+  // rather than clearing it, so navigating away and back to an already-checked
+  // candidate doesn't lose its captured level.
+  const [structuralBySymbol, setStructuralBySymbol] = useState<Record<string, CachedStructural>>({});
+  // "Estimate" (Monte Carlo first-passage) results, per CONTRACT — unlike the
+  // structural stop these ARE contract-specific (every optionPrice is
+  // premium*(1+pct) off that contract's own premium), so they're keyed by
+  // contractKeyFor, the same identity plansBySymbol tags its entries with.
+  const [estimatesByContract, setEstimatesByContract] = useState<Record<string, CachedFirstPassage>>({});
+  // Both write paths delegate to a pure reducer in lib/tradeCardOverride.ts,
+  // alongside the read side (withCachedEstimate) — the two rules they enforce are
+  // the highest-consequence logic in this feature and are unit-tested there rather
+  // than living as untestable inline closures here:
+  //   1. a `undefined`/`null` sentinel (reset on contract switch, or cleared at the
+  //      start of a re-run) is IGNORED, so an in-flight or failed re-run never
+  //      destroys the value already on screen;
+  //   2. an unchanged write returns the IDENTICAL `prev` object, which is what
+  //      breaks the render cascade — the callback props passed to TradeCard below
+  //      are fresh inline closures every render (matching this file's existing
+  //      style for onSendToBroker etc.) and TradeCard keeps a ref synced to them
+  //      via its own effect, so a write that always produced a new object would
+  //      re-render the parent on every TradeCard render, re-create the props,
+  //      re-fire that sync effect... unbounded. React skips the re-render on an
+  //      identical state reference, so a no-op call here is genuinely a no-op.
+  const handleStructuralStopChange = (
+    symbol: string,
+    stop: StructuralStop | null | undefined,
+    stockPrice: number | null,
+  ) => setStructuralBySymbol((prev) => cacheStructural(prev, symbol, stop, stockPrice));
+  const handleFirstPassageChange = (
+    key: string | null,
+    estimate: FirstPassageEstimate | null | undefined,
+    context: FirstPassageContext | null,
+  ) => setEstimatesByContract((prev) => cacheFirstPassage(prev, key, estimate, context));
 
   useEffect(() => {
     setRecIdMap((prev) => {
@@ -179,6 +204,25 @@ export default function Step7Page() {
   const contractsBySymbol   = useScanStore((s) => s.contractsBySymbol);
 
   useEffect(() => {
+    // A new scan invalidates every cached "Estimate" and "Check structure"
+    // result: both were computed against the previous run's prices (and, for
+    // the estimate, against that run's recomputed invalidation level), so
+    // carrying them forward would show pre-scan numbers on post-scan cards.
+    // NOTE this also clears the levels the order-send path reads — a structural
+    // stop checked before a scan no longer rides along into a position opened
+    // after it, which is the intended behaviour, not a side effect.
+    //
+    // In practice this line is belt-and-suspenders, not the primary guard:
+    // `setScanResult` has exactly two production callers (RunScanButton, on
+    // the separate step-3-direction route, and StoreHydration's mount-only
+    // effect), so the only way this effect ever runs with a genuinely NEW
+    // scanResult is if the user leaves this page to reach RunScanButton —
+    // which unmounts Step7Page and, with it, these two useState caches,
+    // independent of this call. Kept in case that ever stops being true (an
+    // in-place scan re-run added to this page, a live scan-result push), so
+    // this file doesn't silently rely on an invariant that lives elsewhere.
+    setEstimatesByContract({});
+    setStructuralBySymbol({});
     if (scanResult?.candidates?.length) {
       setCards(scanResult.candidates);
       if (scanResult.candidates[0]) setActive(scanResult.candidates[0].symbol);
@@ -239,6 +283,39 @@ export default function Step7Page() {
 
   // Merge the recomputed Entry/Exit/RR into the overridden card once it arrives.
   const effectiveCard = pickedCard && planForThisContract ? mergePlan(pickedCard, planForThisContract) : pickedCard;
+
+  // The card actually handed to <TradeCard>, with any cached "Estimate" /
+  // "Check structure" result for this contract spliced into exit.* — the same
+  // fields TradeCard reads for its initial state and its contract-change reset,
+  // so a Prev/Next round trip restores the Profit Targets rows (and the
+  // T1/T2/T3 inputs) without re-firing a single request. The R:R-vs-structural-
+  // stop column is NOT restored this way (round 5 audit, see the plan's notes):
+  // it requires both the structural stop and the estimate independently
+  // reconfirmed fresh in the SAME mount before it will compute, so a restored
+  // pair shows '—' until the user's next Estimate click.
+  // DELIBERATELY applied after mergePlan (which replaces `exit` wholesale and
+  // would otherwise discard the splice) and DELIBERATELY not used anywhere else:
+  // ordering, sizing and the order-send path all keep reading `effectiveCard`,
+  // so nothing about what gets sent to a broker depends on this display-only
+  // enrichment.
+  //
+  // On the memo's limits: for a NON-overridden card `effectiveCard` is a stable
+  // reference, so this genuinely holds `cardForDisplay` stable. For an OVERRIDDEN
+  // card `applyPickedContract` rebuilds the object every render, so both change
+  // identity every render regardless — already true of `effectiveCard` today, and
+  // safe because no effect inside TradeCard depends on `data`'s identity (the
+  // reset effect keys on data.symbol/data.contract, and the only whole-`data`
+  // dependencies there are useMemos that set no state). A new `data` reference
+  // therefore costs a recompute and can never re-trigger the reset that would
+  // wipe the values we just restored.
+  const cardForDisplay = useMemo(
+    () => withCachedEstimate(
+      effectiveCard,
+      contractKey ? estimatesByContract[contractKey] : undefined,
+      effectiveCard ? structuralBySymbol[effectiveCard.symbol] : undefined,
+    ),
+    [effectiveCard, contractKey, estimatesByContract, structuralBySymbol],
+  );
 
   // Every basket item, override-resolved and (if overridden) merged with its
   // recomputed plan. `basketPlansPending` gates the whole "Send to broker" flow
@@ -487,7 +564,7 @@ export default function Step7Page() {
       pnlDollar:     0,
       pnlPct:        0,
       stop:          card.exit.invalidation,
-      structuralStop: structuralStopBySymbol[card.symbol] ?? null,
+      structuralStop: structuralBySymbol[card.symbol]?.stop?.price ?? null,
       targets:       card.exit.targets,
       status:        card.finalStatus,
       ivRank:        cd?.ivRank,
@@ -589,7 +666,7 @@ export default function Step7Page() {
       // One canonical recId per order: addPosition syncs it to the backend
       // (a single POST), so there is no second POST to conflict (409) with.
       const recId = recIdMap[o.card.symbol] ?? generateRecId();
-      const structuralStop = structuralStopBySymbol[o.card.symbol] ?? null;
+      const structuralStop = structuralBySymbol[o.card.symbol]?.stop?.price ?? null;
       const res = await addPosition({ ...positionFromOrder(o, structuralStop), recId });
 
       if (res.status === 'rejected') {
@@ -688,12 +765,13 @@ export default function Step7Page() {
             </div>
           ) : (
             <TradeCard
-              data={effectiveCard}
+              data={cardForDisplay ?? effectiveCard}
               recId={recIdMap[effectiveCard.symbol]}
               onSendToBroker={() => !basketEmpty && !basketPlansPending && setDialogOpen(true)}
               sendLabel={sendLabel}
               sendDisabled={basketEmpty || basketPlansPending}
-              onStructuralStopChange={(stop) => handleStructuralStopChange(effectiveCard.symbol, stop)}
+              onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(effectiveCard.symbol, stop, stockPrice)}
+              onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
             />
           )}
           {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (

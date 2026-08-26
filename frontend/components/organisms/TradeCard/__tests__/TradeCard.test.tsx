@@ -285,7 +285,10 @@ describe('TradeCard', () => {
       fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
     });
     await waitFor(() => {
-      expect(onChangeForAAPL).toHaveBeenCalledWith(expect.objectContaining({ price: 178.5 }));
+      // Second arg is the fresh stock price the level was measured against —
+      // 185.2 here, from the default getStockQuote mock in beforeEach. The
+      // parent caches the pair, so this assertion pins both halves.
+      expect(onChangeForAAPL).toHaveBeenCalledWith(expect.objectContaining({ price: 178.5 }), 185.2);
     });
 
     // Switch to a different, never-checked candidate — a fresh callback,
@@ -297,7 +300,14 @@ describe('TradeCard', () => {
     await waitFor(() => {
       expect(onChangeForMSFT).toHaveBeenCalled();
     });
-    expect(onChangeForMSFT).not.toHaveBeenCalledWith(expect.objectContaining({ price: 178.5 }));
+    // Asserted over the recorded calls rather than with `.not.toHaveBeenCalledWith`,
+    // which matches on the full argument list and would therefore pass vacuously
+    // for any future arity change — the exact way this regression test could go
+    // quietly dead.
+    const sawAaplStop = onChangeForMSFT.mock.calls.some(
+      ([stop]) => (stop as { price?: number } | null | undefined)?.price === 178.5,
+    );
+    expect(sawAaplStop).toBe(false);
   });
 
   it('renders an Estimate button that does not fire on its own', () => {
@@ -416,6 +426,376 @@ describe('TradeCard', () => {
     });
 
     expect(screen.queryByText('T20%')).not.toBeInTheDocument();
+  });
+
+  it('restores a cached first-passage estimate from data.exit on a contract switch, without refetching', async () => {
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    // The api mocks in this file are NEVER cleared between tests (no
+    // clearMocks in jest.config.ts, no jest.clearAllMocks() in beforeEach), so
+    // `expect(api.X).not.toHaveBeenCalled()` would fail here purely because
+    // EARLIER tests in this file already called all three. Snapshot the counts
+    // and assert they don't move — which is the real claim anyway: restoring
+    // from the cache issues no NEW request.
+    const callsBefore = {
+      firstPassage:   (api.getFirstPassageEstimate as jest.Mock).mock.calls.length,
+      structuralStop: (api.getStructuralStop as jest.Mock).mock.calls.length,
+      stockQuote:     (api.getStockQuote as jest.Mock).mock.calls.length,
+    };
+
+    // Simulate CandidateNav switching to a contract the parent HAS a cached
+    // estimate for — the parent splices it (and its context) into exit.*, the
+    // exact fields TradeCard's contract-change reset already reads.
+    const cachedCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        firstPassage: {
+          targets: [{ pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 }],
+          invalidation: { probability: 0.30, expectedDays: 4 },
+        },
+        firstPassageContext: { premium: 2.75, delta: 0.42, targetPct: { t1: 0.10, t2: 0.35, t3: 0.50 } },
+        structuralStop: { price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6 },
+        structuralStopStockPrice: 190.0,
+      },
+    };
+    rerender(<TradeCard data={cachedCard} />);
+
+    // Rows are back. The restore happens inside the contract-change useEffect,
+    // whose setState schedules a further render — waitFor rather than a bare
+    // sync assertion, matching how every other post-effect assertion in this
+    // file is written.
+    await waitFor(() => {
+      expect(screen.getByText('T20%')).toBeInTheDocument();
+    });
+    expect(screen.getByText('$3.30')).toBeInTheDocument();
+    // ...the % inputs show the percentages the estimate was RUN at (10, not the
+    // 20 the settings default would reset them to)...
+    expect(screen.getByLabelText('T1 profit target %')).toHaveValue(10);
+    // ...but the structural R:R column does NOT compute from the restored
+    // pair: a fifth independent audit round found that structuralBySymbol
+    // (symbol-keyed) and estimatesByContract (contract-keyed) in
+    // step-7-trade-card/page.tsx are independent parent caches that can each
+    // be refreshed on their own schedule, so "both halves came from the same
+    // restore" doesn't actually guarantee they were captured together — only
+    // that they're both whatever the two caches currently hold. Computing an
+    // R:R from a merely-restored pair risked silently combining a stop
+    // that's since been refreshed elsewhere with a stale estimate (or the
+    // reverse). The gate now requires BOTH sides independently reconfirmed
+    // fresh this mount, so the cell falls back to the defensive '—'
+    // placeholder instead of a number until the user's next Estimate click.
+    // Not "No structural stop found" — that label specifically means
+    // structuralStop === null (a completed check that found nothing), which
+    // this isn't: a real (merely unconfirmed-fresh) stop is restored and
+    // shown in the Exit Plan section below, just not combined into an R:R.
+    expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.queryByText('0.2×')).not.toBeInTheDocument();
+    // Nothing was re-fetched to get any of that back.
+    expect((api.getFirstPassageEstimate as jest.Mock).mock.calls.length).toBe(callsBefore.firstPassage);
+    expect((api.getStructuralStop as jest.Mock).mock.calls.length).toBe(callsBefore.structuralStop);
+    expect((api.getStockQuote as jest.Mock).mock.calls.length).toBe(callsBefore.stockQuote);
+  });
+
+  it('does not let a restored (possibly stale) structural stop suppress a fresh re-check on the next Estimate click', async () => {
+    // Regression test for a HIGH finding from independent post-implementation
+    // review: estimateFirstPassage's auto-trigger for the structural-stop
+    // fetch used to gate on `structuralStop === undefined`, which was only
+    // ever true for "genuinely never fetched" before caching existed. Once a
+    // cached value can populate that field on restore, the same condition is
+    // false for a value that could be hours old, so the auto-trigger silently
+    // stopped refreshing it — the eventual R:R-vs-structural-stop calc then
+    // permanently combined a stale check-time price with a fresh
+    // estimate-time premium. structuralIsFreshRef fixes this: a restored
+    // value still renders immediately (no blank flash) but is never treated
+    // as "already fetched this mount", so the next Estimate click always
+    // fires a real refresh.
+    const cachedCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        structuralStop: { price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6 },
+        structuralStopStockPrice: 190.0,
+      },
+    };
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    rerender(<TradeCard data={cachedCard} />);
+
+    // The restored (possibly stale) level is on screen immediately.
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+
+    const callsBefore = (api.getStructuralStop as jest.Mock).mock.calls.length;
+
+    // A fresh check, at a very different price, is what a real re-check
+    // would now find.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'MSFT', price: 300 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 40, spread: 0.1, volume: 50,
+    });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 295.0, source: 'swing_low', confidence: 60, distancePct: 1.7,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [{ pct: 0.20, stockPrice: 310, optionPrice: 7.0, probability: 0.6, expectedDays: 6 }],
+      invalidation: { probability: 0.25, expectedDays: 5 },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    });
+
+    // The restored value's presence did NOT suppress the refetch — this is
+    // the actual regression: before the fix this call count would never move.
+    await waitFor(() => {
+      expect((api.getStructuralStop as jest.Mock).mock.calls.length).toBe(callsBefore + 1);
+    });
+    // The stale $178.50 order-block level is fully replaced by the fresh
+    // $295 swing-low level, not merely appended alongside it.
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Swing Low/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Structural stop — Order Block/)).not.toBeInTheDocument();
+  });
+
+  it('does not render a mixed-vintage R:R when the post-restore refresh fails', async () => {
+    // Companion regression test, found in a follow-up independent audit of
+    // the fix above: the auto-refresh's failure path must not leave the
+    // stale, cache-restored structuralStop sitting next to firstPassageContext
+    // once THAT has moved on to this click's fresh premium/delta — otherwise
+    // structuralRR silently combines an hours-old stock move with a
+    // seconds-old option price, which is the exact bug the fix exists to
+    // prevent, just reachable via the error path instead of the happy path.
+    const cachedCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        structuralStop: { price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6 },
+        structuralStopStockPrice: 190.0,
+      },
+    };
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    rerender(<TradeCard data={cachedCard} />);
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+
+    // The refresh this Estimate click triggers fails; the estimate itself
+    // still succeeds, so firstPassageContext gets a fresh premium/delta
+    // while the structural refresh comes back empty-handed.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'MSFT', price: 300 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 40, spread: 0.1, volume: 50,
+    });
+    (api.getStructuralStop as jest.Mock).mockRejectedValueOnce(new Error('network error'));
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [{ pct: 0.20, stockPrice: 310, optionPrice: 7.0, probability: 0.6, expectedDays: 6 }],
+      invalidation: { probability: 0.25, expectedDays: 5 },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    });
+
+    // The rows render (the estimate itself succeeded)...
+    await waitFor(() => {
+      expect(screen.getByText('T20%')).toBeInTheDocument();
+    });
+    // ...the stale level is gone rather than silently paired with the fresh
+    // estimate...
+    expect(screen.queryByText(/Structural stop — Order Block/)).not.toBeInTheDocument();
+    // ...the failure is visible...
+    expect(screen.getByText("Couldn't check structure — try again.")).toBeInTheDocument();
+    // ...and the R:R-vs-structural-stop cell falls back to the defensive
+    // placeholder instead of showing a number computed from the stale
+    // $178.50/$190 pair against the fresh $7.00 estimate (which would render
+    // as a specific, plausible-looking, and wrong ratio here). structuralStop
+    // is cleared to `null` (not `undefined`) so the parent's cache actually
+    // overwrites the stale entry — see the `.catch` handler's comment — which
+    // is what makes this cell read as "unavailable" rather than "—".
+    expect(screen.getByText('No structural stop found')).toBeInTheDocument();
+  });
+
+  it('clears to null (not undefined) so a failed refresh actually overwrites the parent cache, surviving a second navigation', async () => {
+    // Regression test for a MEDIUM finding from a third independent audit
+    // round: clearing to `undefined` fixed the display for THIS render, but
+    // `undefined` is the exact sentinel the parent's cache reducer
+    // (cacheStructural) is designed to ignore — so the stale cached entry
+    // would survive untouched, and the very next navigate-away-and-back
+    // would restore it again, paired with whatever firstPassageContext is
+    // cached by then. `null` is a real, cacheable value (the same shape a
+    // genuine "nothing found" result produces), so this asserts the
+    // onFirstPassageChange-style write-back actually carries `null` out of
+    // TradeCard, which is what lets the parent's cache reducer treat it as
+    // a real overwrite instead of a no-op.
+    const onStructuralStopChange = jest.fn();
+    const cachedCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        structuralStop: { price: 178.5, source: 'order_block', confidence: 75, distancePct: 3.6 },
+        structuralStopStockPrice: 190.0,
+      },
+    };
+    const { rerender } = render(
+      <TradeCard data={mockTradeCard} onStructuralStopChange={onStructuralStopChange} />,
+    );
+    rerender(<TradeCard data={cachedCard} onStructuralStopChange={onStructuralStopChange} />);
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'MSFT', price: 300 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 40, spread: 0.1, volume: 50,
+    });
+    (api.getStructuralStop as jest.Mock).mockRejectedValueOnce(new Error('network error'));
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [{ pct: 0.20, stockPrice: 310, optionPrice: 7.0, probability: 0.6, expectedDays: 6 }],
+      invalidation: { probability: 0.25, expectedDays: 5 },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    });
+
+    await waitFor(() => {
+      // The last call after the failed refresh must carry `null`, not
+      // `undefined` — that's the one distinction the parent's cache
+      // reducer actually branches on.
+      expect(onStructuralStopChange).toHaveBeenLastCalledWith(null, null);
+    });
+  });
+
+  it('does not render a mixed-vintage R:R when a FRESH Check-structure lands next to a still-restored estimate', async () => {
+    // Regression test for a MEDIUM finding from a fourth independent audit
+    // round: rounds 1-3 fixed every path where structuralStop could be the
+    // stale half of the pair, but nothing protected the OTHER direction —
+    // firstPassage/firstPassageContext restored from cache (never refreshed
+    // this visit) sitting next to a structuralStop the user just fetched
+    // fresh via "Check structure" alone. structuralRR combined them exactly
+    // as readily as the already-fixed cases. Round 4's fix gated structuralRR
+    // on both isFreshRefs being true OR a "restored pair" exemption; round 5
+    // found that exemption unsound across a second navigation and removed it
+    // (see the plan's round 5 audit notes) — structuralRR now requires BOTH
+    // isFreshRefs unconditionally, so a fresh check against a stale estimate
+    // still satisfies neither, and no R:R renders until the user's own next
+    // Estimate click (which auto-skips re-checking structure, already fresh)
+    // brings both sides current. This test's assertions still hold under the
+    // simplified gate — it exercises the same scenario, just via a gate with
+    // one fewer branch.
+    const cachedCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        firstPassage: {
+          targets: [{ pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 }],
+          invalidation: { probability: 0.30, expectedDays: 4 },
+        },
+        firstPassageContext: { premium: 2.75, delta: 0.42, targetPct: { t1: 0.20, t2: 0.35, t3: 0.50 } },
+      },
+    };
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    rerender(<TradeCard data={cachedCard} />);
+    await waitFor(() => {
+      expect(screen.getByText('T20%')).toBeInTheDocument();
+    });
+
+    // A genuinely fresh "Check structure" — a very different stock price
+    // than whatever the restored estimate's premium/delta were computed
+    // against.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'MSFT', price: 280 });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 270.0, source: 'swing_low', confidence: 60, distancePct: 3.6,
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Swing Low/)).toBeInTheDocument();
+    });
+    // The fresh stop is real and displayed — but nowhere does the specific
+    // computed ratio appear that combining it with the still-stale estimate
+    // context would produce. (stockMove=|270-280|=10, deltaEst=0.42,
+    // risk=min(4.2,2.75)=2.75, reward=3.3-2.75=0.55 -> if wrongly combined
+    // this would render "0.2×" — the top Risk/Reward badge legitimately
+    // renders its OWN unrelated ratio elsewhere on the page, so this asserts
+    // the specific wrong value's absence, not a page-wide absence of "×".)
+    expect(screen.queryByText('0.2×')).not.toBeInTheDocument();
+    // And the cell doesn't misreport this as "the stop sits at the current
+    // price" (structuralZeroRisk) — that label means something specific and
+    // this isn't it.
+    expect(screen.queryByText('N/A (stop = price)')).not.toBeInTheDocument();
+  });
+
+  it('surfaces a completed first-passage estimate and its context to onFirstPassageChange', async () => {
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    const estimate = {
+      targets: [{ pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 }],
+      invalidation: { probability: 0.30, expectedDays: 4 },
+    };
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce(estimate);
+
+    const onFirstPassageChange = jest.fn();
+    render(<TradeCard data={mockTradeCard} onFirstPassageChange={onFirstPassageChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+
+    await waitFor(() => {
+      expect(onFirstPassageChange).toHaveBeenCalledWith(
+        expect.objectContaining({ targets: estimate.targets }),
+        // Fresh quote values, plus the % trio the request actually carried —
+        // this pair is what the parent caches per contract.
+        { premium: 2.75, delta: 0.42, targetPct: { t1: 0.20, t2: 0.35, t3: 0.50 } },
+      );
+    });
+  });
+
+  it('never surfaces the previous candidate\'s estimate under the new contract\'s callback', async () => {
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [{ pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 }],
+      invalidation: { probability: 0.30, expectedDays: 4 },
+    });
+    const onChangeForAAPL = jest.fn();
+    const { rerender } = render(<TradeCard data={mockTradeCard} onFirstPassageChange={onChangeForAAPL} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    });
+    await waitFor(() => {
+      expect(onChangeForAAPL).toHaveBeenCalledWith(
+        expect.objectContaining({ targets: expect.any(Array) }),
+        expect.objectContaining({ premium: expect.any(Number) }),
+      );
+    });
+
+    // Switch to a never-estimated candidate with a fresh callback, exactly as
+    // the real parent does — the new contract's callback must only ever see the
+    // reset sentinel, never AAPL's estimate (which would cache AAPL's premiums
+    // under MSFT's contract key).
+    const nextCard: TradeCardData = { ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT 300C 06/19' };
+    const onChangeForMSFT = jest.fn();
+    rerender(<TradeCard data={nextCard} onFirstPassageChange={onChangeForMSFT} />);
+
+    await waitFor(() => {
+      expect(onChangeForMSFT).toHaveBeenCalled();
+    });
+    const sawAaplEstimate = onChangeForMSFT.mock.calls.some(([estimate]) => estimate != null);
+    expect(sawAaplEstimate).toBe(false);
   });
 
   it('shows no Profit Targets rows (and no stale two-click hint) until Estimate has been run', async () => {
