@@ -21,6 +21,9 @@ OrderType = Literal['Limit', 'Market', 'Stop']
 OptionRight = Literal['C', 'P']
 TrendDir = Literal['up', 'flat', 'down']
 RrModel = Literal['Heston repriced', 'BS repriced (IV-derived)']
+# Active take-profit method driving a position's TP_HIT alert — see
+# docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md, Feature D.
+TpMethod = Literal['ladder', 'monte_carlo', 'exit_plan_2r', 'exit_plan_3r']
 
 # ── Sentiment / regime ──────────────────────────────────────────────────────
 
@@ -655,7 +658,16 @@ class PortfolioPositionUpdate(BaseModel):
     `portfolioValue` is only required by the router when `qty` is being
     increased (it re-runs the exposure gate in that case, same as
     `POST /api/portfolio`); a `qty` decrease or an edit that never sends `qty`
-    doesn't need it."""
+    doesn't need it.
+
+    `exitPlan`, `maxLossOverride`, `activeTpMethod`, `resolvedTpPrice`/
+    `resolvedTpUpdatedAt`, and `alertOverrides` are Phase 0 scaffolding for
+    the exit-plan pipeline (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
+    — no endpoint computes these yet, but the PATCH plumbing to persist
+    whatever a later feature computes already exists. Like `structuralStop`,
+    `exitPlan`/`maxLossOverride`/`alertOverrides` follow the exclude_unset
+    pattern so `{"exitPlan": null}` can still explicitly clear a previously
+    computed value."""
     model_config = ConfigDict(populate_by_name=True)
 
     stop: Optional[float] = None
@@ -663,6 +675,12 @@ class PortfolioPositionUpdate(BaseModel):
     targets: Optional[list[dict]] = None
     qty: Optional[int] = None
     portfolioValue: Optional[float] = Field(alias="portfolio_value", default=None)
+    exitPlan: Optional[dict] = Field(alias="exit_plan", default=None)
+    maxLossOverride: Optional[dict] = Field(alias="max_loss_override", default=None)
+    activeTpMethod: Optional[TpMethod] = Field(alias="active_tp_method", default=None)
+    resolvedTpPrice: Optional[float] = Field(alias="resolved_tp_price", default=None)
+    resolvedTpUpdatedAt: Optional[str] = Field(alias="resolved_tp_updated_at", default=None)
+    alertOverrides: Optional[dict] = Field(alias="alert_overrides", default=None)
 
 
 class PortfolioPositionSchema(BaseModel):
@@ -695,6 +713,14 @@ class PortfolioPositionSchema(BaseModel):
     delta: Optional[float] = None
     theta: Optional[float] = None
     ivRank: Optional[int] = None
+    # Exit-plan pipeline (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
+    # — Phase 0 scaffolding, populated by later phases.
+    exitPlan: Optional[dict] = None
+    maxLossOverride: Optional[dict] = None
+    activeTpMethod: TpMethod = 'ladder'
+    resolvedTpPrice: Optional[float] = None
+    resolvedTpUpdatedAt: Optional[str] = None
+    alertOverrides: dict = {}
 
     @classmethod
     def from_orm_model(cls, obj) -> "PortfolioPositionSchema":
@@ -712,6 +738,12 @@ class PortfolioPositionSchema(BaseModel):
             targets=obj.targets or [],
             dteTotal=obj.dte_total,
             createdAt=obj.created_at.isoformat() if obj.created_at else "",
+            exitPlan=obj.exit_plan,
+            maxLossOverride=obj.max_loss_override,
+            activeTpMethod=obj.active_tp_method or 'ladder',
+            resolvedTpPrice=obj.resolved_tp_price,
+            resolvedTpUpdatedAt=obj.resolved_tp_updated_at.isoformat() if obj.resolved_tp_updated_at else None,
+            alertOverrides=obj.alert_overrides or {},
         )
 
 
