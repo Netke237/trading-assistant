@@ -71,7 +71,9 @@ function defaultOverlay(card: PositionCardData): StockEditOverlay {
   // and stockPositionLevels() sorts the ladder nearest-first on the way into the
   // portfolio — so the persisted targets[0], which is the ONLY rung TP_HIT
   // fires on, would not be the rung the card showed as T1.
-  const t1    = round2(ladder[0] ?? card.strategy.target_price);
+  // ladder is guaranteed non-empty by construction above, so ladder[0] is
+  // never undefined — no `?? target_price` fallback needed here.
+  const t1    = round2(ladder[0]);
   const t2    = round2(ladder[1] ?? t1 + sign * risk);
   const t3    = round2(ladder[2] ?? t2 + sign * risk);
   const s     = card.shares;
