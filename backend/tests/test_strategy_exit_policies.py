@@ -208,6 +208,43 @@ def test_breakout_base_survives_a_zero_height_base():
                        sl=sig.stop_price, tp=sig.target_price) == "buy"
 
 
+def test_breakout_base_refuses_to_fabricate_a_target_once_the_ladder_is_outrun():
+    """A third independent audit round found that a large enough gap on the
+    breakout bar can outrun even the FARTHEST measured-move extension —
+    unlike every other strategy's entry-relative ATR/R extensions, this
+    strategy's whole ladder is anchored to a fixed price level, so it can be
+    'lapped'. When that happens, _build_target_ladder drops all three rungs
+    and falls through to its generic degenerate-input fallback
+    (entry + risk*rr_target_mult), which produced a plausible-looking,
+    exactly-2.0x R:R target the strategy's own measured-move thesis never
+    proposed, for an entry that had already run ~24x past its stated
+    objective. The strategy must refuse to fire rather than invent a
+    different thesis than the one it claims to trade."""
+    from app.services.strategy_engine import breakout_base_signal
+
+    bars = [{"open": 100.0, "high": 100.3, "low": 99.7, "close": 100.0, "volume": 1_000}
+            for _ in range(24)]
+    bars.append({"open": 100.0, "high": 115.5, "low": 99.9, "close": 115.0, "volume": 2_000})
+    assert breakout_base_signal(bars, base_lookback=20, atr_tight_max=99.0, volume_mult=1.5) is None
+
+
+def test_breakout_base_still_fires_on_a_moderate_gap_with_an_honest_low_rr():
+    """Mirror of the above: a gap that only outruns the PRIMARY rung (not the
+    farthest extension) must still fire — this is the honest-low-R:R case
+    investigated and deliberately left alone (see breakout_base_signal's own
+    comment), not the fabricated-fallback case above."""
+    from app.services.strategy_engine import breakout_base_signal
+
+    bars = [{"open": 100.0, "high": 100.05, "low": 99.95, "close": 100.0, "volume": 1_000}
+            for _ in range(24)]
+    bars.append({"open": 120.06, "high": 120.06, "low": 99.9, "close": 100.15, "volume": 2_000})
+    sig = breakout_base_signal(bars, base_lookback=20, atr_tight_max=99.0, volume_mult=1.5)
+    assert sig is not None, "a moderate gap must still fire, with an honest (low) R:R"
+    risk = sig.entry_price - sig.stop_price
+    reward = sig.target_price - sig.entry_price
+    assert reward / risk < 1.0
+
+
 def test_breakout_base_atr_ignores_todays_own_wide_range_bar():
     """A second independent audit round found the base_high anchor fix (above)
     doesn't hold when the BREAKOUT BAR ITSELF has a wide range/wick relative to

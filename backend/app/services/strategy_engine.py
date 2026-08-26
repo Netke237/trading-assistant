@@ -621,12 +621,36 @@ def breakout_base_signal(
     height = base_height if base_height > 0 else atr
     _sign = 1 if direction == "Bullish" else -1
     anchor = base_high if direction == "Bullish" else base_low
+    farthest = anchor + _sign * height * (measured_move_mult + 1.0)
+    # breakout_base is the only one of the seven strategies whose ENTIRE ladder
+    # (primary and both extensions) is anchored to a fixed price level rather
+    # than to entry — every other strategy's ATR/R extensions are entry-
+    # relative and so can never fall behind entry no matter how far price has
+    # already moved. A big enough gap on the breakout bar can outrun even the
+    # farthest measured-move extension, dropping all three rungs and falling
+    # through to `_build_target_ladder`'s generic degenerate-input fallback
+    # (entry + risk*rr_target_mult) — which a third independent audit round
+    # caught fabricating a plausible-looking, exactly-2.0x R:R target with zero
+    # connection to the measured-move thesis this strategy exists to trade,
+    # for a breakout that has already run ~24x past its own stated objective
+    # in the reported repro. That fallback exists for genuinely degenerate
+    # inputs (NaN, zero ATR) — not for "the thesis is already exhausted, so
+    # invent a different one." Bail out here instead, matching every other
+    # strategy's `return None` when its own objective is unavailable.
+    #
+    # Gated on `height > 0`: a zero-height base with zero pre-breakout ATR
+    # (`height` itself is then 0, so `farthest == anchor`) has no real
+    # measured-move distance to outrun in the first place — that IS the
+    # genuinely degenerate case the generic fallback exists for, and
+    # test_breakout_base_survives_a_zero_height_base pins exactly this.
+    if height > 0 and _sign * (farthest - current) <= 0:
+        return None
     targets = _build_target_ladder(
         entry=current, stop=stop, direction=direction,
         primary=anchor + _sign * height * measured_move_mult,
         extensions=[
             anchor + _sign * height * (measured_move_mult + 0.5),
-            anchor + _sign * height * (measured_move_mult + 1.0),
+            farthest,
         ],
         fallback_mult=rr_target_mult,
     )

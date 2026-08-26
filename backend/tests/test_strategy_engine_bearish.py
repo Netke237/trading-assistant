@@ -57,8 +57,16 @@ def _breakdown_bars():
     for i in range(30):                   # tight base around 100
         bars.append({"open": price, "high": price + 0.4, "low": price - 0.4,
                      "close": price, "volume": 1_000_000, "time": i})
-    # breakdown bar: closes below base low on high volume
-    bars.append({"open": 99.6, "high": 99.7, "low": 96.0, "close": 96.5,
+    # Breakdown bar: closes below base low on high volume, but not so far below
+    # that it outruns the entire measured-move ladder (base_low - height*2 =
+    # 98.0 here). A third independent audit round found a bigger breakdown
+    # (this fixture originally closed at 96.5) makes breakout_base_signal
+    # correctly return None now — the strategy's own thesis is already behind
+    # entry, so it refuses to fabricate a fallback target rather than firing
+    # with a target that has no connection to the measured move. This test is
+    # about Bearish direction support, not that edge case, so it stays inside
+    # the ladder's reach.
+    bars.append({"open": 99.4, "high": 99.5, "low": 98.5, "close": 99.0,
                  "volume": 3_000_000, "time": 30})
     return bars
 

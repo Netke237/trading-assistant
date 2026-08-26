@@ -108,11 +108,14 @@ describe('runStockScan', () => {
 });
 
 describe('stockPositionCardKey', () => {
-  function card(overrides: Partial<{ symbol: string; entry: number; stop: number; target: number }> = {}): PositionCardData {
-    const { symbol = 'AAPL', entry = 150, stop = 145, target = 160 } = overrides;
+  function card(overrides: Partial<{ symbol: string; entry: number; stop: number; target: number; targets: number[] }> = {}): PositionCardData {
+    const { symbol = 'AAPL', entry = 150, stop = 145, target = 160, targets } = overrides;
     return {
       symbol,
-      strategy: { entry_price: entry, stop_price: stop, target_price: target } as PositionCardData['strategy'],
+      strategy: {
+        entry_price: entry, stop_price: stop, target_price: target,
+        ...(targets ? { targets } : {}),
+      } as PositionCardData['strategy'],
     } as PositionCardData;
   }
 
@@ -145,5 +148,27 @@ describe('stockPositionCardKey', () => {
     const before = stockPositionCardKey(card());
     const after  = stockPositionCardKey(card({ target: 165 }));
     expect(before).not.toBe(after);
+  });
+
+  it('changes when T2/T3 change even though entry/stop/target[0] are identical', () => {
+    // A third independent audit round's exact repro: resolve_multi_signal can
+    // return the same entry/stop/targets[0] across two scans (e.g. a
+    // re-scan that adds a third confirming variant whose own rung is
+    // farther than the already-tightest one) while targets[1]/[2] differ.
+    // Keying on target_price alone (== targets[0]) would miss this and leave
+    // the card un-remounted with a stale T2/T3.
+    const before = stockPositionCardKey(card({ target: 103, targets: [103.0, 106.0] }));
+    const after  = stockPositionCardKey(card({ target: 103, targets: [103.0, 106.0, 110.0] }));
+    expect(before).not.toBe(after);
+  });
+
+  it('falls back to target_price when targets is absent or empty, matching defaultOverlay()', () => {
+    // `?.length`, not `??` — an empty array must fall back too, same
+    // convention StockPositionCard's defaultOverlay() already follows.
+    const absent = stockPositionCardKey(card({ target: 160 }));
+    const empty  = stockPositionCardKey(card({ target: 160, targets: [] }));
+    const single = stockPositionCardKey(card({ target: 160, targets: [160] }));
+    expect(absent).toBe(empty);
+    expect(absent).toBe(single);
   });
 });

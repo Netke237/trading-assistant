@@ -462,6 +462,32 @@ async def test_multi_signal_rejects_when_min_exceeds_variants():
     assert resp.status_code == 422
 
 
+@pytest.mark.asyncio
+async def test_multi_signal_rejects_the_intraday_vwap_variant():
+    """mean_reversion_multi's per-variant loop always evaluates DAILY bars —
+    unlike the single-strategy path, it never fetches/uses intraday bars for
+    any variant. "mean_reversion_vwap" (intraday, not "_daily") is the only
+    variant whose signal function assumes 15m bars, so including it here
+    would silently run its VWAP/ATR/entry-gate math on daily candles
+    mislabeled as intraday. A third independent audit round flagged this as
+    a live API footgun (not reachable through the shipped UI, but not
+    guarded against either) — the endpoint must reject it outright rather
+    than produce quietly wrong numbers."""
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/stock-scan", json={
+            "universe": ["SP500"],
+            "direction": "Bullish",
+            "horizon": "Swing",
+            "strategy": "mean_reversion_multi",
+            "mean_reversion_variants": ["mean_reversion_rsi", "mean_reversion_vwap"],
+            "mean_reversion_min_confirmations": 2,
+        })
+    assert resp.status_code == 422
+    assert "mean_reversion_vwap" in resp.json()["detail"]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # resolve_multi_signal — order-independent variant resolution
 # ─────────────────────────────────────────────────────────────────────────────
