@@ -9,7 +9,7 @@ import { useShallow } from 'zustand/shallow';
 import { ScanFunnel } from '@/components/organisms/ScanFunnel';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { MeanReversionConfirmPanel } from '@/components/molecules/MeanReversionConfirmPanel';
-import { runStockScan } from '@/lib/stockScan';
+import { runStockScan, stockPositionCardKey } from '@/lib/stockScan';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { WatchStar } from '@/components/atoms/WatchStar';
@@ -45,7 +45,7 @@ function _labelWithDate(iso: string): string {
 // extensions. See docs/superpowers/plans/2026-08-22-stock-exit-targets-plan.md.
 const STRATEGIES_BULLISH = [
   { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady uptrends',        entry: 'Dip to 20-EMA + reversal candle in uptrend',              stop: 'Below the pullback MA by 1.5 ATR', exit: 'Prior swing high, then 2R / 3R extensions' },
-  { key: 'breakout_base',         label: 'Breakout from tight base',  when: 'Momentum stocks',        entry: 'Break above N-day high after narrow range + volume spike', stop: 'Below the base low',     exit: 'Measured move — base height projected off the breakout' },
+  { key: 'breakout_base',         label: 'Breakout from tight base',  when: 'Momentum stocks',        entry: 'Break above N-day high after narrow range + volume spike', stop: 'Just under the breakout level (base high)', exit: 'Measured move — base height projected off the breakout' },
   { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses above 50-SMA',                             stop: 'Below 50-SMA',           exit: '3 / 4.5 / 6 ATR ladder (cross-back level shown)' },
   { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Oversold in uptrend',    entry: 'RSI < 30 while above 200-SMA',                            stop: 'Below recent swing low', exit: 'Return to the 20-SMA, then 2.5 / 3.75 ATR' },
   { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches lower Bollinger Band + reversal signal',     stop: 'Below lower band',       exit: 'Mid-band, then upper band' },
@@ -55,7 +55,7 @@ const STRATEGIES_BULLISH = [
 
 const STRATEGIES_BEARISH = [
   { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady downtrends',      entry: 'Bounce to 20-EMA + reversal candle in downtrend',          stop: 'Above the pullback MA by 1.5 ATR', exit: 'Prior swing low, then 2R / 3R extensions' },
-  { key: 'breakout_base',         label: 'Breakdown from tight base', when: 'Momentum shorts',        entry: 'Break below N-day low after narrow range + volume spike',  stop: 'Above the base high',    exit: 'Measured move — base height projected off the breakdown' },
+  { key: 'breakout_base',         label: 'Breakdown from tight base', when: 'Momentum shorts',        entry: 'Break below N-day low after narrow range + volume spike',  stop: 'Just above the breakdown level (base low)', exit: 'Measured move — base height projected off the breakdown' },
   { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses below 50-SMA',                             stop: 'Above 50-SMA',           exit: '3 / 4.5 / 6 ATR ladder (cross-back level shown)' },
   { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Overbought in downtrend', entry: 'RSI > 70 while below 200-SMA',                           stop: 'Above recent swing high', exit: 'Return to the 20-SMA, then 2.5 / 3.75 ATR' },
   { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches upper Bollinger Band + reversal signal',     stop: 'Above upper band',       exit: 'Mid-band, then lower band' },
@@ -416,6 +416,13 @@ export default function Step4StocksPage() {
                   </button>
                   {open && (
                     <StockPositionCard
+                      // See stockPositionCardKey's doc comment: an adversarial audit
+                      // round caught a stale entry/stop/target overlay from a
+                      // PREVIOUS scan silently surviving a same-symbol Run Scan and
+                      // reaching order placement / Add to Portfolio, because
+                      // `openSymbol` isn't reset by onRun() and StockPositionCard's
+                      // own overlay-reset effect only fires on a symbol change.
+                      key={stockPositionCardKey(c)}
                       card={c}
                       strategyKey={selected ?? ''}
                       afterScanArmed={afterScanArmedSymbols.has(c.symbol)}

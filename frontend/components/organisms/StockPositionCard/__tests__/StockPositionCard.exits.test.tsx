@@ -420,3 +420,45 @@ describe('StockPositionCard — sell-to-close share allocation is clamped to tot
     expect(within(t1Row).getByText('5')).toBeTruthy();
   });
 });
+
+// ─── Add to Portfolio rejects a target on the wrong side of entry ───────────
+//
+// stockPositionLevels() silently drops such a rung (and the shares allocated
+// to it) with no signal that anything happened. An adversarial audit round
+// flagged this as a real gap since EditableField's save() has no side check —
+// Add to Portfolio must warn and refuse rather than silently truncate the
+// sell-to-close plan.
+
+describe('StockPositionCard — Add to Portfolio rejects a fat-fingered target', () => {
+  beforeEach(() => {
+    usePortfolioStore.setState({ positions: [], lastSyncError: null });
+  });
+  afterEach(() => jest.clearAllMocks());
+
+  it('blocks the add and reports which target is on the wrong side of entry', async () => {
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+
+    // entry=150; edit T1 to 145 (behind entry for a Bullish position).
+    await editField('T1 TARGET', '145');
+    await clickButton(/add to portfolio/i);
+
+    expect(await screen.findByText(/145\.00 is on the wrong side of entry/i)).toBeTruthy();
+    expect(usePortfolioStore.getState().positions).toHaveLength(0);
+  });
+
+  it('adds normally once the bad target is corrected', async () => {
+    render(<StockPositionCard card={makeCard([155, 162, 170])} strategyKey="pullback_ema" />);
+
+    await editField('T1 TARGET', '145');
+    await clickButton(/add to portfolio/i);
+    expect(await screen.findByText(/wrong side of entry/i)).toBeTruthy();
+
+    await editField('T1 TARGET', '155');
+    await clickButton(/add to portfolio/i);
+
+    await waitFor(() => {
+      expect(usePortfolioStore.getState().positions).toHaveLength(1);
+    });
+    expect(screen.queryByText(/wrong side of entry/i)).toBeNull();
+  });
+});

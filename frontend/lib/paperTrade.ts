@@ -71,6 +71,27 @@ export function stockPositionLevels(
   };
 }
 
+/**
+ * Prices from `targets` that `stockPositionLevels()` would silently drop —
+ * on the wrong side of entry, non-finite, or non-positive — using the exact
+ * same sign check. `EditableField.save()` on a T1/T2/T3 row accepts any
+ * `price > 0` with no side check, so a fat-fingered target only surfaces
+ * here: silently losing a rung (and the shares allocated to it) from the
+ * sell-to-close plan with no indication anything happened would be worse
+ * than the caller warning about it up front.
+ */
+export function invalidTargetRungs(
+  entry: number,
+  direction: Direction,
+  targets: ReadonlyArray<{ price: number }>,
+): number[] {
+  if (!(Number.isFinite(entry) && entry > 0)) return targets.map((t) => t.price);
+  const sign = direction === 'Bullish' ? 1 : -1;
+  return targets
+    .map((t) => t.price)
+    .filter((price) => !(Number.isFinite(price) && price > 0 && sign * (price - entry) > 0));
+}
+
 // The "why was this bought" snapshot for the stocks path — attached once at
 // buy time so it survives independent of later scans overwriting scanStore.
 //

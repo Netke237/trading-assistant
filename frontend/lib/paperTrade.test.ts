@@ -1,4 +1,4 @@
-import { buildPaperStockPosition, stockPositionLevels } from './paperTrade';
+import { buildPaperStockPosition, stockPositionLevels, invalidTargetRungs } from './paperTrade';
 
 describe('buildPaperStockPosition', () => {
   it('creates a long underlying position tagged as paper stock', () => {
@@ -83,5 +83,40 @@ describe('buildPaperStockPosition levels', () => {
       stop: 95, structuralStop: 93.456,
     });
     expect(p.structuralStop).toBe(93.46);
+  });
+});
+
+describe('invalidTargetRungs', () => {
+  it('returns nothing when every target is on the correct side of entry', () => {
+    expect(invalidTargetRungs(100, 'Bullish', [{ price: 105 }, { price: 110 }])).toEqual([]);
+    expect(invalidTargetRungs(100, 'Bearish', [{ price: 95 }, { price: 90 }])).toEqual([]);
+  });
+
+  it('flags a Bullish target that sits behind (or at) entry', () => {
+    expect(invalidTargetRungs(100, 'Bullish', [{ price: 95 }, { price: 110 }])).toEqual([95]);
+    expect(invalidTargetRungs(100, 'Bullish', [{ price: 100 }])).toEqual([100]);
+  });
+
+  it('flags a Bearish target that sits behind (or at) entry', () => {
+    expect(invalidTargetRungs(100, 'Bearish', [{ price: 105 }, { price: 90 }])).toEqual([105]);
+  });
+
+  it('flags a non-finite or non-positive price', () => {
+    expect(invalidTargetRungs(100, 'Bullish', [{ price: 0 }, { price: -5 }, { price: NaN }]))
+      .toEqual([0, -5, NaN]);
+  });
+
+  it('flags every target when entry itself is unusable', () => {
+    expect(invalidTargetRungs(0, 'Bullish', [{ price: 105 }, { price: 110 }])).toEqual([105, 110]);
+  });
+
+  it('agrees with stockPositionLevels on what survives', () => {
+    // The two functions apply the same sign check; what one flags as invalid,
+    // the other must drop, and vice versa.
+    const targets = [{ price: 95 }, { price: 105 }, { price: 110 }];
+    const bad = invalidTargetRungs(100, 'Bullish', targets);
+    const { targets: kept } = stockPositionLevels(100, 'Bullish', 95, targets);
+    expect(bad).toEqual([95]);
+    expect(kept.map((t) => t.stockPrice)).toEqual([105, 110]);
   });
 });

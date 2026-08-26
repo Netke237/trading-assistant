@@ -208,6 +208,33 @@ def test_breakout_base_survives_a_zero_height_base():
                        sl=sig.stop_price, tp=sig.target_price) == "buy"
 
 
+def test_breakout_base_atr_ignores_todays_own_wide_range_bar():
+    """A second independent audit round found the base_high anchor fix (above)
+    doesn't hold when the BREAKOUT BAR ITSELF has a wide range/wick relative to
+    the tight base: `_atr(bars)` includes today's bar, so one huge-range candle
+    can dominate a 14-period average and inflate the stop's `atr * 0.2` buffer
+    with the very volatility event the strategy is trying to trade — collapsing
+    R:R back below 1 (reproduced at 0.19x) even with the correct anchor.
+
+    Fix: ATR is computed pre-breakout (`bars[:-1]`), matching how base_high/
+    base_low already exclude today's bar. This fixture is that exact repro:
+    a near-flat 24-bar base (range 0.10) followed by a bar with a 30-point
+    high-low range that still closes only $0.06 above the base."""
+    from app.services.strategy_engine import breakout_base_signal
+
+    bars = [{"open": 100.0, "high": 100.05, "low": 99.95, "close": 100.0, "volume": 1_000}
+            for _ in range(24)]
+    bars.append({"open": 100.0, "high": 130.0, "low": 99.0, "close": 100.06, "volume": 2_000})
+    sig = breakout_base_signal(bars, base_lookback=20, atr_tight_max=99.0, volume_mult=1.5)
+    assert sig is not None, "fixture must fire — a skipping thesis test proves nothing"
+    # Pre-breakout ATR must reflect the flat base (~0.1), not today's 30-point range.
+    assert sig.atr < 1.0, f"ATR {sig.atr} is contaminated by today's own wide-range bar"
+    risk = sig.entry_price - sig.stop_price
+    reward = sig.target_price - sig.entry_price
+    assert risk > 0
+    assert reward / risk > 1.0, "measured-move target must be reachable at a real R:R"
+
+
 def _flat_base_then_breakdown(base_high: float = 104.0, base_low: float = 100.0) -> list[dict]:
     """Mirror of `_flat_base_then_breakout`: 25 bars of a tight base, then a
     high-volume close below it."""

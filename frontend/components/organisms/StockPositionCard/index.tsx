@@ -5,7 +5,7 @@ import { Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
-import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
+import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import { _horizonEnum } from '@/lib/analysisStore';
 import { winRateTooltip } from '@/lib/statusTooltips';
@@ -389,6 +389,23 @@ export function StockPositionCard({
 
   async function onAddToPortfolio() {
     if (adding || added || queued) return; // guards against a double-click firing two adds
+    // stockPositionLevels() silently DROPS a target on the wrong side of entry —
+    // a fat-fingered T1/T2/T3 (EditableField has no side check) would otherwise
+    // lose that rung, and the shares allocated to it, from the sell-to-close
+    // plan with no indication anything happened. Block and say exactly which
+    // target(s), rather than silently truncating the ladder.
+    const badTargets = invalidTargetRungs(overlay.entry, card.direction as Direction, [
+      { price: overlay.t1 }, { price: overlay.t2 }, { price: overlay.t3 },
+    ]);
+    if (badTargets.length > 0) {
+      const plural = badTargets.length > 1;
+      setErr(
+        `Target${plural ? 's' : ''} ${badTargets.map((p) => p.toFixed(2)).join(', ')} ` +
+        `${plural ? 'are' : 'is'} on the wrong side of entry (${overlay.entry.toFixed(2)}) and ` +
+        `would be dropped from the sell-to-close plan — fix before adding.`
+      );
+      return;
+    }
     setAdding(true);
     setErr(null);
     try {

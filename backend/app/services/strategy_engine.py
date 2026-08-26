@@ -538,7 +538,17 @@ def breakout_base_signal(
     base_high = max(b["high"] for b in base_bars)
     base_low  = min(b["low"]  for b in base_bars)
     base_range_pct = (base_high - base_low) / base_low if base_low > 0 else 99
-    atr = _atr(bars)
+    # Pre-breakout ATR — excludes today's bar, same as base_bars above. A
+    # second independent audit round caught the previous `_atr(bars)` (which
+    # includes today): on a wide-range/gap breakout bar, that single bar can
+    # dominate a 14-period ATR average (a 30-point range against a sub-1-point
+    # base pushed ATR to 2.3+ in a reproduced case), inflating BOTH the tight-
+    # base gate's denominator and the stop's `atr * 0.2` buffer with the very
+    # volatility event the strategy is trying to trade — collapsing R:R back
+    # below 1 even after the base_high/base_low anchor fix. Every other
+    # reference level in this function (base_high, base_low) already excludes
+    # today's bar; ATR was the one inconsistent scale.
+    atr = _atr(bars[:-1])
     # Tight base: range < atr_tight_max * ATR. A 20-bar range scales roughly
     # with sqrt(base_lookback) ~= 4.5x ATR on a random walk — 1.5 (the old
     # default) was unfireable on any real data (2026-08-18 audit: observed
@@ -566,6 +576,18 @@ def breakout_base_signal(
         # scales with how far the breakout has already run rather than with
         # the whole base's width, and the measured-move target is reachable
         # at a real R:R again.
+        #
+        # A large GAP on the breakout bar itself (current far above base_high)
+        # still produces a low R:R here on purpose, not as an unfixed bug: the
+        # risk genuinely is entry-back-to-the-breakout-level, and a big gap has
+        # already spent a chunk of the measured move before this signal even
+        # fires. That is real information about a breakout that has already
+        # run, the same "no R-relative floor by default" philosophy
+        # _build_target_ladder documents elsewhere (see also ma_crossover's
+        # stop, which can be several ATR wide by the same reasoning). What is
+        # NOT acceptable — and is what `atr = _atr(bars[:-1])` above fixes — is
+        # a wide-range/wick bar inflating ATR (and therefore the stop buffer)
+        # with volatility from the very bar this signal is trying to trade.
         stop = base_high - atr * 0.2
         risk = current - stop
         if risk <= 0:

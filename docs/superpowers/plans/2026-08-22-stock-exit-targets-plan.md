@@ -3652,3 +3652,104 @@ UI later needs no backend change.
   likely cause of a signal silently disappearing (a config/signature mismatch); and Task 17 Step 3's
   manual pass exercises all seven strategies against real data. If a skip fires during
   implementation, treat it as a fixture to fix, not a test to accept.
+
+## Post-implementation independent audit (round 1)
+
+A fresh, independent subagent reviewed the implemented diff (not this plan) after Tasks 1-17
+shipped. Findings, all fixed:
+
+- **CRITICAL — `breakout_base_signal`'s stop was anchored on the far side of the base
+  (`base_low` for a Bullish breakout), not the breakout level.** Once the target became the
+  measured move instead of `entry + risk*rr_mult`, this made R:R < 1 for *every* possible input:
+  risk = (base_high-base_low) + overshoot + buffer, reward = (base_high-base_low) - overshoot, so
+  risk > reward for any overshoot > 0 — and the entry gate (`current > base_high`) guarantees a
+  positive overshoot. Fixed by anchoring the stop at `base_high`/`base_low` (the breakout/breakdown
+  level itself) instead — "back inside the level that was just broken," the classic
+  breakout-invalidation pairing. Verified against the repo's own `_flat_base_then_breakout`
+  fixture: R:R went from 0.52 to 1.67.
+- **HIGH — no side validation on `/api/stocks/first-passage`.** A target or stop on the wrong side
+  of entry isn't a valid exit ladder — it's already "hit" — which silently produced a bogus ~100%
+  probability instead of a real error. Fixed with an explicit check in the endpoint (422, plain-
+  string `detail` matching this file's existing validation convention).
+- **HIGH — `StockPositionCard`'s overlay edits didn't invalidate a stale displayed
+  Estimate/Check-structure result.** Editing the stop after running Estimate kept showing the OLD
+  probability/expected-days next to the NEW stop, implying they were computed together. Fixed in
+  `patch()`: whichever result depends on what just changed (and its in-flight request, if any) is
+  cleared.
+- **MEDIUM — `mean_reversion_vwap`'s GBM caveat didn't mention the intraday/daily timeframe
+  mismatch.** Its signal and backtest run on 15m bars, but the first-passage estimator always
+  simulates daily closes — a bigger mismatch than the general mean-reversion caveat already covers.
+  Fixed with a distinct, longer caveat for this one strategy (`mean_reversion_vwap_daily` runs on
+  daily bars like the estimator, so it keeps the generic caveat).
+- **MEDIUM — two `pullback_ema` tests used `pytest.skip` on a non-fire, on a deterministic
+  (non-random) fixture, so a real regression could hide as a silent skip.** Tightened to a hard
+  assertion. All seven strategies' exit-thesis tests were also Bullish-only; Bearish-mirror coverage
+  was added for all seven — the exact kind of untested branch the breakout_base bug above lived in.
+- **MEDIUM — `resolve_multi_signal`'s `min_rung_r=0.5` floor, called with exactly ONE fired
+  variant, could discard that variant's own valid target.** `mean_reversion_min_confirmations` is
+  user-configurable down to 1, so this is reachable in production, not a theoretical edge case.
+  Entry/stop with a single variant are exactly that variant's own — nothing is being merged — so
+  the floor (there to stop a rung surviving a transplant onto another variant's wider stop) has no
+  transplant to guard against and was discarding a rung the variant would have shown standalone.
+  Fixed by passing a single variant's own ladder through unchanged.
+- **LOW — `sharesT1+sharesT2+sharesT3` had no check against total `shares`.** Each rung's share
+  count is editable independently, so nothing stopped the sum from exceeding the position's total
+  shares — an oversell instruction. Fixed with a clamp in `patch()`: the rung just edited is capped
+  to what's left after the others; if total `shares` itself shrinks below the existing allocation,
+  every rung scales down proportionally.
+- **LOW — `structural.distancePct` was captured but never rendered.** Added next to the
+  structural-stop price, matching the options TradeCard's existing `"($price ($pct% away))"`
+  format. `structural.confidence` stays unrendered — verified the options TradeCard never renders
+  it either, so this is pre-existing parity, not a gap this feature introduced.
+- **Investigated, not changed:** `pullback_ema_signal`'s R:R varies widely (0.19 to 2.31 across
+  fixtures). Confirmed this is honest variation reflecting real setup quality, not a formula
+  defect — there is no downstream R:R gate in the stock pipeline, matching the ladder builder's own
+  "no R-relative floor by default" design.
+
+Backend: 1621 passed, 1 skipped (up from 1607 baseline). Frontend: typecheck clean, 682 passed
+(up from 672 baseline).
+
+## Post-implementation independent audit (round 2)
+
+A second, independently spawned subagent re-verified every round-1 fix against the actual code
+(not the commit message) and re-ran the diff hunt, this time explicitly computing concrete numbers
+rather than checking formula shape — the mistake that let the CRITICAL bug above through an earlier
+personal (non-subagent) read. All eight round-1 fixes were confirmed genuinely fixed. Three new
+findings, all fixed:
+
+- **HIGH — the base_high anchor fix (round 1) doesn't hold when the breakout bar ITSELF has a
+  wide range or wick relative to the tight base.** `atr = _atr(bars)` included today's bar, so one
+  huge-range candle can dominate a 14-period average — reproduced at R:R = 0.19x with a 24-bar
+  flat base (range 0.10) followed by a bar with a 30-point high-low range that still closed only
+  $0.06 above the base. `base_high`/`base_low` already excluded today's bar
+  (`base_bars = bars[-(lookback+1):-1]`); ATR was the one inconsistent scale. Fixed by computing
+  `atr = _atr(bars[:-1])`, pre-breakout, everywhere in this function (the tight-base gate, the stop
+  buffer, and the flat-base height fallback). A distinct "gap-and-crap" scenario the same finding
+  raised (a large gap-up moving entry far from a base_high-anchored stop) was investigated and left
+  as-is: the risk genuinely is entry-back-to-the-breakout-level, and a big gap has already spent
+  part of the measured move before the signal fires — real information, not a bug, by the same
+  no-R-floor philosophy already documented for `ma_crossover`.
+- **HIGH — a card left open across a same-symbol re-scan kept showing (and could submit) the
+  PREVIOUS scan's overlay.** `step-4-stocks/page.tsx`'s `openSymbol` isn't reset by `onRun()`, and
+  `StockPositionCard`'s own overlay-reset effect only fires on a `card.symbol` change — so a
+  same-symbol Run Scan with the card still open never re-derived the overlay from the fresh signal.
+  Fixed by keying `StockPositionCard` on the signal itself (`stockPositionCardKey()` in
+  `lib/stockScan.ts`: symbol + entry + stop + target), forcing a remount exactly when the
+  underlying signal changes, never on an unrelated re-render.
+- **MEDIUM — a target dropped for sitting on the wrong side of entry gave no user-facing
+  warning.** `stockPositionLevels()` silently filters such a rung (and its allocated shares) out of
+  the sell-to-close plan; `EditableField.save()` has no side check, so a fat-fingered T1/T2/T3 sent
+  a partial ladder to the portfolio with no indication anything was dropped. Fixed by
+  `invalidTargetRungs()` (`paperTrade.ts`, sharing `stockPositionLevels`'s own sign check) gating
+  `onAddToPortfolio()`: it now blocks and names the bad target(s) instead of silently truncating.
+
+Also fixed in passing while in this area: `step-4-stocks/page.tsx` and `step-5-strategy/page.tsx`
+both still described `breakout_base`'s stop as "below the base low" / "above the base high" — the
+pre-round-1 (buggy) anchor — even though round 1 had already moved the actual stop to the breakout
+level. `step-5-strategy/page.tsx`'s whole `STRATEGIES` list had drifted from the reworked exit
+theses in several other places too (`pullback_ema`, `ma_crossover`, `mean_reversion_rsi`,
+`mean_reversion_vwap`, `mean_reversion_multi`); brought in line with the accurate, already-correct
+text in `step-4-stocks/page.tsx`.
+
+Backend: 1624 passed, 1 skipped (up from round 2 audit's 1623). Frontend: typecheck clean,
+695 passed (up from 682).
