@@ -3753,3 +3753,66 @@ text in `step-4-stocks/page.tsx`.
 
 Backend: 1624 passed, 1 skipped (up from round 2 audit's 1623). Frontend: typecheck clean,
 695 passed (up from 682).
+
+## Post-implementation independent audit (round 3)
+
+A third, independently spawned subagent re-verified all three round-2 fixes and hunted specifically
+in areas the first two rounds under-scrutinized (strategy_watch_evaluator parity, the WFO/backtest
+coupling, `targets` `?.length` vs `??` usage at every read site, the mean_reversion_multi variant
+loop). Two of the three round-2 fixes were CONFIRMED FIXED outright (the pre-breakout ATR fix's
+underflow/crash safety, and `invalidTargetRungs`'s boundary behavior); the other two were found to
+be real but incomplete — genuinely closing the reported scenario while leaving a related one open.
+All three new/incomplete findings, fixed:
+
+- **HIGH — `breakout_base_signal`'s round-2 ATR fix left a worse failure mode: a large gap doesn't
+  just produce a poor R:R (the accepted "honest information" case), it can outrun the FARTHEST
+  measured-move extension entirely and fall through to `_build_target_ladder`'s generic
+  degenerate-input fallback, fabricating a plausible-looking, exactly-2.0x R:R target with zero
+  connection to the strategy's own thesis.** Reproduced: entry gapping to $115 against a $100.30
+  base (height $0.60) produced a **$144.64 target at a clean 2.0× R:R** — the real measured-move
+  objective was $100.90, 24x closer, already far behind entry. breakout_base is the only one of the
+  seven strategies whose entire ladder (primary + both extensions) is anchored to a fixed price
+  level rather than to entry, so it is uniquely exposed: every other strategy's ATR/R extensions are
+  entry-relative and can never be "lapped" this way. Fixed by checking whether the farthest
+  extension is still strictly beyond entry before calling `_build_target_ladder` at all; if not
+  (and there's a genuine non-zero measured-move `height` to outrun — gated so the pre-existing
+  zero-height-base fallback in `test_breakout_base_survives_a_zero_height_base` still fires), the
+  signal now returns `None` instead of inventing a target. The moderate-gap "honest low R:R" case
+  from round 2 (a gap that outruns only the primary rung, not the farthest extension) still fires
+  unchanged, pinned by a new test alongside the fabrication-repro test.
+- **MEDIUM — `stockPositionCardKey` (round 2) hashed only `target_price` (== `targets[0]`), not the
+  full ladder, so `resolve_multi_signal` could return byte-identical entry/stop/target[0] across two
+  scans while `targets[1]`/`[2]` differed** (e.g. a re-scan that adds a third confirming
+  mean-reversion variant whose own rung is farther than the already-tightest one). The card would
+  not remount, and `StockPositionCard`'s client-fabricated T2/T3 fallback (`t1+risk`, `t1+2*risk`)
+  could reach Add to Portfolio instead of the fresh backend ladder — the exact class of staleness
+  this key was built to eliminate, just not fully closed. Fixed by hashing the full `targets` array
+  (falling back to `[target_price]` when absent/empty, matching `defaultOverlay()`'s own
+  `?.length`-not-`??` convention).
+- **MEDIUM — `mean_reversion_multi`'s per-variant loop always evaluates DAILY bars, with no
+  special-casing for `_INTRADAY_STRATEGIES`, unlike the single-strategy path.** Including
+  `"mean_reversion_vwap"` (the intraday variant — not `"_daily"`) in `mean_reversion_variants` would
+  silently run its VWAP/ATR/entry-gate math on daily candles mislabeled as 15-minute bars: no
+  error, just quietly wrong numbers with a plausible shape. Confirmed not reachable through the
+  shipped UI today (`MeanReversionConfirmPanel` only offers rsi/bb/vwap_daily) — a live API footgun
+  rather than an active bug. Fixed by rejecting the combination outright at the `/api/stock-scan`
+  endpoint (422) rather than either silently mis-computing it or investing in full intraday-bar
+  plumbing for a variant nothing calls yet.
+
+No issues found in: `resolve_multi_signal`'s behavior at exactly 2 fired variants (uniform code path
+for any count ≥ 2); the `stockPositionCardKey`/`invalidTargetRungs` sign-check boundary at
+target == entry; `strategy_watch_evaluator.py`'s exit/param precedence (confirmed matching the
+scan/backtest path); the WFO/backtest `exit:`+`params` coupling from Task 12; every `targets`
+read site's `?.length`-not-`??` convention (`StockPositionCard`, `StockSendDialog`,
+`step-4-stocks/page.tsx` all correct); the options TradeCard's `structuralStop.confidence`
+non-rendering parity claim from round 2.
+
+Fixing round 3's findings also surfaced a regression: `test_strategy_engine_bearish.py`'s
+pre-existing `test_breakout_base_bearish_breakdown` fixture used a breakdown large enough to also
+exhaust the farthest extension (the same fabricated-fallback case the HIGH finding above fixes) —
+it only asserted price ordering, not target realism, so it had silently been exercising the
+fallback path all along. Adjusted the fixture to a breakdown that stays within the ladder's reach,
+preserving its actual intent (verify Bearish direction support).
+
+Backend: 1627 passed, 1 skipped (up from round 3 audit's 1624). Frontend: typecheck clean,
+697 passed (up from 695).

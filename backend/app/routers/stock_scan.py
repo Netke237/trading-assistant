@@ -952,6 +952,24 @@ async def get_last_stock_scan_status() -> ScanSessionStatus:
 
 @router.post("/stock-scan")
 async def run_stock_scan(req: StockScanRequest, db: AsyncSession = Depends(get_db)) -> StockScanResult:
+    # mean_reversion_multi's per-variant loop (in _process_stock) always calls
+    # each variant on DAILY `bars`, unlike the single-strategy path, which
+    # correctly special-cases _INTRADAY_STRATEGIES to fetch and use 15m bars.
+    # "mean_reversion_vwap" (the intraday variant, NOT "_daily") is not itself
+    # in _INTRADAY_STRATEGIES either, so nothing routes intraday bars into the
+    # multi-signal loop for it. A third independent audit round found this
+    # would silently run the intraday variant's VWAP/ATR/entry-gate math on
+    # daily candles mislabeled as 15-minute bars — no error, just quietly
+    # wrong numbers with a plausible shape. Not reachable through the shipped
+    # UI today (MeanReversionConfirmPanel only offers rsi/bb/vwap_daily), but
+    # rejected here rather than left as a live API footgun for the next
+    # caller (a future feature, a test, a script) that adds it.
+    if req.strategy == "mean_reversion_multi" and "mean_reversion_vwap" in req.mean_reversion_variants:
+        raise HTTPException(
+            status_code=422,
+            detail="mean_reversion_vwap (intraday) is not supported in mean_reversion_multi — "
+                   "its variant loop only evaluates daily bars. Use mean_reversion_vwap_daily instead.",
+        )
     # NOTE: nothing serializes overlapping requests to this endpoint (unlike
     # scan.py's run_scan(), _SCAN_SEM above only throttles per-symbol work
     # inside _process_stock, not the endpoint itself) — two concurrent

@@ -11,13 +11,23 @@ import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
  * reset effect only fires on a `card.symbol` change. Without this, a card
  * left open across a fresh Run Scan would silently keep showing — and let
  * the user submit — the PREVIOUS scan's entry/stop/target overlay even
- * though the signal underneath it just changed. A signal change always
- * moves at least one of entry/stop/target, so this remounts exactly when it
- * should and never on an unrelated re-render (e.g. some other page state
- * updating) that leaves the signal itself unchanged.
+ * though the signal underneath it just changed.
+ *
+ * Hashes the FULL ladder (`targets`), not just `target_price` (== targets[0]):
+ * a third independent audit round found a concrete case via
+ * resolve_multi_signal where entry/stop/targets[0] are byte-identical across
+ * two scans (e.g. a re-scan that adds a third confirming mean-reversion
+ * variant whose own rung is farther than the already-tightest one) while
+ * targets[1]/[2] differ. Keying on target_price alone would miss that change,
+ * leave the card un-remounted, and let StockPositionCard's client-fabricated
+ * T2/T3 fallback (`t1 + risk`, `t1 + 2*risk`) reach Add to Portfolio instead
+ * of the fresh backend-computed rungs. `?.length`, not `??`: an empty
+ * `targets` array must fall back to `target_price` too, same convention as
+ * StockPositionCard's own defaultOverlay().
  */
 export function stockPositionCardKey(c: PositionCardData): string {
-  return `${c.symbol}-${c.strategy.entry_price}-${c.strategy.stop_price}-${c.strategy.target_price}`;
+  const ladder = c.strategy.targets?.length ? c.strategy.targets : [c.strategy.target_price];
+  return `${c.symbol}-${c.strategy.entry_price}-${c.strategy.stop_price}-${ladder.join(',')}`;
 }
 
 /** Optional per-run param overrides (the page passes its locally-edited params). */
