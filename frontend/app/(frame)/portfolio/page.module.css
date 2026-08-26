@@ -323,6 +323,20 @@
   border-color: var(--accent);
 }
 
+.maxLossModeToggle { display: flex; gap: 4px; }
+.maxLossModeBtn, .maxLossModeBtnActive {
+  height: 24px;
+  padding: 0 8px;
+  font-family: var(--font-dm);
+  font-size: 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.maxLossModeBtnActive { color: var(--text-primary); border-color: var(--accent); }
+
 .tabs { display: flex; gap: var(--space-2); margin-bottom: var(--space-3); }
 .tab, .tabActive { border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
 .tabActive { color: var(--text-primary); border-color: var(--accent); }

@@ -36,6 +36,7 @@ const STALE_LIMITS = {
   maxConcurrentPositions: 10,
   maxDailyRecommendations: 5,
   portfolioValue: 100000,
+  maxLossPerTradePct: 0.0375,
 };
 
 describe('Settings page — risk store hydration', () => {
@@ -65,6 +66,7 @@ describe('Settings page — risk store hydration', () => {
       premiumStopPct: 0.60,
       portfolioValue: 250000,
       maxSinglePositionPct: 0.02,
+      maxLossPerTradePct: 0.015,
       maxTotalExposurePct: 0.40,
       maxConcurrentPositions: 15,
       maxDailyRecommendations: 8,
@@ -87,6 +89,7 @@ describe('Settings page — risk store hydration', () => {
       expect(useRiskStore.getState().limits.maxSingleTradeExposurePct).toBe(0.02);
     });
     expect(useRiskStore.getState().limits.portfolioValue).toBe(250000);
+    expect(useRiskStore.getState().limits.maxLossPerTradePct).toBe(0.015);
     expect(useRiskStore.getState().limits.maxTotalExposurePct).toBe(0.40);
     expect(useRiskStore.getState().limits.maxConcurrentPositions).toBe(15);
     expect(useRiskStore.getState().limits.maxDailyRecommendations).toBe(8);

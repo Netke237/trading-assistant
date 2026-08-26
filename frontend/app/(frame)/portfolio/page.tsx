@@ -14,6 +14,8 @@ import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { usePortfolioStore, flushPendingPositionPatches } from '@/lib/portfolioStore';
+import { useRiskStore } from '@/lib/riskStore';
+import { maxLossAtStop, resolveMaxLossLimitDollar } from '@/lib/risk';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
@@ -505,6 +507,9 @@ function EditDrawer({
         {!position.contract.endsWith('|STOCK') && (
           <ExitPlanEditor position={position} onChange={onChange} />
         )}
+        {!position.contract.endsWith('|STOCK') && (
+          <MaxLossBanner position={position} onChange={onChange} />
+        )}
         <EditField
           label="Contracts"
           hint="Number of option contracts held."
@@ -697,6 +702,118 @@ function ExitPlanEditor({
           <Text size={10} tone="dim">as of {new Date(exitPlan.computedAt).toLocaleTimeString()}</Text>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Feature C (exit-plan pipeline plan) — inline max-loss-at-stop badge for an
+ *  OPEN option position. Warning-only, never blocks any action here (nothing
+ *  is being submitted from the Portfolio editor). Basis is strictly the
+ *  exit-plan pipeline's final stop, repriced to a contract price — same rule
+ *  TradeCard-time's checkTradeRisk() uses — so it only renders once an exit
+ *  plan has been computed; options-only like ExitPlanEditor above it. */
+function MaxLossBanner({
+  position,
+  onChange,
+}: {
+  position: PortfolioPosition;
+  onChange: (patch: Partial<PortfolioPosition>) => void;
+}) {
+  const limits = useRiskStore((s) => s.limits);
+  const exitPlan = position.exitPlan;
+  const contracts = position.contracts ?? 1;
+  const override = position.maxLossOverride ?? null;
+
+  // The loss figure is a pure client computation — exitPlan.stop.contractPrice
+  // is already repriced, no network round trip needed — so this debounce is
+  // purely to stop the number/badge flashing on every keystroke while the
+  // user is still typing a new contracts count or override value, not to
+  // throttle a live backend call (that already happens 600ms-debounced,
+  // separately, in portfolioStore's scheduleRemotePositionPatch).
+  const [debounced, setDebounced] = useState({ contracts, override });
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced({ contracts, override }), 400);
+    return () => clearTimeout(t);
+  }, [contracts, override]);
+
+  const [editingOverride, setEditingOverride] = useState(false);
+  const [draftMode, setDraftMode] = useState<'dollar' | 'percent'>(override?.mode ?? 'percent');
+  const [draftValue, setDraftValue] = useState(() =>
+    override
+      ? (override.mode === 'percent' ? override.value * 100 : override.value)
+      : Math.round(limits.maxLossPerTradePct * 100 * 100) / 100
+  );
+
+  if (!exitPlan || position.contract.endsWith('|STOCK')) return null;
+
+  const lossAtStop = maxLossAtStop(position.entryPrice, exitPlan.stop.contractPrice, debounced.contracts);
+  const limitDollar = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, debounced.override);
+  const exceeded = lossAtStop > limitDollar;
+
+  const applyOverride = () => {
+    const value = draftMode === 'percent' ? draftValue / 100 : draftValue;
+    onChange({ maxLossOverride: { mode: draftMode, value } });
+    setEditingOverride(false);
+  };
+  const clearOverride = () => {
+    onChange({ maxLossOverride: null });
+    setEditingOverride(false);
+  };
+
+  return (
+    <div className={styles.targetEditor}>
+      <Text size={11} tone="secondary">Max loss at stop</Text>
+      <div className={styles.targetItem}>
+        <div className={styles.targetHeader}>
+          <Data size={13} weight={500} tone={exceeded ? 'reject' : 'pass'}>
+            ${Math.round(lossAtStop).toLocaleString()}
+          </Data>
+          <StatusBadge status={exceeded ? 'REJECT' : 'PASS'} />
+        </div>
+        <Text size={10} tone="dim">
+          Limit ${Math.round(limitDollar).toLocaleString()}
+          {override
+            ? ` (override: ${override.mode === 'percent' ? `${(override.value * 100).toFixed(2)}%` : `$${override.value.toLocaleString()}`})`
+            : ' (account default)'}
+        </Text>
+        {!editingOverride ? (
+          <button type="button" className={styles.exitPlanBtn} onClick={() => setEditingOverride(true)}>
+            {override ? 'Edit override' : 'Set override'}
+          </button>
+        ) : (
+          <div className={styles.targetGrid}>
+            <div className={styles.maxLossModeToggle}>
+              <button
+                type="button"
+                className={draftMode === 'percent' ? styles.maxLossModeBtnActive : styles.maxLossModeBtn}
+                onClick={() => setDraftMode('percent')}
+              >
+                %
+              </button>
+              <button
+                type="button"
+                className={draftMode === 'dollar' ? styles.maxLossModeBtnActive : styles.maxLossModeBtn}
+                onClick={() => setDraftMode('dollar')}
+              >
+                $
+              </button>
+            </div>
+            <input
+              type="number"
+              className={styles.targetInput}
+              value={draftValue}
+              min={0}
+              step={draftMode === 'percent' ? 0.25 : 10}
+              onChange={(e) => setDraftValue(Math.max(0, Number(e.target.value) || 0))}
+              aria-label="Max loss override value"
+            />
+            <button type="button" className={styles.exitPlanBtn} onClick={applyOverride}>Apply</button>
+            {override && (
+              <button type="button" className={styles.editRemove} onClick={clearOverride}>Use default</button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -304,6 +304,7 @@ function RiskSummary({
     max_concurrent_positions_reached: 'Max concurrent positions reached',
     duplicate_symbol: 'Duplicate symbol in portfolio',
     max_daily_recommendations_reached: 'Max daily recommendations reached',
+    max_loss_per_trade_exceeded: 'Max loss at stop exceeds per-trade limit',
   };
 
   return (
@@ -313,6 +314,18 @@ function RiskSummary({
           {reasonLabels[r] ?? r}
         </Text>
       ))}
+      {reasons.has('max_loss_per_trade_exceeded') && (() => {
+        const worst = Object.values(riskChecks).find(
+          (rc) => rc.reasons.includes('max_loss_per_trade_exceeded'),
+        );
+        if (!worst || worst.maxLossAtStop == null || worst.maxLossLimitDollar == null) return null;
+        return (
+          <Text size={11} tone="dim">
+            Max loss at stop ≈ ${Math.round(worst.maxLossAtStop).toLocaleString()}
+            {' '}(limit ${Math.round(worst.maxLossLimitDollar).toLocaleString()})
+          </Text>
+        );
+      })()}
       {!overrideReady && (
         <Text size={12} tone="secondary">
           Click Submit again to override.

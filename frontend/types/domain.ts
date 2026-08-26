@@ -271,6 +271,9 @@ export interface PortfolioPosition {
    *  verbatim, refreshed only on manual re-click, mirrors the backend's
    *  `exit_plan` JSON column 1:1. */
   exitPlan?:     ExitPlan | null;
+  /** Per-trade override of the global `maxLossPerTradePct` warning threshold
+   *  (Feature C). `null`/absent inherits the global default. */
+  maxLossOverride?: MaxLossOverride | null;
   targets:       TargetLevel[];
   status:        Status;
   // Options-specific fields surfaced in the portfolio table.
@@ -609,6 +612,11 @@ export interface RiskLimits {
   maxConcurrentPositions: number;     // e.g. 10
   maxDailyRecommendations: number;    // e.g. 5
   portfolioValue: number;             // user's total portfolio value in $
+  /** Max acceptable $ loss at the exit-plan pipeline's final stop, as a
+   *  fraction of portfolioValue (e.g. 0.0375 = 3.75%). Warning-only — never
+   *  auto-clamps contract count. See docs/superpowers/plans/
+   *  2026-08-26-exit-plan-pipeline.md Feature C. */
+  maxLossPerTradePct: number;
 }
 
 export interface RiskCheckResult {
@@ -618,6 +626,24 @@ export interface RiskCheckResult {
   singleExposurePct: number;
   totalExposurePct: number;
   capitalAtRisk: number;
+  /** $ loss projected at the exit-plan final stop (entry premium minus the
+   *  stop-repriced contract price, floored at 0, times contracts). Undefined
+   *  when no exit plan has been computed yet — there is nothing to check. */
+  maxLossAtStop?: number;
+  /** The $ threshold `maxLossAtStop` was compared against — global
+   *  `maxLossPerTradePct * portfolioValue` (no per-trade override exists
+   *  pre-trade; that field lives on `PortfolioPosition` only). */
+  maxLossLimitDollar?: number;
+}
+
+/** Per-trade override for Feature C's max-loss-per-trade warning — either a
+ *  fixed dollar figure or a percent of portfolioValue. `null`/absent means
+ *  "inherit the global `maxLossPerTradePct` default". Post-trade only (set
+ *  from the Portfolio editor) — pre-trade (TradeCard/SendToBrokerDialog) uses
+ *  the existing two-click override UX instead of a persisted field. */
+export interface MaxLossOverride {
+  mode:  'dollar' | 'percent';
+  value: number;
 }
 
 export interface PortfolioRiskMetrics {

@@ -62,6 +62,12 @@ class RiskConfig(BaseModel):
         le=1.0,
         description='Max single-trade exposure as a fraction of portfolio value',
     )
+    maxLossPerTradePct: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description='Max acceptable loss at the exit-plan final stop, as a fraction of portfolio value (warning-only)',
+    )
     maxTotalExposurePct: Optional[float] = Field(
         default=None,
         ge=0.0,
@@ -116,6 +122,7 @@ async def get_risk_settings() -> dict:
         'premiumStopPct': float(rr.get('premium_stop_pct', 0.60)),
         'portfolioValue': float(portfolio.get('portfolio_value', 50000.0)),
         'maxSinglePositionPct': float(portfolio.get('max_single_position_pct', 0.05)),
+        'maxLossPerTradePct': float(portfolio.get('max_loss_per_trade_pct', 0.0375)),
         'maxTotalExposurePct': float(portfolio.get('max_total_exposure_pct', 0.25)),
         'maxConcurrentPositions': int(portfolio.get('max_concurrent_positions', 10)),
         'maxDailyRecommendations': int(portfolio.get('max_daily_recommendations', 5)),
@@ -140,6 +147,8 @@ async def save_risk_settings(body: RiskConfig) -> dict:
         cfg['portfolio']['portfolio_value'] = body.portfolioValue
     if body.maxSinglePositionPct is not None:
         cfg['portfolio']['max_single_position_pct'] = body.maxSinglePositionPct
+    if body.maxLossPerTradePct is not None:
+        cfg['portfolio']['max_loss_per_trade_pct'] = body.maxLossPerTradePct
     if body.maxTotalExposurePct is not None:
         cfg['portfolio']['max_total_exposure_pct'] = body.maxTotalExposurePct
     if body.maxConcurrentPositions is not None:
@@ -155,6 +164,7 @@ async def save_risk_settings(body: RiskConfig) -> dict:
         'premiumStopPct': body.premiumStopPct,
         'portfolioValue': body.portfolioValue,
         'maxSinglePositionPct': body.maxSinglePositionPct,
+        'maxLossPerTradePct': body.maxLossPerTradePct,
         'maxTotalExposurePct': body.maxTotalExposurePct,
         'maxConcurrentPositions': body.maxConcurrentPositions,
         'maxDailyRecommendations': body.maxDailyRecommendations,

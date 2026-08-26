@@ -55,14 +55,14 @@ The user runs a ~4000 EUR account (displayed as USD `$` in this app — no curre
 
 ## Feature C — Max-loss-per-trade (built on Feature B's final stop)
 
-- [ ] `backend/config/risk_rules.yaml`: `portfolio.max_loss_per_trade_pct: 0.0375`.
-- [ ] `risk_settings.py`: add `maxLossPerTradePct`, mirrors existing `maxSinglePositionPct`.
-- [ ] `RiskLimits`/`RiskSettings` (domain.ts/api.ts) + `riskStore.ts` (`DEFAULT_LIMITS`, persisted store version bump 2→3, migration branch) + new Settings `RiskForm()` row.
-- [ ] Per-trade override field `maxLossOverride: { mode: 'dollar' | 'percent'; value: number } | null` on `PortfolioPosition`/`PortfolioPositionModel`.
-- [ ] Loss basis = reprice the option at Feature B's `final_stop` price (reuse the same repricing call, no duplicate logic) × contracts; debounce ~400ms on stop/contracts change (live backend round trip).
-- [ ] Trade-card-time: new soft reason `max_loss_per_trade_exceeded` in `checkTradeRisk()`, reuses `SendToBrokerDialog`'s two-click override UX.
-- [ ] Portfolio-time: inline badge/banner, recomputed on stop/contracts/override change.
-- [ ] `portfolioValue` "last updated" staleness nudge in Settings (no auto-tracking).
+- [x] `backend/config/risk_rules.yaml`: `portfolio.max_loss_per_trade_pct: 0.0375`.
+- [x] `risk_settings.py`: add `maxLossPerTradePct`, mirrors existing `maxSinglePositionPct`.
+- [x] `RiskLimits`/`RiskSettings` (domain.ts/api.ts) + `riskStore.ts` (`DEFAULT_LIMITS`, persisted store version bump 2→3, migration branch) + new Settings `RiskForm()` row.
+- [x] Per-trade override field `maxLossOverride: { mode: 'dollar' | 'percent'; value: number } | null` on `PortfolioPosition`/`PortfolioPositionModel`. (Backend ORM/schema/PATCH plumbing already existed from Phase 0 scaffolding; this phase wired the frontend type + `portfolioStore.ts` PATCH payload + the Portfolio-editor UI that sets it.)
+- [x] Loss basis = reprice the option at Feature B's `final_stop` price (reuse the same repricing call, no duplicate logic) × contracts; debounce ~400ms on stop/contracts change. (`exitPlan.stop.contractPrice` is already the repriced value from Feature B's "Compute Exit Plan" — no *additional* backend round trip needed; the ~400ms debounce is a client-side render-smoothing measure on the derived $ figure, distinct from `portfolioStore`'s existing 600ms network-patch debounce.)
+- [x] Trade-card-time: new soft reason `max_loss_per_trade_exceeded` in `checkTradeRisk()`, reuses `SendToBrokerDialog`'s two-click override UX.
+- [x] Portfolio-time: inline badge/banner, recomputed on stop/contracts/override change.
+- [x] `portfolioValue` "last updated" staleness nudge in Settings (no auto-tracking).
 
 ## Feature D — Active TP method + per-position alert controls
 
@@ -87,7 +87,7 @@ Each ✅ checkpoint = typecheck/pytest green **and** a `K-adversarial-audit-loop
 
 1. **Phase 0** — combined migration + ORM/schema/router scaffolding for every new column. ✅ checkpoint + audit.
 2. **Phase 1** — Feature B in full (largest, most novel phase; verify in isolation before anything depends on it). ✅ checkpoint + audit.
-3. **Phase 2** — Feature C (built on Feature B's final stop). ✅ checkpoint + audit.
+3. **Phase 2** — Feature C (built on Feature B's final stop). ✅ checkpoint + audit. [done]
 4. **Phase 3** — Feature E (stock snapshot capture + Monte Carlo in Portfolio editor, both asset types).
 5. **Phase 4** — Feature D (active TP method selector + per-position alert overrides + toast-gating fix — most cross-cutting alert code, done last).
 6. **Final** — full-diff `K-adversarial-audit-loop` pass end-to-end.

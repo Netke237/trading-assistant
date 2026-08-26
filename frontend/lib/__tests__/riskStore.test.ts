@@ -8,6 +8,7 @@ const DEFAULT_LIMITS = {
   maxConcurrentPositions: 10,
   maxDailyRecommendations: 5,
   portfolioValue: 100000,
+  maxLossPerTradePct: 0.0375,
 };
 
 function makePosition(overrides: Partial<PortfolioPosition> = {}): PortfolioPosition {
@@ -48,6 +49,7 @@ describe('riskStore', () => {
           status: 'PASS',
         },
         symbols: [],
+        portfolioValueUpdatedAt: null,
       });
     });
   });
@@ -85,6 +87,27 @@ describe('riskStore', () => {
     });
     expect(result.current.metrics.largestConcentrationSymbol).toBe('AAPL');
     expect(result.current.metrics.largestConcentrationPct).toBe(5000 / 100000);
+  });
+
+  it('setLimits stamps portfolioValueUpdatedAt when portfolioValue actually changes', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-08T12:00:00Z'));
+    const { result } = renderHook(() => useRiskStore());
+    expect(result.current.portfolioValueUpdatedAt).toBeNull();
+    act(() => {
+      result.current.setLimits({ ...DEFAULT_LIMITS, portfolioValue: 75000 });
+    });
+    expect(result.current.portfolioValueUpdatedAt).toBe('2026-04-08T12:00:00.000Z');
+    jest.useRealTimers();
+  });
+
+  it('setLimits leaves portfolioValueUpdatedAt untouched when portfolioValue is unchanged', () => {
+    const { result } = renderHook(() => useRiskStore());
+    act(() => {
+      // A no-op resync (e.g. RiskForm's hydration effect re-pushing the same
+      // fetched value) must not look like a fresh edit.
+      result.current.setLimits({ ...DEFAULT_LIMITS, maxConcurrentPositions: 8 });
+    });
+    expect(result.current.portfolioValueUpdatedAt).toBeNull();
   });
 
   it('incrementDaily increases count', () => {

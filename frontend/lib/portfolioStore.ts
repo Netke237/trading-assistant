@@ -7,7 +7,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PortfolioPosition, TargetLevel, Direction, ExitPlan } from '@/types/domain';
+import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverride } from '@/types/domain';
 import { useRiskStore } from '@/lib/riskStore';
 
 type BackendPosition = {
@@ -22,6 +22,7 @@ type BackendPosition = {
   stop: number | null;
   structuralStop?: number | null;
   exitPlan?: ExitPlan | null;
+  maxLossOverride?: MaxLossOverride | null;
   targets: TargetLevel[];
   dteTotal: number | null;
   createdAt: string;
@@ -51,6 +52,7 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     stop:         floorStop(p.stop),
     structuralStop: floorStop(p.structuralStop),
     exitPlan:     p.exitPlan ?? null,
+    maxLossOverride: p.maxLossOverride ?? null,
     targets:      p.targets ?? [],
     dteTotal:     p.dteTotal ?? 0,
     dteRemaining: p.dteRemaining ?? 0,
@@ -279,6 +281,7 @@ function toUpdatePayload(patch: Partial<PortfolioPosition>): Record<string, unkn
   if ('stop' in patch) body.stop = floorStop(patch.stop);
   if ('structuralStop' in patch) body.structuralStop = floorStop(patch.structuralStop);
   if ('exitPlan' in patch) body.exitPlan = patch.exitPlan;
+  if ('maxLossOverride' in patch) body.maxLossOverride = patch.maxLossOverride;
   if ('targets' in patch) body.targets = patch.targets;
   if ('contracts' in patch) {
     body.qty = patch.contracts;

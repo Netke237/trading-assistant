@@ -44,6 +44,23 @@ describe('persist migrations', () => {
     expect(migrateRisk(null, 0).limits?.portfolioValue).toBe(100000);
   });
 
+  it('riskStore v2->v3 migration backfills maxLossPerTradePct and portfolioValueUpdatedAt', () => {
+    const preV3 = { limits: { maxDailyRecommendations: 5, portfolioValue: 75000 } };
+    const migrated = migrateRisk(preV3, 2);
+    expect(migrated.limits?.maxLossPerTradePct).toBe(0.0375);
+    expect(migrated.portfolioValueUpdatedAt).toBeNull();
+  });
+
+  it('riskStore migration preserves an already-migrated maxLossPerTradePct/portfolioValueUpdatedAt', () => {
+    const postV3 = {
+      limits: { maxDailyRecommendations: 5, portfolioValue: 75000, maxLossPerTradePct: 0.02 },
+      portfolioValueUpdatedAt: '2026-04-01T00:00:00.000Z',
+    };
+    const migrated = migrateRisk(postV3, 3);
+    expect(migrated.limits?.maxLossPerTradePct).toBe(0.02);
+    expect(migrated.portfolioValueUpdatedAt).toBe('2026-04-01T00:00:00.000Z');
+  });
+
   it('structureStore migration restores missing visibility keys', () => {
     const state = { visibility: { FVG: true }, structureVisible: true };
     expect(migrateStructure(state, 1)).toMatchObject({

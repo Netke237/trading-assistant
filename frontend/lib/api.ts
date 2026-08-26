@@ -714,6 +714,7 @@ export interface RiskSettings {
   premiumStopPct: number;
   portfolioValue?: number;
   maxSinglePositionPct?: number;
+  maxLossPerTradePct?: number;
   maxTotalExposurePct?: number;
   maxConcurrentPositions?: number;
   maxDailyRecommendations?: number;

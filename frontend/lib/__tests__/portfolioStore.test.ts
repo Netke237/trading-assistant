@@ -56,6 +56,7 @@ describe('portfolioStore', () => {
       limits: {
         maxSingleTradeExposurePct: 0.05, maxTotalExposurePct: 0.25,
         maxConcurrentPositions: 10, maxDailyRecommendations: 5, portfolioValue: 50000,
+        maxLossPerTradePct: 0.0375,
       },
     } as never);
     act(() => {

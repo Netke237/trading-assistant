@@ -5,8 +5,10 @@ import {
   totalNotional,
   computePortfolioRiskMetrics,
   checkTradeRisk,
+  maxLossAtStop,
+  resolveMaxLossLimitDollar,
 } from '@/lib/risk';
-import type { PortfolioPosition, RiskLimits, TradeCardData } from '@/types/domain';
+import type { PortfolioPosition, RiskLimits, TradeCardData, ExitPlan } from '@/types/domain';
 
 const DEFAULT_LIMITS: RiskLimits = {
   maxSingleTradeExposurePct: 0.05,
@@ -14,6 +16,7 @@ const DEFAULT_LIMITS: RiskLimits = {
   maxConcurrentPositions: 10,
   maxDailyRecommendations: 5,
   portfolioValue: 50000,
+  maxLossPerTradePct: 0.0375,
 };
 
 function makePosition(overrides: Partial<PortfolioPosition> = {}): PortfolioPosition {
@@ -35,6 +38,23 @@ function makePosition(overrides: Partial<PortfolioPosition> = {}): PortfolioPosi
     contracts: 2,
     recId: 'REC-TEST-001',
     ...overrides,
+  };
+}
+
+function makeExitPlan(overrides: Partial<ExitPlan['stop']> = {}): ExitPlan {
+  return {
+    computedAt: '2026-04-08T00:00:00.000Z',
+    stop: {
+      price: 240,
+      source: 'structural',
+      contractPrice: 1.0,
+      rrModel: 'Heston repriced',
+      structuralSource: 'swing_low',
+      structuralConfidence: 0.8,
+      ...overrides,
+    },
+    targets: [],
+    atr: 3.5,
   };
 }
 
@@ -184,5 +204,54 @@ describe('risk helpers', () => {
       expect(result.approved).toBe(false);
       expect(result.reasons).toContain('max_daily_recommendations_reached');
     });
+
+    it('skips the max-loss check entirely when no exit plan has been computed', () => {
+      const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, [], 0);
+      expect(result.reasons).not.toContain('max_loss_per_trade_exceeded');
+      expect(result.maxLossAtStop).toBeUndefined();
+      expect(result.maxLossLimitDollar).toBeUndefined();
+    });
+
+    it('rejects when the loss at the exit-plan final stop exceeds the per-trade limit', () => {
+      // mid 2.5, stop contractPrice 0.5 -> $200/contract loss; limit is 3.75% of 50,000 = $1,875
+      const card = makeCard({ exit: { ...makeCard().exit, exitPlan: makeExitPlan({ contractPrice: 0.5 }) } });
+      const result = checkTradeRisk(card, 10, DEFAULT_LIMITS, [], 0);
+      expect(result.approved).toBe(false);
+      expect(result.reasons).toContain('max_loss_per_trade_exceeded');
+      expect(result.maxLossAtStop).toBe(2000);
+      expect(result.maxLossLimitDollar).toBe(1875);
+    });
+
+    it('approves when the loss at the exit-plan final stop is within the per-trade limit', () => {
+      const card = makeCard({ exit: { ...makeCard().exit, exitPlan: makeExitPlan({ contractPrice: 2.0 }) } });
+      const result = checkTradeRisk(card, 1, DEFAULT_LIMITS, [], 0);
+      expect(result.approved).toBe(true);
+      expect(result.reasons).not.toContain('max_loss_per_trade_exceeded');
+    });
+  });
+});
+
+describe('maxLossAtStop', () => {
+  it('is entry premium minus stop contract price, times contracts * 100', () => {
+    expect(maxLossAtStop(2.5, 1.0, 2)).toBe(300);
+  });
+
+  it('floors at 0 when the stop reprices at or above entry (not actually a loss)', () => {
+    expect(maxLossAtStop(2.5, 3.0, 2)).toBe(0);
+  });
+});
+
+describe('resolveMaxLossLimitDollar', () => {
+  it('uses the global percent when no override is set', () => {
+    expect(resolveMaxLossLimitDollar(50000, 0.0375)).toBe(1875);
+    expect(resolveMaxLossLimitDollar(50000, 0.0375, null)).toBe(1875);
+  });
+
+  it('uses a percent override as a fraction of portfolioValue', () => {
+    expect(resolveMaxLossLimitDollar(50000, 0.0375, { mode: 'percent', value: 0.02 })).toBe(1000);
+  });
+
+  it('uses a dollar override verbatim, ignoring portfolioValue', () => {
+    expect(resolveMaxLossLimitDollar(50000, 0.0375, { mode: 'dollar', value: 300 })).toBe(300);
   });
 });
