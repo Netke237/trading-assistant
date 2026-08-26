@@ -952,7 +952,7 @@ function RiskForm() {
         // another session/device) shows correctly on screen but the pre-flight
         // trade-send gate keeps enforcing the stale persisted limit until the
         // user happens to touch a slider.
-        useRiskStore.getState().setLimits(next);
+        useRiskStore.getState().setLimits(next, { isUserEdit: false });
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps

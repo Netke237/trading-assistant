@@ -744,7 +744,12 @@ function MaxLossBanner({
       : Math.round(limits.maxLossPerTradePct * 100 * 100) / 100
   );
 
-  if (!exitPlan || position.contract.endsWith('|STOCK')) return null;
+  // entryPrice <= 0 is a data-integrity glitch, not a real 0-loss trade
+  // (mirrors the "never a real premium" convention `floorStop` applies to
+  // stock prices elsewhere in this store) — without this guard the formula
+  // below reports a reassuring "PASS — $0 max loss" for a position whose
+  // loss genuinely can't be computed.
+  if (!exitPlan || position.contract.endsWith('|STOCK') || position.entryPrice <= 0) return null;
 
   const lossAtStop = maxLossAtStop(position.entryPrice, exitPlan.stop.contractPrice, debounced.contracts);
   const limitDollar = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, debounced.override);

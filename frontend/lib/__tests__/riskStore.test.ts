@@ -110,6 +110,24 @@ describe('riskStore', () => {
     expect(result.current.portfolioValueUpdatedAt).toBeNull();
   });
 
+  it('setLimits with isUserEdit:false does not stamp portfolioValueUpdatedAt even when portfolioValue differs', () => {
+    // Regression: RiskForm's fetch-on-mount hydration effect calls setLimits
+    // purely to reconcile the store with whatever the backend currently
+    // holds (e.g. a value changed in another session/device) — that is NOT
+    // the user editing the field, and must not reset the staleness nudge.
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-08T12:00:00Z'));
+    const { result } = renderHook(() => useRiskStore());
+    act(() => {
+      useRiskStore.setState({ portfolioValueUpdatedAt: '2026-01-01T00:00:00.000Z' });
+    });
+    act(() => {
+      result.current.setLimits({ ...DEFAULT_LIMITS, portfolioValue: 250000 }, { isUserEdit: false });
+    });
+    expect(result.current.limits.portfolioValue).toBe(250000);
+    expect(result.current.portfolioValueUpdatedAt).toBe('2026-01-01T00:00:00.000Z');
+    jest.useRealTimers();
+  });
+
   it('incrementDaily increases count', () => {
     const { result } = renderHook(() => useRiskStore());
     act(() => {

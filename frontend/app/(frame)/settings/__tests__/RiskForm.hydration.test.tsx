@@ -94,4 +94,35 @@ describe('Settings page — risk store hydration', () => {
     expect(useRiskStore.getState().limits.maxConcurrentPositions).toBe(15);
     expect(useRiskStore.getState().limits.maxDailyRecommendations).toBe(8);
   });
+
+  it('does not reset the portfolioValue staleness nudge when hydration merely reconciles a divergent backend value', async () => {
+    // Regression: the hydration effect's setLimits() call is a resync, not a
+    // user edit — a genuinely-stale timestamp must survive a mount that finds
+    // the backend disagreeing with the locally-cached portfolioValue (e.g. a
+    // value changed in another session/device), exactly the scenario the
+    // test above exercises but never asserted on before this diff.
+    useRiskStore.setState({ portfolioValueUpdatedAt: '2026-02-01T00:00:00.000Z' });
+
+    mockGetRiskSettings.mockResolvedValue({
+      premiumStopPct: 0.60,
+      portfolioValue: 250000,
+      maxSinglePositionPct: 0.02,
+      maxLossPerTradePct: 0.015,
+      maxTotalExposurePct: 0.40,
+      maxConcurrentPositions: 15,
+      maxDailyRecommendations: 8,
+      targetT1Pct: 0.20,
+      targetT2Pct: 0.35,
+      targetT3Pct: 0.50,
+    });
+
+    render(<SettingsPage />);
+    fireEvent.click(screen.getByText('Risk'));
+
+    await waitFor(() => {
+      expect(useRiskStore.getState().limits.portfolioValue).toBe(250000);
+    });
+
+    expect(useRiskStore.getState().portfolioValueUpdatedAt).toBe('2026-02-01T00:00:00.000Z');
+  });
 });

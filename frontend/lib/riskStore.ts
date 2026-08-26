@@ -51,7 +51,12 @@ export interface RiskState {
    *  realized/open P&L, so this is the only signal for "is this still
    *  accurate?" null until the user's first edit. */
   portfolioValueUpdatedAt: string | null;
-  setLimits: (l: RiskLimits) => void;
+  /** `opts.isUserEdit` (default true) gates the `portfolioValueUpdatedAt`
+   *  stamp — pass `false` from a backend-resync path (e.g. RiskForm's
+   *  fetch-on-mount hydration effect) so reconciling the store with a value
+   *  that merely changed in another session doesn't masquerade as "the user
+   *  just edited this," silently resetting the staleness nudge. */
+  setLimits: (l: RiskLimits, opts?: { isUserEdit?: boolean }) => void;
   incrementDaily: () => void;
   computeMetrics: (positions: PortfolioPosition[]) => void;
 }
@@ -139,9 +144,9 @@ export const useRiskStore = create<RiskState>()(
       metrics: { ...DEFAULT_METRICS },
       symbols: [],
       portfolioValueUpdatedAt: null,
-      setLimits: (l) => set((s) => ({
+      setLimits: (l, opts) => set((s) => ({
         limits: l,
-        portfolioValueUpdatedAt: l.portfolioValue !== s.limits.portfolioValue
+        portfolioValueUpdatedAt: (opts?.isUserEdit ?? true) && l.portfolioValue !== s.limits.portfolioValue
           ? new Date().toISOString()
           : s.portfolioValueUpdatedAt,
       })),

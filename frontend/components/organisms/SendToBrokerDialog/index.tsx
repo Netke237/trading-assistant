@@ -315,14 +315,19 @@ function RiskSummary({
         </Text>
       ))}
       {reasons.has('max_loss_per_trade_exceeded') && (() => {
-        const worst = Object.values(riskChecks).find(
-          (rc) => rc.reasons.includes('max_loss_per_trade_exceeded'),
-        );
-        if (!worst || worst.maxLossAtStop == null || worst.maxLossLimitDollar == null) return null;
+        // The actual worst offender, not just the first match in basket order —
+        // a symbol pinned first with a barely-over loss must never mask a
+        // later symbol whose loss is wildly over the same limit.
+        let worst: { symbol: string; rc: RiskCheckResult } | null = null;
+        for (const [symbol, rc] of Object.entries(riskChecks)) {
+          if (!rc.reasons.includes('max_loss_per_trade_exceeded') || rc.maxLossAtStop == null) continue;
+          if (!worst || rc.maxLossAtStop > worst.rc.maxLossAtStop!) worst = { symbol, rc };
+        }
+        if (!worst || worst.rc.maxLossLimitDollar == null) return null;
         return (
           <Text size={11} tone="dim">
-            Max loss at stop ≈ ${Math.round(worst.maxLossAtStop).toLocaleString()}
-            {' '}(limit ${Math.round(worst.maxLossLimitDollar).toLocaleString()})
+            Max loss at stop ({worst.symbol}) ≈ ${Math.round(worst.rc.maxLossAtStop!).toLocaleString()}
+            {' '}(limit ${Math.round(worst.rc.maxLossLimitDollar).toLocaleString()})
           </Text>
         );
       })()}
