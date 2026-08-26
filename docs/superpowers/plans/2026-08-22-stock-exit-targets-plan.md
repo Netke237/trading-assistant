@@ -3850,3 +3850,38 @@ so it structurally cannot, regardless of ladder length).
 
 Backend: 1628 passed, 1 skipped (up from round 4 audit's 1627). Frontend: typecheck clean,
 697 passed (unchanged — the LOW fix needed no new test, covered by existing suite + typecheck).
+
+## Post-implementation independent audit (round 5)
+
+A fifth, independently spawned subagent stress-tested round 4's rounding fix specifically (2M
+random trials comparing the guard's decision against the ladder builder's own on identical
+`farthest`/`current` pairs — 0 mismatches; a 427-call fuzz of `breakout_base_signal` itself across
+float-unfriendly base heights — 0 fabricated fallback targets) and confirmed it CONFIRMED FIXED
+outright — round 4 closed the gap structurally, not just narrowed it, because the guard reuses the
+same `farthest` float object the ladder builder later rounds, so there is no second computation for
+floating-point non-associativity to diverge from. It also checked all six non-breakout_base
+strategies and `_build_target_ladder`'s `min_rung_r` floor for the same raw-vs-rounded disease —
+none reproduce it (breakout_base is structurally the only strategy with an outer pre-check at all).
+One MEDIUM finding, fixed:
+
+- **MEDIUM — `StockPositionCard`'s sell-to-close share-allocation rebalance (round 1) only handled
+  a rung edit or a SHARES *decrease* pushing the allocation over the total; increasing SHARES was
+  never topped up, silently leaving the added shares with no planned exit rung.** Repro: 100 shares
+  allocated 33/33/34 across T1/T2/T3; editing SHARES up to 250 left the rungs unchanged at
+  33/33/34 (sum still 100) — 150 shares would reach "Add to Portfolio" with no exit plan at all, no
+  warning shown (unlike the over-allocation and wrong-side-target cases, both explicitly guarded).
+  Traced downstream: `contractsToSell` isn't read by any automated execution path
+  (`alert_generator.py`'s `TP_HIT` only compares price against `targets[0]`), so this is a
+  data-integrity gap in a user-facing plan, not an execution-safety bug — hence MEDIUM, not HIGH.
+  Fixed by adding the mirror branch: when total `shares` grows beyond the existing allocation, scale
+  every rung UP proportionally, same reasoning as the existing shrink-down branch.
+
+No issues found in: the WFO/`exit:`/`active:`/request-params precedence across
+`strategy_backtest.py`, `strategy_watch_evaluator.py`, and `stock_scan.py` (consistent everywhere,
+and `exit:`'s existence is a deliberate durability net against a WFO re-tune silently dropping a
+parameter no longer in the search grid); the round-3 intraday-VWAP-in-multi-signal guard (still
+correctly rejects at the request level); the `/api/stocks/first-passage` side-validation (compares
+raw floats symmetrically on both sides, not the same asymmetric-rounding disease as breakout_base).
+
+Backend: 1628 passed, 1 skipped (unchanged — this round's fix is frontend-only). Frontend:
+typecheck clean, 698 passed (up from 697).
