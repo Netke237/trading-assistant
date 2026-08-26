@@ -585,6 +585,33 @@ describe('portfolioStore', () => {
       expect(body.portfolioValue).toBe(50000);
     });
 
+    it('persistPosition includes exitPlan in the POST body — regression guard for a round-2 audit finding where the create payload silently dropped it', async () => {
+      // A plan computed pre-trade via TradeCard's "Compute Exit Plan" and
+      // attached to the position before sending to broker must actually
+      // reach the backend on creation, not just on a later PATCH edit — the
+      // create path (toBackendPayload) had no exitPlan field at all until
+      // this fix, so the very next syncFromBackend silently erased it.
+      const exitPlan = {
+        computedAt: '2026-08-26T12:00:00.000Z',
+        stop: { price: 89.0, source: 'structural' as const, contractPrice: 1.1, rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80 },
+        targets: [],
+        atr: 2.0,
+      };
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      await persistPosition({ ...abt, recId: 'REC-EP-1', exitPlan });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.exitPlan).toEqual(exitPlan);
+    });
+
+    it('persistPosition sends exitPlan as null when the position has none', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      await persistPosition({ ...abt, recId: 'REC-EP-2' });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.exitPlan).toBeNull();
+    });
+
     it('persistPosition surfaces adjustedQty when the backend auto-reduces the size', async () => {
       (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
         .mockResolvedValue({ ok: true, status: 201, json: async () => ({ adjustedQty: 2 }) });

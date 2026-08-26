@@ -170,6 +170,36 @@ async def test_portfolio_add_reanchors_stop_and_structural_stop_to_live_price(cl
 # ── Test 2: Portfolio delete ──────────────────────────────────────────────────
 
 @pytest.mark.asyncio
+async def test_portfolio_add_persists_exit_plan(client):
+    """POST /api/portfolio must persist exitPlan (the exit-plan pipeline result
+    a user attached via TradeCard's "Compute Exit Plan" button before sending
+    to broker), not silently drop it — regression guard for a round-2
+    adversarial-audit finding where the create path had no exitPlan field at
+    all (only the later PATCH-update path did), so a plan computed pre-trade
+    was erased by the very next backend sync."""
+    exit_plan = {
+        "computedAt": "2026-08-26T12:00:00.000Z",
+        "stop": {"price": 178.0, "source": "structural", "contractPrice": 1.2, "rrModel": "Heston repriced",
+                  "structuralSource": "order_block", "structuralConfidence": 80},
+        "targets": [
+            {"rrRatio": 2.0, "arithmeticPrice": 195.0, "price": 195.0, "tpSource": "arithmetic",
+             "structuralPrice": None, "contractPrice": 4.5, "rrModel": "Heston repriced",
+             "probability": 0.6, "expectedDays": 8, "qualityGood": True, "qualityReasons": []},
+        ],
+        "atr": 3.5,
+    }
+    payload = {**_POSITION_PAYLOAD, "recId": "REC-EXITPLAN-001", "exitPlan": exit_plan}
+    resp = await client.post("/api/portfolio", json=payload)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["exitPlan"] == exit_plan
+
+    get_resp = await client.get("/api/portfolio")
+    assert get_resp.status_code == 200
+    saved = next(p for p in get_resp.json() if p["recId"] == "REC-EXITPLAN-001")
+    assert saved["exitPlan"] == exit_plan
+
+
+@pytest.mark.asyncio
 async def test_portfolio_delete(client):
     """POST then DELETE by rec_id → GET returns empty list."""
     await client.post("/api/portfolio", json=_POSITION_PAYLOAD)

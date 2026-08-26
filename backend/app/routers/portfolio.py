@@ -278,6 +278,7 @@ async def add_position(
         entry_date=body.entryDate,
         stop=_floor_stop(adjusted_stop),
         structural_stop=_floor_stop(adjusted_structural_stop),
+        exit_plan=body.exitPlan,
         targets=adjusted_targets,
         dte_total=body.dteTotal,
         entry_stock_price=entry_stock_price,

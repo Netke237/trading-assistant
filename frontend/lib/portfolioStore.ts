@@ -150,6 +150,7 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     entryDate:      p.entryDate ?? new Date().toISOString().slice(0, 10),
     stop:           floorStop(p.stop),
     structuralStop: floorStop(p.structuralStop),
+    exitPlan:       p.exitPlan ?? null,
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,

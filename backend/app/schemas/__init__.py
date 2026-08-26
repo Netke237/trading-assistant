@@ -621,6 +621,7 @@ class PortfolioPositionCreate(BaseModel):
     entryDate: str = Field(alias="entry_date")
     stop: Optional[float] = None
     structuralStop: Optional[float] = Field(alias="structural_stop", default=None)
+    exitPlan: Optional[dict] = Field(alias="exit_plan", default=None)
     targets: list[dict] = []
     dteTotal: Optional[int] = Field(alias="dte_total", default=None)
     portfolioValue: float = Field(alias="portfolio_value", default=50000.0)
@@ -635,6 +636,7 @@ class PortfolioPositionCreate(BaseModel):
             "entry_price": "entryPrice",
             "entry_date": "entryDate",
             "structural_stop": "structuralStop",
+            "exit_plan": "exitPlan",
             "dte_total": "dteTotal",
             "portfolio_value": "portfolioValue",
             "scan_stock_price": "scanStockPrice",
