@@ -1,9 +1,9 @@
 import {
   applyPickedContract, contractKeyFor, mergePlan, resolveBasketCards, withCachedEstimate,
-  cacheStructural, cacheFirstPassage,
-  type CachedFirstPassage, type CachedStructural,
+  cacheStructural, cacheFirstPassage, cacheExitPlan,
+  type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '../tradeCardOverride';
-import type { TradeCardData, OptionContract } from '@/types/domain';
+import type { TradeCardData, OptionContract, ExitPlan } from '@/types/domain';
 
 function makeCard(overrides: Partial<TradeCardData> = {}): TradeCardData {
   return {
@@ -270,6 +270,32 @@ describe('withCachedEstimate', () => {
     expect(out.exit.firstPassage).toBe(estimate.estimate);
     expect(out.exit.firstPassageContext).toBeNull();
   });
+
+  const exitPlan = {
+    plan: {
+      computedAt: '2026-08-26T12:00:00.000Z',
+      stop: { price: 294.5, source: 'structural' as const, contractPrice: 11.2, rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 71 },
+      targets: [],
+      atr: 5.4,
+    },
+  };
+
+  it('splices a cached exit plan into exit.exitPlan without disturbing the other two caches', () => {
+    const out = withCachedEstimate(makeCard(), estimate, structural, exitPlan)!;
+    expect(out.exit.exitPlan).toBe(exitPlan.plan);
+    expect(out.exit.firstPassage).toBe(estimate.estimate);
+    expect(out.exit.structuralStop).toBe(structural.stop);
+  });
+
+  it('returns the same card reference when only exitPlan is undefined too', () => {
+    const card = makeCard();
+    expect(withCachedEstimate(card, undefined, undefined, undefined)).toBe(card);
+  });
+
+  it('preserves a cached "compute failed" exit plan as null, not absent', () => {
+    const out = withCachedEstimate(makeCard(), undefined, undefined, { plan: null })!;
+    expect(out.exit.exitPlan).toBeNull();
+  });
 });
 
 describe('cacheStructural', () => {
@@ -404,6 +430,59 @@ describe('cacheFirstPassage', () => {
     const other = 'MSFT|300|2026-01-16|C';
     const prev: Record<string, CachedFirstPassage> = { [other]: { estimate: estimateA, context: contextA } };
     const out = cacheFirstPassage(prev, KEY, estimateA, contextA);
+    expect(prev[KEY]).toBeUndefined();
+    expect(out[other]).toBe(prev[other]);
+  });
+});
+
+describe('cacheExitPlan', () => {
+  const planA: ExitPlan = {
+    computedAt: '2026-08-26T12:00:00.000Z',
+    stop: { price: 294.5, source: 'structural', contractPrice: 11.2, rrModel: 'Heston repriced', structuralSource: 'order_block', structuralConfidence: 71 },
+    targets: [
+      { rrRatio: 2.0, arithmeticPrice: 340.0, price: 340.0, tpSource: 'arithmetic', structuralPrice: null, contractPrice: 25.94, rrModel: 'Heston repriced', probability: 0.62, expectedDays: 12, qualityGood: true, qualityReasons: [] },
+    ],
+    atr: 5.4,
+  };
+  const KEY = 'AAPL|340|2026-01-16|C';
+
+  it('ignores the `undefined` reset sentinel and returns the identical prev', () => {
+    const prev: Record<string, CachedExitPlan> = { [KEY]: { plan: planA } };
+    expect(cacheExitPlan(prev, KEY, undefined)).toBe(prev);
+  });
+
+  it('writes a `null` plan as a real overwrite — a failed re-compute must not leave a stale one cached', () => {
+    const prev: Record<string, CachedExitPlan> = { [KEY]: { plan: planA } };
+    const out = cacheExitPlan(prev, KEY, null);
+    expect(out[KEY]).toEqual({ plan: null });
+  });
+
+  it('ignores a null key (card with no resolvable contract) rather than keying on "null"', () => {
+    const out = cacheExitPlan({}, null, planA);
+    expect(Object.keys(out)).toHaveLength(0);
+  });
+
+  it('writes the plan under the contract key', () => {
+    const out = cacheExitPlan({}, KEY, planA);
+    expect(out[KEY]!.plan).toBe(planA);
+  });
+
+  it('returns the IDENTICAL prev when unchanged (render-loop guard)', () => {
+    const prev: Record<string, CachedExitPlan> = { [KEY]: { plan: planA } };
+    expect(cacheExitPlan(prev, KEY, planA)).toBe(prev);
+  });
+
+  it('overwrites that contract slot on a fresh plan', () => {
+    const prev: Record<string, CachedExitPlan> = { [KEY]: { plan: planA } };
+    const planB: ExitPlan = { ...planA, atr: 6.1 };
+    const out = cacheExitPlan(prev, KEY, planB);
+    expect(out[KEY]!.plan).toBe(planB);
+  });
+
+  it('never mutates prev and never disturbs another contract', () => {
+    const other = 'MSFT|300|2026-01-16|C';
+    const prev: Record<string, CachedExitPlan> = { [other]: { plan: planA } };
+    const out = cacheExitPlan(prev, KEY, planA);
     expect(prev[KEY]).toBeUndefined();
     expect(out[other]).toBe(prev[other]);
   });

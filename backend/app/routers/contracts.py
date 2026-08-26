@@ -496,7 +496,20 @@ async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
     async with httpx.AsyncClient(timeout=8) as client:
         candles = await fetch_candles_async(client, req.symbol.upper())
 
-    atr = _atr(candles, 14) if candles else 0.0
+    # Fewer than 2 candles means _atr can't form even one true range (returns
+    # 0.0) and find_structural_stop's own len<10 guard also returns None — the
+    # ATR floor collapses to entry_price exactly, silently producing a
+    # zero-width "final stop" and, downstream, every target row landing on
+    # entry_price too. That's meaningfully different from "computed, but no
+    # structural level was found nearby" (a real, valid atr_widened result) —
+    # reject explicitly rather than return a plan built on no data at all.
+    if len(candles) < 2:
+        raise HTTPException(
+            status_code=422,
+            detail="insufficient price history to compute an exit plan",
+        )
+
+    atr = _atr(candles, 14)
 
     final_stop = compute_final_stop(
         candles, req.direction, req.entry_price, atr,
@@ -537,22 +550,37 @@ async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
         # simulation / per-day option-repricing loop.
         pct = (tp_priced.estimated_exit_premium - req.premium) / req.premium if req.premium > 0 else 0.0
 
-        seed_key = (
-            f"{req.symbol.upper()}|{req.strike}|{req.dte}|{round(req.entry_price, 2)}"
-            f"|{rr_ratio}|{round(row.price, 2)}"
-        )
-        seed = int(hashlib.sha256(seed_key.encode()).hexdigest(), 16) % (2 ** 32)
+        if pct <= 0:
+            # The repriced contract value at this target's stock price is at
+            # or below the CURRENT premium (time decay at dte_at_target
+            # outweighing the favorable move — plausible for a long-dated,
+            # low-delta, ATR-widened stop). first_passage's "probability of
+            # ever crossing target_option_price" would be trivially ~1 at
+            # ~day 1 here, since day 1's simulated repriced price is already
+            # at/above a threshold that isn't actually above today's real
+            # premium — a misleading "high-probability profit target" for a
+            # row that isn't currently a profit at all. Report it as
+            # unscoreable rather than run a simulation whose answer would be
+            # a numerically-correct but semantically-false near-certainty.
+            probability, expected_days = 0.0, None
+        else:
+            seed_key = (
+                f"{req.symbol.upper()}|{req.strike}|{req.dte}|{round(req.entry_price, 2)}"
+                f"|{rr_ratio}|{round(row.price, 2)}"
+            )
+            seed = int(hashlib.sha256(seed_key.encode()).hexdigest(), 16) % (2 ** 32)
 
-        fp_result = estimate_first_passage(
-            stock_price=req.entry_price, strike=req.strike, dte=req.dte,
-            premium=req.premium, delta=0.45, is_call=is_call,
-            trend_score=req.trend_score, invalidation_price=final_stop.price,
-            candles=candles, t1_pct=pct, t2_pct=pct, t3_pct=pct,
-            max_drift_pct=fp_cfg["max_drift_pct"], n_paths=fp_cfg["n_paths"],
-            sigma_floor=fp_cfg["sigma_floor"], sigma_ceiling=fp_cfg["sigma_ceiling"],
-            seed=seed,
-        )
-        fp_target = fp_result.targets[0]
+            fp_result = estimate_first_passage(
+                stock_price=req.entry_price, strike=req.strike, dte=req.dte,
+                premium=req.premium, delta=0.45, is_call=is_call,
+                trend_score=req.trend_score, invalidation_price=final_stop.price,
+                candles=candles, t1_pct=pct, t2_pct=pct, t3_pct=pct,
+                max_drift_pct=fp_cfg["max_drift_pct"], n_paths=fp_cfg["n_paths"],
+                sigma_floor=fp_cfg["sigma_floor"], sigma_ceiling=fp_cfg["sigma_ceiling"],
+                seed=seed,
+            )
+            fp_target = fp_result.targets[0]
+            probability, expected_days = fp_target.probability, fp_target.expected_days
 
         targets_out.append(ExitPlanTargetRowOut(
             rrRatio=row.rr_ratio,
@@ -562,8 +590,8 @@ async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
             structuralPrice=round(row.structural.price, 2) if row.structural else None,
             contractPrice=round(tp_priced.estimated_exit_premium, 2),
             rrModel=tp_priced.model_used,
-            probability=round(fp_target.probability, 4),
-            expectedDays=fp_target.expected_days,
+            probability=round(probability, 4),
+            expectedDays=expected_days,
             qualityGood=row.quality_good,
             qualityReasons=row.quality_reasons,
         ))

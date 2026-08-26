@@ -10,6 +10,7 @@ jest.mock('@/lib/api', () => ({
     getStockQuote: jest.fn(),
     getContractQuote: jest.fn(),
     getFirstPassageEstimate: jest.fn(),
+    getExitPlan: jest.fn(),
   },
 }));
 
@@ -796,6 +797,98 @@ describe('TradeCard', () => {
     });
     const sawAaplEstimate = onChangeForMSFT.mock.calls.some(([estimate]) => estimate != null);
     expect(sawAaplEstimate).toBe(false);
+  });
+
+  it('fetches and surfaces the exit plan to onExitPlanChange on button click, using fresh quotes', async () => {
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    const plan = {
+      stop: {
+        price: 180.0, source: 'structural' as const, contractPrice: 1.2,
+        rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+      },
+      targets: [
+        {
+          rrRatio: 2.0, arithmeticPrice: 195.0, price: 195.0, tpSource: 'arithmetic' as const,
+          structuralPrice: null, contractPrice: 4.5, rrModel: 'Heston repriced' as const,
+          probability: 0.6, expectedDays: 8, qualityGood: true, qualityReasons: [],
+        },
+        {
+          rrRatio: 3.0, arithmeticPrice: 204.0, price: 204.0, tpSource: 'arithmetic' as const,
+          structuralPrice: null, contractPrice: 6.0, rrModel: 'Heston repriced' as const,
+          probability: 0.4, expectedDays: 14, qualityGood: true, qualityReasons: [],
+        },
+      ],
+      atr: 3.5,
+    };
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce(plan);
+
+    const onExitPlanChange = jest.fn();
+    render(<TradeCard data={mockTradeCard} onExitPlanChange={onExitPlanChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /compute exit plan/i }));
+
+    await waitFor(() => {
+      expect(onExitPlanChange).toHaveBeenCalledWith(
+        expect.objectContaining({ stop: expect.objectContaining({ price: 180.0 }), atr: 3.5 }),
+      );
+    });
+    expect(api.getExitPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ symbol: 'AAPL', direction: 'Bullish', entry_price: 186.1, premium: 2.75 }),
+      expect.anything(),
+    );
+  });
+
+  it('never surfaces the previous candidate\'s exit plan under the new contract\'s callback', async () => {
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop: { price: 180.0, source: 'structural', contractPrice: 1.2, rrModel: 'Heston repriced', structuralSource: null, structuralConfidence: null },
+      targets: [],
+      atr: 3.5,
+    });
+    const onChangeForAAPL = jest.fn();
+    const { rerender } = render(<TradeCard data={mockTradeCard} onExitPlanChange={onChangeForAAPL} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /compute exit plan/i }));
+    });
+    await waitFor(() => {
+      expect(onChangeForAAPL).toHaveBeenCalledWith(expect.objectContaining({ atr: 3.5 }));
+    });
+
+    // Switch to a never-computed candidate with a fresh callback, exactly as
+    // the real parent does — the new contract's callback must only ever see
+    // the reset sentinel, never AAPL's plan (which would cache AAPL's numbers
+    // under MSFT's contract key).
+    const nextCard: TradeCardData = { ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT 300C 06/19' };
+    const onChangeForMSFT = jest.fn();
+    rerender(<TradeCard data={nextCard} onExitPlanChange={onChangeForMSFT} />);
+
+    await waitFor(() => {
+      expect(onChangeForMSFT).toHaveBeenCalled();
+    });
+    const sawAaplPlan = onChangeForMSFT.mock.calls.some(([plan]) => plan != null);
+    expect(sawAaplPlan).toBe(false);
+  });
+
+  it('clears the exit plan to null (not undefined) on a failed compute, so the parent cache is actually overwritten', async () => {
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getExitPlan as jest.Mock).mockRejectedValueOnce(new Error('network error'));
+
+    const onExitPlanChange = jest.fn();
+    render(<TradeCard data={mockTradeCard} onExitPlanChange={onExitPlanChange} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /compute exit plan/i }));
+    });
+
+    await waitFor(() => {
+      expect(onExitPlanChange).toHaveBeenLastCalledWith(null);
+    });
+    expect(screen.getByText(/Couldn't compute an exit plan/i)).toBeInTheDocument();
   });
 
   it('shows no Profit Targets rows (and no stale two-click hint) until Estimate has been run', async () => {

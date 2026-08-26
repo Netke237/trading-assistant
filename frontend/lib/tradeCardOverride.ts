@@ -7,7 +7,7 @@
  * the basket cards were built straight from the raw scan candidates).
  */
 import type {
-  TradeCardData, OptionContract, StructuralStop, FirstPassageEstimate, FirstPassageContext,
+  TradeCardData, OptionContract, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan,
 } from '@/types/domain';
 
 export type OverriddenCard = TradeCardData & { _userOverride?: boolean };
@@ -209,6 +209,34 @@ export function cacheFirstPassage(
   return { ...prev, [key]: { estimate, context } };
 }
 
+/** One cached "Compute Exit Plan" result, keyed by CONTRACT (contractKeyFor) —
+ *  same reasoning as CachedFirstPassage: the plan's repricing/probability is
+ *  computed off that contract's own strike/dte/premium, so a symbol-level key
+ *  would show contract A's numbers on contract B's card. `plan: null` is a
+ *  real, cacheable answer (a failed re-compute that must overwrite a stale
+ *  one), the same role `CachedFirstPassage.estimate: null` plays. */
+export type CachedExitPlan = {
+  plan: ExitPlan | null;
+};
+
+/**
+ * Cache-write reducer for a "Compute Exit Plan" result, keyed by CONTRACT.
+ * Same invariants as `cacheFirstPassage`: `undefined` (in-flight/reset) is
+ * ignored, `null` (a real "computation failed" answer) is cached and
+ * overwrites, and an unchanged write returns the identical `prev` reference
+ * so the parent doesn't re-render on a no-op.
+ */
+export function cacheExitPlan(
+  prev: Record<string, CachedExitPlan>,
+  key: string | null,
+  plan: ExitPlan | null | undefined,
+): Record<string, CachedExitPlan> {
+  if (!key || plan === undefined) return prev;
+  const cur = prev[key];
+  if (cur && cur.plan === plan) return prev;
+  return { ...prev, [key]: { plan } };
+}
+
 /**
  * Splice cached "Estimate" / "Check structure" results into the card's
  * `exit.*` fields — the same fields TradeCard already reads for its initial
@@ -224,8 +252,9 @@ export function withCachedEstimate<T extends TradeCardData>(
   card: T | undefined,
   estimate: CachedFirstPassage | undefined,
   structural: CachedStructural | undefined,
+  exitPlan?: CachedExitPlan,
 ): T | undefined {
-  if (!card || (!estimate && !structural)) return card;
+  if (!card || (!estimate && !structural && !exitPlan)) return card;
   return {
     ...card,
     exit: {
@@ -235,6 +264,9 @@ export function withCachedEstimate<T extends TradeCardData>(
         : {}),
       ...(structural
         ? { structuralStop: structural.stop, structuralStopStockPrice: structural.stockPrice }
+        : {}),
+      ...(exitPlan
+        ? { exitPlan: exitPlan.plan }
         : {}),
     },
   };

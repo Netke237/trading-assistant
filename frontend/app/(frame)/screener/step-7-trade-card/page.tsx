@@ -21,7 +21,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { logAudit } from '@/lib/audit';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import type {
-  PortfolioPosition, TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext,
+  PortfolioPosition, TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan,
 } from '@/types/domain';
 import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
@@ -29,8 +29,8 @@ import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api }               from '@/lib/api';
 import {
   applyPickedContract, contractKeyFor, mergePlan, resolveBasketCards, rrOverridesFrom, withCachedEstimate,
-  cacheStructural, cacheFirstPassage,
-  type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural,
+  cacheStructural, cacheFirstPassage, cacheExitPlan,
+  type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '@/lib/tradeCardOverride';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
@@ -70,7 +70,11 @@ function tradeCardSnapshotOf(card: TradeCardData): Record<string, unknown> {
   };
 }
 
-function positionFromOrder(order: DraftOrder, structuralStop: number | null = null): PortfolioPosition {
+function positionFromOrder(
+  order: DraftOrder,
+  structuralStop: number | null = null,
+  exitPlan: ExitPlan | null = null,
+): PortfolioPosition {
   const c   = order.card;
   const cd  = c.contractDetails;
   const mid = cd?.mid ?? c.entry.limit;
@@ -89,6 +93,7 @@ function positionFromOrder(order: DraftOrder, structuralStop: number | null = nu
     pnlPct:        0,
     stop:          c.exit.invalidation,
     structuralStop,
+    exitPlan,
     targets:       c.exit.targets,
     status:        c.finalStatus,
     ivRank:        cd?.ivRank,
@@ -139,6 +144,11 @@ export default function Step7Page() {
   // premium*(1+pct) off that contract's own premium), so they're keyed by
   // contractKeyFor, the same identity plansBySymbol tags its entries with.
   const [estimatesByContract, setEstimatesByContract] = useState<Record<string, CachedFirstPassage>>({});
+  // "Compute Exit Plan" results, per CONTRACT — same reasoning as
+  // estimatesByContract: the plan's repricing/probability is computed off
+  // that contract's own strike/dte/premium, so it must be keyed by contract,
+  // not symbol.
+  const [exitPlanByContract, setExitPlanByContract] = useState<Record<string, CachedExitPlan>>({});
   // Both write paths delegate to a pure reducer in lib/tradeCardOverride.ts,
   // alongside the read side (withCachedEstimate) — the two rules they enforce are
   // the highest-consequence logic in this feature and are unit-tested there rather
@@ -164,6 +174,10 @@ export default function Step7Page() {
     estimate: FirstPassageEstimate | null | undefined,
     context: FirstPassageContext | null,
   ) => setEstimatesByContract((prev) => cacheFirstPassage(prev, key, estimate, context));
+  const handleExitPlanChange = (
+    key: string | null,
+    plan: ExitPlan | null | undefined,
+  ) => setExitPlanByContract((prev) => cacheExitPlan(prev, key, plan));
 
   useEffect(() => {
     setRecIdMap((prev) => {
@@ -223,6 +237,7 @@ export default function Step7Page() {
     // this file doesn't silently rely on an invariant that lives elsewhere.
     setEstimatesByContract({});
     setStructuralBySymbol({});
+    setExitPlanByContract({});
     if (scanResult?.candidates?.length) {
       setCards(scanResult.candidates);
       if (scanResult.candidates[0]) setActive(scanResult.candidates[0].symbol);
@@ -313,8 +328,9 @@ export default function Step7Page() {
       effectiveCard,
       contractKey ? estimatesByContract[contractKey] : undefined,
       effectiveCard ? structuralBySymbol[effectiveCard.symbol] : undefined,
+      contractKey ? exitPlanByContract[contractKey] : undefined,
     ),
-    [effectiveCard, contractKey, estimatesByContract, structuralBySymbol],
+    [effectiveCard, contractKey, estimatesByContract, structuralBySymbol, exitPlanByContract],
   );
 
   // Every basket item, override-resolved and (if overridden) merged with its
@@ -551,6 +567,7 @@ export default function Step7Page() {
       broker === 'tastytrade_paper' ? 'Tastytrade Paper' :
       'IBKR Paper';
     const typeLabel   = orderType === 'LMT' ? 'Limit' : 'Market';
+    const cardContractKey = contractKeyFor(card);
     return {
       symbol:        card.symbol,
       contract:      toOptionSymbol(card),
@@ -565,6 +582,7 @@ export default function Step7Page() {
       pnlPct:        0,
       stop:          card.exit.invalidation,
       structuralStop: structuralBySymbol[card.symbol]?.stop?.price ?? null,
+      exitPlan:      cardContractKey ? exitPlanByContract[cardContractKey]?.plan ?? null : null,
       targets:       card.exit.targets,
       status:        card.finalStatus,
       ivRank:        cd?.ivRank,
@@ -667,7 +685,9 @@ export default function Step7Page() {
       // (a single POST), so there is no second POST to conflict (409) with.
       const recId = recIdMap[o.card.symbol] ?? generateRecId();
       const structuralStop = structuralBySymbol[o.card.symbol]?.stop?.price ?? null;
-      const res = await addPosition({ ...positionFromOrder(o, structuralStop), recId });
+      const orderContractKey = contractKeyFor(o.card);
+      const orderExitPlan = orderContractKey ? exitPlanByContract[orderContractKey]?.plan ?? null : null;
+      const res = await addPosition({ ...positionFromOrder(o, structuralStop, orderExitPlan), recId });
 
       if (res.status === 'rejected') {
         // Backend refused it and the optimistic row was dropped — a real failure.
@@ -772,6 +792,7 @@ export default function Step7Page() {
               sendDisabled={basketEmpty || basketPlansPending}
               onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(effectiveCard.symbol, stop, stockPrice)}
               onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
+              onExitPlanChange={(plan) => handleExitPlanChange(contractKey, plan)}
             />
           )}
           {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (

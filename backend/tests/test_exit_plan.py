@@ -234,3 +234,64 @@ class TestEndpoint:
             "strike": 105, "dte": 30, "premium": 2.50, "trend_score": 150,
         })
         assert r.status_code == 422
+
+    def test_rejects_when_no_candle_history_is_available(self):
+        """Empty candles would otherwise silently collapse the ATR floor to 0
+        (entry_price exactly) and produce a zero-width stop/every target
+        landing on entry_price — reject explicitly instead of returning a
+        plan built on no data at all."""
+        with patch("app.routers.contracts.fetch_candles_async", AsyncMock(return_value=[])):
+            r = self._client().post("/api/contracts/exit-plan", json={
+                "symbol": "AAPL", "direction": "Bullish", "entry_price": 100,
+                "strike": 105, "dte": 30, "premium": 2.50, "trend_score": 65,
+            })
+        assert r.status_code == 422
+        assert "insufficient" in r.json()["detail"].lower()
+
+    def test_rejects_when_candle_history_is_a_single_bar(self):
+        with patch(
+            "app.routers.contracts.fetch_candles_async",
+            AsyncMock(return_value=[{"time": "1", "open": 100, "high": 100, "low": 100, "close": 100, "volume": 1}]),
+        ):
+            r = self._client().post("/api/contracts/exit-plan", json={
+                "symbol": "AAPL", "direction": "Bullish", "entry_price": 100,
+                "strike": 105, "dte": 30, "premium": 2.50, "trend_score": 65,
+            })
+        assert r.status_code == 422
+
+    def test_target_row_below_current_premium_is_not_scored_as_high_probability(self, monkeypatch):
+        """A target whose repriced contract value doesn't exceed the current
+        premium (net loss from time decay outweighing the favorable move) must
+        not be run through first_passage — that simulation would trivially
+        report ~100% probability at ~day 1 since the "target" is already at or
+        below where day 1's repriced value typically sits, which would
+        misrepresent a loss as a near-certain profit target."""
+        import app.routers.contracts as contracts_module
+        from app.scoring.reward_risk import RrResult
+
+        candles = json.loads((FIXTURES / "AAPL_candles.json").read_text())
+        entry_price = candles[-1]["close"]
+
+        # Force every repricing call to return a value at/below current premium.
+        monkeypatch.setattr(
+            contracts_module, "estimate_rr",
+            lambda **kwargs: RrResult(rr_ratio=0.0, model_used="BS repriced (IV-derived)", estimated_exit_premium=2.50),
+        )
+        fp_spy_calls = []
+        real_fp = contracts_module.estimate_first_passage
+        def _spy(**kwargs):
+            fp_spy_calls.append(kwargs)
+            return real_fp(**kwargs)
+        monkeypatch.setattr(contracts_module, "estimate_first_passage", _spy)
+
+        with patch("app.routers.contracts.fetch_candles_async", AsyncMock(return_value=candles)):
+            r = self._client().post("/api/contracts/exit-plan", json={
+                "symbol": "AAPL", "direction": "Bullish", "entry_price": entry_price,
+                "strike": round(entry_price * 1.05), "dte": 30, "premium": 2.50, "trend_score": 65,
+            })
+        assert r.status_code == 200, r.text
+        body = r.json()
+        for t in body["targets"]:
+            assert t["probability"] == 0.0
+            assert t["expectedDays"] is None
+        assert fp_spy_calls == []
