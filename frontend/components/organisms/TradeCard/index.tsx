@@ -13,7 +13,7 @@ import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk } from '@/lib/risk';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
-import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget } from '@/types/domain';
+import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan } from '@/types/domain';
 import {
   triggerDetailText,
   pullbackDetailText,
@@ -181,6 +181,16 @@ interface TradeCardProps {
     estimate: FirstPassageEstimate | null | undefined,
     context: FirstPassageContext | null,
   ) => void;
+  /** Fired whenever the "Compute Exit Plan" result changes for the current
+   *  contract, including the reset to `undefined` on a contract switch/start
+   *  of a re-compute, and the explicit `null` a FAILED re-compute writes once
+   *  it actually completes — same `undefined` (in-flight, don't touch the
+   *  cache) vs `null` (a real answer, overwrite the cache) distinction as
+   *  `onStructuralStopChange`/`onFirstPassageChange` above. Unlike those two,
+   *  this is a single self-contained server computation (no cross-fetch
+   *  pairing/freshness to track), so the parent can cache it per contract
+   *  on its own. */
+  onExitPlanChange?: (plan: ExitPlan | null | undefined) => void;
 }
 
 function targetStatusTooltip(statusVal: TargetLevel['status']): string {
@@ -203,6 +213,7 @@ export function TradeCard({
   onEditsChange,
   onStructuralStopChange,
   onFirstPassageChange,
+  onExitPlanChange,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
   const [altOpen, setAltOpen] = useState(false);
@@ -313,6 +324,12 @@ export function TradeCard({
   // Same stale-response guard as structuralRequestRef above.
   const firstPassageRequestRef = useRef<AbortController | null>(null);
 
+  const [exitPlan, setExitPlan] = useState<ExitPlan | null | undefined>(data.exit.exitPlan);
+  const [exitPlanLoading, setExitPlanLoading] = useState(false);
+  const [exitPlanError, setExitPlanError] = useState(false);
+  // Same stale-response guard as structuralRequestRef/firstPassageRequestRef above.
+  const exitPlanRequestRef = useRef<AbortController | null>(null);
+
   const prevSymbolRef = useRef(data.symbol);
   const prevContractRef = useRef(data.contract);
   // Single effect resetting BOTH structuralStop and firstPassage state on a
@@ -326,6 +343,7 @@ export function TradeCard({
     if (data.symbol !== prevSymbolRef.current || data.contract !== prevContractRef.current) {
       structuralRequestRef.current?.abort();
       firstPassageRequestRef.current?.abort();
+      exitPlanRequestRef.current?.abort();
       setOverlay({ ...defaultOverlay(data), contracts: initialContracts });
       // Every one of these five reads data.exit — for a candidate nothing has
       // been run on they are all absent and this is still a full reset (the
@@ -347,6 +365,9 @@ export function TradeCard({
       setFirstPassageContext(data.exit.firstPassageContext ?? null);
       setFirstPassageError(false);
       setFirstPassageLoading(false);
+      setExitPlan(data.exit.exitPlan);
+      setExitPlanError(false);
+      setExitPlanLoading(false);
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
     }
@@ -355,6 +376,7 @@ export function TradeCard({
   // Cancel any outstanding requests on unmount.
   useEffect(() => () => structuralRequestRef.current?.abort(), []);
   useEffect(() => () => firstPassageRequestRef.current?.abort(), []);
+  useEffect(() => () => exitPlanRequestRef.current?.abort(), []);
 
   // Surface every structuralStop change (including the reset to `undefined`/`null`
   // above) to the parent, so it can attach the level to the position if/when this
@@ -404,6 +426,60 @@ export function TradeCard({
   useEffect(() => {
     onFirstPassageChangeRef.current?.(firstPassage, firstPassageContext);
   }, [firstPassage, firstPassageContext]);
+
+  // Same two-effect discipline as above, for the exit-plan pipeline result.
+  const onExitPlanChangeRef = useRef(onExitPlanChange);
+  useEffect(() => {
+    onExitPlanChangeRef.current = onExitPlanChange;
+  }, [onExitPlanChange]);
+  useEffect(() => {
+    onExitPlanChangeRef.current?.(exitPlan);
+  }, [exitPlan]);
+
+  const computeExitPlan = useCallback(async () => {
+    exitPlanRequestRef.current?.abort();
+    const controller = new AbortController();
+    exitPlanRequestRef.current = controller;
+    setExitPlanLoading(true);
+    setExitPlanError(false);
+    setExitPlan(undefined);
+    try {
+      const cd = data.contractDetails;
+      if (!cd) throw new Error('no contract selected');
+      // Fresh stock + contract quotes, same reasoning as checkStructure/
+      // estimateFirstPassage above — never data.price/cd.mid, which are
+      // scan-time snapshots.
+      const [stockQuote, contractQuote] = await Promise.all([
+        api.getStockQuote(data.symbol, controller.signal).catch(() => null),
+        api.getContractQuote(data.symbol, cd.strike, cd.expiry, cd.right, controller.signal).catch(() => null),
+      ]);
+      if (controller.signal.aborted) return;
+      const entryPrice = stockQuote?.price ?? data.price;
+      const premium = contractQuote?.price ?? cd.mid;
+      const res = await api.getExitPlan({
+        symbol: data.symbol,
+        direction: data.direction,
+        entry_price: entryPrice,
+        strike: cd.strike,
+        dte: cd.dte,
+        premium,
+        trend_score: data.stockBreakdown.trend,
+      }, controller.signal);
+      if (controller.signal.aborted) return;
+      setExitPlan({ ...res, computedAt: new Date().toISOString() });
+    } catch {
+      if (controller.signal.aborted) return;
+      setExitPlanError(true);
+      // Same reasoning as estimateFirstPassage's `.catch`: this was cleared to
+      // `undefined` above (in-flight, which the parent's cache treats as
+      // "don't touch") — an explicit `null` here forces the overwrite on a
+      // genuine failure instead of leaving a stale cached plan to silently
+      // reappear on the next navigate-away-and-back.
+      setExitPlan(null);
+    } finally {
+      if (!controller.signal.aborted) setExitPlanLoading(false);
+    }
+  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend]);
 
   const estimateFirstPassage = useCallback(async () => {
     firstPassageRequestRef.current?.abort();
@@ -916,6 +992,76 @@ export function TradeCard({
                   mono
                 />
               </dl>
+            )}
+          </div>
+          <div className={styles.structuralStop}>
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={computeExitPlan}
+              disabled={exitPlanLoading || !data.contractDetails}
+            >
+              <Text size={12} weight={500}>
+                {exitPlanLoading ? 'Computing exit plan…' : 'Compute Exit Plan'}
+              </Text>
+            </button>
+            {exitPlanError && (
+              <Text size={11} tone="reject">Couldn&apos;t compute an exit plan — try again.</Text>
+            )}
+            {exitPlan && (
+              <div className={styles.targetsTable}>
+                <div className={styles.targetRow}>
+                  <div className={styles.targetMain}>
+                    <div className={styles.targetId}>
+                      <Text size={12} weight={600}>
+                        Final stop {exitPlan.stop.source === 'structural' ? '(structural)' : '(ATR-widened)'}
+                      </Text>
+                    </div>
+                    <div className={styles.targetValues}>
+                      <KV label="Stock price" value={`$${exitPlan.stop.price.toFixed(2)}`} mono />
+                      <KV label="Contract price" value={`$${exitPlan.stop.contractPrice.toFixed(2)}`} mono />
+                      <KV label="Pricing" value={exitPlan.stop.rrModel} mono />
+                    </div>
+                  </div>
+                </div>
+                {exitPlan.targets.map((t) => (
+                  <div className={styles.targetRow} key={t.rrRatio}>
+                    <div className={styles.targetMain}>
+                      <div className={styles.targetId}>
+                        <Text size={12} weight={600}>
+                          {t.rrRatio}R {t.qualityGood ? '✓' : '⚠'}
+                        </Text>
+                        <Text size={10} tone="dim">
+                          {t.tpSource === 'structural_snap' ? 'Snapped to structural level' : 'Arithmetic target'}
+                        </Text>
+                      </div>
+                      <div className={styles.targetValues}>
+                        <KV label="Stock price" value={`$${t.price.toFixed(2)}`} mono />
+                        <KV label="Contract price" value={`$${t.contractPrice.toFixed(2)}`} mono />
+                        <KV label="Pricing" value={t.rrModel} mono />
+                        <KV label="Probability before expiry" value={`${(t.probability * 100).toFixed(0)}%`} mono />
+                        <KV
+                          label="Expected time"
+                          value={t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}
+                          mono
+                        />
+                      </div>
+                      {!t.qualityGood && (
+                        <Text size={10} tone="caution">
+                          {t.qualityReasons.includes('stop_widened') && t.qualityReasons.includes('target_beyond_structural')
+                            ? 'Stop was ATR-widened and target overshoots the next structural level.'
+                            : t.qualityReasons.includes('stop_widened')
+                            ? 'Stop was ATR-widened — no structural level cleared the floor.'
+                            : 'Target overshoots the next real structural level.'}
+                        </Text>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <Text size={10} tone="dim">
+                  ATR(14): ${exitPlan.atr.toFixed(2)} · as of {new Date(exitPlan.computedAt).toLocaleTimeString()}
+                </Text>
+              </div>
             )}
           </div>
         </section>

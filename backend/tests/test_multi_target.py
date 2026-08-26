@@ -39,7 +39,10 @@ def test_pricing_method_not_empty():
         is_call=True,
     )
     for t in targets:
-        assert t.pricingMethod in (PricingMethod.HESTON, PricingMethod.DELTA_APPROX, PricingMethod.UNAVAILABLE)
+        assert t.pricingMethod in (
+            PricingMethod.HESTON, PricingMethod.BS_REPRICED,
+            PricingMethod.DELTA_APPROX, PricingMethod.UNAVAILABLE,
+        )
         assert t.pricingMethod != ""
 
 
@@ -74,7 +77,7 @@ def test_stock_price_equals_target_price():
     ('legacy', 'current'),
     [
         ('heston', PricingMethod.HESTON),
-        ('delta-approx', PricingMethod.DELTA_APPROX),
+        ('delta-approx', PricingMethod.BS_REPRICED),
         ('manual', PricingMethod.UNAVAILABLE),
     ],
 )

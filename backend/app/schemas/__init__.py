@@ -20,7 +20,7 @@ AlertKind = Literal['Info', 'Action', 'Critical']
 OrderType = Literal['Limit', 'Market', 'Stop']
 OptionRight = Literal['C', 'P']
 TrendDir = Literal['up', 'flat', 'down']
-RrModel = Literal['Heston repriced', 'BS repriced (IV-derived)']
+RrModel = Literal['Heston repriced', 'BS repriced (IV-derived)', 'Delta approximation']
 # Active take-profit method driving a position's TP_HIT alert — see
 # docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md, Feature D.
 TpMethod = Literal['ladder', 'monte_carlo', 'exit_plan_2r', 'exit_plan_3r']
@@ -350,7 +350,8 @@ class NewsItem(BaseModel):
 
 class PricingMethod(str, Enum):
     HESTON = "Heston repriced"
-    DELTA_APPROX = "BS repriced (IV-derived)"
+    BS_REPRICED = "BS repriced (IV-derived)"
+    DELTA_APPROX = "Delta approximation"
     UNAVAILABLE = "Unavailable"
 
 
@@ -379,10 +380,17 @@ class TargetLevel(BaseModel):
     @field_validator('pricingMethod', mode='before')
     @classmethod
     def normalize_legacy_pricing_method(cls, value: object) -> object:
-        """Accept codes from old persisted scan sessions and emit the current enum."""
+        """Accept codes from old persisted scan sessions and emit the current enum.
+
+        'delta-approx' predates the Heston/BS/delta-approx 3-way split — old
+        sessions never distinguished a true BS reprice from the crude
+        flat-delta fallback, both stored under this one code and always
+        displayed as "BS repriced (IV-derived)". Map it to BS_REPRICED, not
+        the now-distinct DELTA_APPROX, to preserve that historical display
+        rather than silently reclassifying old data."""
         return {
             'heston': PricingMethod.HESTON,
-            'delta-approx': PricingMethod.DELTA_APPROX,
+            'delta-approx': PricingMethod.BS_REPRICED,
             'manual': PricingMethod.UNAVAILABLE,
         }.get(value, value) if isinstance(value, str) else value
 

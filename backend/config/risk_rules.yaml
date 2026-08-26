@@ -23,6 +23,17 @@ reward_risk:
   target_t2_pct: 0.35
   target_t3_pct: 0.50
 
+# Exit-plan pipeline tunables (structural stop/target with an ATR floor and
+# ATR-relative structural snap distance) — see docs/superpowers/plans/
+# 2026-08-26-exit-plan-pipeline.md
+exit_plan:
+  stop:
+    atr_multiplier: 2.0          # ATR(14) floor multiplier for the final stop
+  target:
+    rr_ratios: [2.0, 3.0]        # one target row per ratio, both shown independently
+    structural_snap:
+      atr_multiplier: 0.3        # ATR-relative snap distance to a real structural level
+
 # Monte Carlo first-passage-time simulation tunables (profit-target estimator)
 first_passage:
   max_drift_pct: 0.40    # annualized drift ceiling at a trend score of 100 (0 at score 50, -max at score 0)

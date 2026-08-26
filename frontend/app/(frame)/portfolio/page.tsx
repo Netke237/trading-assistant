@@ -23,6 +23,7 @@ import { useAlertStore } from '@/lib/alertStore';
 import { scanPortfolio } from '@/lib/alertEngine';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
 import { positionStatusTooltip } from '@/lib/statusTooltips';
+import { api } from '@/lib/api';
 import type { PortfolioPosition } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -501,6 +502,9 @@ function EditDrawer({
           targets={position.targets}
           onChange={(targets) => onChange({ targets })}
         />
+        {!position.contract.endsWith('|STOCK') && (
+          <ExitPlanEditor position={position} onChange={onChange} />
+        )}
         <EditField
           label="Contracts"
           hint="Number of option contracts held."
@@ -585,6 +589,114 @@ function TargetEditor({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** "Compute Exit Plan" for an OPEN option position — post-trade counterpart
+ *  to TradeCard's pre-trade button. Persists the result verbatim via the
+ *  same `onChange` -> updatePosition -> PATCH /api/portfolio/{recId} path
+ *  every other drawer field already uses; refreshed only on manual re-click,
+ *  never automatically. Options-only (the repricing chain needs strike/dte/
+ *  premium, which a stock position doesn't have) — the caller only renders
+ *  this for non-'|STOCK' contracts. */
+function ExitPlanEditor({
+  position,
+  onChange,
+}: {
+  position: PortfolioPosition;
+  onChange: (patch: Partial<PortfolioPosition>) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const exitPlan = position.exitPlan;
+
+  const compute = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const parts = position.contract.split('|');
+      const strike = Number(parts[1]);
+      // trend_score isn't available for an already-open position (the scan-time
+      // score isn't carried on PortfolioPosition) — neutral 50 means zero
+      // directional drift bias in the Monte Carlo leg, an honest default
+      // rather than fabricating a score from partial data.
+      const res = await api.getExitPlan({
+        symbol: position.symbol,
+        direction: position.direction,
+        entry_price: position.currentStockPrice ?? position.entryPrice,
+        strike,
+        dte: position.dteRemaining,
+        premium: position.currentPrice,
+        trend_score: 50,
+      });
+      onChange({ exitPlan: { ...res, computedAt: new Date().toISOString() } });
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className={styles.targetEditor}>
+      <Text size={11} tone="secondary">Exit Plan</Text>
+      <button type="button" className={styles.exitPlanBtn} onClick={compute} disabled={loading}>
+        {loading ? 'Computing exit plan…' : 'Compute Exit Plan'}
+      </button>
+      {error && <Text size={10} tone="reject">Couldn&apos;t compute an exit plan — try again.</Text>}
+      {exitPlan && (
+        <div className={styles.targetList}>
+          <div className={styles.targetItem}>
+            <div className={styles.targetHeader}>
+              <Text size={12} weight={600}>
+                Stop {exitPlan.stop.source === 'structural' ? '(structural)' : '(ATR-widened)'}
+              </Text>
+            </div>
+            <div className={styles.targetGrid}>
+              <div>
+                <Text size={10} tone="dim">Stock</Text>
+                <Data size={12} weight={500}>${exitPlan.stop.price.toFixed(2)}</Data>
+              </div>
+              <div>
+                <Text size={10} tone="dim">Contract</Text>
+                <Data size={12} weight={500}>${exitPlan.stop.contractPrice.toFixed(2)}</Data>
+              </div>
+            </div>
+            <Text size={10} tone="dim">Method: {exitPlan.stop.rrModel}</Text>
+          </div>
+          {exitPlan.targets.map((t) => (
+            <div key={t.rrRatio} className={styles.targetItem}>
+              <div className={styles.targetHeader}>
+                <Text size={12} weight={600}>{t.rrRatio}R {t.qualityGood ? '✓' : '⚠'}</Text>
+                <span className={styles.targetStatus}>{t.tpSource === 'structural_snap' ? 'snapped' : 'arithmetic'}</span>
+              </div>
+              <div className={styles.targetGrid}>
+                <div>
+                  <Text size={10} tone="dim">Stock</Text>
+                  <Data size={12} weight={500}>${t.price.toFixed(2)}</Data>
+                </div>
+                <div>
+                  <Text size={10} tone="dim">Contract</Text>
+                  <Data size={12} weight={500}>${t.contractPrice.toFixed(2)}</Data>
+                </div>
+                <div>
+                  <Text size={10} tone="dim">Probability</Text>
+                  <Data size={12} weight={500}>{(t.probability * 100).toFixed(0)}%</Data>
+                </div>
+              </div>
+              <Text size={10} tone="dim">Method: {t.rrModel}</Text>
+              {!t.qualityGood && (
+                <Text size={10} tone="caution">
+                  {t.qualityReasons.includes('stop_widened') ? 'Stop ATR-widened. ' : ''}
+                  {t.qualityReasons.includes('target_beyond_structural') ? 'Target overshoots structural level.' : ''}
+                </Text>
+              )}
+            </div>
+          ))}
+          <Text size={10} tone="dim">as of {new Date(exitPlan.computedAt).toLocaleTimeString()}</Text>
+        </div>
+      )}
     </div>
   );
 }

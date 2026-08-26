@@ -92,3 +92,30 @@ def find_structural_stop(
         confidence=_SWING_FALLBACK_CONFIDENCE,
         distance_pct=abs(reference_price - price) / reference_price * 100,
     )
+
+
+def find_structural_target(
+    candles: list[dict],
+    direction: Literal["Bullish", "Bearish"],
+    entry_price: float,
+) -> StructuralStop | None:
+    """Find the nearest real structural level ahead of entry_price in the
+    trade's direction — used to snap an arithmetic profit target onto a real
+    level instead of an arbitrary R:R multiple. Reuses the StructuralStop
+    dataclass and find_structural_stop's own detectors unchanged.
+
+    This is find_structural_stop's search with direction flipped, not a
+    coincidence: a stop level for one direction IS a resistance/support zone
+    that also happens to be the correct "next structural level ahead" for a
+    trade going the OTHER way.
+      Bullish (call): the next resistance above entry_price — the nearest
+      unmitigated bearish Order Block, falling back to the nearest swing
+      high — which is exactly find_structural_stop's *Bearish* search
+      (a bearish stop is by construction a resistance zone above price).
+      Bearish (put): the next support below entry_price — the nearest
+      unmitigated bullish Order Block, falling back to the nearest swing
+      low — exactly find_structural_stop's *Bullish* search (a bullish stop
+      is by construction a support zone below price).
+    """
+    opposite: Literal["Bullish", "Bearish"] = "Bearish" if direction == "Bullish" else "Bullish"
+    return find_structural_stop(candles, opposite, entry_price)

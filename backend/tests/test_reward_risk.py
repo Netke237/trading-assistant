@@ -109,11 +109,12 @@ def test_bs_reprice_or_delta_approx_falls_back_to_crude_guess_when_bs_price_unus
     import app.scoring.reward_risk as rr_module
 
     monkeypatch.setattr(rr_module, "bs_price", lambda *a, **k: 0.0)
-    price = rr_module._bs_reprice_or_delta_approx(
+    price, used_bs_reprice = rr_module._bs_reprice_or_delta_approx(
         t_price=200, stock_price=185, strike=190, dte_at_target=15 / 365,
         r=0.05, sigma=0.20, is_call=True, current_premium=2.50,
     )
     assert price == 10.0
+    assert used_bs_reprice is False
 
 
 def test_zero_price_movement_returns_zero_ratio():

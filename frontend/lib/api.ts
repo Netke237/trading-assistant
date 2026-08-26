@@ -1,5 +1,5 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
-              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow } from '@/types/domain';
+              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan } from '@/types/domain';
 import type { StockScanResult, StockFirstPassageEstimate } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -378,6 +378,22 @@ export const api = {
       targets: { pct: number; stockPrice: number | null; optionPrice: number; probability: number; expectedDays: number | null }[];
       invalidation: { probability: number; expectedDays: number | null };
     }>('/api/contracts/first-passage', req, signal),
+  /** On-demand exit-plan pipeline compute — fired only by the trade card's/
+   *  Portfolio editor's "Compute Exit Plan" button, never automatically. See
+   *  docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md. */
+  getExitPlan: (req: {
+    symbol: string;
+    direction: 'Bullish' | 'Bearish';
+    entry_price: number;
+    strike: number;
+    dte: number;
+    premium: number;
+    trend_score: number;
+  }, signal?: AbortSignal) =>
+    // `computedAt` is a client-only field the caller stamps on receipt (see
+    // ExitPlan's doc comment) — the endpoint itself is stateless and doesn't
+    // return one.
+    post<Omit<ExitPlan, 'computedAt'>>('/api/contracts/exit-plan', req, signal),
   /** On-demand Monte Carlo first-passage estimate for a STOCK position's exit
    *  ladder — fired only by the stock position card's "Estimate" button.
    *  `targets` is the ladder the user intends to trade (their edited overlay),

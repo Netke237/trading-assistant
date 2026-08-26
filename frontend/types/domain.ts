@@ -184,6 +184,48 @@ export interface FirstPassageContext {
   targetPct: { t1: number; t2: number; t3: number };
 }
 
+/** One R:R row from the exit-plan pipeline (backend
+ *  backend/app/scoring/exit_plan.py) — see docs/superpowers/plans/
+ *  2026-08-26-exit-plan-pipeline.md. `price` is the row's effective target
+ *  (== `arithmeticPrice` unless `tpSource === 'structural_snap'`, in which
+ *  case it's the real structural level snapped onto). */
+export interface ExitPlanTargetRow {
+  rrRatio:         number;
+  arithmeticPrice: number;
+  price:           number;
+  tpSource:        'arithmetic' | 'structural_snap';
+  structuralPrice: number | null;
+  contractPrice:   number;
+  rrModel:         'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation';
+  probability:     number;
+  expectedDays:    number | null;
+  qualityGood:     boolean;
+  qualityReasons:  string[];
+}
+
+/** Result of POST /api/contracts/exit-plan — final stop (wider of the
+ *  structural stop and an ATR floor) plus one target row per configured R:R
+ *  ratio. Persisted verbatim as `PortfolioPosition.exitPlan`/
+ *  `TradeCardData.exit.exitPlan` on manual "Compute Exit Plan" clicks only —
+ *  never recomputed automatically. */
+export interface ExitPlan {
+  /** ISO timestamp of when this result was computed (client-set on receipt,
+   *  not returned by the backend — the endpoint itself is stateless/fresh on
+   *  every call). Lets the UI show "as of" staleness next to a persisted,
+   *  never-auto-refreshed plan. */
+  computedAt: string;
+  stop: {
+    price:                number;
+    source:               'structural' | 'atr_widened';
+    contractPrice:        number;
+    rrModel:              'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation';
+    structuralSource:     'order_block' | 'swing_low' | 'swing_high' | null;
+    structuralConfidence: number | null;
+  };
+  targets: ExitPlanTargetRow[];
+  atr:     number;
+}
+
 export interface TargetLevel {
   id?: string;                   // optional — backend doesn't always send it
   stockPrice: number;            // underlying price at this target
@@ -193,7 +235,7 @@ export interface TargetLevel {
   // lowercase codes ('heston' / 'delta-approx' / 'manual') may still appear in
   // old persisted scan sessions; they're rendered as raw strings, so the narrowed
   // type only affects compile-time checking, not runtime display.
-  pricingMethod?: 'Heston repriced' | 'BS repriced (IV-derived)' | 'Unavailable';
+  pricingMethod?: 'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation' | 'Unavailable';
   contractsToSell?: number;      // how many contracts to close here
   status?: string;               // 'PENDING' | 'HIT' | 'MISSED' or undefined
   rrContribution?: number;       // estimated reward / risk contribution
@@ -224,6 +266,11 @@ export interface PortfolioPosition {
    *  was run on the trade card before sending to broker. Optional/opt-in, unlike
    *  `stop` (the premium-based invalidation). */
   structuralStop?: number | null;
+  /** Full exit-plan pipeline result — set only after "Compute Exit Plan" was run
+   *  (on the trade card pre-trade, or the Portfolio editor post-trade). Persisted
+   *  verbatim, refreshed only on manual re-click, mirrors the backend's
+   *  `exit_plan` JSON column 1:1. */
+  exitPlan?:     ExitPlan | null;
   targets:       TargetLevel[];
   status:        Status;
   // Options-specific fields surfaced in the portfolio table.
@@ -311,6 +358,8 @@ export interface TradeCardData {
     structuralStop?: StructuralStop | null;
     /** Populated only after the user presses "Estimate" — never set by the scan itself. */
     firstPassage?: FirstPassageEstimate | null;
+    /** Populated only after the user presses "Compute Exit Plan" — never set by the scan itself. */
+    exitPlan?: ExitPlan | null;
     /** The fresh underlying price `structuralStop` above was derived from, at the time
      *  it was fetched. Client-only, like `structuralStop` itself. A value RESTORED here
      *  (spliced in by step-7-trade-card/page.tsx on candidate re-navigation) is inert —
@@ -329,7 +378,7 @@ export interface TradeCardData {
   nextEventDays?:  number | null;
   nextEventLabel?: string | null;
   rrRatio:  number;
-  rrModel:  'Heston repriced' | 'BS repriced (IV-derived)';
+  rrModel:  'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation';
   finalStatus: Status;
   /** Signal confidence 0–100 (null when history is too thin to judge). */
   confidence?: number | null;
@@ -405,7 +454,7 @@ export interface AlternativeContract {
   contractConfidence: Status;
   contractBreakdown:  ContractScoreBreakdown;
   rrRatio:      number;
-  rrModel:      'Heston repriced' | 'BS repriced (IV-derived)';
+  rrModel:      'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation';
   reason:       string;
   spreadType?:     SpreadType;
   legs?:           OptionLeg[];
