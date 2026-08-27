@@ -2,6 +2,11 @@
 """Compute indicator values from OHLCV candles — server-side equivalent of frontend getIndicatorPoints()."""
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+_EASTERN = ZoneInfo("America/New_York")
+
 
 def compute_indicators_for_conditions(candles: list[dict], conditions: list) -> dict[str, list[dict]]:
     """Given alert conditions and candles, compute only the indicators referenced by conditions.
@@ -177,11 +182,39 @@ def _calc_bb(closes: list[float], times: list[str], period: int = 20, std_dev: f
     return {'times': times, 'upper': uppers, 'mid': mids, 'lower': lowers}
 
 
+def _session_key(t) -> str | None:
+    """Eastern-market calendar date for an intraday bar — the VWAP session anchor.
+
+    Returns None for date-string bars (daily/weekly), which have no intraday
+    session to anchor to; those keep the running-total behaviour.
+    """
+    if isinstance(t, (int, float)):
+        return datetime.fromtimestamp(t, _EASTERN).strftime('%Y-%m-%d')
+    return None
+
+
 def _calc_vwap(highs: list[float], lows: list[float], closes: list[float], volumes: list[float], times: list[str]) -> list[dict]:
+    """Session-anchored VWAP: the accumulation resets at each Eastern trading day.
+
+    It previously accumulated from candles[0] to the end with no anchor, which
+    made the value a function of how many bars the caller happened to pass —
+    so simply loading more history silently moved every VWAP reading and any
+    alert compared against it. Anchoring per session matches the standard
+    definition and makes the series independent of the loaded window.
+
+    Daily/weekly bars carry date strings rather than timestamps and have no
+    intraday session; they keep the original running-total behaviour.
+    """
     result = []
     cum_pv = 0.0
     cum_vol = 0.0
+    current_session: str | None = None
     for i in range(len(closes)):
+        session = _session_key(times[i])
+        if session is not None and session != current_session:
+            current_session = session
+            cum_pv = 0.0
+            cum_vol = 0.0
         typical = (highs[i] + lows[i] + closes[i]) / 3
         cum_pv += typical * volumes[i]
         cum_vol += volumes[i]
