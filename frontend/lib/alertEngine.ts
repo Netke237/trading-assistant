@@ -60,15 +60,6 @@ export interface ScanOptions {
   enabledTypes?: AlertType[];
 }
 
-/** Resolve one alert type for one position: an explicit per-position override
- *  wins, an absent key inherits the global `enabledTypes` list.
- *
- *  `??` (not `||`) is load-bearing — an explicit `false` must beat a global
- *  "on", which `||` would swallow. Overrides are only consulted for the
- *  position-scoped types; a stray key for an account-wide type (REGIME_CHANGE,
- *  SCAN_*) can never reach here because those aren't raised per position.
- *
- *  Mirrors backend `alert_generator._effective_enabled` — keep the two in step. */
 /** Human label for the TP method that fired, appended to the TP_HIT reason so
  *  the alert says WHICH target was reached. 'ladder' is the historical default
  *  and stays unlabelled — its reason line is unchanged from before Feature D. */
@@ -78,12 +69,28 @@ const TP_METHOD_LABEL: Record<Exclude<TpMethod, 'ladder'>, string> = {
   exit_plan_3r: '3R exit plan',
 };
 
+/** Resolve one alert type for one position: an explicit per-position override
+ *  wins, an absent key inherits the global `enabledTypes` list.
+ *
+ *  `??` (not `||`) is load-bearing — an explicit `false` must beat a global
+ *  "on", which `||` would swallow. Overrides are only consulted for the
+ *  position-scoped types; a stray key for an account-wide type (REGIME_CHANGE,
+ *  SCAN_*) can never reach here because those aren't raised per position.
+ *
+ *  Mirrors backend `alert_generator.effective_enabled` — keep the two in step. */
 function effectiveEnabled(
   type: PositionAlertType,
   overrides: AlertOverrides | undefined,
   enabledTypes: AlertType[] | undefined,
 ): boolean {
-  return overrides?.[type] ?? (enabledTypes ? enabledTypes.includes(type) : true);
+  // A non-bool stored value (hand-edited JSON, an older shape) is treated as
+  // absent rather than coerced — mirrors backend `alert_generator.effective_enabled`,
+  // which does the same `isinstance(value, bool)` check, so a truthy non-bool
+  // (e.g. the string "off") can't silently force a type on here while the
+  // backend correctly falls back to the global setting for it.
+  const override = overrides?.[type];
+  const explicit = typeof override === 'boolean' ? override : undefined;
+  return explicit ?? (enabledTypes ? enabledTypes.includes(type) : true);
 }
 
 export function scanPortfolio(
@@ -139,10 +146,12 @@ export function scanPortfolio(
     const firstTarget = p.targets[0];
     // `> 0`, not just non-null: 0 is never a real stock price (the same
     // convention portfolioStore's floorStop applies to stops), and an upstream
-    // `?? 0` fallback can land one here. Left un-guarded, a 0 snapshot makes
-    // `referencePrice >= 0` true on every single tick for a bullish position.
+    // `?? 0` fallback can land one here — on either side. Left un-guarded, a 0
+    // snapshot OR a 0 ladder target makes `referencePrice >= 0` true on every
+    // single tick for a bullish position.
     const snapshotPrice = p.resolvedTpPrice != null && p.resolvedTpPrice > 0 ? p.resolvedTpPrice : null;
-    const tpPrice = snapshotPrice ?? firstTarget?.stockPrice;
+    const ladderPrice = firstTarget?.stockPrice != null && firstTarget.stockPrice > 0 ? firstTarget.stockPrice : undefined;
+    const tpPrice = snapshotPrice ?? ladderPrice;
     const tpMethod = p.activeTpMethod ?? 'ladder';
     // Only label a non-ladder method that actually supplied the price — a
     // method selected without a stamped snapshot fell back to the ladder

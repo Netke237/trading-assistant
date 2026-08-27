@@ -453,6 +453,18 @@ describe('scanPortfolio — per-position alert overrides', () => {
     expect(stopAlerts[0].recId).toBe('loud');
   });
 
+  it('a non-bool stored override value is treated as absent, not truthy', () => {
+    // Mirrors the backend's effective_enabled, which does the same
+    // isinstance(value, bool) check — a hand-edited/corrupted JSON value like
+    // the string "off" must not silently force the type on just because it's
+    // not strictly falsy.
+    const out = scanPortfolio(
+      [makePosition({ alertOverrides: { STOP_REACHED: 'off' as unknown as boolean } })],
+      { enabledTypes: ALL_TYPES.filter((t) => t !== 'STOP_REACHED') },
+    );
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(false);
+  });
+
   it('covers every position-scoped type', () => {
     const position = makePosition({
       currentPrice: 160,
@@ -606,5 +618,20 @@ describe('scanPortfolio — a zero resolved TP price is not a target', () => {
     const alert = out.find((a) => a.alertType === 'TP_HIT');
     expect(alert?.referenceValue).toBe(160);
     expect(alert?.reason).not.toContain('Monte Carlo');
+  });
+
+  it('a zero ladder target (no snapshot at all, default "ladder" method) does not fire on every tick', () => {
+    // Distinct from the cases above: no activeTpMethod/resolvedTpPrice at all —
+    // this is the plain pre-Feature-D ladder path with a genuinely zero first
+    // target, which the frontend's `> 0` guard must also cover, not just the
+    // resolvedTpPrice snapshot path. Mirrors the backend's
+    // test_a_zero_ladder_target_does_not_fire_tp_hit.
+    const out = scanPortfolio([makePosition({
+      stop: null,
+      currentPrice: 165,
+      currentStockPrice: 165,
+      targets: [{ id: 't1', stockPrice: 0, contractsToSell: 1, status: 'PENDING' }],
+    })]);
+    expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(false);
   });
 });

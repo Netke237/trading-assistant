@@ -563,7 +563,8 @@
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
 }
 
-.tpMethodBtn:disabled {
+.tpMethodBtn:disabled,
+.tpMethodBtnActive:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

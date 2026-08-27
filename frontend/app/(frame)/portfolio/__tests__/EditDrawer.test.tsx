@@ -480,6 +480,24 @@ describe('EditDrawer active TP method selector', () => {
     }));
   });
 
+  it('shows the active Monte Carlo method as enabled and priced from its persisted snapshot on reopen', () => {
+    // mcResult (the in-session Monte Carlo estimate) starts null on every mount
+    // — before the drawer has been asked to re-estimate anything, the Monte
+    // Carlo button must still reflect the position's ALREADY-persisted
+    // resolvedTpPrice when that's the active method, not render itself
+    // disabled/unresolved just because nothing's been re-run this session.
+    render(
+      <EditDrawer
+        position={makeStockPosition({ activeTpMethod: 'monte_carlo', resolvedTpPrice: 205 })}
+        onClose={noop} onChange={noop} onRemove={noop}
+      />,
+    );
+    const mc = screen.getByRole('radio', { name: 'Monte Carlo' });
+    expect(mc).toBeEnabled();
+    expect(mc).toHaveAttribute('aria-checked', 'true');
+    expect(mc).toHaveTextContent('$205.00');
+  });
+
   it('re-stamps the snapshot when the active method is re-estimated', async () => {
     (api.getStockFirstPassage as jest.Mock).mockResolvedValueOnce({
       targets: [{ price: 208, probability: 0.6, expectedDays: 8 }],

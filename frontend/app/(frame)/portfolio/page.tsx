@@ -900,7 +900,11 @@ function ExitPlanEditor({
       // plan and the snapshot derived from it can never be persisted apart.
       const active = position.activeTpMethod ?? 'ladder';
       const rr = active === 'exit_plan_2r' ? 2 : active === 'exit_plan_3r' ? 3 : null;
-      const rowPrice = rr != null ? plan.targets.find((t) => t.rrRatio === rr)?.price ?? null : null;
+      const rawRowPrice = rr != null ? plan.targets.find((t) => t.rrRatio === rr)?.price ?? null : null;
+      // `> 0`, not just non-null — same rule as the Monte Carlo path's
+      // restampIfActive: a 0 price would make the alert engine's `price >= 0`
+      // comparison true forever, so leave the previous snapshot in place instead.
+      const rowPrice = rawRowPrice != null && rawRowPrice > 0 ? rawRowPrice : null;
       onChange({
         exitPlan: plan,
         ...(rr != null && rowPrice != null ? tpMethodPatch(active, rowPrice) : {}),
@@ -1166,9 +1170,16 @@ function tpMethodOptions(
   const usable = (p: number | null | undefined) => (p != null && p > 0 ? p : null);
   const rowPrice = (rr: number) =>
     usable(exitPlan?.targets.find((t) => t.rrRatio === rr)?.price);
+  // mcTargetPrice comes from ephemeral component state (`mcResult`), which
+  // starts null on every EditDrawer mount — it holds this SESSION's re-run,
+  // not the persisted one. When Monte Carlo is the position's active method
+  // and nothing's been re-run yet, fall back to the stamped `resolvedTpPrice`
+  // so reopening the drawer doesn't show its own active method as unresolved.
+  const mcPrice = usable(mcTargetPrice) ??
+    (position.activeTpMethod === 'monte_carlo' ? usable(position.resolvedTpPrice) : null);
   return [
     { method: 'ladder',       label: 'Ladder',      price: usable(position.targets[0]?.stockPrice) },
-    { method: 'monte_carlo',  label: 'Monte Carlo', price: usable(mcTargetPrice) },
+    { method: 'monte_carlo',  label: 'Monte Carlo', price: mcPrice },
     { method: 'exit_plan_2r', label: '2R plan',     price: rowPrice(2) },
     { method: 'exit_plan_3r', label: '3R plan',     price: rowPrice(3) },
   ];

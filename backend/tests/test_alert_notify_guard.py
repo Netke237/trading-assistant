@@ -49,11 +49,11 @@ async def client(db_session):
     app.dependency_overrides.clear()
 
 
-async def _insert(db: AsyncSession, rec_id: str) -> None:
+async def _insert(db: AsyncSession, rec_id: str, alert_overrides: dict | None = None) -> None:
     db.add(PortfolioPositionModel(
         rec_id=rec_id, symbol="ABT", contract="ABT|97|2027-01-15|C",
         direction="Bullish", entry_price=10.45, qty=1, entry_date="2026-07-17",
-        stop=89.89, targets=[], dte_total=547,
+        stop=89.89, targets=[], dte_total=547, alert_overrides=alert_overrides,
     ))
     await db.commit()
 
@@ -69,6 +69,49 @@ async def test_notify_dispatches_when_position_exists(client, db_session):
     assert resp.status_code == 200
     assert resp.json()["sent"] is True
     mock_notify.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_notify_passes_explicit_true_override_as_type_enabled(client, db_session):
+    # Feature D: an explicit per-position override must reach notify_alert as
+    # type_enabled so it can bypass a globally-disabled type — this is the one
+    # path (browser POST) the unit tests on effective_enabled/notify_alert in
+    # isolation don't cover, since it's the router that wires the two together.
+    await _insert(db_session, "REC-OVERRIDE-TRUE", alert_overrides={"STOP_REACHED": True})
+    with patch("app.routers.alerts.notify_alert", return_value=True) as mock_notify:
+        resp = await client.post("/api/alerts/notify", json={
+            "symbol": "ABT", "alertType": "STOP_REACHED",
+            "reason": "Stop breached", "recId": "REC-OVERRIDE-TRUE",
+        })
+    assert resp.status_code == 200
+    assert mock_notify.call_args.kwargs["type_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_notify_passes_explicit_false_override_as_type_enabled(client, db_session):
+    await _insert(db_session, "REC-OVERRIDE-FALSE", alert_overrides={"STOP_REACHED": False})
+    with patch("app.routers.alerts.notify_alert", return_value=False) as mock_notify:
+        resp = await client.post("/api/alerts/notify", json={
+            "symbol": "ABT", "alertType": "STOP_REACHED",
+            "reason": "Stop breached", "recId": "REC-OVERRIDE-FALSE",
+        })
+    assert resp.status_code == 200
+    assert mock_notify.call_args.kwargs["type_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_notify_passes_none_when_no_override_present(client, db_session):
+    # No override on the position (and a stray key for an account-wide type
+    # would be ignored the same way) -> notify_alert must fall back to the
+    # global enabledTypes list, signalled by type_enabled=None.
+    await _insert(db_session, "REC-NO-OVERRIDE")
+    with patch("app.routers.alerts.notify_alert", return_value=True) as mock_notify:
+        resp = await client.post("/api/alerts/notify", json={
+            "symbol": "ABT", "alertType": "STOP_REACHED",
+            "reason": "Stop breached", "recId": "REC-NO-OVERRIDE",
+        })
+    assert resp.status_code == 200
+    assert mock_notify.call_args.kwargs["type_enabled"] is None
 
 
 @pytest.mark.asyncio

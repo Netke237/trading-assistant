@@ -215,6 +215,42 @@ def test_reason_with_angle_bracket_is_escaped_not_parsed_as_a_tag(captured):
     _assert_telegram_safe_html(html)
 
 
+def test_type_enabled_true_bypasses_globally_disabled_type(captured, monkeypatch):
+    # Global config has STOP_REACHED disabled account-wide (fixture only enables
+    # it); an explicit per-position override of True must still get through —
+    # this is the whole point of Feature D's per-position alert overrides.
+    monkeypatch.setattr(an, '_load_delivery_config',
+        lambda: {'masterEnabled': True, 'enabledTypes': ['TP_HIT'], 'reminderIntervalHours': 0})
+    assert an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', _TS, type_enabled=True) is True
+    assert len(captured) == 1
+
+
+def test_type_enabled_false_suppresses_globally_enabled_type(captured):
+    # Global config enables STOP_REACHED; an explicit per-position override of
+    # False must still suppress it — muting one position must not require
+    # muting the type account-wide.
+    assert an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', _TS, type_enabled=False) is False
+    assert captured == []
+
+
+def test_type_enabled_none_falls_back_to_global_enabled_types(captured, monkeypatch):
+    # type_enabled=None (the default, and every caller with no override on this
+    # position) must defer to the global list exactly as before Feature D.
+    monkeypatch.setattr(an, '_load_delivery_config',
+        lambda: {'masterEnabled': True, 'enabledTypes': ['TP_HIT'], 'reminderIntervalHours': 0})
+    assert an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', _TS, type_enabled=None) is False
+    assert captured == []
+
+
+def test_type_enabled_true_never_bypasses_master_disabled(captured, monkeypatch):
+    # masterEnabled is the account-wide kill switch — a per-position override
+    # must never defeat it, no matter how explicit.
+    monkeypatch.setattr(an, '_load_delivery_config',
+        lambda: {'masterEnabled': False, 'enabledTypes': ['STOP_REACHED'], 'reminderIntervalHours': 0})
+    assert an.notify_alert('GOOGL', 'STOP_REACHED', 'x', 'rec-1', _TS, type_enabled=True) is False
+    assert captured == []
+
+
 def test_dedup_state_persists_across_reload(monkeypatch, tmp_path):
     import app.services.notifications.alert_notifier as an
 
