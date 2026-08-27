@@ -60,12 +60,14 @@ function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | und
 /** `position.contract` for an option position is a backend-generated,
  *  pipe-delimited machine ID — "SYMBOL|STRIKE|EXPIRY|C/P" (see
  *  backend/app/routers/scan.py's `contract=f"{symbol}|{int(strike)}|..."`
- *  and backend/app/schemas/__init__.py's persistence-schema comment).
- *  Every option position, old or new, has this format — unlike
- *  `tradeCardSnapshot.strike`, which is only populated for positions opened
- *  after this Monte Carlo feature shipped. Prefer parsing the strike out of
- *  the contract id so pre-existing positions aren't permanently stuck with
- *  Estimate disabled. */
+ *  and backend/app/schemas/__init__.py's persistence-schema comment). Note
+ *  the `int(strike)` truncation — this id is INTEGER-only, so it silently
+ *  rounds down any fractional strike (e.g. 187.5 -> "187"). Every option
+ *  position, old or new, has this format, unlike `tradeCardSnapshot.strike`,
+ *  which is only populated for positions opened after this Monte Carlo
+ *  feature shipped — so this is used strictly as the FALLBACK for
+ *  pre-existing positions that predate the snapshot, never preferred over
+ *  it. Callers must try `tradeCardSnapshot.strike` first. */
 function optionStrikeFromContract(contract: string): number | null {
   const parts = contract.split('|');
   if (parts.length !== 4) return null;
@@ -498,7 +500,7 @@ export function EditDrawer({
   const isStock = position.contract.endsWith('|STOCK');
   const snapshot = position.tradeCardSnapshot ?? {};
   const stockTargetPrices = position.targets.map((t) => t.targetPrice ?? t.stockPrice).filter((p): p is number => typeof p === 'number' && p > 0);
-  const optionStrike = optionStrikeFromContract(position.contract) ?? (typeof snapshot.strike === 'number' ? snapshot.strike : null);
+  const optionStrike = (typeof snapshot.strike === 'number' ? snapshot.strike : null) ?? optionStrikeFromContract(position.contract);
   const optionTrend = (snapshot.stockBreakdown as { trend?: number } | undefined)?.trend;
   const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
 
@@ -536,23 +538,21 @@ export function EditDrawer({
     invalidation: { probability: number; expectedDays: number | null };
     horizonNote?: string;
     modelCaveat?: string | null;
-    // The underlying price actually sent in the request this result came from
-    // (position.currentPrice for stocks, position.currentStockPrice for
-    // options) — captured at fetch time so we can flag the result as stale
-    // if the user edits Current Price afterward without re-running the
-    // estimate. Compared at render time; deliberately NOT wired into the
-    // clearing effect above (see that effect's comment) to avoid a third
-    // race in this area.
-    estimatedAtPrice: number;
-    // Options only: the premium (position.currentPrice) sent as the request's
-    // `premium` field, captured separately from estimatedAtPrice above because
-    // for an option position the shared "Current price" EditField edits the
-    // PREMIUM (position.currentPrice), not the underlying (position.currentStockPrice)
-    // — without tracking this too, editing the premium after an option estimate
-    // would silently leave the stale result displayed with no caution note,
-    // since estimatedAtPrice alone only catches an underlying-price change.
-    estimatedAtPremium?: number;
   } | null>(null);
+
+  // True once the user has explicitly edited the "Current price" EditField
+  // in this drawer session since the last estimate — set ONLY by that
+  // field's own onChange below, never derived by comparing mcResult's
+  // captured price against position.currentPrice/currentStockPrice on every
+  // render. A value-comparison approach was tried first and had to be
+  // reverted: portfolioStore's syncFromBackend() re-enriches currentPrice/
+  // currentStockPrice from the broker every 30s (see the "clear entirely"
+  // effect's own comment on this same tick, which excludes these fields for
+  // exactly this reason) while this drawer stays mounted in place — a
+  // comparison-based flag would have relabeled that routine price refresh as
+  // "the user changed something," firing a false "stale" caution roughly
+  // every poll cycle during market hours even when nobody touched anything.
+  const [priceEditedSinceEstimate, setPriceEditedSinceEstimate] = useState(false);
 
   // Clear a stale Monte Carlo result — and abort an in-flight request — when
   // the user edits stop/targets in this same open drawer (EditDrawer doesn't
@@ -577,6 +577,7 @@ export function EditDrawer({
     setMcLoading(false);
     setMcResult(null);
     setMcError(null);
+    setPriceEditedSinceEstimate(false);
   }, [position.stop, targetPricesKey]);
 
   const runEstimate = async () => {
@@ -586,6 +587,7 @@ export function EditDrawer({
     setMcLoading(true);
     setMcError(null);
     setMcResult(null);
+    setPriceEditedSinceEstimate(false);
     try {
       if (isStock) {
         if (stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid) throw new Error('missing target/stop');
@@ -613,7 +615,6 @@ export function EditDrawer({
           invalidation: res.invalidation,
           horizonNote: `${res.horizonDays} trading days`,
           modelCaveat: res.modelCaveat,
-          estimatedAtPrice: position.currentPrice,
         });
       } else {
         if (optionStrike == null || position.currentStockPrice == null || !position.stop) {
@@ -637,8 +638,6 @@ export function EditDrawer({
         setMcResult({
           targets: res.targets.map((t) => ({ label: `T${Math.round(t.pct * 100)}%`, price: t.stockPrice ?? 0, probability: t.probability, expectedDays: t.expectedDays })),
           invalidation: res.invalidation,
-          estimatedAtPrice: position.currentStockPrice,
-          estimatedAtPremium: position.currentPrice,
         });
       }
     } catch (e) {
@@ -657,15 +656,14 @@ export function EditDrawer({
     }
   };
 
-  // Pure derived comparison (no effect, no extra race surface — see the
-  // clearing effect's comment above for why this deliberately isn't done by
-  // invalidating mcResult itself): true when the user has edited Current
-  // Price in this drawer session since the estimate was fetched, so the
-  // displayed probabilities were computed against a now-stale price.
-  const mcPriceStale = mcResult != null
-    && (isStock
-      ? mcResult.estimatedAtPrice !== position.currentPrice
-      : mcResult.estimatedAtPrice !== position.currentStockPrice || mcResult.estimatedAtPremium !== position.currentPrice);
+  // True when the user has explicitly edited Current Price in this drawer
+  // session since the estimate was fetched, so the displayed probabilities
+  // were computed against a now-stale price. Deliberately a flag set only by
+  // the EditField's own onChange (see priceEditedSinceEstimate's declaration
+  // above), not a comparison against the live position price — the live
+  // price ticks on its own via the 30s portfolio sync regardless of whether
+  // the user touched anything.
+  const mcPriceStale = mcResult != null && priceEditedSinceEstimate;
 
   return (
     <div className={styles.editDrawer}>
@@ -707,6 +705,7 @@ export function EditDrawer({
             const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
             const pnlPct    = ((n - position.entryPrice) / position.entryPrice) * 100;
             onChange({ currentPrice: n, pnlDollar, pnlPct });
+            setPriceEditedSinceEstimate(true);
           }}
         />
       </div>

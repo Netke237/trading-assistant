@@ -7,7 +7,7 @@ jest.mock('@/lib/api', () => ({
   api: { getBrokerStatus: jest.fn().mockResolvedValue({}), postStockOrder: jest.fn() },
 }));
 
-// Single card only: buildPaperStockPosition mints the same PAPER-<ms> recId in a
+// Single card only: buildPaperStockPosition mints the same POS-<ms> recId in a
 // tight loop, so a two-card test would collide recIds and muddy the scenario.
 function makeCard(): PositionCardData {
   return {

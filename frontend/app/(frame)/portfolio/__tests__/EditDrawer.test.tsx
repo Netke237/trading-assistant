@@ -129,6 +129,28 @@ describe('EditDrawer Monte Carlo estimate', () => {
     }), expect.any(AbortSignal)));
   });
 
+  it('prefers the exact snapshot strike over the contract id, which the backend truncates to an integer', async () => {
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [{ pct: 0.2, stockPrice: 215, optionPrice: 5.4, probability: 0.6, expectedDays: 5 }],
+      invalidation: { probability: 0.1, expectedDays: null },
+    });
+    // backend/app/routers/scan.py builds the contract id as
+    // f"{symbol}|{int(strike)}|..." — a real $187.50 strike position has
+    // contract "AAPL|187|..." (rounded down) but the buy-time snapshot
+    // captured the exact 187.5. The snapshot must win; falling back to the
+    // contract-derived value here would silently mis-price every fractional
+    // strike.
+    const position = makeOptionPosition({
+      contract: 'AAPL|187|2026-09-16|C',
+      tradeCardSnapshot: { strike: 187.5, stockBreakdown: { trend: 72 } },
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    fireEvent.click(screen.getByText('Estimate'));
+    await waitFor(() => expect(api.getFirstPassageEstimate).toHaveBeenCalledWith(expect.objectContaining({
+      strike: 187.5,
+    }), expect.any(AbortSignal)));
+  });
+
   it('clears a stale Monte Carlo result when the user edits the stop after estimating', async () => {
     (api.getStockFirstPassage as jest.Mock).mockResolvedValueOnce({
       targets: [{ price: 205, probability: 0.6, expectedDays: 8 }],
@@ -149,15 +171,14 @@ describe('EditDrawer Monte Carlo estimate', () => {
     await waitFor(() => expect(screen.queryByText('60%')).not.toBeInTheDocument());
   });
 
-  it('flags a Monte Carlo result as stale when Current Price is edited after estimating, but not before', async () => {
+  it('flags a Monte Carlo result as stale when the user edits the Current Price field after estimating, but not before', async () => {
     (api.getStockFirstPassage as jest.Mock).mockResolvedValueOnce({
       targets: [{ price: 205, probability: 0.6, expectedDays: 8 }],
       invalidation: { probability: 0.15, expectedDays: null },
       horizonDays: 10,
       modelCaveat: null,
     });
-    const onChange = jest.fn();
-    const { rerender } = render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={onChange} onRemove={noop} />);
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={jest.fn()} onRemove={noop} />);
     fireEvent.click(screen.getByText('Estimate'));
     expect(await screen.findByText('60%')).toBeInTheDocument();
 
@@ -166,11 +187,15 @@ describe('EditDrawer Monte Carlo estimate', () => {
     // for the clearing effect above).
     expect(screen.queryByText('Price has changed since this estimate was computed.')).not.toBeInTheDocument();
 
-    // Simulate a manual Current Price edit landing in the same open drawer
-    // session — same position identity, changed currentPrice — exactly as
-    // the real parent does when the Current Price EditField's onChange
-    // writes through to the store.
-    rerender(<EditDrawer position={makeStockPosition({ currentPrice: 210 })} onClose={noop} onChange={onChange} onRemove={noop} />);
+    // Actually interact with the "Current price" EditField, the real
+    // user-edit path — NOT a re-render with a changed `position` prop.
+    // Staleness is deliberately keyed off this explicit edit, never off a
+    // live-price-value comparison: portfolioStore's syncFromBackend() also
+    // rewrites position.currentPrice every 30s independent of any user
+    // action, and a value-comparison approach was tried and reverted
+    // specifically because it fired "stale" on that routine tick too (see
+    // priceEditedSinceEstimate's declaration in page.tsx for the full story).
+    fireEvent.change(screen.getByLabelText(/Current price/), { target: { value: '210' } });
 
     expect(await screen.findByText('Price has changed since this estimate was computed.')).toBeInTheDocument();
     // The existing numbers must still be visible — additive warning, not a
@@ -178,22 +203,40 @@ describe('EditDrawer Monte Carlo estimate', () => {
     expect(screen.getByText('60%')).toBeInTheDocument();
   });
 
-  it('flags an option Monte Carlo result as stale when Current Price (the premium) is edited, even though the underlying price is unchanged', async () => {
+  it('does NOT flag a Monte Carlo result as stale from a live price-sync re-render alone (no user edit)', async () => {
+    (api.getStockFirstPassage as jest.Mock).mockResolvedValueOnce({
+      targets: [{ price: 205, probability: 0.6, expectedDays: 8 }],
+      invalidation: { probability: 0.15, expectedDays: null },
+      horizonDays: 10,
+      modelCaveat: null,
+    });
+    // Simulates the parent's 30s syncFromBackend() poll rewriting
+    // position.currentPrice on the SAME open drawer with no user
+    // interaction — this must NOT be mistaken for an explicit edit.
+    const { rerender } = render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={jest.fn()} onRemove={noop} />);
+    fireEvent.click(screen.getByText('Estimate'));
+    expect(await screen.findByText('60%')).toBeInTheDocument();
+
+    rerender(<EditDrawer position={makeStockPosition({ currentPrice: 196 })} onClose={noop} onChange={jest.fn()} onRemove={noop} />);
+
+    expect(screen.queryByText('Price has changed since this estimate was computed.')).not.toBeInTheDocument();
+  });
+
+  it('flags an option Monte Carlo result as stale when the user edits Current Price (the premium), even though the underlying price is unchanged', async () => {
     (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
       targets: [{ pct: 0.2, stockPrice: 215, optionPrice: 5.4, probability: 0.6, expectedDays: 5 }],
       invalidation: { probability: 0.10, expectedDays: null },
     });
-    const onChange = jest.fn();
     // For an option position, the shared "Current price" EditField edits the
     // PREMIUM (position.currentPrice), not the underlying (currentStockPrice)
-    // — this must invalidate the estimate too, not just an underlying-price
-    // change, since `premium` is a real input to getFirstPassageEstimate.
-    const { rerender } = render(<EditDrawer position={makeOptionPosition()} onClose={noop} onChange={onChange} onRemove={noop} />);
+    // — this must invalidate the estimate too, since `premium` is a real
+    // input to getFirstPassageEstimate.
+    render(<EditDrawer position={makeOptionPosition()} onClose={noop} onChange={jest.fn()} onRemove={noop} />);
     fireEvent.click(screen.getByText('Estimate'));
     expect(await screen.findByText('60%')).toBeInTheDocument();
     expect(screen.queryByText('Price has changed since this estimate was computed.')).not.toBeInTheDocument();
 
-    rerender(<EditDrawer position={makeOptionPosition({ currentPrice: 5.0 })} onClose={noop} onChange={onChange} onRemove={noop} />);
+    fireEvent.change(screen.getByLabelText(/Current price/), { target: { value: '5.0' } });
 
     expect(await screen.findByText('Price has changed since this estimate was computed.')).toBeInTheDocument();
     expect(screen.getByText('60%')).toBeInTheDocument();
