@@ -161,7 +161,16 @@ export function buildPaperStockPosition(
     // StockSendDialog/StockPositionCard/step-7-position-card's broker
     // branches), so a 'PAPER-' prefix here would mislabel a real broker
     // fill's internal id.
-    recId:        'POS-' + Date.now().toString(36),
+    // Date.now() alone is millisecond-resolution — a rapid double-click or
+    // two quick fills queued back-to-back can call this twice within the
+    // same millisecond and collide. Every other id generator in this
+    // codebase (generateRecId in portfolioStore.ts, and the trade-card
+    // recId sites) already appends a Math.random() suffix for exactly this
+    // reason; this was the one outlier. A collision here isn't cosmetic —
+    // recId is portfolioStore.addPosition's dedupe/merge key (a match
+    // overwrites the earlier position, client-side) and a unique DB column
+    // backend-side (the second POST hard-fails with a 500).
+    recId:        'POS-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(),
     currentPrice: price,
     pnlDollar:    0,
     pnlPct:       0,

@@ -15,6 +15,26 @@ describe('buildPaperStockPosition', () => {
     const p = buildPaperStockPosition('TSLA', 250, 5, 'Bearish');
     expect(p.direction).toBe('Bearish');
   });
+
+  it('never collides recId across two calls landing in the same millisecond', () => {
+    // Date.now() alone is millisecond-resolution — a rapid double-click or
+    // two quick fills queued back-to-back can genuinely call this twice
+    // within the same tick. Pin Date.now() to reproduce that deterministically
+    // rather than relying on real calls happening to land in the same ms —
+    // and pin Math.random() to two distinct values too, so this test can't
+    // itself flake on the (astronomically unlikely but nonzero) chance of
+    // drawing the same random suffix twice in a row.
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValueOnce(0.1).mockReturnValueOnce(0.9);
+    try {
+      const first = buildPaperStockPosition('AAPL', 150, 10, 'Bullish');
+      const second = buildPaperStockPosition('AAPL', 150, 10, 'Bullish');
+      expect(first.recId).not.toBe(second.recId);
+    } finally {
+      nowSpy.mockRestore();
+      randomSpy.mockRestore();
+    }
+  });
 });
 
 describe('stockPositionLevels', () => {
