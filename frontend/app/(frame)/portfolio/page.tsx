@@ -536,6 +536,14 @@ export function EditDrawer({
     invalidation: { probability: number; expectedDays: number | null };
     horizonNote?: string;
     modelCaveat?: string | null;
+    // The price actually sent in the request this result came from
+    // (position.currentPrice for stocks, position.currentStockPrice for
+    // options) — captured at fetch time so we can flag the result as stale
+    // if the user edits Current Price afterward without re-running the
+    // estimate. Compared at render time; deliberately NOT wired into the
+    // clearing effect above (see that effect's comment) to avoid a third
+    // race in this area.
+    estimatedAtPrice: number;
   } | null>(null);
 
   // Clear a stale Monte Carlo result — and abort an in-flight request — when
@@ -597,6 +605,7 @@ export function EditDrawer({
           invalidation: res.invalidation,
           horizonNote: `${res.horizonDays} trading days`,
           modelCaveat: res.modelCaveat,
+          estimatedAtPrice: position.currentPrice,
         });
       } else {
         if (optionStrike == null || position.currentStockPrice == null || !position.stop) {
@@ -620,6 +629,7 @@ export function EditDrawer({
         setMcResult({
           targets: res.targets.map((t) => ({ label: `T${Math.round(t.pct * 100)}%`, price: t.stockPrice ?? 0, probability: t.probability, expectedDays: t.expectedDays })),
           invalidation: res.invalidation,
+          estimatedAtPrice: position.currentStockPrice,
         });
       }
     } catch (e) {
@@ -637,6 +647,14 @@ export function EditDrawer({
       }
     }
   };
+
+  // Pure derived comparison (no effect, no extra race surface — see the
+  // clearing effect's comment above for why this deliberately isn't done by
+  // invalidating mcResult itself): true when the user has edited Current
+  // Price in this drawer session since the estimate was fetched, so the
+  // displayed probabilities were computed against a now-stale price.
+  const mcPriceStale = mcResult != null
+    && mcResult.estimatedAtPrice !== (isStock ? position.currentPrice : position.currentStockPrice);
 
   return (
     <div className={styles.editDrawer}>
@@ -716,6 +734,9 @@ export function EditDrawer({
         )}
         {mcResult?.modelCaveat && (
           <Text size={11} tone="caution">{mcResult.modelCaveat}</Text>
+        )}
+        {mcPriceStale && (
+          <Text size={11} tone="caution">Price has changed since this estimate was computed.</Text>
         )}
       </div>
 

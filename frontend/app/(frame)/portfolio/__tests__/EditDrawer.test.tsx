@@ -149,6 +149,35 @@ describe('EditDrawer Monte Carlo estimate', () => {
     await waitFor(() => expect(screen.queryByText('60%')).not.toBeInTheDocument());
   });
 
+  it('flags a Monte Carlo result as stale when Current Price is edited after estimating, but not before', async () => {
+    (api.getStockFirstPassage as jest.Mock).mockResolvedValueOnce({
+      targets: [{ price: 205, probability: 0.6, expectedDays: 8 }],
+      invalidation: { probability: 0.15, expectedDays: null },
+      horizonDays: 10,
+      modelCaveat: null,
+    });
+    const onChange = jest.fn();
+    const { rerender } = render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={onChange} onRemove={noop} />);
+    fireEvent.click(screen.getByText('Estimate'));
+    expect(await screen.findByText('60%')).toBeInTheDocument();
+
+    // Fresh estimate, nothing has changed yet — no staleness note, and the
+    // numbers are still shown (this is purely additive, not a replacement
+    // for the clearing effect above).
+    expect(screen.queryByText('Price has changed since this estimate was computed.')).not.toBeInTheDocument();
+
+    // Simulate a manual Current Price edit landing in the same open drawer
+    // session — same position identity, changed currentPrice — exactly as
+    // the real parent does when the Current Price EditField's onChange
+    // writes through to the store.
+    rerender(<EditDrawer position={makeStockPosition({ currentPrice: 210 })} onClose={noop} onChange={onChange} onRemove={noop} />);
+
+    expect(await screen.findByText('Price has changed since this estimate was computed.')).toBeInTheDocument();
+    // The existing numbers must still be visible — additive warning, not a
+    // clear/hide of the result.
+    expect(screen.getByText('60%')).toBeInTheDocument();
+  });
+
   it('does not get stuck showing "Estimating…" if the stop changes while a request is in flight', async () => {
     let resolveEstimate: (value: unknown) => void;
     const pending = new Promise((resolve) => { resolveEstimate = resolve; });
