@@ -107,20 +107,34 @@ here and should be reverted again rather than committed.
 
 ## What's Next
 
-### Immediate — the outstanding audit obligation
-The plan states, per explicit user instruction, that `K-adversarial-audit-loop` (audit-only mode) runs
-at **every** ✅ checkpoint, not just at the end. Neither has been run:
+### ✅ Done (a later session, after recovering this branch from a second session-limit hit)
 
-- [ ] **Phase 4 checkpoint audit** — `K-adversarial-audit-loop` (audit-only) over the Feature D diff
-- [ ] **Final full-diff audit** — the same loop end-to-end across all 21 commits
+- [x] **Phase 4 checkpoint audit** — 3 rounds of `K-adversarial-audit-loop` (audit-only) over the
+      Feature D diff. Round 1: 6 findings, all fixed (a genuine unguarded-zero-price gap in the
+      ladder's TP_HIT fallback, a frontend/backend `effectiveEnabled` type-coercion mismatch, a
+      TpMethodSelector hydration bug on drawer reopen + missing CSS state, a missing `>0` guard on
+      `ExitPlanEditor`'s restamp path, missing `notify_alert`/router test coverage, one stale doc
+      comment). Round 2: 1 finding (backend `alert_generator.py`'s TP_HIT reason never named the
+      active method, unlike the frontend — fixed). Round 3: clean, verified via mutation testing on
+      every prior fix. `bmad-review-adversarial-general` was not installed in this environment across
+      all 3 rounds — each round's subagent proceeded with the same rigor directly; the skill gap
+      itself was never fixed, just worked around.
+- [x] **Final full-diff audit** — `main` had already absorbed Phases 0–3 by the time this ran, so the
+      diff vs `main` (16 files, Feature D only) *was* the full remaining diff — one audit loop covered
+      both this and the checkpoint audit above.
+- [x] **Manual smoke test** — ran the real app (sqlite dev DB, seeded position, `npm run dev` +
+      backend on `:8000`, driven with Playwright/headless Chromium since `chromium-cli` wasn't
+      available) rather than just the test suite. Confirmed live: the Active TP method selector
+      renders Ladder active at the real seeded target price ($205.00), Monte Carlo/2R/3R correctly
+      disabled with no snapshot to resolve; toggling Stop reached to Off for the position
+      debounce-PATCHes, persists (`GET /api/portfolio` echoed `alertOverrides: {"STOP_REACHED":
+      false}`), and Target hit stayed on Inherit — unaffected, matching the row-isolation the unit
+      tests already covered. Did not exercise a live Monte Carlo estimate or exit-plan compute — both
+      need external market-data calls this sandbox can't reach in reasonable time; those paths are
+      covered by the automated suite (including 3 rounds of mutation-tested audit) instead.
+- [x] **Merged to `main`** — see below.
 
-These were deliberately left for the user to invoke rather than fired off unasked.
-
-### Then
-- [ ] **Manual smoke test** per the plan's Verification section — switch a position's active TP method
-      and confirm the alert-driving price updates; toggle one alert type off for a single position and
-      confirm others are unaffected globally
-- [ ] **Merge to `main`** (or open a PR if remote review is wanted)
+Final counts: 851 frontend / 1679 backend tests pass (7 net new across the two audit-fix commits).
 
 ### Known gaps (deliberate, not defects)
 - `TIME_STOP` fires at `dteRemaining <= 3`, and a stock position's `dteRemaining` is `0` — so it is
