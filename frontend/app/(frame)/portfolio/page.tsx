@@ -7,18 +7,20 @@
  * or close the position (removed from local state — mock only).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { usePortfolioStore, flushPendingPositionPatches } from '@/lib/portfolioStore';
+import { api } from '@/lib/api';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
 import { usePerformanceStore } from '@/lib/performanceStore';
 import { useSettingsStore } from '@/lib/settingsStore';
+import { _horizonEnum } from '@/lib/analysisStore';
 import { useAlertStore } from '@/lib/alertStore';
 import { scanPortfolio } from '@/lib/alertEngine';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
@@ -53,6 +55,24 @@ function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | und
   if (rk >= 70) return 'reject';      // very rich
   if (rk >= 40) return 'caution';     // moderate
   return 'pass';                      // cheap
+}
+
+/** `position.contract` for an option position is a backend-generated,
+ *  pipe-delimited machine ID — "SYMBOL|STRIKE|EXPIRY|C/P" (see
+ *  backend/app/routers/scan.py's `contract=f"{symbol}|{int(strike)}|..."`
+ *  and backend/app/schemas/__init__.py's persistence-schema comment). Note
+ *  the `int(strike)` truncation — this id is INTEGER-only, so it silently
+ *  rounds down any fractional strike (e.g. 187.5 -> "187"). Every option
+ *  position, old or new, has this format, unlike `tradeCardSnapshot.strike`,
+ *  which is only populated for positions opened after this Monte Carlo
+ *  feature shipped — so this is used strictly as the FALLBACK for
+ *  pre-existing positions that predate the snapshot, never preferred over
+ *  it. Callers must try `tradeCardSnapshot.strike` first. */
+function optionStrikeFromContract(contract: string): number | null {
+  const parts = contract.split('|');
+  if (parts.length !== 4) return null;
+  const strike = Number(parts[1]);
+  return Number.isFinite(strike) && strike > 0 ? strike : null;
 }
 
 const COLUMNS = '28px 72px 1.6fr 72px 1fr 110px 104px 60px 56px 60px 90px 40px';
@@ -458,7 +478,7 @@ function PerfStat({ label, value, period }: { label: string; value: number; peri
 
 /* ---------- Edit drawer ---------- */
 
-function EditDrawer({
+export function EditDrawer({
   position,
   onClose,
   onChange,
@@ -476,6 +496,174 @@ function EditDrawer({
   useEffect(() => {
     return () => { flushPendingPositionPatches(position.recId); };
   }, [position.recId]);
+
+  const isStock = position.contract.endsWith('|STOCK');
+  const snapshot = position.tradeCardSnapshot ?? {};
+  const stockTargetPrices = position.targets.map((t) => t.targetPrice ?? t.stockPrice).filter((p): p is number => typeof p === 'number' && p > 0);
+  const optionStrike = (typeof snapshot.strike === 'number' ? snapshot.strike : null) ?? optionStrikeFromContract(position.contract);
+  const optionTrend = (snapshot.stockBreakdown as { trend?: number } | undefined)?.trend;
+  const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
+
+  // Mirrors backend/app/routers/stock_scan.py's own directional validation for
+  // /api/stocks/first-passage (stop and every target must be on the correct
+  // side of the current price for the trade's direction) — without this, a
+  // normal winning position (current price has already run past a target that
+  // hasn't had its `targets[].status` synced to HIT yet) hits a 422 that the
+  // single catch{} below collapses into "try again," which can never succeed
+  // no matter how many times the user clicks it.
+  const stockDirectionValid = isStock && position.stop
+    ? position.direction === 'Bullish'
+      ? position.stop < position.currentPrice && stockTargetPrices.every((p) => p > position.currentPrice)
+      : position.stop > position.currentPrice && stockTargetPrices.every((p) => p < position.currentPrice)
+    : true;
+
+  const estimateDisabled = isStock
+    ? stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid
+    : optionStrike == null || position.currentStockPrice == null || !position.stop;
+
+  // Same AbortController pattern as StockPositionCard's onEstimate/estimateReq
+  // (the template this section mirrors): abort a still-in-flight request when
+  // the button is re-fired or this drawer instance goes away (closing the
+  // drawer, or the parent switching `editing` to a different row), so a late
+  // response for a request the user has already moved on from can never land.
+  const estimateReq = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => { estimateReq.current?.abort(); };
+  }, [position.recId]);
+
+  const [mcLoading, setMcLoading] = useState(false);
+  const [mcError, setMcError] = useState<string | null>(null);
+  const [mcResult, setMcResult] = useState<{
+    targets: { label: string; price: number; probability: number; expectedDays: number | null }[];
+    invalidation: { probability: number; expectedDays: number | null };
+    horizonNote?: string;
+    modelCaveat?: string | null;
+  } | null>(null);
+
+  // True once the user has explicitly edited the "Current price" EditField
+  // in this drawer session since the last estimate — set ONLY by that
+  // field's own onChange below, never derived by comparing mcResult's
+  // captured price against position.currentPrice/currentStockPrice on every
+  // render. A value-comparison approach was tried first and had to be
+  // reverted: portfolioStore's syncFromBackend() re-enriches currentPrice/
+  // currentStockPrice from the broker every 30s (see the "clear entirely"
+  // effect's own comment on this same tick, which excludes these fields for
+  // exactly this reason) while this drawer stays mounted in place — a
+  // comparison-based flag would have relabeled that routine price refresh as
+  // "the user changed something," firing a false "stale" caution roughly
+  // every poll cycle during market hours even when nobody touched anything.
+  const [priceEditedSinceEstimate, setPriceEditedSinceEstimate] = useState(false);
+
+  // Clear a stale Monte Carlo result — and abort an in-flight request — when
+  // the user edits stop/targets in this same open drawer (EditDrawer doesn't
+  // unmount on those edits; the parent just re-renders it with new props).
+  // Without this, the panel keeps showing probabilities computed against the
+  // OLD stop/targets after the user changes them. Keyed by VALUE (not the
+  // `position.targets` array reference, which gets a new identity on
+  // unrelated store updates like a routine price-sync tick) so this doesn't
+  // spuriously wipe a fresh estimate on every sync poll — only on a genuine
+  // stop/target edit. Deliberately excludes currentPrice/currentStockPrice,
+  // which tick frequently and would defeat the point of showing a result.
+  const targetPricesKey = position.targets.map((t) => t.targetPrice ?? t.stockPrice).join(',');
+  useEffect(() => {
+    estimateReq.current?.abort();
+    estimateReq.current = null;
+    // Aborting means this drawer no longer cares about the in-flight
+    // request's outcome — reset mcLoading here too, unconditionally.
+    // runEstimate's own `finally` only clears mcLoading when
+    // estimateReq.current still === its own controller, which is no longer
+    // true once this effect has nulled the ref: without this line the
+    // button would be stuck on "Estimating…" until the drawer remounts.
+    setMcLoading(false);
+    setMcResult(null);
+    setMcError(null);
+    setPriceEditedSinceEstimate(false);
+  }, [position.stop, targetPricesKey]);
+
+  const runEstimate = async () => {
+    estimateReq.current?.abort();
+    const ctrl = new AbortController();
+    estimateReq.current = ctrl;
+    setMcLoading(true);
+    setMcError(null);
+    setMcResult(null);
+    setPriceEditedSinceEstimate(false);
+    try {
+      if (isStock) {
+        if (stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid) throw new Error('missing target/stop');
+        // A position minted with no snapshot (the after-scan auto-execute path
+        // deliberately omits one — see paperTrade.ts/step-4-stocks's own
+        // comment) has no real strategy name to send. An empty string just
+        // never matches the backend's mean-reversion caveat check, which is a
+        // safe under-trigger — a wrong HARDCODED guess here would misrepresent
+        // which strategy this trade actually came from.
+        const strategy = (snapshot.strategy as { strategy?: string } | undefined)?.strategy ?? '';
+        const horizonLabel = typeof snapshot.horizon === 'string' ? snapshot.horizon : undefined;
+        const res = await api.getStockFirstPassage({
+          symbol: position.symbol,
+          direction: position.direction,
+          horizon: _horizonEnum(horizonLabel),
+          strategy,
+          stock_price: position.currentPrice,
+          stop_price: position.stop,
+          targets: stockTargetPrices,
+          trend_score: typeof snapshot.stock_score === 'number' ? snapshot.stock_score : 50,
+        }, ctrl.signal);
+        if (ctrl.signal.aborted) return;
+        setMcResult({
+          targets: res.targets.map((t, i) => ({ label: `T${i + 1}`, price: t.price, probability: t.probability, expectedDays: t.expectedDays })),
+          invalidation: res.invalidation,
+          horizonNote: `${res.horizonDays} trading days`,
+          modelCaveat: res.modelCaveat,
+        });
+      } else {
+        if (optionStrike == null || position.currentStockPrice == null || !position.stop) {
+          throw new Error('missing option context');
+        }
+        const res = await api.getFirstPassageEstimate({
+          symbol: position.symbol,
+          direction: position.direction,
+          stock_price: position.currentStockPrice,
+          strike: optionStrike,
+          dte: position.dteRemaining,
+          premium: position.currentPrice,
+          delta: position.delta ?? 0.45,
+          trend_score: optionTrend ?? 50,
+          invalidation_price: position.stop,
+          t1_pct: defaultTargetPct.t1,
+          t2_pct: defaultTargetPct.t2,
+          t3_pct: defaultTargetPct.t3,
+        }, ctrl.signal);
+        if (ctrl.signal.aborted) return;
+        setMcResult({
+          targets: res.targets.map((t) => ({ label: `T${Math.round(t.pct * 100)}%`, price: t.stockPrice ?? 0, probability: t.probability, expectedDays: t.expectedDays })),
+          invalidation: res.invalidation,
+        });
+      }
+    } catch (e) {
+      if (ctrl.signal.aborted) return;
+      // Mirrors StockPositionCard's onEstimate, which captures the real
+      // error (setEstimateErr(String(e))) rather than a single static
+      // message — a genuine backend rejection (bad symbol, missing candle
+      // data, a 500) reads very differently from "try again" being useless
+      // forever after the directional-guard case above.
+      setMcError(String(e));
+    } finally {
+      if (estimateReq.current === ctrl) {
+        estimateReq.current = null;
+        setMcLoading(false);
+      }
+    }
+  };
+
+  // True when the user has explicitly edited Current Price in this drawer
+  // session since the estimate was fetched, so the displayed probabilities
+  // were computed against a now-stale price. Deliberately a flag set only by
+  // the EditField's own onChange (see priceEditedSinceEstimate's declaration
+  // above), not a comparison against the live position price — the live
+  // price ticks on its own via the 30s portfolio sync regardless of whether
+  // the user touched anything.
+  const mcPriceStale = mcResult != null && priceEditedSinceEstimate;
 
   return (
     <div className={styles.editDrawer}>
@@ -517,8 +705,49 @@ function EditDrawer({
             const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
             const pnlPct    = ((n - position.entryPrice) / position.entryPrice) * 100;
             onChange({ currentPrice: n, pnlDollar, pnlPct });
+            setPriceEditedSinceEstimate(true);
           }}
         />
+      </div>
+
+      <div className={styles.mcSection}>
+        <Text size={12} weight={500}>Monte Carlo estimate</Text>
+        <div className={styles.mcRow}>
+          <button type="button" className={styles.mcBtn} onClick={runEstimate} disabled={mcLoading || estimateDisabled}>
+            <Text size={12} weight={500}>{mcLoading ? 'Estimating…' : 'Estimate'}</Text>
+          </button>
+          {mcError && <Text size={11} tone="reject">{mcError}</Text>}
+        </div>
+        {isStock && !stockDirectionValid && (
+          <Text size={11} tone="dim">
+            Stop or a target is already on the wrong side of the current price — sync the position&apos;s targets before estimating.
+          </Text>
+        )}
+        {mcResult?.horizonNote && (
+          <Text size={10} tone="dim">Chance of reaching each target within {mcResult.horizonNote}</Text>
+        )}
+        {mcResult && (
+          <div className={styles.mcResultRow}>
+            {mcResult.targets.map((t, i) => (
+              <div key={`${t.label}-${i}`}>
+                <Text size={10} tone="dim">{t.label.toUpperCase()}</Text>
+                <Data size={14} weight={500} tone="pass">{`${Math.round(t.probability * 100)}%`}</Data>
+                <Text size={10} tone="dim">{t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}</Text>
+              </div>
+            ))}
+            <div>
+              <Text size={10} tone="dim">STOP HIT</Text>
+              <Data size={14} weight={500} tone="reject">{`${Math.round(mcResult.invalidation.probability * 100)}%`}</Data>
+              <Text size={10} tone="dim">{mcResult.invalidation.expectedDays != null ? `~${Math.round(mcResult.invalidation.expectedDays)}d` : 'unlikely'}</Text>
+            </div>
+          </div>
+        )}
+        {mcResult?.modelCaveat && (
+          <Text size={11} tone="caution">{mcResult.modelCaveat}</Text>
+        )}
+        {mcPriceStale && (
+          <Text size={11} tone="caution">Price has changed since this estimate was computed.</Text>
+        )}
       </div>
 
       <div className={styles.editFooter}>

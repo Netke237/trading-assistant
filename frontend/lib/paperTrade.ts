@@ -103,10 +103,12 @@ export function invalidTargetRungs(
 // just a baseline. See the plan's "Pristine or edited?" decision.
 export function stockCardSnapshotOf(
   c: PositionCardData,
+  horizon: string,
   edited?: { entry: number; stop: number; targets: number[]; shares: number },
 ): Record<string, unknown> {
   return {
     ...(edited ? { edited } : {}),
+    horizon,
     stock_score: c.stock_score,
     stock_status: c.stock_status,
     strategy: c.strategy,
@@ -154,7 +156,12 @@ export function buildPaperStockPosition(
     dteTotal:     0,
     dteRemaining: 0,
     status:       'PENDING',
-    recId:        'PAPER-' + Date.now().toString(36),
+    // Not 'PAPER-' — callers override `source` (spread + override) for
+    // broker-executed positions built via this same helper (see
+    // StockSendDialog/StockPositionCard/step-7-position-card's broker
+    // branches), so a 'PAPER-' prefix here would mislabel a real broker
+    // fill's internal id.
+    recId:        'POS-' + Date.now().toString(36),
     currentPrice: price,
     pnlDollar:    0,
     pnlPct:       0,
