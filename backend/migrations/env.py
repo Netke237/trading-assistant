@@ -6,6 +6,14 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from dotenv import load_dotenv
+
+# Alembic never imports app.main, which is where load_dotenv() normally runs, so
+# without this the root .env is never read: app.config then falls back to its
+# sqlite dev default and migrations silently apply to a stray backend/dev.db
+# instead of Postgres, exiting 0 as if they had succeeded.
+load_dotenv()
+
 from app.config import get_settings
 from app.models.base import Base
 from app.database import Base as DatabaseBase
