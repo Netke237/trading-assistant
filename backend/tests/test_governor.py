@@ -41,10 +41,15 @@ def test_circuit_opens_after_threshold_failures():
 
 
 def test_circuit_closes_after_cooldown():
-    cb = CircuitBreaker(fail_threshold=1, cooldown=0.05)
+    # Margin is deliberately generous: cooldown 0.02s against a 0.3s sleep, so
+    # the sleep would have to return ~280ms early to fail. The original 0.05s /
+    # 0.06s pairing left only 10ms and flipped under CPU contention on a host
+    # running the app's own services alongside the suite — a false failure
+    # during an unattended burn-in window is worse than 0.3s of runtime.
+    cb = CircuitBreaker(fail_threshold=1, cooldown=0.02)
     cb.record_failure()
     assert cb.is_open is True
-    time.sleep(0.06)
+    time.sleep(0.3)
     assert cb.is_open is False  # half-open: allows a trial
 
 
@@ -75,10 +80,12 @@ def test_symbol_budget_same_symbol_is_free_within_window():
 
 
 def test_symbol_budget_evicts_after_window():
-    budget = SymbolBudget(max_symbols=1, window=0.05)
+    # Same generous margin as test_circuit_closes_after_cooldown above, for the
+    # same reason — this test carried the identical 10ms window.
+    budget = SymbolBudget(max_symbols=1, window=0.02)
     assert budget.try_consume("AAPL") is True
     assert budget.try_consume("MSFT") is False
-    time.sleep(0.06)
+    time.sleep(0.3)
     assert budget.try_consume("MSFT") is True     # AAPL evicted, slot freed
 
 
