@@ -7,7 +7,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverride } from '@/types/domain';
+import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverride, AlertOverrides, TpMethod } from '@/types/domain';
 import { useRiskStore } from '@/lib/riskStore';
 
 type BackendPosition = {
@@ -23,6 +23,10 @@ type BackendPosition = {
   structuralStop?: number | null;
   exitPlan?: ExitPlan | null;
   maxLossOverride?: MaxLossOverride | null;
+  activeTpMethod?: TpMethod | null;
+  resolvedTpPrice?: number | null;
+  resolvedTpUpdatedAt?: string | null;
+  alertOverrides?: AlertOverrides | null;
   targets: TargetLevel[];
   dteTotal: number | null;
   createdAt: string;
@@ -53,6 +57,14 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     structuralStop: floorStop(p.structuralStop),
     exitPlan:     p.exitPlan ?? null,
     maxLossOverride: p.maxLossOverride ?? null,
+    // The backend column defaults to 'ladder' server-side, but a row written
+    // before that default (or a payload that omits the key) still arrives as
+    // null — normalise to 'ladder' here so the drawer's segmented control and
+    // alertEngine's TP resolution never have to special-case a null method.
+    activeTpMethod: (p.activeTpMethod ?? 'ladder') as TpMethod,
+    resolvedTpPrice: p.resolvedTpPrice ?? null,
+    resolvedTpUpdatedAt: p.resolvedTpUpdatedAt ?? null,
+    alertOverrides: p.alertOverrides ?? {},
     targets:      p.targets ?? [],
     dteTotal:     p.dteTotal ?? 0,
     dteRemaining: p.dteRemaining ?? 0,
@@ -282,6 +294,10 @@ function toUpdatePayload(patch: Partial<PortfolioPosition>): Record<string, unkn
   if ('structuralStop' in patch) body.structuralStop = floorStop(patch.structuralStop);
   if ('exitPlan' in patch) body.exitPlan = patch.exitPlan;
   if ('maxLossOverride' in patch) body.maxLossOverride = patch.maxLossOverride;
+  if ('activeTpMethod' in patch) body.activeTpMethod = patch.activeTpMethod;
+  if ('resolvedTpPrice' in patch) body.resolvedTpPrice = patch.resolvedTpPrice;
+  if ('resolvedTpUpdatedAt' in patch) body.resolvedTpUpdatedAt = patch.resolvedTpUpdatedAt;
+  if ('alertOverrides' in patch) body.alertOverrides = patch.alertOverrides;
   if ('targets' in patch) body.targets = patch.targets;
   if ('contracts' in patch) {
     body.qty = patch.contracts;

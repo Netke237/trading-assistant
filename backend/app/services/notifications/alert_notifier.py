@@ -190,19 +190,32 @@ def _build_notification(symbol: str, alert_type: str, reason: str,
 
 
 def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
-                 timestamp: str | None = None) -> bool:
+                 timestamp: str | None = None,
+                 type_enabled: bool | None = None) -> bool:
     """Dispatch one portfolio alert to email/Telegram, deduped across all callers.
 
     Returns True if the alert was dispatched, False if suppressed (master off,
     type disabled, or already sent within the dedup window).
+
+    ``type_enabled`` carries a position's explicit per-type override (Feature D)
+    and, when not None, REPLACES the global ``enabledTypes`` check for this one
+    call — that is what lets a single position turn an alert type on while it
+    stays off account-wide. Leave it None (the default, and every caller that
+    has no position in hand) to use the global list as before. ``masterEnabled``
+    is deliberately NOT bypassed: it is the user's account-wide kill switch and
+    a per-position toggle must not defeat it.
     """
     delivery = _load_delivery_config()
     if not delivery.get('masterEnabled', True):
         return False
 
-    enabled_types = delivery.get('enabledTypes', _DEFAULT_ENABLED_TYPES)
-    if alert_type not in enabled_types:
-        return False
+    if type_enabled is not None:
+        if not type_enabled:
+            return False
+    else:
+        enabled_types = delivery.get('enabledTypes', _DEFAULT_ENABLED_TYPES)
+        if alert_type not in enabled_types:
+            return False
 
     key = f'{rec_id}|{alert_type}'
     now = time.time()

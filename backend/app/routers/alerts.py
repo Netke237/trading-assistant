@@ -7,7 +7,7 @@ from app.data.market import fetch_quotes
 from app.database import get_db
 from app.models.portfolio import PortfolioPositionModel
 from app.schemas import AlertItem
-from app.services.alert_generator import generate_alerts
+from app.services.alert_generator import effective_enabled, generate_alerts
 from app.services.notifications.alert_notifier import notify_alert
 from app.services.position_alert_log import log_position_alert
 
@@ -110,5 +110,14 @@ async def post_alert_notify(
     # itself — see its docstring — so this endpoint owns the final commit.
     await db.commit()
 
-    sent = notify_alert(position.symbol, req.alertType, req.reason, req.recId, req.timestamp)
+    # Honour the position's per-type override (Feature D) over the global
+    # enabledTypes list — `None` when it has none, which leaves notify_alert on
+    # the global list exactly as before. The browser engine already suppresses
+    # a muted type before it ever POSTs here, so in practice this carries an
+    # explicit True; passing the full three-way result anyway keeps this path
+    # correct on its own rather than relying on the caller having filtered.
+    sent = notify_alert(
+        position.symbol, req.alertType, req.reason, req.recId, req.timestamp,
+        type_enabled=effective_enabled(position.alert_overrides, req.alertType),
+    )
     return {'sent': sent}
