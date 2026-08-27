@@ -148,4 +148,29 @@ describe('EditDrawer Monte Carlo estimate', () => {
 
     await waitFor(() => expect(screen.queryByText('60%')).not.toBeInTheDocument());
   });
+
+  it('does not get stuck showing "Estimating…" if the stop changes while a request is in flight', async () => {
+    let resolveEstimate: (value: unknown) => void;
+    const pending = new Promise((resolve) => { resolveEstimate = resolve; });
+    (api.getStockFirstPassage as jest.Mock).mockReturnValueOnce(pending);
+
+    const { rerender } = render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    fireEvent.click(screen.getByText('Estimate'));
+    expect(await screen.findByText('Estimating…')).toBeInTheDocument();
+
+    // Edit lands while the request is still pending.
+    rerender(<EditDrawer position={makeStockPosition({ stop: 175 })} onClose={noop} onChange={noop} onRemove={noop} />);
+
+    // Now let the original (now-abandoned) request settle.
+    resolveEstimate!({
+      targets: [{ price: 205, probability: 0.6, expectedDays: 8 }],
+      invalidation: { probability: 0.15, expectedDays: null },
+      horizonDays: 10,
+      modelCaveat: null,
+    });
+
+    // The button must recover — not be stuck disabled/"Estimating…" forever.
+    await waitFor(() => expect(screen.getByText('Estimate')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Estimate' })).not.toBeDisabled();
+  });
 });

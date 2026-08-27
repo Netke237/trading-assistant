@@ -552,6 +552,13 @@ export function EditDrawer({
   useEffect(() => {
     estimateReq.current?.abort();
     estimateReq.current = null;
+    // Aborting means this drawer no longer cares about the in-flight
+    // request's outcome — reset mcLoading here too, unconditionally.
+    // runEstimate's own `finally` only clears mcLoading when
+    // estimateReq.current still === its own controller, which is no longer
+    // true once this effect has nulled the ref: without this line the
+    // button would be stuck on "Estimating…" until the drawer remounts.
+    setMcLoading(false);
     setMcResult(null);
     setMcError(null);
   }, [position.stop, targetPricesKey]);
