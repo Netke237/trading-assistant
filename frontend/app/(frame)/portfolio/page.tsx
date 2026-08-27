@@ -1013,7 +1013,7 @@ function MaxLossBanner({
         </Text>
         {sizing && (
           <Text size={10} tone="dim">
-            Risk-derived size: {sizing.recommended} contract{sizing.recommended === 1 ? '' : 's'} ({formatRecommendedContractSizeRaw(sizing.raw)} exact)
+            Risk-derived size: {sizing.recommended} contract{sizing.recommended === 1 ? '' : 's'} ({formatRecommendedContractSizeRaw(sizing)} exact)
           </Text>
         )}
         {!editingOverride ? (

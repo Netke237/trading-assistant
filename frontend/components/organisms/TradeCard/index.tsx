@@ -1041,7 +1041,7 @@ export function TradeCard({
                     {recommendedSize && (
                       <Text size={10} tone="dim">
                         Risk-derived size: {recommendedSize.recommended} contract{recommendedSize.recommended === 1 ? '' : 's'}{' '}
-                        ({formatRecommendedContractSizeRaw(recommendedSize.raw)} exact)
+                        ({formatRecommendedContractSizeRaw(recommendedSize)} exact)
                       </Text>
                     )}
                   </div>

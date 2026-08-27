@@ -154,21 +154,26 @@ export function recommendedContractSize(
   return { raw, recommended: Math.floor(raw + FLOOR_EPSILON) };
 }
 
-/** Formats `recommendedContractSize`'s `raw` decimal for display, truncated
- *  (not rounded) to 2 places — plain `toFixed(2)` rounds, which can cross
- *  the same floor boundary `recommended` already floored down from (e.g.
- *  raw=0.9975 rounds to "1.00" while recommended is 0), producing a
- *  self-contradictory "0 contracts (1.00 exact)" display. Truncating keeps
- *  the two numbers consistent at that boundary — but `raw * 100` is itself
- *  a float multiplication that can land a few ULPs under an integer (e.g. a
- *  true 87 computed as 86.99999999999999), the same fp-noise class
- *  `FLOOR_EPSILON` exists to absorb, just one decimal place over. Applying
- *  the identical epsilon here (scaled ×100, same units as the truncation
- *  step) before flooring keeps this function's output consistent with
- *  `recommended` at every boundary, not just the one the plain-toFixed bug
- *  originally covered. */
-export function formatRecommendedContractSizeRaw(raw: number): string {
-  return (Math.floor(raw * 100 + FLOOR_EPSILON * 100) / 100).toFixed(2);
+/** Formats a `recommendedContractSize` result for display as "N.dd" — always
+ *  showing `size.recommended` as the whole part, by construction. Two
+ *  earlier versions independently re-derived a floored/truncated decimal
+ *  from `raw` (once via bare `toFixed`, once via a second, separately-
+ *  epsilon-adjusted floor) — each fixed a real IEEE754 boundary disagreement
+ *  with `recommended`, and each was later shown to have its own, narrower
+ *  boundary where the two could still disagree, since two independent
+ *  floating-point computations over the same input can be tuned to agree at
+ *  every practically-reachable boundary but never proven to agree at every
+ *  boundary. Deriving the decimal from `size.recommended` (already the
+ *  authoritative, epsilon-corrected integer) instead of re-flooring `raw`
+ *  a third time eliminates that whole bug class rather than patching the
+ *  next boundary: the whole part can never disagree with `recommended`
+ *  because it never comes from anywhere else. `Math.max(0, ...)` guards the
+ *  fractional remainder against the same sub-epsilon negative noise
+ *  `FLOOR_EPSILON` exists to absorb (e.g. raw fractionally *below*
+ *  `recommended` by a few ULPs). */
+export function formatRecommendedContractSizeRaw(size: RecommendedContractSize): string {
+  const fractionCents = Math.min(99, Math.floor(Math.max(0, size.raw - size.recommended) * 100));
+  return `${size.recommended}.${String(fractionCents).padStart(2, '0')}`;
 }
 
 export function checkTradeRisk(
