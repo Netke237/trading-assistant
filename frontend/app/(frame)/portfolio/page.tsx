@@ -57,6 +57,22 @@ function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | und
   return 'pass';                      // cheap
 }
 
+/** `position.contract` for an option position is a backend-generated,
+ *  pipe-delimited machine ID — "SYMBOL|STRIKE|EXPIRY|C/P" (see
+ *  backend/app/routers/scan.py's `contract=f"{symbol}|{int(strike)}|..."`
+ *  and backend/app/schemas/__init__.py's persistence-schema comment).
+ *  Every option position, old or new, has this format — unlike
+ *  `tradeCardSnapshot.strike`, which is only populated for positions opened
+ *  after this Monte Carlo feature shipped. Prefer parsing the strike out of
+ *  the contract id so pre-existing positions aren't permanently stuck with
+ *  Estimate disabled. */
+function optionStrikeFromContract(contract: string): number | null {
+  const parts = contract.split('|');
+  if (parts.length !== 4) return null;
+  const strike = Number(parts[1]);
+  return Number.isFinite(strike) && strike > 0 ? strike : null;
+}
+
 const COLUMNS = '28px 72px 1.6fr 72px 1fr 110px 104px 60px 56px 60px 90px 40px';
 
 function downloadCsv(filename: string, text: string): void {
@@ -482,7 +498,7 @@ export function EditDrawer({
   const isStock = position.contract.endsWith('|STOCK');
   const snapshot = position.tradeCardSnapshot ?? {};
   const stockTargetPrices = position.targets.map((t) => t.targetPrice ?? t.stockPrice).filter((p): p is number => typeof p === 'number' && p > 0);
-  const optionStrike = typeof snapshot.strike === 'number' ? snapshot.strike : null;
+  const optionStrike = optionStrikeFromContract(position.contract) ?? (typeof snapshot.strike === 'number' ? snapshot.strike : null);
   const optionTrend = (snapshot.stockBreakdown as { trend?: number } | undefined)?.trend;
   const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
 
@@ -521,6 +537,24 @@ export function EditDrawer({
     horizonNote?: string;
     modelCaveat?: string | null;
   } | null>(null);
+
+  // Clear a stale Monte Carlo result — and abort an in-flight request — when
+  // the user edits stop/targets in this same open drawer (EditDrawer doesn't
+  // unmount on those edits; the parent just re-renders it with new props).
+  // Without this, the panel keeps showing probabilities computed against the
+  // OLD stop/targets after the user changes them. Keyed by VALUE (not the
+  // `position.targets` array reference, which gets a new identity on
+  // unrelated store updates like a routine price-sync tick) so this doesn't
+  // spuriously wipe a fresh estimate on every sync poll — only on a genuine
+  // stop/target edit. Deliberately excludes currentPrice/currentStockPrice,
+  // which tick frequently and would defeat the point of showing a result.
+  const targetPricesKey = position.targets.map((t) => t.targetPrice ?? t.stockPrice).join(',');
+  useEffect(() => {
+    estimateReq.current?.abort();
+    estimateReq.current = null;
+    setMcResult(null);
+    setMcError(null);
+  }, [position.stop, targetPricesKey]);
 
   const runEstimate = async () => {
     estimateReq.current?.abort();

@@ -114,4 +114,38 @@ describe('EditDrawer Monte Carlo estimate', () => {
     render(<EditDrawer position={makeOptionPosition({ tradeCardSnapshot: {} })} onClose={noop} onChange={noop} onRemove={noop} />);
     expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
   });
+
+  it('re-derives the option strike from position.contract even when the buy-time snapshot has no strike (pre-existing positions)', async () => {
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [{ pct: 0.2, stockPrice: 215, optionPrice: 5.4, probability: 0.6, expectedDays: 5 }],
+      invalidation: { probability: 0.1, expectedDays: null },
+    });
+    const position = makeOptionPosition({ contract: 'AAPL|220|2026-09-16|C', tradeCardSnapshot: { stockBreakdown: { trend: 72 } } });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Estimate' })).not.toBeDisabled();
+    fireEvent.click(screen.getByText('Estimate'));
+    await waitFor(() => expect(api.getFirstPassageEstimate).toHaveBeenCalledWith(expect.objectContaining({
+      strike: 220,
+    }), expect.any(AbortSignal)));
+  });
+
+  it('clears a stale Monte Carlo result when the user edits the stop after estimating', async () => {
+    (api.getStockFirstPassage as jest.Mock).mockResolvedValueOnce({
+      targets: [{ price: 205, probability: 0.6, expectedDays: 8 }],
+      invalidation: { probability: 0.15, expectedDays: null },
+      horizonDays: 10,
+      modelCaveat: null,
+    });
+    const onChange = jest.fn();
+    const { rerender } = render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={onChange} onRemove={noop} />);
+    fireEvent.click(screen.getByText('Estimate'));
+    expect(await screen.findByText('60%')).toBeInTheDocument();
+
+    // Simulate the store update an edited stop would produce — EditDrawer re-renders
+    // with the SAME position identity but a changed `stop`, exactly as the real
+    // parent does when `onChange` writes through to the store.
+    rerender(<EditDrawer position={makeStockPosition({ stop: 175 })} onClose={noop} onChange={onChange} onRemove={noop} />);
+
+    await waitFor(() => expect(screen.queryByText('60%')).not.toBeInTheDocument());
+  });
 });
