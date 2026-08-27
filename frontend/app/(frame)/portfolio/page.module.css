@@ -202,6 +202,48 @@
   gap: 4px;
 }
 
+.mcSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.mcRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.mcBtn {
+  height: 30px;
+  padding: 0 var(--space-4);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  font-family: var(--font-dm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.mcBtn:hover:not(:disabled) {
+  background: var(--bg-surface);
+}
+
+.mcBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mcResultRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: var(--space-3);
+}
+
 .editInput {
   height: 32px;
   padding: 0 var(--space-3);

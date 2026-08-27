@@ -67,6 +67,7 @@ function tradeCardSnapshotOf(card: TradeCardData): Record<string, unknown> {
     contractBreakdown: card.contractBreakdown,
     rrRatio: card.rrRatio,
     rrModel: card.rrModel,
+    strike: card.contractDetails?.strike ?? null,
   };
 }
 
