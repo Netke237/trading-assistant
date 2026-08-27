@@ -20,13 +20,16 @@ _TTL_BY_INTERVAL: dict[str, float] = {
 _CHART_SEM = asyncio.Semaphore(2)
 
 # The chart WS stream and /chart/history default to days=55 — the right cap for
-# intraday intervals (yfinance's 15m window) but far too short for daily/weekly,
-# which can serve years. Widen those here — at the caching layer, so the cache
-# key reflects the real window and only the chart path is affected (scanner /
-# regime / HMM callers hit fetch_intraday_candles directly and keep their own
-# days). ~5y matches the scanner's daily depth (market._fetch_daily_yf uses 5y).
+# 1min/5min/15min/30min (yfinance's real window for those, per market._YF_MAX_DAYS)
+# but far too short for 1h/4h/daily/weekly, which can serve much more. Widen those
+# here — at the caching layer, so the cache key reflects the real window and only
+# the chart path is affected (scanner / regime / HMM callers hit
+# fetch_intraday_candles directly and keep their own days). ~5y matches the
+# scanner's daily depth (market._fetch_daily_yf uses 5y); 730d matches
+# market._YF_MAX_DAYS["1h"/"4h"], yfinance's real cap for those intervals.
 _CHART_DAILY_DAYS = 1825    # ~5 years of daily bars
 _CHART_WEEKLY_DAYS = 1825   # ~5 years of weekly bars
+_CHART_HOURLY_DAYS = 730    # ~2 years of 1h/4h bars
 
 
 def _key(symbol: str, interval: str, days: int) -> str:
@@ -40,6 +43,8 @@ async def get_intraday(symbol: str, interval: str = "15min", days: int = 55) -> 
         days = max(days, _CHART_DAILY_DAYS)
     elif interval == "weekly":
         days = max(days, _CHART_WEEKLY_DAYS)
+    elif interval in ("1h", "4h"):
+        days = max(days, _CHART_HOURLY_DAYS)
     key = _key(symbol, interval, days)
     now = time.monotonic()
 

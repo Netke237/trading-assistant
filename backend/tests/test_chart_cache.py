@@ -82,6 +82,20 @@ async def test_1W_and_weekly_share_one_cache_entry_and_ttl():
 
 
 @pytest.mark.asyncio
+async def test_4h_widened_to_hourly_cap_not_left_at_default_55():
+    """'4h' (and '1h') must be widened past the chart WS/route's days=55 default,
+    same as daily/weekly — yfinance supports 730 days for these intervals
+    (market._YF_MAX_DAYS), so leaving them at 55 silently truncates the chart to
+    a few weeks of history instead of ~2 years."""
+    mock_rows = [{"time": "2024-01-02", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000}]
+    with patch("app.data.chart_cache.fetch_intraday_candles", return_value=mock_rows) as mock_fetch:
+        from app.data.chart_cache import get_intraday, _INTRADAY_CACHE
+        _INTRADAY_CACHE.clear()
+        await get_intraday("AAPL", "4h")  # caller passes no days -> route/WS default of 55
+    mock_fetch.assert_called_once_with("AAPL", "4h", 730)
+
+
+@pytest.mark.asyncio
 async def test_at_most_2_concurrent_fetches():
     """At most 2 concurrent chart fetches run simultaneously."""
     import asyncio as _asyncio
