@@ -74,8 +74,10 @@ The user runs a ~4000 EUR account (displayed as USD `$` in this app — no curre
 
 ## Feature E — Monte Carlo + buy-time snapshot for stock positions
 
-- [ ] Build the missing snapshot-capture step in the stock buy flow (mirror `tradeCardSnapshotOf()` from `step-7-trade-card/page.tsx:60-71` into the equivalent stock buy flow, `step-7-position-card`/`StockPositionCard`), capturing whatever `getStockFirstPassage` needs (`horizon`, `strategy`, `trend_score`-equivalent) that isn't already captured.
-- [ ] Wire the existing Monte Carlo estimate-button + result-row pattern into the Portfolio `EditDrawer` for both options (`getFirstPassageEstimate`) and stock (`getStockFirstPassage`) positions, branching on contract shape.
+> **Status: DONE — shipped to `main` ahead of this plan, via a separate branch (`feat/stock-monte-carlo-buy-snapshot`, merge commit `41e40480`) and its own plan docs (`2026-08-26-monte-carlo-portfolio-drawer-and-snapshot-gaps.md`, implemented; `2026-08-26-stock-monte-carlo-buy-snapshot.md`, superseded once the backend estimator was found to already exist).** This section's checkboxes are retro-marked. Adversarial-audit evidence is self-reported in commit messages only (2 documented `K-adversarial-audit-loop` rounds — `79f2480e`, `423f2d5b` — plus a clean 3rd per `41e40480`); no standalone audit report was produced.
+
+- [x] Build the missing snapshot-capture step in the stock buy flow (mirror `tradeCardSnapshotOf()` from `step-7-trade-card/page.tsx:60-71` into the equivalent stock buy flow, `step-7-position-card`/`StockPositionCard`), capturing whatever `getStockFirstPassage` needs (`horizon`, `strategy`, `trend_score`-equivalent) that isn't already captured. — `stockCardSnapshotOf(card, horizon)` in `frontend/lib/paperTrade.ts`, wired into all three broker-order stock paths (`StockSendDialog` auto-send, `StockPositionCard.submit`, `step-7-position-card` submit). Two create paths remain snapshotless by design — the after-scan auto-execute loop (`step-4-stocks/page.tsx`) and the `ChartWorkspace` chart-click buy — and their estimate degrades gracefully to `strategy: ''`, `horizon: 'Swing'`, `trend_score: 50`.
+- [x] Wire the existing Monte Carlo estimate-button + result-row pattern into the Portfolio `EditDrawer` for both options (`getFirstPassageEstimate`) and stock (`getStockFirstPassage`) positions, branching on contract shape. — `EditDrawer` in `frontend/app/(frame)/portfolio/page.tsx`, branches on `position.contract.endsWith('|STOCK')`. Option-side estimate is disabled when `currentStockPrice`/strike can't be resolved.
 
 ## Migration
 
@@ -88,9 +90,11 @@ Each ✅ checkpoint = typecheck/pytest green **and** a `K-adversarial-audit-loop
 1. **Phase 0** — combined migration + ORM/schema/router scaffolding for every new column. ✅ checkpoint + audit.
 2. **Phase 1** — Feature B in full (largest, most novel phase; verify in isolation before anything depends on it). ✅ checkpoint + audit.
 3. **Phase 2** — Feature C (built on Feature B's final stop). ✅ checkpoint + audit. [done]
-4. **Phase 3** — Feature E (stock snapshot capture + Monte Carlo in Portfolio editor, both asset types).
+4. **Phase 3** — Feature E (stock snapshot capture + Monte Carlo in Portfolio editor, both asset types). [done — shipped separately, see the Feature E section]
 5. **Phase 4** — Feature D (active TP method selector + per-position alert overrides + toast-gating fix — most cross-cutting alert code, done last).
 6. **Final** — full-diff `K-adversarial-audit-loop` pass end-to-end.
+
+> **Phase 0 / Feature D scaffolding note:** Phase 0's `bbb04a057515` migration already added *all* the columns, Feature D's included (`active_tp_method`, `resolved_tp_price`, `resolved_tp_updated_at`, `alert_overrides`), and the ORM fields (`models/portfolio.py`), the `TpMethod` literal, the read/update Pydantic schemas, and the CREATE/PATCH router plumbing (`routers/portfolio.py`) are all in place. Phase 4 therefore needs **no new migration** — only the business logic that populates and consumes those columns (`alert_generator.py`/`portfolio_alert_monitor.py`/`alertEngine.ts` override + toast-gating, `resolved_tp` snapshot refresh) plus the frontend type/store/UI.
 
 Extend existing test files rather than adding new ones at the end: `test_first_passage.py`, `test_structural_stop.py` (+ new `test_exit_plan.py`), `test_risk_settings.py`, `test_portfolio_update.py`, `test_portfolio_alert_monitor.py`, `riskStore.test.ts`, `risk.test.ts`, `alertEngine.test.ts`, `portfolioStore.test.ts`.
 
