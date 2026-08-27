@@ -1,6 +1,6 @@
 # Exit-Plan Pipeline & Risk Enhancements Implementation Plan
 
-> **Status:** Accepted 2026-08-26. Nothing implemented yet — this session was planning-only (extensive back-and-forth with the user, including a `/grill-me` pass, to converge the design before any code was touched). Whoever picks this up should implement task-by-task using the checkboxes below, running `K-adversarial-audit-loop` (audit-only mode) at each ✅ checkpoint, not just at the end — per explicit user instruction.
+> **Status:** Accepted 2026-08-26 (planning-only that day — extensive back-and-forth with the user, including a `/grill-me` pass, to converge the design before any code was touched). **All five phases are now implemented**; Features B, C, D and E are checked off below and the migration was folded into Phase 0. What remains is the audit discipline the user asked for: the Phase 4 ✅ checkpoint and the final full-diff pass, both `K-adversarial-audit-loop` in audit-only mode, are **not yet run**. Per explicit user instruction that loop belongs at every ✅ checkpoint, not just at the end.
 
 **Goal:** Replace the TradeCard/Portfolio "Set the profit/target" mechanism's ad-hoc pieces (fixed-% invalidation, one arithmetic TP ladder, no dollar-loss awareness, no per-position alert control) with one coherent, structurally-grounded exit-plan pipeline, plus the risk-sizing and alerting features that depend on it.
 
@@ -66,11 +66,11 @@ The user runs a ~4000 EUR account (displayed as USD `$` in this app — no curre
 
 ## Feature D — Active TP method + per-position alert controls
 
-- [ ] `TpMethod = 'ladder' | 'monte_carlo' | 'exit_plan_2r' | 'exit_plan_3r'` field on `PortfolioPosition`/ORM + selector UI (radio/segmented control) in the Portfolio editor across all TP-producing sections.
-- [ ] Headless alerting: `resolved_tp_price` / `resolved_tp_updated_at` snapshot columns, refreshed only on manual re-estimate/re-compute; `portfolio_alert_monitor.py` compares live price against this snapshot exactly as it already does for `structuralStop`.
-- [ ] `AlertOverrides = Partial<Record<AlertType, boolean>>` field on `PortfolioPosition`/ORM. `effectiveEnabled(type) = overrides[type] ?? globalEnabledTypes.includes(type)`, implemented in both `frontend/lib/alertEngine.ts::scanPortfolio` and `backend/app/services/alert_generator.py::generate_alerts` (documented mirrors of each other per `CLAUDE.md`).
-- [ ] Toast-gating bugfix bundled in: thread `enabledTypes` into `scanPortfolio`/`addToast` for the first time.
-- [ ] UI: toggle switches per `AlertType` in the Portfolio `EditDrawer`, defaulting to "inherit" (visually distinct from explicit on/off), plus a line showing which price each active alert currently fires against.
+- [x] `TpMethod = 'ladder' | 'monte_carlo' | 'exit_plan_2r' | 'exit_plan_3r'` field on `PortfolioPosition`/ORM + selector UI (radio/segmented control) in the Portfolio editor across all TP-producing sections. (`TpMethodSelector` in `portfolio/page.tsx` — one segmented control listing all four methods with the price each resolves to; a method whose price can't be resolved yet renders disabled rather than stamping a null snapshot.)
+- [x] Headless alerting: `resolved_tp_price` / `resolved_tp_updated_at` snapshot columns, refreshed only on manual re-estimate/re-compute; `portfolio_alert_monitor.py` compares live price against this snapshot exactly as it already does for `structuralStop`. (Re-stamping is wired into both sources: `runEstimate` for `monte_carlo` and `ExitPlanEditor.compute` for the 2R/3R rows, each re-stamping only when its own method is the active one. `'ladder'` deliberately stamps `resolvedTpPrice: null` and keeps tracking `targets[0]` live, since those targets are edited in the same drawer; a non-ladder method with no snapshot falls back to the ladder rather than going silent.)
+- [x] `AlertOverrides = Partial<Record<AlertType, boolean>>` field on `PortfolioPosition`/ORM. `effectiveEnabled(type) = overrides[type] ?? globalEnabledTypes.includes(type)`, implemented in both `frontend/lib/alertEngine.ts::scanPortfolio` and `backend/app/services/alert_generator.py::generate_alerts` (documented mirrors of each other per `CLAUDE.md`). (Typed against a narrower `PositionAlertType` — the six types a single position can actually raise; `REGIME_CHANGE`/`SCAN_*` stay global-only, and the backend helper ignores a stray key for one. The backend splits the resolution across its two existing gates rather than duplicating the global list: `generate_alerts` drops an explicitly-muted type up front, and an explicit `true` reaches dispatch via a new `notify_alert(type_enabled=...)` argument that replaces — but never bypasses `masterEnabled` — the global `enabledTypes` check. That keeps history rows being written for a type muted only globally, as before.)
+- [x] Toast-gating bugfix bundled in: thread `enabledTypes` into `scanPortfolio`/`addToast` for the first time. (Both call sites — `portfolio/page.tsx` and `dashboard/page.tsx`, the latter twice. Left undefined, `scanPortfolio` still treats every type as enabled, so a caller that is never updated fails open rather than going silent.)
+- [x] UI: toggle switches per `AlertType` in the Portfolio `EditDrawer`, defaulting to "inherit" (visually distinct from explicit on/off), plus a line showing which price each active alert currently fires against. (`AlertOverridesEditor` — three states per type, Inherit labelled with what it currently resolves to (`Inherit (on)`/`Inherit (off)`); inherit is stored as an absent key, matching the backend JSON shape exactly.)
 
 ## Feature E — Monte Carlo + buy-time snapshot for stock positions
 
@@ -81,7 +81,7 @@ The user runs a ~4000 EUR account (displayed as USD `$` in this app — no curre
 
 ## Migration
 
-- [ ] One combined Alembic migration for all new `portfolio_positions` columns: `exit_plan` (JSON), `max_loss_override` (JSON), `active_tp_method` (string), `resolved_tp_price` / `resolved_tp_updated_at`, `alert_overrides` (JSON). All additive `ADD COLUMN`s, no ordering dependency between them.
+- [x] *(Done in Phase 0 — `bbb04a057515` already added every column below, Feature D's included, so Phase 4 needed no new migration. See the Phase 0 / Feature D scaffolding note at the end of the build sequence.)* One combined Alembic migration for all new `portfolio_positions` columns: `exit_plan` (JSON), `max_loss_override` (JSON), `active_tp_method` (string), `resolved_tp_price` / `resolved_tp_updated_at`, `alert_overrides` (JSON). All additive `ADD COLUMN`s, no ordering dependency between them.
 
 ## Build sequence with checkpoints
 
@@ -91,8 +91,8 @@ Each ✅ checkpoint = typecheck/pytest green **and** a `K-adversarial-audit-loop
 2. **Phase 1** — Feature B in full (largest, most novel phase; verify in isolation before anything depends on it). ✅ checkpoint + audit.
 3. **Phase 2** — Feature C (built on Feature B's final stop). ✅ checkpoint + audit. [done]
 4. **Phase 3** — Feature E (stock snapshot capture + Monte Carlo in Portfolio editor, both asset types). [done — shipped separately, see the Feature E section]
-5. **Phase 4** — Feature D (active TP method selector + per-position alert overrides + toast-gating fix — most cross-cutting alert code, done last).
-6. **Final** — full-diff `K-adversarial-audit-loop` pass end-to-end.
+5. **Phase 4** — Feature D (active TP method selector + per-position alert overrides + toast-gating fix — most cross-cutting alert code, done last). [done — typecheck clean, 845 frontend tests and 1666 backend tests green; ✅ audit checkpoint NOT yet run]
+6. **Final** — full-diff `K-adversarial-audit-loop` pass end-to-end. [not yet run]
 
 > **Phase 0 / Feature D scaffolding note:** Phase 0's `bbb04a057515` migration already added *all* the columns, Feature D's included (`active_tp_method`, `resolved_tp_price`, `resolved_tp_updated_at`, `alert_overrides`), and the ORM fields (`models/portfolio.py`), the `TpMethod` literal, the read/update Pydantic schemas, and the CREATE/PATCH router plumbing (`routers/portfolio.py`) are all in place. Phase 4 therefore needs **no new migration** — only the business logic that populates and consumes those columns (`alert_generator.py`/`portfolio_alert_monitor.py`/`alertEngine.ts` override + toast-gating, `resolved_tp` snapshot refresh) plus the frontend type/store/UI.
 

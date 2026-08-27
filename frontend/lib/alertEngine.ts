@@ -1,4 +1,4 @@
-import type { AlertKind, AlertType, TargetLevel, Direction } from '@/types/domain';
+import type { AlertKind, AlertType, TargetLevel, Direction, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
 
 export interface AlertPosition {
   recId: string;
@@ -19,6 +19,17 @@ export interface AlertPosition {
   direction: Direction;
   nextEventDays?: number;
   nextEventLabel?: string;
+  /** Which TP computation drives this position's TP_HIT (Feature D). Absent =
+   *  'ladder'. Carried purely so the TP_HIT reason line can name the method
+   *  that fired; the price itself comes from `resolvedTpPrice` below. */
+  activeTpMethod?: TpMethod;
+  /** Stock price the active TP method resolved to, snapshotted when the method
+   *  was picked or re-computed. Null/absent for 'ladder', which reads
+   *  `targets[0].stockPrice` live instead. */
+  resolvedTpPrice?: number | null;
+  /** Per-position alert-type overrides — absent key inherits the global
+   *  `enabledTypes` decision (see `effectiveEnabled`). */
+  alertOverrides?: AlertOverrides;
 }
 
 export interface AlertReason {
@@ -39,6 +50,40 @@ export interface AlertReason {
 
 export interface ScanOptions {
   premiumStopPct?: number;  // fraction of premium lost at stop; default 0.60
+  /** The user's global `AlertConfig.enabledTypes`. Threading this in is the
+   *  Feature D toast-gating bugfix: before it, `enabledTypes` gated ONLY the
+   *  outbound email/Telegram dispatch (backend `notify_alert`), so turning a
+   *  type off in Settings still popped an in-app toast for it. Left undefined
+   *  every type is treated as enabled — that keeps a caller that hasn't been
+   *  updated (and the engine's own unit tests) on the pre-fix behavior rather
+   *  than silently muting everything. */
+  enabledTypes?: AlertType[];
+}
+
+/** Resolve one alert type for one position: an explicit per-position override
+ *  wins, an absent key inherits the global `enabledTypes` list.
+ *
+ *  `??` (not `||`) is load-bearing — an explicit `false` must beat a global
+ *  "on", which `||` would swallow. Overrides are only consulted for the
+ *  position-scoped types; a stray key for an account-wide type (REGIME_CHANGE,
+ *  SCAN_*) can never reach here because those aren't raised per position.
+ *
+ *  Mirrors backend `alert_generator._effective_enabled` — keep the two in step. */
+/** Human label for the TP method that fired, appended to the TP_HIT reason so
+ *  the alert says WHICH target was reached. 'ladder' is the historical default
+ *  and stays unlabelled — its reason line is unchanged from before Feature D. */
+const TP_METHOD_LABEL: Record<Exclude<TpMethod, 'ladder'>, string> = {
+  monte_carlo:  'Monte Carlo target',
+  exit_plan_2r: '2R exit plan',
+  exit_plan_3r: '3R exit plan',
+};
+
+function effectiveEnabled(
+  type: PositionAlertType,
+  overrides: AlertOverrides | undefined,
+  enabledTypes: AlertType[] | undefined,
+): boolean {
+  return overrides?.[type] ?? (enabledTypes ? enabledTypes.includes(type) : true);
 }
 
 export function scanPortfolio(
@@ -47,11 +92,18 @@ export function scanPortfolio(
 ): AlertReason[] {
   const premiumStopPct = options.premiumStopPct ?? 0.60;
   const premiumStopThreshold = -(premiumStopPct * 100);  // e.g. -60 for 0.60
+  const { enabledTypes } = options;
 
   const out: AlertReason[] = [];
 
   for (const p of positions) {
     const isBearish = p.direction === 'Bearish';
+    // Per-position override ?? global enabledTypes, resolved once per position.
+    // Every alert branch below gates on this, so a muted type produces no
+    // AlertReason at all — no toast, and (since alertStore.addToast is what
+    // POSTs /api/alerts/notify) no email/Telegram either.
+    const enabled = (type: PositionAlertType) =>
+      effectiveEnabled(type, p.alertOverrides, enabledTypes);
 
     // Shared by TP_HIT (below) and STOP_REACHED (further below) — both compare against an
     // underlying STOCK price (`firstTarget.stockPrice` / `stop`). For an option position,
@@ -76,20 +128,41 @@ export function scanPortfolio(
     // silently falling back to the option premium — the exact bug this guard exists to prevent.
     const referencePrice = hasReferencePrice ? (isStock ? p.currentPrice : p.currentStockPrice!) : NaN;
 
-    // TP_HIT — direction-aware: bullish targets are above current price, bearish below
+    // TP_HIT — direction-aware: bullish targets are above current price, bearish below.
+    // The price compared against is whatever the position's ACTIVE TP method
+    // resolved to (Feature D): `resolvedTpPrice` is a snapshot stamped when the
+    // method was picked or re-computed, exactly like `structuralStop`, and is
+    // deliberately never recomputed here. It is null for the 'ladder' method,
+    // which reads the live first ladder target instead — and null is also the
+    // fallback for a non-ladder method whose snapshot never got stamped, which
+    // keeps a mis-set position alerting on the ladder rather than going silent.
     const firstTarget = p.targets[0];
-    const tpHit = hasReferencePrice && firstTarget
-      ? (isBearish ? referencePrice <= firstTarget.stockPrice : referencePrice >= firstTarget.stockPrice)
+    // `> 0`, not just non-null: 0 is never a real stock price (the same
+    // convention portfolioStore's floorStop applies to stops), and an upstream
+    // `?? 0` fallback can land one here. Left un-guarded, a 0 snapshot makes
+    // `referencePrice >= 0` true on every single tick for a bullish position.
+    const snapshotPrice = p.resolvedTpPrice != null && p.resolvedTpPrice > 0 ? p.resolvedTpPrice : null;
+    const tpPrice = snapshotPrice ?? firstTarget?.stockPrice;
+    const tpMethod = p.activeTpMethod ?? 'ladder';
+    // Only label a non-ladder method that actually supplied the price — a
+    // method selected without a stamped snapshot fell back to the ladder
+    // above, so naming it here would misreport which target was hit.
+    const tpMethodNote =
+      tpMethod !== 'ladder' && snapshotPrice != null
+        ? ` (${TP_METHOD_LABEL[tpMethod]})`
+        : '';
+    const tpHit = hasReferencePrice && tpPrice != null
+      ? (isBearish ? referencePrice <= tpPrice : referencePrice >= tpPrice)
       : false;
-    if (tpHit) {
+    if (tpHit && enabled('TP_HIT')) {
       out.push({
         recId: p.recId,
         kind: 'Action',
         symbol: p.symbol,
         alertType: 'TP_HIT',
-        reason: `Target reached — ${p.symbol} at $${referencePrice.toFixed(2)}`,
+        reason: `Target reached — ${p.symbol} at $${referencePrice.toFixed(2)}${tpMethodNote}`,
         price: referencePrice,
-        referenceValue: firstTarget?.stockPrice,
+        referenceValue: tpPrice,
         direction: p.direction,
         contract: p.contract,
       });
@@ -103,7 +176,7 @@ export function scanPortfolio(
     // from null to 0 upstream in portfolioStore.ts).
     const stop = p.stop;
     const stopBreached = hasReferencePrice && stop != null && (isBearish ? referencePrice >= stop : referencePrice <= stop);
-    if (stopBreached && stop != null) {
+    if (stopBreached && stop != null && enabled('STOP_REACHED')) {
       out.push({
         recId: p.recId,
         kind: 'Critical',
@@ -123,7 +196,7 @@ export function scanPortfolio(
     // "Check structure" was never run before sending to broker — optional, unlike `stop`.
     const structuralStop = p.structuralStop;
     const structuralBreached = hasReferencePrice && structuralStop != null && (isBearish ? referencePrice >= structuralStop : referencePrice <= structuralStop);
-    if (structuralBreached && structuralStop != null) {
+    if (structuralBreached && structuralStop != null && enabled('STRUCTURAL_STOP_BREACHED')) {
       out.push({
         recId: p.recId,
         kind: 'Critical',
@@ -140,7 +213,7 @@ export function scanPortfolio(
     // PREMIUM_STOP — option lost premiumStopPct of its value. No dollar price/
     // threshold is available in this scope (only pnlPct), so price/referenceValue
     // are left undefined rather than mislabeled.
-    if (p.pnlPct <= premiumStopThreshold) {
+    if (p.pnlPct <= premiumStopThreshold && enabled('PREMIUM_STOP')) {
       out.push({
         recId: p.recId,
         kind: 'Critical',
@@ -153,7 +226,7 @@ export function scanPortfolio(
     }
 
     // TIME_STOP — expiry within 3 days
-    if (p.dteRemaining <= 3) {
+    if (p.dteRemaining <= 3 && enabled('TIME_STOP')) {
       out.push({
         recId: p.recId,
         kind: 'Action',
@@ -167,7 +240,7 @@ export function scanPortfolio(
     }
 
     // EVENT_RISK
-    if (p.nextEventDays != null && p.nextEventDays <= 3) {
+    if (p.nextEventDays != null && p.nextEventDays <= 3 && enabled('EVENT_RISK')) {
       out.push({
         recId: p.recId,
         kind: 'Action',

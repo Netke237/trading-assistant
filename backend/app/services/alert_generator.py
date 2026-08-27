@@ -27,6 +27,36 @@ def _premium_stop_pct() -> float:
     return float(_load_risk_config().get("reward_risk", {}).get("premium_stop_pct", 0.60))
 
 
+# Position-scoped alert types — the only ones a per-position override can
+# switch. Mirrors frontend `POSITION_ALERT_TYPES` in types/domain.ts.
+POSITION_ALERT_TYPES = frozenset({
+    "TP_HIT", "STOP_REACHED", "STRUCTURAL_STOP_BREACHED",
+    "PREMIUM_STOP", "TIME_STOP", "EVENT_RISK",
+})
+
+
+def effective_enabled(overrides: Optional[dict], alert_type: str) -> Optional[bool]:
+    """Resolve one position's per-type alert override (Feature D).
+
+    Returns True/False when the position carries an EXPLICIT override for the
+    type, and None when it doesn't — None means "inherit", i.e. defer to the
+    global ``alert_delivery.enabledTypes`` gate that already lives in
+    ``notify_alert``. The three-way return is what keeps this composable with
+    that existing gate instead of duplicating it here.
+
+    Mirrors frontend ``alertEngine.effectiveEnabled`` — keep the two in step.
+    A non-bool stored value (hand-edited JSON, an older shape) is treated as
+    absent rather than coerced, so a truthy string can never silently force an
+    alert type on. So is a key for an account-wide type (REGIME_CHANGE, the
+    SCAN_* lifecycle types): those are never raised per position, so a stray
+    entry for one must not be allowed to override the user's global setting.
+    """
+    if not overrides or alert_type not in POSITION_ALERT_TYPES:
+        return None
+    value = overrides.get(alert_type)
+    return value if isinstance(value, bool) else None
+
+
 def parse_expiry_from_contract(contract: str) -> Optional[date]:
     """Extract expiry date from contract string format: SYMBOL|STRIKE|EXPIRY|C/P."""
     try:
@@ -65,6 +95,32 @@ async def generate_alerts(
         opt_price = (current_option_prices or {}).get(pos.contract) if current_option_prices else None
         targets = pos.targets or []
         alert_state = dict(pos.alert_state or {})
+        overrides = pos.alert_overrides or {}
+
+        def _muted(alert_type: str) -> bool:
+            """True when this position explicitly turned the type OFF.
+
+            Only an explicit False suppresses here. An explicit True and an
+            absent key both fall through to the existing global
+            ``enabledTypes`` gate in ``notify_alert`` — which the caller
+            bypasses for an explicit True (see `type_enabled`), giving the
+            full `override ?? global` semantics without this function having
+            to know the global config at all. Suppressing here (rather than at
+            dispatch) is deliberate: a muted type must produce no alert row,
+            no WS broadcast, and no history entry, because for this position
+            it genuinely never fired.
+
+            Muting also drops any half-elapsed ``sustain_minutes`` clock for
+            the type: the branches below short-circuit before ``_sustained``,
+            so without this the stale ``pending_since`` would survive the
+            mute and fire the instant the user switched the type back on.
+            Un-muting therefore starts a fresh sustain window, which is what
+            "this alert was off" should mean.
+            """
+            if effective_enabled(overrides, alert_type) is False:
+                alert_state.pop(alert_type, None)
+                return True
+            return False
 
         def _sustained(alert_type: str, met: bool) -> bool:
             if not sustain_minutes:
@@ -89,11 +145,25 @@ async def generate_alerts(
 
         # TP_HIT — direction-aware: bullish targets are above current price, bearish below
         is_bearish = pos.direction == "Bearish"
-        if targets and price is not None:
-            first_target = targets[0]
-            target_stock_price = (
-                first_target.get("stock_price") or first_target.get("stockPrice") or 0
-            )
+        # The price compared against is whatever the position's ACTIVE TP
+        # method resolved to (Feature D). `resolved_tp_price` is a snapshot
+        # refreshed only on a manual re-estimate/re-compute — read here
+        # exactly as `structural_stop` already is, never recomputed. It is
+        # NULL for the 'ladder' method, which falls back to the live first
+        # ladder target below (also the fallback for a non-ladder method whose
+        # snapshot was never stamped, so such a position keeps alerting rather
+        # than going silent).
+        first_target = targets[0] if targets else None
+        ladder_price = (
+            (first_target.get("stock_price") or first_target.get("stockPrice") or 0)
+            if first_target else None
+        )
+        # Truthiness, not `is not None`: 0 is never a real stock price (the same
+        # convention `_floor_stop` applies to stops) and an upstream `?? 0`
+        # fallback can persist one. A 0 snapshot falls back to the ladder rather
+        # than making `price >= 0` true on every tick.
+        target_stock_price = pos.resolved_tp_price or ladder_price
+        if target_stock_price and price is not None and not _muted("TP_HIT"):
             hit_raw = (price <= target_stock_price) if is_bearish else (price >= target_stock_price)
             if _sustained("TP_HIT", hit_raw):
                 counter += 1
@@ -128,7 +198,8 @@ async def generate_alerts(
             (price >= pos.stop) if is_bearish
             else (price <= pos.stop)
         ) if (pos.stop is not None and price is not None) else False
-        if pos.stop is not None and price is not None and _sustained("STOP_REACHED", stop_breached_raw):
+        if pos.stop is not None and price is not None and not _muted("STOP_REACHED") \
+                and _sustained("STOP_REACHED", stop_breached_raw):
             counter += 1
             log_event("alert_fired", pos.rec_id, {
                 "symbol": symbol,
@@ -164,7 +235,9 @@ async def generate_alerts(
             (price >= pos.structural_stop) if is_bearish
             else (price <= pos.structural_stop)
         ) if (pos.structural_stop is not None and price is not None) else False
-        if pos.structural_stop is not None and price is not None and _sustained("STRUCTURAL_STOP_BREACHED", structural_breached_raw):
+        if pos.structural_stop is not None and price is not None \
+                and not _muted("STRUCTURAL_STOP_BREACHED") \
+                and _sustained("STRUCTURAL_STOP_BREACHED", structural_breached_raw):
             counter += 1
             log_event("alert_fired", pos.rec_id, {
                 "symbol": symbol,
@@ -197,7 +270,7 @@ async def generate_alerts(
             opt_price is not None and pos.entry_price > 0
             and opt_price <= pos.entry_price * (1 - _premium_stop_pct())
         )
-        if _sustained("PREMIUM_STOP", premium_hit_raw):
+        if not _muted("PREMIUM_STOP") and _sustained("PREMIUM_STOP", premium_hit_raw):
             counter += 1
             threshold_price = round(pos.entry_price * (1 - _premium_stop_pct()), 4)
             log_event("alert_fired", pos.rec_id, {
@@ -230,7 +303,7 @@ async def generate_alerts(
         expiry = parse_expiry_from_contract(pos.contract)
         if expiry is not None:
             days_to_expiry = (expiry - date.today()).days
-            if 0 <= days_to_expiry <= 3:
+            if 0 <= days_to_expiry <= 3 and not _muted("TIME_STOP"):
                 counter += 1
                 log_event("alert_fired", pos.rec_id, {
                     "symbol": symbol,

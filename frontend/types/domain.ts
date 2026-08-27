@@ -274,6 +274,22 @@ export interface PortfolioPosition {
   /** Per-trade override of the global `maxLossPerTradePct` warning threshold
    *  (Feature C). `null`/absent inherits the global default. */
   maxLossOverride?: MaxLossOverride | null;
+  /** Which TP computation drives this position's TP_HIT alert (Feature D).
+   *  Absent = 'ladder', matching the backend column's server-side default —
+   *  every position predating this field keeps today's behavior. */
+  activeTpMethod?: TpMethod;
+  /** Stock price the active TP method resolved to, snapshotted at selection /
+   *  re-compute time rather than recomputed per alert tick. Null for 'ladder',
+   *  which reads `targets[0].stockPrice` live instead — see alertEngine.ts.
+   *  This is what BOTH alert paths compare the live price against, exactly as
+   *  they already do for `structuralStop`. */
+  resolvedTpPrice?: number | null;
+  /** ISO timestamp of the last `resolvedTpPrice` refresh, for an "as of" hint
+   *  next to a snapshot that is deliberately never auto-refreshed. */
+  resolvedTpUpdatedAt?: string | null;
+  /** Per-position alert-type overrides — absent key inherits the global
+   *  `AlertConfig.enabledTypes` decision (Feature D). */
+  alertOverrides?: AlertOverrides;
   targets:       TargetLevel[];
   status:        Status;
   // Options-specific fields surfaced in the portfolio table.
@@ -584,6 +600,40 @@ export type AlertType =
   | 'REGIME_CHANGE'
   | 'SCAN_COMPLETE'
   | 'SCAN_FAILED';
+
+/** Portfolio-position-scoped alert types — the subset of `AlertType` that a
+ *  single open position can actually raise, and therefore the only ones a
+ *  per-position override can meaningfully switch. REGIME_CHANGE and the
+ *  SCAN_* lifecycle types are account-wide and stay global-only. */
+export const POSITION_ALERT_TYPES = [
+  'TP_HIT',
+  'STOP_REACHED',
+  'STRUCTURAL_STOP_BREACHED',
+  'PREMIUM_STOP',
+  'TIME_STOP',
+  'EVENT_RISK',
+] as const;
+
+export type PositionAlertType = (typeof POSITION_ALERT_TYPES)[number];
+
+/** Per-position alert-type overrides (Feature D).
+ *
+ *  Tri-state by design, encoded as key presence: an ABSENT key inherits the
+ *  global `AlertConfig.enabledTypes` decision, an explicit `true`/`false`
+ *  wins over it. `Partial<Record<...>>` (not `Record<..., boolean>`) is what
+ *  makes "absent" representable at all — do not "tidy" it into a full record
+ *  or the inherit state disappears. Mirrors the backend's `alert_overrides`
+ *  JSON column 1:1. */
+export type AlertOverrides = Partial<Record<PositionAlertType, boolean>>;
+
+/** Which take-profit computation drives a position's TP_HIT alert (Feature D).
+ *  Exactly one is active per position — these are not independent alerts.
+ *    ladder        — today's Sell-to-Close ladder, i.e. `targets[0].stockPrice`
+ *    monte_carlo   — the Monte Carlo estimate's target
+ *    exit_plan_2r  — the exit-plan pipeline's 2R row
+ *    exit_plan_3r  — the exit-plan pipeline's 3R row
+ *  Mirrors the backend `TpMethod` literal / `active_tp_method` column. */
+export type TpMethod = 'ladder' | 'monte_carlo' | 'exit_plan_2r' | 'exit_plan_3r';
 
 export interface ToastItem {
   id: string;

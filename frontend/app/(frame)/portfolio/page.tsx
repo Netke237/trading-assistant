@@ -27,7 +27,8 @@ import { scanPortfolio } from '@/lib/alertEngine';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
 import { positionStatusTooltip } from '@/lib/statusTooltips';
 import { api } from '@/lib/api';
-import type { PortfolioPosition } from '@/types/domain';
+import { POSITION_ALERT_TYPES } from '@/types/domain';
+import type { PortfolioPosition, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
 import styles from './page.module.css';
 
 const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 28px';
@@ -130,7 +131,11 @@ export default function PortfolioPage() {
           const positions = usePortfolioStore.getState().positions;
           const pct = useSettingsStore.getState().premiumStopPct;
           const addToast = useAlertStore.getState().addToast;
-          for (const r of scanPortfolio(positions, { premiumStopPct: pct })) addToast(r);
+          // enabledTypes is read here (not captured in the effect's closure) so
+          // a Settings change takes effect on the very next 30s cycle without
+          // this interval having to be torn down and re-created.
+          const enabledTypes = useAlertStore.getState().config.enabledTypes;
+          for (const r of scanPortfolio(positions, { premiumStopPct: pct, enabledTypes })) addToast(r);
           usePerformanceStore.getState().fetchPerformance();
         })
         .catch(() => {});
@@ -582,6 +587,21 @@ export function EditDrawer({
     setPriceEditedSinceEstimate(false);
   }, [position.stop, targetPricesKey]);
 
+  // Feature D: the resolvedTpPrice snapshot is refreshed ONLY when the user
+  // manually re-runs the method backing it — so a fresh Monte Carlo estimate
+  // re-stamps the snapshot if, and only if, 'monte_carlo' is the active TP
+  // method. Without this the position would keep alerting on the target price
+  // from an estimate the user has just visibly replaced.
+  const restampIfActive = (method: TpMethod, price: number | null) => {
+    if ((position.activeTpMethod ?? 'ladder') !== method) return;
+    // `> 0`, not just non-null — the option-side estimate maps a target with no
+    // stockPrice to 0, and stamping that would make the alert engine's
+    // `price >= 0` comparison true forever. Leaving the previous snapshot in
+    // place is the safer failure: it's stale, not permanently triggered.
+    if (price == null || price <= 0) return;
+    onChange(tpMethodPatch(method, price));
+  };
+
   const runEstimate = async () => {
     estimateReq.current?.abort();
     const ctrl = new AbortController();
@@ -612,12 +632,14 @@ export function EditDrawer({
           trend_score: typeof snapshot.stock_score === 'number' ? snapshot.stock_score : 50,
         }, ctrl.signal);
         if (ctrl.signal.aborted) return;
+        const targets = res.targets.map((t, i) => ({ label: `T${i + 1}`, price: t.price, probability: t.probability, expectedDays: t.expectedDays }));
         setMcResult({
-          targets: res.targets.map((t, i) => ({ label: `T${i + 1}`, price: t.price, probability: t.probability, expectedDays: t.expectedDays })),
+          targets,
           invalidation: res.invalidation,
           horizonNote: `${res.horizonDays} trading days`,
           modelCaveat: res.modelCaveat,
         });
+        restampIfActive('monte_carlo', targets[0]?.price ?? null);
       } else {
         if (optionStrike == null || position.currentStockPrice == null || !position.stop) {
           throw new Error('missing option context');
@@ -637,10 +659,12 @@ export function EditDrawer({
           t3_pct: defaultTargetPct.t3,
         }, ctrl.signal);
         if (ctrl.signal.aborted) return;
+        const targets = res.targets.map((t) => ({ label: `T${Math.round(t.pct * 100)}%`, price: t.stockPrice ?? 0, probability: t.probability, expectedDays: t.expectedDays }));
         setMcResult({
-          targets: res.targets.map((t) => ({ label: `T${Math.round(t.pct * 100)}%`, price: t.stockPrice ?? 0, probability: t.probability, expectedDays: t.expectedDays })),
+          targets,
           invalidation: res.invalidation,
         });
+        restampIfActive('monte_carlo', targets[0]?.price ?? null);
       }
     } catch (e) {
       if (ctrl.signal.aborted) return;
@@ -697,6 +721,12 @@ export function EditDrawer({
         {!position.contract.endsWith('|STOCK') && (
           <MaxLossBanner position={position} onChange={onChange} />
         )}
+        <TpMethodSelector
+          position={position}
+          mcTargetPrice={mcResult?.targets[0]?.price ?? null}
+          onChange={onChange}
+        />
+        <AlertOverridesEditor position={position} onChange={onChange} />
         <EditField
           label="Contracts"
           hint="Number of option contracts held."
@@ -863,7 +893,18 @@ function ExitPlanEditor({
         premium: position.currentPrice,
         trend_score: 50,
       });
-      onChange({ exitPlan: { ...res, computedAt: new Date().toISOString() } });
+      const plan = { ...res, computedAt: new Date().toISOString() };
+      // Feature D: a re-computed plan re-stamps the TP snapshot when one of its
+      // rows is the active TP method — the same "refresh only on a manual
+      // re-compute" rule the Monte Carlo path follows. Sent as ONE patch so the
+      // plan and the snapshot derived from it can never be persisted apart.
+      const active = position.activeTpMethod ?? 'ladder';
+      const rr = active === 'exit_plan_2r' ? 2 : active === 'exit_plan_3r' ? 3 : null;
+      const rowPrice = rr != null ? plan.targets.find((t) => t.rrRatio === rr)?.price ?? null : null;
+      onChange({
+        exitPlan: plan,
+        ...(rr != null && rowPrice != null ? tpMethodPatch(active, rowPrice) : {}),
+      });
     } catch {
       setError(true);
     } finally {
@@ -1100,5 +1141,214 @@ function PencilIcon() {
         fill="none"
       />
     </svg>
+  );
+}
+
+/* ------------------------------------------------------------------------ *
+ * Feature D (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
+ * ------------------------------------------------------------------------ */
+
+/** Label + resolved stock price for each selectable TP method. A method whose
+ *  price can't be resolved yet (no exit plan computed, no Monte Carlo run, no
+ *  ladder target) comes back with `price: null` and is rendered disabled —
+ *  picking it would stamp a null snapshot, which alertEngine would silently
+ *  fall back to the ladder for, i.e. a selector that appears to do nothing. */
+function tpMethodOptions(
+  position: PortfolioPosition,
+  mcTargetPrice: number | null,
+): { method: TpMethod; label: string; price: number | null }[] {
+  const exitPlan = position.exitPlan;
+  // A non-positive price is "not resolvable", not a real level — 0 is never a
+  // valid stock price here (see floorStop's convention in portfolioStore), and
+  // both the ladder targets and the option-side Monte Carlo mapping can yield
+  // one. Collapsing it to null renders the option disabled instead of offering
+  // a "$0.00" method that would make TP_HIT fire on every tick.
+  const usable = (p: number | null | undefined) => (p != null && p > 0 ? p : null);
+  const rowPrice = (rr: number) =>
+    usable(exitPlan?.targets.find((t) => t.rrRatio === rr)?.price);
+  return [
+    { method: 'ladder',       label: 'Ladder',      price: usable(position.targets[0]?.stockPrice) },
+    { method: 'monte_carlo',  label: 'Monte Carlo', price: usable(mcTargetPrice) },
+    { method: 'exit_plan_2r', label: '2R plan',     price: rowPrice(2) },
+    { method: 'exit_plan_3r', label: '3R plan',     price: rowPrice(3) },
+  ];
+}
+
+/** Build the patch that switches a position's active TP method.
+ *
+ *  'ladder' deliberately stamps `resolvedTpPrice: null` rather than the current
+ *  first-target price: the ladder is the one method that should keep tracking
+ *  its target live (the user edits those targets right here in this drawer), so
+ *  a snapshot would go stale the moment they did. Every other method IS a
+ *  snapshot, refreshed only when the user re-computes its source.
+ *
+ *  Exported for the unit tests — the stamping rule, not the click handler, is
+ *  the part worth pinning down. */
+export function tpMethodPatch(
+  method: TpMethod,
+  price: number | null,
+  now: string = new Date().toISOString(),
+): Partial<PortfolioPosition> {
+  return method === 'ladder'
+    ? { activeTpMethod: 'ladder', resolvedTpPrice: null, resolvedTpUpdatedAt: now }
+    : { activeTpMethod: method, resolvedTpPrice: price, resolvedTpUpdatedAt: now };
+}
+
+function TpMethodSelector({
+  position,
+  mcTargetPrice,
+  onChange,
+}: {
+  position: PortfolioPosition;
+  mcTargetPrice: number | null;
+  onChange: (patch: Partial<PortfolioPosition>) => void;
+}) {
+  const active = position.activeTpMethod ?? 'ladder';
+  const options = tpMethodOptions(position, mcTargetPrice);
+
+  return (
+    <div className={styles.targetEditor}>
+      <Text size={11} tone="secondary">Active TP method</Text>
+      <div className={styles.tpMethodRow} role="radiogroup" aria-label="Active TP method">
+        {options.map((o) => (
+          <button
+            key={o.method}
+            type="button"
+            role="radio"
+            aria-checked={active === o.method}
+            aria-label={o.label}
+            disabled={o.price == null}
+            className={active === o.method ? styles.tpMethodBtnActive : styles.tpMethodBtn}
+            onClick={() => onChange(tpMethodPatch(o.method, o.price))}
+          >
+            <Text size={11} weight={500}>{o.label}</Text>
+            <Data size={11} weight={400} tone="dim">
+              {o.price != null ? `$${o.price.toFixed(2)}` : '—'}
+            </Data>
+          </button>
+        ))}
+      </div>
+      <Text size={10} tone="dim">
+        Drives this position&apos;s TP_HIT alert. The ladder tracks its first target live;
+        the other methods snapshot a price when picked, refreshed only when you re-compute them.
+      </Text>
+    </div>
+  );
+}
+
+/** What price (or window) each position-scoped alert type currently fires
+ *  against, for the "fires at" line under each toggle. Returns null when the
+ *  type has no threshold set on this position, which the UI renders as "not
+ *  set" — an alert that is switched on but has nothing to compare against
+ *  should say so rather than look armed. */
+function alertFiresAgainst(
+  position: PortfolioPosition,
+  type: PositionAlertType,
+  premiumStopPct: number,
+): string | null {
+  switch (type) {
+    case 'TP_HIT': {
+      // Same snapshot-then-ladder resolution (and same `> 0` rule) the alert
+      // engine uses, so this line can never disagree with what actually fires.
+      const snapshot = position.resolvedTpPrice != null && position.resolvedTpPrice > 0
+        ? position.resolvedTpPrice : null;
+      const price = snapshot ?? position.targets[0]?.stockPrice ?? null;
+      return price != null && price > 0 ? `stock $${price.toFixed(2)}` : null;
+    }
+    case 'STOP_REACHED':
+      return position.stop != null ? `stock $${position.stop.toFixed(2)}` : null;
+    case 'STRUCTURAL_STOP_BREACHED':
+      return position.structuralStop != null ? `stock $${position.structuralStop.toFixed(2)}` : null;
+    case 'PREMIUM_STOP':
+      // Premium-based, not a stock level — the engine compares pnlPct, but the
+      // equivalent premium is the number the user can actually eyeball against
+      // the position's current price.
+      return position.entryPrice > 0
+        ? `premium $${(position.entryPrice * (1 - premiumStopPct)).toFixed(2)}`
+        : null;
+    case 'TIME_STOP':
+      return '3 DTE or less';
+    case 'EVENT_RISK':
+      return 'event within 3 days';
+  }
+}
+
+const ALERT_TYPE_LABELS: Record<PositionAlertType, string> = {
+  TP_HIT:                   'Target hit',
+  STOP_REACHED:             'Stop reached',
+  STRUCTURAL_STOP_BREACHED: 'Structural stop',
+  PREMIUM_STOP:             'Premium stop',
+  TIME_STOP:                'Time stop',
+  EVENT_RISK:               'Event risk',
+};
+
+/** Per-position alert-type overrides. Three states per row — Inherit / On /
+ *  Off — where Inherit is the DEFAULT and is visually distinct from an
+ *  explicit On even when the global setting is also on, because the two behave
+ *  differently the moment the user changes the global. Inherit is stored as an
+ *  absent key, not `undefined`, so the persisted JSON matches the backend's
+ *  `alert_overrides` column exactly. */
+function AlertOverridesEditor({
+  position,
+  onChange,
+}: {
+  position: PortfolioPosition;
+  onChange: (patch: Partial<PortfolioPosition>) => void;
+}) {
+  const globalEnabled = useAlertStore((s) => s.config.enabledTypes);
+  const premiumStopPct = useSettingsStore((s) => s.premiumStopPct);
+  const overrides = position.alertOverrides ?? {};
+
+  const setOverride = (type: PositionAlertType, value: boolean | null) => {
+    const next: AlertOverrides = { ...overrides };
+    if (value === null) delete next[type];
+    else next[type] = value;
+    onChange({ alertOverrides: next });
+  };
+
+  return (
+    <div className={styles.targetEditor}>
+      <Text size={11} tone="secondary">Alerts for this position</Text>
+      <div className={styles.alertOverrideList}>
+        {POSITION_ALERT_TYPES.map((type) => {
+          const override = overrides[type];
+          const inherited = globalEnabled.includes(type);
+          const effective = override ?? inherited;
+          const firesAgainst = alertFiresAgainst(position, type, premiumStopPct);
+          const states: { value: boolean | null; label: string }[] = [
+            { value: null,  label: `Inherit (${inherited ? 'on' : 'off'})` },
+            { value: true,  label: 'On' },
+            { value: false, label: 'Off' },
+          ];
+          return (
+            <div key={type} className={styles.alertOverrideRow}>
+              <div className={styles.alertOverrideHeader}>
+                <Text size={12} weight={500}>{ALERT_TYPE_LABELS[type]}</Text>
+                <div className={styles.tpMethodRow} role="radiogroup" aria-label={`${ALERT_TYPE_LABELS[type]} alert`}>
+                  {states.map((s) => (
+                    <button
+                      key={String(s.value)}
+                      type="button"
+                      role="radio"
+                      aria-checked={(override ?? null) === s.value}
+                      aria-label={`${ALERT_TYPE_LABELS[type]}: ${s.label}`}
+                      className={(override ?? null) === s.value ? styles.tpMethodBtnActive : styles.tpMethodBtn}
+                      onClick={() => setOverride(type, s.value)}
+                    >
+                      <Text size={10} weight={500}>{s.label}</Text>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Text size={10} tone={effective ? 'dim' : 'secondary'}>
+                {effective
+                  ? (firesAgainst ? `Fires at ${firesAgainst}.` : 'On, but no level is set on this position yet.')
+                  : 'Off — this position raises no alert of this type.'}
+              </Text>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

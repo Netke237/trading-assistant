@@ -862,6 +862,40 @@ describe('portfolioStore', () => {
       expect(p.structuralStop).toBeNull();
     });
 
+    it('maps the Feature D alert/TP fields off the backend GET response', async () => {
+      usePortfolioStore.setState({ positions: [] } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(
+        jsonResponse([{
+          ...makeBackendPosition(),
+          activeTpMethod: 'exit_plan_2r',
+          resolvedTpPrice: 230,
+          resolvedTpUpdatedAt: '2026-08-27T00:00:00.000Z',
+          alertOverrides: { STOP_REACHED: false },
+        }])
+      );
+      await usePortfolioStore.getState().syncFromBackend();
+      const p = usePortfolioStore.getState().positions[0];
+      expect(p.activeTpMethod).toBe('exit_plan_2r');
+      expect(p.resolvedTpPrice).toBe(230);
+      expect(p.resolvedTpUpdatedAt).toBe('2026-08-27T00:00:00.000Z');
+      expect(p.alertOverrides).toEqual({ STOP_REACHED: false });
+    });
+
+    it('normalises a missing activeTpMethod to ladder and overrides to {}', async () => {
+      // A row written before the column default (or a payload that omits the
+      // keys) must not leave the drawer's selector and alertEngine handling a
+      // null method.
+      usePortfolioStore.setState({ positions: [] } as never);
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(
+        jsonResponse([{ ...makeBackendPosition(), activeTpMethod: null, alertOverrides: null }])
+      );
+      await usePortfolioStore.getState().syncFromBackend();
+      const p = usePortfolioStore.getState().positions[0];
+      expect(p.activeTpMethod).toBe('ladder');
+      expect(p.alertOverrides).toEqual({});
+      expect(p.resolvedTpPrice).toBeNull();
+    });
+
     it('keeps a row synced AFTER this GET started (poll-race safe)', async () => {
       usePortfolioStore.setState({
         positions: [mkLocal('FRESH', { syncStatus: 'synced', syncedAt: Date.now() + 60_000 })],
@@ -1032,6 +1066,61 @@ describe('portfolioStore', () => {
       expect(url).toContain('/api/portfolio/REC-PATCH-1');
       expect(init.method).toBe('PATCH');
       expect(JSON.parse(init.body)).toEqual({ stop: 185 });
+    });
+
+    it('sends the Feature D fields in the PATCH payload', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-FD', contract: 'AAPL 190C 05/16' });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos] });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue(jsonResponse({}));
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', {
+          activeTpMethod: 'exit_plan_2r',
+          resolvedTpPrice: 230,
+          resolvedTpUpdatedAt: '2026-08-27T00:00:00.000Z',
+          alertOverrides: { STOP_REACHED: false },
+        });
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+      expect(JSON.parse(init.body)).toEqual({
+        activeTpMethod: 'exit_plan_2r',
+        resolvedTpPrice: 230,
+        resolvedTpUpdatedAt: '2026-08-27T00:00:00.000Z',
+        alertOverrides: { STOP_REACHED: false },
+      });
+    });
+
+    it('sends an explicit null resolvedTpPrice when switching back to the ladder', async () => {
+      // `'resolvedTpPrice' in patch` (not a truthiness check) is what lets the
+      // ladder CLEAR a stale snapshot — a dropped null would leave the backend
+      // still alerting on the previous method's price.
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-LADDER', contract: 'AAPL 190C 05/16' });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos] });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue(jsonResponse({}));
+
+      act(() => {
+        result.current.updatePosition('AAPL 190C 05/16', {
+          activeTpMethod: 'ladder', resolvedTpPrice: null,
+        });
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      expect(JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body))
+        .toEqual({ activeTpMethod: 'ladder', resolvedTpPrice: null });
     });
 
     it('floors stop/structuralStop to null at the store level, not just in the drawer UI', async () => {

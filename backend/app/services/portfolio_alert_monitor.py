@@ -13,7 +13,7 @@ from app.database import AsyncSessionLocal
 from app.models.portfolio import PortfolioPositionModel
 from app.routers.regime import compute_overall_regime
 from app.schemas import AlertItem
-from app.services.alert_generator import generate_alerts
+from app.services.alert_generator import effective_enabled, generate_alerts
 from app.services.alert_service import alert_service
 from app.services.notifications.alert_notifier import forget_alerts, notify_alert
 from app.services.position_alert_log import log_position_alert, prune_position_alert_history
@@ -83,6 +83,10 @@ async def _run_once() -> None:
 
     alerts: list[AlertItem] = []
     current_rec_ids: set[str] = set()
+    # recId -> that position's per-type alert overrides (Feature D), captured
+    # while the positions are already loaded below so the dispatch loop can
+    # resolve `override ?? global` without a second query.
+    overrides_by_rec_id: dict[str, dict] = {}
 
     # ── 1. Portfolio position alerts ─────────────────────────────────────────
     try:
@@ -93,6 +97,9 @@ async def _run_once() -> None:
             result = await db.execute(select(PortfolioPositionModel))
             positions = result.scalars().all()
             current_rec_ids = {p.rec_id for p in positions if p.rec_id}
+            overrides_by_rec_id = {
+                p.rec_id: (p.alert_overrides or {}) for p in positions if p.rec_id
+            }
             symbols = list({p.symbol for p in positions})
             if symbols:
                 quotes = await asyncio.to_thread(fetch_quotes, symbols)
@@ -129,8 +136,11 @@ async def _run_once() -> None:
     # ── 2. Regime flip detection ─────────────────────────────────────────────
     # Detection (and persistence) always runs, independent of enabledTypes —
     # only the notification dispatch below is gated by it, matching the
-    # position-alert branches above (generate_alerts computes all types
-    # unconditionally; enabledTypes only filters what notify_alert sends).
+    # position-alert branches above (generate_alerts computes every GLOBALLY
+    # gated type unconditionally and lets notify_alert filter on enabledTypes;
+    # the one thing it does drop up front is a type a specific position
+    # explicitly muted via alert_overrides, which is per-position and so has no
+    # equivalent for an account-wide regime flip).
     try:
         from datetime import datetime, timezone
         current_regime = await asyncio.to_thread(compute_overall_regime)
@@ -168,8 +178,14 @@ async def _run_once() -> None:
     # recId|alertType across BOTH this monitor and the browser POST, so an
     # alert the user already saw in-app won't be emailed twice from here.
     for alert in alerts:
+        # generate_alerts already dropped anything a position explicitly muted,
+        # so the only override left to honour here is an explicit True — which
+        # must beat a globally-disabled type. `None` (no override) keeps
+        # notify_alert on the global enabledTypes list, exactly as before.
         notify_alert(alert.symbol, alert.alertType, alert.reason,
-                     alert.recId, alert.timestamp)
+                     alert.recId, alert.timestamp,
+                     type_enabled=effective_enabled(
+                         overrides_by_rec_id.get(alert.recId), alert.alertType))
 
         try:
             await alert_service.broadcast([alert.model_dump()])

@@ -1,4 +1,5 @@
 import { scanPortfolio, type AlertPosition } from '@/lib/alertEngine';
+import type { AlertType } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
 
 function makePosition(overrides: Partial<AlertPosition> = {}): AlertPosition {
@@ -354,5 +355,256 @@ describe('scanPortfolio', () => {
     expect(alert).toBeDefined();
     expect(alert?.price).toBe(155);
     expect(alert?.reason).toContain('$155.00');
+  });
+});
+
+/* ------------------------------------------------------------------------ *
+ * Feature D — per-position alert overrides + active TP method
+ * (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
+ *
+ * Backend mirror: backend/tests/test_alert_overrides.py. A rule proved here
+ * should have a counterpart there.
+ * ------------------------------------------------------------------------ */
+
+const ALL_TYPES: AlertType[] = [
+  'TP_HIT', 'STOP_REACHED', 'STRUCTURAL_STOP_BREACHED', 'PREMIUM_STOP',
+  'TIME_STOP', 'EVENT_RISK', 'REGIME_CHANGE', 'SCAN_COMPLETE', 'SCAN_FAILED',
+  'TIME_STOP_APPROACHING', 'EARNINGS_APPROACHING', 'EXPIRATION_APPROACHING',
+];
+
+describe('scanPortfolio — global enabledTypes gating (the toast-gating bugfix)', () => {
+  it('still fires every type when enabledTypes is not supplied at all', () => {
+    // The pre-Feature-D contract: a caller that never passes enabledTypes must
+    // not have every one of its alerts silently muted.
+    const out = scanPortfolio([makePosition()]);
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(true);
+  });
+
+  it('suppresses a type the user turned off globally', () => {
+    const out = scanPortfolio([makePosition()], {
+      enabledTypes: ALL_TYPES.filter((t) => t !== 'STOP_REACHED'),
+    });
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(false);
+  });
+
+  it('leaves the other types firing when one is globally off', () => {
+    const out = scanPortfolio(
+      [makePosition({ dteRemaining: 1 })],
+      { enabledTypes: ALL_TYPES.filter((t) => t !== 'STOP_REACHED') },
+    );
+    const types = out.map((a) => a.alertType);
+    expect(types).not.toContain('STOP_REACHED');
+    expect(types).toContain('TIME_STOP');
+  });
+
+  it('suppresses everything when the enabled list is empty', () => {
+    const out = scanPortfolio([makePosition({ dteRemaining: 1, pnlPct: -80 })], { enabledTypes: [] });
+    expect(out).toEqual([]);
+  });
+});
+
+describe('scanPortfolio — per-position alert overrides', () => {
+  it('an explicit false beats a globally-enabled type', () => {
+    const out = scanPortfolio(
+      [makePosition({ alertOverrides: { STOP_REACHED: false } })],
+      { enabledTypes: ALL_TYPES },
+    );
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(false);
+  });
+
+  it('an explicit true beats a globally-disabled type', () => {
+    const out = scanPortfolio(
+      [makePosition({ alertOverrides: { STOP_REACHED: true } })],
+      { enabledTypes: ALL_TYPES.filter((t) => t !== 'STOP_REACHED') },
+    );
+    expect(out.some((a) => a.alertType === 'STOP_REACHED')).toBe(true);
+  });
+
+  it('an absent key inherits the global decision, both ways', () => {
+    const on = scanPortfolio([makePosition({ alertOverrides: {} })], { enabledTypes: ALL_TYPES });
+    expect(on.some((a) => a.alertType === 'STOP_REACHED')).toBe(true);
+
+    const off = scanPortfolio([makePosition({ alertOverrides: {} })], {
+      enabledTypes: ALL_TYPES.filter((t) => t !== 'STOP_REACHED'),
+    });
+    expect(off.some((a) => a.alertType === 'STOP_REACHED')).toBe(false);
+  });
+
+  it('an override on one type does not leak to the others', () => {
+    const out = scanPortfolio(
+      [makePosition({ dteRemaining: 1, alertOverrides: { STOP_REACHED: false } })],
+      { enabledTypes: ALL_TYPES },
+    );
+    const types = out.map((a) => a.alertType);
+    expect(types).not.toContain('STOP_REACHED');
+    expect(types).toContain('TIME_STOP');
+  });
+
+  it('an override on one position does not leak to another', () => {
+    const out = scanPortfolio(
+      [
+        makePosition({ recId: 'muted', alertOverrides: { STOP_REACHED: false } }),
+        makePosition({ recId: 'loud' }),
+      ],
+      { enabledTypes: ALL_TYPES },
+    );
+    const stopAlerts = out.filter((a) => a.alertType === 'STOP_REACHED');
+    expect(stopAlerts).toHaveLength(1);
+    expect(stopAlerts[0].recId).toBe('loud');
+  });
+
+  it('covers every position-scoped type', () => {
+    const position = makePosition({
+      currentPrice: 160,
+      currentStockPrice: 160,
+      stop: 165,
+      structuralStop: 165,
+      targets: [{ id: 't1', stockPrice: 150, contractsToSell: 1, status: 'PENDING' }],
+      pnlPct: -80,
+      dteRemaining: 1,
+      nextEventDays: 1,
+      nextEventLabel: 'Earnings',
+    });
+    // Sanity: with no overrides this position raises all six.
+    const loud = scanPortfolio([position], { enabledTypes: ALL_TYPES });
+    expect(new Set(loud.map((a) => a.alertType)).size).toBe(6);
+
+    const muted = scanPortfolio(
+      [{
+        ...position,
+        alertOverrides: {
+          TP_HIT: false, STOP_REACHED: false, STRUCTURAL_STOP_BREACHED: false,
+          PREMIUM_STOP: false, TIME_STOP: false, EVENT_RISK: false,
+        },
+      }],
+      { enabledTypes: ALL_TYPES },
+    );
+    expect(muted).toEqual([]);
+  });
+});
+
+describe('scanPortfolio — active TP method / resolved TP snapshot', () => {
+  const withTp = (overrides: Partial<AlertPosition>) => makePosition({
+    stop: null,
+    currentPrice: 165,
+    currentStockPrice: 165,
+    targets: [{ id: 't1', stockPrice: 200, contractsToSell: 1, status: 'PENDING' }],
+    ...overrides,
+  });
+
+  it('compares against resolvedTpPrice instead of the ladder target', () => {
+    const out = scanPortfolio([withTp({ resolvedTpPrice: 160, activeTpMethod: 'exit_plan_2r' })]);
+    const alert = out.find((a) => a.alertType === 'TP_HIT');
+    expect(alert).toBeDefined();               // 165 >= 160, though the ladder says 200
+    expect(alert?.referenceValue).toBe(160);
+  });
+
+  it('holds the alert back when the snapshot sits beyond the ladder target', () => {
+    const out = scanPortfolio([withTp({
+      targets: [{ id: 't1', stockPrice: 160, contractsToSell: 1, status: 'PENDING' }],
+      resolvedTpPrice: 200,
+      activeTpMethod: 'exit_plan_3r',
+    })]);
+    expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(false);
+  });
+
+  it('names the method that fired in the reason line', () => {
+    const out = scanPortfolio([withTp({ resolvedTpPrice: 160, activeTpMethod: 'exit_plan_2r' })]);
+    expect(out.find((a) => a.alertType === 'TP_HIT')?.reason).toContain('(2R exit plan)');
+  });
+
+  it('leaves the ladder reason line unchanged', () => {
+    const out = scanPortfolio([withTp({
+      targets: [{ id: 't1', stockPrice: 160, contractsToSell: 1, status: 'PENDING' }],
+      activeTpMethod: 'ladder',
+    })]);
+    const reason = out.find((a) => a.alertType === 'TP_HIT')?.reason;
+    expect(reason).toBe('Target reached — NVDA at $165.00');
+  });
+
+  it('falls back to the ladder when a non-ladder method has no snapshot stamped', () => {
+    // A mis-set position must keep alerting, not go silent — and must not
+    // claim the un-stamped method supplied the price.
+    const out = scanPortfolio([withTp({
+      targets: [{ id: 't1', stockPrice: 160, contractsToSell: 1, status: 'PENDING' }],
+      resolvedTpPrice: null,
+      activeTpMethod: 'exit_plan_2r',
+    })]);
+    const alert = out.find((a) => a.alertType === 'TP_HIT');
+    expect(alert?.referenceValue).toBe(160);
+    expect(alert?.reason).not.toContain('exit plan');
+  });
+
+  it('fires off the snapshot alone when the position has no ladder targets', () => {
+    const out = scanPortfolio([withTp({ targets: [], resolvedTpPrice: 160, activeTpMethod: 'monte_carlo' })]);
+    expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(true);
+  });
+
+  it('raises no TP_HIT when neither a snapshot nor a ladder target exists', () => {
+    const out = scanPortfolio([withTp({ targets: [], resolvedTpPrice: null })]);
+    expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(false);
+  });
+
+  it('is direction-aware for a Bearish snapshot', () => {
+    const hit = scanPortfolio([withTp({
+      direction: 'Bearish', targets: [], resolvedTpPrice: 170, activeTpMethod: 'exit_plan_2r',
+    })]);
+    expect(hit.some((a) => a.alertType === 'TP_HIT')).toBe(true);   // 165 <= 170
+
+    const quiet = scanPortfolio([withTp({
+      direction: 'Bearish', targets: [], resolvedTpPrice: 160, activeTpMethod: 'exit_plan_2r',
+    })]);
+    expect(quiet.some((a) => a.alertType === 'TP_HIT')).toBe(false); // 165 > 160
+  });
+
+  it('still suppresses a snapshot-driven TP_HIT the position has muted', () => {
+    const out = scanPortfolio(
+      [withTp({ resolvedTpPrice: 160, activeTpMethod: 'exit_plan_2r', alertOverrides: { TP_HIT: false } })],
+      { enabledTypes: ALL_TYPES },
+    );
+    expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(false);
+  });
+
+  it('never fires off a snapshot while no live reference price exists', () => {
+    // The hasReferencePrice guard must still win — an option leg with no live
+    // underlying quote yet must not compare its premium against the snapshot.
+    const out = scanPortfolio([withTp({
+      currentPrice: 5, currentStockPrice: undefined, targets: [],
+      resolvedTpPrice: 4, activeTpMethod: 'exit_plan_2r',
+    })]);
+    expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(false);
+  });
+});
+
+describe('scanPortfolio — a zero resolved TP price is not a target', () => {
+  const zeroTp = (overrides: Partial<AlertPosition> = {}) => makePosition({
+    stop: null,
+    currentPrice: 165,
+    currentStockPrice: 165,
+    activeTpMethod: 'monte_carlo',
+    resolvedTpPrice: 0,
+    ...overrides,
+  });
+
+  it('falls back to the ladder rather than firing on every tick', () => {
+    // The option-side Monte Carlo mapping turns a target with no stockPrice
+    // into 0. Read as a real level, `165 >= 0` is true forever.
+    const out = scanPortfolio([zeroTp({
+      targets: [{ id: 't1', stockPrice: 200, contractsToSell: 1, status: 'PENDING' }],
+    })]);
+    expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(false);
+  });
+
+  it('raises nothing at all when the ladder is empty too', () => {
+    expect(scanPortfolio([zeroTp({ targets: [] })]).some((a) => a.alertType === 'TP_HIT')).toBe(false);
+  });
+
+  it('does not claim the method supplied the price when it falls back', () => {
+    const out = scanPortfolio([zeroTp({
+      targets: [{ id: 't1', stockPrice: 160, contractsToSell: 1, status: 'PENDING' }],
+    })]);
+    const alert = out.find((a) => a.alertType === 'TP_HIT');
+    expect(alert?.referenceValue).toBe(160);
+    expect(alert?.reason).not.toContain('Monte Carlo');
   });
 });

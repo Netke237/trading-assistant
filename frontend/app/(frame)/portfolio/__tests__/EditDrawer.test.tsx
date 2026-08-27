@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { EditDrawer } from '../page';
+import { EditDrawer, tpMethodPatch } from '../page';
 import { api } from '@/lib/api';
 import type { PortfolioPosition } from '@/types/domain';
 
@@ -309,7 +309,11 @@ describe('ExitPlanEditor', () => {
     rerender(<EditDrawer position={{ ...position, ...patch }} onClose={noop} onChange={onChange} onRemove={noop} />);
     expect(screen.getByText('Stop (structural)')).toBeInTheDocument();
     expect(screen.getByText('2R ✓')).toBeInTheDocument();
-    expect(screen.getByText('$230.00')).toBeInTheDocument();
+    // $230.00 renders twice now: once as this exit-plan 2R row's stock price,
+    // and once as the "2R plan" option in the Feature D TP-method selector,
+    // which reads its price out of this very row. Both are correct, so assert
+    // on the pair rather than pinning either one and going ambiguous.
+    expect(screen.getAllByText('$230.00')).toHaveLength(2);
   });
 
   it('shows an error message when the exit-plan request fails', async () => {
@@ -382,5 +386,221 @@ describe('MaxLossBanner', () => {
     });
     render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
     expect(screen.queryByText(/Risk-derived size/)).not.toBeInTheDocument();
+  });
+});
+
+/* ------------------------------------------------------------------------ *
+ * Feature D — active TP method selector + per-position alert overrides
+ * (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
+ * ------------------------------------------------------------------------ */
+
+describe('tpMethodPatch', () => {
+  it('stamps a snapshot price and timestamp for a non-ladder method', () => {
+    expect(tpMethodPatch('exit_plan_2r', 230, '2026-08-27T00:00:00.000Z')).toEqual({
+      activeTpMethod: 'exit_plan_2r',
+      resolvedTpPrice: 230,
+      resolvedTpUpdatedAt: '2026-08-27T00:00:00.000Z',
+    });
+  });
+
+  it('clears the snapshot for the ladder so it keeps tracking its target live', () => {
+    // The ladder's targets are edited in this very drawer — a snapshot would
+    // go stale the moment the user changed one, so 'ladder' means "no snapshot".
+    expect(tpMethodPatch('ladder', 205, '2026-08-27T00:00:00.000Z')).toEqual({
+      activeTpMethod: 'ladder',
+      resolvedTpPrice: null,
+      resolvedTpUpdatedAt: '2026-08-27T00:00:00.000Z',
+    });
+  });
+});
+
+describe('EditDrawer active TP method selector', () => {
+  const noop = () => {};
+
+  it('marks the ladder active by default and offers every method', () => {
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('radio', { name: 'Ladder' })).toHaveAttribute('aria-checked', 'true');
+    for (const label of ['Monte Carlo', '2R plan', '3R plan']) {
+      expect(screen.getByRole('radio', { name: label })).toBeInTheDocument();
+    }
+  });
+
+  it('shows the ladder its first target price', () => {
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('radio', { name: 'Ladder' })).toHaveTextContent('$205.00');
+  });
+
+  it('disables a method whose price cannot be resolved yet', () => {
+    // No exit plan computed and no Monte Carlo run — picking either would
+    // stamp a null snapshot, which the alert engine silently falls back to the
+    // ladder for, i.e. a control that appears to do nothing.
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('radio', { name: '2R plan' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: 'Monte Carlo' })).toBeDisabled();
+  });
+
+  it('disables the ladder when the position has no targets at all', () => {
+    render(<EditDrawer position={makeStockPosition({ targets: [] })} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('radio', { name: 'Ladder' })).toBeDisabled();
+  });
+
+  it('enables and prices the exit-plan rows once a plan is present', () => {
+    const position = makeOptionPosition({
+      exitPlan: {
+        computedAt: '2026-08-27T00:00:00.000Z',
+        atr: 3.1,
+        stop: {
+          price: 180, source: 'structural', contractPrice: 2.5,
+          rrModel: 'BS repriced (IV-derived)', structuralSource: 'swing_low', structuralConfidence: 0.8,
+        },
+        targets: [
+          {
+            rrRatio: 2, arithmeticPrice: 230, price: 230, tpSource: 'arithmetic', structuralPrice: null,
+            contractPrice: 7.2, rrModel: 'BS repriced (IV-derived)', probability: 0.55, expectedDays: 6,
+            qualityGood: true, qualityReasons: [],
+          },
+        ],
+      },
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    const twoR = screen.getByRole('radio', { name: '2R plan' });
+    expect(twoR).toBeEnabled();
+    expect(twoR).toHaveTextContent('$230.00');
+    // The plan carries no 3R row, so that option stays unpickable.
+    expect(screen.getByRole('radio', { name: '3R plan' })).toBeDisabled();
+  });
+
+  it('patches the active method and its snapshot on click', () => {
+    const onChange = jest.fn();
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={onChange} onRemove={noop} />);
+    fireEvent.click(screen.getByRole('radio', { name: 'Ladder' }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      activeTpMethod: 'ladder',
+      resolvedTpPrice: null,
+    }));
+  });
+
+  it('re-stamps the snapshot when the active method is re-estimated', async () => {
+    (api.getStockFirstPassage as jest.Mock).mockResolvedValueOnce({
+      targets: [{ price: 208, probability: 0.6, expectedDays: 8 }],
+      invalidation: { probability: 0.15, expectedDays: null },
+      horizonDays: 10,
+      modelCaveat: null,
+    });
+    const onChange = jest.fn();
+    render(
+      <EditDrawer
+        position={makeStockPosition({ activeTpMethod: 'monte_carlo', resolvedTpPrice: 205 })}
+        onClose={noop} onChange={onChange} onRemove={noop}
+      />,
+    );
+    fireEvent.click(screen.getByText('Estimate'));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      activeTpMethod: 'monte_carlo',
+      resolvedTpPrice: 208,
+    })));
+  });
+
+  it('does not re-stamp when a different method is active', async () => {
+    (api.getStockFirstPassage as jest.Mock).mockResolvedValueOnce({
+      targets: [{ price: 208, probability: 0.6, expectedDays: 8 }],
+      invalidation: { probability: 0.15, expectedDays: null },
+      horizonDays: 10,
+      modelCaveat: null,
+    });
+    const onChange = jest.fn();
+    render(
+      <EditDrawer
+        position={makeStockPosition({ activeTpMethod: 'ladder' })}
+        onClose={noop} onChange={onChange} onRemove={noop}
+      />,
+    );
+    fireEvent.click(screen.getByText('Estimate'));
+    await waitFor(() => expect(screen.getByText(/Chance of reaching/)).toBeInTheDocument());
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('EditDrawer per-position alert overrides', () => {
+  const noop = () => {};
+
+  it('defaults every type to inherit', () => {
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('radio', { name: /Stop reached: Inherit/ })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: 'Stop reached: On' })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('radio', { name: 'Stop reached: Off' })).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('labels what the inherit state currently resolves to', () => {
+    // Inherit must stay visually distinct from an explicit On even when the
+    // global setting is also on — they diverge the moment the global changes.
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('radio', { name: 'Stop reached: Inherit (on)' })).toBeInTheDocument();
+  });
+
+  it('writes an explicit false when a type is switched off', () => {
+    const onChange = jest.fn();
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={onChange} onRemove={noop} />);
+    fireEvent.click(screen.getByRole('radio', { name: 'Stop reached: Off' }));
+    expect(onChange).toHaveBeenCalledWith({ alertOverrides: { STOP_REACHED: false } });
+  });
+
+  it('deletes the key — never stores undefined — when returning to inherit', () => {
+    // Absent key IS the inherit state, and it has to match the backend's
+    // alert_overrides JSON shape; a stored `undefined` would round-trip as null.
+    const onChange = jest.fn();
+    render(
+      <EditDrawer
+        position={makeStockPosition({ alertOverrides: { STOP_REACHED: false, TP_HIT: true } })}
+        onClose={noop} onChange={onChange} onRemove={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole('radio', { name: /Stop reached: Inherit/ }));
+    expect(onChange).toHaveBeenCalledWith({ alertOverrides: { TP_HIT: true } });
+    expect(Object.keys(onChange.mock.calls[0][0].alertOverrides)).not.toContain('STOP_REACHED');
+  });
+
+  it('leaves the other types untouched when one is changed', () => {
+    const onChange = jest.fn();
+    render(
+      <EditDrawer
+        position={makeStockPosition({ alertOverrides: { TP_HIT: false } })}
+        onClose={noop} onChange={onChange} onRemove={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole('radio', { name: 'Time stop: On' }));
+    expect(onChange).toHaveBeenCalledWith({ alertOverrides: { TP_HIT: false, TIME_STOP: true } });
+  });
+
+  it('shows the price each enabled alert fires against', () => {
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByText('Fires at stock $205.00.')).toBeInTheDocument();  // TP_HIT — first ladder target
+    expect(screen.getByText('Fires at stock $182.00.')).toBeInTheDocument();  // STOP_REACHED
+  });
+
+  it('prefers the resolved TP snapshot over the ladder in the fires-at line', () => {
+    render(
+      <EditDrawer
+        position={makeStockPosition({ activeTpMethod: 'exit_plan_2r', resolvedTpPrice: 230 })}
+        onClose={noop} onChange={noop} onRemove={noop}
+      />,
+    );
+    expect(screen.getByText('Fires at stock $230.00.')).toBeInTheDocument();
+  });
+
+  it('says so when an enabled type has no level set on this position', () => {
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    // No structural stop was ever captured for this position.
+    expect(screen.getByText('On, but no level is set on this position yet.')).toBeInTheDocument();
+  });
+
+  it('says an explicitly-off type raises nothing', () => {
+    render(
+      <EditDrawer
+        position={makeStockPosition({ alertOverrides: { STOP_REACHED: false } })}
+        onClose={noop} onChange={noop} onRemove={noop}
+      />,
+    );
+    expect(screen.getByText('Off — this position raises no alert of this type.')).toBeInTheDocument();
   });
 });

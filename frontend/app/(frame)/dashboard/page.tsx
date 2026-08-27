@@ -60,6 +60,7 @@ export default function DashboardPage() {
 
   const portfolio = usePortfolioStore((s) => s.positions);
   const premiumStopPct = useSettingsStore((s) => s.premiumStopPct);
+  const enabledTypes = useAlertStore((s) => s.config.enabledTypes);
 
   const performance = usePerformanceStore((s) => s.performance);
   const fetchPerformance = usePerformanceStore((s) => s.fetchPerformance);
@@ -91,7 +92,11 @@ export default function DashboardPage() {
           const positions = usePortfolioStore.getState().positions;
           const pct = useSettingsStore.getState().premiumStopPct;
           const addToast = useAlertStore.getState().addToast;
-          for (const r of scanPortfolio(positions, { premiumStopPct: pct })) addToast(r);
+          // enabledTypes is read here (not captured in the effect's closure) so
+          // a Settings change takes effect on the very next 30s cycle without
+          // this interval having to be torn down and re-created.
+          const liveEnabledTypes = useAlertStore.getState().config.enabledTypes;
+          for (const r of scanPortfolio(positions, { premiumStopPct: pct, enabledTypes: liveEnabledTypes })) addToast(r);
           usePerformanceStore.getState().fetchPerformance();
         })
         .catch(() => {});
@@ -130,11 +135,12 @@ export default function DashboardPage() {
     api.getNews(watchlist.map((r) => r.symbol)).then(setNews).catch(() => {});
   }, [watchlist]);
 
-  // Immediate scan when positions or stop-% change between refresh cycles.
+  // Immediate scan when positions, stop-%, or the enabled alert types change
+  // between refresh cycles.
   useEffect(() => {
     const addToast = useAlertStore.getState().addToast;
-    for (const r of scanPortfolio(portfolio, { premiumStopPct })) addToast(r);
-  }, [portfolio, premiumStopPct]);
+    for (const r of scanPortfolio(portfolio, { premiumStopPct, enabledTypes })) addToast(r);
+  }, [portfolio, premiumStopPct, enabledTypes]);
 
   const top5 = watchlist.slice(0, 5);
 
