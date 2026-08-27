@@ -511,6 +511,17 @@ async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
 
     atr = _atr(candles, 14)
 
+    # A flat/duplicated candle feed (stale or repeated upstream data) passes
+    # the len(candles) < 2 guard above but still collapses the ATR floor to
+    # 0 — the exact zero-width-stop/every-target-lands-on-entry-price outcome
+    # that guard exists to prevent, just reached a different way. Reject
+    # explicitly rather than return a "computed" plan built on no real range.
+    if atr <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="insufficient price history to compute an exit plan",
+        )
+
     final_stop = compute_final_stop(
         candles, req.direction, req.entry_price, atr,
         ep_cfg["stop"]["atr_multiplier"],

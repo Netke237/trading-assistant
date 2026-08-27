@@ -259,6 +259,25 @@ class TestEndpoint:
             })
         assert r.status_code == 422
 
+    def test_rejects_when_candle_history_is_flat_with_zero_atr(self):
+        """20 flat/duplicated OHLC candles pass the len(candles) < 2 guard but
+        still collapse ATR(14) to exactly 0 — the same zero-width-stop
+        outcome the candle-count guard exists to prevent, reached a
+        different way (e.g. a stale or duplicated upstream data-feed
+        response). Reject explicitly rather than return a "computed" plan
+        with every target landing on entry_price."""
+        flat_candles = [
+            {"time": str(i), "open": 100, "high": 100, "low": 100, "close": 100, "volume": 1000}
+            for i in range(20)
+        ]
+        with patch("app.routers.contracts.fetch_candles_async", AsyncMock(return_value=flat_candles)):
+            r = self._client().post("/api/contracts/exit-plan", json={
+                "symbol": "AAPL", "direction": "Bullish", "entry_price": 100,
+                "strike": 105, "dte": 30, "premium": 2.50, "trend_score": 65,
+            })
+        assert r.status_code == 422
+        assert "insufficient" in r.json()["detail"].lower()
+
     def test_target_row_below_current_premium_is_not_scored_as_high_probability(self, monkeypatch):
         """A target whose repriced contract value doesn't exceed the current
         premium (net loss from time decay outweighing the favorable move) must
