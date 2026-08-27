@@ -34,6 +34,16 @@ POSITION_ALERT_TYPES = frozenset({
     "PREMIUM_STOP", "TIME_STOP", "EVENT_RISK",
 })
 
+# Human label for the TP method that fired, appended to the TP_HIT reason so
+# the alert says WHICH target was reached. Mirrors frontend
+# `alertEngine.TP_METHOD_LABEL` — keep the two in step. 'ladder' is the
+# historical default and stays unlabelled, same as the frontend.
+_TP_METHOD_LABEL = {
+    "monte_carlo": "Monte Carlo target",
+    "exit_plan_2r": "2R exit plan",
+    "exit_plan_3r": "3R exit plan",
+}
+
 
 def effective_enabled(overrides: Optional[dict], alert_type: str) -> Optional[bool]:
     """Resolve one position's per-type alert override (Feature D).
@@ -179,11 +189,20 @@ async def generate_alerts(
                     source="backend", price=price, reference_value=target_stock_price,
                     reference_kind="price", direction=pos.direction, contract=pos.contract,
                 )
+                # Only label a non-ladder method that actually supplied the
+                # price — `pos.resolved_tp_price` falsy means it fell back to
+                # the ladder above, so naming the method here would misreport
+                # which target was hit. Mirrors frontend's `tpMethodNote`.
+                tp_method_note = (
+                    f" ({_TP_METHOD_LABEL[pos.active_tp_method]})"
+                    if pos.resolved_tp_price and pos.active_tp_method in _TP_METHOD_LABEL
+                    else ""
+                )
                 alerts.append(AlertItem(
                     id=f"a{counter}",
                     kind="Action",
                     symbol=symbol,
-                    reason=f"Target reached — {symbol} at ${price:.2f}",
+                    reason=f"Target reached — {symbol} at ${price:.2f}{tp_method_note}",
                     timestamp=now_iso,
                     recId=pos.rec_id,
                     alertType="TP_HIT",

@@ -172,6 +172,44 @@ async def test_bearish_snapshot_fires_on_the_way_down():
     assert not any(a.alertType == 'TP_HIT' for a in quiet)
 
 
+@pytest.mark.asyncio
+async def test_tp_hit_reason_names_the_active_method_that_fired():
+    # Mirrors frontend alertEngine's tpMethodNote — the backend reason (which
+    # is what email/Telegram/the websocket broadcast actually show, not just
+    # the in-app toast) must name which method's snapshot supplied the price.
+    alerts = await _alerts(
+        _position(targets=[{'stock_price': 200.0}], resolved_tp_price=160.0,
+                  active_tp_method='exit_plan_2r'),
+        {'AAPL': 165.0})
+    tp = [a for a in alerts if a.alertType == 'TP_HIT']
+    assert len(tp) == 1
+    assert '(2R exit plan)' in tp[0].reason
+
+
+@pytest.mark.asyncio
+async def test_tp_hit_reason_leaves_the_ladder_unlabelled():
+    alerts = await _alerts(
+        _position(targets=[{'stock_price': 160.0}]),
+        {'AAPL': 165.0})
+    tp = [a for a in alerts if a.alertType == 'TP_HIT']
+    assert len(tp) == 1
+    assert '(' not in tp[0].reason
+
+
+@pytest.mark.asyncio
+async def test_tp_hit_reason_does_not_label_a_fallen_back_method():
+    # active_tp_method is exit_plan_2r but its snapshot was never stamped, so
+    # this fires off the ladder target instead — the reason must not claim
+    # the 2R plan supplied a price it never actually resolved.
+    alerts = await _alerts(
+        _position(targets=[{'stock_price': 160.0}], resolved_tp_price=None,
+                  active_tp_method='exit_plan_2r'),
+        {'AAPL': 165.0})
+    tp = [a for a in alerts if a.alertType == 'TP_HIT']
+    assert len(tp) == 1
+    assert '(' not in tp[0].reason
+
+
 def test_effective_enabled_ignores_an_account_wide_type():
     # REGIME_CHANGE is never raised per position — a stray key for it must not
     # be allowed to override the user's global setting.
