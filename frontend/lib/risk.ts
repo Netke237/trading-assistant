@@ -175,6 +175,15 @@ export function checkTradeRisk(
   let lossLimitDollar: number | undefined;
   const exitPlan = card.exit.exitPlan;
   if (exitPlan) {
+    // `cd.mid` is the scan-time snapshot, while `exitPlan.stop.contractPrice`
+    // came from a fresh quote fetched when "Compute Exit Plan" ran (see the
+    // comment on TradeCard's computeExitPlan) — the two don't share a
+    // baseline if premium moved between scan and click. Same limitation as
+    // `capitalAtRisk(mid, ...)` above, which this mirrors deliberately
+    // rather than inventing a second, inconsistent convention; `ExitPlan`
+    // doesn't currently carry the fresh premium it was computed against, so
+    // fixing this for real means threading that value through as a new
+    // field, which is out of scope here.
     const entryPremium = card.contractDetails?.mid ?? 0;
     lossAtStop = maxLossAtStop(entryPremium, exitPlan.stop.contractPrice, proposedContracts);
     lossLimitDollar = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct);

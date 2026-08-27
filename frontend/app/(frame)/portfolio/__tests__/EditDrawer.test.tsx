@@ -7,6 +7,7 @@ jest.mock('@/lib/api', () => ({
   api: {
     getFirstPassageEstimate: jest.fn(),
     getStockFirstPassage: jest.fn(),
+    getExitPlan: jest.fn(),
   },
 }));
 
@@ -265,5 +266,99 @@ describe('EditDrawer Monte Carlo estimate', () => {
     // The button must recover — not be stuck disabled/"Estimating…" forever.
     await waitFor(() => expect(screen.getByText('Estimate')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Estimate' })).not.toBeDisabled();
+  });
+});
+
+describe('ExitPlanEditor', () => {
+  const noop = () => {};
+
+  it('computes and renders an exit plan with stop/target rows on click', async () => {
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop: {
+        price: 180, source: 'structural', contractPrice: 2.5,
+        rrModel: 'BS repriced (IV-derived)', structuralSource: 'swing_low', structuralConfidence: 0.8,
+      },
+      targets: [
+        {
+          rrRatio: 2, arithmeticPrice: 230, price: 230, tpSource: 'arithmetic', structuralPrice: null,
+          contractPrice: 7.2, rrModel: 'BS repriced (IV-derived)', probability: 0.55, expectedDays: 6,
+          qualityGood: true, qualityReasons: [],
+        },
+      ],
+      atr: 3.1,
+    });
+    // Pipe-delimited contract id (the real runtime format — see the strike-
+    // derivation tests above) so `position.contract.split('|')[1]` in
+    // ExitPlanEditor's compute() actually yields the strike.
+    const position = makeOptionPosition({ contract: 'AAPL|220|2026-09-16|C' });
+    // ExitPlanEditor reads `position.exitPlan` from props, not local state —
+    // the computed result only appears once `onChange`'s patch has been
+    // written through and the position re-rendered with it, exactly as the
+    // real store round-trip does. Same rerender pattern as the stale-Monte-
+    // Carlo tests above.
+    const onChange = jest.fn();
+    const { rerender } = render(<EditDrawer position={position} onClose={noop} onChange={onChange} onRemove={noop} />);
+    fireEvent.click(screen.getByText('Compute Exit Plan'));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      exitPlan: expect.objectContaining({ stop: expect.objectContaining({ source: 'structural' }) }),
+    })));
+    expect(api.getExitPlan).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: 'AAPL', direction: 'Bullish', strike: 220, dte: 20, premium: 4.5, trend_score: 50,
+    }));
+    const patch = onChange.mock.calls[0][0];
+    rerender(<EditDrawer position={{ ...position, ...patch }} onClose={noop} onChange={onChange} onRemove={noop} />);
+    expect(screen.getByText('Stop (structural)')).toBeInTheDocument();
+    expect(screen.getByText('2R ✓')).toBeInTheDocument();
+    expect(screen.getByText('$230.00')).toBeInTheDocument();
+  });
+
+  it('shows an error message when the exit-plan request fails', async () => {
+    (api.getExitPlan as jest.Mock).mockRejectedValueOnce(new Error('network'));
+    const position = makeOptionPosition({ contract: 'AAPL|220|2026-09-16|C' });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    fireEvent.click(screen.getByText('Compute Exit Plan'));
+    expect(await screen.findByText(/Couldn.t compute an exit plan/)).toBeInTheDocument();
+  });
+});
+
+describe('MaxLossBanner', () => {
+  const noop = () => {};
+  const baseExitPlan = {
+    computedAt: '2026-08-27T00:00:00.000Z',
+    stop: {
+      price: 180, source: 'structural' as const, contractPrice: 2.0,
+      rrModel: 'BS repriced (IV-derived)' as const, structuralSource: 'swing_low' as const, structuralConfidence: 0.8,
+    },
+    targets: [],
+    atr: 3.1,
+  };
+
+  it('renders nothing when entryPrice is 0 (data-integrity guard), even with a computed exit plan', () => {
+    const position = makeOptionPosition({ contract: 'AAPL|220|2026-09-16|C', entryPrice: 0, exitPlan: baseExitPlan });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.queryByText('Max loss at stop')).not.toBeInTheDocument();
+  });
+
+  it('flags REJECT when the loss at stop exceeds the account default limit', () => {
+    // lossAtStop = (10 - 1) * 100 * 20 = $18,000, well over the $3,750 default limit
+    // (portfolioValue 100000 * maxLossPerTradePct 0.0375, riskStore's DEFAULT_LIMITS).
+    const position = makeOptionPosition({
+      contract: 'AAPL|220|2026-09-16|C', entryPrice: 10, contracts: 20,
+      exitPlan: { ...baseExitPlan, stop: { ...baseExitPlan.stop, contractPrice: 1 } },
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByText('Max loss at stop')).toBeInTheDocument();
+    expect(screen.getByText('REJECT')).toBeInTheDocument();
+    expect(screen.getByText('$18,000')).toBeInTheDocument();
+  });
+
+  it('shows PASS when the loss at stop is within the account default limit', () => {
+    // lossAtStop = (4.2 - 3.5) * 100 * 1 = $70, well within the $3,750 default limit.
+    const position = makeOptionPosition({
+      contract: 'AAPL|220|2026-09-16|C', entryPrice: 4.2, contracts: 1,
+      exitPlan: { ...baseExitPlan, stop: { ...baseExitPlan.stop, contractPrice: 3.5 } },
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByText('PASS')).toBeInTheDocument();
   });
 });
