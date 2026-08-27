@@ -159,9 +159,16 @@ export function recommendedContractSize(
  *  the same floor boundary `recommended` already floored down from (e.g.
  *  raw=0.9975 rounds to "1.00" while recommended is 0), producing a
  *  self-contradictory "0 contracts (1.00 exact)" display. Truncating keeps
- *  the two numbers consistent at every boundary. */
+ *  the two numbers consistent at that boundary — but `raw * 100` is itself
+ *  a float multiplication that can land a few ULPs under an integer (e.g. a
+ *  true 87 computed as 86.99999999999999), the same fp-noise class
+ *  `FLOOR_EPSILON` exists to absorb, just one decimal place over. Applying
+ *  the identical epsilon here (scaled ×100, same units as the truncation
+ *  step) before flooring keeps this function's output consistent with
+ *  `recommended` at every boundary, not just the one the plain-toFixed bug
+ *  originally covered. */
 export function formatRecommendedContractSizeRaw(raw: number): string {
-  return (Math.floor(raw * 100) / 100).toFixed(2);
+  return (Math.floor(raw * 100 + FLOOR_EPSILON * 100) / 100).toFixed(2);
 }
 
 export function checkTradeRisk(

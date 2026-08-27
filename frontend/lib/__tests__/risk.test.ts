@@ -310,4 +310,21 @@ describe('formatRecommendedContractSizeRaw', () => {
     expect(formatRecommendedContractSizeRaw(3.71)).toBe('3.71');
     expect(formatRecommendedContractSizeRaw(25)).toBe('25.00');
   });
+
+  it('does not disagree with recommendedContractSize\'s epsilon-corrected floor at a raw*100 fp-noise boundary', () => {
+    // $3,748.83 budget / $43.09 per contract = 87 exactly in real arithmetic
+    // (43.09 * 87 === 3748.83), but riskBudget / riskPerContract computes as
+    // 86.99999999999999 in IEEE754. recommendedContractSize's epsilon
+    // correctly floors this to 87 -- the display must also read "87.00",
+    // not "86.99" (which would read as self-contradictory: "87 contracts
+    // (86.99 exact)").
+    const result = recommendedContractSize(3748.83, 43.09);
+    expect(result?.raw).not.toBe(87); // sanity: reproduces the fp noise this guards against
+    expect(result?.recommended).toBe(87);
+    expect(formatRecommendedContractSizeRaw(result!.raw)).toBe('87.00');
+  });
+
+  it('still truncates a genuinely short raw decimal down, not nudged up by the epsilon', () => {
+    expect(formatRecommendedContractSizeRaw(0.34)).toBe('0.34');
+  });
 });
