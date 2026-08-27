@@ -8,6 +8,7 @@ const DEFAULT_LIMITS = {
   maxConcurrentPositions: 10,
   maxDailyRecommendations: 5,
   portfolioValue: 100000,
+  maxLossPerTradePct: 0.0375,
 };
 
 function makePosition(overrides: Partial<PortfolioPosition> = {}): PortfolioPosition {
@@ -48,6 +49,7 @@ describe('riskStore', () => {
           status: 'PASS',
         },
         symbols: [],
+        portfolioValueUpdatedAt: null,
       });
     });
   });
@@ -85,6 +87,45 @@ describe('riskStore', () => {
     });
     expect(result.current.metrics.largestConcentrationSymbol).toBe('AAPL');
     expect(result.current.metrics.largestConcentrationPct).toBe(5000 / 100000);
+  });
+
+  it('setLimits stamps portfolioValueUpdatedAt when portfolioValue actually changes', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-08T12:00:00Z'));
+    const { result } = renderHook(() => useRiskStore());
+    expect(result.current.portfolioValueUpdatedAt).toBeNull();
+    act(() => {
+      result.current.setLimits({ ...DEFAULT_LIMITS, portfolioValue: 75000 });
+    });
+    expect(result.current.portfolioValueUpdatedAt).toBe('2026-04-08T12:00:00.000Z');
+    jest.useRealTimers();
+  });
+
+  it('setLimits leaves portfolioValueUpdatedAt untouched when portfolioValue is unchanged', () => {
+    const { result } = renderHook(() => useRiskStore());
+    act(() => {
+      // A no-op resync (e.g. RiskForm's hydration effect re-pushing the same
+      // fetched value) must not look like a fresh edit.
+      result.current.setLimits({ ...DEFAULT_LIMITS, maxConcurrentPositions: 8 });
+    });
+    expect(result.current.portfolioValueUpdatedAt).toBeNull();
+  });
+
+  it('setLimits with isUserEdit:false does not stamp portfolioValueUpdatedAt even when portfolioValue differs', () => {
+    // Regression: RiskForm's fetch-on-mount hydration effect calls setLimits
+    // purely to reconcile the store with whatever the backend currently
+    // holds (e.g. a value changed in another session/device) — that is NOT
+    // the user editing the field, and must not reset the staleness nudge.
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-08T12:00:00Z'));
+    const { result } = renderHook(() => useRiskStore());
+    act(() => {
+      useRiskStore.setState({ portfolioValueUpdatedAt: '2026-01-01T00:00:00.000Z' });
+    });
+    act(() => {
+      result.current.setLimits({ ...DEFAULT_LIMITS, portfolioValue: 250000 }, { isUserEdit: false });
+    });
+    expect(result.current.limits.portfolioValue).toBe(250000);
+    expect(result.current.portfolioValueUpdatedAt).toBe('2026-01-01T00:00:00.000Z');
+    jest.useRealTimers();
   });
 
   it('incrementDaily increases count', () => {

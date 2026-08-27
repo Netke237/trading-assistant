@@ -8,7 +8,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.schemas import OptionContract, TradeEntry, TradeExit
+from app.schemas import OptionContract, RrModel, TradeEntry, TradeExit
 from app.data.market import fetch_option_chain_async, fetch_contract_quote_async, fetch_price_async, fetch_candles_async
 from app.data.augment import _augment
 from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
@@ -16,10 +16,14 @@ from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_
 from app.scoring.trade_plan import build_trade_plan
 from app.scoring.structural_stop import find_structural_stop
 from app.scoring.first_passage import estimate_first_passage
+from app.scoring.exit_plan import compute_final_stop, compute_target_row
+from app.scoring.reward_risk import estimate_rr
+from app.scoring.stock_scorer import _atr
 # Shared with app.routers.scan — both build a trade plan off the same
 # reward_risk config so the scan and the per-contract recompute endpoint agree.
 from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 from app.services.config_loader import load_first_passage_cfg as _fp_cfg
+from app.services.config_loader import load_exit_plan_cfg as _ep_cfg
 from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
 
 router = APIRouter(prefix='/api', tags=['trading'])
@@ -424,3 +428,172 @@ async def first_passage(req: FirstPassageRequest) -> FirstPassageResponse:
             expectedDays=result.invalidation.expected_days,
         ),
     )
+
+
+class ExitPlanRequest(BaseModel):
+    symbol:      str
+    direction:   Literal["Bullish", "Bearish"]
+    entry_price: float = Field(..., gt=0)
+    strike:      float = Field(..., gt=0)
+    dte:         int = Field(..., ge=0)
+    premium:     float = Field(..., gt=0)
+    trend_score: float = Field(..., ge=0, le=100)
+
+
+class ExitPlanStopOut(BaseModel):
+    price:                float
+    source:               Literal["structural", "atr_widened"]
+    contractPrice:        float
+    rrModel:              RrModel
+    structuralSource:     Optional[Literal["order_block", "swing_low", "swing_high"]] = None
+    structuralConfidence: Optional[int] = None
+
+
+class ExitPlanTargetRowOut(BaseModel):
+    rrRatio:         float
+    arithmeticPrice: float
+    price:           float
+    tpSource:        Literal["arithmetic", "structural_snap"]
+    structuralPrice: Optional[float] = None
+    contractPrice:   float
+    rrModel:         RrModel
+    probability:     float
+    expectedDays:    Optional[float] = None
+    qualityGood:     bool
+    qualityReasons:  list[str]
+
+
+class ExitPlanResponse(BaseModel):
+    stop:    ExitPlanStopOut
+    targets: list[ExitPlanTargetRowOut]
+    atr:     float
+
+
+@router.post('/contracts/exit-plan', response_model=ExitPlanResponse)
+async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
+    """Compute the exit-plan pipeline for one contract: a structurally-grounded
+    final stop (the wider of the structural invalidation and an ATR floor),
+    one target row per configured R:R ratio (arithmetic, snapped onto a real
+    structural level when one falls close enough), each repriced to an
+    approximate contract price and run through the Monte Carlo first-passage
+    engine for probability/expected days, plus a composite quality flag.
+
+    Deliberately its own endpoint, fired only by the trade card's/portfolio
+    editor's "Compute Exit Plan" button — never part of the scan pipeline.
+
+    heston_params intentionally omitted from every reprice call below, same
+    trade-off as recompute_plan (this endpoint also serves one contract with
+    no option chain to calibrate against, from an interactive single-click
+    UI where a multi-second Heston calibration would be a visible delay) —
+    see docs/superpowers/plans/2026-07-25-heston-pricing-in-trade-plan.md's
+    "Out of scope" section.
+    """
+    ep_cfg = _ep_cfg()
+    fp_cfg = _fp_cfg()
+    is_call = req.direction == "Bullish"
+    expiry_years = req.dte / 365.0
+
+    async with httpx.AsyncClient(timeout=8) as client:
+        candles = await fetch_candles_async(client, req.symbol.upper())
+
+    # Fewer than 2 candles means _atr can't form even one true range (returns
+    # 0.0) and find_structural_stop's own len<10 guard also returns None — the
+    # ATR floor collapses to entry_price exactly, silently producing a
+    # zero-width "final stop" and, downstream, every target row landing on
+    # entry_price too. That's meaningfully different from "computed, but no
+    # structural level was found nearby" (a real, valid atr_widened result) —
+    # reject explicitly rather than return a plan built on no data at all.
+    if len(candles) < 2:
+        raise HTTPException(
+            status_code=422,
+            detail="insufficient price history to compute an exit plan",
+        )
+
+    atr = _atr(candles, 14)
+
+    final_stop = compute_final_stop(
+        candles, req.direction, req.entry_price, atr,
+        ep_cfg["stop"]["atr_multiplier"],
+    )
+
+    stop_priced = estimate_rr(
+        stock_price=req.entry_price, target_price=final_stop.price,
+        invalidation_price=final_stop.price, strike=req.strike,
+        expiry_years=expiry_years, current_premium=req.premium, is_call=is_call,
+    )
+
+    stop_out = ExitPlanStopOut(
+        price=round(final_stop.price, 2),
+        source=final_stop.source,
+        contractPrice=stop_priced.estimated_exit_premium,
+        rrModel=stop_priced.model_used,
+        structuralSource=final_stop.structural.source if final_stop.structural else None,
+        structuralConfidence=final_stop.structural.confidence if final_stop.structural else None,
+    )
+
+    targets_out: list[ExitPlanTargetRowOut] = []
+    for rr_ratio in ep_cfg["target"]["rr_ratios"]:
+        row = compute_target_row(
+            candles, req.direction, req.entry_price, final_stop, atr,
+            rr_ratio, ep_cfg["target"]["structural_snap"]["atr_multiplier"],
+        )
+        tp_priced = estimate_rr(
+            stock_price=req.entry_price, target_price=row.price,
+            invalidation_price=final_stop.price, strike=req.strike,
+            expiry_years=expiry_years, current_premium=req.premium, is_call=is_call,
+        )
+
+        # Convert the target's repriced contract value into an equivalent
+        # "% of current premium" so it can be fed through the existing
+        # first_passage engine (which is built around percent-of-premium
+        # targets, not raw stock-price ones) without duplicating its GBM
+        # simulation / per-day option-repricing loop.
+        pct = (tp_priced.estimated_exit_premium - req.premium) / req.premium if req.premium > 0 else 0.0
+
+        if pct <= 0:
+            # The repriced contract value at this target's stock price is at
+            # or below the CURRENT premium (time decay at dte_at_target
+            # outweighing the favorable move — plausible for a long-dated,
+            # low-delta, ATR-widened stop). first_passage's "probability of
+            # ever crossing target_option_price" would be trivially ~1 at
+            # ~day 1 here, since day 1's simulated repriced price is already
+            # at/above a threshold that isn't actually above today's real
+            # premium — a misleading "high-probability profit target" for a
+            # row that isn't currently a profit at all. Report it as
+            # unscoreable rather than run a simulation whose answer would be
+            # a numerically-correct but semantically-false near-certainty.
+            probability, expected_days = 0.0, None
+        else:
+            seed_key = (
+                f"{req.symbol.upper()}|{req.strike}|{req.dte}|{round(req.entry_price, 2)}"
+                f"|{rr_ratio}|{round(row.price, 2)}"
+            )
+            seed = int(hashlib.sha256(seed_key.encode()).hexdigest(), 16) % (2 ** 32)
+
+            fp_result = estimate_first_passage(
+                stock_price=req.entry_price, strike=req.strike, dte=req.dte,
+                premium=req.premium, delta=0.45, is_call=is_call,
+                trend_score=req.trend_score, invalidation_price=final_stop.price,
+                candles=candles, t1_pct=pct, t2_pct=pct, t3_pct=pct,
+                max_drift_pct=fp_cfg["max_drift_pct"], n_paths=fp_cfg["n_paths"],
+                sigma_floor=fp_cfg["sigma_floor"], sigma_ceiling=fp_cfg["sigma_ceiling"],
+                seed=seed,
+            )
+            fp_target = fp_result.targets[0]
+            probability, expected_days = fp_target.probability, fp_target.expected_days
+
+        targets_out.append(ExitPlanTargetRowOut(
+            rrRatio=row.rr_ratio,
+            arithmeticPrice=round(row.arithmetic_price, 2),
+            price=round(row.price, 2),
+            tpSource=row.tp_source,
+            structuralPrice=round(row.structural.price, 2) if row.structural else None,
+            contractPrice=round(tp_priced.estimated_exit_premium, 2),
+            rrModel=tp_priced.model_used,
+            probability=round(probability, 4),
+            expectedDays=expected_days,
+            qualityGood=row.quality_good,
+            qualityReasons=row.quality_reasons,
+        ))
+
+    return ExitPlanResponse(stop=stop_out, targets=targets_out, atr=round(atr, 2))

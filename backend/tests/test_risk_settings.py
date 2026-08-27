@@ -157,6 +157,39 @@ async def test_max_single_position_pct_is_actually_enforced(tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_get_risk_settings_returns_max_loss_per_trade_pct():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as ac:
+        resp = await ac.get('/settings/risk')
+    assert resp.status_code == 200
+    data = resp.json()
+    assert 'maxLossPerTradePct' in data
+    assert isinstance(data['maxLossPerTradePct'], float)
+    assert 0.0 <= data['maxLossPerTradePct'] <= 1.0
+
+
+@pytest.mark.asyncio
+async def test_post_risk_settings_updates_max_loss_per_trade_pct(tmp_path, monkeypatch):
+    import app.routers.risk_settings as rs
+    fake_yaml = tmp_path / 'risk_rules.yaml'
+    fake_yaml.write_text(
+        'portfolio:\n  max_concurrent_positions: 10\n  max_loss_per_trade_pct: 0.0375\n'
+        'reward_risk:\n  premium_stop_pct: 0.60\n'
+    )
+    monkeypatch.setattr(rs, '_RISK_PATH', fake_yaml)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as ac:
+        resp = await ac.post('/settings/risk', json={
+            'premiumStopPct': 0.60, 'maxLossPerTradePct': 0.02,
+        })
+    assert resp.status_code == 200
+    assert resp.json()['maxLossPerTradePct'] == 0.02
+
+    import yaml
+    saved = yaml.safe_load(fake_yaml.read_text())
+    assert saved['portfolio']['max_loss_per_trade_pct'] == 0.02
+
+
+@pytest.mark.asyncio
 async def test_post_risk_settings_rejects_out_of_order_targets():
     async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as ac:
         resp = await ac.post('/settings/risk', json={

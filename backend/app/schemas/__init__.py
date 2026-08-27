@@ -20,7 +20,10 @@ AlertKind = Literal['Info', 'Action', 'Critical']
 OrderType = Literal['Limit', 'Market', 'Stop']
 OptionRight = Literal['C', 'P']
 TrendDir = Literal['up', 'flat', 'down']
-RrModel = Literal['Heston repriced', 'BS repriced (IV-derived)']
+RrModel = Literal['Heston repriced', 'BS repriced (IV-derived)', 'Delta approximation']
+# Active take-profit method driving a position's TP_HIT alert — see
+# docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md, Feature D.
+TpMethod = Literal['ladder', 'monte_carlo', 'exit_plan_2r', 'exit_plan_3r']
 
 # ── Sentiment / regime ──────────────────────────────────────────────────────
 
@@ -347,7 +350,8 @@ class NewsItem(BaseModel):
 
 class PricingMethod(str, Enum):
     HESTON = "Heston repriced"
-    DELTA_APPROX = "BS repriced (IV-derived)"
+    BS_REPRICED = "BS repriced (IV-derived)"
+    DELTA_APPROX = "Delta approximation"
     UNAVAILABLE = "Unavailable"
 
 
@@ -376,10 +380,17 @@ class TargetLevel(BaseModel):
     @field_validator('pricingMethod', mode='before')
     @classmethod
     def normalize_legacy_pricing_method(cls, value: object) -> object:
-        """Accept codes from old persisted scan sessions and emit the current enum."""
+        """Accept codes from old persisted scan sessions and emit the current enum.
+
+        'delta-approx' predates the Heston/BS/delta-approx 3-way split — old
+        sessions never distinguished a true BS reprice from the crude
+        flat-delta fallback, both stored under this one code and always
+        displayed as "BS repriced (IV-derived)". Map it to BS_REPRICED, not
+        the now-distinct DELTA_APPROX, to preserve that historical display
+        rather than silently reclassifying old data."""
         return {
             'heston': PricingMethod.HESTON,
-            'delta-approx': PricingMethod.DELTA_APPROX,
+            'delta-approx': PricingMethod.BS_REPRICED,
             'manual': PricingMethod.UNAVAILABLE,
         }.get(value, value) if isinstance(value, str) else value
 
@@ -610,6 +621,7 @@ class PortfolioPositionCreate(BaseModel):
     entryDate: str = Field(alias="entry_date")
     stop: Optional[float] = None
     structuralStop: Optional[float] = Field(alias="structural_stop", default=None)
+    exitPlan: Optional[dict] = Field(alias="exit_plan", default=None)
     targets: list[dict] = []
     dteTotal: Optional[int] = Field(alias="dte_total", default=None)
     portfolioValue: float = Field(alias="portfolio_value", default=50000.0)
@@ -624,6 +636,7 @@ class PortfolioPositionCreate(BaseModel):
             "entry_price": "entryPrice",
             "entry_date": "entryDate",
             "structural_stop": "structuralStop",
+            "exit_plan": "exitPlan",
             "dte_total": "dteTotal",
             "portfolio_value": "portfolioValue",
             "scan_stock_price": "scanStockPrice",
@@ -655,7 +668,16 @@ class PortfolioPositionUpdate(BaseModel):
     `portfolioValue` is only required by the router when `qty` is being
     increased (it re-runs the exposure gate in that case, same as
     `POST /api/portfolio`); a `qty` decrease or an edit that never sends `qty`
-    doesn't need it."""
+    doesn't need it.
+
+    `exitPlan`, `maxLossOverride`, `activeTpMethod`, `resolvedTpPrice`/
+    `resolvedTpUpdatedAt`, and `alertOverrides` are Phase 0 scaffolding for
+    the exit-plan pipeline (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
+    — no endpoint computes these yet, but the PATCH plumbing to persist
+    whatever a later feature computes already exists. Like `structuralStop`,
+    `exitPlan`/`maxLossOverride`/`alertOverrides` follow the exclude_unset
+    pattern so `{"exitPlan": null}` can still explicitly clear a previously
+    computed value."""
     model_config = ConfigDict(populate_by_name=True)
 
     stop: Optional[float] = None
@@ -663,6 +685,12 @@ class PortfolioPositionUpdate(BaseModel):
     targets: Optional[list[dict]] = None
     qty: Optional[int] = None
     portfolioValue: Optional[float] = Field(alias="portfolio_value", default=None)
+    exitPlan: Optional[dict] = Field(alias="exit_plan", default=None)
+    maxLossOverride: Optional[dict] = Field(alias="max_loss_override", default=None)
+    activeTpMethod: Optional[TpMethod] = Field(alias="active_tp_method", default=None)
+    resolvedTpPrice: Optional[float] = Field(alias="resolved_tp_price", default=None)
+    resolvedTpUpdatedAt: Optional[str] = Field(alias="resolved_tp_updated_at", default=None)
+    alertOverrides: Optional[dict] = Field(alias="alert_overrides", default=None)
 
 
 class PortfolioPositionSchema(BaseModel):
@@ -695,6 +723,14 @@ class PortfolioPositionSchema(BaseModel):
     delta: Optional[float] = None
     theta: Optional[float] = None
     ivRank: Optional[int] = None
+    # Exit-plan pipeline (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
+    # — Phase 0 scaffolding, populated by later phases.
+    exitPlan: Optional[dict] = None
+    maxLossOverride: Optional[dict] = None
+    activeTpMethod: TpMethod = 'ladder'
+    resolvedTpPrice: Optional[float] = None
+    resolvedTpUpdatedAt: Optional[str] = None
+    alertOverrides: dict = {}
 
     @classmethod
     def from_orm_model(cls, obj) -> "PortfolioPositionSchema":
@@ -712,6 +748,12 @@ class PortfolioPositionSchema(BaseModel):
             targets=obj.targets or [],
             dteTotal=obj.dte_total,
             createdAt=obj.created_at.isoformat() if obj.created_at else "",
+            exitPlan=obj.exit_plan,
+            maxLossOverride=obj.max_loss_override,
+            activeTpMethod=obj.active_tp_method or 'ladder',
+            resolvedTpPrice=obj.resolved_tp_price,
+            resolvedTpUpdatedAt=obj.resolved_tp_updated_at.isoformat() if obj.resolved_tp_updated_at else None,
+            alertOverrides=obj.alert_overrides or {},
         )
 
 

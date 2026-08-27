@@ -304,6 +304,7 @@ function RiskSummary({
     max_concurrent_positions_reached: 'Max concurrent positions reached',
     duplicate_symbol: 'Duplicate symbol in portfolio',
     max_daily_recommendations_reached: 'Max daily recommendations reached',
+    max_loss_per_trade_exceeded: 'Max loss at stop exceeds per-trade limit',
   };
 
   return (
@@ -313,6 +314,23 @@ function RiskSummary({
           {reasonLabels[r] ?? r}
         </Text>
       ))}
+      {reasons.has('max_loss_per_trade_exceeded') && (() => {
+        // The actual worst offender, not just the first match in basket order —
+        // a symbol pinned first with a barely-over loss must never mask a
+        // later symbol whose loss is wildly over the same limit.
+        let worst: { symbol: string; rc: RiskCheckResult } | null = null;
+        for (const [symbol, rc] of Object.entries(riskChecks)) {
+          if (!rc.reasons.includes('max_loss_per_trade_exceeded') || rc.maxLossAtStop == null) continue;
+          if (!worst || rc.maxLossAtStop > worst.rc.maxLossAtStop!) worst = { symbol, rc };
+        }
+        if (!worst || worst.rc.maxLossLimitDollar == null) return null;
+        return (
+          <Text size={11} tone="dim">
+            Max loss at stop ({worst.symbol}) ≈ ${Math.round(worst.rc.maxLossAtStop!).toLocaleString()}
+            {' '}(limit ${Math.round(worst.rc.maxLossLimitDollar).toLocaleString()})
+          </Text>
+        );
+      })()}
       {!overrideReady && (
         <Text size={12} tone="secondary">
           Click Submit again to override.

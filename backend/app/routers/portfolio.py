@@ -278,6 +278,7 @@ async def add_position(
         entry_date=body.entryDate,
         stop=_floor_stop(adjusted_stop),
         structural_stop=_floor_stop(adjusted_structural_stop),
+        exit_plan=body.exitPlan,
         targets=adjusted_targets,
         dte_total=body.dteTotal,
         entry_stock_price=entry_stock_price,
@@ -402,6 +403,23 @@ async def update_position(
         position.structural_stop = _floor_stop(updates["structuralStop"])
     if "targets" in updates:
         position.targets = updates["targets"]
+    # Exit-plan pipeline scaffolding (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
+    # — later phases compute these values; this endpoint just persists
+    # whatever they send, same exclude_unset/explicit-null-clears pattern as
+    # stop/structuralStop/targets above.
+    if "exitPlan" in updates:
+        position.exit_plan = updates["exitPlan"]
+    if "maxLossOverride" in updates:
+        position.max_loss_override = updates["maxLossOverride"]
+    if "activeTpMethod" in updates and updates["activeTpMethod"] is not None:
+        position.active_tp_method = updates["activeTpMethod"]
+    if "resolvedTpPrice" in updates:
+        position.resolved_tp_price = updates["resolvedTpPrice"]
+    if "resolvedTpUpdatedAt" in updates:
+        raw = updates["resolvedTpUpdatedAt"]
+        position.resolved_tp_updated_at = datetime.fromisoformat(raw) if raw else None
+    if "alertOverrides" in updates:
+        position.alert_overrides = updates["alertOverrides"]
 
     await db.commit()
     await db.refresh(position)

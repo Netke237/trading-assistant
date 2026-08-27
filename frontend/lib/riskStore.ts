@@ -18,6 +18,7 @@ const DEFAULT_LIMITS: RiskLimits = {
   maxConcurrentPositions: 10,
   maxDailyRecommendations: 5,
   portfolioValue: 100000,
+  maxLossPerTradePct: 0.0375,
 };
 
 const DEFAULT_METRICS: PortfolioRiskMetrics = {
@@ -44,7 +45,18 @@ export interface RiskState {
   lastResetDate: string;
   metrics: PortfolioRiskMetrics;
   symbols: string[];
-  setLimits: (l: RiskLimits) => void;
+  /** ISO timestamp of the last time `portfolioValue` actually changed value
+   *  (not merely re-saved at the same figure) — drives the Settings page's
+   *  staleness nudge. `portfolioValue` itself is never auto-tracked from
+   *  realized/open P&L, so this is the only signal for "is this still
+   *  accurate?" null until the user's first edit. */
+  portfolioValueUpdatedAt: string | null;
+  /** `opts.isUserEdit` (default true) gates the `portfolioValueUpdatedAt`
+   *  stamp — pass `false` from a backend-resync path (e.g. RiskForm's
+   *  fetch-on-mount hydration effect) so reconciling the store with a value
+   *  that merely changed in another session doesn't masquerade as "the user
+   *  just edited this," silently resetting the staleness nudge. */
+  setLimits: (l: RiskLimits, opts?: { isUserEdit?: boolean }) => void;
   incrementDaily: () => void;
   computeMetrics: (positions: PortfolioPosition[]) => void;
 }
@@ -98,6 +110,12 @@ export function migrateRisk(persistedState: unknown, _version: number): Partial<
         1000,
         Number.MAX_SAFE_INTEGER,
       ),
+      maxLossPerTradePct: boundedNumber(
+        rawLimits.maxLossPerTradePct,
+        DEFAULT_LIMITS.maxLossPerTradePct,
+        0,
+        1,
+      ),
     },
     dailyRecommendations: Math.max(
       0,
@@ -109,6 +127,11 @@ export function migrateRisk(persistedState: unknown, _version: number): Partial<
     symbols: Array.isArray(prev.symbols)
       ? prev.symbols.filter((symbol): symbol is string => typeof symbol === 'string')
       : [],
+    // Pre-v3 stores never tracked this — null means "unknown", not "stale
+    // today"; the staleness nudge treats null as neutral rather than caution.
+    portfolioValueUpdatedAt: typeof prev.portfolioValueUpdatedAt === 'string'
+      ? prev.portfolioValueUpdatedAt
+      : null,
   };
 }
 
@@ -120,7 +143,13 @@ export const useRiskStore = create<RiskState>()(
       lastResetDate: localTodayIso(),
       metrics: { ...DEFAULT_METRICS },
       symbols: [],
-      setLimits: (l) => set({ limits: l }),
+      portfolioValueUpdatedAt: null,
+      setLimits: (l, opts) => set((s) => ({
+        limits: l,
+        portfolioValueUpdatedAt: (opts?.isUserEdit ?? true) && l.portfolioValue !== s.limits.portfolioValue
+          ? new Date().toISOString()
+          : s.portfolioValueUpdatedAt,
+      })),
       incrementDaily: () => {
         const today = localTodayIso();
         set((s) => {
@@ -200,13 +229,14 @@ export const useRiskStore = create<RiskState>()(
     {
       name: 'bamendjou-risk-v1',
       skipHydration: true,
-      version: 2,
+      version: 3,
       migrate: migrateRisk,
       partialize: (state) => ({
         limits: state.limits,
         dailyRecommendations: state.dailyRecommendations,
         lastResetDate: state.lastResetDate,
         symbols: state.symbols,
+        portfolioValueUpdatedAt: state.portfolioValueUpdatedAt,
       }),
     }
   )

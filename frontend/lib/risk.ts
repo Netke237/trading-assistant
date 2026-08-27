@@ -8,6 +8,7 @@ import type {
   PortfolioRiskMetrics,
   TradeCardData,
   RiskCheckResult,
+  MaxLossOverride,
 } from '@/types/domain';
 import type { Status } from '@/lib/status';
 import { worstStatus } from '@/lib/status';
@@ -93,6 +94,33 @@ export function computePortfolioRiskMetrics(
   };
 }
 
+/** Feature C (exit-plan pipeline plan) — $ loss projected if the position is
+ *  stopped out at the exit-plan pipeline's final stop: entry premium minus
+ *  the stop-repriced contract price (floored at 0 — a repriced value at or
+ *  above entry means the "stop" isn't actually a loss for this leg), times
+ *  contracts. Options-only, mirroring the exit-plan pipeline itself. */
+export function maxLossAtStop(
+  entryPremium: number,
+  stopContractPrice: number,
+  contracts: number,
+): number {
+  return Math.max(0, entryPremium - stopContractPrice) * contracts * 100;
+}
+
+/** Resolves the $ threshold `maxLossAtStop` is checked against — a per-trade
+ *  override (fixed dollar or percent of portfolioValue) if one is set,
+ *  otherwise the global `maxLossPerTradePct` default. */
+export function resolveMaxLossLimitDollar(
+  portfolioValue: number,
+  globalPct: number,
+  override?: MaxLossOverride | null,
+): number {
+  if (override) {
+    return override.mode === 'dollar' ? override.value : portfolioValue * override.value;
+  }
+  return portfolioValue * globalPct;
+}
+
 export function checkTradeRisk(
   card: TradeCardData,
   proposedContracts: number,
@@ -139,11 +167,30 @@ export function checkTradeRisk(
     approved = false;
   }
 
+  // No per-trade override exists pre-trade — that field lives on
+  // PortfolioPosition, set only after the position is open — so this always
+  // checks against the global default. Skipped entirely when no exit plan
+  // has been computed yet (nothing to reprice against).
+  let lossAtStop: number | undefined;
+  let lossLimitDollar: number | undefined;
+  const exitPlan = card.exit.exitPlan;
+  if (exitPlan) {
+    const entryPremium = card.contractDetails?.mid ?? 0;
+    lossAtStop = maxLossAtStop(entryPremium, exitPlan.stop.contractPrice, proposedContracts);
+    lossLimitDollar = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct);
+    if (lossAtStop > lossLimitDollar) {
+      reasons.push('max_loss_per_trade_exceeded');
+      approved = false;
+    }
+  }
+
   return {
     approved,
     reasons,
     singleExposurePct: singleExposure,
     totalExposurePct: totalExposure,
     capitalAtRisk: car,
+    maxLossAtStop: lossAtStop,
+    maxLossLimitDollar: lossLimitDollar,
   };
 }

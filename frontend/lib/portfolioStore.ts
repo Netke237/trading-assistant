@@ -7,7 +7,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PortfolioPosition, TargetLevel, Direction } from '@/types/domain';
+import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverride } from '@/types/domain';
 import { useRiskStore } from '@/lib/riskStore';
 
 type BackendPosition = {
@@ -21,6 +21,8 @@ type BackendPosition = {
   entryDate: string;
   stop: number | null;
   structuralStop?: number | null;
+  exitPlan?: ExitPlan | null;
+  maxLossOverride?: MaxLossOverride | null;
   targets: TargetLevel[];
   dteTotal: number | null;
   createdAt: string;
@@ -49,6 +51,8 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     expiry,
     stop:         floorStop(p.stop),
     structuralStop: floorStop(p.structuralStop),
+    exitPlan:     p.exitPlan ?? null,
+    maxLossOverride: p.maxLossOverride ?? null,
     targets:      p.targets ?? [],
     dteTotal:     p.dteTotal ?? 0,
     dteRemaining: p.dteRemaining ?? 0,
@@ -148,6 +152,7 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     entryDate:      p.entryDate ?? new Date().toISOString().slice(0, 10),
     stop:           floorStop(p.stop),
     structuralStop: floorStop(p.structuralStop),
+    exitPlan:       p.exitPlan ?? null,
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,
@@ -275,6 +280,8 @@ function toUpdatePayload(patch: Partial<PortfolioPosition>): Record<string, unkn
   const body: Record<string, unknown> = {};
   if ('stop' in patch) body.stop = floorStop(patch.stop);
   if ('structuralStop' in patch) body.structuralStop = floorStop(patch.structuralStop);
+  if ('exitPlan' in patch) body.exitPlan = patch.exitPlan;
+  if ('maxLossOverride' in patch) body.maxLossOverride = patch.maxLossOverride;
   if ('targets' in patch) body.targets = patch.targets;
   if ('contracts' in patch) {
     body.qty = patch.contracts;

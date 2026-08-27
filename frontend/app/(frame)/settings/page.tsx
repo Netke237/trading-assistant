@@ -890,8 +890,20 @@ function Toggle({ defaultOn, onChange }: { defaultOn?: boolean; onChange?: (on: 
 
 /* ---------- Risk ---------- */
 
+/** Days between an ISO timestamp and now, floored — used for the
+ *  Portfolio-value staleness nudge. Returns null when there's nothing to
+ *  compare (never edited yet). */
+function daysSince(iso: string | null): number | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return null;
+  return Math.max(0, Math.floor((Date.now() - then) / 86_400_000));
+}
+
+const PORTFOLIO_VALUE_STALE_DAYS = 30;
+
 function RiskForm() {
-  const { limits, setLimits } = useRiskStore();
+  const { limits, setLimits, portfolioValueUpdatedAt } = useRiskStore();
   const { premiumStopPct, setPremiumStopPct, targetProfitPct, setTargetProfitPct } = useSettingsStore();
   const [localLimits, setLocalLimits] = useState<RiskLimits>(limits);
   const [localStopPct, setLocalStopPct] = useState(premiumStopPct);
@@ -927,6 +939,7 @@ function RiskForm() {
           ...useRiskStore.getState().limits,
           ...(s.portfolioValue           !== undefined && { portfolioValue:             s.portfolioValue }),
           ...(s.maxSinglePositionPct     !== undefined && { maxSingleTradeExposurePct:  s.maxSinglePositionPct }),
+          ...(s.maxLossPerTradePct       !== undefined && { maxLossPerTradePct:         s.maxLossPerTradePct }),
           ...(s.maxTotalExposurePct      !== undefined && { maxTotalExposurePct:        s.maxTotalExposurePct }),
           ...(s.maxConcurrentPositions   !== undefined && { maxConcurrentPositions:     s.maxConcurrentPositions }),
           ...(s.maxDailyRecommendations  !== undefined && { maxDailyRecommendations:    s.maxDailyRecommendations }),
@@ -939,7 +952,7 @@ function RiskForm() {
         // another session/device) shows correctly on screen but the pre-flight
         // trade-send gate keeps enforcing the stale persisted limit until the
         // user happens to touch a slider.
-        useRiskStore.getState().setLimits(next);
+        useRiskStore.getState().setLimits(next, { isUserEdit: false });
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -967,6 +980,7 @@ function RiskForm() {
         premiumStopPct:          localStopPct,
         portfolioValue:          localLimits.portfolioValue,
         maxSinglePositionPct:    localLimits.maxSingleTradeExposurePct,
+        maxLossPerTradePct:      localLimits.maxLossPerTradePct,
         maxTotalExposurePct:     localLimits.maxTotalExposurePct,
         maxConcurrentPositions:  localLimits.maxConcurrentPositions,
         maxDailyRecommendations: localLimits.maxDailyRecommendations,
@@ -1006,6 +1020,26 @@ function RiskForm() {
           onBlur={handleSaveRisk}
         />
       </Row>
+      {(() => {
+        // Static, manually-edited number — never auto-tracked from realized/
+        // open P&L (see docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md
+        // Feature C). This is only a nudge to go re-check it, not a gate.
+        const days = daysSince(portfolioValueUpdatedAt);
+        if (days === null) {
+          return (
+            <Text size={11} tone="dim">
+              Not tracked yet — edit and save to start tracking staleness.
+            </Text>
+          );
+        }
+        const stale = days >= PORTFOLIO_VALUE_STALE_DAYS;
+        return (
+          <Text size={11} tone={stale ? 'caution' : 'dim'}>
+            Last updated {days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`}
+            {stale ? ' — consider confirming it still reflects your account.' : ''}
+          </Text>
+        );
+      })()}
       <Row
         label="Max single trade exposure"
         hint="Notional of one trade as % of portfolio."
@@ -1019,6 +1053,22 @@ function RiskForm() {
           step={1}
           value={Math.round(localLimits.maxSingleTradeExposurePct * 100)}
           onChange={(e) => updateLimit('maxSingleTradeExposurePct', Math.max(1, Math.min(100, Number(e.target.value))) / 100)}
+          onBlur={handleSaveRisk}
+        />
+      </Row>
+      <Row
+        label="Max loss per trade"
+        hint="Warning-only — checked against the exit-plan pipeline's final stop, repriced to a contract price. Overridable per-position in the Portfolio editor."
+        defaultValue="3.75%"
+      >
+        <input
+          type="number"
+          className={styles.input}
+          min={0}
+          max={100}
+          step={0.25}
+          value={Math.round(localLimits.maxLossPerTradePct * 10000) / 100}
+          onChange={(e) => updateLimit('maxLossPerTradePct', Math.max(0, Math.min(100, Number(e.target.value))) / 100)}
           onBlur={handleSaveRisk}
         />
       </Row>

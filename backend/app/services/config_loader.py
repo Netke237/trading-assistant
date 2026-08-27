@@ -31,6 +31,15 @@ def load_reward_risk_cfg() -> dict:
 
 
 @lru_cache(maxsize=1)
+def load_exit_plan_cfg() -> dict:
+    """Return risk_rules.yaml's exit_plan block (stop.atr_multiplier,
+    target.rr_ratios, target.structural_snap.atr_multiplier)."""
+    import yaml
+    full = yaml.safe_load((_CONFIG_DIR / "risk_rules.yaml").read_text())
+    return full["exit_plan"]
+
+
+@lru_cache(maxsize=1)
 def load_first_passage_cfg() -> dict:
     """Return risk_rules.yaml's first_passage block (Monte Carlo simulation
     tunables: max_drift_pct, n_paths, sigma_floor, sigma_ceiling)."""

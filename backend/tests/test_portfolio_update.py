@@ -88,6 +88,24 @@ async def test_patch_updates_structural_stop_and_can_clear_it(client):
 
 
 @pytest.mark.asyncio
+async def test_patch_updates_max_loss_override_and_can_clear_it(client):
+    """Feature C (exit-plan pipeline plan, docs/superpowers/plans/
+    2026-08-26-exit-plan-pipeline.md) — per-position override of the global
+    max-loss-per-trade warning threshold. Same exclude_unset/explicit-null
+    pattern as structuralStop above: PATCHing null must clear a previously
+    set override, not be treated as "field omitted"."""
+    await _add(client, rec="REC-MAXLOSS")
+    override = {"mode": "dollar", "value": 300}
+    r = await client.patch("/api/portfolio/REC-MAXLOSS", json={"maxLossOverride": override})
+    assert r.status_code == 200, r.text
+    assert r.json()["maxLossOverride"] == override
+
+    r2 = await client.patch("/api/portfolio/REC-MAXLOSS", json={"maxLossOverride": None})
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["maxLossOverride"] is None
+
+
+@pytest.mark.asyncio
 async def test_patch_updates_targets(client):
     await _add(client, rec="REC-TGT")
     new_targets = [{"id": "tp1", "stockPrice": 200.0, "contractsToSell": 2, "status": "PENDING"}]

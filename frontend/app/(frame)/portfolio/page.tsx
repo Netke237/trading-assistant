@@ -14,7 +14,8 @@ import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { usePortfolioStore, flushPendingPositionPatches } from '@/lib/portfolioStore';
-import { api } from '@/lib/api';
+import { useRiskStore } from '@/lib/riskStore';
+import { maxLossAtStop, resolveMaxLossLimitDollar } from '@/lib/risk';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
@@ -25,6 +26,7 @@ import { useAlertStore } from '@/lib/alertStore';
 import { scanPortfolio } from '@/lib/alertEngine';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
 import { positionStatusTooltip } from '@/lib/statusTooltips';
+import { api } from '@/lib/api';
 import type { PortfolioPosition } from '@/types/domain';
 import styles from './page.module.css';
 
@@ -689,6 +691,12 @@ export function EditDrawer({
           targets={position.targets}
           onChange={(targets) => onChange({ targets })}
         />
+        {!position.contract.endsWith('|STOCK') && (
+          <ExitPlanEditor position={position} onChange={onChange} />
+        )}
+        {!position.contract.endsWith('|STOCK') && (
+          <MaxLossBanner position={position} onChange={onChange} />
+        )}
         <EditField
           label="Contracts"
           hint="Number of option contracts held."
@@ -813,6 +821,231 @@ function TargetEditor({
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** "Compute Exit Plan" for an OPEN option position — post-trade counterpart
+ *  to TradeCard's pre-trade button. Persists the result verbatim via the
+ *  same `onChange` -> updatePosition -> PATCH /api/portfolio/{recId} path
+ *  every other drawer field already uses; refreshed only on manual re-click,
+ *  never automatically. Options-only (the repricing chain needs strike/dte/
+ *  premium, which a stock position doesn't have) — the caller only renders
+ *  this for non-'|STOCK' contracts. */
+function ExitPlanEditor({
+  position,
+  onChange,
+}: {
+  position: PortfolioPosition;
+  onChange: (patch: Partial<PortfolioPosition>) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const exitPlan = position.exitPlan;
+
+  const compute = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const parts = position.contract.split('|');
+      const strike = Number(parts[1]);
+      // trend_score isn't available for an already-open position (the scan-time
+      // score isn't carried on PortfolioPosition) — neutral 50 means zero
+      // directional drift bias in the Monte Carlo leg, an honest default
+      // rather than fabricating a score from partial data.
+      const res = await api.getExitPlan({
+        symbol: position.symbol,
+        direction: position.direction,
+        entry_price: position.currentStockPrice ?? position.entryPrice,
+        strike,
+        dte: position.dteRemaining,
+        premium: position.currentPrice,
+        trend_score: 50,
+      });
+      onChange({ exitPlan: { ...res, computedAt: new Date().toISOString() } });
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className={styles.targetEditor}>
+      <Text size={11} tone="secondary">Exit Plan</Text>
+      <button type="button" className={styles.exitPlanBtn} onClick={compute} disabled={loading}>
+        {loading ? 'Computing exit plan…' : 'Compute Exit Plan'}
+      </button>
+      {error && <Text size={10} tone="reject">Couldn&apos;t compute an exit plan — try again.</Text>}
+      {exitPlan && (
+        <div className={styles.targetList}>
+          <div className={styles.targetItem}>
+            <div className={styles.targetHeader}>
+              <Text size={12} weight={600}>
+                Stop {exitPlan.stop.source === 'structural' ? '(structural)' : '(ATR-widened)'}
+              </Text>
+            </div>
+            <div className={styles.targetGrid}>
+              <div>
+                <Text size={10} tone="dim">Stock</Text>
+                <Data size={12} weight={500}>${exitPlan.stop.price.toFixed(2)}</Data>
+              </div>
+              <div>
+                <Text size={10} tone="dim">Contract</Text>
+                <Data size={12} weight={500}>${exitPlan.stop.contractPrice.toFixed(2)}</Data>
+              </div>
+            </div>
+            <Text size={10} tone="dim">Method: {exitPlan.stop.rrModel}</Text>
+          </div>
+          {exitPlan.targets.map((t) => (
+            <div key={t.rrRatio} className={styles.targetItem}>
+              <div className={styles.targetHeader}>
+                <Text size={12} weight={600}>{t.rrRatio}R {t.qualityGood ? '✓' : '⚠'}</Text>
+                <span className={styles.targetStatus}>{t.tpSource === 'structural_snap' ? 'snapped' : 'arithmetic'}</span>
+              </div>
+              <div className={styles.targetGrid}>
+                <div>
+                  <Text size={10} tone="dim">Stock</Text>
+                  <Data size={12} weight={500}>${t.price.toFixed(2)}</Data>
+                </div>
+                <div>
+                  <Text size={10} tone="dim">Contract</Text>
+                  <Data size={12} weight={500}>${t.contractPrice.toFixed(2)}</Data>
+                </div>
+                <div>
+                  <Text size={10} tone="dim">Probability</Text>
+                  <Data size={12} weight={500}>{(t.probability * 100).toFixed(0)}%</Data>
+                </div>
+              </div>
+              <Text size={10} tone="dim">Method: {t.rrModel}</Text>
+              {!t.qualityGood && (
+                <Text size={10} tone="caution">
+                  {t.qualityReasons.includes('stop_widened') ? 'Stop ATR-widened. ' : ''}
+                  {t.qualityReasons.includes('target_beyond_structural') ? 'Target overshoots structural level.' : ''}
+                </Text>
+              )}
+            </div>
+          ))}
+          <Text size={10} tone="dim">as of {new Date(exitPlan.computedAt).toLocaleTimeString()}</Text>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Feature C (exit-plan pipeline plan) — inline max-loss-at-stop badge for an
+ *  OPEN option position. Warning-only, never blocks any action here (nothing
+ *  is being submitted from the Portfolio editor). Basis is strictly the
+ *  exit-plan pipeline's final stop, repriced to a contract price — same rule
+ *  TradeCard-time's checkTradeRisk() uses — so it only renders once an exit
+ *  plan has been computed; options-only like ExitPlanEditor above it. */
+function MaxLossBanner({
+  position,
+  onChange,
+}: {
+  position: PortfolioPosition;
+  onChange: (patch: Partial<PortfolioPosition>) => void;
+}) {
+  const limits = useRiskStore((s) => s.limits);
+  const exitPlan = position.exitPlan;
+  const contracts = position.contracts ?? 1;
+  const override = position.maxLossOverride ?? null;
+
+  // The loss figure is a pure client computation — exitPlan.stop.contractPrice
+  // is already repriced, no network round trip needed — so this debounce is
+  // purely to stop the number/badge flashing on every keystroke while the
+  // user is still typing a new contracts count or override value, not to
+  // throttle a live backend call (that already happens 600ms-debounced,
+  // separately, in portfolioStore's scheduleRemotePositionPatch).
+  const [debounced, setDebounced] = useState({ contracts, override });
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced({ contracts, override }), 400);
+    return () => clearTimeout(t);
+  }, [contracts, override]);
+
+  const [editingOverride, setEditingOverride] = useState(false);
+  const [draftMode, setDraftMode] = useState<'dollar' | 'percent'>(override?.mode ?? 'percent');
+  const [draftValue, setDraftValue] = useState(() =>
+    override
+      ? (override.mode === 'percent' ? override.value * 100 : override.value)
+      : Math.round(limits.maxLossPerTradePct * 100 * 100) / 100
+  );
+
+  // entryPrice <= 0 is a data-integrity glitch, not a real 0-loss trade
+  // (mirrors the "never a real premium" convention `floorStop` applies to
+  // stock prices elsewhere in this store) — without this guard the formula
+  // below reports a reassuring "PASS — $0 max loss" for a position whose
+  // loss genuinely can't be computed.
+  if (!exitPlan || position.contract.endsWith('|STOCK') || position.entryPrice <= 0) return null;
+
+  const lossAtStop = maxLossAtStop(position.entryPrice, exitPlan.stop.contractPrice, debounced.contracts);
+  const limitDollar = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, debounced.override);
+  const exceeded = lossAtStop > limitDollar;
+
+  const applyOverride = () => {
+    const value = draftMode === 'percent' ? draftValue / 100 : draftValue;
+    onChange({ maxLossOverride: { mode: draftMode, value } });
+    setEditingOverride(false);
+  };
+  const clearOverride = () => {
+    onChange({ maxLossOverride: null });
+    setEditingOverride(false);
+  };
+
+  return (
+    <div className={styles.targetEditor}>
+      <Text size={11} tone="secondary">Max loss at stop</Text>
+      <div className={styles.targetItem}>
+        <div className={styles.targetHeader}>
+          <Data size={13} weight={500} tone={exceeded ? 'reject' : 'pass'}>
+            ${Math.round(lossAtStop).toLocaleString()}
+          </Data>
+          <StatusBadge status={exceeded ? 'REJECT' : 'PASS'} />
+        </div>
+        <Text size={10} tone="dim">
+          Limit ${Math.round(limitDollar).toLocaleString()}
+          {override
+            ? ` (override: ${override.mode === 'percent' ? `${(override.value * 100).toFixed(2)}%` : `$${override.value.toLocaleString()}`})`
+            : ' (account default)'}
+        </Text>
+        {!editingOverride ? (
+          <button type="button" className={styles.exitPlanBtn} onClick={() => setEditingOverride(true)}>
+            {override ? 'Edit override' : 'Set override'}
+          </button>
+        ) : (
+          <div className={styles.targetGrid}>
+            <div className={styles.maxLossModeToggle}>
+              <button
+                type="button"
+                className={draftMode === 'percent' ? styles.maxLossModeBtnActive : styles.maxLossModeBtn}
+                onClick={() => setDraftMode('percent')}
+              >
+                %
+              </button>
+              <button
+                type="button"
+                className={draftMode === 'dollar' ? styles.maxLossModeBtnActive : styles.maxLossModeBtn}
+                onClick={() => setDraftMode('dollar')}
+              >
+                $
+              </button>
+            </div>
+            <input
+              type="number"
+              className={styles.targetInput}
+              value={draftValue}
+              min={0}
+              step={draftMode === 'percent' ? 0.25 : 10}
+              onChange={(e) => setDraftValue(Math.max(0, Number(e.target.value) || 0))}
+              aria-label="Max loss override value"
+            />
+            <button type="button" className={styles.exitPlanBtn} onClick={applyOverride}>Apply</button>
+            {override && (
+              <button type="button" className={styles.editRemove} onClick={clearOverride}>Use default</button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

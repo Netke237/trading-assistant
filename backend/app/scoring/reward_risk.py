@@ -7,7 +7,7 @@ from typing import Literal, Optional
 from app.models.heston import HestonParams, heston_price
 from app.models.black_scholes import bs_iv, bs_price
 
-RrModel = Literal["Heston repriced", "BS repriced (IV-derived)"]
+RrModel = Literal["Heston repriced", "BS repriced (IV-derived)", "Delta approximation"]
 
 
 @dataclass
@@ -43,20 +43,25 @@ def _bs_reprice_or_delta_approx(
     sigma: float,
     is_call: bool,
     current_premium: float,
-) -> float:
+) -> tuple[float, bool]:
     """Reprice at t_price via Black-Scholes using the given sigma. Falls back
     to the crude flat-delta guess (the pre-fix behavior) only if bs_price
     itself is unusable — kept as a last-resort safety net. Expected to be
     rare in practice (dte_at_target is provably positive via its own floor;
     t_price and strike come from caller-supplied market/config data that is
     not independently validated here), but not proven unreachable — callers
-    do not enforce t_price > 0 or strike > 0."""
+    do not enforce t_price > 0 or strike > 0.
+
+    Returns (price, used_bs_reprice) — callers label the result "BS repriced
+    (IV-derived)" vs "Delta approximation" from used_bs_reprice rather than
+    assuming every call here is a real BS reprice (that assumption was itself
+    a bug: see PricingMethod.DELTA_APPROX's history)."""
     price = bs_price(t_price, strike, dte_at_target, r, sigma, is_call)
     if math.isfinite(price) and price > 0:
-        return price
+        return price, True
     delta = 0.5 if (is_call and t_price > strike) or (not is_call and t_price < strike) else 0.3
     price_move = abs(t_price - stock_price)
-    return current_premium + delta * price_move
+    return current_premium + delta * price_move, False
 
 
 def estimate_rr(
@@ -88,10 +93,10 @@ def estimate_rr(
         model_used = "Heston repriced"
     else:
         sigma = _derive_fallback_sigma(current_premium, stock_price, strike, expiry_years, r, is_call, sigma_fallback)
-        exit_premium = _bs_reprice_or_delta_approx(
+        exit_premium, used_bs_reprice = _bs_reprice_or_delta_approx(
             target_price, stock_price, strike, dte_at_target, r, sigma, is_call, current_premium,
         )
-        model_used = "BS repriced (IV-derived)"
+        model_used = "BS repriced (IV-derived)" if used_bs_reprice else "Delta approximation"
 
     exit_premium = max(exit_premium, 0.01)
 
@@ -222,10 +227,11 @@ def estimate_targets(
                 fallback_sigma = _derive_fallback_sigma(
                     current_premium, stock_price, strike, expiry_years, r, is_call, sigma_fallback,
                 )
-            opt_price = max(0.01, _bs_reprice_or_delta_approx(
+            raw_fallback_price, used_bs_reprice = _bs_reprice_or_delta_approx(
                 t_price, stock_price, strike, dte_at_target, r, fallback_sigma, is_call, current_premium,
-            ))
-            method = PricingMethod.DELTA_APPROX
+            )
+            opt_price = max(0.01, raw_fallback_price)
+            method = PricingMethod.BS_REPRICED if used_bs_reprice else PricingMethod.DELTA_APPROX
 
         # Hard invariant: the *displayed* ladder must be non-decreasing
         # regardless of which pricing path produced each level. A
