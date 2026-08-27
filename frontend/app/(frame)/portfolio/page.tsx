@@ -15,7 +15,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { usePortfolioStore, flushPendingPositionPatches } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
-import { maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize } from '@/lib/risk';
+import { maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw } from '@/lib/risk';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
@@ -1013,7 +1013,7 @@ function MaxLossBanner({
         </Text>
         {sizing && (
           <Text size={10} tone="dim">
-            Risk-derived size: {sizing.recommended} contract{sizing.recommended === 1 ? '' : 's'} ({sizing.raw.toFixed(2)} exact)
+            Risk-derived size: {sizing.recommended} contract{sizing.recommended === 1 ? '' : 's'} ({formatRecommendedContractSizeRaw(sizing.raw)} exact)
           </Text>
         )}
         {!editingOverride ? (

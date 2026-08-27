@@ -10,7 +10,7 @@ import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthC
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
-import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize } from '@/lib/risk';
+import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw } from '@/lib/risk';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -1041,7 +1041,7 @@ export function TradeCard({
                     {recommendedSize && (
                       <Text size={10} tone="dim">
                         Risk-derived size: {recommendedSize.recommended} contract{recommendedSize.recommended === 1 ? '' : 's'}{' '}
-                        ({recommendedSize.raw.toFixed(2)} exact)
+                        ({formatRecommendedContractSizeRaw(recommendedSize.raw)} exact)
                       </Text>
                     )}
                   </div>

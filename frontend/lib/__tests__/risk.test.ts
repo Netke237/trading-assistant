@@ -8,6 +8,7 @@ import {
   maxLossAtStop,
   resolveMaxLossLimitDollar,
   recommendedContractSize,
+  formatRecommendedContractSizeRaw,
 } from '@/lib/risk';
 import type { PortfolioPosition, RiskLimits, TradeCardData, ExitPlan } from '@/types/domain';
 
@@ -278,5 +279,35 @@ describe('recommendedContractSize', () => {
   it('returns null for a non-positive risk per contract (stop reprices at or above entry — no real loss on this leg)', () => {
     expect(recommendedContractSize(1000, 0)).toBeNull();
     expect(recommendedContractSize(1000, -50)).toBeNull();
+  });
+
+  it('does not under-recommend by one contract at an exact-multiple budget corrupted by floating-point subtraction noise', () => {
+    // maxLossAtStop(1.00, 0.41, 1) -> (1.00 - 0.41) * 100 = 59.00000000000001
+    // in IEEE754, not the exact 59. A $118 budget genuinely, exactly affords
+    // 2 contracts at that per-contract risk -- Math.floor(raw) alone would
+    // compute 118 / 59.00000000000001 = 1.9999999999999998 and wrongly floor
+    // to 1.
+    const riskPerContract = maxLossAtStop(1.0, 0.41, 1);
+    expect(riskPerContract).not.toBe(59); // sanity: reproduces the fp noise this guards against
+    const result = recommendedContractSize(118, riskPerContract);
+    expect(result?.recommended).toBe(2);
+  });
+
+  it('still floors a genuinely short budget to the lower count, not nudged up by the noise guard', () => {
+    // 199.50 / 200 = 0.9975 -- really short of 1 contract, not fp noise.
+    expect(recommendedContractSize(199.5, 200)).toEqual({ raw: 0.9975, recommended: 0 });
+  });
+});
+
+describe('formatRecommendedContractSizeRaw', () => {
+  it('truncates rather than rounds, so it never crosses the floor boundary recommended already crossed down', () => {
+    // raw=0.9975 rounds to "1.00" via toFixed(2) alone, contradicting
+    // recommended=0 -- truncation keeps both numbers honest at the boundary.
+    expect(formatRecommendedContractSizeRaw(0.9975)).toBe('0.99');
+  });
+
+  it('formats an ordinary non-boundary decimal the same as toFixed would', () => {
+    expect(formatRecommendedContractSizeRaw(3.71)).toBe('3.71');
+    expect(formatRecommendedContractSizeRaw(25)).toBe('25.00');
   });
 });

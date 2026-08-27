@@ -128,7 +128,18 @@ export function resolveMaxLossLimitDollar(
  *  UI can show "3 contracts (3.71 exact)" rather than just the rounded
  *  number. Returns null when there's no meaningful answer — a non-positive
  *  budget, or a non-positive per-contract risk (the stop reprices at or
- *  above entry premium, i.e. not actually a loss on this leg). */
+ *  above entry premium, i.e. not actually a loss on this leg).
+ *
+ *  `recommended` floors `raw + FLOOR_EPSILON` rather than `raw` directly —
+ *  `riskPerContract` is a subtraction of two dollar floats (entry premium
+ *  minus a repriced stop price, see `maxLossAtStop`), which routinely lands
+ *  a few ULPs off the exact cent value (e.g. 1.00 - 0.41 === 0.5900000000000001
+ *  in IEEE754). At an exact-multiple budget that noise pushes `raw` to
+ *  0.9999999999999999 instead of 1.0, silently under-recommending by a
+ *  whole contract. The epsilon is far too small to change any real,
+ *  intentionally-fractional recommendation. */
+const FLOOR_EPSILON = 1e-9;
+
 export interface RecommendedContractSize {
   raw: number;
   recommended: number;
@@ -140,7 +151,17 @@ export function recommendedContractSize(
 ): RecommendedContractSize | null {
   if (riskBudget <= 0 || riskPerContract <= 0) return null;
   const raw = riskBudget / riskPerContract;
-  return { raw, recommended: Math.floor(raw) };
+  return { raw, recommended: Math.floor(raw + FLOOR_EPSILON) };
+}
+
+/** Formats `recommendedContractSize`'s `raw` decimal for display, truncated
+ *  (not rounded) to 2 places — plain `toFixed(2)` rounds, which can cross
+ *  the same floor boundary `recommended` already floored down from (e.g.
+ *  raw=0.9975 rounds to "1.00" while recommended is 0), producing a
+ *  self-contradictory "0 contracts (1.00 exact)" display. Truncating keeps
+ *  the two numbers consistent at every boundary. */
+export function formatRecommendedContractSizeRaw(raw: number): string {
+  return (Math.floor(raw * 100) / 100).toFixed(2);
 }
 
 export function checkTradeRisk(
