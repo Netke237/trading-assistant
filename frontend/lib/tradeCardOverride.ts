@@ -67,6 +67,14 @@ export function mergePlan(card: OverriddenCard, plan: RecomputedPlanShape): Over
  * `pending` — this is the gate that must block "Send to broker" so an order
  * can never go out carrying an overridden contract whose Entry/Exit/RR still
  * describe the auto-pick.
+ *
+ * Also splices in each card's cached "Compute Exit Plan" result (keyed by
+ * contract, same cache `withCachedEstimate` reads for the single active
+ * TradeCard) — without this, `checkTradeRisk`'s max-loss-per-trade gate
+ * silently never fires for the basket "Send to broker" path: a raw scan
+ * candidate never carries `exit.exitPlan` on its own, only a user's
+ * "Compute Exit Plan" click populates it, and that click's result was never
+ * otherwise reaching the cards this function returns.
  */
 export function resolveBasketCards(
   basket: string[],
@@ -74,6 +82,7 @@ export function resolveBasketCards(
   pickedContracts: Record<string, string>,
   contractsBySymbol: Record<string, OptionContract[]>,
   plansBySymbol: Record<string, PlanEntry>,
+  exitPlanByContract: Record<string, CachedExitPlan> = {},
 ): { cards: TradeCardData[]; pending: boolean } {
   let pending = false;
   const cards: TradeCardData[] = [];
@@ -83,17 +92,26 @@ export function resolveBasketCards(
     const pickedId = pickedContracts[sym];
     const picked = pickedId ? contractsBySymbol[sym]?.find((c) => c.id === pickedId) : undefined;
     const resolved = applyPickedContract(raw, picked);
+    let card: TradeCardData;
     if (!resolved._userOverride) {
-      cards.push(resolved);
-      continue;
-    }
-    const key = contractKeyFor(resolved);
-    const entry = plansBySymbol[sym];
-    if (entry && entry.key === key) {
-      cards.push(mergePlan(resolved, entry.plan));
+      card = resolved;
     } else {
-      pending = true;
+      const key = contractKeyFor(resolved);
+      const entry = plansBySymbol[sym];
+      if (entry && entry.key === key) {
+        card = mergePlan(resolved, entry.plan);
+      } else {
+        pending = true;
+        continue;
+      }
     }
+    const contractKey = contractKeyFor(card);
+    const exitPlanEntry = contractKey ? exitPlanByContract[contractKey] : undefined;
+    // withCachedEstimate MUST run after mergePlan (see its own doc comment) —
+    // mergePlan replaces `exit` wholesale, which would discard the splice if
+    // applied first. Falls back to the unspliced `card` only if the helper
+    // itself somehow returned undefined, which it can't for a defined input.
+    cards.push(withCachedEstimate(card, undefined, undefined, exitPlanEntry) ?? card);
   }
   return { cards, pending };
 }

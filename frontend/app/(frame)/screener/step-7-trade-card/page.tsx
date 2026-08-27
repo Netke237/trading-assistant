@@ -342,8 +342,8 @@ export default function Step7Page() {
   // (resolveBasketCards is the same pure logic exercised directly in
   // lib/__tests__/tradeCardOverride.test.ts.)
   const { cards: basketCards, pending: basketPlansPending } = useMemo(
-    () => resolveBasketCards(basket, cardIndex, pickedContracts, contractsBySymbol, plansBySymbol),
-    [basket, cardIndex, pickedContracts, contractsBySymbol, plansBySymbol],
+    () => resolveBasketCards(basket, cardIndex, pickedContracts, contractsBySymbol, plansBySymbol, exitPlanByContract),
+    [basket, cardIndex, pickedContracts, contractsBySymbol, plansBySymbol, exitPlanByContract],
   );
 
   // Basket symbols (other than the active one, surfaced separately via

@@ -205,6 +205,65 @@ describe('resolveBasketCards', () => {
     expect(cards).toHaveLength(0);
     expect(pending).toBe(false);
   });
+
+  describe('exit-plan splicing (the SendToBrokerDialog max-loss gate integration bug)', () => {
+    // Without this splice, a raw scan candidate never carries exit.exitPlan on
+    // its own — only a user's "Compute Exit Plan" click populates it, cached
+    // separately by contract key — so checkTradeRisk's max_loss_per_trade_exceeded
+    // gate silently never fires for the basket "Send to broker" path even when
+    // the user has looked at and pinned a candidate whose exit plan shows a
+    // loss over the configured limit.
+    const plan: ExitPlan = {
+      computedAt: '2026-08-27T00:00:00.000Z',
+      stop: { price: 294.5, source: 'structural', contractPrice: 11.2, rrModel: 'Heston repriced', structuralSource: 'order_block', structuralConfidence: 71 },
+      targets: [],
+      atr: 5.4,
+    };
+
+    it('splices a cached exit plan into a non-overridden basket card', () => {
+      const exitPlanByContract: Record<string, CachedExitPlan> = { 'AAPL|330|2027-01-15|C': { plan } };
+
+      const { cards } = resolveBasketCards(['AAPL'], cardIndex, {}, {}, {}, exitPlanByContract);
+
+      expect(cards).toHaveLength(1);
+      expect(cards[0].exit.exitPlan).toBe(plan);
+    });
+
+    it('splices the exit plan for the OVERRIDDEN contract, not the auto-pick, and after mergePlan (which replaces exit wholesale)', () => {
+      const picked = makeOption();   // AAPL 375C — overrides the auto-picked 330C
+      const pickedContracts = { AAPL: picked.id };
+      const contractsBySymbol = { AAPL: [picked] };
+      const recomputedPlan = {
+        entry: { limit: 7.47, maxFill: 7.69, orderType: 'Limit' as const },
+        exit: { invalidation: 300.06, premiumStop: 4.48, timeStopDays: 74, target: 344.23, targets: [] },
+        rrRatio: 1.71,
+        rrModel: 'BS repriced (IV-derived)' as const,
+      };
+      const plansBySymbol = { AAPL: { key: 'AAPL|375|2027-01-15|C', plan: recomputedPlan } };
+      // Keyed for the OVERRIDDEN contract (375C) — the auto-pick's key (330C)
+      // must NOT be the one that lands here.
+      const exitPlanByContract: Record<string, CachedExitPlan> = { 'AAPL|375|2027-01-15|C': { plan } };
+
+      const { cards } = resolveBasketCards(['AAPL'], cardIndex, pickedContracts, contractsBySymbol, plansBySymbol, exitPlanByContract);
+
+      expect(cards).toHaveLength(1);
+      expect(cards[0].exit.exitPlan).toBe(plan);
+      expect(cards[0].exit.premiumStop).toBe(4.48);   // mergePlan's fields survived the splice too
+    });
+
+    it('leaves exit.exitPlan absent when nothing is cached for that contract (no exitPlanByContract arg — back-compat default)', () => {
+      const { cards } = resolveBasketCards(['AAPL'], cardIndex, {}, {}, {});
+      expect(cards[0].exit.exitPlan).toBeUndefined();
+    });
+
+    it('does not splice a plan cached under a DIFFERENT contract key', () => {
+      const exitPlanByContract: Record<string, CachedExitPlan> = { 'MSFT|400|2026-09-18|C': { plan } };
+
+      const { cards } = resolveBasketCards(['AAPL'], cardIndex, {}, {}, {}, exitPlanByContract);
+
+      expect(cards[0].exit.exitPlan).toBeUndefined();
+    });
+  });
 });
 
 describe('withCachedEstimate', () => {
