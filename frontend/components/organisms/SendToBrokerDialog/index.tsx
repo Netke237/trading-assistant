@@ -326,8 +326,8 @@ function RiskSummary({
         if (!worst || worst.rc.maxLossLimitDollar == null) return null;
         return (
           <Text size={11} tone="dim">
-            Max loss at stop ({worst.symbol}) ≈ ${Math.round(worst.rc.maxLossAtStop!).toLocaleString()}
-            {' '}(limit ${Math.round(worst.rc.maxLossLimitDollar).toLocaleString()})
+            Max loss at stop ({worst.symbol}) ≈ ${Math.round(worst.rc.maxLossAtStop!).toLocaleString('en-US')}
+            {' '}(limit ${Math.round(worst.rc.maxLossLimitDollar).toLocaleString('en-US')})
           </Text>
         );
       })()}

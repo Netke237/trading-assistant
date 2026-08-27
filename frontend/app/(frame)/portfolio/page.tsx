@@ -1001,14 +1001,14 @@ function MaxLossBanner({
       <div className={styles.targetItem}>
         <div className={styles.targetHeader}>
           <Data size={13} weight={500} tone={exceeded ? 'reject' : 'pass'}>
-            ${Math.round(lossAtStop).toLocaleString()}
+            ${Math.round(lossAtStop).toLocaleString('en-US')}
           </Data>
           <StatusBadge status={exceeded ? 'REJECT' : 'PASS'} />
         </div>
         <Text size={10} tone="dim">
-          Limit ${Math.round(limitDollar).toLocaleString()}
+          Limit ${Math.round(limitDollar).toLocaleString('en-US')}
           {override
-            ? ` (override: ${override.mode === 'percent' ? `${(override.value * 100).toFixed(2)}%` : `$${override.value.toLocaleString()}`})`
+            ? ` (override: ${override.mode === 'percent' ? `${(override.value * 100).toFixed(2)}%` : `$${override.value.toLocaleString('en-US')}`})`
             : ' (account default)'}
         </Text>
         {sizing && (
