@@ -7,6 +7,7 @@ import {
   checkTradeRisk,
   maxLossAtStop,
   resolveMaxLossLimitDollar,
+  recommendedContractSize,
 } from '@/lib/risk';
 import type { PortfolioPosition, RiskLimits, TradeCardData, ExitPlan } from '@/types/domain';
 
@@ -253,5 +254,29 @@ describe('resolveMaxLossLimitDollar', () => {
 
   it('uses a dollar override verbatim, ignoring portfolioValue', () => {
     expect(resolveMaxLossLimitDollar(50000, 0.0375, { mode: 'dollar', value: 300 })).toBe(300);
+  });
+});
+
+describe('recommendedContractSize', () => {
+  it('floors risk budget divided by risk per contract, keeping the raw decimal too', () => {
+    expect(recommendedContractSize(1000, 270)).toEqual({ raw: 1000 / 270, recommended: 3 });
+  });
+
+  it('recommends 0 (not null) when the budget affords less than one contract', () => {
+    expect(recommendedContractSize(100, 270)).toEqual({ raw: 100 / 270, recommended: 0 });
+  });
+
+  it('recommends exactly the whole-number result when it divides evenly', () => {
+    expect(recommendedContractSize(1000, 250)).toEqual({ raw: 4, recommended: 4 });
+  });
+
+  it('returns null for a non-positive risk budget', () => {
+    expect(recommendedContractSize(0, 270)).toBeNull();
+    expect(recommendedContractSize(-100, 270)).toBeNull();
+  });
+
+  it('returns null for a non-positive risk per contract (stop reprices at or above entry — no real loss on this leg)', () => {
+    expect(recommendedContractSize(1000, 0)).toBeNull();
+    expect(recommendedContractSize(1000, -50)).toBeNull();
   });
 });

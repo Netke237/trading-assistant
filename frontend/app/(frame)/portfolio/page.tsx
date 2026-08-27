@@ -15,7 +15,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { usePortfolioStore, flushPendingPositionPatches } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
-import { maxLossAtStop, resolveMaxLossLimitDollar } from '@/lib/risk';
+import { maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize } from '@/lib/risk';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
@@ -982,6 +982,8 @@ function MaxLossBanner({
   const lossAtStop = maxLossAtStop(position.entryPrice, exitPlan.stop.contractPrice, debounced.contracts);
   const limitDollar = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, debounced.override);
   const exceeded = lossAtStop > limitDollar;
+  const riskPerContract = maxLossAtStop(position.entryPrice, exitPlan.stop.contractPrice, 1);
+  const sizing = recommendedContractSize(limitDollar, riskPerContract);
 
   const applyOverride = () => {
     const value = draftMode === 'percent' ? draftValue / 100 : draftValue;
@@ -1009,6 +1011,11 @@ function MaxLossBanner({
             ? ` (override: ${override.mode === 'percent' ? `${(override.value * 100).toFixed(2)}%` : `$${override.value.toLocaleString()}`})`
             : ' (account default)'}
         </Text>
+        {sizing && (
+          <Text size={10} tone="dim">
+            Risk-derived size: {sizing.recommended} contract{sizing.recommended === 1 ? '' : 's'} ({sizing.raw.toFixed(2)} exact)
+          </Text>
+        )}
         {!editingOverride ? (
           <button type="button" className={styles.exitPlanBtn} onClick={() => setEditingOverride(true)}>
             {override ? 'Edit override' : 'Set override'}

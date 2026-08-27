@@ -10,7 +10,8 @@ import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthC
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
-import { capitalAtRisk } from '@/lib/risk';
+import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize } from '@/lib/risk';
+import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
 import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan } from '@/types/domain';
@@ -747,6 +748,21 @@ export function TradeCard({
     [data.contractDetails?.mid, overlay.contracts],
   );
 
+  // Risk-derived contract size: how many contracts the account's max-loss
+  // budget affords at this exit plan's final stop. No per-trade override
+  // exists pre-trade (same reasoning as checkTradeRisk's identical note) —
+  // always the global default. entryPremium intentionally mirrors
+  // checkTradeRisk's basis (cd.mid, a scan-time snapshot) for consistency,
+  // not a fresh quote — see risk.ts's comment on that same tradeoff.
+  const limits = useRiskStore((s) => s.limits);
+  const recommendedSize = useMemo(() => {
+    if (!exitPlan) return null;
+    const entryPremium = data.contractDetails?.mid ?? 0;
+    const riskPerContract = maxLossAtStop(entryPremium, exitPlan.stop.contractPrice, 1);
+    const riskBudget = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct);
+    return recommendedContractSize(riskBudget, riskPerContract);
+  }, [exitPlan, data.contractDetails?.mid, limits.portfolioValue, limits.maxLossPerTradePct]);
+
   const dirty = useMemo(() => isDirty(overlay, data), [overlay, data]);
 
   const editedRR = useMemo(() => {
@@ -1022,6 +1038,12 @@ export function TradeCard({
                       <KV label="Contract price" value={`$${exitPlan.stop.contractPrice.toFixed(2)}`} mono />
                       <KV label="Pricing" value={exitPlan.stop.rrModel} mono />
                     </div>
+                    {recommendedSize && (
+                      <Text size={10} tone="dim">
+                        Risk-derived size: {recommendedSize.recommended} contract{recommendedSize.recommended === 1 ? '' : 's'}{' '}
+                        ({recommendedSize.raw.toFixed(2)} exact)
+                      </Text>
+                    )}
                   </div>
                 </div>
                 {exitPlan.targets.map((t) => (

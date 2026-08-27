@@ -121,6 +121,28 @@ export function resolveMaxLossLimitDollar(
   return portfolioValue * globalPct;
 }
 
+/** Risk-derived contract size: how many whole contracts the given risk
+ *  budget affords at the given per-contract risk (typically the exit-plan
+ *  pipeline's `maxLossAtStop(entryPremium, stop.contractPrice, 1)`), rounded
+ *  down. Returns both the floored recommendation and the raw decimal so the
+ *  UI can show "3 contracts (3.71 exact)" rather than just the rounded
+ *  number. Returns null when there's no meaningful answer — a non-positive
+ *  budget, or a non-positive per-contract risk (the stop reprices at or
+ *  above entry premium, i.e. not actually a loss on this leg). */
+export interface RecommendedContractSize {
+  raw: number;
+  recommended: number;
+}
+
+export function recommendedContractSize(
+  riskBudget: number,
+  riskPerContract: number,
+): RecommendedContractSize | null {
+  if (riskBudget <= 0 || riskPerContract <= 0) return null;
+  const raw = riskBudget / riskPerContract;
+  return { raw, recommended: Math.floor(raw) };
+}
+
 export function checkTradeRisk(
   card: TradeCardData,
   proposedContracts: number,

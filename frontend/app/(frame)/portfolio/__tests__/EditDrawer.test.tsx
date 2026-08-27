@@ -361,4 +361,24 @@ describe('MaxLossBanner', () => {
     render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
     expect(screen.getByText('PASS')).toBeInTheDocument();
   });
+
+  it('shows the risk-derived recommended contract size, floored, next to the exact decimal', () => {
+    // riskPerContract = (10 - 1) * 100 * 1 = $900/contract. limitDollar =
+    // $3,750 (account default) -> 3750 / 900 = 4.1666... contracts -> floors to 4.
+    const position = makeOptionPosition({
+      contract: 'AAPL|220|2026-09-16|C', entryPrice: 10, contracts: 20,
+      exitPlan: { ...baseExitPlan, stop: { ...baseExitPlan.stop, contractPrice: 1 } },
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByText(/Risk-derived size: 4 contracts \(4\.17 exact\)/)).toBeInTheDocument();
+  });
+
+  it('does not show a risk-derived size when the stop reprices at or above entry (no real per-contract loss)', () => {
+    const position = makeOptionPosition({
+      contract: 'AAPL|220|2026-09-16|C', entryPrice: 4.2, contracts: 1,
+      exitPlan: { ...baseExitPlan, stop: { ...baseExitPlan.stop, contractPrice: 5.0 } },
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.queryByText(/Risk-derived size/)).not.toBeInTheDocument();
+  });
 });

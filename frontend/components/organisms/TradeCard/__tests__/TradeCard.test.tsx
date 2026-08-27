@@ -840,6 +840,29 @@ describe('TradeCard', () => {
     );
   });
 
+  it('shows the risk-derived recommended contract size once an exit plan is computed', async () => {
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    // riskPerContract = (mid 2.5 - stop.contractPrice 1.0) * 100 * 1 = $150.
+    // riskBudget (account default) = portfolioValue 100000 * maxLossPerTradePct
+    // 0.0375 = $3,750. 3750 / 150 = 25 exactly.
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop: {
+        price: 180.0, source: 'structural' as const, contractPrice: 1.0,
+        rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+      },
+      targets: [],
+      atr: 3.5,
+    });
+
+    render(<TradeCard data={mockTradeCard} onExitPlanChange={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /compute exit plan/i }));
+
+    expect(await screen.findByText(/Risk-derived size: 25 contracts \(25\.00 exact\)/)).toBeInTheDocument();
+  });
+
   it('never surfaces the previous candidate\'s exit plan under the new contract\'s callback', async () => {
     (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
       stop: { price: 180.0, source: 'structural', contractPrice: 1.2, rrModel: 'Heston repriced', structuralSource: null, structuralConfidence: null },
