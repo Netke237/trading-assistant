@@ -536,7 +536,7 @@ export function EditDrawer({
     invalidation: { probability: number; expectedDays: number | null };
     horizonNote?: string;
     modelCaveat?: string | null;
-    // The price actually sent in the request this result came from
+    // The underlying price actually sent in the request this result came from
     // (position.currentPrice for stocks, position.currentStockPrice for
     // options) — captured at fetch time so we can flag the result as stale
     // if the user edits Current Price afterward without re-running the
@@ -544,6 +544,14 @@ export function EditDrawer({
     // clearing effect above (see that effect's comment) to avoid a third
     // race in this area.
     estimatedAtPrice: number;
+    // Options only: the premium (position.currentPrice) sent as the request's
+    // `premium` field, captured separately from estimatedAtPrice above because
+    // for an option position the shared "Current price" EditField edits the
+    // PREMIUM (position.currentPrice), not the underlying (position.currentStockPrice)
+    // — without tracking this too, editing the premium after an option estimate
+    // would silently leave the stale result displayed with no caution note,
+    // since estimatedAtPrice alone only catches an underlying-price change.
+    estimatedAtPremium?: number;
   } | null>(null);
 
   // Clear a stale Monte Carlo result — and abort an in-flight request — when
@@ -630,6 +638,7 @@ export function EditDrawer({
           targets: res.targets.map((t) => ({ label: `T${Math.round(t.pct * 100)}%`, price: t.stockPrice ?? 0, probability: t.probability, expectedDays: t.expectedDays })),
           invalidation: res.invalidation,
           estimatedAtPrice: position.currentStockPrice,
+          estimatedAtPremium: position.currentPrice,
         });
       }
     } catch (e) {
@@ -654,7 +663,9 @@ export function EditDrawer({
   // Price in this drawer session since the estimate was fetched, so the
   // displayed probabilities were computed against a now-stale price.
   const mcPriceStale = mcResult != null
-    && mcResult.estimatedAtPrice !== (isStock ? position.currentPrice : position.currentStockPrice);
+    && (isStock
+      ? mcResult.estimatedAtPrice !== position.currentPrice
+      : mcResult.estimatedAtPrice !== position.currentStockPrice || mcResult.estimatedAtPremium !== position.currentPrice);
 
   return (
     <div className={styles.editDrawer}>

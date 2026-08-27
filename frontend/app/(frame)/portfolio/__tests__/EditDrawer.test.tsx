@@ -30,7 +30,7 @@ function makeOptionPosition(overrides: Partial<PortfolioPosition> = {}): Portfol
     symbol: 'AAPL', contract: 'AAPL 220C 05/16', direction: 'Bullish',
     entryDate: '2026-08-01', expiry: '2026-09-16', dteRemaining: 20, dteTotal: 30,
     entryPrice: 4.2, currentPrice: 4.5, currentStockPrice: 195,
-    pnlDollar: 30, pnlPct: 7.1, stop: 3.0, targets: [], status: 'PASS',
+    pnlDollar: 30, pnlPct: 7.1, stop: 185, targets: [], status: 'PASS',
     delta: 0.5, contracts: 2, recId: 'REC-2',
     tradeCardSnapshot: { strike: 220, stockBreakdown: { trend: 72 } },
     ...overrides,
@@ -90,7 +90,7 @@ describe('EditDrawer Monte Carlo estimate', () => {
     fireEvent.click(screen.getByText('Estimate'));
     await waitFor(() => expect(api.getFirstPassageEstimate).toHaveBeenCalledWith(expect.objectContaining({
       symbol: 'AAPL', direction: 'Bullish', stock_price: 195, strike: 220,
-      dte: 20, premium: 4.5, delta: 0.5, trend_score: 72, invalidation_price: 3.0,
+      dte: 20, premium: 4.5, delta: 0.5, trend_score: 72, invalidation_price: 185,
       t1_pct: expect.any(Number), t2_pct: expect.any(Number), t3_pct: expect.any(Number),
     }), expect.any(AbortSignal)));
     expect(await screen.findByText('60%')).toBeInTheDocument();
@@ -175,6 +175,27 @@ describe('EditDrawer Monte Carlo estimate', () => {
     expect(await screen.findByText('Price has changed since this estimate was computed.')).toBeInTheDocument();
     // The existing numbers must still be visible — additive warning, not a
     // clear/hide of the result.
+    expect(screen.getByText('60%')).toBeInTheDocument();
+  });
+
+  it('flags an option Monte Carlo result as stale when Current Price (the premium) is edited, even though the underlying price is unchanged', async () => {
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [{ pct: 0.2, stockPrice: 215, optionPrice: 5.4, probability: 0.6, expectedDays: 5 }],
+      invalidation: { probability: 0.10, expectedDays: null },
+    });
+    const onChange = jest.fn();
+    // For an option position, the shared "Current price" EditField edits the
+    // PREMIUM (position.currentPrice), not the underlying (currentStockPrice)
+    // — this must invalidate the estimate too, not just an underlying-price
+    // change, since `premium` is a real input to getFirstPassageEstimate.
+    const { rerender } = render(<EditDrawer position={makeOptionPosition()} onClose={noop} onChange={onChange} onRemove={noop} />);
+    fireEvent.click(screen.getByText('Estimate'));
+    expect(await screen.findByText('60%')).toBeInTheDocument();
+    expect(screen.queryByText('Price has changed since this estimate was computed.')).not.toBeInTheDocument();
+
+    rerender(<EditDrawer position={makeOptionPosition({ currentPrice: 5.0 })} onClose={noop} onChange={onChange} onRemove={noop} />);
+
+    expect(await screen.findByText('Price has changed since this estimate was computed.')).toBeInTheDocument();
     expect(screen.getByText('60%')).toBeInTheDocument();
   });
 

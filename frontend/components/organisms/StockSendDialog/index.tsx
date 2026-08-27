@@ -351,10 +351,13 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
                   ? 'Submitting…'
                   : hasRetryableErrors
                     ? `Retry ${Object.keys(errors).length} failed order${Object.keys(errors).length === 1 ? '' : 's'}`
-                    : hasQueued
-                      ? 'Queued — close to continue'
-                      : hasWarnings
-                        ? 'Placed — close to continue'
+                    // A real broker fill with no local record outranks a
+                    // merely-deferred paper save — a mixed queued+warn state
+                    // must surface the warning, not bury it behind "Queued."
+                    : hasWarnings
+                      ? 'Placed — close to continue'
+                      : hasQueued
+                        ? 'Queued — close to continue'
                         : `Submit ${cards.length} order${cards.length === 1 ? '' : 's'}`}
               </Text>
             </button>
