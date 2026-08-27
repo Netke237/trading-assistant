@@ -135,5 +135,24 @@ class CredentialStore:
             return {k: _mask_dict(dict(v)) for k, v in self._data.items()}
 
 
-_creds_path = Path(os.getenv("BAMENDJOU_CREDS_PATH", str(_DEFAULT_PATH))) if os.getenv("BAMENDJOU_CREDS_PATH") else _DEFAULT_PATH
+# BAMENDJOU_CREDS_PATH selects where this singleton persists to. There are
+# three distinct cases, and the empty one is the reason this is spelled out:
+#   unset     -> the real config/local_credentials.yaml
+#   ""        -> None, i.e. no file persistence at all (save() and load() both
+#                short-circuit on `if not self._path`)
+#   a path    -> that path
+#
+# The empty-string case used to collapse into the default through a falsy
+# check, which did the exact OPPOSITE of what setting it to "" asks for:
+# a caller opting out of persistence got the singleton aimed at the real
+# credentials file, where save() would overwrite the developer's actual broker
+# tokens. Distinguish "unset" from "set to empty" explicitly.
+_env_creds_path = os.getenv("BAMENDJOU_CREDS_PATH")
+if _env_creds_path is None:
+    _creds_path: Path | None = _DEFAULT_PATH
+elif _env_creds_path == "":
+    _creds_path = None
+else:
+    _creds_path = Path(_env_creds_path)
+
 credential_store = CredentialStore(path=_creds_path)
