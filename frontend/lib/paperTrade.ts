@@ -103,10 +103,12 @@ export function invalidTargetRungs(
 // just a baseline. See the plan's "Pristine or edited?" decision.
 export function stockCardSnapshotOf(
   c: PositionCardData,
+  horizon: string,
   edited?: { entry: number; stop: number; targets: number[]; shares: number },
 ): Record<string, unknown> {
   return {
     ...(edited ? { edited } : {}),
+    horizon,
     stock_score: c.stock_score,
     stock_status: c.stock_status,
     strategy: c.strategy,

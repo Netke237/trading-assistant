@@ -6,6 +6,8 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import { stockStatusTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
@@ -42,7 +44,10 @@ export default function Step7PositionCardPage() {
   const [placingType, setPlacingType] = useState<'LMT' | 'MKT' | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const settings = useSettingsStore();
+  const addPosition = usePortfolioStore((s) => s.addPosition);
+  const scanHorizon = useScanStore((s) => s.context?.horizon ?? 'Swing');
 
   const ibkrConfigured = !!settings.ibkrPaper.accountId && !!settings.ibkrPaper.baseUrl;
   const tradierConfigured = !!settings.tradierPaper.token && !!settings.tradierPaper.accountId;
@@ -83,9 +88,10 @@ export default function Step7PositionCardPage() {
   }
 
   async function submit(orderType: 'LMT' | 'MKT') {
-    if (!card || execMode === 'recommendation') return;
+    if (!card || execMode === 'recommendation' || orderId !== null) return;
     setPlacingType(orderType);
     setError(null);
+    setWarning(null);
     try {
       const res = await api.postStockOrder({
         broker: execMode,
@@ -98,6 +104,27 @@ export default function Step7PositionCardPage() {
         tif: 'DAY',
       });
       setOrderId(res.order_id);
+      try {
+        const addRes = await addPosition({
+          ...buildPaperStockPosition(
+            card.symbol, card.strategy.entry_price, card.shares, card.direction as 'Bullish' | 'Bearish',
+            stockCardSnapshotOf(card, scanHorizon),
+            {
+              stop: card.strategy.stop_price,
+              targets: (card.strategy.targets?.length ? card.strategy.targets : [card.strategy.target_price])
+                .map((price) => ({ price })),
+            },
+          ),
+          source: 'broker',
+          sourceLabel: `${execMode} — ${orderType} (ID: ${res.order_id})`,
+          orderedAt: new Date().toISOString(),
+        });
+        if (addRes.status === 'rejected' || addRes.status === 'pending') {
+          setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
+        }
+      } catch {
+        setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
+      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -116,7 +143,7 @@ export default function Step7PositionCardPage() {
         {candidates.map((c, i) => (
           <button key={c.symbol} type="button"
             className={`${styles.navBtn} ${i === selectedIdx ? styles.navBtnActive : ''}`}
-            onClick={() => { setSelectedIdx(i); setOrderId(null); setError(null); }}>
+            onClick={() => { setSelectedIdx(i); setOrderId(null); setError(null); setWarning(null); }}>
             <Data size={12} weight={500}>{c.symbol}</Data>
           </button>
         ))}
@@ -175,11 +202,11 @@ export default function Step7PositionCardPage() {
       {execMode !== 'recommendation' && (
         <div className={styles.actions}>
           <button type="button" className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => submit('LMT')} disabled={placingType !== null}>
+            onClick={() => submit('LMT')} disabled={placingType !== null || orderId !== null}>
             {placingType === 'LMT' ? 'Placing…' : `Place Limit Order @ $${card.strategy.entry_price}`}
           </button>
           <button type="button" className={`${styles.btn} ${styles.btnMarket}`}
-            onClick={() => submit('MKT')} disabled={placingType !== null}>
+            onClick={() => submit('MKT')} disabled={placingType !== null || orderId !== null}>
             {placingType === 'MKT' ? 'Placing…' : 'Right Now — Market Order'}
           </button>
         </div>
@@ -187,6 +214,7 @@ export default function Step7PositionCardPage() {
 
       {orderId && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
       {error && <Text size={12} tone="reject">{error}</Text>}
+      {warning && <Text size={12} tone="caution">{warning}</Text>}
     </div>
   );
 }

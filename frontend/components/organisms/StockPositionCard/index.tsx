@@ -163,6 +163,7 @@ export function StockPositionCard({
     setOverlay(defaultOverlay(card));
     setAdded(false);
     setErr(null);
+    setWarning(null);
     setQueued(false);
     setAdding(false);
     setOrderId(null);
@@ -269,6 +270,7 @@ export function StockPositionCard({
   const [placingType, setPlacingType]   = useState<'LMT' | 'MKT' | null>(null);
   const [orderId, setOrderId]           = useState<string | null>(null);
   const [err, setErr]                   = useState<string | null>(null);
+  const [warning, setWarning]           = useState<string | null>(null);
   const [added, setAdded]               = useState(false);
   const [queued, setQueued]             = useState(false);
   const [adding, setAdding]             = useState(false);
@@ -306,9 +308,10 @@ export function StockPositionCard({
   }, []);
 
   async function submit(orderType: 'LMT' | 'MKT') {
-    if (execMode === 'recommendation') return;
+    if (execMode === 'recommendation' || orderId !== null) return;
     setPlacingType(orderType);
     setErr(null);
+    setWarning(null);
     try {
       const res = await api.postStockOrder({
         broker: execMode,
@@ -321,6 +324,36 @@ export function StockPositionCard({
         tif: 'DAY',
       });
       setOrderId(res.order_id);
+      try {
+        const addRes = await addPosition({
+          ...buildPaperStockPosition(
+            card.symbol, overlay.entry, overlay.shares, card.direction as Direction,
+            stockCardSnapshotOf(card, scanHorizonLabel ?? 'Swing', {
+              entry: overlay.entry,
+              stop: overlay.stop,
+              targets: [overlay.t1, overlay.t2, overlay.t3],
+              shares: overlay.shares,
+            }),
+            {
+              stop: overlay.stop,
+              targets: [
+                { price: overlay.t1, shares: overlay.sharesT1 },
+                { price: overlay.t2, shares: overlay.sharesT2 },
+                { price: overlay.t3, shares: overlay.sharesT3 },
+              ],
+              structuralStop: structural?.price ?? null,
+            },
+          ),
+          source: 'broker',
+          sourceLabel: `${execMode} — ${orderType} (ID: ${res.order_id})`,
+          orderedAt: new Date().toISOString(),
+        });
+        if (addRes.status === 'rejected' || addRes.status === 'pending') {
+          setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
+        }
+      } catch {
+        setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
+      }
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -433,7 +466,7 @@ export function StockPositionCard({
       const res = await addPosition(
         buildPaperStockPosition(
           card.symbol, overlay.entry, overlay.shares, card.direction as Direction,
-          stockCardSnapshotOf(card, {
+          stockCardSnapshotOf(card, scanHorizonLabel ?? 'Swing', {
             entry: overlay.entry,
             stop: overlay.stop,
             targets: [overlay.t1, overlay.t2, overlay.t3],
@@ -737,7 +770,7 @@ export function StockPositionCard({
             type="button"
             className={styles.actionBtn}
             onClick={() => submit('LMT')}
-            disabled={placingType !== null}
+            disabled={placingType !== null || orderId !== null}
           >
             <Text size={12}>{placingType === 'LMT' ? 'Placing…' : `Limit @ $${overlay.entry.toFixed(2)}`}</Text>
           </button>
@@ -745,7 +778,7 @@ export function StockPositionCard({
             type="button"
             className={styles.actionBtn}
             onClick={() => submit('MKT')}
-            disabled={placingType !== null}
+            disabled={placingType !== null || orderId !== null}
           >
             <Text size={12}>{placingType === 'MKT' ? 'Placing…' : 'Market Order'}</Text>
           </button>
@@ -755,6 +788,7 @@ export function StockPositionCard({
       {/* Section 6 — Order result / error */}
       {orderId && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
       {err      && <Text size={12} tone="reject">{err}</Text>}
+      {warning  && <Text size={12} tone="caution">{warning}</Text>}
       {queued   && <Text size={12} tone="caution">Queued — backend unreachable, will sync automatically.</Text>}
 
       {/* Section 7 — Auto-trade arm */}

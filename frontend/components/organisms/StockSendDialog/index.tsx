@@ -5,6 +5,7 @@ import { Text } from '@/components/primitives/Text';
 import { Data } from '@/components/primitives/Data';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
+import { useScanStore } from '@/lib/scanStore';
 import { buildPaperStockPosition, stockCardSnapshotOf } from '@/lib/paperTrade';
 import { api } from '@/lib/api';
 import type { PositionCardData } from '@/types/stockDomain';
@@ -53,6 +54,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [queued, setQueued] = useState<Record<string, string>>({});
+  const [warnings, setWarnings] = useState<Record<string, string>>({});
   const [hasSubmittedOnce, setHasSubmittedOnce] = useState(false);
   const [alpacaConfigured, setAlpacaConfigured] = useState(false);
   const [tastytradeConfigured, setTastytradeConfigured] = useState(false);
@@ -60,6 +62,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   const addPosition  = usePortfolioStore((s) => s.addPosition);
   const ibkrPaper    = useSettingsStore((s) => s.ibkrPaper);
   const tradierPaper = useSettingsStore((s) => s.tradierPaper);
+  const scanHorizon = useScanStore((s) => s.context?.horizon ?? 'Swing');
 
   const ibkrConfigured    = !!ibkrPaper.accountId && !!ibkrPaper.baseUrl;
   const tradierConfigured = !!tradierPaper.token && !!tradierPaper.accountId;
@@ -112,6 +115,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     // unconfirmed, and the dialog reports the FULL basket (including the
     // still-unconfirmed queued symbol) as placed via onSubmit.
     const q: Record<string, string> = hasSubmittedOnce ? { ...queued } : {};
+    const warn: Record<string, string> = hasSubmittedOnce ? { ...warnings } : {};
     for (const c of targets) {
       const r = rows[c.symbol] ?? { shares: c.shares, autoSend: true };
       if (!r.autoSend) {
@@ -119,15 +123,20 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
         const res = await addPosition(
           buildPaperStockPosition(
             c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
-            stockCardSnapshotOf(c), pristineLevels(c),
+            stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
           ),
         );
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
         else if (res.status === 'pending') q[c.symbol] = 'queued — backend unreachable, will sync';
       } else if (broker !== 'recommendation') {
-        // Auto-send → broker
+        // Auto-send → broker, then mirror the fill into the local portfolio
+        // (same pattern as the manual branch just above) so this position
+        // carries a tradeCardSnapshot and real stop/target too — without
+        // this, a broker-executed stock position has no local record at all
+        // and the Portfolio EditDrawer's Monte Carlo estimate has nothing to
+        // work from.
         try {
-          await api.postStockOrder({
+          const res = await api.postStockOrder({
             broker,
             symbol: c.symbol,
             action: c.direction === 'Bullish' ? 'BUY' : 'SELL',
@@ -137,6 +146,26 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
             limit_price: c.strategy.entry_price,
             tif: 'DAY',
           });
+          // The broker order has ALREADY succeeded at this point — a failure
+          // below must never be written to `errs`/`q` (those drive the retry
+          // set; retrying here would resubmit an already-filled order). It's
+          // tracked in `warn` instead, purely informational.
+          try {
+            const addRes = await addPosition({
+              ...buildPaperStockPosition(
+                c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
+                stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
+              ),
+              source: 'broker',
+              sourceLabel: `${broker} — Limit (ID: ${res.order_id})`,
+              orderedAt: new Date().toISOString(),
+            });
+            if (addRes.status === 'rejected' || addRes.status === 'pending') {
+              warn[c.symbol] = 'Order placed but not yet tracked in Portfolio — check there directly.';
+            }
+          } catch {
+            warn[c.symbol] = 'Order placed but not yet tracked in Portfolio — check there directly.';
+          }
         } catch (e) {
           errs[c.symbol] = String(e);
         }
@@ -145,7 +174,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
         const res = await addPosition(
           buildPaperStockPosition(
             c.symbol, c.strategy.entry_price, r.shares, c.direction as Direction,
-            stockCardSnapshotOf(c), pristineLevels(c),
+            stockCardSnapshotOf(c, scanHorizon), pristineLevels(c),
           ),
         );
         if (res.status === 'rejected') errs[c.symbol] = res.detail ?? 'not saved';
@@ -156,10 +185,12 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
     setSubmitting(false);
     setErrors(errs);
     setQueued(q);
+    setWarnings(warn);
 
     // Stay open on ANY unconfirmed row — hard rejections (red) OR queued/pending
-    // (caution). Only a fully-confirmed submit advances to onSubmit + close.
-    if (Object.keys(errs).length > 0 || Object.keys(q).length > 0) return;
+    // (caution) OR a warn-only outcome (broker order placed but local tracking
+    // failed). Only a fully-confirmed submit advances to onSubmit + close.
+    if (Object.keys(errs).length > 0 || Object.keys(q).length > 0 || Object.keys(warn).length > 0) return;
 
     // All symbols (across this attempt and any prior successful ones) are
     // now placed. Report the full original card set/shares to the caller,
@@ -181,6 +212,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   // nothing left to retry.
   const hasQueued = Object.keys(queued).length > 0;
   const hasRetryableErrors = Object.keys(errors).length > 0;
+  const hasWarnings = Object.keys(warnings).length > 0;
 
   const brokerOptions: Array<[BrokerMode, string, boolean]> = [
     ['recommendation', 'Recommendation', true],
@@ -289,6 +321,11 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
                     <Text size={11} tone="caution">{queued[c.symbol]}</Text>
                   </span>
                 )}
+                {warnings[c.symbol] && !hasErr && !isQueued && (
+                  <span className={styles.errCell}>
+                    <Text size={11} tone="caution">{warnings[c.symbol]}</Text>
+                  </span>
+                )}
               </div>
             );
           })}
@@ -307,7 +344,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={submit}
-              disabled={cards.length === 0 || submitting || (hasQueued && !hasRetryableErrors)}
+              disabled={cards.length === 0 || submitting || (hasQueued && !hasRetryableErrors) || (hasWarnings && !hasRetryableErrors && !hasQueued)}
             >
               <Text size={13}>
                 {submitting
@@ -316,7 +353,9 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
                     ? `Retry ${Object.keys(errors).length} failed order${Object.keys(errors).length === 1 ? '' : 's'}`
                     : hasQueued
                       ? 'Queued — close to continue'
-                      : `Submit ${cards.length} order${cards.length === 1 ? '' : 's'}`}
+                      : hasWarnings
+                        ? 'Placed — close to continue'
+                        : `Submit ${cards.length} order${cards.length === 1 ? '' : 's'}`}
               </Text>
             </button>
           </div>

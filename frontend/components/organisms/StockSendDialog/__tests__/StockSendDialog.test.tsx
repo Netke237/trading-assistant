@@ -38,6 +38,12 @@ function makeCard(symbol: string): PositionCardData {
 }
 
 describe('StockSendDialog — partial basket failure retry', () => {
+  const realAddPosition = usePortfolioStore.getState().addPosition;
+
+  afterEach(() => {
+    usePortfolioStore.setState({ addPosition: realAddPosition });
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     act(() => {
@@ -49,6 +55,7 @@ describe('StockSendDialog — partial basket failure retry', () => {
   });
 
   it('only resubmits symbols that failed on the previous attempt', async () => {
+    usePortfolioStore.setState({ addPosition: jest.fn().mockResolvedValue({ ok: true, status: 'ok' as const }) });
     const cards = [makeCard('AAPL'), makeCard('MSFT'), makeCard('NVDA')];
     const onSubmit = jest.fn();
 
@@ -149,5 +156,49 @@ describe('StockSendDialog — partial basket failure retry', () => {
     expect(screen.queryByText(/broker rejected/i)).not.toBeInTheDocument();
 
     global.fetch = originalFetch;
+  });
+
+  it('creates a local position with a snapshot after a successful auto-send broker order', async () => {
+    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1', status: 'filled', broker: 'ibkr_paper' });
+    const addPosition = jest.fn().mockResolvedValue({ status: 'ok' });
+    usePortfolioStore.setState({ addPosition } as any);
+
+    render(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
+    fireEvent.click(screen.getByText('IBKR Paper'));
+    fireEvent.click(screen.getByText(/Submit 1 order/));
+
+    await waitFor(() => expect(addPosition).toHaveBeenCalled());
+    const created = addPosition.mock.calls[0][0];
+    expect(created.source).toBe('broker');
+    expect(created.tradeCardSnapshot).toBeDefined();
+    expect(created.tradeCardSnapshot.strategy.strategy).toBe('pullback_ema');
+    expect(created.stop).toBe(95);
+  });
+
+  it('does NOT re-submit the broker order on retry when the order succeeded but local tracking failed', async () => {
+    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-2', status: 'filled', broker: 'ibkr_paper' });
+    const addPosition = jest.fn().mockResolvedValueOnce({ status: 'rejected', detail: 'exposure limit' });
+    usePortfolioStore.setState({ addPosition } as any);
+
+    render(<StockSendDialog cards={[makeCard('AAPL')]} onClose={jest.fn()} onSubmit={jest.fn()} />);
+    fireEvent.click(screen.getByText('IBKR Paper'));
+    fireEvent.click(screen.getByText(/Submit 1 order/));
+    await waitFor(() => expect(api.postStockOrder).toHaveBeenCalledTimes(1));
+
+    // A local-tracking failure must not put the symbol back in the retryable
+    // error set — `errors`/`queued` are both still empty, only `warnings` is
+    // set. The button reflects this: it relabels to "Placed — close to
+    // continue" and becomes disabled (the same treatment `hasQueued` already
+    // gets), so there is nothing left to click that could re-fire the broker
+    // order — a stronger guarantee than relying solely on the retry-target
+    // filter (`errors`-only) to make a stray click safe.
+    const btn = await screen.findByRole('button', { name: /Placed — close to continue/ });
+    expect(btn).toBeDisabled();
+    expect(api.postStockOrder).toHaveBeenCalledTimes(1);
+
+    // The failure must still be VISIBLE — silently swallowing it (computing
+    // `warn` and never rendering it) would mean a real broker order succeeds
+    // with zero local record and zero indication anything needs attention.
+    expect(await screen.findByText(/not yet tracked in Portfolio/)).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
-import { buildPaperStockPosition, stockPositionLevels, invalidTargetRungs } from './paperTrade';
+import { buildPaperStockPosition, stockPositionLevels, invalidTargetRungs, stockCardSnapshotOf } from './paperTrade';
+import type { PositionCardData } from '@/types/stockDomain';
 
 describe('buildPaperStockPosition', () => {
   it('creates a long underlying position tagged as paper stock', () => {
@@ -118,5 +119,37 @@ describe('invalidTargetRungs', () => {
     const { targets: kept } = stockPositionLevels(100, 'Bullish', 95, targets);
     expect(bad).toEqual([95]);
     expect(kept.map((t) => t.stockPrice)).toEqual([105, 110]);
+  });
+});
+
+describe('stockCardSnapshotOf', () => {
+  function makeCard(overrides: Partial<PositionCardData> = {}): PositionCardData {
+    return {
+      symbol: 'AAPL', company: 'Apple Inc.', price: 190, direction: 'Bullish',
+      strategy: {
+        strategy: 'pullback_ema', entry_price: 190, stop_price: 182,
+        target_price: 205, rr_ratio: 1.9, atr: 3.2, detail: {},
+      },
+      backtest: {
+        n_trades: 40, win_rate: 0.55, total_return_pct: 12, max_drawdown_pct: 8,
+        expectancy: 0.4, sharpe: 1.1, confidence: 70, passes_gate: true, summary_text: 'ok',
+      },
+      stock_score: 78, stock_status: 'PASS', shares: 10, dollar_risk: 80, dollar_size: 1900,
+      confidence: 70, confidence_text: 'Solid',
+      ...overrides,
+    };
+  }
+
+  it('includes the horizon label passed in', () => {
+    const snap = stockCardSnapshotOf(makeCard(), 'Swing (5–15d)');
+    expect(snap.horizon).toBe('Swing (5–15d)');
+    expect(snap.stock_score).toBe(78);
+  });
+
+  it('still carries the edited overlay when one is passed', () => {
+    const snap = stockCardSnapshotOf(makeCard(), 'Swing (5–15d)', {
+      entry: 191, stop: 183, targets: [206, 212, 218], shares: 12,
+    });
+    expect(snap.edited).toEqual({ entry: 191, stop: 183, targets: [206, 212, 218], shares: 12 });
   });
 });
