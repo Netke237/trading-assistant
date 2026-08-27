@@ -1,7 +1,30 @@
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { SendToBrokerDialog } from '@/components/organisms/SendToBrokerDialog';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useRiskStore } from '@/lib/riskStore';
 import type { TradeCardData } from '@/types/domain';
+
+// Reset the real (unmocked) stores this dialog reads from — same convention
+// as StockSendDialog.test.tsx — so an empty portfolio and the account
+// default risk limits are guaranteed regardless of test run order or what
+// another suite may have left in them.
+beforeEach(() => {
+  act(() => {
+    usePortfolioStore.setState({ positions: [] });
+    useRiskStore.setState({
+      limits: {
+        maxSingleTradeExposurePct: 0.05,
+        maxTotalExposurePct: 0.25,
+        maxConcurrentPositions: 10,
+        maxDailyRecommendations: 5,
+        portfolioValue: 100000,
+        maxLossPerTradePct: 0.0375,
+      },
+      dailyRecommendations: 0,
+    });
+  });
+});
 
 function makeCard(overrides: Partial<TradeCardData> & { symbol: string }): TradeCardData {
   return {
@@ -44,23 +67,40 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
   const noop = () => {};
 
   it('names the symbol with the largest loss at stop across the basket, not the first one pinned', () => {
-    // Both exceed the $3,750 default limit (portfolioValue 100000 *
-    // maxLossPerTradePct 0.0375), but BBB's is far worse. AAA is pinned
-    // first in the basket — the detail line must still name BBB.
+    // Both cards share the same mid (50) and 1 contract, so
+    // capitalAtRisk/exposure is identical and at the maxSingleTradeExposurePct
+    // boundary (5000/100000 = 5%, not > 0.05) for both — the only gate either
+    // trips is max_loss_per_trade_exceeded, isolating exactly the behavior
+    // under test. They differ only in the exit-plan stop's contract price,
+    // which is what makes AAA's and BBB's loss at stop differ. AAA is pinned
+    // first in the basket — the detail line must still name BBB, the worse
+    // of the two, not the first match in insertion order.
     const aaa = makeCard({
       symbol: 'AAA',
-      contractDetails: { strike: 100, expiry: '2026-05-15', right: 'C', mid: 50, delta: 0.45, theta: -0.09, ivRank: 45, dte: 24 },
-      // lossAtStop = (50 - 1) * 100 * 1 = $4,900
+      exit: {
+        invalidation: 90, premiumStop: 40, timeStopDays: 10, target: 130, targets: [],
+        exitPlan: {
+          computedAt: '2026-08-27T00:00:00.000Z',
+          stop: {
+            price: 90, source: 'structural', contractPrice: 10,
+            rrModel: 'BS repriced (IV-derived)', structuralSource: 'swing_low', structuralConfidence: 0.8,
+          },
+          targets: [],
+          atr: 3,
+        },
+      },
+      // lossAtStop = (50 - 10) * 100 * 1 = $4,000
     });
     const bbb = makeCard({
       symbol: 'BBB',
-      contractDetails: { strike: 100, expiry: '2026-05-15', right: 'C', mid: 100, delta: 0.45, theta: -0.09, ivRank: 45, dte: 24 },
-      // lossAtStop = (100 - 1) * 100 * 1 = $9,900
+      // exit.exitPlan.stop.contractPrice: 1 (from makeCard's default)
+      // lossAtStop = (50 - 1) * 100 * 1 = $4,900
     });
 
     render(<SendToBrokerDialog cards={[aaa, bbb]} onClose={noop} onSubmit={noop} />);
 
-    expect(screen.getByText(/Max loss at stop \(BBB\) ≈ \$9,900 \(limit \$3,750\)/)).toBeInTheDocument();
+    expect(screen.queryByText('Single trade exposure too high')).not.toBeInTheDocument();
+    expect(screen.getByText(/Max loss at stop \(BBB\) ≈ \$4,900 \(limit \$3,750\)/)).toBeInTheDocument();
     expect(screen.queryByText(/Max loss at stop \(AAA\)/)).not.toBeInTheDocument();
   });
 
