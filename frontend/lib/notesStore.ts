@@ -17,9 +17,17 @@ import { api } from '@/lib/api';
 
 export interface NoteEntry {
   body: string;
+  /** True once this entry holds a confirmed value — either a successful GET,
+   *  or a local edit the user has made since. SymbolNotes refuses to render
+   *  an editable textarea until this is true, specifically so a failed GET
+   *  can never be mistaken for "no note exists yet" and silently overwritten
+   *  by a fresh (actually blank) edit. */
   loaded: boolean;
   saving: boolean;
+  /** Most recent save attempt failed. */
   error: boolean;
+  /** Most recent load attempt failed and no confirmed value is held yet. */
+  loadError: boolean;
 }
 
 interface NotesState {
@@ -30,6 +38,10 @@ interface NotesState {
 
 const NOTE_SAVE_DEBOUNCE_MS = 600;
 const _pendingSaves = new Map<string, ReturnType<typeof setTimeout>>();
+// Dedupes concurrent fetchNote calls for the same symbol (e.g. two surfaces
+// mounting for the same symbol in the same tick) — without this, both would
+// fire their own GET.
+const _inFlightFetches = new Set<string>();
 
 function _save(symbol: string, body: string): void {
   api.putSymbolNote(symbol, body)
@@ -45,7 +57,11 @@ function _save(symbol: string, body: string): void {
     .catch(() => {
       useNotesStore.setState((s) => {
         const cur = s.notes[symbol];
-        if (!cur) return s;
+        // Same staleness check as the success path — if a newer edit already
+        // landed (and its own save already succeeded or is in flight), this
+        // stale failure must not stamp an `error` onto content that is, as
+        // far as the user can tell, already saved.
+        if (!cur || cur.body !== body) return s;
         return { notes: { ...s.notes, [symbol]: { ...cur, saving: false, error: true } } };
       });
     });
@@ -56,21 +72,32 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
 
   fetchNote: async (symbolRaw) => {
     const symbol = symbolRaw.trim().toUpperCase();
-    if (!symbol || get().notes[symbol]) return;
+    if (!symbol) return;
+    // Already have a confirmed value (a prior successful GET, or the user
+    // has since typed something) — nothing to fetch. Deliberately NOT keyed
+    // on "does an entry exist at all": a failed load also leaves an entry
+    // behind (loaded: false, loadError: true) precisely so this guard lets
+    // a retry — the next mount, or an explicit re-call — go through instead
+    // of permanently caching the failure.
+    if (get().notes[symbol]?.loaded) return;
+    if (_inFlightFetches.has(symbol)) return;
+    _inFlightFetches.add(symbol);
     try {
       const res = await api.getSymbolNote(symbol);
       set((s) => {
-        // The user may have already started typing (setNoteBody creates an
-        // entry synchronously) while this fetch was in flight — never let a
-        // late GET clobber a local edit.
-        if (s.notes[symbol]) return s;
-        return { notes: { ...s.notes, [symbol]: { body: res.body, loaded: true, saving: false, error: false } } };
+        // The user may have already started typing (setNoteBody sets
+        // loaded: true synchronously) while this fetch was in flight —
+        // never let a late GET clobber a local edit.
+        if (s.notes[symbol]?.loaded) return s;
+        return { notes: { ...s.notes, [symbol]: { body: res.body, loaded: true, saving: false, error: false, loadError: false } } };
       });
     } catch {
       set((s) => {
-        if (s.notes[symbol]) return s;
-        return { notes: { ...s.notes, [symbol]: { body: '', loaded: true, saving: false, error: true } } };
+        if (s.notes[symbol]?.loaded) return s;
+        return { notes: { ...s.notes, [symbol]: { body: '', loaded: false, saving: false, error: false, loadError: true } } };
       });
+    } finally {
+      _inFlightFetches.delete(symbol);
     }
   },
 
@@ -78,7 +105,7 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
     const symbol = symbolRaw.trim().toUpperCase();
     if (!symbol) return;
     set((s) => ({
-      notes: { ...s.notes, [symbol]: { body, loaded: true, saving: true, error: false } },
+      notes: { ...s.notes, [symbol]: { body, loaded: true, saving: true, error: false, loadError: false } },
     }));
     const existing = _pendingSaves.get(symbol);
     if (existing) clearTimeout(existing);

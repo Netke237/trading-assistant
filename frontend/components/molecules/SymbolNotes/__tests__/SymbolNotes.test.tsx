@@ -47,4 +47,29 @@ describe('SymbolNotes', () => {
     expect(textarea).toHaveValue('new note');
     await waitFor(() => expect(mockPut).toHaveBeenCalledWith('AAPL', 'new note'));
   });
+
+  it('shows a retry state instead of a blank editable textarea when the load fails', async () => {
+    mockGet.mockReset();
+    mockGet.mockRejectedValueOnce(new Error('network down'));
+    render(<SymbolNotes symbol="AAPL" editable />);
+
+    await screen.findByText(/couldn't load this note/i);
+    // Critically, no textarea is offered — typing here would silently
+    // overwrite a note we never actually saw.
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('retry button re-fetches and then reveals the real note for editing', async () => {
+    mockGet.mockReset();
+    mockGet.mockRejectedValueOnce(new Error('network down'));
+    render(<SymbolNotes symbol="AAPL" editable />);
+    const retryBtn = await screen.findByRole('button', { name: /retry/i });
+
+    mockGet.mockResolvedValueOnce({ symbol: 'AAPL', body: 'the real note', updatedAt: '2026-08-01T00:00:00Z' });
+    fireEvent.click(retryBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox')).toHaveValue('the real note');
+    });
+  });
 });

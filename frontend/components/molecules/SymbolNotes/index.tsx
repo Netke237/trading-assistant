@@ -41,6 +41,21 @@ export function SymbolNotes({ symbol, editable }: { symbol: string; editable: bo
     );
   }
 
+  // A failed load must never fall through to a blank, editable textarea —
+  // that would look exactly like "no note exists yet" and a save while in
+  // this state would silently overwrite whatever note actually exists on
+  // the backend. Block editing until a load actually succeeds.
+  if (note?.loadError && !note.loaded) {
+    return (
+      <div className={styles.placeholder}>
+        <Text size={11} tone="reject">Couldn&apos;t load this note.</Text>
+        <button type="button" className={styles.retryBtn} onClick={() => fetchNote(sym)}>
+          <Text size={11} weight={500}>Retry</Text>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.wrap}>
       <textarea

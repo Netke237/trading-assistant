@@ -15,7 +15,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { SymbolNotes } from '@/components/molecules/SymbolNotes';
-import { flushPendingPositionPatches } from '@/lib/portfolioStore';
+import { flushPendingPositionPatches, useIsSymbolHeld } from '@/lib/portfolioStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw } from '@/lib/risk';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -62,6 +63,13 @@ export function EditDrawer({
   useEffect(() => {
     return () => { flushPendingPositionPatches(position.recId); };
   }, [position.recId]);
+
+  // Computed, not assumed: this drawer only ever renders for a position
+  // still present in `positions`, so `isHeld` is always true here — but
+  // deriving it from the same gate the Chart sidebar uses (rather than
+  // hardcoding `editable`) keeps all three note surfaces honoring one rule.
+  const isHeld = useIsSymbolHeld(position.symbol);
+  const isWatched = useWatchlistStore((s) => s.isWatched(position.symbol));
 
   const isStock = position.contract.endsWith('|STOCK');
   const snapshot = position.tradeCardSnapshot ?? {};
@@ -385,7 +393,7 @@ export function EditDrawer({
 
       <div className={styles.targetEditor}>
         <Text size={11} tone="secondary">Notes</Text>
-        <SymbolNotes symbol={position.symbol} editable />
+        <SymbolNotes symbol={position.symbol} editable={isHeld || isWatched} />
       </div>
 
       <div className={styles.editFooter}>

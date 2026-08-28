@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -49,13 +50,31 @@ async def get_note(symbol: str, db: AsyncSession = Depends(get_db)) -> dict:
 async def upsert_note(symbol: str, body: NoteIn, db: AsyncSession = Depends(get_db)) -> dict:
     """Create or overwrite the note for a symbol (upsert)."""
     sym = symbol.upper()
+    now = datetime.now(timezone.utc)
     row = await db.get(SymbolNoteModel, sym)
     if row is None:
-        row = SymbolNoteModel(symbol=sym, body=body.body, updated_at=datetime.now(timezone.utc))
+        row = SymbolNoteModel(symbol=sym, body=body.body, updated_at=now)
         db.add(row)
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Concurrent duplicate: two PUTs for a symbol with no existing row
+            # both pass the `db.get()` check above and both attempt an INSERT
+            # — the loser trips the primary-key uniqueness constraint. Unlike
+            # a POST, this is a benign race for an upsert (both calls just
+            # want *some* value saved), so retry as the UPDATE it should have
+            # been instead of surfacing a raw 500 for what the client sees as
+            # a normal debounced save.
+            await db.rollback()
+            row = await db.get(SymbolNoteModel, sym)
+            if row is None:
+                raise
+            row.body = body.body
+            row.updated_at = now
+            await db.commit()
     else:
         row.body = body.body
-        row.updated_at = datetime.now(timezone.utc)
-    await db.commit()
+        row.updated_at = now
+        await db.commit()
     await db.refresh(row)
     return _row_to_dict(row)

@@ -111,4 +111,68 @@ describe('notesStore', () => {
     flushPendingNoteSave('IBM');
     expect(mockPut).not.toHaveBeenCalled();
   });
+
+  it('a failed GET marks loadError without pretending the note is loaded/empty', async () => {
+    mockGet.mockRejectedValueOnce(new Error('network down'));
+
+    await act(async () => { await useNotesStore.getState().fetchNote('SPY'); });
+
+    expect(useNotesStore.getState().notes['SPY']).toMatchObject({
+      loaded: false,
+      loadError: true,
+    });
+  });
+
+  it('a failed GET can be retried and does not permanently block re-fetching', async () => {
+    mockGet.mockRejectedValueOnce(new Error('network down'));
+    await act(async () => { await useNotesStore.getState().fetchNote('QQQ'); });
+    expect(useNotesStore.getState().notes['QQQ'].loadError).toBe(true);
+
+    mockGet.mockResolvedValueOnce({ symbol: 'QQQ', body: 'real note', updatedAt: '2026-08-01T00:00:00Z' });
+    await act(async () => { await useNotesStore.getState().fetchNote('QQQ'); });
+
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(useNotesStore.getState().notes['QQQ']).toMatchObject({
+      body: 'real note',
+      loaded: true,
+      loadError: false,
+    });
+  });
+
+  it('does not double-fetch when two callers request the same symbol concurrently', async () => {
+    let resolveGet: (v: unknown) => void = () => {};
+    mockGet.mockReturnValueOnce(new Promise((resolve) => { resolveGet = resolve; }));
+
+    const p1 = useNotesStore.getState().fetchNote('AMZN');
+    const p2 = useNotesStore.getState().fetchNote('AMZN');
+
+    await act(async () => {
+      resolveGet({ symbol: 'AMZN', body: 'note', updatedAt: null });
+      await Promise.all([p1, p2]);
+    });
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not stamp a stale save-error onto a note a newer edit has already saved', async () => {
+    // First edit's PUT will be slow and eventually fail.
+    let rejectFirst: (e: unknown) => void = () => {};
+    mockPut.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject; }));
+
+    act(() => { useNotesStore.getState().setNoteBody('COIN', 'first draft'); });
+    await act(async () => { jest.advanceTimersByTime(600); }); // fires the first (slow) PUT
+
+    // A newer edit supersedes it and its PUT resolves successfully first.
+    mockPut.mockResolvedValueOnce({ symbol: 'COIN', body: 'final version', updatedAt: '2026-08-28T00:00:00Z' });
+    act(() => { useNotesStore.getState().setNoteBody('COIN', 'final version'); });
+    await act(async () => { jest.advanceTimersByTime(600); }); // fires + resolves the second PUT
+
+    expect(useNotesStore.getState().notes['COIN']).toMatchObject({ body: 'final version', saving: false, error: false });
+
+    // The first (stale) PUT now rejects — it must not retroactively mark
+    // today's already-saved content as errored.
+    await act(async () => { rejectFirst(new Error('stale request finally failed')); });
+
+    expect(useNotesStore.getState().notes['COIN']).toMatchObject({ body: 'final version', saving: false, error: false });
+  });
 });

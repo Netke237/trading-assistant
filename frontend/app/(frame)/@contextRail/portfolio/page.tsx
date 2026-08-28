@@ -4,8 +4,9 @@
 
 'use client';
 
-import { usePortfolioStore } from '@/lib/portfolioStore';
+import { usePortfolioStore, useIsSymbolHeld } from '@/lib/portfolioStore';
 import { usePortfolioUiStore } from '@/lib/portfolioUiStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
 import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { SymbolNotes } from '@/components/molecules/SymbolNotes';
@@ -15,6 +16,15 @@ import styles from './page.module.css';
 export default function PortfolioContextRail() {
   const positions = usePortfolioStore((s) => s.positions);
   const selectedSymbol = usePortfolioUiStore((s) => s.selectedSymbol);
+  // `selectedSymbol` tracks whichever row's pencil icon was last clicked and
+  // is only cleared by this page's own close/remove/unmount handlers — an
+  // out-of-band close (another tab, a stop-triggered close reconciled by the
+  // 30s portfolio poll) can leave it pointing at a symbol no longer held.
+  // Computing `editable` for real (instead of assuming "selected means
+  // held") is what actually re-gates the note box in that case, same as the
+  // Chart sidebar and EditDrawer.
+  const isHeld = useIsSymbolHeld(selectedSymbol ?? '');
+  const isWatched = useWatchlistStore((s) => (selectedSymbol ? s.isWatched(selectedSymbol) : false));
   const deployed = positions.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
   const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
   const hasGreeks = positions.some((p) => p.delta != null || p.theta != null);
@@ -49,7 +59,7 @@ export default function PortfolioContextRail() {
 
       {selectedSymbol && (
         <RailSection title={`Notes · ${selectedSymbol}`}>
-          <SymbolNotes symbol={selectedSymbol} editable />
+          <SymbolNotes symbol={selectedSymbol} editable={isHeld || isWatched} />
         </RailSection>
       )}
 
