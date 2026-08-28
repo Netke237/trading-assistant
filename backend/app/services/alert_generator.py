@@ -308,7 +308,7 @@ async def generate_alerts(
                 id=f"a{counter}",
                 kind="Critical",
                 symbol=symbol,
-                reason=f"Premium stop — {symbol} option at ${opt_price:.2f}",
+                reason=f"Premium stop — {symbol} {'stock' if pos.contract.endswith('|STOCK') else 'option'} at ${opt_price:.2f}",
                 timestamp=now_iso,
                 recId=pos.rec_id,
                 alertType="PREMIUM_STOP",

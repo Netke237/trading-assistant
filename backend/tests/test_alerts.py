@@ -203,6 +203,28 @@ async def test_premium_stop_does_not_fire_before_threshold(db_session):
     assert len(prem_alerts) == 0
 
 
+# ── Test 3c: PREMIUM_STOP on a stock position says "stock", not "option" ───────
+# Round-6 re-audit finding: the reason string was hardcoded to "option at $X.XX"
+# regardless of contract shape, unlike the frontend's alertFiresAgainst (which
+# already branches on `position.contract.endsWith('|STOCK')`). A stock position
+# breaching its premium stop must not claim the user holds an option.
+
+@pytest.mark.asyncio
+async def test_premium_stop_stock_position_says_stock_not_option(db_session):
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(
+        db_session, symbol="XYZ", contract="XYZ|STOCK", entry_price=100.0,
+        stop=None, targets=[],
+    )
+    prices = {"XYZ": 90.0}
+    opt_prices = {"XYZ|STOCK": 35.0}  # 35 <= 100 * (1 - 0.60) = 40 -- lost 65%
+    alerts = await generate_alerts(db_session, prices, opt_prices)
+    prem_alerts = [a for a in alerts if a.alertType == "PREMIUM_STOP"]
+    assert len(prem_alerts) == 1
+    assert "stock at $35.00" in prem_alerts[0].reason
+    assert "option" not in prem_alerts[0].reason
+
+
 # ── Test 4: Backend produces distinct alert types (dedup is frontend logic) ─
 
 @pytest.mark.asyncio

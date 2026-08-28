@@ -130,7 +130,7 @@ _ALERT_TYPE_LABELS = {
     'TP_HIT': 'Target reached',
     'STOP_REACHED': 'Stop hit',
     'STRUCTURAL_STOP_BREACHED': 'Structural stop hit',
-    'PREMIUM_STOP': 'Option premium stop hit',
+    'PREMIUM_STOP': 'Premium stop hit',
     'TIME_STOP': 'Time stop hit',
     'EVENT_RISK': 'Event risk warning',
     'REGIME_CHANGE': 'Market regime changed',
