@@ -21,7 +21,13 @@ router = APIRouter(prefix='/api', tags=['alerts'])
 async def get_alerts(db: AsyncSession = Depends(get_db)) -> list[AlertItem]:
     positions = (await db.execute(select(PortfolioPositionModel))).scalars().all()
     symbols = list({p.symbol for p in positions})
-    quotes = fetch_quotes(symbols)
+    # fetch_quotes is synchronous (a blocking httpx.get, up to its own
+    # timeout) — run it off the event loop thread, same as
+    # portfolio_alert_monitor.py's identical call, so one slow/unresponsive
+    # upstream quote doesn't stall every other concurrent request this
+    # single-threaded server is handling (other users' API calls, WS alert
+    # ticks, background schedulers) for the duration of this call.
+    quotes = await asyncio.to_thread(fetch_quotes, symbols)
     current_prices = {sym: q["last"] for sym, q in quotes.items()}
 
     # Live option prices — same source as portfolio_alert_monitor.py's

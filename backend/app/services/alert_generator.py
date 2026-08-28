@@ -192,12 +192,15 @@ async def generate_alerts(
                     reference_kind="price", direction=pos.direction, contract=pos.contract,
                 )
                 # Only label a non-ladder method that actually supplied the
-                # price — `pos.resolved_tp_price` falsy means it fell back to
-                # the ladder above, so naming the method here would misreport
-                # which target was hit. Mirrors frontend's `tpMethodNote`.
+                # price — a non-positive raw_resolved falsy/negative means it
+                # fell back to the ladder above (same `> 0` guard as line 177,
+                # not the plain truthiness this used to re-test here, which
+                # let a negative resolved_tp_price mislabel a ladder-sourced
+                # fire as the exit-plan method). Mirrors frontend's
+                # `tpMethodNote`.
                 tp_method_note = (
                     f" ({_TP_METHOD_LABEL[pos.active_tp_method]})"
-                    if pos.resolved_tp_price and pos.active_tp_method in _TP_METHOD_LABEL
+                    if raw_resolved and raw_resolved > 0 and pos.active_tp_method in _TP_METHOD_LABEL
                     else ""
                 )
                 alerts.append(AlertItem(

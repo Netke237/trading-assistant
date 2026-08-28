@@ -116,6 +116,29 @@ async def test_tp_hit_ignores_negative_resolved_tp_price_and_falls_back_to_ladde
     assert len(tp_alerts) == 0
 
 
+@pytest.mark.asyncio
+async def test_tp_hit_from_ladder_fallback_does_not_mislabel_the_tp_method(db_session):
+    """Round-9 audit finding: the firing condition correctly falls back to the
+    ladder target when resolved_tp_price is negative (guarded with `> 0`), but
+    the method-label code re-tested `pos.resolved_tp_price` with plain
+    truthiness (-50.0 is truthy in Python) — so a ladder-sourced fire got
+    mislabeled with the exit-plan method name that did NOT actually supply
+    the price it fired against. The reason text must stay unlabelled here,
+    exactly as it would for a genuinely unset resolved_tp_price."""
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(
+        db_session, symbol="AAPL",
+        targets=[{"stockPrice": 500.0, "stock_price": 500.0}],  # ladder target IS hit below
+        resolved_tp_price=-50.0,  # stray negative -- must not label the fire
+        active_tp_method="exit_plan_2r",
+    )
+    prices = {"AAPL": 501.0}  # hits the ladder target, not the (unset) resolved price
+    alerts = await generate_alerts(db_session, prices)
+    tp_alerts = [a for a in alerts if a.alertType == "TP_HIT"]
+    assert len(tp_alerts) == 1
+    assert "2R exit plan" not in tp_alerts[0].reason
+
+
 # ── Test 2: STOP_REACHED when current_price <= stop ────────────────────────────
 
 @pytest.mark.asyncio
