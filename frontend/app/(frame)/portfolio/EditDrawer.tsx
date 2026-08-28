@@ -95,13 +95,18 @@ export function EditDrawer({
       : position.stop > position.currentPrice
     : true;
 
-  // The explicit `currentPrice > 0` checks below (stock: the underlying
-  // price; option: the premium) mirror the backend's own `Field(..., gt=0)`
-  // on `stock_price`/`premium` in the first-passage request schemas. A live
-  // quote with no price sets `currentPrice = quote.get("price") or 0.0`
-  // (portfolio.py) — a real state for illiquid/deep-OTM contracts, not a
-  // hypothetical — and would otherwise reach the backend as a raw 422
-  // instead of the button going disabled. On the stock side this is mostly
+  // The explicit `> 0` checks below (stock: currentPrice, the underlying
+  // price; option: currentPrice, the premium, AND currentStockPrice, the
+  // underlying) mirror the backend's own `Field(..., gt=0)` on
+  // `stock_price`/`premium` in the first-passage request schemas. A live
+  // quote with no price sets the field to `0.0`, not null — `currentPrice`
+  // via `quote.get("price") or 0.0` (portfolio.py), `currentStockPrice` via
+  // `stock_prices.get(schema.symbol)` landing on a `0.0` from
+  // `fetch_price_async` for a bad/halted quote — both real states for
+  // illiquid/deep-OTM contracts, not hypotheticals, and both would otherwise
+  // reach the backend as a raw 422 instead of the button going disabled.
+  // `currentStockPrice`'s existing `== null` check alone let a `0` value
+  // straight through, since `0 != null`. On the stock side this is mostly
   // "belt and suspenders": `stockDirectionValid` already rejects
   // `currentPrice = 0` for a Bullish position incidentally (a 0 price can
   // never be above a positive stop), and a Bearish position instead falls
@@ -110,7 +115,7 @@ export function EditDrawer({
   // explicitly here too rather than relying on the incidental backstop.
   const estimateDisabled = isStock
     ? stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid || !(position.currentPrice > 0)
-    : optionStrike == null || position.currentStockPrice == null || !position.stop || !(position.currentPrice > 0);
+    : optionStrike == null || !(position.currentStockPrice != null && position.currentStockPrice > 0) || !position.stop || !(position.currentPrice > 0);
 
   // Same AbortController pattern as StockPositionCard's onEstimate/estimateReq
   // (the template this section mirrors): abort a still-in-flight request when
@@ -225,7 +230,7 @@ export function EditDrawer({
         });
         restampIfActive('monte_carlo', targets[0]?.price ?? null);
       } else {
-        if (optionStrike == null || position.currentStockPrice == null || !position.stop || !(position.currentPrice > 0)) {
+        if (optionStrike == null || !(position.currentStockPrice != null && position.currentStockPrice > 0) || !position.stop || !(position.currentPrice > 0)) {
           throw new Error('missing option context');
         }
         const res = await api.getFirstPassageEstimate({
@@ -470,10 +475,16 @@ function ExitPlanEditor({
   // permanent "try again" the user can never resolve by actually trying again.
   const snapshot = position.tradeCardSnapshot ?? {};
   const strike = (typeof snapshot.strike === 'number' && snapshot.strike > 0 ? snapshot.strike : null) ?? optionStrikeFromContract(position.contract);
-  const computeDisabled = loading || strike == null || !(position.currentPrice > 0);
+  // `?? position.entryPrice` alone doesn't fall through on a `0` —
+  // `currentStockPrice` lands on exactly `0.0` (not null) for a bad/halted
+  // quote, same failure class as the strike/premium checks above, and the
+  // backend's entry_price: Field(..., gt=0) rejects it the same way.
+  const effectiveEntryPrice = position.currentStockPrice != null && position.currentStockPrice > 0
+    ? position.currentStockPrice : position.entryPrice;
+  const computeDisabled = loading || strike == null || !(position.currentPrice > 0) || !(effectiveEntryPrice > 0);
 
   const compute = async () => {
-    if (strike == null || !(position.currentPrice > 0)) return;
+    if (strike == null || !(position.currentPrice > 0) || !(effectiveEntryPrice > 0)) return;
     setLoading(true);
     setError(false);
     try {
@@ -484,7 +495,7 @@ function ExitPlanEditor({
       const res = await api.getExitPlan({
         symbol: position.symbol,
         direction: position.direction,
-        entry_price: position.currentStockPrice ?? position.entryPrice,
+        entry_price: effectiveEntryPrice,
         strike,
         dte: position.dteRemaining,
         premium: position.currentPrice,
@@ -519,8 +530,8 @@ function ExitPlanEditor({
       <button type="button" className={styles.exitPlanBtn} onClick={compute} disabled={computeDisabled}>
         {loading ? 'Computing exit plan…' : 'Compute Exit Plan'}
       </button>
-      {!loading && (strike == null || !(position.currentPrice > 0)) && (
-        <Text size={10} tone="dim">Missing a valid strike or premium — can&apos;t compute an exit plan yet.</Text>
+      {!loading && (strike == null || !(position.currentPrice > 0) || !(effectiveEntryPrice > 0)) && (
+        <Text size={10} tone="dim">Missing a valid strike, premium, or entry price — can&apos;t compute an exit plan yet.</Text>
       )}
       {error && <Text size={10} tone="reject">Couldn&apos;t compute an exit plan — try again.</Text>}
       {exitPlan && (

@@ -137,6 +137,14 @@ describe('EditDrawer Monte Carlo estimate', () => {
     expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
   });
 
+  it('disables Estimate for an option position with a 0 underlying stock price', () => {
+    // currentStockPrice lands on exactly 0.0 (not null) for a bad/halted
+    // quote — the old `== null` check alone let it straight through to the
+    // backend's stock_price: Field(..., gt=0).
+    render(<EditDrawer position={makeOptionPosition({ currentStockPrice: 0 })} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
+  });
+
   it('keeps Estimate enabled for a winning stock position that has already cleared its first target', async () => {
     // Regression: a Bullish position at $210 with T1=$205 (cleared) and
     // T2=$215 (still ahead) is a completely normal partial-profit state —
@@ -398,20 +406,44 @@ describe('ExitPlanEditor', () => {
     const position = makeOptionPosition({ tradeCardSnapshot: { strike: 0 }, contract: 'AAPL 220C 05/16' });
     render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
     expect(screen.getByRole('button', { name: 'Compute Exit Plan' })).toBeDisabled();
-    expect(screen.getByText(/Missing a valid strike or premium/)).toBeInTheDocument();
+    expect(screen.getByText(/Missing a valid strike, premium, or entry price/)).toBeInTheDocument();
   });
 
   it('disables Compute Exit Plan and explains why for a 0 premium', () => {
     const position = makeOptionPosition({ currentPrice: 0 });
     render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
     expect(screen.getByRole('button', { name: 'Compute Exit Plan' })).toBeDisabled();
-    expect(screen.getByText(/Missing a valid strike or premium/)).toBeInTheDocument();
+    expect(screen.getByText(/Missing a valid strike, premium, or entry price/)).toBeInTheDocument();
   });
 
   it('disables Compute Exit Plan when the contract id has no parseable strike and no snapshot exists', () => {
     const position = makeOptionPosition({ tradeCardSnapshot: {}, contract: 'not-a-real-contract' });
     render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
     expect(screen.getByRole('button', { name: 'Compute Exit Plan' })).toBeDisabled();
+  });
+
+  it('falls back to entryPrice for entry_price when currentStockPrice is 0, instead of sending 0', async () => {
+    // `?? position.entryPrice` alone doesn't fall through on 0 — currentStockPrice
+    // lands on exactly 0.0 (not null) for a bad/halted quote, and the backend's
+    // entry_price: Field(..., gt=0) would reject a raw 0.
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop: { price: 180, source: 'structural', contractPrice: 2.5, rrModel: 'x', structuralSource: 'swing_low', structuralConfidence: 0.8 },
+      targets: [], atr: 3.1,
+    });
+    const position = makeOptionPosition({ contract: 'AAPL|220|2026-09-16|C', currentStockPrice: 0, entryPrice: 3.9 });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Compute Exit Plan' })).toBeEnabled();
+    fireEvent.click(screen.getByText('Compute Exit Plan'));
+    await waitFor(() => expect(api.getExitPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ entry_price: 3.9 }),
+    ));
+  });
+
+  it('disables Compute Exit Plan when both currentStockPrice and entryPrice are 0', () => {
+    const position = makeOptionPosition({ currentStockPrice: 0, entryPrice: 0 });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Compute Exit Plan' })).toBeDisabled();
+    expect(screen.getByText(/Missing a valid strike, premium, or entry price/)).toBeInTheDocument();
   });
 });
 

@@ -155,7 +155,15 @@ export default function Step7PositionCardPage() {
         {candidates.map((c, i) => (
           <button key={c.symbol} type="button"
             className={`${styles.navBtn} ${i === selectedIdx ? styles.navBtnActive : ''}`}
-            onClick={() => { setSelectedIdx(i); setOrderId(null); setError(null); setWarning(null); }}>
+            onClick={() => {
+              // Re-clicking the ALREADY-active tab must not reset orderId —
+              // orderId/error/warning are shared, not per-candidate, so doing
+              // so would silently re-enable the Buy buttons for a candidate
+              // that already has a live (paper) order placed, permitting a
+              // duplicate submission with no warning.
+              if (i === selectedIdx) return;
+              setSelectedIdx(i); setOrderId(null); setError(null); setWarning(null);
+            }}>
             <Data size={12} weight={500}>{c.symbol}</Data>
           </button>
         ))}
