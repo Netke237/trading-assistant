@@ -159,7 +159,6 @@ describe('ChartPane — malformed bars', () => {
 
     render(
       <ChartPane
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         series={[{ id: 'main', type: 'Candlestick', data: data as any }]}
       />,
     );
