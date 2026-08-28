@@ -462,13 +462,21 @@ function ExitPlanEditor({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const exitPlan = position.exitPlan;
+  // Same guarded strike derivation and the same `> 0` premium check as the
+  // Monte Carlo section's optionStrike/estimateDisabled above — a corrupted
+  // 0/malformed strike or a 0 premium (a live quote with no price, a real
+  // state for illiquid/deep-OTM contracts) must not reach the backend, which
+  // rejects both with a raw 422 that the blanket catch{} below turns into a
+  // permanent "try again" the user can never resolve by actually trying again.
+  const snapshot = position.tradeCardSnapshot ?? {};
+  const strike = (typeof snapshot.strike === 'number' && snapshot.strike > 0 ? snapshot.strike : null) ?? optionStrikeFromContract(position.contract);
+  const computeDisabled = loading || strike == null || !(position.currentPrice > 0);
 
   const compute = async () => {
+    if (strike == null || !(position.currentPrice > 0)) return;
     setLoading(true);
     setError(false);
     try {
-      const parts = position.contract.split('|');
-      const strike = Number(parts[1]);
       // trend_score isn't available for an already-open position (the scan-time
       // score isn't carried on PortfolioPosition) — neutral 50 means zero
       // directional drift bias in the Monte Carlo leg, an honest default
@@ -508,9 +516,12 @@ function ExitPlanEditor({
   return (
     <div className={styles.targetEditor}>
       <Text size={11} tone="secondary">Exit Plan</Text>
-      <button type="button" className={styles.exitPlanBtn} onClick={compute} disabled={loading}>
+      <button type="button" className={styles.exitPlanBtn} onClick={compute} disabled={computeDisabled}>
         {loading ? 'Computing exit plan…' : 'Compute Exit Plan'}
       </button>
+      {!loading && (strike == null || !(position.currentPrice > 0)) && (
+        <Text size={10} tone="dim">Missing a valid strike or premium — can&apos;t compute an exit plan yet.</Text>
+      )}
       {error && <Text size={10} tone="reject">Couldn&apos;t compute an exit plan — try again.</Text>}
       {exitPlan && (
         <div className={styles.targetList}>

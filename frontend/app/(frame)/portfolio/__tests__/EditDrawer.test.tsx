@@ -393,6 +393,26 @@ describe('ExitPlanEditor', () => {
     fireEvent.click(screen.getByText('Compute Exit Plan'));
     expect(await screen.findByText(/Couldn.t compute an exit plan/)).toBeInTheDocument();
   });
+
+  it('disables Compute Exit Plan and explains why for a corrupted 0 strike', () => {
+    const position = makeOptionPosition({ tradeCardSnapshot: { strike: 0 }, contract: 'AAPL 220C 05/16' });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Compute Exit Plan' })).toBeDisabled();
+    expect(screen.getByText(/Missing a valid strike or premium/)).toBeInTheDocument();
+  });
+
+  it('disables Compute Exit Plan and explains why for a 0 premium', () => {
+    const position = makeOptionPosition({ currentPrice: 0 });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Compute Exit Plan' })).toBeDisabled();
+    expect(screen.getByText(/Missing a valid strike or premium/)).toBeInTheDocument();
+  });
+
+  it('disables Compute Exit Plan when the contract id has no parseable strike and no snapshot exists', () => {
+    const position = makeOptionPosition({ tradeCardSnapshot: {}, contract: 'not-a-real-contract' });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Compute Exit Plan' })).toBeDisabled();
+  });
 });
 
 describe('MaxLossBanner', () => {
