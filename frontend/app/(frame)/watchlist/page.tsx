@@ -25,6 +25,7 @@ import { contractLabel, type OptionContract } from '@/types/domain';
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
 import type { WatchlistRow } from '@/types/domain';
 import { useChartStore } from '@/lib/chartStore';
+import { useWatchlistUiStore } from '@/lib/watchlistUiStore';
 import styles from './page.module.css';
 
 type Tab     = 'stocks' | 'contracts' | 'composite';
@@ -53,6 +54,7 @@ export default function WatchlistPage() {
 
   const setChartSymbol     = useChartStore((s) => s.setSymbol);
   const setChartSymbolName = useChartStore((s) => s.setSymbolName);
+  const setUiSelectedSymbol = useWatchlistUiStore((s) => s.setSelectedSymbol);
 
   const watchedSymbols            = useWatchlistStore((s) => s.added);
   const syncFromBackend           = useWatchlistStore((s) => s.syncFromBackend);
@@ -207,10 +209,22 @@ export default function WatchlistPage() {
   };
 
   const onSelect = (symbol: string, company: string) => {
-    setSelected((cur) => (cur === symbol ? null : symbol));
+    setSelected((cur) => {
+      const next = cur === symbol ? null : symbol;
+      setUiSelectedSymbol(next);
+      return next;
+    });
     setChartSymbol(symbol);
     setChartSymbolName(company);
   };
+
+  // Clear the rail's selected-symbol note when leaving this page (mirrors
+  // Portfolio's own cleanup), so a stale selection never lingers into a
+  // future visit — even though chartStore's own persisted symbol keeps
+  // whatever was last clicked, this dedicated store deliberately doesn't.
+  useEffect(() => {
+    return () => setUiSelectedSymbol(null);
+  }, [setUiSelectedSymbol]);
 
   return (
     <div className={styles.main}>

@@ -12,7 +12,7 @@ import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { GENERIC_STATUS_TOOLTIP } from '@/lib/statusTooltips';
 import { api } from '@/lib/api';
-import { useChartStore } from '@/lib/chartStore';
+import { useWatchlistUiStore } from '@/lib/watchlistUiStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useIsSymbolHeld } from '@/lib/portfolioStore';
 import type { WatchlistRow } from '@/types/domain';
@@ -22,12 +22,13 @@ export default function WatchlistContextRail() {
   const [rows, setRows] = useState<WatchlistRow[]>([]);
   useEffect(() => { api.getWatchlist().then(setRows).catch(() => {}); }, []);
 
-  // Clicking a row on the Watchlist page sets this via setChartSymbol (see
-  // page.tsx's onSelect) — reusing it here, same as the Chart sidebar, means
-  // selecting a row surfaces that symbol's note without a dedicated store.
-  const symbol = useChartStore((s) => s.symbol);
-  const isWatched = useWatchlistStore((s) => s.isWatched(symbol));
-  const isHeld = useIsSymbolHeld(symbol);
+  // Clicking a row on the Watchlist page sets this via watchlistUiStore (see
+  // page.tsx's onSelect) — a dedicated store, not chartStore: chartStore
+  // defaults to 'AAPL' and persists to localStorage, so it can never
+  // represent "no row selected" the way this store's `null` default does.
+  const symbol = useWatchlistUiStore((s) => s.selectedSymbol);
+  const isWatched = useWatchlistStore((s) => (symbol ? s.isWatched(symbol) : false));
+  const isHeld = useIsSymbolHeld(symbol ?? '');
 
   const pass    = rows.filter((r) => r.status === 'PASS').length;
   const caution = rows.filter((r) => r.status === 'CAUTION').length;
