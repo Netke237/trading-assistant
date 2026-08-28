@@ -53,6 +53,24 @@ atexit.register(shutil.rmtree, _TEST_DB_DIR, True)
 _TEST_DB_PATH = Path(_TEST_DB_DIR, "test.db").as_posix()
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
 
+# ── Credential-store safety pin (MUST run before any app import) ──────────────
+# The same class of bug as the DB pin above, and it bites harder.
+# credential_store.py builds a module-level singleton at import time whose path
+# defaults to the REAL backend/config/local_credentials.yaml, and save() writes
+# to it — so any test reaching a code path that calls credential_store.save()
+# (broker_router's build_router_from_credentials(), the credentials POST
+# endpoint) would overwrite the developer's actual broker tokens.
+#
+# test_credential_store.py sets this variable for the same reason, but that only
+# helps if that module happens to be imported before anything else pulls in
+# credential_store — and pytest's collection order decides that, not the test.
+# Pinning here removes the ordering dependency entirely, because conftest is
+# imported before any test module. Points at a throwaway file rather than ""
+# so load()/save() still exercise real persistence, just never against real
+# credentials. setdefault lets an explicit override still win.
+_TEST_CREDS_PATH = Path(_TEST_DB_DIR, "test_local_credentials.yaml").as_posix()
+os.environ.setdefault("BAMENDJOU_CREDS_PATH", _TEST_CREDS_PATH)
+
 import asyncio
 from typing import AsyncGenerator
 from unittest.mock import patch, AsyncMock

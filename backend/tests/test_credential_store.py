@@ -3,6 +3,10 @@ import pytest
 import tempfile
 from pathlib import Path
 
+# "" means "no file persistence" — see the three cases in credential_store.py.
+# The real guarantee is conftest.py's pin, which runs before any test module
+# and so does not depend on pytest collection order; this line keeps THIS
+# module explicitly off disk regardless.
 os.environ["BAMENDJOU_CREDS_PATH"] = ""
 
 from app.services.credential_store import CredentialStore
