@@ -74,8 +74,17 @@ export function EditDrawer({
   // partially-profitable position (T1 already cleared, T2 still ahead) keep
   // estimating against its remaining targets instead of the whole feature
   // going silently disabled the moment the first target is crossed.
-  const stockTargetPrices = allStockTargetPrices.filter((p) =>
-    position.direction === 'Bullish' ? p > position.currentPrice : p < position.currentPrice);
+  //
+  // Labelled by the target's ORIGINAL 1-based position (T1, T2, ...), not by
+  // its position within this filtered array — the backend response comes
+  // back positionally, one entry per price actually sent, so relabelling
+  // from T1 whenever an earlier target has been filtered out would show the
+  // user's real T2 result under the label "T1".
+  const pendingStockTargets = position.targets
+    .map((t, idx) => ({ price: t.targetPrice ?? t.stockPrice, label: `T${idx + 1}` }))
+    .filter((t): t is { price: number; label: string } => typeof t.price === 'number' && t.price > 0)
+    .filter((t) => (position.direction === 'Bullish' ? t.price > position.currentPrice : t.price < position.currentPrice));
+  const stockTargetPrices = pendingStockTargets.map((t) => t.price);
   // A stored strike of 0 (a corrupted snapshot) must not pass this `== null`
   // guard through to the backend, which rejects strike <= 0 with a raw 422
   // instead of the button simply going disabled.
@@ -221,7 +230,10 @@ export function EditDrawer({
           trend_score: typeof snapshot.stock_score === 'number' ? snapshot.stock_score : 50,
         }, ctrl.signal);
         if (ctrl.signal.aborted) return;
-        const targets = res.targets.map((t, i) => ({ label: `T${i + 1}`, price: t.price, probability: t.probability, expectedDays: t.expectedDays }));
+        // The response is positional (one entry per price in the `targets`
+        // array just sent), so pair it back up with pendingStockTargets'
+        // ORIGINAL labels rather than relabelling from T1.
+        const targets = res.targets.map((t, i) => ({ label: pendingStockTargets[i]?.label ?? `T${i + 1}`, price: t.price, probability: t.probability, expectedDays: t.expectedDays }));
         setMcResult({
           targets,
           invalidation: res.invalidation,
@@ -345,12 +357,17 @@ export function EditDrawer({
           </button>
           {mcError && <Text size={11} tone="reject">{mcError}</Text>}
         </div>
-        {isStock && !stockDirectionValid && (
+        {isStock && !(position.currentPrice > 0) && (
+          <Text size={11} tone="dim">
+            No live current price yet — can&apos;t estimate until a price is available.
+          </Text>
+        )}
+        {isStock && position.currentPrice > 0 && !stockDirectionValid && (
           <Text size={11} tone="dim">
             The stop is already on the wrong side of the current price — sync the position&apos;s stop before estimating.
           </Text>
         )}
-        {isStock && stockDirectionValid && stockTargetPrices.length === 0 && allStockTargetPrices.length > 0 && (
+        {isStock && position.currentPrice > 0 && stockDirectionValid && stockTargetPrices.length === 0 && allStockTargetPrices.length > 0 && (
           <Text size={11} tone="dim">
             Every target has already been reached — add a new target to estimate further upside.
           </Text>

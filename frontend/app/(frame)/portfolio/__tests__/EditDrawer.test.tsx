@@ -132,9 +132,17 @@ describe('EditDrawer Monte Carlo estimate', () => {
     expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
   });
 
-  it('disables Estimate for a stock position with a 0 current price', () => {
+  it('disables Estimate and correctly attributes it to a missing price, not the stop or targets, for a stock position with a 0 current price', () => {
+    // A 0 current price incidentally satisfies (or fails) the OTHER two
+    // caution conditions for the wrong reason — a Bullish position would
+    // otherwise misreport "stop on wrong side" and a Bearish one would
+    // misreport "every target already reached." Neither is true; the real
+    // cause is simply no live price yet.
     render(<EditDrawer position={makeStockPosition({ currentPrice: 0 })} onClose={noop} onChange={noop} onRemove={noop} />);
     expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
+    expect(screen.getByText(/No live current price yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/stop is already on the wrong side/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Every target has already been reached/)).not.toBeInTheDocument();
   });
 
   it('disables Estimate for an option position with a 0 underlying stock price', () => {
@@ -172,6 +180,16 @@ describe('EditDrawer Monte Carlo estimate', () => {
       expect.objectContaining({ targets: [215] }),
       expect.any(AbortSignal),
     ));
+    // The backend response is positional (one entry for the one price sent,
+    // T2's $215) — it must render labelled "T2", the target's real name, not
+    // relabelled "T1" from its position within the filtered request array.
+    // "T1"/"T2" also each appear once as the Targets section's own row
+    // header regardless of this bug, so assert counts rather than presence:
+    // "T2" should appear twice (its own header + the correctly-labelled
+    // Monte Carlo result) and "T1" only once (its header alone — the one MC
+    // result must not be mislabelled onto it).
+    await waitFor(() => expect(screen.getAllByText('T2')).toHaveLength(2));
+    expect(screen.getAllByText('T1')).toHaveLength(1);
   });
 
   it('disables Estimate and explains why when every target has already been reached', () => {

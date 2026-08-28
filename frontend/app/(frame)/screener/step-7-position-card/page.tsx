@@ -43,6 +43,15 @@ export default function Step7PositionCardPage() {
   const [execMode, setExecMode] = useState<ExecutionMode>('recommendation');
   const [placingType, setPlacingType] = useState<'LMT' | 'MKT' | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  // Which candidate `orderId` belongs to. orderId itself is NOT per-candidate
+  // state, but reset-on-navigate (either direction) has its own failure mode:
+  // resetting it to null on every nav click re-arms the Buy buttons for a
+  // candidate that already has a live order the instant the user navigates
+  // away and back to it, permitting a duplicate submission. Comparing this
+  // against `selectedIdx` below, instead of ever clearing orderId on
+  // navigation, is what lets "does this candidate have an order" stay
+  // correct regardless of how the user gets back to it.
+  const [orderedIdx, setOrderedIdx] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const settings = useSettingsStore();
@@ -63,14 +72,15 @@ export default function Step7PositionCardPage() {
 
   const candidates = result?.candidates.filter((c) => c.backtest.passes_gate) ?? [];
   const card: PositionCardData | undefined = candidates[selectedIdx];
+  const hasOrderForCurrent = orderId !== null && orderedIdx === selectedIdx;
 
-  // orderId/error/warning are shared (not per-candidate) state. If the user
-  // switches candidates while a submit() is still in flight, a stale
-  // response landing after the switch must not stamp its outcome onto
-  // whatever candidate is now on screen (e.g. wrongly disabling ITS Buy
-  // buttons via the orderId !== null guard below). addPosition() still
-  // always runs for the originally-submitted card — a real order was
-  // placed and must be tracked regardless of what the user looks at next.
+  // error/warning are transient feedback about a submit, not durable
+  // per-candidate state like orderId/orderedIdx above — if the user switches
+  // candidates while a submit() is still in flight, a stale response landing
+  // after the switch must not stamp an error/warning onto whatever candidate
+  // is now on screen. addPosition() still always runs for the
+  // originally-submitted card — a real order was placed and must be tracked
+  // regardless of what the user looks at next.
   const selectedIdxRef = useRef(selectedIdx);
   useEffect(() => { selectedIdxRef.current = selectedIdx; }, [selectedIdx]);
 
@@ -98,7 +108,7 @@ export default function Step7PositionCardPage() {
   }
 
   async function submit(orderType: 'LMT' | 'MKT') {
-    if (!card || execMode === 'recommendation' || orderId !== null) return;
+    if (!card || execMode === 'recommendation' || hasOrderForCurrent) return;
     const submittedIdx = selectedIdx;
     const stillViewing = () => selectedIdxRef.current === submittedIdx;
     setPlacingType(orderType);
@@ -115,7 +125,12 @@ export default function Step7PositionCardPage() {
         limit_price: orderType === 'LMT' ? card.strategy.entry_price : null,
         tif: 'DAY',
       });
-      if (stillViewing()) setOrderId(res.order_id);
+      // Recorded regardless of `stillViewing()` — unlike error/warning below
+      // (transient feedback about a submit the user watched happen), this is
+      // durable "does candidate X have an order" state that must stay correct
+      // even after the user has navigated away, per `hasOrderForCurrent` above.
+      setOrderId(res.order_id);
+      setOrderedIdx(submittedIdx);
       try {
         const addRes = await addPosition({
           ...buildPaperStockPosition(
@@ -155,15 +170,7 @@ export default function Step7PositionCardPage() {
         {candidates.map((c, i) => (
           <button key={c.symbol} type="button"
             className={`${styles.navBtn} ${i === selectedIdx ? styles.navBtnActive : ''}`}
-            onClick={() => {
-              // Re-clicking the ALREADY-active tab must not reset orderId —
-              // orderId/error/warning are shared, not per-candidate, so doing
-              // so would silently re-enable the Buy buttons for a candidate
-              // that already has a live (paper) order placed, permitting a
-              // duplicate submission with no warning.
-              if (i === selectedIdx) return;
-              setSelectedIdx(i); setOrderId(null); setError(null); setWarning(null);
-            }}>
+            onClick={() => { setSelectedIdx(i); setError(null); setWarning(null); }}>
             <Data size={12} weight={500}>{c.symbol}</Data>
           </button>
         ))}
@@ -222,17 +229,17 @@ export default function Step7PositionCardPage() {
       {execMode !== 'recommendation' && (
         <div className={styles.actions}>
           <button type="button" className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => submit('LMT')} disabled={placingType !== null || orderId !== null}>
+            onClick={() => submit('LMT')} disabled={placingType !== null || hasOrderForCurrent}>
             {placingType === 'LMT' ? 'Placing…' : `Place Limit Order @ $${card.strategy.entry_price}`}
           </button>
           <button type="button" className={`${styles.btn} ${styles.btnMarket}`}
-            onClick={() => submit('MKT')} disabled={placingType !== null || orderId !== null}>
+            onClick={() => submit('MKT')} disabled={placingType !== null || hasOrderForCurrent}>
             {placingType === 'MKT' ? 'Placing…' : 'Right Now — Market Order'}
           </button>
         </div>
       )}
 
-      {orderId && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
+      {hasOrderForCurrent && <Text size={12} tone="pass">Order placed — ID: {orderId}</Text>}
       {error && <Text size={12} tone="reject">{error}</Text>}
       {warning && <Text size={12} tone="caution">{warning}</Text>}
     </div>

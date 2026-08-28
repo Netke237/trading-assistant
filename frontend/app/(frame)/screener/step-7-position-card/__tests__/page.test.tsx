@@ -122,4 +122,29 @@ describe('step-7-position-card — broker order submit()', () => {
 
     expect(screen.getByRole('button', { name: /place limit order/i })).toBeDisabled();
   });
+
+  it('still shows a placed order as disabled after navigating away to another candidate and back', async () => {
+    // The same duplicate-submission risk as the same-tab-re-click case above,
+    // reached via a more natural path: switching to a DIFFERENT candidate
+    // (which correctly shows ITS own, unordered state) and then switching
+    // BACK to the one that already has a live order. orderId/orderedIdx must
+    // stay correctly attributed to AAPL regardless of what got viewed in
+    // between — nothing about navigating away should un-order it.
+    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1' });
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+
+    render(<Step7PositionCardPage />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(screen.getByRole('button', { name: /place limit order/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit order/i })).toBeDisabled());
+    expect(screen.getByText(/Order placed — ID: ORD-1/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'MSFT' }));
+    expect(screen.getByRole('button', { name: /place limit order/i })).toBeEnabled();
+    expect(screen.queryByText(/Order placed — ID:/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'AAPL' }));
+    expect(screen.getByRole('button', { name: /place limit order/i })).toBeDisabled();
+    expect(screen.getByText(/Order placed — ID: ORD-1/)).toBeInTheDocument();
+  });
 });
