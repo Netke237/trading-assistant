@@ -127,14 +127,25 @@ export function CandlestickChart({
   useEffect(() => {
     const candle = candleSeriesRef.current;
     if (!candle) return;
+    // Upstream OHLCV providers occasionally emit a NaN bar (thin/halted
+    // trading days) that round-trips through JSON as null — lightweight-charts
+    // asserts on any non-number field and would otherwise crash the whole chart.
     candle.setData(
-      data.map((c) => ({
-        time: c.time as Time,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-      })),
+      data
+        .filter(
+          (c) =>
+            Number.isFinite(c.open) &&
+            Number.isFinite(c.high) &&
+            Number.isFinite(c.low) &&
+            Number.isFinite(c.close),
+        )
+        .map((c) => ({
+          time: c.time as Time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+        })),
     );
     chartRef.current?.timeScale().fitContent();
   }, [data, chartVersion]);

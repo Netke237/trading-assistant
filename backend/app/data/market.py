@@ -103,6 +103,7 @@ def _fetch_daily_yf(symbol: str) -> list[dict]:
             return []
         if isinstance(df.columns, pd.MultiIndex):
             df = df.droplevel(1, axis=1)
+        df = df.dropna(subset=["Open", "High", "Low", "Close"])
         return [
             {
                 "time":   ts.strftime("%Y-%m-%d"),
@@ -298,6 +299,7 @@ def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 55) -> li
         # yfinance ≥1.1 returns MultiIndex columns (Price, Ticker) for single-ticker downloads
         if isinstance(df.columns, pd.MultiIndex):
             df = df.droplevel(1, axis=1)
+        df = df.dropna(subset=["Open", "High", "Low", "Close", "Volume"])
         return [
             {
                 "time":   int(ts.timestamp()),

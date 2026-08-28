@@ -272,10 +272,15 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
 
       if (cfg.type === 'Candlestick' || cfg.type === 'Bar') {
         (s as ISeriesApi<'Candlestick' | 'Bar'>).setData(
-          (cfg.data as Candle[]).map(c => ({
-            time: c.time as Time,
-            open: c.open, high: c.high, low: c.low, close: c.close,
-          }))
+          (cfg.data as Candle[])
+            .filter(c =>
+              Number.isFinite(c.open) && Number.isFinite(c.high) &&
+              Number.isFinite(c.low) && Number.isFinite(c.close),
+            )
+            .map(c => ({
+              time: c.time as Time,
+              open: c.open, high: c.high, low: c.low, close: c.close,
+            }))
         );
       } else {
         (s as ISeriesApi<'Line' | 'Histogram'>).setData(
