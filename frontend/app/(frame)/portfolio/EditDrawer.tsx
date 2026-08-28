@@ -898,7 +898,10 @@ function alertFiresAgainst(
         ? `${isStock ? 'stock' : 'premium'} $${(position.entryPrice * (1 - premiumStopPct)).toFixed(2)}`
         : null;
     case 'TIME_STOP':
-      return '3 DTE or less';
+      // Stock positions carry no expiry and (per alertEngine.ts's isStock
+      // guard) can never fire this type — "not set" rather than a threshold
+      // that looks armed but isn't.
+      return isStock ? null : '3 DTE or less';
     case 'EVENT_RISK':
       return 'event within 3 days';
   }

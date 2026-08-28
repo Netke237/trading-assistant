@@ -234,8 +234,16 @@ export function scanPortfolio(
       });
     }
 
-    // TIME_STOP — expiry within 3 days
-    if (p.dteRemaining <= 3 && enabled('TIME_STOP')) {
+    // TIME_STOP — expiry within 3 days. Stock positions carry no expiry, but
+    // dteRemaining defaults/coerces to 0 for them everywhere upstream
+    // (paperTrade.ts's buildPaperStockPosition, portfolioStore.ts's `?? 0`
+    // sync, and the backend schema default — portfolio.py's router only
+    // overwrites it from a contract's expiry for an options-shaped, 4-part
+    // contract string) — so `dteRemaining <= 3` is unconditionally true for
+    // every stock position without this guard. Mirrors the backend's own
+    // alert_generator.py, whose parse_expiry_from_contract already returns
+    // None (never fires) for a `|STOCK` contract.
+    if (!isStock && p.dteRemaining <= 3 && enabled('TIME_STOP')) {
       out.push({
         recId: p.recId,
         kind: 'Action',

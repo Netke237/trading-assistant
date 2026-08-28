@@ -261,6 +261,26 @@ describe('scanPortfolio', () => {
     expect(out.some((a) => a.alertType === 'STRUCTURAL_STOP_BREACHED')).toBe(false);
   });
 
+  it('does NOT fire TIME_STOP on a stock position, even with the real-world default dteRemaining of 0', () => {
+    // Round-7 re-audit finding: dteRemaining defaults/coerces to 0 for every
+    // stock position (paperTrade.ts's buildPaperStockPosition, portfolioStore.ts's
+    // `?? 0` sync, and the backend schema default — portfolio.py's router only
+    // derives it from a contract's expiry for an options-shaped contract string),
+    // so `dteRemaining <= 3` was unconditionally true for a stock position without
+    // the isStock guard, firing TIME_STOP on every open stock position forever.
+    // Deliberately does NOT override dteRemaining, to catch a regression at the
+    // real-world default rather than a hand-picked low value.
+    const position = makePosition({ contract: 'NVDA|STOCK' });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'TIME_STOP')).toBe(false);
+  });
+
+  it('still fires TIME_STOP on an option position within 3 DTE', () => {
+    const position = makePosition({ dteRemaining: 1 });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'TIME_STOP')).toBe(true);
+  });
+
   it('uses currentStockPrice, not the option premium, for STOP_REACHED on an option position', () => {
     // Premium (currentPrice) is far below any realistic stop — if the bug were still present
     // this would fire immediately. The real stock price is what must be compared.
