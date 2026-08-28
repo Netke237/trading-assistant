@@ -7,16 +7,27 @@
 import { useEffect, useState } from 'react';
 import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
+import { SymbolNotes } from '@/components/molecules/SymbolNotes';
 import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { GENERIC_STATUS_TOOLTIP } from '@/lib/statusTooltips';
 import { api } from '@/lib/api';
+import { useChartStore } from '@/lib/chartStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
+import { useIsSymbolHeld } from '@/lib/portfolioStore';
 import type { WatchlistRow } from '@/types/domain';
 import styles from './page.module.css';
 
 export default function WatchlistContextRail() {
   const [rows, setRows] = useState<WatchlistRow[]>([]);
   useEffect(() => { api.getWatchlist().then(setRows).catch(() => {}); }, []);
+
+  // Clicking a row on the Watchlist page sets this via setChartSymbol (see
+  // page.tsx's onSelect) — reusing it here, same as the Chart sidebar, means
+  // selecting a row surfaces that symbol's note without a dedicated store.
+  const symbol = useChartStore((s) => s.symbol);
+  const isWatched = useWatchlistStore((s) => s.isWatched(symbol));
+  const isHeld = useIsSymbolHeld(symbol);
 
   const pass    = rows.filter((r) => r.status === 'PASS').length;
   const caution = rows.filter((r) => r.status === 'CAUTION').length;
@@ -39,6 +50,12 @@ export default function WatchlistContextRail() {
           <Row><Text size={12} tone="secondary">Total</Text><Data size={12}>{rows.length}</Data></Row>
         </div>
       </RailSection>
+
+      {symbol && (
+        <RailSection title={`Notes · ${symbol}`}>
+          <SymbolNotes symbol={symbol} editable={isWatched || isHeld} />
+        </RailSection>
+      )}
 
       <RailQuickLook />
     </>
