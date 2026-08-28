@@ -209,11 +209,15 @@ export default function WatchlistPage() {
   };
 
   const onSelect = (symbol: string, company: string) => {
-    setSelected((cur) => {
-      const next = cur === symbol ? null : symbol;
-      setUiSelectedSymbol(next);
-      return next;
-    });
+    // Computed from the closure, not a setSelected functional updater — a
+    // click handler runs once per click, so there's no rapid-fire staleness
+    // risk here, and calling setUiSelectedSymbol (a different store's
+    // setter) from inside a useState updater triggers React's "Cannot
+    // update a component while rendering a different component" warning
+    // under StrictMode.
+    const next = selected === symbol ? null : symbol;
+    setSelected(next);
+    setUiSelectedSymbol(next);
     setChartSymbol(symbol);
     setChartSymbolName(company);
   };
