@@ -15,22 +15,23 @@ jest.mock('@/lib/api', () => ({
 }));
 
 function makeScanResult(): StockScanResult {
+  const candidate = (symbol: string) => ({
+    symbol, company: `${symbol} Inc.`, price: 150, direction: 'Bullish',
+    strategy: {
+      strategy: 'pullback_ema', entry_price: 150, stop_price: 145,
+      target_price: 160, rr_ratio: 2, atr: 3, detail: {},
+    },
+    backtest: {
+      n_trades: 20, win_rate: 0.6, total_return_pct: 12, max_drawdown_pct: 5,
+      expectancy: 0.4, sharpe: 1.2, confidence: 0.7, passes_gate: true, summary_text: 'ok',
+    },
+    stock_score: 80, stock_status: 'PASS',
+    shares: 30, dollar_risk: 150, dollar_size: 4500,
+    confidence: 0.7, confidence_text: 'High',
+  });
   return {
     scan_id: 'S1', timestamp: '2026-08-01T00:00:00Z',
-    candidates: [{
-      symbol: 'AAPL', company: 'Apple Inc.', price: 150, direction: 'Bullish',
-      strategy: {
-        strategy: 'pullback_ema', entry_price: 150, stop_price: 145,
-        target_price: 160, rr_ratio: 2, atr: 3, detail: {},
-      },
-      backtest: {
-        n_trades: 20, win_rate: 0.6, total_return_pct: 12, max_drawdown_pct: 5,
-        expectancy: 0.4, sharpe: 1.2, confidence: 0.7, passes_gate: true, summary_text: 'ok',
-      },
-      stock_score: 80, stock_status: 'PASS',
-      shares: 30, dollar_risk: 150, dollar_size: 4500,
-      confidence: 0.7, confidence_text: 'High',
-    }],
+    candidates: [candidate('AAPL'), candidate('MSFT')],
     rejected: [],
   } as unknown as StockScanResult;
 }
@@ -75,5 +76,32 @@ describe('step-7-position-card — broker order submit()', () => {
 
     expect(await screen.findByText(/not yet tracked in Portfolio/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /place limit order/i })).toBeDisabled();
+  });
+
+  it('does not let a stale order response from a previous candidate disable the newly-selected one', async () => {
+    // orderId/error/warning are shared, not per-candidate, state. Submitting
+    // on AAPL, switching to MSFT before the broker responds, then letting
+    // that AAPL response land, must not stamp its outcome (disabling the Buy
+    // buttons via orderId !== null) onto MSFT, which was never submitted.
+    let resolveOrder!: (v: { order_id: string }) => void;
+    (api.postStockOrder as jest.Mock).mockReturnValueOnce(new Promise((res) => { resolveOrder = res; }));
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+
+    render(<Step7PositionCardPage />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(screen.getByRole('button', { name: /place limit order/i }));
+
+    // Switching candidates while AAPL's submit is still in flight — placingType
+    // is also shared state, reset unconditionally once that request settles
+    // (not something this fix touches), so MSFT's buttons briefly still read
+    // "Placing…" here. The fix under test is specifically about what happens
+    // to orderId once the stale response actually lands below.
+    fireEvent.click(screen.getByRole('button', { name: 'MSFT' }));
+
+    resolveOrder({ order_id: 'ORD-STALE' });
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit order/i })).toBeEnabled());
+    expect(usePortfolioStore.getState().positions).toHaveLength(1);
+    expect(usePortfolioStore.getState().positions[0].symbol).toBe('AAPL');
   });
 });

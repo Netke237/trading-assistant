@@ -13,7 +13,20 @@ async function apiError(path: string, res: Response): Promise<never> {
   let detail = text;
   try {
     const json = JSON.parse(text);
-    detail = typeof json?.detail === 'string' ? json.detail : text;
+    if (typeof json?.detail === 'string') {
+      detail = json.detail;
+    } else if (Array.isArray(json?.detail)) {
+      // FastAPI/Pydantic validation errors (e.g. a 422 on a Field(..., gt=0)
+      // violation) shape `detail` as a list of {loc, msg, type} objects, not
+      // a string — the `typeof === 'string'` check above misses this shape
+      // entirely and used to fall through to the raw JSON text, dumping a
+      // machine-formatted validation payload straight into a caller's error
+      // UI. Join the human-readable `msg` fields instead.
+      const messages = json.detail
+        .map((e: unknown) => (e && typeof e === 'object' && 'msg' in e ? String((e as { msg: unknown }).msg) : null))
+        .filter((m: string | null): m is string => m != null);
+      detail = messages.length > 0 ? messages.join('; ') : text;
+    }
   } catch { /* not JSON — use raw text */ }
   throw new Error(`API ${path} → ${res.status}${detail ? `: ${detail}` : ''}`);
 }

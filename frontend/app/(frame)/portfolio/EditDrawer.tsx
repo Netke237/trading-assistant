@@ -25,11 +25,22 @@ import { POSITION_ALERT_TYPES } from '@/types/domain';
 import type { PortfolioPosition, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
 import styles from './page.module.css';
 
+/** `position.contract` for an option position is a backend-generated,
+ *  pipe-delimited machine ID — "SYMBOL|STRIKE|EXPIRY|C/P" (see
+ *  backend/app/routers/scan.py's `contract=f"{symbol}|{int(strike)}|..."`
+ *  and backend/app/schemas/__init__.py's persistence-schema comment). Note
+ *  the `int(strike)` truncation — this id is INTEGER-only, so it silently
+ *  rounds down any fractional strike (e.g. 187.5 -> "187"). Every option
+ *  position, old or new, has this format, unlike `tradeCardSnapshot.strike`,
+ *  which is only populated for positions opened after this Monte Carlo
+ *  feature shipped — so this is used strictly as the FALLBACK for
+ *  pre-existing positions that predate the snapshot, never preferred over
+ *  it. Callers must try `tradeCardSnapshot.strike` first. */
 function optionStrikeFromContract(contract: string): number | null {
   const parts = contract.split('|');
-  if (parts.length < 2) return null;
-  const n = Number(parts[1]);
-  return Number.isFinite(n) ? n : null;
+  if (parts.length !== 4) return null;
+  const strike = Number(parts[1]);
+  return Number.isFinite(strike) && strike > 0 ? strike : null;
 }
 
 export function EditDrawer({
@@ -65,7 +76,10 @@ export function EditDrawer({
   // going silently disabled the moment the first target is crossed.
   const stockTargetPrices = allStockTargetPrices.filter((p) =>
     position.direction === 'Bullish' ? p > position.currentPrice : p < position.currentPrice);
-  const optionStrike = (typeof snapshot.strike === 'number' ? snapshot.strike : null) ?? optionStrikeFromContract(position.contract);
+  // A stored strike of 0 (a corrupted snapshot) must not pass this `== null`
+  // guard through to the backend, which rejects strike <= 0 with a raw 422
+  // instead of the button simply going disabled.
+  const optionStrike = (typeof snapshot.strike === 'number' && snapshot.strike > 0 ? snapshot.strike : null) ?? optionStrikeFromContract(position.contract);
   const optionTrend = (snapshot.stockBreakdown as { trend?: number } | undefined)?.trend;
   const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
 
@@ -81,9 +95,22 @@ export function EditDrawer({
       : position.stop > position.currentPrice
     : true;
 
+  // The explicit `currentPrice > 0` checks below (stock: the underlying
+  // price; option: the premium) mirror the backend's own `Field(..., gt=0)`
+  // on `stock_price`/`premium` in the first-passage request schemas. A live
+  // quote with no price sets `currentPrice = quote.get("price") or 0.0`
+  // (portfolio.py) — a real state for illiquid/deep-OTM contracts, not a
+  // hypothetical — and would otherwise reach the backend as a raw 422
+  // instead of the button going disabled. On the stock side this is mostly
+  // "belt and suspenders": `stockDirectionValid` already rejects
+  // `currentPrice = 0` for a Bullish position incidentally (a 0 price can
+  // never be above a positive stop), and a Bearish position instead falls
+  // through the empty-`stockTargetPrices` branch — but neither of those is
+  // an intentional guard against this specific case, so it's checked
+  // explicitly here too rather than relying on the incidental backstop.
   const estimateDisabled = isStock
-    ? stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid
-    : optionStrike == null || position.currentStockPrice == null || !position.stop;
+    ? stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid || !(position.currentPrice > 0)
+    : optionStrike == null || position.currentStockPrice == null || !position.stop || !(position.currentPrice > 0);
 
   // Same AbortController pattern as StockPositionCard's onEstimate/estimateReq
   // (the template this section mirrors): abort a still-in-flight request when
@@ -169,7 +196,7 @@ export function EditDrawer({
     setPriceEditedSinceEstimate(false);
     try {
       if (isStock) {
-        if (stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid) throw new Error('missing target/stop');
+        if (stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid || !(position.currentPrice > 0)) throw new Error('missing target/stop');
         // A position minted with no snapshot (the after-scan auto-execute path
         // deliberately omits one — see paperTrade.ts/step-4-stocks's own
         // comment) has no real strategy name to send. An empty string just
@@ -198,7 +225,7 @@ export function EditDrawer({
         });
         restampIfActive('monte_carlo', targets[0]?.price ?? null);
       } else {
-        if (optionStrike == null || position.currentStockPrice == null || !position.stop) {
+        if (optionStrike == null || position.currentStockPrice == null || !position.stop || !(position.currentPrice > 0)) {
           throw new Error('missing option context');
         }
         const res = await api.getFirstPassageEstimate({

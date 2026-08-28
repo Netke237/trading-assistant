@@ -116,6 +116,27 @@ describe('EditDrawer Monte Carlo estimate', () => {
     expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
   });
 
+  it('disables Estimate for an option position with a corrupted strike of 0 in its snapshot', () => {
+    // A stored strike of 0 must not pass the `== null` check through to the
+    // backend, which rejects strike <= 0 with a raw 422 instead of a
+    // disabled button.
+    render(<EditDrawer position={makeOptionPosition({ tradeCardSnapshot: { strike: 0 } })} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
+  });
+
+  it('disables Estimate for an option position with a 0 premium (illiquid/deep-OTM quote)', () => {
+    // portfolioStore's fromBackend sets currentPrice = quote.price ?? 0 for a
+    // failed/empty quote fetch — a real state, not hypothetical. The backend
+    // rejects premium <= 0 with a raw 422 rather than the button disabling.
+    render(<EditDrawer position={makeOptionPosition({ currentPrice: 0 })} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
+  });
+
+  it('disables Estimate for a stock position with a 0 current price', () => {
+    render(<EditDrawer position={makeStockPosition({ currentPrice: 0 })} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
+  });
+
   it('keeps Estimate enabled for a winning stock position that has already cleared its first target', async () => {
     // Regression: a Bullish position at $210 with T1=$205 (cleared) and
     // T2=$215 (still ahead) is a completely normal partial-profit state —

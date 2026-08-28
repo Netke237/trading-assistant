@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
@@ -64,6 +64,16 @@ export default function Step7PositionCardPage() {
   const candidates = result?.candidates.filter((c) => c.backtest.passes_gate) ?? [];
   const card: PositionCardData | undefined = candidates[selectedIdx];
 
+  // orderId/error/warning are shared (not per-candidate) state. If the user
+  // switches candidates while a submit() is still in flight, a stale
+  // response landing after the switch must not stamp its outcome onto
+  // whatever candidate is now on screen (e.g. wrongly disabling ITS Buy
+  // buttons via the orderId !== null guard below). addPosition() still
+  // always runs for the originally-submitted card — a real order was
+  // placed and must be tracked regardless of what the user looks at next.
+  const selectedIdxRef = useRef(selectedIdx);
+  useEffect(() => { selectedIdxRef.current = selectedIdx; }, [selectedIdx]);
+
   const [spotPrice,    setSpotPrice]    = useState<number | null>(null);
   const [fetchingSpot, setFetchingSpot] = useState(false);
 
@@ -89,6 +99,8 @@ export default function Step7PositionCardPage() {
 
   async function submit(orderType: 'LMT' | 'MKT') {
     if (!card || execMode === 'recommendation' || orderId !== null) return;
+    const submittedIdx = selectedIdx;
+    const stillViewing = () => selectedIdxRef.current === submittedIdx;
     setPlacingType(orderType);
     setError(null);
     setWarning(null);
@@ -103,7 +115,7 @@ export default function Step7PositionCardPage() {
         limit_price: orderType === 'LMT' ? card.strategy.entry_price : null,
         tif: 'DAY',
       });
-      setOrderId(res.order_id);
+      if (stillViewing()) setOrderId(res.order_id);
       try {
         const addRes = await addPosition({
           ...buildPaperStockPosition(
@@ -119,14 +131,14 @@ export default function Step7PositionCardPage() {
           sourceLabel: `${execMode} — ${orderType} (ID: ${res.order_id})`,
           orderedAt: new Date().toISOString(),
         });
-        if (addRes.status === 'rejected' || addRes.status === 'pending') {
+        if (stillViewing() && (addRes.status === 'rejected' || addRes.status === 'pending')) {
           setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
         }
       } catch {
-        setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
+        if (stillViewing()) setWarning('Order placed but not yet tracked in Portfolio — check there directly.');
       }
     } catch (e) {
-      setError(String(e));
+      if (stillViewing()) setError(String(e));
     } finally {
       setPlacingType(null);
     }

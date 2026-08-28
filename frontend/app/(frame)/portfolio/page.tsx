@@ -23,7 +23,6 @@ import { useAlertStore } from '@/lib/alertStore';
 import { scanPortfolio } from '@/lib/alertEngine';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
 import { positionStatusTooltip } from '@/lib/statusTooltips';
-import { api } from '@/lib/api';
 import type { PortfolioPosition } from '@/types/domain';
 import styles from './page.module.css';
 import { EditDrawer } from './EditDrawer';
@@ -55,24 +54,6 @@ function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | und
   if (rk >= 70) return 'reject';      // very rich
   if (rk >= 40) return 'caution';     // moderate
   return 'pass';                      // cheap
-}
-
-/** `position.contract` for an option position is a backend-generated,
- *  pipe-delimited machine ID — "SYMBOL|STRIKE|EXPIRY|C/P" (see
- *  backend/app/routers/scan.py's `contract=f"{symbol}|{int(strike)}|..."`
- *  and backend/app/schemas/__init__.py's persistence-schema comment). Note
- *  the `int(strike)` truncation — this id is INTEGER-only, so it silently
- *  rounds down any fractional strike (e.g. 187.5 -> "187"). Every option
- *  position, old or new, has this format, unlike `tradeCardSnapshot.strike`,
- *  which is only populated for positions opened after this Monte Carlo
- *  feature shipped — so this is used strictly as the FALLBACK for
- *  pre-existing positions that predate the snapshot, never preferred over
- *  it. Callers must try `tradeCardSnapshot.strike` first. */
-function optionStrikeFromContract(contract: string): number | null {
-  const parts = contract.split('|');
-  if (parts.length !== 4) return null;
-  const strike = Number(parts[1]);
-  return Number.isFinite(strike) && strike > 0 ? strike : null;
 }
 
 const COLUMNS = '28px 72px 1.6fr 72px 1fr 110px 104px 60px 56px 60px 90px 40px';
