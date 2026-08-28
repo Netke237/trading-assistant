@@ -567,6 +567,23 @@ describe('scanPortfolio — active TP method / resolved TP snapshot', () => {
     expect(alert?.reason).not.toContain('exit plan');
   });
 
+  it('falls back to the ladder and does not mislabel on a stray negative resolvedTpPrice', () => {
+    // Backend regression guard (round-9 audit finding): a >0 check is
+    // required, not just != null — 0 falls back correctly, but truthiness
+    // alone would treat a negative snapshot as "set" and mislabel a
+    // ladder-sourced fire with the (unused) exit-plan method name. Pins the
+    // frontend side of the same guard, which the backend fix didn't have an
+    // explicit negative-value test for on this side.
+    const out = scanPortfolio([withTp({
+      targets: [{ id: 't1', stockPrice: 160, contractsToSell: 1, status: 'PENDING' }],
+      resolvedTpPrice: -50,
+      activeTpMethod: 'exit_plan_2r',
+    })]);
+    const alert = out.find((a) => a.alertType === 'TP_HIT');
+    expect(alert?.referenceValue).toBe(160);
+    expect(alert?.reason).not.toContain('exit plan');
+  });
+
   it('fires off the snapshot alone when the position has no ladder targets', () => {
     const out = scanPortfolio([withTp({ targets: [], resolvedTpPrice: 160, activeTpMethod: 'monte_carlo' })]);
     expect(out.some((a) => a.alertType === 'TP_HIT')).toBe(true);
