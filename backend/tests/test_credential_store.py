@@ -4,9 +4,12 @@ import tempfile
 from pathlib import Path
 
 # "" means "no file persistence" — see the three cases in credential_store.py.
-# The real guarantee is conftest.py's pin, which runs before any test module
-# and so does not depend on pytest collection order; this line keeps THIS
-# module explicitly off disk regardless.
+# This line is NOT load-bearing for this module: every CredentialStore below
+# is constructed with an explicit path= argument, so the module-level
+# singleton (the only thing that reads this env var) is never touched here.
+# The real guarantee against writing to the real config file is conftest.py's
+# setdefault pin, which runs before any test module is collected and so does
+# not depend on import order. Kept here only for documentation/consistency.
 os.environ["BAMENDJOU_CREDS_PATH"] = ""
 
 from app.services.credential_store import CredentialStore

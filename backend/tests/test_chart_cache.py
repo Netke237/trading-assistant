@@ -96,6 +96,18 @@ async def test_4h_widened_to_hourly_cap_not_left_at_default_55():
 
 
 @pytest.mark.asyncio
+async def test_1h_widened_to_hourly_cap_not_left_at_default_55():
+    """Same widening as 4h (see test above) — '1h' shares the same branch in
+    get_intraday, but had no dedicated regression test of its own."""
+    mock_rows = [{"time": "2024-01-02", "open": 100, "high": 105, "low": 99, "close": 103, "volume": 1000}]
+    with patch("app.data.chart_cache.fetch_intraday_candles", return_value=mock_rows) as mock_fetch:
+        from app.data.chart_cache import get_intraday, _INTRADAY_CACHE
+        _INTRADAY_CACHE.clear()
+        await get_intraday("AAPL", "1h")  # caller passes no days -> route/WS default of 55
+    mock_fetch.assert_called_once_with("AAPL", "1h", 730)
+
+
+@pytest.mark.asyncio
 async def test_at_most_2_concurrent_fetches():
     """At most 2 concurrent chart fetches run simultaneously."""
     import asyncio as _asyncio
