@@ -113,6 +113,31 @@ async def test_put_uppercase_then_get_lowercase_symbol():
 
 
 @pytest.mark.asyncio
+async def test_get_note_rejects_oversized_symbol():
+    """The `symbol` column is String(10); a longer symbol must be rejected
+    with a clean 422 rather than reaching the DB, where Postgres would raise
+    a raw data-length error the caller can't recover from."""
+    app = await _make_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        resp = await client.get('/api/notes/' + 'A' * 11)
+        assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_upsert_note_rejects_oversized_symbol():
+    app = await _make_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        resp = await client.put('/api/notes/' + 'A' * 11, json={'body': 'too long'})
+        assert resp.status_code == 422
+
+        # Confirm it never reached the DB: a subsequent GET for the same
+        # (truncated-to-10, if it had gotten through) symbol shape still
+        # finds nothing.
+        resp2 = await client.get('/api/notes/' + 'A' * 11)
+        assert resp2.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_upsert_note_recovers_when_insert_races_an_existing_row():
     """Exercises upsert_note's own IntegrityError-retry branch directly."""
     from unittest.mock import patch

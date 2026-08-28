@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,12 @@ from app.database import get_db
 from app.models.symbol_note import SymbolNoteModel
 
 router = APIRouter(prefix='/api/notes', tags=['symbol-notes'])
+
+# Matches the `symbol` column's String(10) width — reject early with a clean
+# 422 instead of letting an oversized symbol reach the DB and blow up with a
+# raw data-length error (Postgres) that upsert_note's IntegrityError retry
+# doesn't handle, permanently stranding the note as unsavable.
+MAX_SYMBOL_LEN = 10
 
 
 class NoteOut(BaseModel):
@@ -40,6 +46,8 @@ def _row_to_dict(row: SymbolNoteModel) -> dict:
 async def get_note(symbol: str, db: AsyncSession = Depends(get_db)) -> dict:
     """Returns the note for a symbol, or an empty placeholder if none exists
     yet — a symbol with no note is a normal state, not a 404."""
+    if len(symbol) > MAX_SYMBOL_LEN:
+        raise HTTPException(status_code=422, detail=f'symbol must be at most {MAX_SYMBOL_LEN} characters')
     row = await db.get(SymbolNoteModel, symbol.upper())
     if row is None:
         return {'symbol': symbol.upper(), 'body': '', 'updatedAt': None}
@@ -49,6 +57,8 @@ async def get_note(symbol: str, db: AsyncSession = Depends(get_db)) -> dict:
 @router.put('/{symbol}', response_model=NoteOut)
 async def upsert_note(symbol: str, body: NoteIn, db: AsyncSession = Depends(get_db)) -> dict:
     """Create or overwrite the note for a symbol (upsert)."""
+    if len(symbol) > MAX_SYMBOL_LEN:
+        raise HTTPException(status_code=422, detail=f'symbol must be at most {MAX_SYMBOL_LEN} characters')
     sym = symbol.upper()
     now = datetime.now(timezone.utc)
     row = await db.get(SymbolNoteModel, sym)
