@@ -168,12 +168,14 @@ async def generate_alerts(
             (first_target.get("stock_price") or first_target.get("stockPrice") or 0)
             if first_target else None
         )
-        # Truthiness, not `is not None`: 0 is never a real stock price (the same
-        # convention `_floor_stop` applies to stops) and an upstream `?? 0`
-        # fallback can persist one. A 0 snapshot falls back to the ladder rather
-        # than making `price >= 0` true on every tick.
-        target_stock_price = pos.resolved_tp_price or ladder_price
-        if target_stock_price and price is not None and not _muted("TP_HIT"):
+        # `> 0`, not truthiness: 0 AND negative are never real stock prices
+        # (the same convention `_floor_stop` applies to stops) and an
+        # unguarded write path could persist either. A non-positive snapshot
+        # falls back to the ladder rather than making `price >= <=0` true on
+        # every tick for a Bullish position, or never true for a Bearish one.
+        raw_resolved = pos.resolved_tp_price
+        target_stock_price = raw_resolved if raw_resolved and raw_resolved > 0 else ladder_price
+        if target_stock_price and target_stock_price > 0 and price is not None and not _muted("TP_HIT"):
             hit_raw = (price <= target_stock_price) if is_bearish else (price >= target_stock_price)
             if _sustained("TP_HIT", hit_raw):
                 counter += 1

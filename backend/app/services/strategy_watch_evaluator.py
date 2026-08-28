@@ -364,7 +364,7 @@ async def evaluate_and_notify(sustain_minutes: int = 0) -> list[WatchEvent]:
     for ev in events:
         subject, plain, html = _format_event(ev)
         try:
-            notify_enabled_channels(subject, plain, html)
+            await notify_enabled_channels(subject, plain, html)
         except Exception:
             logger.error("strategy-watch: notify failed for %s", ev.symbol, exc_info=True)
     return events

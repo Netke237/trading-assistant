@@ -617,13 +617,13 @@ async def create_history_entry(body: AlertHistoryCreate, db: AsyncSession = Depe
     _tg    = _notif_cfg.get('telegram', {})
     if _gmail.get('enabled'):
         logger.info('Dispatching alert email for %s [%s]', entry_dict.get('symbol'), entry_dict.get('interval'))
-        _dispatch('gmail',
+        await _dispatch('gmail',
             to=_gmail.get('to', ''), subject=subject, body=plain_body,
             smtp_user=_gmail.get('smtp_user', ''), smtp_password=_gmail.get('smtp_password', ''),
         )
     if _tg.get('enabled'):
         logger.info('Dispatching alert Telegram for %s [%s]', entry_dict.get('symbol'), entry_dict.get('interval'))
-        _dispatch('telegram',
+        await _dispatch('telegram',
             bot_token=_tg.get('bot_token', ''), chat_id=_tg.get('chat_id', ''), text=html_body,
         )
 
@@ -803,13 +803,13 @@ async def evaluate_and_notify_for_symbol(
 
             if _gmail.get('enabled'):
                 logger.info('Dispatching WS alert email for %s [%s]', entry['symbol'], entry['interval'])
-                _dispatch('gmail',
+                await _dispatch('gmail',
                     to=_gmail.get('to', ''), subject=subject, body=plain_body,
                     smtp_user=_gmail.get('smtp_user', ''), smtp_password=_gmail.get('smtp_password', ''),
                 )
             if _tg.get('enabled'):
                 logger.info('Dispatching WS alert Telegram for %s [%s]', entry['symbol'], entry['interval'])
-                _dispatch('telegram',
+                await _dispatch('telegram',
                     bot_token=_tg.get('bot_token', ''), chat_id=_tg.get('chat_id', ''), text=html_body,
                 )
 
@@ -953,10 +953,10 @@ async def evaluate_and_notify_for_symbol(
                 _gm = _ncfg.get('gmail', {})
                 _tg = _ncfg.get('telegram', {})
                 if _gm.get('enabled'):
-                    _dispatch('gmail', to=_gm.get('to', ''), subject=_subj, body=_plain,
+                    await _dispatch('gmail', to=_gm.get('to', ''), subject=_subj, body=_plain,
                               smtp_user=_gm.get('smtp_user', ''), smtp_password=_gm.get('smtp_password', ''))
                 if _tg.get('enabled'):
-                    _dispatch('telegram', bot_token=_tg.get('bot_token', ''), chat_id=_tg.get('chat_id', ''), text=_html)
+                    await _dispatch('telegram', bot_token=_tg.get('bot_token', ''), chat_id=_tg.get('chat_id', ''), text=_html)
                 triggered.append(_entry)
 
         await db.commit()

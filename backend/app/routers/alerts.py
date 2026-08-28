@@ -1,9 +1,12 @@
+import asyncio
+
+import httpx
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.data.market import fetch_quotes
+from app.data.market import fetch_contract_quote_async, fetch_quotes
 from app.database import get_db
 from app.models.portfolio import PortfolioPositionModel
 from app.schemas import AlertItem
@@ -16,11 +19,30 @@ router = APIRouter(prefix='/api', tags=['alerts'])
 
 @router.get('/alerts', response_model=list[AlertItem])
 async def get_alerts(db: AsyncSession = Depends(get_db)) -> list[AlertItem]:
-    result = await db.execute(select(PortfolioPositionModel))
-    symbols = list({p.symbol for p in result.scalars().all()})
+    positions = (await db.execute(select(PortfolioPositionModel))).scalars().all()
+    symbols = list({p.symbol for p in positions})
     quotes = fetch_quotes(symbols)
     current_prices = {sym: q["last"] for sym, q in quotes.items()}
-    alerts = await generate_alerts(db, current_prices)
+
+    # Live option prices — same source as portfolio_alert_monitor.py's
+    # headless dispatch loop — so PREMIUM_STOP can actually fire through
+    # this endpoint too. Without this, current_option_prices stayed None
+    # forever and PREMIUM_STOP could never surface on the Dashboard's
+    # "Latest Alert" rail (fed exclusively by this endpoint), even though
+    # the same condition correctly emails/Telegrams via the background job.
+    option_prices: dict[str, float] = {}
+    contracts = [p.contract for p in positions if p.contract]
+    if contracts:
+        async with httpx.AsyncClient(timeout=10) as client:
+            results = await asyncio.gather(
+                *[fetch_contract_quote_async(client, c) for c in contracts],
+                return_exceptions=True,
+            )
+        for contract, quote in zip(contracts, results):
+            if isinstance(quote, dict) and quote.get('price') is not None:
+                option_prices[contract] = quote['price']
+
+    alerts = await generate_alerts(db, current_prices, option_prices or None)
     # generate_alerts() writes position_alert_history rows (log_position_alert)
     # and updates PortfolioPositionModel.alert_state, neither of which self-
     # commits any more (see log_position_alert's docstring) — get_db() only
@@ -116,7 +138,7 @@ async def post_alert_notify(
     # a muted type before it ever POSTs here, so in practice this carries an
     # explicit True; passing the full three-way result anyway keeps this path
     # correct on its own rather than relying on the caller having filtered.
-    sent = notify_alert(
+    sent = await notify_alert(
         position.symbol, req.alertType, req.reason, req.recId, req.timestamp,
         type_enabled=effective_enabled(position.alert_overrides, req.alertType),
     )

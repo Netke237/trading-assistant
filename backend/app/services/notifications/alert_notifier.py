@@ -189,13 +189,20 @@ def _build_notification(symbol: str, alert_type: str, reason: str,
     return subject, plain, html
 
 
-def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
+async def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
                  timestamp: str | None = None,
                  type_enabled: bool | None = None) -> bool:
     """Dispatch one portfolio alert to email/Telegram, deduped across all callers.
 
-    Returns True if the alert was dispatched, False if suppressed (master off,
-    type disabled, or already sent within the dedup window).
+    Returns True if the alert was actually delivered by at least one channel,
+    False if suppressed (master off, type disabled, already sent within the
+    dedup window) or if delivery genuinely failed. The dedup window is only
+    armed on a CONFIRMED send — a bad SMTP password or a dead Telegram bot
+    token used to mark the alert "sent" the instant it was scheduled
+    (fire-and-forget, outcome unobserved), which then silently suppressed
+    every retry for the whole dedup window even though nothing was ever
+    delivered. Now a failed attempt leaves the key unmarked so the very next
+    check retries instead of going quiet.
 
     ``type_enabled`` carries a position's explicit per-type override (Feature D)
     and, when not None, REPLACES the global ``enabledTypes`` check for this one
@@ -230,6 +237,10 @@ def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
         if key in _fired:
             return False  # already sent within the window
 
+        # Optimistic hold: claimed now, before the actual (async) send, so a
+        # concurrent call for the same key (browser POST racing the headless
+        # monitor's tick) still can't double-send during the network round
+        # trip. Rolled back below if delivery doesn't actually succeed.
         _fired[key] = now
         # First-ever send for this condition records the trigger time; later
         # sends are reminders and reuse it. _first_seen outlives the dedup purge.
@@ -242,10 +253,23 @@ def notify_alert(symbol: str, alert_type: str, reason: str, rec_id: str,
     subject, plain, html = _build_notification(
         symbol, alert_type, reason, original_ts, is_reminder=is_reminder)
     try:
-        notify_enabled_channels(subject, plain, html)
+        sent = await notify_enabled_channels(subject, plain, html)
     except Exception:
         logger.error('Failed to dispatch notification for %s', key, exc_info=True)
+        sent = False
+
+    if not sent:
+        with _fired_lock:
+            # Release the hold so the next check retries this condition
+            # instead of staying silent for the rest of the dedup window —
+            # but only if nothing newer has since claimed the key.
+            if _fired.get(key) == now:
+                _fired.pop(key, None)
+            if not is_reminder:
+                _first_seen.pop(key, None)
+            _save_dedup()
         return False
+
     logger.info('Dispatched alert notification: %s', key)
     return True
 

@@ -414,7 +414,13 @@ async def update_position(
     if "activeTpMethod" in updates and updates["activeTpMethod"] is not None:
         position.active_tp_method = updates["activeTpMethod"]
     if "resolvedTpPrice" in updates:
-        position.resolved_tp_price = updates["resolvedTpPrice"]
+        # Same non-positive-means-unset floor as stop/structuralStop above —
+        # generate_alerts()'s TP_HIT check tests `resolved_tp_price or
+        # ladder_price` (Python truthiness only catches 0, not negative), so
+        # an unfloored negative value here made TP_HIT fire on every tick for
+        # a Bullish position (price >= negative is always true) and never
+        # fire for a Bearish one (price <= negative is never true).
+        position.resolved_tp_price = _floor_stop(updates["resolvedTpPrice"])
     if "resolvedTpUpdatedAt" in updates:
         raw = updates["resolvedTpUpdatedAt"]
         position.resolved_tp_updated_at = datetime.fromisoformat(raw) if raw else None

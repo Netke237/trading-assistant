@@ -182,7 +182,7 @@ async def _run_once() -> None:
         # so the only override left to honour here is an explicit True — which
         # must beat a globally-disabled type. `None` (no override) keeps
         # notify_alert on the global enabledTypes list, exactly as before.
-        notify_alert(alert.symbol, alert.alertType, alert.reason,
+        await notify_alert(alert.symbol, alert.alertType, alert.reason,
                      alert.recId, alert.timestamp,
                      type_enabled=effective_enabled(
                          overrides_by_rec_id.get(alert.recId), alert.alertType))
