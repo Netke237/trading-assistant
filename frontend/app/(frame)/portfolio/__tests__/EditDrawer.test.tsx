@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { EditDrawer, tpMethodPatch } from '../page';
+import { EditDrawer, tpMethodPatch } from '../EditDrawer';
 import { api } from '@/lib/api';
 import type { PortfolioPosition } from '@/types/domain';
 
@@ -114,6 +114,55 @@ describe('EditDrawer Monte Carlo estimate', () => {
   it('disables Estimate for an option position missing strike in its snapshot', () => {
     render(<EditDrawer position={makeOptionPosition({ tradeCardSnapshot: {} })} onClose={noop} onChange={noop} onRemove={noop} />);
     expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
+  });
+
+  it('keeps Estimate enabled for a winning stock position that has already cleared its first target', async () => {
+    // Regression: a Bullish position at $210 with T1=$205 (cleared) and
+    // T2=$215 (still ahead) is a completely normal partial-profit state —
+    // targets[].status is never synced to 'HIT' anywhere in this codebase, so
+    // this must not be treated as "the position's data needs fixing." Only
+    // T2 should be sent to the estimate; T1 must be silently dropped, not
+    // block the whole feature.
+    (api.getStockFirstPassage as jest.Mock).mockResolvedValueOnce({
+      targets: [{ price: 215, probability: 0.4, expectedDays: 8 }],
+      invalidation: { probability: 0.15, expectedDays: null },
+      horizonDays: 10,
+      modelCaveat: null,
+    });
+    const position = makeStockPosition({
+      currentPrice: 210,
+      targets: [
+        { id: 'T1', stockPrice: 205, targetPrice: 205, status: 'PENDING' },
+        { id: 'T2', stockPrice: 215, targetPrice: 215, status: 'PENDING' },
+      ],
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Estimate' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+    await waitFor(() => expect(api.getStockFirstPassage).toHaveBeenCalledWith(
+      expect.objectContaining({ targets: [215] }),
+      expect.any(AbortSignal),
+    ));
+  });
+
+  it('disables Estimate and explains why when every target has already been reached', () => {
+    const position = makeStockPosition({
+      currentPrice: 220,
+      targets: [
+        { id: 'T1', stockPrice: 205, targetPrice: 205, status: 'PENDING' },
+        { id: 'T2', stockPrice: 215, targetPrice: 215, status: 'PENDING' },
+      ],
+    });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
+    expect(screen.getByText(/Every target has already been reached/)).toBeInTheDocument();
+  });
+
+  it('disables Estimate and explains why when the stop is on the wrong side of the current price', () => {
+    const position = makeStockPosition({ currentPrice: 180, stop: 182 }); // stop above price for a Bullish position
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
+    expect(screen.getByText(/stop is already on the wrong side/)).toBeInTheDocument();
   });
 
   it('re-derives the option strike from position.contract even when the buy-time snapshot has no strike (pre-existing positions)', async () => {
