@@ -5,13 +5,16 @@
 'use client';
 
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { usePortfolioUiStore } from '@/lib/portfolioUiStore';
 import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
+import { SymbolNotes } from '@/components/molecules/SymbolNotes';
 import { Text, Data } from '@/components/primitives';
 import styles from './page.module.css';
 
 export default function PortfolioContextRail() {
   const positions = usePortfolioStore((s) => s.positions);
+  const selectedSymbol = usePortfolioUiStore((s) => s.selectedSymbol);
   const deployed = positions.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
   const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
   const hasGreeks = positions.some((p) => p.delta != null || p.theta != null);
@@ -44,7 +47,16 @@ export default function PortfolioContextRail() {
         </div>
       </RailSection>
 
-      <RailQuickLook />
+      {selectedSymbol && (
+        <RailSection title={`Notes · ${selectedSymbol}`}>
+          <SymbolNotes symbol={selectedSymbol} editable />
+        </RailSection>
+      )}
+
+      {/* showPortfolio=false: the "Totals" section above already covers
+          positions/deployed/open P&L — RailQuickLook's own "Portfolio"
+          section would just repeat the same numbers a second time. */}
+      <RailQuickLook showPortfolio={false} />
     </>
   );
 }

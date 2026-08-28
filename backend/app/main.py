@@ -44,6 +44,7 @@ from app.routers.composite_watch import router as composite_watch_router
 from app.routers.strategy_tuning import router as strategy_tuning_router
 from app.routers.config          import router as config_router
 from app.routers.symbols         import router as symbols_router
+from app.routers.symbol_notes    import router as symbol_notes_router
 
 
 _portfolio_monitor_task: asyncio.Task | None = None
@@ -295,6 +296,7 @@ def create_app() -> FastAPI:
     app.include_router(auto_trade_router)
     app.include_router(historical_data_router)
     app.include_router(chart_drawings_router)
+    app.include_router(symbol_notes_router)
     app.include_router(ingestion_router)
     app.include_router(strategy_watch_router)
     app.include_router(composite_watch_router)

@@ -14,6 +14,7 @@ import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { usePortfolioStore } from '@/lib/portfolioStore';
+import { usePortfolioUiStore } from '@/lib/portfolioUiStore';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
@@ -79,6 +80,7 @@ export default function PortfolioPage() {
   const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
   const updatePosition = usePortfolioStore((s) => s.updatePosition);
   const [editing, setEditing] = useState<string | null>(null);
+  const setSelectedSymbol = usePortfolioUiStore((s) => s.setSelectedSymbol);
   const [tab, setTab] = useState<'open' | 'history'>('open');
   const [closing, setClosing] = useState<string | null>(null); // contract being closed
   const [closeError, setCloseError] = useState<string | null>(null);
@@ -121,6 +123,12 @@ export default function PortfolioPage() {
     const id = setInterval(runCycle, 30_000);
     return () => clearInterval(id);
   }, [syncFromBackend, fetchHistory, fetchPerformance]);
+
+  // Clear the sidebar's selected-symbol note when leaving this page, so a
+  // stale selection doesn't linger for the next visit.
+  useEffect(() => {
+    return () => setSelectedSymbol(null);
+  }, [setSelectedSymbol]);
 
   const deployed = positions.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
   const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
@@ -345,7 +353,11 @@ export default function PortfolioPage() {
                   <button
                     type="button"
                     className={styles.editBtn}
-                    onClick={() => setEditing((cur) => (cur === p.contract ? null : p.contract))}
+                    onClick={() => {
+                      const opening = editing !== p.contract;
+                      setEditing(opening ? p.contract : null);
+                      setSelectedSymbol(opening ? p.symbol : null);
+                    }}
                     aria-label={`Edit ${p.contract}`}
                     aria-expanded={editing === p.contract}
                     title="Edit position"
@@ -357,9 +369,9 @@ export default function PortfolioPage() {
                 {editing === p.contract && (
                   <EditDrawer
                     position={p}
-                    onClose={() => setEditing(null)}
+                    onClose={() => { setEditing(null); setSelectedSymbol(null); }}
                     onChange={(patch) => updatePosition(p.contract, patch)}
-                    onRemove={() => { setEditing(null); setClosing(p.contract); }}
+                    onRemove={() => { setEditing(null); setSelectedSymbol(null); setClosing(p.contract); }}
                   />
                 )}
               </div>

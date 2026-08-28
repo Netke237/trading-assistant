@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { SymbolNotes } from '@/components/molecules/SymbolNotes';
 import { flushPendingPositionPatches } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw } from '@/lib/risk';
@@ -380,6 +381,11 @@ export function EditDrawer({
         {mcPriceStale && (
           <Text size={11} tone="caution">Price has changed since this estimate was computed.</Text>
         )}
+      </div>
+
+      <div className={styles.targetEditor}>
+        <Text size={11} tone="secondary">Notes</Text>
+        <SymbolNotes symbol={position.symbol} editable />
       </div>
 
       <div className={styles.editFooter}>
