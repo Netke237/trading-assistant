@@ -4,12 +4,15 @@ import tempfile
 from pathlib import Path
 
 # "" means "no file persistence" — see the three cases in credential_store.py.
-# This line is NOT load-bearing for this module: every CredentialStore below
-# is constructed with an explicit path= argument, so the module-level
-# singleton (the only thing that reads this env var) is never touched here.
-# The real guarantee against writing to the real config file is conftest.py's
-# setdefault pin, which runs before any test module is collected and so does
-# not depend on import order. Kept here only for documentation/consistency.
+# Most tests below construct a CredentialStore with an explicit path=, which
+# never reads this env var at all. The exception is
+# test_post_credentials_stores_and_get_returns_masked, which goes through the
+# /settings/credentials route and does call save() on the module-level
+# singleton — but by the time that singleton is first built (whichever test
+# module gets collected first), conftest.py's setdefault pin has already set
+# this env var to a throwaway path, so this line does not change that
+# singleton's behavior either way. It's kept for documentation/consistency,
+# not because it's load-bearing.
 os.environ["BAMENDJOU_CREDS_PATH"] = ""
 
 from app.services.credential_store import CredentialStore
