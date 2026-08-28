@@ -741,6 +741,38 @@ describe('EditDrawer per-position alert overrides', () => {
     expect(screen.getByText('Fires at stock $182.00.')).toBeInTheDocument();  // STOP_REACHED
   });
 
+  it('labels PREMIUM_STOP a stock level, not a premium, for a stock position', () => {
+    // The backend's PREMIUM_STOP threshold (entry_price * (1 - premiumStopPct))
+    // is compared against the position's own contract quote — for a `|STOCK`
+    // contract that's the stock price itself (market.py's stock-format branch
+    // in fetch_contract_quote_async), never an option premium. Labeling it
+    // "premium" here would misattribute a stock-price level as an options
+    // concept this position doesn't have. entryPrice 190 * (1 - 0.60) = 76.00.
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByText('Fires at stock $76.00.')).toBeInTheDocument();
+    expect(screen.queryByText(/Fires at premium/)).not.toBeInTheDocument();
+  });
+
+  it('labels PREMIUM_STOP a premium for an option position', () => {
+    render(<EditDrawer position={makeOptionPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    // entryPrice 4.2 * (1 - 0.60) = 1.68.
+    expect(screen.getByText('Fires at premium $1.68.')).toBeInTheDocument();
+  });
+
+  it('shows TIME_STOP as not set for a stock position, not the option 3-DTE threshold', () => {
+    // Round-7 re-audit finding: alertFiresAgainst's TIME_STOP case unconditionally
+    // returned '3 DTE or less' regardless of contract shape, describing a threshold
+    // that alertEngine.ts can never actually fire for a stock position (which has
+    // no expiry) as if it were live.
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.queryByText(/3 DTE or less/)).not.toBeInTheDocument();
+  });
+
+  it('shows the 3-DTE threshold for TIME_STOP on an option position', () => {
+    render(<EditDrawer position={makeOptionPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByText(/3 DTE or less/)).toBeInTheDocument();
+  });
+
   it('prefers the resolved TP snapshot over the ladder in the fires-at line', () => {
     render(
       <EditDrawer
@@ -753,8 +785,9 @@ describe('EditDrawer per-position alert overrides', () => {
 
   it('says so when an enabled type has no level set on this position', () => {
     render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
-    // No structural stop was ever captured for this position.
-    expect(screen.getByText('On, but no level is set on this position yet.')).toBeInTheDocument();
+    // No structural stop was ever captured for this position, and TIME_STOP
+    // never applies to a stock position (round-7 fix) -- both show "not set."
+    expect(screen.getAllByText('On, but no level is set on this position yet.')).toHaveLength(2);
   });
 
   it('says an explicitly-off type raises nothing', () => {

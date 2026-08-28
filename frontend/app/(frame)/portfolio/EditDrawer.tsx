@@ -73,7 +73,17 @@ export function EditDrawer({
 
   const isStock = position.contract.endsWith('|STOCK');
   const snapshot = position.tradeCardSnapshot ?? {};
-  const allStockTargetPrices = position.targets.map((t) => t.targetPrice ?? t.stockPrice).filter((p): p is number => typeof p === 'number' && p > 0);
+  // Carries each target's real id (T1/T2/…) alongside its price through both
+  // filters below, so a partially-cleared position's remaining targets keep
+  // their own labels in the estimate result instead of being renumbered from
+  // whatever index they land at in the filtered array (see runEstimate's use
+  // of allStockTargets/stockTargets below — T1 cleared, T2 still ahead must
+  // render as "T2", not be relabeled "T1" just because it's now first in the
+  // filtered list).
+  const allStockTargets = position.targets
+    .map((t) => ({ id: t.id, price: t.targetPrice ?? t.stockPrice }))
+    .filter((t): t is { id: string | undefined; price: number } => typeof t.price === 'number' && t.price > 0);
+  const allStockTargetPrices = allStockTargets.map((t) => t.price);
   // Only targets still AHEAD of the current price are meaningful to a
   // forward-looking Monte Carlo estimate — a target the price has already run
   // past is a normal winning-trade state (targets[].status isn't kept synced
@@ -885,6 +895,7 @@ function alertFiresAgainst(
   type: PositionAlertType,
   premiumStopPct: number,
 ): string | null {
+  const isStock = position.contract.endsWith('|STOCK');
   switch (type) {
     case 'TP_HIT': {
       // Same snapshot-then-ladder resolution (and same `> 0` rule) the alert
@@ -899,14 +910,22 @@ function alertFiresAgainst(
     case 'STRUCTURAL_STOP_BREACHED':
       return position.structuralStop != null ? `stock $${position.structuralStop.toFixed(2)}` : null;
     case 'PREMIUM_STOP':
-      // Premium-based, not a stock level — the engine compares pnlPct, but the
-      // equivalent premium is the number the user can actually eyeball against
-      // the position's current price.
+      // The backend's threshold (entry_price * (1 - premiumStopPct)) is
+      // compared against fetch_contract_quote_async's price for the position's
+      // own contract, which for a `|STOCK` position IS the stock quote, not an
+      // option premium (see market.py's stock-format branch — `opt_price` is
+      // just this generic "current quote for pos.contract", named for the
+      // option case it originated from). Labeling that threshold "premium"
+      // for a stock position misattributes a stock-price level as an option
+      // concept the position doesn't even have.
       return position.entryPrice > 0
-        ? `premium $${(position.entryPrice * (1 - premiumStopPct)).toFixed(2)}`
+        ? `${isStock ? 'stock' : 'premium'} $${(position.entryPrice * (1 - premiumStopPct)).toFixed(2)}`
         : null;
     case 'TIME_STOP':
-      return '3 DTE or less';
+      // Stock positions carry no expiry and (per alertEngine.ts's isStock
+      // guard) can never fire this type — "not set" rather than a threshold
+      // that looks armed but isn't.
+      return isStock ? null : '3 DTE or less';
     case 'EVENT_RISK':
       return 'event within 3 days';
   }

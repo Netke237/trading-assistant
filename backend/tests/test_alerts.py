@@ -95,6 +95,50 @@ async def test_tp_hit_fires(db_session):
     assert "Target reached" in tp_alerts[0].reason
 
 
+# ── Test 1b: a negative resolved_tp_price falls back to the ladder target,
+# it does not make TP_HIT fire on every tick (round-8 audit finding) ──────────
+
+@pytest.mark.asyncio
+async def test_tp_hit_ignores_negative_resolved_tp_price_and_falls_back_to_ladder(db_session):
+    """A stray negative resolved_tp_price (bypassing the PATCH-boundary floor,
+    e.g. a pre-fix row) must not make `price >= resolved_tp_price` trivially
+    true on every check for a Bullish position — it should be treated as
+    unset and fall back to the ladder target, exactly like 0 already does."""
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(
+        db_session, symbol="AAPL",
+        targets=[{"stockPrice": 500.0, "stock_price": 500.0}],  # ladder target NOT hit
+        resolved_tp_price=-50.0,
+    )
+    prices = {"AAPL": 195.0}  # would trivially satisfy `>= -50` if unguarded
+    alerts = await generate_alerts(db_session, prices)
+    tp_alerts = [a for a in alerts if a.alertType == "TP_HIT"]
+    assert len(tp_alerts) == 0
+
+
+@pytest.mark.asyncio
+async def test_tp_hit_from_ladder_fallback_does_not_mislabel_the_tp_method(db_session):
+    """Round-9 audit finding: the firing condition correctly falls back to the
+    ladder target when resolved_tp_price is negative (guarded with `> 0`), but
+    the method-label code re-tested `pos.resolved_tp_price` with plain
+    truthiness (-50.0 is truthy in Python) — so a ladder-sourced fire got
+    mislabeled with the exit-plan method name that did NOT actually supply
+    the price it fired against. The reason text must stay unlabelled here,
+    exactly as it would for a genuinely unset resolved_tp_price."""
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(
+        db_session, symbol="AAPL",
+        targets=[{"stockPrice": 500.0, "stock_price": 500.0}],  # ladder target IS hit below
+        resolved_tp_price=-50.0,  # stray negative -- must not label the fire
+        active_tp_method="exit_plan_2r",
+    )
+    prices = {"AAPL": 501.0}  # hits the ladder target, not the (unset) resolved price
+    alerts = await generate_alerts(db_session, prices)
+    tp_alerts = [a for a in alerts if a.alertType == "TP_HIT"]
+    assert len(tp_alerts) == 1
+    assert "2R exit plan" not in tp_alerts[0].reason
+
+
 # ── Test 2: STOP_REACHED when current_price <= stop ────────────────────────────
 
 @pytest.mark.asyncio
@@ -201,6 +245,28 @@ async def test_premium_stop_does_not_fire_before_threshold(db_session):
     alerts = await generate_alerts(db_session, prices, opt_prices)
     prem_alerts = [a for a in alerts if a.alertType == "PREMIUM_STOP"]
     assert len(prem_alerts) == 0
+
+
+# ── Test 3c: PREMIUM_STOP on a stock position says "stock", not "option" ───────
+# Round-6 re-audit finding: the reason string was hardcoded to "option at $X.XX"
+# regardless of contract shape, unlike the frontend's alertFiresAgainst (which
+# already branches on `position.contract.endsWith('|STOCK')`). A stock position
+# breaching its premium stop must not claim the user holds an option.
+
+@pytest.mark.asyncio
+async def test_premium_stop_stock_position_says_stock_not_option(db_session):
+    from app.services.alert_generator import generate_alerts
+    await _insert_position(
+        db_session, symbol="XYZ", contract="XYZ|STOCK", entry_price=100.0,
+        stop=None, targets=[],
+    )
+    prices = {"XYZ": 90.0}
+    opt_prices = {"XYZ|STOCK": 35.0}  # 35 <= 100 * (1 - 0.60) = 40 -- lost 65%
+    alerts = await generate_alerts(db_session, prices, opt_prices)
+    prem_alerts = [a for a in alerts if a.alertType == "PREMIUM_STOP"]
+    assert len(prem_alerts) == 1
+    assert "stock at $35.00" in prem_alerts[0].reason
+    assert "option" not in prem_alerts[0].reason
 
 
 # ── Test 4: Backend produces distinct alert types (dedup is frontend logic) ─
@@ -435,8 +501,11 @@ async def test_get_alerts_endpoint_commits_position_alert_history(client, db_ses
 
     # This is the first test in this file to hit the router directly (rather
     # than calling generate_alerts() in-process) — get_alerts() calls the real
-    # (synchronous) fetch_quotes for live prices, which must be mocked here.
-    with patch("app.routers.alerts.fetch_quotes", return_value={"AAPL": {"last": 175.0}}):
+    # (synchronous) fetch_quotes for live stock prices and fetch_contract_
+    # quote_async for live option prices, both of which must be mocked here
+    # to keep the test hermetic (no real network call).
+    with patch("app.routers.alerts.fetch_quotes", return_value={"AAPL": {"last": 175.0}}), \
+         patch("app.routers.alerts.fetch_contract_quote_async", new=AsyncMock(return_value=None)):
         resp = await client.get("/api/alerts")
     assert resp.status_code == 200
 
@@ -450,3 +519,29 @@ async def test_get_alerts_endpoint_commits_position_alert_history(client, db_ses
     )).scalars().all()
     assert len(rows) == 1
     assert rows[0].alert_type == "STOP_REACHED"
+
+
+@pytest.mark.asyncio
+async def test_get_alerts_endpoint_surfaces_premium_stop(client, db_session):
+    """Regression guard: GET /api/alerts previously never fetched live option
+    prices at all, so current_option_prices stayed None on every call and
+    PREMIUM_STOP could never fire through this endpoint — the one thing that
+    feeds the Dashboard's "Latest Alert" rail. Email/Telegram delivery (via
+    portfolio_alert_monitor.py's separate background job) always worked fine,
+    which is what let this go unnoticed: the in-app widget silently could
+    never show a PREMIUM_STOP even while the user got emailed one."""
+    from unittest.mock import AsyncMock
+
+    await _insert_position(
+        db_session, symbol="AAPL", rec_id="REC-GET-PREMIUM",
+        contract="AAPL|190|2026-05-16|C", entry_price=5.0,
+    )
+
+    with patch("app.routers.alerts.fetch_quotes", return_value={"AAPL": {"last": 180.0}}), \
+         patch("app.routers.alerts.fetch_contract_quote_async",
+               new=AsyncMock(return_value={"price": 1.5})):  # 1.5 <= 5.0*0.4 -- 70% loss
+        resp = await client.get("/api/alerts")
+    assert resp.status_code == 200
+
+    fired_types = {a["alertType"] for a in resp.json()}
+    assert "PREMIUM_STOP" in fired_types

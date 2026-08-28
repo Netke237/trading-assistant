@@ -80,6 +80,37 @@ async def test_patch_coerces_a_zero_stop_to_null_instead_of_persisting_it(client
 
 
 @pytest.mark.asyncio
+async def test_patch_coerces_a_negative_resolved_tp_price_to_null(client):
+    """Round-8 audit finding: resolvedTpPrice was the one price field on this
+    endpoint persisted raw, unlike stop/structuralStop above. generate_alerts()'s
+    TP_HIT check only special-cased 0 (`resolved_tp_price or ladder_price`,
+    Python truthiness), never negative — so a negative value here made TP_HIT
+    fire on every single tick for a Bullish position (price >= negative is
+    always true) and never fire at all for a Bearish one. Now floored exactly
+    like stop/structuralStop: non-positive means unset."""
+    await _add(client, rec="REC-NEGTP")
+    r = await client.patch("/api/portfolio/REC-NEGTP", json={"resolvedTpPrice": -50.0})
+    assert r.status_code == 200, r.text
+    assert r.json()["resolvedTpPrice"] is None
+
+
+@pytest.mark.asyncio
+async def test_patch_coerces_a_zero_resolved_tp_price_to_null(client):
+    await _add(client, rec="REC-ZEROTP")
+    r = await client.patch("/api/portfolio/REC-ZEROTP", json={"resolvedTpPrice": 0})
+    assert r.status_code == 200, r.text
+    assert r.json()["resolvedTpPrice"] is None
+
+
+@pytest.mark.asyncio
+async def test_patch_updates_resolved_tp_price_when_positive(client):
+    await _add(client, rec="REC-POSTP")
+    r = await client.patch("/api/portfolio/REC-POSTP", json={"resolvedTpPrice": 210.5})
+    assert r.status_code == 200, r.text
+    assert r.json()["resolvedTpPrice"] == 210.5
+
+
+@pytest.mark.asyncio
 async def test_patch_updates_structural_stop_and_can_clear_it(client):
     await _add(client, rec="REC-SSTOP", structural_stop=170.0)
     r = await client.patch("/api/portfolio/REC-SSTOP", json={"structuralStop": None})

@@ -261,6 +261,26 @@ describe('scanPortfolio', () => {
     expect(out.some((a) => a.alertType === 'STRUCTURAL_STOP_BREACHED')).toBe(false);
   });
 
+  it('does NOT fire TIME_STOP on a stock position, even with the real-world default dteRemaining of 0', () => {
+    // Round-7 re-audit finding: dteRemaining defaults/coerces to 0 for every
+    // stock position (paperTrade.ts's buildPaperStockPosition, portfolioStore.ts's
+    // `?? 0` sync, and the backend schema default — portfolio.py's router only
+    // derives it from a contract's expiry for an options-shaped contract string),
+    // so `dteRemaining <= 3` was unconditionally true for a stock position without
+    // the isStock guard, firing TIME_STOP on every open stock position forever.
+    // Deliberately does NOT override dteRemaining, to catch a regression at the
+    // real-world default rather than a hand-picked low value.
+    const position = makePosition({ contract: 'NVDA|STOCK' });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'TIME_STOP')).toBe(false);
+  });
+
+  it('still fires TIME_STOP on an option position within 3 DTE', () => {
+    const position = makePosition({ dteRemaining: 1 });
+    const out = scanPortfolio([position]);
+    expect(out.some((a) => a.alertType === 'TIME_STOP')).toBe(true);
+  });
+
   it('uses currentStockPrice, not the option premium, for STOP_REACHED on an option position', () => {
     // Premium (currentPrice) is far below any realistic stop — if the bug were still present
     // this would fire immediately. The real stock price is what must be compared.
@@ -540,6 +560,23 @@ describe('scanPortfolio — active TP method / resolved TP snapshot', () => {
     const out = scanPortfolio([withTp({
       targets: [{ id: 't1', stockPrice: 160, contractsToSell: 1, status: 'PENDING' }],
       resolvedTpPrice: null,
+      activeTpMethod: 'exit_plan_2r',
+    })]);
+    const alert = out.find((a) => a.alertType === 'TP_HIT');
+    expect(alert?.referenceValue).toBe(160);
+    expect(alert?.reason).not.toContain('exit plan');
+  });
+
+  it('falls back to the ladder and does not mislabel on a stray negative resolvedTpPrice', () => {
+    // Backend regression guard (round-9 audit finding): a >0 check is
+    // required, not just != null — 0 falls back correctly, but truthiness
+    // alone would treat a negative snapshot as "set" and mislabel a
+    // ladder-sourced fire with the (unused) exit-plan method name. Pins the
+    // frontend side of the same guard, which the backend fix didn't have an
+    // explicit negative-value test for on this side.
+    const out = scanPortfolio([withTp({
+      targets: [{ id: 't1', stockPrice: 160, contractsToSell: 1, status: 'PENDING' }],
+      resolvedTpPrice: -50,
       activeTpMethod: 'exit_plan_2r',
     })]);
     const alert = out.find((a) => a.alertType === 'TP_HIT');

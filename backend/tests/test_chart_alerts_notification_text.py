@@ -443,7 +443,12 @@ async def test_post_history_with_checklist_uses_plain_language_layout(monkeypatc
     import app.routers.chart_alerts as chart_alerts_module
 
     captured = []
-    monkeypatch.setattr(chart_alerts_module, '_dispatch', lambda channel, **kw: captured.append((channel, kw)))
+
+    async def _fake_dispatch(channel, **kw):
+        captured.append((channel, kw))
+        return True
+
+    monkeypatch.setattr(chart_alerts_module, '_dispatch', _fake_dispatch)
     monkeypatch.setattr(
         chart_alerts_module, '_load_notification_config',
         lambda: {'telegram': {'enabled': True, 'bot_token': 'x', 'chat_id': 'y'}},
@@ -486,7 +491,12 @@ async def test_post_history_rejects_malformed_checklist_item_before_persisting(m
     import app.routers.chart_alerts as chart_alerts_module
 
     captured = []
-    monkeypatch.setattr(chart_alerts_module, '_dispatch', lambda channel, **kw: captured.append((channel, kw)))
+
+    async def _fake_dispatch(channel, **kw):
+        captured.append((channel, kw))
+        return True
+
+    monkeypatch.setattr(chart_alerts_module, '_dispatch', _fake_dispatch)
     monkeypatch.setattr(
         chart_alerts_module, '_load_notification_config',
         lambda: {'telegram': {'enabled': True, 'bot_token': 'x', 'chat_id': 'y'}},
@@ -530,7 +540,10 @@ async def test_post_history_checklist_is_never_persisted_to_the_history_row(monk
     """
     import app.routers.chart_alerts as chart_alerts_module
 
-    monkeypatch.setattr(chart_alerts_module, '_dispatch', lambda channel, **kw: None)
+    async def _fake_dispatch(channel, **kw):
+        return True
+
+    monkeypatch.setattr(chart_alerts_module, '_dispatch', _fake_dispatch)
     monkeypatch.setattr(chart_alerts_module, '_load_notification_config', lambda: {})
 
     app = await _make_app()

@@ -271,7 +271,7 @@ async def test_generate_alerts_persists_even_when_notify_alert_would_suppress_di
     assert rows[0].price == 185.0
     assert rows[0].reference_value == 190.0
 
-    dispatched = alert_notifier.notify_alert("AAPL", "STOP_REACHED", "Stop breached", "REC-6")
+    dispatched = await alert_notifier.notify_alert("AAPL", "STOP_REACHED", "Stop breached", "REC-6")
     assert dispatched is False, "dispatch, unlike persistence, must respect enabledTypes"
 
 

@@ -295,7 +295,7 @@ function toUpdatePayload(patch: Partial<PortfolioPosition>): Record<string, unkn
   if ('exitPlan' in patch) body.exitPlan = patch.exitPlan;
   if ('maxLossOverride' in patch) body.maxLossOverride = patch.maxLossOverride;
   if ('activeTpMethod' in patch) body.activeTpMethod = patch.activeTpMethod;
-  if ('resolvedTpPrice' in patch) body.resolvedTpPrice = patch.resolvedTpPrice;
+  if ('resolvedTpPrice' in patch) body.resolvedTpPrice = floorStop(patch.resolvedTpPrice);
   if ('resolvedTpUpdatedAt' in patch) body.resolvedTpUpdatedAt = patch.resolvedTpUpdatedAt;
   if ('alertOverrides' in patch) body.alertOverrides = patch.alertOverrides;
   if ('targets' in patch) body.targets = patch.targets;
