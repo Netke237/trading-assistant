@@ -175,4 +175,29 @@ describe('notesStore', () => {
 
     expect(useNotesStore.getState().notes['COIN']).toMatchObject({ body: 'final version', saving: false, error: false });
   });
+
+  it('does not stamp a stale save-error onto a newer edit that happens to have identical text', async () => {
+    // A body-text-equality staleness check (rather than a generation id)
+    // would miss this: the user types "note", clears it, then types "note"
+    // again — two DIFFERENT edits with the same text. If the first one's
+    // now-stale PUT rejects after the second one's PUT already succeeded, a
+    // text-equality guard sees the same string and wrongly concludes it's
+    // still "the current edit," stamping an error onto content that is, in
+    // fact, already safely saved.
+    let rejectFirst: (e: unknown) => void = () => {};
+    mockPut.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject; }));
+
+    act(() => { useNotesStore.getState().setNoteBody('PLTR', 'note'); });
+    await act(async () => { jest.advanceTimersByTime(600); }); // fires the first (slow) PUT
+
+    mockPut.mockResolvedValueOnce({ symbol: 'PLTR', body: 'note', updatedAt: '2026-08-28T00:00:00Z' });
+    act(() => { useNotesStore.getState().setNoteBody('PLTR', 'note'); }); // same text, a distinct later edit
+    await act(async () => { jest.advanceTimersByTime(600); });
+
+    expect(useNotesStore.getState().notes['PLTR']).toMatchObject({ body: 'note', saving: false, error: false });
+
+    await act(async () => { rejectFirst(new Error('stale request finally failed')); });
+
+    expect(useNotesStore.getState().notes['PLTR']).toMatchObject({ body: 'note', saving: false, error: false });
+  });
 });

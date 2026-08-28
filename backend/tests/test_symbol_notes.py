@@ -100,50 +100,57 @@ async def test_put_uppercase_then_get_lowercase_symbol():
 # SQLAlchemy serves off a single shared connection (StaticPool) — two
 # "concurrent" AsyncSession objects awaiting on that one connection at once
 # don't reproduce the real Postgres/asyncpg race (each request its own
-# connection), they produce unrelated cross-session transaction interference.
-# test_insert_race_mechanics_are_recoverable_on_sqlite below instead drives
-# the exact interleaving upsert_note's IntegrityError branch exists to
-# handle, deterministically, without depending on asyncio scheduling luck
-# or a test double for the real concurrency behavior.
+# connection), they produce unrelated cross-session transaction interference,
+# not the race itself.
+#
+# test_upsert_note_recovers_when_insert_races_an_existing_row below instead
+# calls upsert_note directly and forces the exact interleaving its
+# IntegrityError branch exists to handle — this session's own read seeing no
+# row despite one already existing, exactly what a genuinely concurrent
+# request's SELECT would have seen before either INSERT committed — via a
+# one-shot monkeypatch of AsyncSession.get, rather than hand-reproducing an
+# equivalent sequence next to the router's real code.
 
 
 @pytest.mark.asyncio
-async def test_insert_race_mechanics_are_recoverable_on_sqlite():
-    """Lower-level check that the exact interleaving upsert_note's
-    IntegrityError branch exists to handle — session A reads no row, session
-    B wins the insert first, session A's own insert then collides — is both
-    real (aiosqlite does raise IntegrityError here) and recoverable via
-    rollback + re-fetch + update, driven deterministically rather than
-    depending on asyncio scheduling (see the comment above for why an
-    HTTP-level asyncio.gather() test isn't reliable against this module's
-    single-shared-connection sqlite test harness)."""
+async def test_upsert_note_recovers_when_insert_races_an_existing_row():
+    """Exercises upsert_note's own IntegrityError-retry branch directly."""
+    from unittest.mock import patch
     from app.database import Base
-    from sqlalchemy.exc import IntegrityError
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
     from app.models.symbol_note import SymbolNoteModel
+    from app.routers.symbol_notes import upsert_note, NoteIn
 
     engine = create_async_engine('sqlite+aiosqlite:///:memory:', connect_args={'check_same_thread': False})
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    now = datetime.now(timezone.utc)
-    async with Session() as session_a, Session() as session_b:
-        assert await session_a.get(SymbolNoteModel, 'RACE2') is None
-        assert await session_b.get(SymbolNoteModel, 'RACE2') is None
+    # Simulate "another request already won the race": a row committed via
+    # an independent session, before the session under test ever queries.
+    async with Session() as winner_session:
+        winner_session.add(SymbolNoteModel(symbol='RACE2', body='winner', updated_at=datetime.now(timezone.utc)))
+        await winner_session.commit()
 
-        session_b.add(SymbolNoteModel(symbol='RACE2', body='winner', updated_at=now))
-        await session_b.commit()
+    async with Session() as db:
+        real_get = AsyncSession.get
+        first_call = {'seen': False}
 
-        session_a.add(SymbolNoteModel(symbol='RACE2', body='loser', updated_at=now))
-        with pytest.raises(IntegrityError):
-            await session_a.commit()
-        await session_a.rollback()
+        async def get_none_on_first_call(self, *args, **kwargs):
+            # upsert_note's OWN db.get() call — the one whose real-world
+            # equivalent raced the winner's insert and lost — is forced to
+            # see nothing, exactly as it would have under true concurrency.
+            # Every other call on this session (the retry branch's re-fetch,
+            # the final db.refresh()) behaves normally.
+            if not first_call['seen']:
+                first_call['seen'] = True
+                return None
+            return await real_get(self, *args, **kwargs)
 
-        row = await session_a.get(SymbolNoteModel, 'RACE2')
-        assert row is not None
-        row.body = 'loser'
-        await session_a.commit()
+        with patch.object(AsyncSession, 'get', get_none_on_first_call):
+            result = await upsert_note('RACE2', NoteIn(body='loser'), db)
+
+    assert result['body'] == 'loser'
 
     async with Session() as verify:
         final = await verify.get(SymbolNoteModel, 'RACE2')

@@ -42,15 +42,24 @@ const _pendingSaves = new Map<string, ReturnType<typeof setTimeout>>();
 // mounting for the same symbol in the same tick) — without this, both would
 // fire their own GET.
 const _inFlightFetches = new Set<string>();
+// Per-symbol edit counter. Each setNoteBody call bumps it and captures the
+// resulting value as that edit's "generation" — the identity a save result
+// is checked against, instead of comparing saved body text. Text equality
+// alone misses the case where the user types away and back to the exact
+// same content: two different edits with identical bodies would look like
+// "the same edit" to a body comparison, so a stale failure for the first
+// one could still stamp `error: true` onto the second one's already-saved,
+// textually-identical content. A monotonic id has no such collision.
+const _generations = new Map<string, number>();
 
-function _save(symbol: string, body: string): void {
+function _save(symbol: string, body: string, gen: number): void {
   api.putSymbolNote(symbol, body)
     .then(() => {
       useNotesStore.setState((s) => {
         const cur = s.notes[symbol];
         // A newer edit landed while this PUT was in flight — don't clear
         // its `saving` flag, that edit's own debounced save owns it.
-        if (!cur || cur.body !== body) return s;
+        if (!cur || _generations.get(symbol) !== gen) return s;
         return { notes: { ...s.notes, [symbol]: { ...cur, saving: false, error: false } } };
       });
     })
@@ -61,7 +70,7 @@ function _save(symbol: string, body: string): void {
         // landed (and its own save already succeeded or is in flight), this
         // stale failure must not stamp an `error` onto content that is, as
         // far as the user can tell, already saved.
-        if (!cur || cur.body !== body) return s;
+        if (!cur || _generations.get(symbol) !== gen) return s;
         return { notes: { ...s.notes, [symbol]: { ...cur, saving: false, error: true } } };
       });
     });
@@ -104,6 +113,8 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
   setNoteBody: (symbolRaw, body) => {
     const symbol = symbolRaw.trim().toUpperCase();
     if (!symbol) return;
+    const gen = (_generations.get(symbol) ?? 0) + 1;
+    _generations.set(symbol, gen);
     set((s) => ({
       notes: { ...s.notes, [symbol]: { body, loaded: true, saving: true, error: false, loadError: false } },
     }));
@@ -111,7 +122,7 @@ export const useNotesStore = create<NotesState>()((set, get) => ({
     if (existing) clearTimeout(existing);
     const timer = setTimeout(() => {
       _pendingSaves.delete(symbol);
-      _save(symbol, body);
+      _save(symbol, body, gen);
     }, NOTE_SAVE_DEBOUNCE_MS);
     _pendingSaves.set(symbol, timer);
   },
@@ -128,5 +139,8 @@ export function flushPendingNoteSave(symbol: string): void {
   clearTimeout(timer);
   _pendingSaves.delete(sym);
   const entry = useNotesStore.getState().notes[sym];
-  if (entry) _save(sym, entry.body);
+  // The pending timer's body is always this symbol's most recent edit, so
+  // its generation is simply the current counter value — the same one
+  // setNoteBody just stamped when it (re)armed this timer.
+  if (entry) _save(sym, entry.body, _generations.get(sym) ?? 0);
 }

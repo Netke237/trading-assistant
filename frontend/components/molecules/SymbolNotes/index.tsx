@@ -23,9 +23,14 @@ export function SymbolNotes({ symbol, editable }: { symbol: string; editable: bo
   const fetchNote = useNotesStore((s) => s.fetchNote);
   const setNoteBody = useNotesStore((s) => s.setNoteBody);
 
+  // Gated on `editable` too — a not-editable symbol only ever shows the
+  // gating placeholder, so fetching its note would be a wasted request. If
+  // the symbol becomes editable later without remounting (e.g. the user
+  // stars it while this component stays mounted), the dependency on
+  // `editable` re-fires this effect and fetches it then.
   useEffect(() => {
-    if (sym) fetchNote(sym);
-  }, [sym, fetchNote]);
+    if (sym && editable) fetchNote(sym);
+  }, [sym, editable, fetchNote]);
 
   // Flush a still-debounced edit on unmount (drawer close, page nav) so a
   // fast edit-then-leave is never silently dropped.
