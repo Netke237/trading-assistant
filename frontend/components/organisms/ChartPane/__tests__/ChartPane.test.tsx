@@ -139,3 +139,36 @@ describe('ChartPane — theme token colors', () => {
     }
   });
 });
+
+describe('ChartPane — malformed bars', () => {
+  beforeEach(() => {
+    (createChart as jest.Mock).mockClear();
+    mockComputedStyle(TOKENS);
+  });
+
+  // Same crash lightweight-charts throws on a null OHLC field as
+  // CandlestickChart — ChartPane (used by the standalone Chart workspace)
+  // has the identical unguarded setData() call, so it needs the same
+  // non-finite-bar filter.
+  it('drops non-finite OHLC bars before calling setData on a Candlestick series', () => {
+    const data = [
+      { time: '2026-01-05', open: 100, high: 101, low: 99, close: 100.5 },
+      { time: '2026-01-06', open: null, high: null, low: null, close: null },
+      { time: '2026-01-07', open: 102, high: 103, low: 101, close: 102.5 },
+    ];
+
+    render(
+      <ChartPane
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        series={[{ id: 'main', type: 'Candlestick', data: data as any }]}
+      />,
+    );
+
+    const chart = (createChart as jest.Mock).mock.results[0].value;
+    const candleSeries = chart.addSeries.mock.results[0].value;
+    expect(candleSeries.setData).toHaveBeenCalledWith([
+      { time: '2026-01-05', open: 100, high: 101, low: 99, close: 100.5 },
+      { time: '2026-01-07', open: 102, high: 103, low: 101, close: 102.5 },
+    ]);
+  });
+});

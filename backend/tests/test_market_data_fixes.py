@@ -1082,3 +1082,66 @@ def test_fetch_quotes_does_not_log_when_last_present():
 
     assert result["AAPL"]["last"] == 301.05
     mock_log_event.assert_not_called()
+
+
+# ── Fix: NaN OHLC bars from yfinance must be dropped, not passed through ──────
+# yfinance occasionally returns a NaN Open/High/Low/Close for a thin or halted
+# trading bar. FastAPI's response-model serialization turns that NaN into JSON
+# `null`, which lightweight-charts then hard-asserts on and crashes the whole
+# chart (see CandlestickChart/index.tsx and ChartPane/index.tsx's matching
+# Number.isFinite guards). _fetch_daily_yf/_fetch_intraday_yf must drop the
+# bad bar at the source instead of letting it reach the API response.
+
+
+def test_fetch_daily_yf_drops_nan_ohlc_rows():
+    from app.data.market import _fetch_daily_yf
+
+    idx = pd.to_datetime(["2026-01-05", "2026-01-06", "2026-01-07"])
+    df = pd.DataFrame(
+        {
+            "Open":   [100.0, float("nan"), 102.0],
+            "High":   [101.0, float("nan"), 103.0],
+            "Low":    [99.0,  float("nan"), 101.0],
+            "Close":  [100.5, float("nan"), 102.5],
+            "Volume": [1_000_000, 500_000, 1_200_000],
+        },
+        index=idx,
+    )
+
+    with patch("yfinance.download", return_value=df):
+        result = _fetch_daily_yf("AAPL")
+
+    assert [r["time"] for r in result] == ["2026-01-05", "2026-01-07"]
+    assert all(
+        isinstance(r[k], float) and r[k] == r[k]  # NaN != NaN
+        for r in result
+        for k in ("open", "high", "low", "close")
+    )
+
+
+def test_fetch_intraday_yf_drops_nan_ohlc_rows():
+    from app.data.market import _fetch_intraday_yf
+
+    idx = pd.to_datetime(
+        ["2026-01-05 09:30", "2026-01-05 09:45", "2026-01-05 10:00"], utc=True
+    )
+    df = pd.DataFrame(
+        {
+            "Open":   [100.0, 101.0, float("nan")],
+            "High":   [101.0, 102.0, float("nan")],
+            "Low":    [99.0,  100.0, float("nan")],
+            "Close":  [100.5, 101.5, float("nan")],
+            "Volume": [10_000, 12_000, 8_000],
+        },
+        index=idx,
+    )
+
+    with patch("yfinance.download", return_value=df):
+        result = _fetch_intraday_yf("AAPL", interval="15m", days=1)
+
+    assert len(result) == 2
+    assert all(
+        isinstance(r[k], float) and r[k] == r[k]
+        for r in result
+        for k in ("open", "high", "low", "close")
+    )
