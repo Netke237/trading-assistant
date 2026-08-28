@@ -1,6 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { EditDrawer, tpMethodPatch } from '../EditDrawer';
 import { api } from '@/lib/api';
+import { usePortfolioStore } from '@/lib/portfolioStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
+import { useNotesStore } from '@/lib/notesStore';
 import type { PortfolioPosition } from '@/types/domain';
 
 jest.mock('@/lib/api', () => ({
@@ -8,6 +11,8 @@ jest.mock('@/lib/api', () => ({
     getFirstPassageEstimate: jest.fn(),
     getStockFirstPassage: jest.fn(),
     getExitPlan: jest.fn(),
+    getSymbolNote: jest.fn().mockResolvedValue({ symbol: 'AAPL', body: '', updatedAt: null }),
+    putSymbolNote: jest.fn().mockResolvedValue({ symbol: 'AAPL', body: '', updatedAt: '2026-08-27T00:00:00Z' }),
   },
 }));
 
@@ -760,5 +765,38 @@ describe('EditDrawer per-position alert overrides', () => {
       />,
     );
     expect(screen.getByText('Off — this position raises no alert of this type.')).toBeInTheDocument();
+  });
+});
+
+describe('EditDrawer Notes section gating', () => {
+  const noop = () => {};
+
+  // `editable` on the Notes field is computed from the real watchlist/held
+  // gate (useIsSymbolHeld + useWatchlistStore.isWatched), not hardcoded —
+  // seed both stores explicitly per test rather than relying on whatever
+  // default/persisted state the singleton stores happen to carry.
+  beforeEach(() => {
+    usePortfolioStore.setState({ positions: [] });
+    useWatchlistStore.setState({ added: [] });
+    useNotesStore.setState({ notes: {} });
+  });
+
+  it('renders the note editor (not the gating placeholder) for a genuinely held position', async () => {
+    const position = makeStockPosition();
+    usePortfolioStore.setState({ positions: [position] });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+
+    expect(await screen.findByLabelText(`Note for ${position.symbol}`)).toBeInTheDocument();
+    expect(screen.queryByText(/star this symbol or open a position/i)).not.toBeInTheDocument();
+  });
+
+  it('renders the note editor via the watchlist gate alone, independent of the held gate', async () => {
+    const position = makeStockPosition();
+    // Deliberately NOT added to usePortfolioStore's positions — only the
+    // watchlist gate should be doing the work in this case.
+    useWatchlistStore.setState({ added: [position.symbol] });
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+
+    expect(await screen.findByLabelText(`Note for ${position.symbol}`)).toBeInTheDocument();
   });
 });

@@ -933,3 +933,10 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     }
   )
 );
+
+/** Whether the symbol has at least one open portfolio position — used to
+ *  gate symbol-notes editing (a note is editable if watchlisted OR held). */
+export function useIsSymbolHeld(symbol: string): boolean {
+  const s = symbol.trim().toUpperCase();
+  return usePortfolioStore((state) => state.positions.some((p) => p.symbol.toUpperCase() === s));
+}

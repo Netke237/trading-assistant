@@ -19,7 +19,7 @@ import { useScanStore } from '@/lib/scanStore';
 import type { WatchlistRow } from '@/types/domain';
 import styles from './QuickLook.module.css';
 
-export function RailQuickLook() {
+export function RailQuickLook({ showPortfolio = true }: { showPortfolio?: boolean } = {}) {
   const [watchlist, setWatchlist] = useState<WatchlistRow[]>([]);
   const [watchlistError, setWatchlistError] = useState(false);
   const portfolio       = usePortfolioStore((s) => s.positions);
@@ -74,22 +74,24 @@ export function RailQuickLook() {
         </div>
       </RailSection>
 
-      <RailSection title="Portfolio">
-        <div className={styles.portfolioStack}>
-          <Row><Text size={12} tone="secondary">Positions</Text><Data size={12}>{portfolio.length}</Data></Row>
-          <Row><Text size={12} tone="secondary">Deployed</Text><Data size={12}>${Math.round(deployed).toLocaleString()}</Data></Row>
-          <Row>
-            <Text size={12} tone="secondary">Open P&amp;L</Text>
-            <Data size={12} tone={openPnL > 0 ? 'pass' : openPnL < 0 ? 'reject' : undefined}>
-              {openPnL > 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
-            </Data>
-          </Row>
-          <Row>
-            <Text size={12} tone="secondary">Winners</Text>
-            <Data size={12} tone="pass">{winners} / {portfolio.length}</Data>
-          </Row>
-        </div>
-      </RailSection>
+      {showPortfolio && (
+        <RailSection title="Portfolio">
+          <div className={styles.portfolioStack}>
+            <Row><Text size={12} tone="secondary">Positions</Text><Data size={12}>{portfolio.length}</Data></Row>
+            <Row><Text size={12} tone="secondary">Deployed</Text><Data size={12}>${Math.round(deployed).toLocaleString()}</Data></Row>
+            <Row>
+              <Text size={12} tone="secondary">Open P&amp;L</Text>
+              <Data size={12} tone={openPnL > 0 ? 'pass' : openPnL < 0 ? 'reject' : undefined}>
+                {openPnL > 0 ? '+' : ''}${Math.round(openPnL).toLocaleString()}
+              </Data>
+            </Row>
+            <Row>
+              <Text size={12} tone="secondary">Winners</Text>
+              <Data size={12} tone="pass">{winners} / {portfolio.length}</Data>
+            </Row>
+          </div>
+        </RailSection>
+      )}
 
       {dataSources !== null && dataSources.length > 0 && (
         <RailSection title="Data Sources">

@@ -81,6 +81,12 @@ export interface DataSourceInfo {
   detail: string | null;
 }
 
+export interface SymbolNote {
+  symbol: string;
+  body: string;
+  updatedAt: string | null;
+}
+
 export interface StrategyWatchState {
   phase: 'idle' | 'armed';
   direction: 'Bullish' | 'Bearish' | null;
@@ -719,6 +725,12 @@ export const api = {
       window_end_hour:   cfg.windowEndHour,
       timezone_name:     cfg.timezoneName,
     }),
+
+  // ── Symbol notes ─────────────────────────────────────────────────────────
+  getSymbolNote: (symbol: string) =>
+    get<SymbolNote>(`/api/notes/${encodeURIComponent(symbol)}`),
+  putSymbolNote: (symbol: string, body: string) =>
+    put<SymbolNote>(`/api/notes/${encodeURIComponent(symbol)}`, { body }),
 };
 
 /* ---------- Risk settings ---------- */
