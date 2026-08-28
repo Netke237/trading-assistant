@@ -106,9 +106,9 @@ describe('step-7-position-card — broker order submit()', () => {
   });
 
   it('re-clicking the already-active candidate tab does not re-arm a placed order', async () => {
-    // orderId is shared, not per-candidate, state — re-clicking the tab that's
-    // ALREADY selected (e.g. a stray double-click) must not reset it to null
-    // and silently re-enable the Buy buttons for a candidate that already has
+    // orderIds is keyed by candidate index — re-clicking the tab that's
+    // ALREADY selected (e.g. a stray double-click) must not reset it and
+    // silently re-enable the Buy buttons for a candidate that already has
     // a live (paper) order placed, which would permit a duplicate submission.
     (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1' });
     global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
@@ -121,5 +121,27 @@ describe('step-7-position-card — broker order submit()', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AAPL' }));
 
     expect(screen.getByRole('button', { name: /place limit order/i })).toBeDisabled();
+  });
+
+  it('switching away to another candidate and back does not re-arm a placed order', async () => {
+    // The round-4 fix only covered re-clicking the tab that's ALREADY active.
+    // The more realistic path — AAPL gets an order placed, the user looks at
+    // MSFT, then comes back to AAPL — went straight through the old shared
+    // `orderId` state's unconditional reset on every candidate switch,
+    // silently re-enabling AAPL's Buy buttons for a duplicate submission.
+    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1' });
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+
+    render(<Step7PositionCardPage />);
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(screen.getByRole('button', { name: /place limit order/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit order/i })).toBeDisabled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'MSFT' }));
+    expect(screen.getByRole('button', { name: /place limit order/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'AAPL' }));
+    expect(screen.getByRole('button', { name: /place limit order/i })).toBeDisabled();
+    expect(screen.getByText(/Order placed — ID: ORD-1/)).toBeInTheDocument();
   });
 });

@@ -42,7 +42,14 @@ export default function Step7PositionCardPage() {
   });
   const [execMode, setExecMode] = useState<ExecutionMode>('recommendation');
   const [placingType, setPlacingType] = useState<'LMT' | 'MKT' | null>(null);
-  const [orderId, setOrderId] = useState<string | null>(null);
+  // Keyed by candidate index, not shared — a placed order belongs to the
+  // candidate it was submitted for, and must stay "placed" (Buy buttons
+  // disabled) no matter how many times the user switches away and back.
+  // Patching only the "re-click of the already-active tab" case (round 4)
+  // left the general case open: switch AAPL -> MSFT -> back to AAPL still
+  // reset orderId to null on each nav click, silently re-arming AAPL's
+  // already-placed order for a duplicate submission.
+  const [orderIds, setOrderIds] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const settings = useSettingsStore();
@@ -63,14 +70,15 @@ export default function Step7PositionCardPage() {
 
   const candidates = result?.candidates.filter((c) => c.backtest.passes_gate) ?? [];
   const card: PositionCardData | undefined = candidates[selectedIdx];
+  const orderId = orderIds[selectedIdx] ?? null;
 
-  // orderId/error/warning are shared (not per-candidate) state. If the user
-  // switches candidates while a submit() is still in flight, a stale
-  // response landing after the switch must not stamp its outcome onto
-  // whatever candidate is now on screen (e.g. wrongly disabling ITS Buy
-  // buttons via the orderId !== null guard below). addPosition() still
-  // always runs for the originally-submitted card — a real order was
-  // placed and must be tracked regardless of what the user looks at next.
+  // error/warning are shared (not per-candidate) state. If the user switches
+  // candidates while a submit() is still in flight, a stale response landing
+  // after the switch must not stamp its outcome onto whatever candidate is
+  // now on screen. orderIds itself doesn't need this guard — it's already
+  // keyed by the submitting candidate's own index, so it can be written
+  // unconditionally regardless of what's currently on screen; addPosition()
+  // likewise always runs for the originally-submitted card.
   const selectedIdxRef = useRef(selectedIdx);
   useEffect(() => { selectedIdxRef.current = selectedIdx; }, [selectedIdx]);
 
@@ -115,7 +123,7 @@ export default function Step7PositionCardPage() {
         limit_price: orderType === 'LMT' ? card.strategy.entry_price : null,
         tif: 'DAY',
       });
-      if (stillViewing()) setOrderId(res.order_id);
+      setOrderIds((prev) => ({ ...prev, [submittedIdx]: res.order_id }));
       try {
         const addRes = await addPosition({
           ...buildPaperStockPosition(
@@ -156,13 +164,10 @@ export default function Step7PositionCardPage() {
           <button key={c.symbol} type="button"
             className={`${styles.navBtn} ${i === selectedIdx ? styles.navBtnActive : ''}`}
             onClick={() => {
-              // Re-clicking the ALREADY-active tab must not reset orderId —
-              // orderId/error/warning are shared, not per-candidate, so doing
-              // so would silently re-enable the Buy buttons for a candidate
-              // that already has a live (paper) order placed, permitting a
-              // duplicate submission with no warning.
-              if (i === selectedIdx) return;
-              setSelectedIdx(i); setOrderId(null); setError(null); setWarning(null);
+              // orderIds is keyed by candidate index, so switching tabs (in
+              // either direction, any number of times) never touches another
+              // candidate's already-placed order — nothing to reset here.
+              setSelectedIdx(i); setError(null); setWarning(null);
             }}>
             <Data size={12} weight={500}>{c.symbol}</Data>
           </button>

@@ -172,6 +172,15 @@ describe('EditDrawer Monte Carlo estimate', () => {
       expect.objectContaining({ targets: [215] }),
       expect.any(AbortSignal),
     ));
+    // Regression: the sole result must render labeled "T2" (its real id),
+    // not "T1" just because it landed first in the filtered/sent array. Both
+    // "T1" and "T2" already appear once each from TargetEditor's own target
+    // list (rendered regardless of any estimate) — the bug relabeled the
+    // Monte Carlo result "T1" too, misattributing T2's own probability and
+    // expected-days figures to T1 (which was never even sent to the
+    // backend), so the old behavior would show "T1" twice and "T2" once.
+    await waitFor(() => expect(screen.getAllByText('T2')).toHaveLength(2));
+    expect(screen.getAllByText('T1')).toHaveLength(1);
   });
 
   it('disables Estimate and explains why when every target has already been reached', () => {
@@ -716,6 +725,24 @@ describe('EditDrawer per-position alert overrides', () => {
     render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
     expect(screen.getByText('Fires at stock $205.00.')).toBeInTheDocument();  // TP_HIT — first ladder target
     expect(screen.getByText('Fires at stock $182.00.')).toBeInTheDocument();  // STOP_REACHED
+  });
+
+  it('labels PREMIUM_STOP a stock level, not a premium, for a stock position', () => {
+    // The backend's PREMIUM_STOP threshold (entry_price * (1 - premiumStopPct))
+    // is compared against the position's own contract quote — for a `|STOCK`
+    // contract that's the stock price itself (market.py's stock-format branch
+    // in fetch_contract_quote_async), never an option premium. Labeling it
+    // "premium" here would misattribute a stock-price level as an options
+    // concept this position doesn't have. entryPrice 190 * (1 - 0.60) = 76.00.
+    render(<EditDrawer position={makeStockPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByText('Fires at stock $76.00.')).toBeInTheDocument();
+    expect(screen.queryByText(/Fires at premium/)).not.toBeInTheDocument();
+  });
+
+  it('labels PREMIUM_STOP a premium for an option position', () => {
+    render(<EditDrawer position={makeOptionPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
+    // entryPrice 4.2 * (1 - 0.60) = 1.68.
+    expect(screen.getByText('Fires at premium $1.68.')).toBeInTheDocument();
   });
 
   it('prefers the resolved TP snapshot over the ladder in the fires-at line', () => {
