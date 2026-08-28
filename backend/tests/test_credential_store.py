@@ -8,11 +8,16 @@ from pathlib import Path
 # never reads this env var at all. The exception is
 # test_post_credentials_stores_and_get_returns_masked, which goes through the
 # /settings/credentials route and does call save() on the module-level
-# singleton — but by the time that singleton is first built (whichever test
-# module gets collected first), conftest.py's setdefault pin has already set
-# this env var to a throwaway path, so this line does not change that
-# singleton's behavior either way. It's kept for documentation/consistency,
-# not because it's load-bearing.
+# singleton. Which value wins there depends on pytest's collection order (this
+# line runs at import time, and other test modules may import
+# credential_store — transitively, via broker_router — before this one is
+# collected): either this line hasn't run yet and conftest.py's setdefault pin
+# already pointed the singleton at a throwaway test path, or this line runs
+# first and sets it to None (persistence disabled outright, e.g. when running
+# `pytest tests/test_credential_store.py` alone). Both outcomes are safe —
+# neither ever points at the real config/local_credentials.yaml — so this line
+# is not load-bearing either way; it's kept for documentation/consistency, not
+# as the safety guarantee (that's conftest.py's pin).
 os.environ["BAMENDJOU_CREDS_PATH"] = ""
 
 from app.services.credential_store import CredentialStore
