@@ -445,6 +445,7 @@ function ScanForm() {
       </Row>
 
       <OperatorTimezoneSection />
+      <ScheduledScanRetentionSection />
       <ScheduledScansSection />
     </>
   );
@@ -487,6 +488,60 @@ function OperatorTimezoneSection() {
             className={styles.input}
             value={tz}
             onChange={(e) => setTz(e.target.value)}
+          />
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave}>
+            Save
+          </button>
+          {saveResult && <Text size={11} tone="secondary">{saveResult}</Text>}
+        </div>
+      </Row>
+    </>
+  );
+}
+
+/* ---------- Part 3: scheduled-scan-run retention ---------- */
+// Flagged by post-implementation adversarial review: the endpoint
+// (getScheduledScanRunRetention/saveScheduledScanRunRetention in api.ts)
+// existed with no Settings UI field bound to it — the same class of gap
+// the plan called out and fixed for operator timezone above, recurring
+// here for a different setting. Mirrors OperatorTimezoneSection's pattern.
+
+function ScheduledScanRetentionSection() {
+  const [days, setDays] = useState(90);
+  const [saveResult, setSaveResult] = useState('');
+
+  useEffect(() => {
+    api.getScheduledScanRunRetention()
+      .then((r) => setDays(r.scheduledScanRunRetentionDays))
+      .catch(() => {});
+  }, []);
+
+  async function handleSave() {
+    setSaveResult('');
+    try {
+      await api.saveScheduledScanRunRetention(days);
+      setSaveResult('Saved');
+    } catch {
+      setSaveResult('Save failed');
+    } finally {
+      setTimeout(() => setSaveResult(''), 2500);
+    }
+  }
+
+  return (
+    <>
+      <SectionIntro
+        title="Scheduled scan history retention"
+        blurb="How long completed scheduled-scan runs (Part 3 below) are kept before being pruned — separate from the trade-history retention setting, since this is operational scan-run history, not the trade-rationale audit trail. Each entry's most recent successful run is always kept regardless of age, as the baseline for its next run's rank/score deltas."
+      />
+      <Row label="Retention (days)" defaultValue="90">
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <input
+            type="number"
+            min={1}
+            className={styles.input}
+            value={days}
+            onChange={(e) => setDays(Math.max(1, Number(e.target.value) || 1))}
           />
           <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave}>
             Save

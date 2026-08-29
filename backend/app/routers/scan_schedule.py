@@ -79,9 +79,20 @@ async def delete_scan_schedule_entry(entry_id: str, db: AsyncSession = Depends(g
 async def run_scan_schedule_entry_now(entry_id: str) -> dict:
     """Bypass the schedule, execute immediately — mirrors the existing
     run_now() pattern on strategy_watch_scheduler.py. Useful for testing a
-    newly-created entry without waiting for its fire time."""
-    if scan_schedule_store.get(entry_id) is None:
+    newly-created entry without waiting for its fire time.
+
+    Rejects a disabled entry rather than reporting a false "triggered: true"
+    — flagged by post-implementation adversarial review: _run_scheduled_entry
+    itself silently no-ops on a disabled entry (by design, for the scheduler
+    dispatch paths, where that's the correct behavior for a race against
+    deletion/disabling), which without this check would let a user pause an
+    entry, click "Run now" to test it, and see a false success with nothing
+    actually run and no row written to ScheduledScanRunModel."""
+    entry = scan_schedule_store.get(entry_id)
+    if entry is None:
         raise HTTPException(status_code=404, detail=f"schedule entry {entry_id} not found")
+    if not entry.get("enabled"):
+        raise HTTPException(status_code=409, detail=f"schedule entry {entry_id} is disabled — enable it first")
     await _run_scheduled_entry(entry_id)
     return {"triggered": True, "id": entry_id}
 

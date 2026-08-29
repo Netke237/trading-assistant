@@ -94,7 +94,7 @@ async def _migrate_continuous_scan_session_if_running(status: str | None) -> Non
     from app.services.scan_schedule_store import scan_schedule_store
 
     try:
-        _settings_path = _Path(__file__).parent / "config" / "settings.yaml"
+        _settings_path = _Path(__file__).parent.parent / "config" / "settings.yaml"
         _raw = _yaml.safe_load(_settings_path.read_text()) or {} if _settings_path.exists() else {}
         sched_cfg = _ScheduleConfig(**_raw.get("scan", {}).get("schedule", {}))
     except Exception:

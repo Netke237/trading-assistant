@@ -65,6 +65,24 @@ def test_run_now_nonexistent_entry_404(client):
     assert r.status_code == 404
 
 
+def test_run_now_disabled_entry_rejected_not_false_success(client):
+    """Flagged by post-implementation adversarial review: _run_scheduled_entry
+    silently no-ops on a disabled entry (correct for the scheduler dispatch
+    paths, where that's an expected race), but the run-now endpoint used to
+    swallow that and report {"triggered": true} anyway — a false-positive
+    success with nothing actually run and no ScheduledScanRunModel row
+    written. The endpoint must reject a disabled entry outright instead."""
+    r = client.post("/api/scan-schedule", json=_options_entry_body(enabled=False))
+    entry_id = r.json()["id"]
+    try:
+        r = client.post(f"/api/scan-schedule/{entry_id}/run-now")
+        assert r.status_code == 409
+        r = client.get(f"/api/scan-schedule/{entry_id}/runs")
+        assert r.json() == []
+    finally:
+        client.delete(f"/api/scan-schedule/{entry_id}")
+
+
 def test_get_runs_empty_initially(client):
     r = client.post("/api/scan-schedule", json=_options_entry_body())
     entry_id = r.json()["id"]
