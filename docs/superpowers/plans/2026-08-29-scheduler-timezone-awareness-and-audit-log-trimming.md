@@ -403,15 +403,259 @@ nightly tick is enough, since this only needs to happen once a day.
 
 ---
 
+## Part 0 — Resolved default times (decided in this thread, applies across Parts 1-3)
+
+All times below are **operator timezone** (`Europe/Berlin`) unless marked NY —
+see 1.3 for the operator-vs-market distinction. These replace the shipped
+defaults; Part 1, Step 2's `operator_zone()` anchor is what makes these numbers
+mean what they say regardless of host OS.
+
+| Job | New default | Reasoning |
+|---|---|---|
+| OHLCV ingestion | **02:00, every night** | NYSE close (16:00 ET) ≈ 22:00 Berlin; 02:00 gives ~4h buffer for EOD data to finalize. Needs daily freshness. |
+| EDGAR fundamentals | **03:00, every night** | After ingestion, same overnight block; no same-day urgency but no reason to separate. |
+| S&P 500 liquidity update | **04:00, every night** — moved off the shipped `16:30` | `16:30` only made sense under "server-local = US Eastern." Anchored to Berlin, `16:30` lands mid-US-session (10:30 ET) — wrong. Moved into the same overnight block. |
+| Strategy tuning (WFO) | **Saturday 03:00 only, not nightly** | Compute-heavy, doesn't need daily freshness (verified: no EDGAR/fundamentals dependency, OHLCV-only via `historical_store.get_bars`'s self-heal). Weekly is the standard cadence; running after Friday's ingestion sees a full settled week. |
+| Strategy-watch EOD trigger | **16:30 America/New_York** (market timezone, not operator) | 30 min past the 16:00 ET close, matching the ingestion buffer logic. Deliberately NOT expressed in Berlin time — see 1.3. |
+| `audit.log` rotation/prune | Piggybacks on the ingestion job, no separate slot | A few hundred lines/day doesn't need its own cadence. |
+| New profile-based scan entries (Part 3) | User-defined per entry | See Part 3 — no single default, this is the point of the feature. |
+
+## Part 3 — Profile-based scan scheduling (stock + options, "once" + "loop" patterns)
+
+Resolved decisions from this thread, restated so the implementation has a
+single source of truth:
+
+- **Storage**: push-on-select/save. `searchProfilesStore` (`frontend/lib/searchProfilesStore.ts`)
+  stays the frontend's browse/edit/create surface — it is not migrated. A new
+  backend-side list of **schedule entries** is introduced; each entry holds its
+  own copy (snapshot) of the profile content it points at, pushed from the
+  frontend whenever that entry is created/edited, **and** re-pushed automatically
+  whenever the frontend saves changes to a profile that an existing entry
+  references (see 3.4 — this is how "live" semantics are achieved without the
+  backend ever reading `localStorage` directly).
+- **Multiplicity**: a list, not a slot — any number of entries, per mode,
+  independently enabled.
+- **Modes**: fully independent per mode — options entries and stocks entries
+  never share a cadence/window; stocks-mode scheduled execution is new (today
+  there is none — verified, `stock_scan.py` has no `_scheduled_scan`/
+  `_last_request` equivalent despite `ScheduleConfig.enabled_stocks` existing
+  as an unused flag).
+- **Patterns**: both **once** (fire at a specific time, single shot) and
+  **loop** (cadence + window, repeating — today's `ScanScheduler` behavior,
+  generalized to run per-entry) are fully built now, for both modes — not
+  stubbed. `loop` exists today for a day-trading use case not yet in active
+  use, but ships working.
+- **Manual runs never affect the schedule**: `_last_request`'s drift problem
+  (running a scan manually silently becomes what the scheduler replays next)
+  is eliminated for this feature — a schedule entry only ever runs its own
+  referenced snapshot, regardless of what you run by hand in the UI. (The old
+  `_last_request`-replay mechanism can remain as-is for backward compatibility
+  or be retired in favor of "every scheduled run must come from an explicit
+  entry" — flagged as an implementation-time call, default to retiring it
+  since a schedule with no entries should mean "nothing scheduled," not
+  "silently replay whatever I last clicked.")
+- **Profile editing semantics**: a profile only changes when explicitly saved
+  (overwrite) or saved-as (new name/id) via `searchProfilesStore.saveProfile`/
+  `updateProfile` — never from unsaved on-screen edits. Schedule entries follow
+  the saved profile by id, so "live" means "always reflects the last explicit
+  save," never mid-edit state.
+- **UI**: a flat list of entries in Settings (no grouping structure), each with
+  a free-text label (defaults to the profile's name).
+
+### 3.1 New backend schema
+
+New file `backend/app/schemas/scan_schedule.py`:
+
+```python
+from typing import Literal, Optional
+from pydantic import BaseModel, Field, model_validator
+
+class ScanScheduleEntry(BaseModel):
+    id:               str
+    label:            str
+    mode:             Literal['options', 'stocks']
+    profile_id:       str              # frontend-side SearchProfile.id, for display/re-sync matching
+    profile_name:     str              # denormalized for display without a round-trip
+    profile_snapshot: dict             # the pushed SearchProfileSnapshot, opaque to the backend
+    pattern:          Literal['once', 'loop']
+    enabled:          bool = True
+    days_of_week:     list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
+
+    # 'once' pattern
+    fire_time: Optional[str] = None    # "HH:MM", operator timezone
+
+    # 'loop' pattern
+    cadence_minutes:   Optional[int] = Field(None, ge=5, le=1440)
+    window_start_hour: Optional[int] = Field(None, ge=0, le=23)
+    window_end_hour:   Optional[int] = Field(None, ge=1, le=24)
+
+    @model_validator(mode='after')
+    def check_pattern_fields(self) -> 'ScanScheduleEntry':
+        if self.pattern == 'once' and not self.fire_time:
+            raise ValueError("fire_time is required for pattern='once'")
+        if self.pattern == 'loop':
+            if self.cadence_minutes is None or self.window_start_hour is None or self.window_end_hour is None:
+                raise ValueError("cadence_minutes/window_start_hour/window_end_hour required for pattern='loop'")
+            if self.window_start_hour >= self.window_end_hour:
+                raise ValueError("window_start_hour must be less than window_end_hour")
+        return self
+```
+
+This is deliberately its own schema, not an extension of the existing
+`ScheduleConfig` (`backend/app/schemas/schedule.py`) — `ScheduleConfig` is a
+single-object settings blob (`enabled`/`cadence_minutes`/window), structurally
+wrong for "a list of independent, individually-toggled entries." The two
+schemas can still share the multi-window work already flagged as pending
+(Part 1, Step 5) at the *validation-logic* level (window containment check),
+without sharing the *storage* shape — confirm this split during implementation
+rather than forcing one schema to do both jobs.
+
+### 3.2 Storage
+
+New file `backend/app/services/scan_schedule_store.py`, following the exact
+pattern already established by `tuning_schedule_store.py` /
+`ingestion_schedule_store.py` (YAML-backed, `threading.Lock`, atomic
+tmp-file-then-`os.replace` write) but holding a **list** instead of a single
+dict:
+
+```python
+_DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "scan_schedule.yaml"
+
+class ScanScheduleStore:
+    def list(self) -> list[dict]: ...
+    def get(self, entry_id: str) -> dict | None: ...
+    def upsert(self, entry: dict) -> None: ...   # create or full-replace by id
+    def delete(self, entry_id: str) -> None: ...
+```
+
+No new DB table — this is config-shaped data (small, infrequently written,
+already-established YAML-store convention across every other scheduler in
+this codebase), not transactional application data.
+
+### 3.3 Endpoints
+
+New router `backend/app/routers/scan_schedule.py`:
+
+- `GET  /api/scan-schedule` → `list[ScanScheduleEntry]`
+- `POST /api/scan-schedule` → create, body = `ScanScheduleEntry` minus `id`
+  (server generates)
+- `PUT  /api/scan-schedule/{entry_id}` → full replace (this is also the
+  re-sync path used automatically when a referenced profile is saved, see 3.4)
+- `DELETE /api/scan-schedule/{entry_id}`
+- `POST /api/scan-schedule/{entry_id}/run-now` → bypass the schedule, execute
+  immediately (mirrors the existing `run_now()` pattern on
+  `strategy_watch_scheduler.py`) — useful for testing a newly-created entry
+  without waiting for its fire time.
+
+Each write (`POST`/`PUT`/`DELETE`) calls into 3.5's runner to re-sync the live
+job set — same "reconfigure immediately on save" pattern already used by
+`ingestion_scheduler.configure()` etc.
+
+### 3.4 Frontend re-sync on profile save
+
+In `frontend/lib/searchProfilesStore.ts`, `saveProfile`/`updateProfile` need
+one addition: after a successful save, look up whether any local knowledge of
+schedule entries (fetched via `GET /api/scan-schedule` and cached, or looked
+up fresh) references the saved `profile_id`, and if so, `PUT` each such
+entry's `profile_snapshot` with the newly-saved snapshot. This is the entire
+mechanism behind "a schedule always reflects the profile's last explicit
+save" — the backend never reads `localStorage`, it just receives pushes,
+including this automatic one triggered by the save action itself.
+
+### 3.5 Scheduler — "once" pattern
+
+Reuse the `AsyncIOScheduler(timezone=operator_zone())` instance-per-scheduler
+convention from Part 1 rather than inventing a new mechanism. One shared
+scheduler instance for scan-schedule entries; each enabled `pattern='once'`
+entry becomes one `CronTrigger`-backed job, id = the entry's `id`:
+
+```python
+def _sync_once_jobs() -> None:
+    sched = _get_scan_schedule_scheduler()  # AsyncIOScheduler(timezone=operator_zone())
+    for job in sched.get_jobs():
+        sched.remove_job(job.id)
+    for entry in scan_schedule_store.list():
+        if entry["enabled"] and entry["pattern"] == "once":
+            hour, minute = map(int, entry["fire_time"].split(":"))
+            sched.add_job(
+                _run_scheduled_entry, CronTrigger(hour=hour, minute=minute,
+                    day_of_week=",".join(map(str, entry["days_of_week"]))),
+                args=[entry["id"]], id=entry["id"], replace_existing=True,
+            )
+```
+
+`_run_scheduled_entry(entry_id)` loads the entry, dispatches on `mode`:
+
+- `mode == 'options'` → convert `profile_snapshot` into a `ScanRequest`
+  (`backend/app/schemas/__init__.py` line 502) and call the existing
+  `run_scan(req, db)` (`routers/scan.py`) directly — **not** via
+  `_scheduled_scan()`/`_last_request`, bypassing that mechanism entirely per
+  the "manual runs never affect the schedule" decision.
+- `mode == 'stocks'` → convert `profile_snapshot` into a `StockScanRequest`
+  (`backend/app/schemas/stock_scan.py` line 10) and call `run_stock_scan(req, db)`
+  (`routers/stock_scan.py` line 954) directly — **this is the new stocks-mode
+  scheduled execution path that doesn't exist today.**
+
+The snapshot→request field mapping (`SearchProfileSnapshot`'s
+`universe`/`direction`/`horizonPreset`/`holdMin`/`holdMax`/`scanOverrides`/
+`scanSettings`/`strategy`/`strategyParams` → each request schema's fields)
+needs to be written by hand for each mode — confirm the exact field-by-field
+correspondence against `backend/app/schemas/stock_scan.py`'s full definition
+during implementation; this plan only confirmed the file/endpoint exist, not
+its complete field list.
+
+### 3.6 Scheduler — "loop" pattern
+
+A second, lightweight background task (`ScanScheduleLoopRunner`, modeled on
+`ScanScheduler._loop()` but iterating multiple entries instead of one global
+config): ticks every 60s, and for each enabled `pattern='loop'` entry
+independently tracks its own `last_run_at`/`next_run_at` and checks its own
+`window_start_hour`/`window_end_hour`/`days_of_week`/`cadence_minutes` — same
+`_should_run_now()` logic as today's `ScanScheduler` (`scan_scheduler.py`
+lines 45-53), just keyed per-entry instead of holding one global `_cfg`. On
+fire, calls the same `_run_scheduled_entry(entry_id)` dispatch as the "once"
+path (3.5) — both patterns converge on identical execution, they only differ
+in *when* they decide to fire.
+
+### 3.7 Frontend — Settings UI
+
+New section under Settings → Scan (alongside the existing continuous-scan
+controls): a flat list of schedule entries. Each row: mode badge
+(options/stocks), label (editable text, defaults to profile name), profile
+picker (populated from `useSearchProfilesStore`, filtered to the row's mode),
+pattern toggle (once/loop), pattern-specific fields (time picker for once;
+cadence + window-hour pickers for loop), days-of-week picker, enabled toggle,
+delete button, "Run now" button (calls 3.3's `run-now` endpoint). An "Add
+entry" button appends a new row defaulting to `pattern='once'`.
+
+### 3.8 Tests
+
+- Backend: `ScanScheduleEntry` validation (missing pattern-specific fields
+  rejected, `window_start_hour >= window_end_hour` rejected — mirrors the
+  existing `ScheduleConfig` validator test if one exists).
+- `_run_scheduled_entry` dispatches to `run_scan` for `mode='options'` and
+  `run_stock_scan` for `mode='stocks'`, with the snapshot correctly converted
+  in each case.
+- "once" pattern: `_sync_once_jobs()` produces exactly one `CronTrigger` job
+  per enabled once-entry, none for disabled or loop-pattern entries; removing
+  an entry removes its job.
+- "loop" pattern: `ScanScheduleLoopRunner` fires an entry only within its own
+  window/cadence, independent of any other entry's state (two loop-entries
+  with different windows don't interfere with each other).
+- Frontend: saving/updating a profile that a schedule entry references issues
+  the expected `PUT /api/scan-schedule/{id}` re-sync call; saving a profile
+  with *no* referencing entries issues no such call.
+
+---
+
 ## Open items carried over from this thread, not yet decided
 
-- Multi-window scan scheduling (Part 1, Step 5) — schema change, optional/
-  separate scope.
-- Frontend timezone/window controls (Part 1, Step 4) — needed for `scan_scheduler`'s
-  settings to be reachable at all; currently API-only.
-- Whether the four nightly batch jobs (tuning/ingestion/EDGAR/S&P 500) should
-  remain individually toggled `enabled: false` by default, or the reorder
-  discussed earlier in this thread (ingestion → EDGAR → tuning) should ship in
-  the same change — this plan only fixes *how* the configured hour is
-  interpreted, not *what* the configured hours are; the reorder is a separate,
-  already-discussed decision this plan doesn't re-litigate.
+- Multi-window scan scheduling for the *existing* `ScanScheduler`/`ScheduleConfig`
+  path (Part 1, Step 5) — still schema-shaped scope, now explicitly decoupled
+  from Part 3's new entry list per 3.1's note (share validation logic, not storage).
+- Frontend timezone/window controls for `ScheduleConfig` (Part 1, Step 4) —
+  still needed independent of Part 3's UI, since `ScheduleConfig` continues to
+  govern the existing continuous-scan toggle even after Part 3 ships.
+- Whether the old `_last_request`-replay mechanism (`_scheduled_scan()` in
+  `routers/scan.py`) should be retired outright once Part 3 ships, or kept as
+  a fallback — default-to-retire noted in Part 3, confirm before implementation.
