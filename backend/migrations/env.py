@@ -19,6 +19,7 @@ from app.models.base import Base
 from app.database import Base as DatabaseBase
 from app.models.scan_session import ScanSessionBase
 from app.models.ohlcv_daily import OhlcvBase
+from app.models.scheduled_scan_run import ScheduledScanRunBase
 
 # Load all ORM models so both metadata registries are populated before autogenerate.
 from app.models.audit_event import AuditEventModel  # noqa: F401
@@ -35,7 +36,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = [Base.metadata, DatabaseBase.metadata, ScanSessionBase.metadata, OhlcvBase.metadata]
+target_metadata = [Base.metadata, DatabaseBase.metadata, ScanSessionBase.metadata, OhlcvBase.metadata, ScheduledScanRunBase.metadata]
 
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 

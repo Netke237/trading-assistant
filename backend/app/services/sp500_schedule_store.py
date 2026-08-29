@@ -11,7 +11,7 @@ _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "sp500_schedule
 
 _DEFAULTS: dict = {
     "enabled": False,
-    "time": "16:30",
+    "time": "04:00",
 }
 
 

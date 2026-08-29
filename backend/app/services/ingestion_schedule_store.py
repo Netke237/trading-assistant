@@ -14,7 +14,7 @@ _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "ingestion_sche
 
 _DEFAULTS: dict = {
     "enabled": False,
-    "time": "03:00",
+    "time": "02:00",
 }
 
 

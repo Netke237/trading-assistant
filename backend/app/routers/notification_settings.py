@@ -98,6 +98,24 @@ async def save_history_retention(body: HistoryRetentionConfig) -> dict:
     return {'historyRetentionYears': cfg['history_retention_years']}
 
 
+class ScheduledScanRunRetentionConfig(BaseModel):
+    scheduledScanRunRetentionDays: int = 90
+
+
+@router.get('/scheduled-scan-retention')
+async def get_scheduled_scan_retention() -> dict:
+    cfg = _load_yaml()
+    return {'scheduledScanRunRetentionDays': int(cfg.get('scheduled_scan_run_retention_days', 90))}
+
+
+@router.post('/scheduled-scan-retention')
+async def save_scheduled_scan_retention(body: ScheduledScanRunRetentionConfig) -> dict:
+    cfg = _load_yaml()
+    cfg['scheduled_scan_run_retention_days'] = max(1, min(3650, body.scheduledScanRunRetentionDays))
+    _save_yaml(cfg)
+    return {'scheduledScanRunRetentionDays': cfg['scheduled_scan_run_retention_days']}
+
+
 @router.get('/alert-delivery')
 async def get_alert_delivery() -> dict:
     cfg = _load_yaml()

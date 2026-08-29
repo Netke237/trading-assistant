@@ -146,7 +146,11 @@ _TIME_RE_ST = __import__("re").compile(r"^\d{2}:\d{2}$")
 
 class TuningScheduleUpdate(BaseModel):
     enabled: bool
-    time: str = Field(description="HH:MM in 24-hour format, e.g. '02:00'")
+    time: str = Field(description="HH:MM in 24-hour format, e.g. '05:00'")
+    days_of_week: list[int] = Field(
+        default_factory=lambda: [5],
+        description="0=Mon…6=Sun. Default Saturday-only (compute-heavy, weekly cadence).",
+    )
 
 
 @router.get("/schedule")
@@ -160,15 +164,20 @@ async def get_tuning_schedule() -> dict:
 @router.post("/schedule")
 async def update_tuning_schedule(body: TuningScheduleUpdate) -> dict:
     if not _TIME_RE_ST.match(body.time):
-        raise HTTPException(status_code=422, detail="time must be HH:MM, e.g. '02:00'")
+        raise HTTPException(status_code=422, detail="time must be HH:MM, e.g. '05:00'")
     h, m = int(body.time[:2]), int(body.time[3:])
     if not (0 <= h <= 23 and 0 <= m <= 59):
         raise HTTPException(status_code=422, detail="time out of range")
+    if not body.days_of_week or any(d < 0 or d > 6 for d in body.days_of_week):
+        raise HTTPException(status_code=422, detail="days_of_week must be non-empty ints in 0..6")
     from app.services.tuning_schedule_store import tuning_schedule_store
     from app.services import tuning_scheduler
-    tuning_schedule_store.set(body.enabled, body.time)
-    tuning_scheduler.configure(body.enabled, body.time)
-    return {"ok": True, "enabled": body.enabled, "time": body.time, "next_run": tuning_scheduler.next_run_time()}
+    tuning_schedule_store.set(body.enabled, body.time, body.days_of_week)
+    tuning_scheduler.configure(body.enabled, body.time, body.days_of_week)
+    return {
+        "ok": True, "enabled": body.enabled, "time": body.time,
+        "days_of_week": body.days_of_week, "next_run": tuning_scheduler.next_run_time(),
+    }
 
 
 @router.post("/adopt")

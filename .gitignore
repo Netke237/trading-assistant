@@ -52,6 +52,11 @@ backend/audit.log
 backend/*.log
 backend/config/settings.yaml
 backend/config/local_credentials.yaml
+# Part 3 (scan-schedule) runtime data — real per-operator schedule entries,
+# not committed config. tuning_schedule.yaml/ingestion_schedule.yaml/
+# edgar_schedule.yaml/sp500_schedule.yaml are the same kind of runtime file
+# and share this same gap today — pre-existing, out of scope here.
+backend/config/scan_schedule.yaml
 
 # SQLite WAL/SHM sidecars
 *.db-shm

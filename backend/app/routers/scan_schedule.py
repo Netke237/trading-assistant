@@ -1,0 +1,115 @@
+"""Part 3 — profile-based scan scheduling endpoints.
+
+GET/POST/PUT/DELETE /api/scan-schedule[/{id}] manage the ScanScheduleEntry
+list; POST .../run-now bypasses the schedule for a one-off test fire; GET
+.../runs serves this entry's ScheduledScanRunModel history.
+"""
+from __future__ import annotations
+
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
+from app.schemas.scan_schedule import ScanScheduleEntry, ScanScheduleEntryCreate
+from app.services.scan_schedule_store import (
+    scan_schedule_store, delete_scheduled_scan_runs, list_scheduled_scan_runs,
+)
+from app.services.scan_schedule_scheduler import sync_fixed_time_jobs, _run_scheduled_entry
+
+router = APIRouter(prefix="/api/scan-schedule", tags=["scan-schedule"])
+
+
+def _build_entry(entry_id: str, body: ScanScheduleEntryCreate) -> ScanScheduleEntry:
+    """ScanScheduleEntryCreate (the request-body model FastAPI already
+    validated) carries none of ScanScheduleEntry's cross-field validators
+    (pattern-specific fields, resolved_request shape) — those only run when
+    ScanScheduleEntry itself is constructed here, so a pydantic
+    ValidationError at this point is a genuine 422, not a 500."""
+    try:
+        return ScanScheduleEntry(id=entry_id, **body.model_dump())
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("", response_model=list[ScanScheduleEntry])
+async def list_scan_schedule_entries() -> list[ScanScheduleEntry]:
+    return [ScanScheduleEntry.model_validate(e) for e in scan_schedule_store.list()]
+
+
+@router.post("", response_model=ScanScheduleEntry)
+async def create_scan_schedule_entry(body: ScanScheduleEntryCreate) -> ScanScheduleEntry:
+    entry = _build_entry(str(uuid.uuid4()), body)
+    scan_schedule_store.upsert(entry.model_dump())
+    sync_fixed_time_jobs()
+    return entry
+
+
+@router.put("/{entry_id}", response_model=ScanScheduleEntry)
+async def update_scan_schedule_entry(entry_id: str, body: ScanScheduleEntryCreate) -> ScanScheduleEntry:
+    """Full replace by id. This is also the automatic re-sync path the
+    frontend calls whenever a referenced profile is saved (3.4) — pushing a
+    freshly re-resolved `resolved_request` keeps a schedule entry's request
+    body always reflecting the profile's last explicit save."""
+    if scan_schedule_store.get(entry_id) is None:
+        raise HTTPException(status_code=404, detail=f"schedule entry {entry_id} not found")
+    entry = _build_entry(entry_id, body)
+    scan_schedule_store.upsert(entry.model_dump())
+    sync_fixed_time_jobs()
+    return entry
+
+
+@router.delete("/{entry_id}")
+async def delete_scan_schedule_entry(entry_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    if scan_schedule_store.get(entry_id) is None:
+        raise HTTPException(status_code=404, detail=f"schedule entry {entry_id} not found")
+    scan_schedule_store.delete(entry_id)
+    sync_fixed_time_jobs()
+    # Must also delete this entry's ScheduledScanRunModel rows — the YAML
+    # store has no FK/cascade to rely on. Without this, a deleted entry's
+    # rows (including the one row prune_scheduled_scan_runs's "latest
+    # success" exclusion protects) would escape pruning forever.
+    await delete_scheduled_scan_runs(db, entry_id)
+    return {"deleted": True, "id": entry_id}
+
+
+@router.post("/{entry_id}/run-now")
+async def run_scan_schedule_entry_now(entry_id: str) -> dict:
+    """Bypass the schedule, execute immediately — mirrors the existing
+    run_now() pattern on strategy_watch_scheduler.py. Useful for testing a
+    newly-created entry without waiting for its fire time."""
+    if scan_schedule_store.get(entry_id) is None:
+        raise HTTPException(status_code=404, detail=f"schedule entry {entry_id} not found")
+    await _run_scheduled_entry(entry_id)
+    return {"triggered": True, "id": entry_id}
+
+
+@router.get("/{entry_id}/runs")
+async def get_scan_schedule_entry_runs(
+    entry_id: str, limit: int = 20, db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    rows = await list_scheduled_scan_runs(db, entry_id, limit=limit)
+    return [
+        {
+            "id": r.id,
+            "schedule_entry_id": r.schedule_entry_id,
+            "mode": r.mode,
+            "fired_at": r.fired_at.isoformat() if r.fired_at else None,
+            "status": r.status,
+            "error": r.error,
+            "candidate_count": _candidate_count(r.result_json),
+        }
+        for r in rows
+    ]
+
+
+def _candidate_count(result_json: str | None) -> int | None:
+    if not result_json:
+        return None
+    try:
+        import json
+        return len(json.loads(result_json).get("candidates", []))
+    except Exception:
+        return None

@@ -1,0 +1,141 @@
+/*
+ * Pure stocks-mode scan-request resolution, extracted from stockScan.ts's
+ * runStockScan() (Part 3 of the scheduler-timezone-awareness plan) so the
+ * exact same request-building logic can be reused by the profile-based
+ * scan-schedule resolver (scanScheduleResolve.ts).
+ */
+import type { ScanParams } from '@/lib/scanParamsStore';
+import type { ConfidenceGate } from '@/lib/settingsStore';
+import { atrMultForHorizon } from '@/lib/settingsStore';
+
+// Keys from scanStore.scanOverrides that stock_scorer.py reads via the overrides dict.
+// Options-only params (max_delta, min_dte, etc.) and iv_rank_pass_max are excluded.
+const STOCKS_SCORER_KEYS = new Set([
+  'weight_trend', 'weight_pullback', 'weight_trigger', 'weight_event', 'weight_vol',
+  'trend_method', 'ma_type', 'fast_ema', 'slow_ema',
+  'additive_ma_type', 'additive_ma_period', 'additive_slope_lookback',
+  'additive_adx_period', 'additive_adx_pass', 'additive_adx_caution',
+  'additive_price_max', 'additive_slope_max', 'additive_adx_max',
+  'rs_period', 'rs_pass_threshold', 'rs_caution_threshold', 'rs_benchmark',
+  'swing_high_lookback_bars', 'atr_caution_max',
+  'macd_fast', 'macd_slow', 'macd_signal', 'rsi_floor',
+  'event_reject_days', 'event_caution_days',
+  'rr_bullish_target_pct', 'rr_bearish_target_pct',
+  'rr_bullish_invalidation_pct', 'rr_bearish_invalidation_pct',
+]);
+
+export interface ResolvedStockScanContext {
+  universe: string[];
+  direction: string;
+  /** Scoring horizon string, e.g. "Swing" (space-split, no "(Nd)" suffix). */
+  horizon: string;
+  strategy: string;
+  params: ScanParams;
+  requireReversal: boolean;
+  scanOverrides: Record<string, number | boolean | string>;
+  confidenceGate: ConfidenceGate;
+  /** $ account size — riskStore.limits.portfolioValue, live or captured. */
+  accountSize: number;
+  /** Fraction — riskStore.limits.maxLossPerTradePct, live or captured. */
+  riskPct: number;
+}
+
+/** Matches backend `StockScanRequest` (backend/app/schemas/stock_scan.py) field-for-field. */
+export interface StockScanRequestBody {
+  universe: string[];
+  direction: string;
+  horizon: string;
+  strategy: string;
+  pullback_tolerance_pct?: number;
+  pullback_ema_period?: number;
+  pullback_trend_ema?: number;
+  pullback_ma_type?: 'EMA' | 'SMA';
+  pullback_require_reversal?: boolean;
+  ma_crossover_fast?: number;
+  ma_crossover_slow?: number;
+  ma_crossover_lookback?: number;
+  breakout_volume_mult?: number;
+  rsi_period?: number;
+  rsi_oversold?: number;
+  rsi_trend_sma?: number;
+  require_choppy_regime?: boolean;
+  bt_min_trades?: number;
+  bt_min_win_rate?: number;
+  // Both have backend defaults (account_size=50_000.0, risk_pct=0.01 — see
+  // backend/app/schemas/stock_scan.py) so are optional on the wire; the
+  // resolver functions in this repo always set them explicitly, but other
+  // callers (e.g. step-4-prebreakout's ad-hoc pullback/fib scan requests)
+  // legitimately omit them and rely on those defaults.
+  account_size?: number;
+  risk_pct?: number;
+  shortlist_max_candidates?: number;
+  overrides?: Record<string, number | boolean | string>;
+  confidence_caution_below?: number;
+  confidence_reject_below?: number;
+  confidence_atr_mult_target?: number;
+  confidence_atr_mult_stop?: number;
+  regime_headwind_caution_pct?: number;
+  regime_headwind_reject_pct?: number;
+  fundamentals_caution_above?: number;
+  fundamentals_reject_above?: number;
+  mean_reversion_variants?: string[];
+  mean_reversion_min_confirmations?: number;
+  vwap_lookback?: number;
+  vwap_deviation_pct?: number;
+}
+
+export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockScanRequestBody {
+  const p = ctx.params;
+  const rawOverrides = ctx.scanOverrides;
+  const stocksOverrides = Object.fromEntries(
+    Object.entries(rawOverrides).filter(([k]) => STOCKS_SCORER_KEYS.has(k)),
+  );
+
+  const confidenceGate = ctx.confidenceGate;
+  const hasFullAtrOverride =
+    typeof rawOverrides.confidence_atr_mult_target === 'number' &&
+    typeof rawOverrides.confidence_atr_mult_stop === 'number';
+  const atrPair = hasFullAtrOverride
+    ? { target: rawOverrides.confidence_atr_mult_target as number, stop: rawOverrides.confidence_atr_mult_stop as number }
+    : atrMultForHorizon(confidenceGate, ctx.horizon);
+
+  return {
+    universe: ctx.universe,
+    direction: ctx.direction,
+    horizon: ctx.horizon,
+    strategy: ctx.strategy,
+    pullback_tolerance_pct: p.pullbackTolerancePct,
+    pullback_ema_period: p.pullbackEmaPeriod,
+    pullback_trend_ema: p.pullbackTrendEma,
+    pullback_ma_type: p.pullbackMaType,
+    pullback_require_reversal: ctx.requireReversal,
+    ma_crossover_fast: p.maCrossoverFast,
+    ma_crossover_slow: p.maCrossoverSlow,
+    ma_crossover_lookback: p.maCrossoverLookback,
+    breakout_volume_mult: p.breakoutVolumeMult,
+    rsi_period: p.rsiPeriod,
+    rsi_oversold: p.rsiOversold,
+    rsi_trend_sma: p.rsiTrendSma,
+    require_choppy_regime: p.requireChoppyRegime ?? false,
+    bt_min_trades: p.btMinTrades,
+    bt_min_win_rate: p.btMinWinRate,
+    account_size: ctx.accountSize,
+    risk_pct: ctx.riskPct,
+    shortlist_max_candidates: p.stockShortlistMax,
+    overrides: stocksOverrides,
+    confidence_caution_below: confidenceGate.enabled ? confidenceGate.cautionBelow : undefined,
+    confidence_reject_below: confidenceGate.enabled ? confidenceGate.rejectBelow : undefined,
+    confidence_atr_mult_target: atrPair.target,
+    confidence_atr_mult_stop: atrPair.stop,
+    regime_headwind_caution_pct: typeof rawOverrides.regime_headwind_caution_pct === 'number' ? rawOverrides.regime_headwind_caution_pct : undefined,
+    regime_headwind_reject_pct: typeof rawOverrides.regime_headwind_reject_pct === 'number' ? rawOverrides.regime_headwind_reject_pct : undefined,
+    fundamentals_caution_above: typeof rawOverrides.fundamentals_caution_above === 'number' ? rawOverrides.fundamentals_caution_above : undefined,
+    fundamentals_reject_above: typeof rawOverrides.fundamentals_reject_above === 'number' ? rawOverrides.fundamentals_reject_above : undefined,
+    ...(ctx.strategy === 'mean_reversion_multi' ? {
+      mean_reversion_variants: p.meanReversionVariants,
+      mean_reversion_min_confirmations: p.meanReversionMinConfirm,
+      vwap_lookback: p.vwapLookback,
+      vwap_deviation_pct: p.vwapDeviationPct,
+    } : {}),
+  };
+}

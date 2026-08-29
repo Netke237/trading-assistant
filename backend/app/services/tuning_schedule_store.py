@@ -11,7 +11,8 @@ _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "tuning_schedul
 
 _DEFAULTS: dict = {
     "enabled": False,
-    "time": "02:00",
+    "time": "05:00",
+    "days_of_week": [5],  # Saturday-only — compute-heavy, weekly cadence (Part 0)
 }
 
 
@@ -37,10 +38,12 @@ class TuningScheduleStore:
         with self._lock:
             return dict(self._data)
 
-    def set(self, enabled: bool, time: str) -> None:
+    def set(self, enabled: bool, time: str, days_of_week: list[int] | None = None) -> None:
         with self._lock:
             self._data["enabled"] = bool(enabled)
             self._data["time"] = time
+            if days_of_week is not None:
+                self._data["days_of_week"] = list(days_of_week)
         self._save()
 
     def _save(self) -> None:

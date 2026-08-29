@@ -30,7 +30,7 @@ from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
 from app.schemas import (
     ScanRequest, ScanResult, RejectedCandidate, TradeCardData,
     ScoreBreakdown, ContractScoreBreakdown, ContractDetails, TradeEntry, TradeExit,
-    ScanDelta, ContinuousScanConfig, ScanState, OptionsPipeline,
+    ScanDelta, ScanState, OptionsPipeline,
     AlternativeContract, DteWindow, ScanSessionStatus,
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
@@ -65,7 +65,6 @@ from app.scoring.trade_plan import build_trade_plan
 from app.models.heston import calibrate_heston, HestonParams
 from types import SimpleNamespace
 from app.services.audit import new_rec_id, log_event
-from app.services.scan_scheduler import ScanScheduler
 from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
 from pydantic import BaseModel
 
@@ -96,17 +95,8 @@ def _load_settings() -> dict:
 
 _settings: dict = _load_settings()
 
-# ── Scheduler instance ───────────────────────────────────────────────────────
+# ── Manual-run state (Part 3: scheduled runs never touch any of this) ───────
 
-_DEFAULT_CADENCE = 60
-
-
-def _load_default_cadence() -> int:
-    # Reuse the already-loaded _settings dict — no second disk read.
-    return int(_settings.get('scan', {}).get('cadence_minutes', _DEFAULT_CADENCE))
-
-
-_scheduler = ScanScheduler(cadence_minutes=_load_default_cadence())
 _last_request: ScanRequest | None = None
 _last_result: ScanResult | None = None
 _last_status: str = "idle"
@@ -259,10 +249,14 @@ _HESTON_CONCURRENCY = _compute_heston_concurrency(_SCAN_CONCURRENCY, _detect_cpu
 #      calibrations at _HESTON_CONCURRENCY across the WHOLE process, not just
 #      within one scan. Deliberately NOT the per-request `sem` parameter
 #      _process_symbol receives: `semaphore = asyncio.Semaphore(_SCAN_CONCURRENCY)`
-#      in run_scan() is created fresh on every call, but a scheduled scan
-#      (scan_scheduler.py) and a manual POST /api/scan can run fully
-#      concurrently (nothing serializes them — _state_lock only guards a few
-#      lines of _last_request/_last_result bookkeeping, not scan execution) —
+#      in run_scan() is created fresh on every call, and _execute_scan_core
+#      itself is shared by run_scan() (manual) and Part 3's scheduled runner
+#      (scan_schedule_scheduler.py) — the two can still run fully
+#      concurrently at the _process_symbol level even though
+#      _SCHEDULED_SCAN_SEMAPHORE serializes scheduled runs against each
+#      other (it does not serialize them against a manual run — see that
+#      semaphore's own docstring), and _state_lock only guards a few lines of
+#      _last_request/_last_result bookkeeping, not scan execution —
 #      two independent per-request semaphores would let up to 2x
 #      _HESTON_CONCURRENCY symbols contend for this single executor's workers.
 #   3. A hard per-symbol wait_for ceiling, so one slow calibration can't stall
@@ -1083,13 +1077,12 @@ async def get_last_scan() -> ScanResult | None:
 
 @router.get('/scan/last-run', response_model=ScanSessionStatus)
 async def get_last_scan_status() -> ScanSessionStatus:
-    """Return last-run metadata (status/timestamp/request params) for
-    options-mode scans. `status` prefers the continuous-scan scheduler's live
-    state over the DB-cached value, since a scheduled tick's completion write
-    would otherwise make a still-active continuous scan look "complete"."""
-    status = "running" if _scheduler.get_status().get("running") else _last_status
+    """Return last-run metadata (status/timestamp/request params) for the
+    manual-run UI slot. Part 3's scheduled runs never touch this — each has
+    its own status/history reachable via GET /api/scan-schedule/{id}/runs
+    instead (see routers/scan_schedule.py)."""
     return ScanSessionStatus(
-        status=status,
+        status=_last_status,
         updated_at=_last_updated_at,
         universe=_last_request.universe if _last_request else None,
         direction=_last_request.direction if _last_request else None,
@@ -1097,9 +1090,17 @@ async def get_last_scan_status() -> ScanSessionStatus:
     )
 
 
-@router.post('/scan', response_model=ScanResult)
-async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> ScanResult:
-    global _last_request, _last_result
+async def _execute_scan_core(
+    req: ScanRequest, db: AsyncSession, *, previous_result: ScanResult | None,
+) -> ScanResult:
+    """The actual scan-running logic — the same body run_scan() always ran,
+    with the delta computation taking `previous_result` as a parameter
+    instead of silently reading the module-global _last_result, and with NO
+    writes to _last_request/_last_result/_last_status/ScanSession(id="current")
+    and no auto-trade firing. Both the manual handler (run_scan, below) and
+    Part 3's scheduled runner (_run_scheduled_entry) call this; only the
+    manual handler additionally updates the UI-facing globals, persists to
+    ScanSession(id="current"), and checks the auto-trader — see run_scan()."""
     scan_id = new_rec_id()
     log_event("scan_started", scan_id, {"universe": req.universe, "direction": req.direction})
 
@@ -1334,30 +1335,53 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
     elif has_exception and not candidates:
         state = 'FAILED'
 
-    async with _state_lock:
-        deltas = _compute_deltas(
-            ScanResult(scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(), candidates=candidates, rejected=rejected),
-            _last_result,
-        )
+    deltas = _compute_deltas(
+        ScanResult(scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(), candidates=candidates, rejected=rejected),
+        previous_result,
+    )
 
-        result = ScanResult(
-            scan_id=scan_id,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            candidates=candidates,
-            rejected=rejected,
-            state=state,
-            previous_run_id=_last_result.scan_id if _last_result else None,
-            deltas=deltas,
-            shortlist_truncated=shortlist_truncated,
-            original_count=original_count,
-            pipeline=_pipeline,
-            direction_banner=_direction_banner,
-            dte_window=_dte_win,
-        )
+    result = ScanResult(
+        scan_id=scan_id,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        candidates=candidates,
+        rejected=rejected,
+        state=state,
+        previous_run_id=previous_result.scan_id if previous_result else None,
+        deltas=deltas,
+        shortlist_truncated=shortlist_truncated,
+        original_count=original_count,
+        pipeline=_pipeline,
+        direction_banner=_direction_banner,
+        dte_window=_dte_win,
+    )
+    return result
+
+
+@router.post('/scan', response_model=ScanResult)
+async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> ScanResult:
+    """Manual-trigger entry point — unchanged external behavior for the UI.
+
+    Note (accepted behavioral narrowing): `previous` is read *before*
+    _execute_scan_core runs, not atomically with the write at the end, as it
+    was pre-refactor. Under two genuinely overlapping manual run_scan() calls
+    (already possible today — nothing serializes two manual scans, or a
+    manual scan against a scheduled Part-3 run either — see the concurrency
+    note on _SCHEDULED_SCAN_SEMAPHORE in scan_schedule_scheduler.py), both
+    calls could read the same stale `_last_result` before either writes,
+    producing deltas neither reflects the other's outcome. Today's behavior
+    under that same scenario isn't a clean "first writer wins" either — it's
+    already best-effort — so this is accepted as-is rather than engineered
+    around."""
+    global _last_request, _last_result
+    async with _state_lock:
+        previous = _last_result
+    result = await _execute_scan_core(req, db, previous_result=previous)
+    async with _state_lock:
         _last_result = result
         _last_request = req
     # Trigger #2: fire armed auto-trade only when at least one PASS candidate exists.
     # Run off the event loop — the broker call inside is synchronous network I/O.
+    # Manual-trigger only — Part 3's scheduled runner never reaches this.
     if any(c.finalStatus == 'PASS' for c in result.candidates):
         from app.services.auto_trader import auto_trader as _auto_trader
         if _auto_trader.get_state().armed:
@@ -1375,18 +1399,6 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
     return result
 
 
-# ── Continuous scan endpoints ────────────────────────────────────────────────
-
-async def _scheduled_scan() -> ScanResult:
-    """Wrapper used by the scheduler. Re-uses the last request configuration."""
-    async with _state_lock:
-        req = _last_request
-    if req is None:
-        raise RuntimeError("No previous scan request to repeat")
-    async with AsyncSessionLocal() as db:
-        return await run_scan(req, db)
-
-
 @router.post('/scan/prewarm-candles')
 async def prewarm_candles(req: _PrewarmRequest) -> dict:
     """Pre-populate the candle cache before the scan runs.
@@ -1397,29 +1409,3 @@ async def prewarm_candles(req: _PrewarmRequest) -> dict:
     from app.data.market import prewarm_candles_async
     count = await prewarm_candles_async(req.symbols)
     return {"prewarmed": count}
-
-
-@router.post('/scan/continuous', response_model=ContinuousScanConfig)
-async def start_continuous_scan(
-    config: ContinuousScanConfig, db: AsyncSession = Depends(get_db)
-) -> ContinuousScanConfig:
-    """Start (or restart) the continuous scan scheduler."""
-    _scheduler.set_cadence(config.cadence_minutes)
-    _scheduler.bind(_scheduled_scan)
-    await _scheduler.start()
-    await _upsert_session(db, req=_last_request, result=_last_result, status="running")
-    return config
-
-
-@router.delete('/scan/continuous')
-async def stop_continuous_scan(db: AsyncSession = Depends(get_db)) -> dict:
-    """Stop the continuous scan scheduler."""
-    await _scheduler.stop()
-    await _upsert_session(db, req=_last_request, result=_last_result, status="stopped")
-    return {"status": "stopped"}
-
-
-@router.get('/scan/continuous/status')
-async def continuous_scan_status() -> dict:
-    """Get current scheduler status."""
-    return _scheduler.get_status()

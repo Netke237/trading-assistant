@@ -11,16 +11,19 @@
  * value is and can tell at a glance if they've drifted.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
-import { useSettingsStore, MARKOV_PRESETS, clampGateThresholds, type MarkovPreset, type MarkovConfig, type FundamentalsGate, type AtrMultPair, type ScheduleConfig, DEFAULT_SCHEDULE_CONFIG } from '@/lib/settingsStore';
+import { useSettingsStore, MARKOV_PRESETS, clampGateThresholds, type MarkovPreset, type MarkovConfig, type FundamentalsGate, type AtrMultPair } from '@/lib/settingsStore';
 import { useIvThresholdsStore, type HorizonIvThresholds } from '@/lib/ivThresholdsStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
-import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, getEdgarSchedule, saveEdgarSchedule, triggerEdgarPrefetch, getSp500Schedule, saveSp500Schedule, triggerSp500Update, getTuningSchedule, saveTuningSchedule, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type TuningJob, type TuningJobCount, type WfoProposal } from '@/lib/api';
+import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
+import { resolveProfileToScanRequest } from '@/lib/scanScheduleResolve';
+import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, getEdgarSchedule, saveEdgarSchedule, triggerEdgarPrefetch, getSp500Schedule, saveSp500Schedule, triggerSp500Update, getTuningSchedule, saveTuningSchedule, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type TuningJob, type TuningJobCount, type WfoProposal, type ScanScheduleEntry, type ScanScheduleRun } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
+import type { SearchProfile } from '@/types/searchProfile';
 import styles from './page.module.css';
 
 type Section = 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy' | 'data' | 'tuning';
@@ -233,7 +236,6 @@ function ScanForm() {
     maxContractPrice, setMaxContractPrice,
     confidenceGate, setConfidenceGate,
     fundamentalsGate, setFundamentalsGate,
-    scheduleConfig, setScheduleConfig,
   } = useSettingsStore();
   const horizon = useScanStore((s) => s.context?.horizon);
   const isIntraday = horizon?.toLowerCase().includes('intraday') ?? false;
@@ -242,28 +244,8 @@ function ScanForm() {
   const lastStockScanStatus      = useScanStore((s) => s.lastStockScanStatus);
   const lastStockScanUpdatedAt   = useScanStore((s) => s.lastStockScanUpdatedAt);
   const lastStockScanStrategy    = useScanStore((s) => s.lastStockScanStrategy);
-  const [continuous, setContinuous] = useState(false);
-  const [schedule, setSchedule] = useState<ScheduleConfig>(scheduleConfig ?? DEFAULT_SCHEDULE_CONFIG);
-  const [scheduleSaveResult, setScheduleSaveResult] = useState('');
-
-  // Sync when store resets
-  useEffect(() => { setSchedule(scheduleConfig ?? DEFAULT_SCHEDULE_CONFIG); }, [scheduleConfig]);
-
-  async function handleSaveSchedule() {
-    setScheduleSaveResult('');
-    try {
-      await api.putSchedule(schedule);
-      setScheduleConfig(schedule);
-      setScheduleSaveResult('Saved');
-    } catch {
-      setScheduleSaveResult('Save failed');
-    } finally {
-      setTimeout(() => setScheduleSaveResult(''), 2500);
-    }
-  }
 
   // Local text buffers — let the user type freely; validate on blur
-  const [cadenceText,    setCadenceText]    = useState('60');
   const [candidatesText, setCandidatesText] = useState(String(shortlistMaxCandidates));
   const [chainsText,     setChainsText]     = useState(String(maxContractsPerChain));
   const [priceText,      setPriceText]      = useState(String(maxContractPrice));
@@ -300,29 +282,8 @@ function ScanForm() {
     <>
       <SectionIntro
         title="Scan behaviour"
-        blurb="Continuous scan automatically re-runs the screener on a schedule."
+        blurb="General scan settings — candidate/contract caps and the confidence/fundamentals gates. Scheduled, unattended scanning lives in the Scheduled scans section below."
       />
-      <Row label="Continuous scan" hint="Auto-run the screener in the background" defaultValue="Off">
-        <Toggle
-          defaultOn={continuous}
-          onChange={(on) => setContinuous(on)}
-        />
-      </Row>
-      <Row label="Cadence (minutes)" hint="How often to re-run — 5 min to 24 h" defaultValue="60">
-        <input
-          type="text"
-          inputMode="numeric"
-          className={styles.input}
-          disabled={!continuous}
-          value={cadenceText}
-          onChange={(e) => setCadenceText(e.target.value)}
-          onBlur={() => {
-            const val = parseInt(cadenceText, 10);
-            const clamped = isNaN(val) ? 60 : Math.max(5, Math.min(1440, val));
-            setCadenceText(String(clamped));
-          }}
-        />
-      </Row>
       <Row
         label="Shortlist max candidates"
         hint="Cap on how many stocks pass the score gate per scan (1–50)"
@@ -469,98 +430,350 @@ function ScanForm() {
       <SpreadsSection />
       <IvThresholdsSection />
 
-      <Row label="Last options scan" hint="Status and time of the most recent options-mode scan">
+      <Row label="Last options scan" hint="Status and time of the most recent manually-triggered options-mode scan">
         <Text size={13} tone="secondary">
-          Continuous scanning: {lastOptionsScanStatus ?? '—'}
+          {lastOptionsScanStatus ?? '—'}
           {lastOptionsScanUpdatedAt && ` · ${formatLastRun(lastOptionsScanUpdatedAt)}`}
         </Text>
       </Row>
-      <Row label="Last stock scan" hint="Status, time, and strategy of the most recent stock-mode scan">
+      <Row label="Last stock scan" hint="Status, time, and strategy of the most recent manually-triggered stock-mode scan">
         <Text size={13} tone="secondary">
-          Scan: {lastStockScanStatus ?? '—'}
+          {lastStockScanStatus ?? '—'}
           {lastStockScanUpdatedAt && ` · ${formatLastRun(lastStockScanUpdatedAt)}`}
           {lastStockScanStrategy && ` · ${lastStockScanStrategy}`}
         </Text>
       </Row>
 
+      <OperatorTimezoneSection />
+      <ScheduledScansSection />
+    </>
+  );
+}
+
+/* ---------- Part 1: operator timezone ---------- */
+
+function OperatorTimezoneSection() {
+  const [tz, setTz] = useState('Europe/Berlin');
+  const [saveResult, setSaveResult] = useState('');
+
+  useEffect(() => {
+    api.getSchedulingTimezone()
+      .then((r) => setTz(r.timezone))
+      .catch(() => {});
+  }, []);
+
+  async function handleSave() {
+    setSaveResult('');
+    try {
+      await api.putSchedulingTimezone(tz);
+      setSaveResult('Saved');
+    } catch {
+      setSaveResult('Save failed — check the timezone name');
+    } finally {
+      setTimeout(() => setSaveResult(''), 2500);
+    }
+  }
+
+  return (
+    <>
       <SectionIntro
-        title="Scheduled scanning"
-        blurb="Automatically triggers scans on a recurring interval within the configured time window. Options and Stocks run independently. Changes take effect on the next server restart."
+        title="Operator timezone"
+        blurb="Governs jobs that just need a quiet, convenient local hour — nightly OHLCV ingestion, EDGAR fundamentals, S&P 500 liquidity update, strategy tuning, and audit-log rotation. Does NOT affect anything tracking real NYSE hours (e.g. the strategy-watch end-of-day trigger), which always uses America/New_York regardless of this setting. Takes effect immediately, no restart needed."
       />
-      <Row label="Enable Options scan" hint="Runs the Options scan on the interval below" defaultValue="Off">
-        <Toggle
-          defaultOn={schedule.enabledOptions}
-          onChange={(on) => setSchedule((s) => ({ ...s, enabledOptions: on }))}
-        />
-      </Row>
-      <Row label="Enable Stocks scan" hint="Runs the Stocks scan on the interval below" defaultValue="Off">
-        <Toggle
-          defaultOn={schedule.enabledStocks}
-          onChange={(on) => setSchedule((s) => ({ ...s, enabledStocks: on }))}
-        />
-      </Row>
-      <Row label="Interval" hint="How often the scan fires within the active window" defaultValue="Every 1 hour">
-        <select
-          className={styles.input}
-          value={schedule.cadenceMinutes}
-          onChange={(e) => setSchedule((s) => ({ ...s, cadenceMinutes: Number(e.target.value) }))}
-        >
-          <option value={15}>Every 15 min</option>
-          <option value={30}>Every 30 min</option>
-          <option value={60}>Every 1 hour</option>
-          <option value={120}>Every 2 hours</option>
-          <option value={240}>Every 4 hours</option>
-        </select>
-      </Row>
-      <Row label="Active days" hint="Scans only run on checked days (US market: Mon–Fri)" defaultValue="Mon–Fri">
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const).map((label, day) => (
-            <label key={day} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={schedule.daysOfWeek.includes(day)}
-                onChange={(e) => {
-                  const next = e.target.checked
-                    ? [...schedule.daysOfWeek, day].sort((a, b) => a - b)
-                    : schedule.daysOfWeek.filter((d) => d !== day);
-                  setSchedule((s) => ({ ...s, daysOfWeek: next }));
-                }}
-              />
-              <Text size={11}>{label}</Text>
-            </label>
-          ))}
+      <Row label="Timezone" hint="IANA timezone name, e.g. Europe/Berlin" defaultValue="Europe/Berlin">
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <input
+            type="text"
+            className={styles.input}
+            value={tz}
+            onChange={(e) => setTz(e.target.value)}
+          />
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave}>
+            Save
+          </button>
+          {saveResult && <Text size={11} tone="secondary">{saveResult}</Text>}
         </div>
       </Row>
-      <Row label="Window start hour (ET)" hint="Scan will not fire before this hour. 9 = 9:00 AM ET" defaultValue="9">
-        <input
-          type="number"
-          className={styles.input}
-          min={0}
-          max={23}
-          value={schedule.windowStartHour}
-          onChange={(e) => setSchedule((s) => ({ ...s, windowStartHour: Number(e.target.value) }))}
+    </>
+  );
+}
+
+/* ---------- Part 3: profile-based scan scheduling ---------- */
+
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+
+function formatRunTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function ScheduledScansSection() {
+  const [entries, setEntries] = useState<ScanScheduleEntry[]>([]);
+  const [lastRuns, setLastRuns] = useState<Record<string, ScanScheduleRun | null>>({});
+  const [loadError, setLoadError] = useState('');
+  const [addError, setAddError] = useState('');
+  const profiles = useSearchProfilesStore((s) => s.profiles);
+  const staleIds = useSearchProfilesStore((s) => s.staleScheduleEntryIds);
+
+  const refresh = useCallback(async () => {
+    try {
+      const list = await api.getScanSchedule();
+      setEntries(list);
+      setLoadError('');
+      const pairs = await Promise.all(list.map(async (e) => {
+        const runs = await api.getScanScheduleEntryRuns(e.id, 1).catch(() => [] as ScanScheduleRun[]);
+        return [e.id, runs[0] ?? null] as const;
+      }));
+      setLastRuns(Object.fromEntries(pairs));
+    } catch {
+      setLoadError('Could not reach the backend — schedule entries unavailable right now.');
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  async function addEntry(mode: 'options' | 'stocks') {
+    setAddError('');
+    const candidate = profiles.find((p) => p.mode === mode);
+    if (!candidate) {
+      setAddError(`No saved ${mode} profile yet — save one from Step 3/5 first.`);
+      return;
+    }
+    let resolved;
+    try {
+      resolved = resolveProfileToScanRequest(candidate);
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : 'Could not resolve this profile into a scan request.');
+      return;
+    }
+    try {
+      await api.createScanScheduleEntry({
+        label: candidate.name,
+        mode,
+        profile_id: candidate.id,
+        profile_name: candidate.name,
+        profile_synced_at: new Date().toISOString(),
+        resolved_request: resolved,
+        pattern: 'fixed_time',
+        enabled: true,
+        days_of_week: [0, 1, 2, 3, 4],
+        fire_time: '09:00',
+      });
+      void refresh();
+    } catch {
+      setAddError('Could not create the entry — check the backend is reachable.');
+    }
+  }
+
+  async function updateEntry(entry: ScanScheduleEntry, patch: Partial<ScanScheduleEntry>) {
+    const next = { ...entry, ...patch };
+    try {
+      await api.updateScanScheduleEntry(entry.id, {
+        label: next.label, mode: next.mode, profile_id: next.profile_id,
+        profile_name: next.profile_name, profile_synced_at: next.profile_synced_at,
+        resolved_request: next.resolved_request, pattern: next.pattern, enabled: next.enabled,
+        days_of_week: next.days_of_week, fire_time: next.fire_time,
+        cadence_minutes: next.cadence_minutes, window_start_hour: next.window_start_hour,
+        window_end_hour: next.window_end_hour,
+      });
+      void refresh();
+    } catch {
+      // Leave the list stale rather than silently reverting the UI's optimistic value.
+    }
+  }
+
+  async function deleteEntry(id: string) {
+    try {
+      await api.deleteScanScheduleEntry(id);
+      void refresh();
+    } catch { /* best-effort */ }
+  }
+
+  async function runNow(id: string) {
+    try {
+      await api.runScanScheduleEntryNow(id);
+      setTimeout(() => void refresh(), 1500); // give the backend a moment to record the run
+    } catch { /* best-effort */ }
+  }
+
+  return (
+    <>
+      <SectionIntro
+        title="Scheduled scans"
+        blurb="Any number of independently-scheduled scan entries, each pointed at a saved search profile — options and stocks entries never share a cadence/window. 'Fixed time' fires once at a clock time on the selected weekdays; 'Loop' repeats on a cadence within a time window. A schedule entry always reflects its profile's last explicit save — editing it here changes only the schedule, not the profile."
+      />
+      {loadError && <Row label=""><Text size={12} tone="reject">{loadError}</Text></Row>}
+      {entries.length === 0 && !loadError && (
+        <Row label="" hint="No scheduled scans yet">
+          <Text size={12} tone="secondary">Add one below, pointed at any saved search profile.</Text>
+        </Row>
+      )}
+      {entries.map((entry) => (
+        <ScheduleEntryRow
+          key={entry.id}
+          entry={entry}
+          lastRun={lastRuns[entry.id] ?? null}
+          stale={staleIds.includes(entry.id)}
+          profiles={profiles.filter((p) => p.mode === entry.mode)}
+          onUpdate={(patch) => void updateEntry(entry, patch)}
+          onDelete={() => void deleteEntry(entry.id)}
+          onRunNow={() => void runNow(entry.id)}
         />
-      </Row>
-      <Row label="Window end hour (ET)" hint="Scan will not fire after this hour. 17 = 5:00 PM ET" defaultValue="17">
-        <input
-          type="number"
-          className={styles.input}
-          min={1}
-          max={24}
-          value={schedule.windowEndHour}
-          onChange={(e) => setSchedule((s) => ({ ...s, windowEndHour: Number(e.target.value) }))}
-        />
-      </Row>
+      ))}
       <div className={styles.row}>
         <div className={styles.rowLabel} />
         <div className={styles.rowControl} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSaveSchedule}>
-            Save schedule
+          <button type="button" className={styles.btn} onClick={() => void addEntry('options')}>
+            + Add options entry
           </button>
-          {scheduleSaveResult && <Text size={11} tone="secondary">{scheduleSaveResult}</Text>}
+          <button type="button" className={styles.btn} onClick={() => void addEntry('stocks')}>
+            + Add stocks entry
+          </button>
+          {addError && <Text size={11} tone="reject">{addError}</Text>}
         </div>
       </div>
     </>
+  );
+}
+
+function ScheduleEntryRow({
+  entry, lastRun, stale, profiles, onUpdate, onDelete, onRunNow,
+}: {
+  entry: ScanScheduleEntry;
+  lastRun: ScanScheduleRun | null;
+  stale: boolean;
+  profiles: SearchProfile[];
+  onUpdate: (patch: Partial<ScanScheduleEntry>) => void;
+  onDelete: () => void;
+  onRunNow: () => void;
+}) {
+  const [label, setLabel] = useState(entry.label);
+  useEffect(() => { setLabel(entry.label); }, [entry.label]);
+
+  return (
+    <div className={styles.row} style={{ alignItems: 'flex-start', borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+      <div className={styles.rowLabel}>
+        <span className={styles.defaultTag}>{entry.mode === 'options' ? 'Options' : 'Stocks'}</span>
+        {stale && <Text size={11} tone="caution">May be out of date — last re-sync push failed</Text>}
+      </div>
+      <div className={styles.rowControl} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="text"
+            className={styles.input}
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            onBlur={() => { if (label !== entry.label) onUpdate({ label }); }}
+          />
+          <select
+            className={styles.input}
+            value={entry.profile_id}
+            onChange={(e) => {
+              const p = profiles.find((pr) => pr.id === e.target.value);
+              if (!p) return;
+              try {
+                const resolved = resolveProfileToScanRequest(p);
+                onUpdate({
+                  profile_id: p.id, profile_name: p.name,
+                  profile_synced_at: new Date().toISOString(), resolved_request: resolved,
+                });
+              } catch { /* leave entry pointed at old profile if this one can't resolve yet */ }
+            }}
+          >
+            {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select
+            className={styles.input}
+            value={entry.pattern}
+            onChange={(e) => onUpdate({
+              pattern: e.target.value as 'fixed_time' | 'loop',
+              fire_time: e.target.value === 'fixed_time' ? (entry.fire_time ?? '09:00') : null,
+              cadence_minutes: e.target.value === 'loop' ? (entry.cadence_minutes ?? 60) : null,
+              window_start_hour: e.target.value === 'loop' ? (entry.window_start_hour ?? 9) : null,
+              window_end_hour: e.target.value === 'loop' ? (entry.window_end_hour ?? 17) : null,
+            })}
+          >
+            <option value="fixed_time">Fixed time</option>
+            <option value="loop">Loop (cadence + window)</option>
+          </select>
+          <Toggle defaultOn={entry.enabled} onChange={(on) => onUpdate({ enabled: on })} />
+          <button type="button" className={styles.btn} onClick={onRunNow}>Run now</button>
+          <button type="button" className={styles.btn} onClick={onDelete}>Delete</button>
+        </div>
+
+        {entry.pattern === 'fixed_time' ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Text size={11} tone="secondary">Fires at</Text>
+            <input
+              type="time"
+              className={styles.input}
+              value={entry.fire_time ?? '09:00'}
+              onChange={(e) => onUpdate({ fire_time: e.target.value })}
+            />
+            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => onUpdate({ days_of_week: d })} />
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Text size={11} tone="secondary">Every</Text>
+            <input
+              type="number" min={5} max={1440} className={styles.input} style={{ width: 70 }}
+              value={entry.cadence_minutes ?? 60}
+              onChange={(e) => onUpdate({ cadence_minutes: Number(e.target.value) })}
+            />
+            <Text size={11} tone="secondary">min, between</Text>
+            <input
+              type="number" min={0} max={23} className={styles.input} style={{ width: 60 }}
+              value={entry.window_start_hour ?? 9}
+              onChange={(e) => onUpdate({ window_start_hour: Number(e.target.value) })}
+            />
+            <Text size={11} tone="secondary">and</Text>
+            <input
+              type="number" min={1} max={24} className={styles.input} style={{ width: 60 }}
+              value={entry.window_end_hour ?? 17}
+              onChange={(e) => onUpdate({ window_end_hour: Number(e.target.value) })}
+            />
+            <Text size={11} tone="secondary">(operator timezone)</Text>
+            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => onUpdate({ days_of_week: d })} />
+          </div>
+        )}
+
+        <Text size={11} tone="secondary">
+          {lastRun
+            ? `Last run: ${lastRun.status} · ${formatRunTime(lastRun.fired_at)}` +
+              (lastRun.status === 'success'
+                ? ` · ${lastRun.candidate_count ?? '—'} candidate(s)`
+                : ` · ${lastRun.error ?? 'unknown error'}`)
+            : 'Never run yet'}
+        </Text>
+      </div>
+    </div>
+  );
+}
+
+function DaysOfWeekPicker({ days, onChange }: { days: number[]; onChange: (days: number[]) => void }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {DAY_LABELS.map((label, day) => (
+        <label key={day} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={days.includes(day)}
+            onChange={(e) => {
+              const next = e.target.checked
+                ? [...days, day].sort((a, b) => a - b)
+                : days.filter((d) => d !== day);
+              onChange(next);
+            }}
+          />
+          <Text size={11}>{label}</Text>
+        </label>
+      ))}
+    </div>
   );
 }
 
@@ -1922,18 +2135,24 @@ function ScheduleSection({
   saveSchedule,
   onTrigger,
   triggerLabel = 'Run now',
+  showDaysOfWeek = false,
 }: {
   title: string;
   blurb: string;
   manualBlurb?: string;
   defaultTime: string;
   loadSchedule: () => Promise<IngestionSchedule>;
-  saveSchedule: (s: Pick<IngestionSchedule, 'enabled' | 'time'>) => Promise<IngestionSchedule>;
+  saveSchedule: (s: Pick<IngestionSchedule, 'enabled' | 'time'> & { days_of_week?: number[] }) => Promise<IngestionSchedule>;
   onTrigger?: () => Promise<unknown>;
   triggerLabel?: string;
+  /** Only strategy tuning uses this — a Saturday-only weekly cadence
+   * (Part 0/Part 1, §2a); the other three schedulers (ingestion/EDGAR/
+   * S&P 500) stay nightly-every-day and don't need a picker. */
+  showDaysOfWeek?: boolean;
 }) {
   const [enabled, setEnabled] = useState(false);
   const [time, setTime] = useState(defaultTime);
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([5]);
   const [nextRun, setNextRun] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState('');
@@ -1942,7 +2161,11 @@ function ScheduleSection({
 
   useEffect(() => {
     loadSchedule()
-      .then((s) => { setEnabled(s.enabled); setTime(s.time); setNextRun(s.next_run); })
+      .then((s) => {
+        setEnabled(s.enabled); setTime(s.time); setNextRun(s.next_run);
+        const dow = (s as IngestionSchedule & { days_of_week?: number[] }).days_of_week;
+        if (Array.isArray(dow)) setDaysOfWeek(dow);
+      })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1959,7 +2182,7 @@ function ScheduleSection({
   async function handleSave() {
     setSaving(true); setSaveResult('');
     try {
-      const r = await saveSchedule({ enabled, time });
+      const r = await saveSchedule(showDaysOfWeek ? { enabled, time, days_of_week: daysOfWeek } : { enabled, time });
       setNextRun(r.next_run);
       setSaveResult('Saved');
     } catch { setSaveResult('Save failed'); }
@@ -1979,9 +2202,14 @@ function ScheduleSection({
       <Row label="Enable schedule" hint="Runs at the configured time every day" defaultValue="Off">
         <Toggle defaultOn={enabled} onChange={(on) => setEnabled(on)} />
       </Row>
-      <Row label="Run time (HH:MM)" hint="24-hour local server time" defaultValue={defaultTime}>
+      <Row label="Run time (HH:MM)" hint="24-hour operator timezone (see Scan → Operator timezone)" defaultValue={defaultTime}>
         <input type="time" className={styles.input} disabled={!enabled} value={time} onChange={(e) => setTime(e.target.value)} />
       </Row>
+      {showDaysOfWeek && (
+        <Row label="Active days" hint="Which weekdays this runs on" defaultValue="Saturday">
+          <DaysOfWeekPicker days={daysOfWeek} onChange={setDaysOfWeek} />
+        </Row>
+      )}
       <Row label="Next scheduled run" hint="Calculated after saving">
         <Text size={13} tone="secondary">{formatNextRun(nextRun)}</Text>
       </Row>
@@ -2273,10 +2501,11 @@ function StrategyTuningForm() {
     <div>
       <ScheduleSection
         title="Automatic tuning schedule"
-        blurb="Run walk-forward optimization automatically at a fixed time each day. The job is skipped if a run is already active."
-        defaultTime="02:00"
+        blurb="Run walk-forward optimization automatically at a fixed time — Saturday-only by default, since this is compute-heavy and doesn't need daily freshness. The job is skipped if a run is already active."
+        defaultTime="05:00"
         loadSchedule={getTuningSchedule}
         saveSchedule={saveTuningSchedule}
+        showDaysOfWeek
       />
 
       <SectionIntro

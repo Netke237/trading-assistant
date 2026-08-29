@@ -71,6 +71,20 @@ os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
 _TEST_CREDS_PATH = Path(_TEST_DB_DIR, "test_local_credentials.yaml").as_posix()
 os.environ.setdefault("BAMENDJOU_CREDS_PATH", _TEST_CREDS_PATH)
 
+# ── scan_schedule_store safety pin (MUST run before any app import) ───────────
+# Same class of bug as the two pins above: scan_schedule_store.py (Part 3 of
+# the scheduler-timezone-awareness plan) builds a module-level singleton at
+# import time whose path defaults to the real backend/config/scan_schedule.yaml,
+# and its router (routers/scan_schedule.py) calls upsert()/delete() on that
+# singleton directly — any test exercising those endpoints via the `client`
+# fixture (not just a test that builds its own ScanScheduleStore(path=tmp_path))
+# would otherwise write real schedule entries into the repo's actual config
+# directory. Confirmed to actually happen during this change's own test
+# development. Pinned to a throwaway file for the same reason as the
+# credentials pin — setdefault lets an explicit override still win.
+_TEST_SCAN_SCHEDULE_PATH = Path(_TEST_DB_DIR, "test_scan_schedule.yaml").as_posix()
+os.environ.setdefault("BAMENDJOU_SCAN_SCHEDULE_PATH", _TEST_SCAN_SCHEDULE_PATH)
+
 import asyncio
 from typing import AsyncGenerator
 from unittest.mock import patch, AsyncMock
@@ -87,6 +101,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.database import get_db
 from app.models.scan_session import ScanSessionBase
+from app.models.scheduled_scan_run import ScheduledScanRunBase
 
 # ── Strategy-param cache isolation ────────────────────────────────────────────
 
@@ -230,6 +245,7 @@ _TestSession = async_sessionmaker(
 async def _create_tables() -> None:
     async with _test_engine.begin() as conn:
         await conn.run_sync(ScanSessionBase.metadata.create_all)
+        await conn.run_sync(ScheduledScanRunBase.metadata.create_all)
 
 
 async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -252,7 +268,7 @@ def _db_tables():
 # real `app.database.engine`, now pointed at the isolated file DB pinned above
 # instead of dev.db. Those tables need to actually exist in that file.
 #
-# This codebase has FOUR independent SQLAlchemy declarative-base/metadata
+# This codebase has FIVE independent SQLAlchemy declarative-base/metadata
 # registries, not one:
 #   1. app.models.base.Base       — dead code, nothing registers against it.
 #      Deliberately NOT used below — it's the obvious-looking name to import,
@@ -262,8 +278,9 @@ def _db_tables():
 #      inherits from this.
 #   3. ScanSessionBase            — ScanSessionModel only.
 #   4. OhlcvBase                  — OhlcvDailyModel only.
+#   5. ScheduledScanRunBase       — ScheduledScanRunModel only (Part 3).
 # (backend/migrations/env.py's target_metadata list is the reference for this
-# — it already has to name all four separately, because they don't merge.)
+# — it already has to name all five separately, because they don't merge.)
 async def _create_app_db_tables() -> None:
     # Import app.main so every router — and therefore every model module — is
     # loaded and registered against its Base before create_all runs. In
@@ -276,10 +293,12 @@ async def _create_app_db_tables() -> None:
     from app.database import engine, Base as AppBase
     from app.models.scan_session import ScanSessionBase
     from app.models.ohlcv_daily import OhlcvBase
+    from app.models.scheduled_scan_run import ScheduledScanRunBase
     async with engine.begin() as conn:
         await conn.run_sync(AppBase.metadata.create_all)
         await conn.run_sync(ScanSessionBase.metadata.create_all)
         await conn.run_sync(OhlcvBase.metadata.create_all)
+        await conn.run_sync(ScheduledScanRunBase.metadata.create_all)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -325,6 +344,7 @@ def client():
     from app.routers.news      import router as news_router
     from app.routers.ws_alerts import router as ws_alerts_router
     from app.routers.notification_settings import router as notification_settings_router
+    from app.routers.scan_schedule import router as scan_schedule_router
 
     # ── Build test app ────────────────────────────────────────────────────────
     test_app = FastAPI(title="Test App", debug=True)
@@ -374,6 +394,7 @@ def client():
     test_app.include_router(news_router)
     test_app.include_router(ws_alerts_router)
     test_app.include_router(notification_settings_router)
+    test_app.include_router(scan_schedule_router)
 
     # Override get_db with the in-memory SQLite session
     test_app.dependency_overrides[get_db] = _override_get_db

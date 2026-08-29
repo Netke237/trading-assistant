@@ -13,6 +13,7 @@ from datetime import date, datetime, time as dtime
 
 from app.services.strategy_watch_evaluator import evaluate_and_notify
 from app.services.strategy_watch_store import strategy_watch_store
+from app.services.scheduling_tz import MARKET_TZ
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +21,11 @@ _TICK_SECONDS = 300  # 5 minutes
 
 
 def _market_open(now: datetime | None = None) -> bool:
-    """True on a weekday between 09:30 and 16:00 (naive local time; coarse by design)."""
-    now = now or datetime.now()
+    """True on a weekday between 09:30 and 16:00 America/New_York wall-clock
+    time — real NYSE session hours, tracked via a real IANA zone (not a
+    hardcoded offset) so this stays correct across both the US's and any
+    host/operator's own DST transition weeks."""
+    now = now or datetime.now(MARKET_TZ)
     if now.weekday() >= 5:  # Sat/Sun
         return False
     return dtime(9, 30) <= now.time() <= dtime(16, 0)
@@ -40,7 +44,7 @@ class StrategyWatchScheduler:
 
     async def _maybe_run(self, now: datetime | None = None) -> bool:
         """Decide and possibly run one evaluation. Returns True if it ran."""
-        now = now or datetime.now()
+        now = now or datetime.now(MARKET_TZ)
         cfg = self._load_schedule()
         if not cfg.get("enabled"):
             return False
@@ -112,7 +116,7 @@ class StrategyWatchScheduler:
         # Manual runs bypass the sustain window by design — the user explicitly
         # requested an immediate evaluation, so sustain_minutes is not applied here.
         events = await evaluate_and_notify()
-        self._last_run_at = datetime.now()
+        self._last_run_at = datetime.now(MARKET_TZ)
         return events
 
     def get_status(self) -> dict:

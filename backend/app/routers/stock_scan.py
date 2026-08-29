@@ -979,24 +979,42 @@ async def run_stock_scan(req: StockScanRequest, db: AsyncSession = Depends(get_d
     # a low-probability edge case given this app is single-user and the UI
     # only issues one stock scan at a time, rather than engineered around
     # with a lock/sequence-token.
-    scan_id = new_rec_id()
     _prev_request, _prev_result, _prev_status = _last_stock_request, _last_stock_result, _last_stock_status
     await _upsert_stock_session(db, req=req, result=_prev_result, status="running")
 
     try:
-        return await _run_stock_scan_body(req, db, scan_id)
+        result = await _execute_stock_scan_core(req, db, previous_result=_prev_result)
+        await _upsert_stock_session(db, req, result, status="complete")
+        return result
     except Exception:
         # Revert to the request/result/status that were current before THIS
         # attempt started (not `req`/"idle" unconditionally) — otherwise a
         # scan that fails right after a genuinely completed one would
         # mislabel that still-valid prior result as "idle" instead of
         # "complete". `_prev_status` is "idle" only when there really was no
-        # prior scan (module default / a fresh DB).
+        # prior scan (module default / a fresh DB). Manual-run-only: Part 3's
+        # scheduled runner never touches this global slot at all, so this
+        # revert dance doesn't apply there — see _execute_stock_scan_core.
         await _upsert_stock_session(db, req=_prev_request, result=_prev_result, status=_prev_status)
         raise
 
 
-async def _run_stock_scan_body(req: StockScanRequest, db: AsyncSession, scan_id: str) -> StockScanResult:
+async def _execute_stock_scan_core(
+    req: StockScanRequest, db: AsyncSession, *, previous_result: StockScanResult | None = None,
+) -> StockScanResult:
+    """The actual stock-scan-running logic — same body run_stock_scan() has
+    always run through result construction, with NO write to
+    `_last_stock_request`/`_last_stock_result`/`_last_stock_status` (that
+    happens in `_upsert_stock_session`, called only by run_stock_scan() and
+    Part 3's scheduled runner after this returns, never from inside here).
+
+    `previous_result` is accepted for signature symmetry with the
+    options-mode core (_execute_scan_core) — Part 3's scheduled runner passes
+    each entry's own prior successful result — but is unused internally
+    today: unlike options mode, stock-mode scans compute no rank/score
+    deltas (StockScanResult carries no `deltas` field), so there is nothing
+    here to compute against it yet."""
+    scan_id = new_rec_id()
     # Deliberately NOT hoisted to the module-level import at line 57 — tests
     # patch `app.data.universe_presets.expand_universe` (not
     # `app.routers.stock_scan.expand_universe`), which only takes effect if
@@ -1113,7 +1131,6 @@ async def _run_stock_scan_body(req: StockScanRequest, db: AsyncSession, scan_id:
         original_count=original_count, shortlist_truncated=shortlist_truncated,
         direction_banner=_direction_banner,
     )
-    await _upsert_stock_session(db, req, result, status="complete")
     return result
 
 

@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.services import portfolio_risk, alert_generator
 from app.routers import scan as scan_router
-from app.schemas.schedule import ScheduleConfig
 
 router = APIRouter(prefix='/settings', tags=['settings'])
 
@@ -174,22 +173,30 @@ async def save_risk_settings(body: RiskConfig) -> dict:
     }
 
 
-@router.get('/schedule', response_model=ScheduleConfig)
-def get_schedule() -> ScheduleConfig:
-    raw = _load_settings().get('scan', {}).get('schedule', {})
-    return ScheduleConfig(**raw)
+class SchedulingConfig(BaseModel):
+    """Operator timezone (Part 1) — governs jobs that only need some quiet,
+    convenient local hour (nightly ingestion/EDGAR/S&P 500/tuning, audit-log
+    rotation). Does NOT govern anything tracking real NYSE hours (e.g. the
+    strategy-watch EOD trigger) — those stay pinned to America/New_York
+    regardless of this setting; see app/services/scheduling_tz.py."""
+    timezone: str = Field(default="Europe/Berlin", description="IANA timezone name, e.g. 'Europe/Berlin'")
 
 
-@router.put('/schedule', response_model=ScheduleConfig)
-def put_schedule(cfg: ScheduleConfig) -> ScheduleConfig:
-    data = _load_settings()
-    data.setdefault('scan', {})['schedule'] = cfg.model_dump()
-    _save_settings(data)
+@router.get('/scheduling', response_model=SchedulingConfig)
+def get_scheduling() -> SchedulingConfig:
+    from app.services.scheduling_tz import operator_timezone_name
+    return SchedulingConfig(timezone=operator_timezone_name())
+
+
+@router.put('/scheduling', response_model=SchedulingConfig)
+def put_scheduling(cfg: SchedulingConfig) -> SchedulingConfig:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
     try:
-        scan_router._scheduler.configure(cfg)
-    except Exception as _exc:
-        import logging as _logging
-        _logging.getLogger(__name__).warning(
-            "put_schedule: live scheduler configure failed (scheduler may not be started): %s", _exc
-        )
+        ZoneInfo(cfg.timezone)
+    except (ZoneInfoNotFoundError, ValueError, KeyError):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail=f"unknown timezone {cfg.timezone!r}")
+    data = _load_settings()
+    data.setdefault('scheduling', {})['timezone'] = cfg.timezone
+    _save_settings(data)
     return cfg

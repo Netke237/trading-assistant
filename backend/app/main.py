@@ -45,11 +45,84 @@ from app.routers.strategy_tuning import router as strategy_tuning_router
 from app.routers.config          import router as config_router
 from app.routers.symbols         import router as symbols_router
 from app.routers.symbol_notes    import router as symbol_notes_router
+from app.routers.scan_schedule   import router as scan_schedule_router
 
 
 _portfolio_monitor_task: asyncio.Task | None = None
 _regime_monitor_task: asyncio.Task | None = None
 _chart_alert_scheduler_task: asyncio.Task | None = None
+
+
+async def _migrate_continuous_scan_session_if_running(status: str | None) -> None:
+    """One-shot startup migration (Part 3, §3.9) for the retired
+    continuous-scan mechanism.
+
+    If the old ScanSession(id="current") row was left status=="running" as
+    of this restart (i.e. exactly the case the now-deleted startup-resume
+    code existed to handle), build one `pattern='loop'` ScanScheduleEntry
+    from it instead of silently dropping it, then mark the session
+    "stopped" either way so this only ever migrates once. `restore_from_db()`
+    (already called by the caller) only populates `app.routers.scan._last_request`
+    when the row's `last_request_json` column is truthy — if it's null/
+    unparseable (e.g. a crash between `_scheduler.start()` and the first
+    completed scan, under the old mechanism), there's no request to build an
+    entry from; skip the migration and just mark the session stopped."""
+    if status != "running":
+        return
+
+    import app.routers.scan as _scan_module
+    from app.database import AsyncSessionLocal
+
+    last_request = _scan_module._last_request
+    last_result = _scan_module._last_result
+
+    if last_request is None:
+        async with AsyncSessionLocal() as db:
+            await _scan_module._upsert_session(db, req=None, result=None, status="stopped")
+        logger.info(
+            "startup migration: old continuous-scan session had status='running' but no "
+            "usable last request — nothing to migrate, marked stopped"
+        )
+        return
+
+    import uuid
+    from datetime import datetime, timezone
+    from pathlib import Path as _Path
+    import yaml as _yaml
+    from app.schemas.schedule import ScheduleConfig as _ScheduleConfig
+    from app.schemas.scan_schedule import ScanScheduleEntry
+    from app.services.scan_schedule_store import scan_schedule_store
+
+    try:
+        _settings_path = _Path(__file__).parent / "config" / "settings.yaml"
+        _raw = _yaml.safe_load(_settings_path.read_text()) or {} if _settings_path.exists() else {}
+        sched_cfg = _ScheduleConfig(**_raw.get("scan", {}).get("schedule", {}))
+    except Exception:
+        sched_cfg = _ScheduleConfig()
+
+    entry = ScanScheduleEntry(
+        id=str(uuid.uuid4()),
+        label="Migrated from continuous scan",
+        mode="options",
+        profile_id="",
+        profile_name="Migrated from continuous scan",
+        profile_synced_at=datetime.now(timezone.utc).isoformat(),
+        resolved_request=last_request.model_dump(),
+        pattern="loop",
+        enabled=True,
+        days_of_week=sched_cfg.days_of_week,
+        cadence_minutes=sched_cfg.cadence_minutes,
+        window_start_hour=sched_cfg.window_start_hour,
+        window_end_hour=sched_cfg.window_end_hour,
+    )
+    scan_schedule_store.upsert(entry.model_dump())
+    logger.info(
+        "startup migration: created ScanScheduleEntry %s ('%s') from the old "
+        "continuous-scan session", entry.id, entry.label,
+    )
+
+    async with AsyncSessionLocal() as db:
+        await _scan_module._upsert_session(db, req=last_request, result=last_result, status="stopped")
 
 
 @asynccontextmanager
@@ -59,9 +132,11 @@ async def lifespan(app: FastAPI):
     _web_concurrency = int(os.getenv("WEB_CONCURRENCY", "1"))
     if _web_concurrency > 1:
         logger.error(
-            "WEB_CONCURRENCY=%d detected — strategy-tuning concurrency guard uses an "
-            "in-process asyncio.Lock invisible across workers. "
-            "Run with --workers 1 or migrate to a shared lock backend.",
+            "WEB_CONCURRENCY=%d detected — strategy-tuning concurrency guard AND "
+            "Part 3's scheduled-scan concurrency guard (_SCHEDULED_SCAN_SEMAPHORE, "
+            "scan_schedule_scheduler.py) both use an in-process asyncio "
+            "lock/semaphore invisible across workers. "
+            "Run with --workers 1 or migrate both to a shared lock backend.",
             _web_concurrency,
         )
     # ── One-time settings migrations (see app/services/settings_migrations.py
@@ -75,24 +150,27 @@ async def lifespan(app: FastAPI):
     except Exception as _exc:
         logger.warning("settings.yaml migration failed: %s", _exc)
 
-    from app.routers.scan import restore_from_db, _scheduler, _scheduled_scan
+    from app.routers.scan import restore_from_db
     from app.routers.stock_scan import restore_stock_from_db
     status = await restore_from_db()
     await restore_stock_from_db()
-    if status == "running":
-        _scheduler.bind(_scheduled_scan)
-        # Restore persisted schedule config so cadence/window/days survive restarts
-        try:
-            from app.schemas.schedule import ScheduleConfig as _ScheduleConfig
-            import yaml as _yaml
-            from pathlib import Path as _Path
-            _settings_path = _Path(__file__).parent.parent / "config" / "settings.yaml"
-            _raw = _yaml.safe_load(_settings_path.read_text()) or {} if _settings_path.exists() else {}
-            _sched_cfg = _ScheduleConfig(**_raw.get("scan", {}).get("schedule", {}))
-            _scheduler.configure(_sched_cfg)
-        except Exception as _exc:
-            logger.warning("scan scheduler configure on startup failed: %s", _exc)
-        await _scheduler.start()
+    # One-shot migration: if the retired continuous-scan mechanism (see Part
+    # 3, §3.9) was left "running" as of this restart, migrate it into a
+    # single Part-3 `loop`-pattern ScanScheduleEntry instead of silently
+    # dropping it. Idempotent by construction — this marks the old session
+    # "stopped" either way, so a second boot sees status != "running" and
+    # skips this path entirely.
+    try:
+        await _migrate_continuous_scan_session_if_running(status)
+    except Exception as _exc:
+        logger.warning("continuous-scan migration failed: %s", _exc)
+    # ── Part 3: profile-based scan scheduling ──────────────────────────────
+    try:
+        from app.services.scan_schedule_scheduler import sync_fixed_time_jobs, scan_schedule_loop_runner
+        sync_fixed_time_jobs()
+        await scan_schedule_loop_runner.start()
+    except Exception as _exc:
+        logger.warning("scan_schedule_scheduler startup failed: %s", _exc)
     # Keep strong references so the GC never collects background tasks.
     from app.services.portfolio_alert_monitor import run_portfolio_alert_monitor
     _portfolio_monitor_task = asyncio.create_task(run_portfolio_alert_monitor())
@@ -168,7 +246,7 @@ async def lifespan(app: FastAPI):
         from app.services.tuning_schedule_store import tuning_schedule_store as _tuning_store
         from app.services import tuning_scheduler as _tuning_sched
         _tuning_cfg = _tuning_store.get()
-        _tuning_sched.configure(_tuning_cfg["enabled"], _tuning_cfg["time"])
+        _tuning_sched.configure(_tuning_cfg["enabled"], _tuning_cfg["time"], _tuning_cfg.get("days_of_week"))
         _tuning_sched.start()
     except Exception as _exc:
         logger.warning("tuning_scheduler startup failed: %s", _exc)
@@ -226,8 +304,12 @@ async def lifespan(app: FastAPI):
         _HESTON_EXECUTOR.shutdown(wait=False, cancel_futures=True)
     except Exception:
         pass
-    if _scheduler._running:
-        await _scheduler.stop()
+    try:
+        from app.services.scan_schedule_scheduler import shutdown_fixed_time_scheduler, scan_schedule_loop_runner
+        shutdown_fixed_time_scheduler()
+        await scan_schedule_loop_runner.stop()
+    except Exception:
+        pass
     for task in (_portfolio_monitor_task, _regime_monitor_task, _chart_alert_scheduler_task):
         if task:
             task.cancel()
@@ -302,6 +384,7 @@ def create_app() -> FastAPI:
     app.include_router(composite_watch_router)
     app.include_router(strategy_tuning_router)
     app.include_router(config_router)
+    app.include_router(scan_schedule_router)
 
     return app
 

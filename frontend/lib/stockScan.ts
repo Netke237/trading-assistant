@@ -1,7 +1,8 @@
 import { api } from '@/lib/api';
 import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
-import { useSettingsStore, atrMultForHorizon } from '@/lib/settingsStore';
+import { useSettingsStore } from '@/lib/settingsStore';
+import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 
 /**
@@ -66,87 +67,36 @@ export async function runStockScan(
   const requireReversal =
     (store.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
   const { confidenceGate } = useSettingsStore.getState();
-
-  // Keys from scanStore.scanOverrides that stock_scorer.py reads via the overrides dict.
-  // Options-only params (max_delta, min_dte, etc.) and iv_rank_pass_max are excluded.
-  const STOCKS_SCORER_KEYS = new Set([
-    'weight_trend', 'weight_pullback', 'weight_trigger', 'weight_event', 'weight_vol',
-    'trend_method', 'ma_type', 'fast_ema', 'slow_ema',
-    'additive_ma_type', 'additive_ma_period', 'additive_slope_lookback',
-    'additive_adx_period', 'additive_adx_pass', 'additive_adx_caution',
-    'additive_price_max', 'additive_slope_max', 'additive_adx_max',
-    'rs_period', 'rs_pass_threshold', 'rs_caution_threshold', 'rs_benchmark',
-    'swing_high_lookback_bars', 'atr_caution_max',
-    'macd_fast', 'macd_slow', 'macd_signal', 'rsi_floor',
-    'event_reject_days', 'event_caution_days',
-    // Reward/Risk params — forwarded in overrides dict; handled by the options pipeline only.
-    'rr_bullish_target_pct', 'rr_bearish_target_pct',
-    'rr_bullish_invalidation_pct', 'rr_bearish_invalidation_pct',
-  ]);
-
   const rawOverrides = store.scanOverrides;
-  const stocksOverrides = Object.fromEntries(
-    Object.entries(rawOverrides).filter(([k]) => STOCKS_SCORER_KEYS.has(k))
-  );
 
   store.setActiveStrategy(strategy);
   store.setStockScanResult(null);
   store.setScanState('SCANNING');
 
-  // ATR barriers always apply (they change what confidence measures,
-  // regardless of the gate). Both-or-neither: a lone target/stop override in
-  // Step 3 (without the other) is ignored entirely, falling back to the full
-  // Settings default pair for this scan's horizon — a mismatched pair must
-  // never be sent, since it would silently bypass the backend's own
-  // both-or-neither guard (which only nulls a pair when it receives an
-  // explicit None on one side, not when it receives two mismatched numbers).
-  const hasFullAtrOverride =
-    typeof rawOverrides.confidence_atr_mult_target === 'number' &&
-    typeof rawOverrides.confidence_atr_mult_stop === 'number';
-  const atrPair = hasFullAtrOverride
-    ? { target: rawOverrides.confidence_atr_mult_target as number, stop: rawOverrides.confidence_atr_mult_stop as number }
-    : atrMultForHorizon(confidenceGate, context?.horizon ?? 'Swing');
+  // account_size/risk_pct are hardcoded here (not read from riskStore) —
+  // this is the manual-run path's existing, already-shipped behavior,
+  // unchanged by this extraction. Flagged (not silently fixed) per the
+  // scheduler-timezone-awareness plan: the profile-based schedule resolver
+  // (scanScheduleResolve.ts) explicitly reads live riskStore values instead,
+  // since a scheduled entry firing unattended for months must never
+  // silently keep a stale $50k/1% default baked in from before the user set
+  // their real position sizing — fixing this same gap for the manual path
+  // too is a separate, pre-existing concern outside this plan's scope.
+  const requestBody = buildStockScanRequestBody({
+    universe: context?.universe ? [context.universe] : ['SP500'],
+    direction: context?.direction ?? 'Bullish',
+    horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
+    strategy,
+    params: p,
+    requireReversal,
+    scanOverrides: rawOverrides,
+    confidenceGate,
+    accountSize: 50_000,
+    riskPct: 0.01,
+  });
 
   try {
-    const result = await api.postStockScan({
-      universe:  context?.universe ? [context.universe] : ['SP500'],
-      direction: context?.direction ?? 'Bullish',
-      horizon:   (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
-      strategy,
-      pullback_tolerance_pct:    p.pullbackTolerancePct,
-      pullback_ema_period:       p.pullbackEmaPeriod,
-      pullback_trend_ema:        p.pullbackTrendEma,
-      pullback_ma_type:          p.pullbackMaType,
-      pullback_require_reversal: requireReversal,
-      ma_crossover_fast:      p.maCrossoverFast,
-      ma_crossover_slow:      p.maCrossoverSlow,
-      ma_crossover_lookback:  p.maCrossoverLookback,
-      breakout_volume_mult:   p.breakoutVolumeMult,
-      rsi_period:             p.rsiPeriod,
-      rsi_oversold:           p.rsiOversold,
-      rsi_trend_sma:          p.rsiTrendSma,
-      require_choppy_regime:  p.requireChoppyRegime ?? false,
-      bt_min_trades:          p.btMinTrades,
-      bt_min_win_rate:        p.btMinWinRate,
-      account_size: 50_000,
-      risk_pct: 0.01,
-      shortlist_max_candidates: p.stockShortlistMax,
-      overrides: stocksOverrides,
-      confidence_caution_below: confidenceGate.enabled ? confidenceGate.cautionBelow : undefined,
-      confidence_reject_below:  confidenceGate.enabled ? confidenceGate.rejectBelow  : undefined,
-      confidence_atr_mult_target: atrPair.target,
-      confidence_atr_mult_stop:   atrPair.stop,
-      regime_headwind_caution_pct: typeof rawOverrides.regime_headwind_caution_pct === 'number' ? rawOverrides.regime_headwind_caution_pct : undefined,
-      regime_headwind_reject_pct:  typeof rawOverrides.regime_headwind_reject_pct  === 'number' ? rawOverrides.regime_headwind_reject_pct  : undefined,
-      fundamentals_caution_above:  typeof rawOverrides.fundamentals_caution_above  === 'number' ? rawOverrides.fundamentals_caution_above  : undefined,
-      fundamentals_reject_above:   typeof rawOverrides.fundamentals_reject_above   === 'number' ? rawOverrides.fundamentals_reject_above   : undefined,
-      ...(strategy === 'mean_reversion_multi' ? {
-        mean_reversion_variants:          saved.meanReversionVariants,
-        mean_reversion_min_confirmations: saved.meanReversionMinConfirm,
-        vwap_lookback:                    saved.vwapLookback,
-        vwap_deviation_pct:               saved.vwapDeviationPct,
-      } : {}),
-    });
+    const result = await api.postStockScan(requestBody);
     store.setStockScanResult(result);
     store.setScanState('COMPLETED');
     return result;

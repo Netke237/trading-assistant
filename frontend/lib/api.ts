@@ -4,7 +4,39 @@ import type { StockScanResult, StockFirstPassageEstimate } from '@/types/stockDo
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import type { AlertRule, AlertHistory } from '@/types/alerts';
-import type { ScheduleConfig } from '@/lib/settingsStore';
+import type { OptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
+import type { StockScanRequestBody } from '@/lib/resolveStockScanRequest';
+
+// ── Part 3: profile-based scan schedule entries ────────────────────────────
+// Mirrors backend/app/schemas/scan_schedule.py's ScanScheduleEntry.
+export interface ScanScheduleEntry {
+  id: string;
+  label: string;
+  mode: 'options' | 'stocks';
+  profile_id: string;
+  profile_name: string;
+  profile_synced_at: string;
+  resolved_request: OptionsScanRequestBody | StockScanRequestBody;
+  pattern: 'fixed_time' | 'loop';
+  enabled: boolean;
+  days_of_week: number[];
+  fire_time?: string | null;
+  cadence_minutes?: number | null;
+  window_start_hour?: number | null;
+  window_end_hour?: number | null;
+}
+
+export type ScanScheduleEntryInput = Omit<ScanScheduleEntry, 'id'>;
+
+export interface ScanScheduleRun {
+  id: string;
+  schedule_entry_id: string;
+  mode: 'options' | 'stocks';
+  fired_at: string;
+  status: 'success' | 'error';
+  error: string | null;
+  candidate_count: number | null;
+}
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
@@ -468,44 +500,19 @@ export const api = {
       { universe, direction, horizon, ...hold, overrides: overrides ?? {}, ...filters, ...spreads },
     ),
 
-  postStockScan: (req: {
-    universe: string[]; direction: string; horizon: string;
-    strategy: string; symbols?: string[];
-    pullback_tolerance_pct?: number;
-    pullback_ema_period?: number;
-    pullback_trend_ema?: number;
-    pullback_ma_type?: 'EMA' | 'SMA';
-    pullback_require_reversal?: boolean;
-    ma_crossover_fast?: number;
-    ma_crossover_slow?: number;
-    ma_crossover_lookback?: number;
-    breakout_volume_mult?: number;
-    rsi_period?: number;
-    rsi_oversold?: number;
-    rsi_trend_sma?: number;
-    require_choppy_regime?: boolean;
-    account_size?: number; risk_pct?: number;
-    risk_fixed_usd?: number; bt_min_trades?: number; bt_min_win_rate?: number;
-    min_price?: number; max_price?: number;
-    shortlist_max_candidates?: number;
-    fundamentals_enabled?: boolean;
-    fundamentals_caution_below?: number;
-    fundamentals_reject_below?: number;
-    fundamentals_de_reject?: number;
-    overrides?: Record<string, number | boolean | string>;
-    confidence_caution_below?: number;
-    confidence_reject_below?:  number;
-    confidence_atr_mult_target?: number;
-    confidence_atr_mult_stop?:   number;
-    regime_headwind_caution_pct?: number;
-    regime_headwind_reject_pct?:  number;
-    fundamentals_caution_above?:  number;
-    fundamentals_reject_above?:   number;
-    mean_reversion_variants?: string[];
-    mean_reversion_min_confirmations?: number;
-    vwap_lookback?: number;
-    vwap_deviation_pct?: number;
-  }) => post<StockScanResult>('/api/stock-scan', req),
+  /** Posts an already-fully-resolved options-mode request body (the shape
+   * `resolveOptionsScanRequest.ts`'s buildOptionsScanRequestBody() returns) —
+   * used by RunScanButton after that extraction (Part 3 of the
+   * scheduler-timezone-awareness plan), instead of the positional-args
+   * postScan() above. */
+  postScanBody: (body: import('./resolveOptionsScanRequest').OptionsScanRequestBody) =>
+    post<ScanResult>('/api/scan', body),
+
+  postStockScan: (
+    req: import('./resolveStockScanRequest').StockScanRequestBody & {
+      symbols?: string[]; risk_fixed_usd?: number; min_price?: number; max_price?: number;
+    },
+  ) => post<StockScanResult>('/api/stock-scan', req),
 
   getLastScan: () => get<ScanResult | null>('/api/scan/last'),
   getLastStockScan: () => get<StockScanResult | null>('/api/stock-scan/last'),
@@ -703,28 +710,28 @@ export const api = {
       '/api/config/event-thresholds'
     ),
 
-  getSchedule: async (): Promise<ScheduleConfig> => {
-    const raw = await get<Record<string, unknown>>('/settings/schedule');
-    return {
-      enabledOptions:  typeof raw.enabled_options   === 'boolean' ? raw.enabled_options  : false,
-      enabledStocks:   typeof raw.enabled_stocks    === 'boolean' ? raw.enabled_stocks   : false,
-      cadenceMinutes:  typeof raw.cadence_minutes   === 'number'  ? raw.cadence_minutes  : 60,
-      daysOfWeek:      Array.isArray(raw.days_of_week)            ? (raw.days_of_week as number[]) : [0, 1, 2, 3, 4],
-      windowStartHour: typeof raw.window_start_hour === 'number'  ? raw.window_start_hour : 9,
-      windowEndHour:   typeof raw.window_end_hour   === 'number'  ? raw.window_end_hour   : 17,
-      timezoneName:    typeof raw.timezone_name     === 'string'  ? raw.timezone_name     : 'America/New_York',
-    };
-  },
-  putSchedule: (cfg: ScheduleConfig) =>
-    put<ScheduleConfig>('/settings/schedule', {
-      enabled_options:   cfg.enabledOptions,
-      enabled_stocks:    cfg.enabledStocks,
-      cadence_minutes:   cfg.cadenceMinutes,
-      days_of_week:      cfg.daysOfWeek,
-      window_start_hour: cfg.windowStartHour,
-      window_end_hour:   cfg.windowEndHour,
-      timezone_name:     cfg.timezoneName,
-    }),
+  // ── Part 1: operator timezone ────────────────────────────────────────────
+  getSchedulingTimezone: () => get<{ timezone: string }>('/settings/scheduling'),
+  putSchedulingTimezone: (timezone: string) => put<{ timezone: string }>('/settings/scheduling', { timezone }),
+
+  // ── Part 3: scheduled-scan-run retention ─────────────────────────────────
+  getScheduledScanRunRetention: () =>
+    get<{ scheduledScanRunRetentionDays: number }>('/settings/scheduled-scan-retention'),
+  saveScheduledScanRunRetention: (days: number) =>
+    post<{ scheduledScanRunRetentionDays: number }>('/settings/scheduled-scan-retention', { scheduledScanRunRetentionDays: days }),
+
+  // ── Part 3: profile-based scan schedule entries ──────────────────────────
+  getScanSchedule: () => get<ScanScheduleEntry[]>('/api/scan-schedule'),
+  createScanScheduleEntry: (body: ScanScheduleEntryInput) =>
+    post<ScanScheduleEntry>('/api/scan-schedule', body),
+  updateScanScheduleEntry: (id: string, body: ScanScheduleEntryInput) =>
+    put<ScanScheduleEntry>(`/api/scan-schedule/${encodeURIComponent(id)}`, body),
+  deleteScanScheduleEntry: (id: string) =>
+    del(`/api/scan-schedule/${encodeURIComponent(id)}`),
+  runScanScheduleEntryNow: (id: string) =>
+    post<{ triggered: boolean; id: string }>(`/api/scan-schedule/${encodeURIComponent(id)}/run-now`, {}),
+  getScanScheduleEntryRuns: (id: string, limit = 20) =>
+    get<ScanScheduleRun[]>(`/api/scan-schedule/${encodeURIComponent(id)}/runs?limit=${limit}`),
 
   // ── Symbol notes ─────────────────────────────────────────────────────────
   getSymbolNote: (symbol: string) =>
@@ -836,12 +843,18 @@ export async function getSp500Status(): Promise<{ status: string; last_updated: 
 
 /* ---------- Tuning schedule ---------- */
 
-export async function getTuningSchedule(): Promise<IngestionSchedule> {
-  return get<IngestionSchedule>('/api/strategy-tuning/schedule');
+export interface TuningSchedule extends IngestionSchedule {
+  days_of_week: number[];   // 0=Mon…6=Sun — Saturday-only ([5]) by default
 }
 
-export async function saveTuningSchedule(s: Pick<IngestionSchedule, 'enabled' | 'time'>): Promise<IngestionSchedule> {
-  return post<IngestionSchedule>('/api/strategy-tuning/schedule', s);
+export async function getTuningSchedule(): Promise<TuningSchedule> {
+  return get<TuningSchedule>('/api/strategy-tuning/schedule');
+}
+
+export async function saveTuningSchedule(
+  s: Pick<IngestionSchedule, 'enabled' | 'time'> & { days_of_week?: number[] },
+): Promise<TuningSchedule> {
+  return post<TuningSchedule>('/api/strategy-tuning/schedule', s);
 }
 
 /* ---------- Walk-Forward Optimization ---------- */

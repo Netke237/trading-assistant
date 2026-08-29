@@ -11,7 +11,7 @@ _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "edgar_schedule
 
 _DEFAULTS: dict = {
     "enabled": False,
-    "time": "04:00",
+    "time": "03:00",
 }
 
 
