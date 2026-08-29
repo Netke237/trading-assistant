@@ -24,11 +24,15 @@ def test_settings_yaml_path_resolves_to_the_real_config_file():
     assert _SETTINGS_YAML_PATH.name == "settings.yaml"
     assert _SETTINGS_YAML_PATH.parent.name == "config"
     assert _SETTINGS_YAML_PATH.parent.parent.name == "backend"
-    assert _SETTINGS_YAML_PATH.exists(), (
-        f"{_SETTINGS_YAML_PATH} does not exist — if this ever legitimately "
-        "changes (e.g. settings.yaml is removed from the repo), that's a "
-        "reason to update this test, not to weaken it silently."
-    )
+    # Deliberately NOT asserting .exists() here: settings.yaml is gitignored
+    # (a per-operator runtime file), so a fresh clone or CI checkout
+    # legitimately has no such file on disk — that's exactly the scenario
+    # a sibling test in this same file (test_migration_reads_real_settings_
+    # yaml_not_class_defaults) was rewritten to be safe under. Asserting
+    # existence here would fail on that same legitimate environment for no
+    # good reason; the three name checks above are what actually catch the
+    # `.parent` vs `.parent.parent` regression, and don't depend on any
+    # file being present.
 
 
 @pytest.mark.asyncio
