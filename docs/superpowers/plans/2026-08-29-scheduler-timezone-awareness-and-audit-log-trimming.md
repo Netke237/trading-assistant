@@ -223,10 +223,35 @@ other three nightly jobs run every day, per Part 0, and don't need this):
 - `tuning_scheduler.configure(enabled, time_str, days_of_week)`: pass
   `CronTrigger(hour=hour, minute=minute, day_of_week=",".join(map(str, days_of_week)))`
   instead of the current `CronTrigger(hour=hour, minute=minute)`.
+- **`tuning_schedule_store.py`'s `set(self, enabled: bool, time: str)`
+  (line 40) must also gain the parameter** — audit round 2 caught that the
+  original version of this step updated `_DEFAULTS`, the router model, and
+  `configure()`'s signature, but not `set()`/its call site
+  (`strategy_tuning.py` line 169: `tuning_schedule_store.set(body.enabled, body.time)`).
+  Without this, a posted `days_of_week` would take effect on the live
+  in-memory scheduler but never persist to `tuning_schedule.yaml`, silently
+  reverting to `[5]` on next restart. Change to
+  `set(self, enabled: bool, time: str, days_of_week: list[int])` and update
+  the call site to pass it through.
 - Frontend Settings UI (the same `DataForm`-style component used for
   ingestion/EDGAR/S&P 500 in `frontend/app/(frame)/settings/page.tsx`): add a
   day-of-week picker to tuning's schedule form specifically — the other three
   forms don't need one since they stay daily.
+
+**Step 3a — Give the new `scheduling.timezone` operator setting (Step 1) an
+actual way to be changed.** Audit round 2 caught that Step 1 adds a brand-new
+`scheduling.timezone` key to `settings.yaml`, but nothing in this plan gives
+the operator a way to set it — Step 4 below only covers `ScheduleConfig`'s
+*pre-existing*, unrelated `timezone_name` field (scoped to the scan-window
+scheduler only). Add a small dedicated endpoint pair,
+`GET/PUT /api/settings/scheduling` (new router or a couple of routes added to
+`risk_settings.py` alongside the existing `/settings/schedule` ones), backed
+by a `{"timezone": str}` Pydantic model, reading/writing the same
+`scheduling.timezone` key `operator_zone()` reads — plus one field in the
+Settings UI (a timezone-name input, same style as Step 4's) to drive it. Without
+this, `Europe/Berlin` is only changeable by hand-editing `settings.yaml` on
+the server, contradicting the plan's own framing of it as "operator timezone
+(configurable)."
 
 **Step 3 — Fix `strategy_watch_scheduler.py` to use `MARKET_TZ`, not naive local time.**
 
@@ -461,12 +486,24 @@ reads, so both copies expire together):
 
 ```python
 async def _run_audit_log_maintenance() -> None:
+    import asyncio
     from app.services.audit import rotate_audit_log, prune_audit_log_archives
     cfg = _load_settings()  # existing helper pattern from portfolio_alert_monitor.py
     retention_years = int(cfg.get('history_retention_years', 10))
-    rotate_audit_log()
-    prune_audit_log_archives(retention_years)
+    await asyncio.to_thread(rotate_audit_log)
+    await asyncio.to_thread(prune_audit_log_archives, retention_years)
 ```
+
+`rotate_audit_log`/`prune_audit_log_archives` stay plain synchronous
+functions (`threading.Lock`, not `asyncio.Lock` — correct, since they're also
+called from `log_event()`, which is itself synchronous and called from
+non-async contexts elsewhere in the codebase). The async wrapper above is
+what actually runs inside the scheduler job callback, and offloads the
+blocking file I/O via `asyncio.to_thread` — audit round 2 flagged the
+original version as running a potentially-20MB synchronous read/write
+directly inside an async callback, unlike this codebase's established
+convention elsewhere (e.g. `fetch_quotes` in `run_scan`). Bounded by the size
+cap, so low real-world impact, but worth being consistent.
 
 Add this as a fifth job (or a step inside one of the existing four) in the
 operator-timezone-anchored overnight batch from Part 1, Step 2 — it does not
@@ -583,16 +620,34 @@ found real gaps, not just missing glue code:
 
 **Fix: don't push a raw snapshot and convert it server-side at all. Push an
 already-resolved request, computed client-side by reusing the exact same
-code path the manual "Run Scan" button already calls** (whatever function
-`RunScanButton`/`stockScan.ts` currently uses to turn Step 2/3 UI state into
-a `ScanRequest`/`StockScanRequest` body — confirm the precise function names
-during implementation, but the principle is: one resolution path, used by
-both the manual button and this feature, never a second Python
-reimplementation of unit/horizon parsing). This also fixes the risk-fields
-gap for free — the frontend has live access to `riskStore` when building the
-request the same way the manual path already does, so `account_size`/
-`risk_pct`/`risk_fixed_usd` are populated from the user's real current risk
-settings, not defaults.
+code path the manual "Run Scan" button already calls** (the principle: one
+resolution path, used by both the manual button and this feature, never a
+second Python reimplementation of unit/horizon parsing).
+
+**Correction (audit round 2): "reusing the manual path fixes the risk-fields
+gap for free" is false as originally written, and checkable in the repo
+today.** Read `frontend/lib/stockScan.ts`'s `runStockScan()` directly —
+it never reads `riskStore` at all; its request body hardcodes
+`account_size: 50_000, risk_pct: 0.01` unconditionally (this is the
+*existing*, already-shipped manual-run behavior, not something this plan
+introduces). Those two fields feed `_position_size()`
+(`backend/app/routers/stock_scan.py` lines 613-618, 871-874) — the actual
+share-count/dollar-risk shown on every candidate, not cosmetic. So "reuse
+the manual path" alone does **not** close this gap; it would silently bake
+the existing $50k/1% default into every scheduled entry forever, which is
+worse than round 1's original concern since it looks fixed on paper.
+
+**Real fix**: the client-side resolver this plan builds (3.4/open-items)
+must explicitly read the live `riskStore` (`useRiskStore.getState()` or
+equivalent) and set `account_size`/`risk_pct`/`risk_fixed_usd` on the
+resolved request itself, **overriding** whatever `runStockScan()`'s own
+request-building would otherwise produce — not relying on that function's
+existing behavior to already do it, since it demonstrably doesn't. This is
+new logic the resolver adds on top of reusing `runStockScan()`'s other
+field-mapping, not a byproduct of calling it. Whether `runStockScan()`'s
+own hardcoded defaults are also worth fixing for the *manual* path is a
+separate, pre-existing bug outside this plan's scope — flagged here for
+visibility, not silently fixed as a side effect.
 
 New file `backend/app/schemas/scan_schedule.py`:
 
@@ -745,28 +800,70 @@ directly from a scheduled entry would have broken "manual runs never affect
 the schedule" in the *other* direction too — those functions unconditionally
 mutate `_last_request`/`_last_result` (`routers/scan.py` line 1358) and
 `stock_scan.py`'s equivalent globals, and `run_scan()` fires the armed
-auto-trader on any PASS candidate. An unattended nightly scan firing a live
-or paper trade with zero mention of that anywhere in this plan is not
-acceptable to ship silently.
+auto-trader on any PASS candidate. **Audit round 2 then read the actual
+~275-line `run_scan()` body (lines 1101-1375) and the actual `stock_scan.py`
+structure (its own existing `_run_stock_scan_body()` at line 999, which
+itself ends by calling `_upsert_stock_session()` — a function that mutates
+all four `_last_stock_*` globals internally) and found round 1's fix, as
+sketched, doesn't hold either**: simply "remove the assignment lines" leaves
+`run_scan()`'s delta computation (`_compute_deltas(..., _last_result)`,
+lines 1338-1349) still *reading* the global — so a scheduled entry's
+rank/score deltas would silently compute against whatever the UI (or an
+unrelated entry) last produced, not its own history — and never addresses
+`_upsert_session()`'s independent `_last_status`/`_last_updated_at`
+mutation and its write to the `ScanSession(id="current")` DB row (a
+**second** single-slot store the original sketch didn't mention at all).
+For `stock_scan.py`, "same split" doesn't even apply mechanically — the
+state mutation there lives one level deeper, inside a function the plan
+would otherwise reuse unmodified.
 
-**Fix — factor the actual scan-execution logic out of both routers into a
-core helper that never touches the single-slot globals or the auto-trader:**
+**Real fix — each schedule entry gets its own persisted state (its own
+"last result," "last status," delta baseline), entirely separate from the
+UI's single-slot `_last_request`/`_last_result`/`_last_status`/
+`ScanSession(id="current")` and from every other entry's state:**
+
+Extend `ScanScheduleEntry` (3.1) with a small block of *runtime* fields the
+backend owns and the frontend only ever reads, not writes — analogous to
+how `next_run_time()` already works for the other four schedulers:
+
+```python
+    # Runtime state, backend-owned — set by _run_scheduled_entry, read-only from the API
+    last_run_at:     Optional[str] = None   # ISO 8601 UTC
+    last_status:     Optional[Literal['success', 'error']] = None
+    last_error:      Optional[str] = None   # populated only on last_status == 'error'
+    last_result_id:  Optional[str] = None   # ScanResult.scan_id / StockScanResult equivalent, for delta baseline + lookup
+```
+
+`ScanResult`/`StockScanResult` themselves already get persisted through the
+existing scan-history mechanism (`ScanHistoryEntry` / whatever the stocks
+side's equivalent is — confirm the exact table/model during implementation)
+independent of the single "current" slot; a scheduled run's result rides
+that same existing history path, just tagged with which entry produced it
+(add an optional `schedule_entry_id` column/field to that history record) —
+reuse, not a new parallel history mechanism.
 
 ```python
 # routers/scan.py
-async def _execute_scan_core(req: ScanRequest, db: AsyncSession) -> ScanResult:
-    """The actual scan-running logic, with no side effects on _last_request/
-    _last_result and no auto-trade firing. Both the manual POST /scan handler
-    and Part 3's scheduled-entry runner call this; only the manual handler
-    additionally updates _last_request/_last_result and checks the auto-trader."""
-    # ... existing body of what is today run_scan(), minus the
-    # `_last_request = req` / `_last_result = result` assignments and the
-    # auto-trader block ...
+async def _execute_scan_core(
+    req: ScanRequest, db: AsyncSession, *, previous_result: ScanResult | None,
+) -> ScanResult:
+    """The actual scan-running logic — the same body run_scan() has today,
+    with the delta computation taking previous_result as a parameter instead
+    of silently reading the module-global _last_result, and with no writes
+    to _last_request/_last_result/_last_status/ScanSession(id="current") and
+    no auto-trade firing. Both the manual handler and Part 3's runner call
+    this; only the manual handler additionally updates the UI-facing globals,
+    persists to ScanSession(id="current"), and checks the auto-trader."""
+    ...
+    deltas = _compute_deltas(candidate_result, previous_result)
+    result = ScanResult(..., previous_run_id=previous_result.scan_id if previous_result else None, deltas=deltas, ...)
     return result
 
 async def run_scan(req: ScanRequest, db: AsyncSession) -> ScanResult:
-    """Manual-trigger entry point — unchanged behavior for the UI."""
-    result = await _execute_scan_core(req, db)
+    """Manual-trigger entry point — unchanged external behavior for the UI."""
+    async with _state_lock:
+        previous = _last_result
+    result = await _execute_scan_core(req, db, previous_result=previous)
     async with _state_lock:
         _last_request, _last_result = req, result
     if any(c.finalStatus == 'PASS' for c in result.candidates):
@@ -775,10 +872,23 @@ async def run_scan(req: ScanRequest, db: AsyncSession) -> ScanResult:
     return result
 ```
 
-Same split for `run_stock_scan()`/`_last_stock_request`/`_last_stock_result`
-in `stock_scan.py`. This is a refactor of existing functions, not new
-behavior for the manual path — `run_scan()`'s external behavior (what the UI
-sees) is unchanged; only where the side-effecting lines live moves.
+`_run_scheduled_entry` (3.6) calls `_execute_scan_core` the same way, but
+passes `previous_result` loaded from *that entry's own* `last_result_id`
+(via the shared history lookup, not `_last_result`) — so deltas are always
+computed against the entry's own prior run, correctly isolated per entry,
+never against the UI's state or another entry's.
+
+For `stock_scan.py`: the reusable core is **not** `_run_stock_scan_body()`
+as-is (it ends by calling the global-mutating `_upsert_stock_session()`).
+Split it the same way: extract everything through result construction into
+a core that takes `previous_result` as a parameter and returns `StockScanResult`
+with no global writes; `run_stock_scan()` keeps calling
+`_upsert_stock_session()` afterward exactly as today. The existing
+revert-on-exception snapshot dance around `_prev_request`/`_prev_result`/
+`_prev_status` (lines 983-996) exists specifically to protect the shared
+global slot on a mid-request failure — since the scheduled path never
+touches that slot at all, this dance simply doesn't apply there; no
+equivalent is needed in `_run_scheduled_entry`.
 
 **Whether a scheduled run should ever be allowed to fire the auto-trader is
 an explicit, separate decision this plan does not make on your behalf**:
@@ -787,11 +897,55 @@ stop, for either mode. An unattended background job placing trades is a
 large enough change in risk posture that it deserves its own conversation if
 you want it later; it is out of scope here.
 
+**Observability — flagged by audit round 2 as missing entirely from round 1's
+version of this section.** A feature whose entire point is "find candidates
+while I'm not watching" cannot silently discard what happened:
+
+- `_run_scheduled_entry(entry_id)` opens its own DB session
+  (`async with AsyncSessionLocal() as db:`, mirroring the pattern the
+  *existing* `_scheduled_scan()` wrapper already uses at `routers/scan.py`
+  line 1386 — APScheduler's job callback has no `Depends(get_db)` request
+  context to draw one from).
+- Wraps the `_execute_scan_core` call in `try/except`. `_execute_scan_core`'s
+  body can raise `fastapi.HTTPException` today (validation failures inside
+  what is currently `run_scan()`) — a type that only makes sense inside a
+  request/response cycle. In the scheduled path, catch it (and any other
+  exception) at this boundary, set `last_status='error'`/`last_error=str(exc)`
+  on the entry via `scan_schedule_store.upsert(...)`, log at `error` level,
+  and send one notification via the existing
+  `notifications/dispatch.py::notify_enabled_channels()` (the same
+  Gmail/Telegram layer `strategy_watch_evaluator.py` already uses) — "scan
+  entry '<label>' failed: <error>" — rather than a job that fails silently
+  forever.
+- On success: set `last_status='success'`/`last_result_id`/`last_run_at` on
+  the entry, and send one summary notification via the same dispatch layer
+  — "scan entry '<label>': N candidates found" (mirroring the shape of
+  `strategy_watch_evaluator`'s existing notification, not inventing a new
+  format).
+
 **Deleted-entry-mid-flight**: `_run_scheduled_entry(entry_id)` starts with
 `entry = scan_schedule_store.get(entry_id)`; if `None` (entry deleted between
 the trigger firing and the handler running), log at `info` level and return —
 never let a missing entry raise into APScheduler's job-execution machinery,
 which would otherwise log a scary traceback for an entirely expected race.
+
+**The options-mode client-side resolver (3.1/3.4) is real refactoring work,
+not a lookup — flagged by audit round 2, understated in the original plan.**
+Read `frontend/components/organisms/RunScanButton/index.tsx` in full: the
+**stocks**-mode path (`stockScan.ts`'s `runStockScan`) is already a
+standalone function, genuinely reusable as originally claimed. The
+**options**-mode request-building logic (~85 lines: universe/direction/
+horizon/filters/overrides/ATR pairs/fundamentals gate) lives inline inside
+`RunScanButton`'s `onClick` `useCallback`, interleaved with React-hook-subscribed
+store values, toast side effects, and a regime-REJECT confirmation dialog —
+none of which can be called from `searchProfilesStore`'s non-component
+save-hook (3.4). This needs an actual extraction: pull the pure
+request-building logic out of that closure into a standalone function in
+`frontend/lib/` (e.g. `resolveOptionsScanRequest(snapshot, context): ScanRequest`),
+parameterized on the values it currently reads from hooks, used by both the
+now-thinner `onClick` handler and the profile-save resolver. Scope this as
+its own implementation step, not folded silently into "read the function
+names during implementation."
 
 ### 3.6 Scheduler — `fixed_time` pattern
 
@@ -832,16 +986,56 @@ once, client-side, at save time, using the same code the manual button uses.
 
 ### 3.7 Scheduler — `loop` pattern
 
-A second, lightweight background task (`ScanScheduleLoopRunner`, modeled on
-`ScanScheduler._loop()` but iterating multiple entries instead of one global
-config): ticks every 60s, and for each enabled `pattern='loop'` entry
-independently tracks its own `last_run_at`/`next_run_at` and checks its own
-`window_start_hour`/`window_end_hour`/`days_of_week`/`cadence_minutes` — same
-`_should_run_now()` logic as today's `ScanScheduler` (`scan_scheduler.py`
-lines 45-53), just keyed per-entry instead of holding one global `_cfg`. On
-fire, calls the same `_run_scheduled_entry(entry_id)` dispatch as the
+**Architecture, resolved (audit round 2 caught the original wording
+contradicting itself between here and 3.9 — this section and one shared
+runtime object, not per-entry `ScanScheduler` instances, and not "the same
+class instance," is the actual design):**
+
+`ScanScheduler._should_run_now()` (`scan_scheduler.py` lines 45-53) is a pure
+function of `(cfg, now)` — it reads `self._cfg`'s window/day fields and
+`datetime.now(tz)`, no other state. Extract it into a standalone function,
+e.g. `services/scan_window.py::window_is_open(window_start_hour,
+window_end_hour, days_of_week, timezone_name, now=None) -> bool`, and have
+**both** `ScanScheduler` (unchanged class, still backs 3.9's note that the
+engine survives) and the new `ScanScheduleLoopRunner` call it — shared
+*logic*, not a shared *instance*, resolving the contradiction: `ScanScheduler`
+the class stays defined and importable, but after 3.9, nothing instantiates
+it any more (its sole caller, `_scheduler` in `routers/scan.py`, is deleted)
+— so it becomes dead code unless something new uses it. If you want to avoid
+carrying unused code, delete the `ScanScheduler` class itself once
+`window_is_open()` is extracted from it and `ScanScheduleLoopRunner` is the
+only remaining scheduling engine; keep it only if you expect to reintroduce
+a single-global-window scheduler later. Default: delete it — extraction, not
+reuse, per the audit's finding.
+
+`ScanScheduleLoopRunner` is **one** background task (not N), modeled on
+`ScanScheduler._loop()`'s tick structure: ticks every 60s, and for each
+enabled `pattern='loop'` entry independently tracks its own
+`last_run_at`/`next_run_at` (kept in an in-memory `dict[entry_id, ...]` inside
+the runner, not persisted — a missed loop-tick on restart just means the
+entry's cadence timer resets, which is an acceptable, low-stakes edge case
+for a repeating scan) and calls `window_is_open(...)` with that entry's own
+`window_start_hour`/`window_end_hour`/`days_of_week`.
+
+**Per-entry fault isolation, required and previously unspecified**: because
+this is one shared task iterating a list — a materially larger blast radius
+than `ScanScheduler`'s one-task-per-config design it's modeled on — each
+entry's fire attempt inside the tick **must** be wrapped in its own
+`try/except`, logged and reported via 3.5's error-notification path, so one
+misbehaving `loop`-pattern entry can never prevent any other entry (or the
+next tick) from running. This mirrors `strategy_watch_scheduler._loop()`'s
+existing `try/except Exception: logger.error(..., exc_info=True)` around its
+own per-tick body — same pattern, applied per-entry instead of per-tick.
+
+On fire, calls the same `_run_scheduled_entry(entry_id)` dispatch as the
 `fixed_time` path (3.6) — both patterns converge on identical execution
 (3.5's core helpers), they only differ in *when* they decide to fire.
+`ScanScheduleLoopRunner`'s own start/stop lifecycle follows the existing
+`portfolio_alert_monitor`/`regime_monitor` convention: one `asyncio.create_task`
+kept alive via a strong module-level reference from `main.py`'s startup hook,
+alongside those two — no add/remove-per-entry lifecycle is needed for the
+task itself, only for what it iterates (`scan_schedule_store.list()`, read
+fresh each tick).
 
 ### 3.8 Frontend — Settings UI
 
@@ -860,17 +1054,46 @@ button appends a new row defaulting to `pattern='fixed_time'`.
 Per the resolved decision at the top of Part 3: the pre-existing
 `_scheduled_scan()`/`_last_request`-replay/`ScheduleConfig` continuous-scan
 toggle in `routers/scan.py` (`start_continuous_scan`/`stop_continuous_scan`,
-the `ScanScheduler` class instance bound to it) is retired once Part 3 ships,
-rather than kept as a parallel mechanism — two different ways to schedule an
+the `_scheduler` instance bound to it) is retired once Part 3 ships, rather
+than kept as a parallel mechanism — two different ways to schedule an
 options scan, one keyed off "whatever ran last" and one off an explicit
 profile, would be confusing and the exact drift problem this plan exists to
-fix. Concretely: remove the `POST/DELETE /api/scan/continuous` endpoints and
-the `_scheduler`/`_scheduled_scan` globals from `routers/scan.py`, and the
-corresponding frontend controls, once Part 3's `fixed_time`/`loop` entries
-cover the same ground. `ScheduleConfig`/`ScanScheduler` as a *class* remains
-in use — it's the same engine 3.7's `ScanScheduleLoopRunner` is modeled on —
-only the single-global-slot *binding* of it (`_scheduled_scan`/
-`_last_request`) goes away.
+fix. `ScheduleConfig`/`window_is_open()` as *logic* survives (3.7); only the
+single-global-slot *binding* of the old mechanism goes away — see 3.7 for
+whether the `ScanScheduler` class itself is deleted or kept unused.
+
+**Audit round 2 caught that this section's original one-line removal
+instruction, taken literally, breaks backend startup entirely** — every real
+call site must be found and updated, not just the two endpoints:
+
+- `backend/app/main.py` line 78: `from app.routers.scan import restore_from_db, _scheduler, _scheduled_scan`
+  — a plain `ImportError` at process boot the moment `_scheduler`/`_scheduled_scan`
+  no longer exist. Lines 82-95 use them to auto-resume continuous scan on
+  startup if `restore_from_db()` reports `status == "running"`; the shutdown
+  hook (~lines 229-230) calls `_scheduler.stop()`. **Both blocks must be
+  deleted, not just left importing removed names.**
+- `backend/app/routers/scan.py` line 1090 (inside `get_last_scan_status()`):
+  `status = "running" if _scheduler.get_status().get("running") else _last_status`
+  — rewrite to derive "running" from whether any enabled Part-3 entry exists
+  for options mode (or drop the "running" concept from this endpoint
+  entirely and let the frontend read schedule-entry state directly via
+  `GET /api/scan-schedule` instead — confirm which during implementation,
+  but the current line cannot survive unmodified).
+
+**Migration story — also missing from the original section, per audit round
+2's question about a user with continuous scan already enabled today**: on
+first boot after this ships, if `restore_from_db()` reports the old
+continuous-scan session was `status == "running"` (i.e. exactly the case the
+now-deleted startup-resume code existed to handle), run a one-time migration
+instead of silently dropping it: read the persisted `ScheduleConfig` and the
+last-known `_last_request` from that session row, and create one
+`pattern='loop'` `ScanScheduleEntry` (`mode='options'`, `resolved_request`
+= that last request, cadence/window from the old `ScheduleConfig`, label
+e.g. "Migrated from continuous scan") via `scan_schedule_store.upsert(...)`
+directly at startup, then mark the old session `stopped` so this migration
+only ever runs once. This is a small, one-shot piece of startup code in
+`main.py`'s lifespan hook, not a full migration framework — scope it as
+such.
 
 ### 3.10 Tests
 
@@ -906,17 +1129,26 @@ only the single-global-slot *binding* of it (`_scheduled_scan`/
 
 ## Open items carried over from this thread, not yet decided
 
-- Multi-window scan scheduling for the *existing* `ScanScheduler`/`ScheduleConfig`
-  engine (Part 1, Step 5) — still schema-shaped scope; Part 3's `loop` pattern
-  reuses this same engine per-entry (3.7), so this work benefits both.
-- Frontend timezone/window controls for `ScheduleConfig` (Part 1, Step 4) —
-  still needed independent of Part 3's UI, since `ScheduleConfig`/`ScanScheduler`
-  remains the engine behind Part 3's `loop` pattern even after the old
-  single-slot *binding* of it is retired (3.9).
-- The precise manual "Run Scan" resolution function names in the frontend
-  (Step 2/3 UI state → `ScanRequest`/`StockScanRequest`) that 3.1/3.4's
-  client-side resolution needs to reuse — confirmed such logic exists
-  (`applySearchProfile` in `searchProfileSnapshot.ts` handles the
-  profile-restoration half of this already) but the exact call graph from
-  "Run Scan button click" to "request body sent to the backend" needs to be
-  read during implementation, not assumed.
+- Multi-window scan scheduling (Part 1, Step 5) — a pre-market + post-close
+  pair for the manual/UI-driven side of scanning. Note this is now decoupled
+  from Part 3: per 3.7's resolved architecture, `loop`-pattern entries carry
+  their *own* `window_start_hour`/`window_end_hour` fields directly on
+  `ScanScheduleEntry` (3.1), not a shared `ScheduleConfig` window — so Part 3
+  already supports "one entry per window" (e.g. two separate `loop` entries,
+  one pre-market, one post-close) without needing this schema change at all.
+  Step 5 only still matters if you also want multi-window behavior on
+  whatever, if anything, remains of the plain `ScheduleConfig`/`window_is_open()`
+  path once 3.9's retirement lands — confirm whether that's still wanted
+  before scoping this in.
+- Frontend timezone/window controls for `ScheduleConfig`'s pre-existing
+  `timezone_name`/`window_start_hour`/`window_end_hour` fields (Part 1, Step 4)
+  — still worth shipping for whatever surface continues to read
+  `ScheduleConfig` after 3.9 (confirm during implementation whether anything
+  still does, per 3.7's note that `ScanScheduler` the class may be deleted
+  outright rather than kept idle).
+- The exact call graph from "options Run Scan button click" to "request body
+  sent to the backend" inside `RunScanButton/index.tsx` needs to be read in
+  full and mapped field-by-field during implementation before extracting
+  3.5's `resolveOptionsScanRequest` — this plan identified *that* the
+  extraction is necessary and roughly what it needs to produce (a `ScanRequest`),
+  not the line-by-line extraction itself.
