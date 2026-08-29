@@ -902,12 +902,40 @@ on `ScanScheduleEntry`, resolving both round 3 findings at once:
   recent first) serves both the delta-baseline lookup internally and 3.8's
   UI display of last-run status/error (see 3.8's update below) — one store,
   two consumers, not a duplicated mechanism.
-- A retention/pruning story for this table follows the same pattern as
-  everything else in Part 2 — e.g. `prune_old_history`-style age-based
-  deletion, reusing `history_retention_years` — worth adding to the nightly
-  batch alongside Part 2's audit-log maintenance rather than left unbounded;
-  flagged here, not fully speced, since it's a smaller, lower-risk addendum
-  than the core design.
+**Retention — audit round 4 caught that this was left as a "flagged, not
+fully specced" footnote, which is not acceptable given this table can grow
+faster than the exact file Part 2 of this same plan exists to fix.** A
+`loop`-pattern entry can fire as often as every 5 minutes
+(`cadence_minutes`'s schema floor) — up to 12 rows/hour, each carrying a
+full serialized `ScanResult`/`StockScanResult`, per active `loop` entry,
+forever, with no bound. This needs the same level of design Part 2 got, not
+less, because its write rate can be materially higher:
+
+- **Default retention: 90 days**, not `history_retention_years` (10 years) —
+  deliberately a *different*, shorter default from Part 2's, because this
+  table is operational scan-run history ("did entry X run, what did it
+  find"), not the trade-rationale audit trail `history_retention_years`
+  governs. Add a small new setting, e.g. `scheduled_scan_run_retention_days`
+  in `settings.yaml` (default `90`), separate from `history_retention_years`
+  — don't conflate the two just because Part 2 already has a working pattern
+  to imitate.
+- `prune_scheduled_scan_runs(retention_days: int) -> None` in
+  `backend/app/services/scan_schedule_store.py` (or a sibling module): one
+  SQL `DELETE FROM scheduled_scan_runs WHERE fired_at < cutoff`, same shape
+  as `history_cleanup.prune_old_history` — **with one exception**: never
+  delete the single most recent `status='success'` row per
+  `schedule_entry_id`, regardless of age, since that row is the delta
+  baseline for that entry's next run — an entry that fires monthly
+  shouldn't lose its only baseline to a 90-day sweep. (`DELETE ... WHERE
+  fired_at < cutoff AND id NOT IN (SELECT the latest success id per
+  schedule_entry_id)` — exact query shape is an implementation detail, the
+  requirement is the exclusion.)
+- Wire into the same nightly batch as Part 2's audit-log maintenance
+  (3's Step 3) — one more call alongside `rotate_audit_log`/
+  `prune_audit_log_archives`, same `asyncio.to_thread` treatment for the
+  synchronous DB call if the ORM session isn't already async-native here
+  (it is, per this codebase's SQLAlchemy v2 async convention — use
+  `AsyncSession`, not a thread offload, for this one).
 
 ```python
 # routers/scan.py
@@ -938,6 +966,27 @@ async def run_scan(req: ScanRequest, db: AsyncSession) -> ScanResult:
     await _upsert_session(db, req=req, result=result, status="complete")
     return result
 ```
+
+**Accepted behavioral narrowing — flagged by audit round 4.** Today,
+`_last_result` is read and the delta computed *atomically* with the write,
+inside one lock, only after the scan's own work finishes. The split above
+reads `previous` *before* `_execute_scan_core` runs rather than atomically
+at write time — under two genuinely overlapping manual `run_scan()` calls
+(the codebase's own comment at `routers/scan.py` lines 262-267 already
+states this is possible today — nothing serializes two manual scans, or a
+manual scan against the not-yet-retired continuous-scan tick, either), both
+calls could read the same stale `_last_result` before either writes,
+producing deltas neither reflects the other's outcome. This is a real,
+narrow behavioral change versus today, not a hypothetical — but note that
+*today's* behavior under this same scenario isn't a clean, well-defined
+"first writer wins" either, per that same comment; it's already
+best-effort. Given that, and that this requires two literal manual clicks
+(or a double-click) landing within one scan's runtime to matter, this is
+accepted as-is rather than engineered around (e.g. via a lazy
+previous-result callback re-read at write time) — call this out explicitly
+in review rather than silently shipping it, since "narrower guarantee than
+today, in an already-undefined edge case" is a judgment call, not a
+default-obvious one.
 
 `_run_scheduled_entry` (3.6) calls `_execute_scan_core` the same way, but
 passes `previous_result` loaded from `ScheduledScanRunModel`'s most recent
@@ -991,6 +1040,22 @@ acceptable tradeoff for unattended background work with no latency
 requirement. Starting at `1` (fully serial) is the safe default; widening it
 later is a one-line change once real usage shows it's needed, not a
 day-one requirement.
+
+**Scope limitation — flagged by audit round 4, stated explicitly rather than
+left implicit.** `asyncio.Semaphore` is in-process only — it does not
+serialize anything across multiple worker processes. This codebase already
+has a precedent for exactly this caveat: `backend/app/main.py` lines 59-66
+detects `WEB_CONCURRENCY > 1` at startup and logs an explicit error that its
+strategy-tuning concurrency guard "uses an in-process asyncio.Lock invisible
+across workers... Run with `--workers 1` or migrate to a shared lock
+backend." `_SCHEDULED_SCAN_SEMAPHORE` has the identical limitation and
+should be covered by the **same** warning — extend that existing check at
+`main.py` lines 59-66 to also name the scheduled-scan semaphore, rather than
+introducing a second, undocumented single-worker assumption elsewhere in the
+codebase. This app currently runs single-worker in every case examined in
+this thread; if that ever changes, this (and the tuning guard it now sits
+beside) both need a shared-lock backend, not just this one — out of scope
+to build here, but must not be silently assumed away.
 
 **Observability — flagged by audit round 2 as missing entirely from round 1's
 version of this section; storage design corrected by round 3 (see the
@@ -1072,14 +1137,20 @@ def _sync_fixed_time_jobs() -> None:
 ```
 
 `_run_scheduled_entry(entry_id)` loads the entry (see 3.5's deleted-entry
-handling), validates it's still enabled, then dispatches on `mode`:
+handling), validates it's still enabled, loads `previous_result` from
+`ScheduledScanRunModel`'s most recent `status='success'` row for this
+`entry_id` (3.5), then dispatches on `mode` — **correcting audit round 4's
+finding that this section's own code sketch dropped the required
+`previous_result` keyword argument** `_execute_scan_core`'s real signature
+mandates:
 
 - `mode == 'options'` → `ScanRequest.model_validate(entry["resolved_request"])`,
-  call `_execute_scan_core(req, db)` (3.5) directly — never `run_scan()`,
-  never touching `_last_request`.
+  call `_execute_scan_core(req, db, previous_result=previous_result)` (3.5)
+  directly — never `run_scan()`, never touching `_last_request`.
 - `mode == 'stocks'` → `StockScanRequest.model_validate(entry["resolved_request"])`,
-  call the equivalent stocks-side core helper directly — **this is the new
-  stocks-mode scheduled execution path that doesn't exist today.**
+  call the equivalent stocks-side core helper with the same
+  `previous_result=` argument directly — **this is the new stocks-mode
+  scheduled execution path that doesn't exist today.**
 
 Because `resolved_request` was already validated as a well-formed
 `ScanRequest`/`StockScanRequest` at save time (3.1), this dispatch has no
@@ -1207,6 +1278,34 @@ call site must be found and updated, not just the two endpoints:
   post-3.9) or repoint it at whatever does — not left as dead code with a
   swallowed exception. Resolve which before implementation; don't leave this
   as a silent no-op.
+- **Audit round 4 found a fifth call site rounds 2 and 3 both missed**:
+  `continuous_scan_status()` (`GET /api/scan/continuous/status`,
+  `routers/scan.py` lines 1422-1425) calls `_scheduler.get_status()`
+  directly and was never named in any prior version of this list. (Low
+  real-world impact — grepped the whole frontend, nothing currently calls
+  this endpoint — but it would become a silently-broken 500 rather than a
+  clean removal if left as-is.) Remove it alongside
+  `start_continuous_scan`/`stop_continuous_scan`.
+- **Given the same class of gap — an incomplete enumeration of `_scheduler`/
+  `ScanScheduler`/`ScheduleConfig` call sites — has now recurred in three
+  consecutive audit rounds despite each one explicitly re-checking, treat
+  this list as unreliable rather than complete.** Before deleting anything,
+  run a fresh, exhaustive search (`grep -rn "_scheduler\b\|ScanScheduler\b"
+  backend/` — not a re-read of this list) across the *entire* backend, not
+  just `routers/scan.py` and `routers/risk_settings.py`, and update every
+  call site found, whether or not it appears above.
+- **Existing tests will break and are not mentioned anywhere in this
+  section or 3.10** — flagged by audit round 4: `backend/tests/test_scan_scheduler.py`
+  instantiates `ScanScheduler()` directly and exercises
+  `_should_run_now()`/`configure()`/`set_cadence()` — the exact class 3.7
+  says to delete by default. `backend/tests/test_schedule_endpoint.py`
+  does the same plus exercises `GET/PUT /settings/schedule` (the endpoint
+  flagged as needing "a real answer" two bullets above). `backend/tests/test_scan_session.py`
+  monkeypatches `app.routers.scan._scheduler` directly and drives
+  `POST/DELETE /api/scan/continuous` — the two endpoints this section
+  retires. All three need to be deleted or rewritten against Part 3's new
+  mechanism as part of this change, not discovered as CI failures after
+  the fact — add this to the implementation checklist explicitly.
 
 **Migration story — also missing from the original section, per audit round
 2's question about a user with continuous scan already enabled today; the
@@ -1239,6 +1338,14 @@ full migration framework — scope it as such.
 
 ### 3.10 Tests
 
+- `prune_scheduled_scan_runs`: deletes rows older than the retention cutoff
+  except each `schedule_entry_id`'s single most recent `status='success'`
+  row, which survives regardless of age; `retention_days <= 0` disables
+  pruning, matching every other `prune_*` function's convention.
+- `backend/tests/test_scan_scheduler.py`, `test_scan_session.py`,
+  `test_schedule_endpoint.py`: deleted or rewritten against Part 3's
+  mechanism as part of this change (per 3.9's note) — CI must not be left
+  red by this refactor.
 - Backend: `ScanScheduleEntry` validation — missing pattern-specific fields
   rejected, `window_start_hour >= window_end_hour` rejected, a `resolved_request`
   that doesn't validate against `ScanRequest`/`StockScanRequest` for the
