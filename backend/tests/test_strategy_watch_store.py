@@ -106,8 +106,8 @@ def test_load_migrates_legacy_entries_missing_direction(tmp_path):
 def test_schedule_defaults_and_update(tmp_path):
     store = StrategyWatchStore(path=tmp_path / "watches.yaml")
     sched = store.get_schedule()
-    assert sched == {"enabled": False, "mode": "eod", "eod_time": "16:15", "poll_hours": 4,
+    assert sched == {"enabled": False, "mode": "eod", "eod_time": "16:30", "poll_hours": 4,
                      "sustain_minutes": 0}
-    store.set_schedule({"enabled": True, "mode": "poll", "eod_time": "16:15", "poll_hours": 2})
+    store.set_schedule({"enabled": True, "mode": "poll", "eod_time": "16:30", "poll_hours": 2})
     assert store.get_schedule()["mode"] == "poll"
     assert store.get_schedule()["poll_hours"] == 2

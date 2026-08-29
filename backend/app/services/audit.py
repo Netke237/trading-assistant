@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import glob
 import json
 import os
-from datetime import datetime, timezone
+import re
+import threading
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -13,6 +16,14 @@ if TYPE_CHECKING:
 # Writing to backend/ when started from backend/:
 _LOG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "audit.log")
 _LOG_PATH = os.path.normpath(_LOG_PATH)
+
+_ROTATE_SIZE_BYTES = 20 * 1024 * 1024  # 20MB safety cap between monthly rotations
+# Shared by log_event(), rotate_audit_log(), and prune_audit_log_archives() —
+# without this, a log_event() write landing between rotation's read and
+# truncate would be silently dropped, for the one file whose entire purpose
+# is "never lose a trade-rationale record."
+_log_lock = threading.Lock()
+_ARCHIVE_RE = re.compile(r"audit-(\d{4})-(\d{2})\.log$")
 
 
 def new_rec_id() -> str:
@@ -56,10 +67,74 @@ def log_event(
         **payload,
     }
     try:
-        with open(_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        with _log_lock:
+            with open(_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception:
         pass  # audit failures are non-fatal
+
+
+def _archive_path_for(dt: datetime) -> str:
+    return os.path.join(os.path.dirname(_LOG_PATH), f"audit-{dt:%Y-%m}.log")
+
+
+def rotate_audit_log(now: datetime | None = None) -> None:
+    """Rename audit.log to audit-YYYY-MM.log if the current month's archive
+    doesn't exist yet, or if the live file has grown past the size cap.
+
+    Archive, don't delete: the live file's content always survives (either as
+    the freshly-renamed archive, or appended into an already-existing one).
+    Called once nightly, piggybacked on the ingestion job's nightly tick
+    (Part 1, Step 2's operator-timezone-anchored scheduler) — a few hundred
+    lines/day doesn't need its own cadence.
+    """
+    now = now or datetime.now(timezone.utc)
+    with _log_lock:
+        if not os.path.exists(_LOG_PATH):
+            return
+        archive = _archive_path_for(now)
+        needs_rotation = not os.path.exists(archive) or os.path.getsize(_LOG_PATH) > _ROTATE_SIZE_BYTES
+        if not needs_rotation:
+            return
+        try:
+            if os.path.exists(archive):
+                # Mid-month size-triggered rotation into an archive that
+                # already exists for this month — append, don't clobber.
+                with open(_LOG_PATH, "r", encoding="utf-8") as src, open(archive, "a", encoding="utf-8") as dst:
+                    dst.write(src.read())
+                open(_LOG_PATH, "w", encoding="utf-8").close()
+            else:
+                os.replace(_LOG_PATH, archive)
+        except Exception:
+            pass  # rotation failures are non-fatal, same policy as log_event() itself
+
+
+def prune_audit_log_archives(retention_years: int) -> None:
+    """Delete archived audit-YYYY-MM.log files older than retention_years.
+
+    Only ever touches archives, never the live audit.log — this is a prune
+    of history, not of the current trade-rationale trail. Shares
+    history_retention_years with history_cleanup.prune_old_history (the
+    AuditEventModel DB-side counterpart) so both copies of the same data
+    expire on the same clock. retention_years * 365 has no leap-year
+    adjustment — inherited from that same function's arithmetic, deliberately
+    left as-is so the two stay in sync rather than drifting apart at the
+    margin.
+    """
+    if retention_years <= 0:
+        return
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_years * 365)
+    with _log_lock:
+        for path in glob.glob(os.path.join(os.path.dirname(_LOG_PATH), "audit-*.log")):
+            m = _ARCHIVE_RE.search(path)
+            if not m:
+                continue
+            archived_month = datetime(int(m.group(1)), int(m.group(2)), 1, tzinfo=timezone.utc)
+            if archived_month < cutoff:
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
 
 
 # ── DB-backed audit helpers ───────────────────────────────────────────────────

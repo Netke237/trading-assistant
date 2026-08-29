@@ -1,4 +1,12 @@
-"""Tests for WS-42 ScanSession DB persistence."""
+"""Tests for ScanSession DB persistence (manual-run slot only).
+
+The old continuous-scan mechanism this file used to also cover
+(`_scheduler`, POST/DELETE /api/scan/continuous) was retired in Part 3 of
+the scheduler-timezone-awareness plan — see test_scan_schedule.py for its
+replacement, and test_scan_core.py for the _compute_deltas /
+_execute_scan_core regression tests that moved out of test_scan_scheduler.py
+(deleted).
+"""
 
 from __future__ import annotations
 
@@ -44,55 +52,7 @@ def test_scan_result_persisted_to_db(client):
     assert "scan_id" in parsed
 
 
-# ── Test 2: Continuous scan status persisted ─────────────────────────────────
-
-def test_continuous_scan_status_persisted(client):
-    """Start then stop continuous scan → DB row reflects running then stopped."""
-    from unittest.mock import AsyncMock, MagicMock
-    import app.routers.scan as scan_module
-
-    mock_scheduler = MagicMock()
-    mock_scheduler.start = AsyncMock()
-    mock_scheduler.stop = AsyncMock()
-    original = scan_module._scheduler
-    scan_module._scheduler = mock_scheduler
-    try:
-        # Start
-        r = client.post("/api/scan/continuous", json={
-            "enabled": True, "cadence_minutes": 30,
-        })
-        assert r.status_code == 200
-        status = r.json()
-        assert status["enabled"] is True
-
-        # Check DB
-        import asyncio
-        from sqlalchemy import select
-
-        async def _check():
-            async with _TestSession() as session:
-                result = await session.execute(
-                    select(ScanSession).where(ScanSession.id == "current")
-                )
-                return result.scalar_one_or_none()
-
-        row = asyncio.run(_check())
-        assert row is not None
-        assert row.status == "running"
-
-        # Stop
-        r = client.delete("/api/scan/continuous")
-        assert r.status_code == 200
-        assert r.json()["status"] == "stopped"
-
-        row = asyncio.run(_check())
-        assert row is not None
-        assert row.status == "stopped"
-    finally:
-        scan_module._scheduler = original
-
-
-# ── Test 3: restore_from_db restores globals ─────────────────────────────────
+# ── Test 2: restore_from_db restores globals ─────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_restore_from_db_restores_globals():
@@ -149,7 +109,7 @@ async def test_restore_from_db_restores_globals():
         scan_module.AsyncSessionLocal = orig_async_session_local
 
 
-# ── Test 4: /scan/last-run ────────────────────────────────────────────────────
+# ── Test 3: /scan/last-run ────────────────────────────────────────────────────
 
 def test_last_run_idle_when_no_scan_yet(client, monkeypatch):
     import app.routers.scan as scan_module
@@ -183,13 +143,10 @@ def test_last_run_reflects_last_completed_scan(client):
     assert body["horizon"] == "Swing"
 
 
-def test_last_run_prefers_live_scheduler_state_over_stale_complete(client, monkeypatch):
-    """A scheduled tick always writes status='complete' regardless of whether
-    continuous mode is still active — /scan/last-run must report the live
-    scheduler state ('running'), not the stale DB-cached value."""
-    import app.routers.scan as scan_module
-    monkeypatch.setattr(scan_module, "_last_status", "complete")
-    monkeypatch.setattr(scan_module._scheduler, "get_status", lambda: {"running": True})
-    r = client.get("/api/scan/last-run")
-    assert r.status_code == 200
-    assert r.json()["status"] == "running"
+def test_continuous_scan_endpoints_are_gone(client):
+    """Part 3, §3.9: the retired single-slot continuous-scan endpoints must
+    not exist any more — a schedule with zero entries now means "nothing
+    scheduled," not "silently replay whatever was last clicked."."""
+    assert client.post("/api/scan/continuous", json={"enabled": True, "cadence_minutes": 30}).status_code == 404
+    assert client.delete("/api/scan/continuous").status_code == 404
+    assert client.get("/api/scan/continuous/status").status_code == 404

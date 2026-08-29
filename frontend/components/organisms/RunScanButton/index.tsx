@@ -18,10 +18,11 @@ import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useAlertStore } from '@/lib/alertStore';
-import { useSettingsStore, atrMultForHorizon } from '@/lib/settingsStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import { runStockScan } from '@/lib/stockScan';
-import { presetByKey, resolveParamsHorizon, sanitizeHoldDays } from '@/lib/horizonPresets';
+import { presetByKey, resolveParamsHorizon } from '@/lib/horizonPresets';
+import { buildOptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
 import styles from './index.module.css';
 
 function nowLocalISO(): string {
@@ -125,89 +126,26 @@ export function RunScanButton() {
       return;
     }
 
-    const filters: Record<string, number | boolean> = {};
-    const minPrice = Number(minPriceRaw);
-    const maxPrice = Number(maxPriceRaw);
-    const minCap = Number(minCapRaw);
-    const maxCap = Number(maxCapRaw);
-    const capMultiplier = capUnit === 'B' ? 1e9 : 1;
-
-    if (Number.isFinite(minPrice) && minPriceRaw !== '') filters.min_price = minPrice;
-    if (Number.isFinite(maxPrice) && maxPriceRaw !== '') filters.max_price = maxPrice;
-    if (Number.isFinite(minCap) && minCapRaw !== '') filters.min_cap_usd = minCap * capMultiplier;
-    if (Number.isFinite(maxCap) && maxCapRaw !== '') filters.max_cap_usd = maxCap * capMultiplier;
-
     const scanOverrides = useScanStore.getState().scanOverrides;
-    // Confidence gate keys live in scanOverrides for Step-3 panel editing, but
-    // they must go in top-level filters, NOT in the score overrides dict.
-    // Strip them here so they don't pollute the backend overrides map.
-    const { confidence_caution_below: _cb, confidence_reject_below: _rb,
-            confidence_atr_mult_target: _amt, confidence_atr_mult_stop: _ams,
-            fundamentals_caution_above: _fca, fundamentals_reject_above: _fra,
-            ...scoreOnlyOverrides } = scanOverrides;
-    const effectiveOverrides = { ...scoreOnlyOverrides, shortlist_max_candidates: shortlistMaxCandidates };
-
-    // Confidence gate: persisted Settings default, overridden per-scan by the
-    // Execution Parameters panel (Step 3, Stocks section) which writes scanOverrides.
-    // Disabled gate -> send 0/0 thresholds so confidence can never demote.
     const gate = useSettingsStore.getState().confidenceGate;
-    const cautionOv = scanOverrides.confidence_caution_below;
-    const rejectOv  = scanOverrides.confidence_reject_below;
-    if (gate.enabled) {
-      filters.confidence_caution_below = typeof cautionOv === 'number' ? cautionOv : gate.cautionBelow;
-      filters.confidence_reject_below  = typeof rejectOv === 'number' ? rejectOv : gate.rejectBelow;
-    } else {
-      filters.confidence_caution_below = 0;
-      filters.confidence_reject_below  = 0;
-    }
-    // ATR barriers always apply (they change what confidence measures,
-    // regardless of the gate). Both-or-neither: a lone target/stop override
-    // in Step 3 (without the other) is ignored entirely, falling back to the
-    // full Settings default pair for this scan's horizon — a mismatched pair
-    // must never be sent, since it would silently bypass the backend's own
-    // both-or-neither guard (which only nulls a pair when it receives an
-    // explicit None on one side, not two mismatched numbers).
-    const hasFullAtrOverride =
-      typeof scanOverrides.confidence_atr_mult_target === 'number' &&
-      typeof scanOverrides.confidence_atr_mult_stop === 'number';
-    const atrPair = hasFullAtrOverride
-      ? { target: scanOverrides.confidence_atr_mult_target as number, stop: scanOverrides.confidence_atr_mult_stop as number }
-      : atrMultForHorizon(gate, horizon);
-    filters.confidence_atr_mult_target = atrPair.target;
-    filters.confidence_atr_mult_stop   = atrPair.stop;
+    const spreads = useSettingsStore.getState().spreads;
 
-    // Fundamentals gate
-    const fGate = fundamentalsGate;
-    filters.fundamentals_enabled       = fGate.enabled;
-    filters.fundamentals_caution_below = fGate.cautionBelow;
-    filters.fundamentals_reject_below  = fGate.rejectBelow;
-    filters.fundamentals_de_reject     = fGate.deReject;
-
-    // Bearish-fundamentals override (BEARISH SCANS ONLY) — Step-3 Execution
-    // Parameters sliders. Must ride in top-level filters (ScanRequest fields),
-    // not the generic overrides dict, which the Options fundamentals gate
-    // never reads (see resolve_fundamentals_gate in fundamentals_gate.py).
-    if (typeof scanOverrides.fundamentals_caution_above === 'number') {
-      filters.fundamentals_caution_above = scanOverrides.fundamentals_caution_above;
-    }
-    if (typeof scanOverrides.fundamentals_reject_above === 'number') {
-      filters.fundamentals_reject_above = scanOverrides.fundamentals_reject_above;
-    }
+    const requestBody = buildOptionsScanRequestBody({
+      universe, direction, horizon,
+      holdMinDays: holdMin, holdMaxDays: holdMax,
+      minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit,
+      scanOverrides,
+      confidenceGate: gate,
+      fundamentalsGate,
+      shortlistMaxCandidates,
+      spreads,
+    });
 
     const t0 = Date.now();
     const startISO = nowLocalISO();        // capture start time before the async call
     setScanState('SCANNING', startISO);   // scanAt = START time (not end)
     useScanStore.getState().setRejectedLog([]);
-    const spreads = useSettingsStore.getState().spreads;
-    api.postScan(universe, direction, horizon,
-      sanitizeHoldDays(holdMin, holdMax),
-      filters, effectiveOverrides, {
-      spread_width:       spreads.widthPoints,
-      short_leg_delta:    spreads.shortLegDelta,
-      iv_rank_threshold:  spreads.ivRankThreshold,
-      min_credit:         spreads.minCredit,
-      max_debit_pct:      spreads.maxDebitPctOfWidth,
-    })
+    api.postScanBody(requestBody)
       .then((result) => {
         setScanResult(result);
         useScanStore.getState().setRejectedLog(result.rejected ?? []);

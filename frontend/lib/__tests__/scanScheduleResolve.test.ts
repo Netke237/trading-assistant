@@ -1,0 +1,129 @@
+import { SCAN_PARAM_DEFAULTS } from '@/lib/scanParamsStore';
+import { DEFAULT_CONFIDENCE_GATE, DEFAULT_FUNDAMENTALS_GATE, DEFAULT_SPREADS } from '@/lib/settingsStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
+import { useRiskStore } from '@/lib/riskStore';
+import { resolveProfileToScanRequest } from '@/lib/scanScheduleResolve';
+import type { SearchProfile } from '@/types/searchProfile';
+import type { StockScanRequestBody } from '@/lib/resolveStockScanRequest';
+
+const BASE_RISK_LIMITS = {
+  portfolioValue: 100_000, maxLossPerTradePct: 0.0375,
+  maxSingleTradeExposurePct: 0.05, maxTotalExposurePct: 0.25,
+  maxConcurrentPositions: 10, maxDailyRecommendations: 5,
+};
+
+// Regression coverage for a gap caught by post-implementation adversarial
+// review: resolveProfileToScanRequest's stocks-mode branch used to wrap
+// `profile.universe.pick` in an array directly, so a stocks-mode profile
+// saved with universe pick 'Custom' or 'Watchlist' would resolve to a
+// schedule entry whose universe was literally ["Custom"]/["Watchlist"] — a
+// single nonexistent ticker, scanned "successfully" forever. The
+// options-mode branch already resolved these correctly; the fix reuses the
+// same logic for both modes.
+
+function baseProfile(overrides: Partial<SearchProfile> = {}): SearchProfile {
+  return {
+    id: 'p1',
+    name: 'Test profile',
+    mode: 'options',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    universe: {
+      pick: 'SP500', customRaw: '', minPriceRaw: '', maxPriceRaw: '',
+      minCapRaw: '', maxCapRaw: '', capUnit: 'B',
+    },
+    direction: 'Bullish',
+    horizonPreset: 'Swing',
+    holdMin: 5,
+    holdMax: 15,
+    scanOverrides: {},
+    scanSettings: {
+      confidenceGate: { ...DEFAULT_CONFIDENCE_GATE },
+      fundamentalsGate: { ...DEFAULT_FUNDAMENTALS_GATE },
+      shortlistMaxCandidates: 10,
+      spreads: { ...DEFAULT_SPREADS },
+    },
+    ...overrides,
+  };
+}
+
+function stockProfile(overrides: Partial<SearchProfile> = {}): SearchProfile {
+  return baseProfile({
+    mode: 'stocks',
+    strategy: 'pullback_ema',
+    strategyParams: { ...SCAN_PARAM_DEFAULTS },
+    scanSettings: { confidenceGate: { ...DEFAULT_CONFIDENCE_GATE } },
+    ...overrides,
+  });
+}
+
+beforeEach(() => {
+  useWatchlistStore.setState({ added: ['AAPL', 'MSFT'] });
+  useRiskStore.setState({ limits: { ...BASE_RISK_LIMITS } });
+});
+
+describe('resolveProfileToScanRequest — universe resolution, options mode', () => {
+  it('resolves a preset pick to itself', () => {
+    const req = resolveProfileToScanRequest(baseProfile({ universe: { ...baseProfile().universe, pick: 'NDX100' } }));
+    expect(req.universe).toEqual(['NDX100']);
+  });
+
+  it('resolves Custom to the parsed symbol list', () => {
+    const req = resolveProfileToScanRequest(baseProfile({
+      universe: { ...baseProfile().universe, pick: 'Custom', customRaw: 'AAPL, msft ; TSLA' },
+    }));
+    expect(req.universe.sort()).toEqual(['AAPL', 'MSFT', 'TSLA']);
+  });
+
+  it('resolves Watchlist to the current watchlist contents', () => {
+    const req = resolveProfileToScanRequest(baseProfile({
+      universe: { ...baseProfile().universe, pick: 'Watchlist' },
+    }));
+    expect(req.universe).toEqual(['AAPL', 'MSFT']);
+  });
+});
+
+describe('resolveProfileToScanRequest — universe resolution, stocks mode', () => {
+  it('resolves a preset pick to itself', () => {
+    const req = resolveProfileToScanRequest(stockProfile({ universe: { ...stockProfile().universe, pick: 'DOW30' } }));
+    expect(req.universe).toEqual(['DOW30']);
+  });
+
+  it('resolves Custom to the parsed symbol list, not the literal string "Custom"', () => {
+    const req = resolveProfileToScanRequest(stockProfile({
+      universe: { ...stockProfile().universe, pick: 'Custom', customRaw: 'AAPL,MSFT' },
+    }));
+    expect(req.universe.sort()).toEqual(['AAPL', 'MSFT']);
+    expect(req.universe).not.toContain('Custom');
+  });
+
+  it('resolves Watchlist to the current watchlist contents, not the literal string "Watchlist"', () => {
+    const req = resolveProfileToScanRequest(stockProfile({
+      universe: { ...stockProfile().universe, pick: 'Watchlist' },
+    }));
+    expect(req.universe).toEqual(['AAPL', 'MSFT']);
+    expect(req.universe).not.toContain('Watchlist');
+  });
+});
+
+describe('resolveProfileToScanRequest — risk fields (stocks mode)', () => {
+  it('pulls account_size/risk_pct from the live riskStore, not hardcoded defaults', () => {
+    useRiskStore.setState({ limits: { ...BASE_RISK_LIMITS, portfolioValue: 250_000, maxLossPerTradePct: 0.02 } });
+    const req = resolveProfileToScanRequest(stockProfile()) as StockScanRequestBody;
+    expect(req.account_size).toBe(250_000);
+    expect(req.risk_pct).toBe(0.02);
+  });
+});
+
+describe('resolveProfileToScanRequest — error cases', () => {
+  it('throws for a stocks-mode profile with no strategy selected', () => {
+    expect(() => resolveProfileToScanRequest(stockProfile({ strategy: undefined, strategyParams: undefined })))
+      .toThrow(/no strategy selected/);
+  });
+
+  it('throws for an options-mode profile missing fundamentalsGate/spreads', () => {
+    expect(() => resolveProfileToScanRequest(baseProfile({
+      scanSettings: { confidenceGate: { ...DEFAULT_CONFIDENCE_GATE } },
+    }))).toThrow(/fundamentalsGate\/spreads/);
+  });
+});

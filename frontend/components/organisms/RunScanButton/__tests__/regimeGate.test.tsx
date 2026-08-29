@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 
 jest.mock('@/lib/api', () => ({
   api: {
-    postScan: jest.fn(),
+    postScanBody: jest.fn(),
   },
 }));
 
@@ -78,7 +78,7 @@ describe('RunScanButton — regime gate fires for both directions', () => {
     } as any);
     usePortfolioStore.setState({ positions: [] });
 
-    (api.postScan as jest.Mock).mockResolvedValue({
+    (api.postScanBody as jest.Mock).mockResolvedValue({
       scan_id: 'SCAN-X',
       timestamp: '2026-06-17T10:00:00',
       candidates: [],

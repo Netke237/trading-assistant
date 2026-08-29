@@ -6,16 +6,18 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from app.services.scheduling_tz import get_or_rebuild_scheduler
+
 logger = logging.getLogger(__name__)
 
 _JOB_ID = "tuning_daily"
 _scheduler: AsyncIOScheduler | None = None
+_scheduler_tz_key: str | None = None  # str(ZoneInfo) of the zone the current scheduler was built with
 
 
 def _get() -> AsyncIOScheduler:
-    global _scheduler
-    if _scheduler is None:
-        _scheduler = AsyncIOScheduler()
+    global _scheduler, _scheduler_tz_key
+    _scheduler, _scheduler_tz_key = get_or_rebuild_scheduler(_scheduler, _scheduler_tz_key)
     return _scheduler
 
 
@@ -32,7 +34,10 @@ async def _run_daily() -> None:
         logger.error("tuning_scheduler: failed to start WFO job — %s", exc)
 
 
-def configure(enabled: bool, time_str: str) -> None:
+_DEFAULT_DAYS_OF_WEEK = [5]  # Saturday-only default (Part 0: compute-heavy, weekly cadence)
+
+
+def configure(enabled: bool, time_str: str, days_of_week: list[int] | None = None) -> None:
     sched = _get()
     try:
         sched.remove_job(_JOB_ID)
@@ -42,15 +47,16 @@ def configure(enabled: bool, time_str: str) -> None:
         try:
             hour, minute = map(int, time_str.split(":"))
         except ValueError:
-            logger.warning("tuning_scheduler: invalid time %r, defaulting to 02:00", time_str)
-            hour, minute = 2, 0
+            logger.warning("tuning_scheduler: invalid time %r, defaulting to 05:00", time_str)
+            hour, minute = 5, 0
+        dow = days_of_week if days_of_week else _DEFAULT_DAYS_OF_WEEK
         sched.add_job(
             _run_daily,
-            CronTrigger(hour=hour, minute=minute),
+            CronTrigger(hour=hour, minute=minute, day_of_week=",".join(str(d) for d in dow)),
             id=_JOB_ID,
             replace_existing=True,
         )
-        logger.info("tuning_scheduler: scheduled daily at %02d:%02d", hour, minute)
+        logger.info("tuning_scheduler: scheduled at %02d:%02d on days %s", hour, minute, dow)
     else:
         logger.info("tuning_scheduler: disabled")
 

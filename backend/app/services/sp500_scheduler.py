@@ -6,16 +6,18 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from app.services.scheduling_tz import get_or_rebuild_scheduler
+
 logger = logging.getLogger(__name__)
 
 _JOB_ID = "sp500_daily"
 _scheduler: AsyncIOScheduler | None = None
+_scheduler_tz_key: str | None = None
 
 
 def _get() -> AsyncIOScheduler:
-    global _scheduler
-    if _scheduler is None:
-        _scheduler = AsyncIOScheduler()
+    global _scheduler, _scheduler_tz_key
+    _scheduler, _scheduler_tz_key = get_or_rebuild_scheduler(_scheduler, _scheduler_tz_key)
     return _scheduler
 
 
@@ -37,8 +39,8 @@ def configure(enabled: bool, time_str: str) -> None:
         try:
             hour, minute = map(int, time_str.split(":"))
         except ValueError:
-            logger.warning("sp500_scheduler: invalid time %r, defaulting to 16:30", time_str)
-            hour, minute = 16, 30
+            logger.warning("sp500_scheduler: invalid time %r, defaulting to 04:00", time_str)
+            hour, minute = 4, 0
         sched.add_job(
             _run_daily,
             CronTrigger(hour=hour, minute=minute),
