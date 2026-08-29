@@ -793,7 +793,17 @@ New router `backend/app/routers/scan_schedule.py`:
   (server generates)
 - `PUT  /api/scan-schedule/{entry_id}` → full replace (this is also the
   re-sync path used automatically when a referenced profile is saved, see 3.4)
-- `DELETE /api/scan-schedule/{entry_id}`
+- `DELETE /api/scan-schedule/{entry_id}` — **must also delete that entry's
+  `ScheduledScanRunModel` rows** (`DELETE FROM scheduled_scan_runs WHERE
+  schedule_entry_id = :entry_id`), flagged by audit round 5: without this,
+  `prune_scheduled_scan_runs`'s "keep the latest success row per
+  `schedule_entry_id`" exclusion (3.5) has no way to know the entry no
+  longer exists, so a deleted entry's rows — including the one row the
+  exclusion clause protects from age-based deletion — would escape pruning
+  forever, recreating the exact unbounded-growth problem that retention
+  design exists to prevent. `scan_schedule_store` is a YAML file, not a DB
+  table, so there's no FK/cascade to rely on — this has to be explicit at
+  the endpoint.
 - `POST /api/scan-schedule/{entry_id}/run-now` → bypass the schedule, execute
   immediately (mirrors the existing `run_now()` pattern on
   `strategy_watch_scheduler.py`) — useful for testing a newly-created entry
@@ -918,7 +928,15 @@ less, because its write rate can be materially higher:
   governs. Add a small new setting, e.g. `scheduled_scan_run_retention_days`
   in `settings.yaml` (default `90`), separate from `history_retention_years`
   — don't conflate the two just because Part 2 already has a working pattern
-  to imitate.
+  to imitate. **Give it an actual `GET/POST` endpoint and Settings UI field
+  before implementation is done** — flagged by audit round 5 as the same
+  class of gap Part 1's Step 3a caught for `scheduling.timezone`, recurring
+  here for a different setting: `history_retention_years` itself already has
+  a dedicated pair (`GET/POST /settings/history-retention`,
+  `notification_settings.py`) plus a Settings UI field — mirror that exact
+  pattern for this setting rather than leaving it YAML-only. Lower severity
+  than the timezone case (the `90`-day default is sane on its own), but
+  don't ship it silently unconfigurable a second time in the same document.
 - `prune_scheduled_scan_runs(retention_days: int) -> None` in
   `backend/app/services/scan_schedule_store.py` (or a sibling module): one
   SQL `DELETE FROM scheduled_scan_runs WHERE fired_at < cutoff`, same shape
