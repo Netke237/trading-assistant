@@ -203,7 +203,7 @@ change needed to the default hour values themselves — per Part 0, those are
 fine as "quiet overnight" markers once anchored to a real, declared zone
 instead of an implicit one.
 
-**Step 2a — Give `tuning_scheduler.py` a real day-of-week dimension, required by Part 0's "Saturday 03:00 only" default.**
+**Step 2a — Give `tuning_scheduler.py` a real day-of-week dimension, required by Part 0's "Saturday 05:00 only" default.**
 
 Checked: `tuning_schedule_store.py`'s schema is `{enabled, time}` only, and
 `strategy_tuning.py`'s `PUT` handler calls
@@ -213,7 +213,7 @@ without this — add it explicitly, scoped to `tuning_scheduler.py` only (the
 other three nightly jobs run every day, per Part 0, and don't need this):
 
 - `tuning_schedule_store.py`: extend `_DEFAULTS` to
-  `{"enabled": False, "time": "03:00", "days_of_week": [5]}` (5 = Saturday,
+  `{"enabled": False, "time": "05:00", "days_of_week": [5]}` (5 = Saturday,
   matching Python's `datetime.weekday()`/APScheduler's own 0=Mon convention —
   confirm APScheduler's `CronTrigger(day_of_week=...)` accepts either int or
   the `"sat"`-style string form during implementation and pick whichever the
@@ -532,10 +532,10 @@ mean what they say regardless of host OS.
 
 | Job | New default | Reasoning |
 |---|---|---|
-| OHLCV ingestion | **02:00, every night** | NYSE close (16:00 ET) ≈ 22:00 Berlin; 02:00 gives ~4h buffer for EOD data to finalize. Needs daily freshness. |
-| EDGAR fundamentals | **03:00, every night** | After ingestion, same overnight block; no same-day urgency but no reason to separate. |
+| OHLCV ingestion | **02:00, every night** — moved off the shipped `03:00` | NYSE close (16:00 ET) ≈ 22:00 Berlin; 02:00 gives ~4h buffer for EOD data to finalize. Needs daily freshness. (Audit round 3: this is a real change from the shipped default, same as S&P 500's row below — the original table implied only S&P 500 changed; corrected.) |
+| EDGAR fundamentals | **03:00, every night** — moved off the shipped `04:00` | After ingestion, same overnight block; no same-day urgency but no reason to separate. Also a real change from the shipped default, not "unchanged" as originally implied. |
 | S&P 500 liquidity update | **04:00, every night** — moved off the shipped `16:30` | `16:30` only made sense under "server-local = US Eastern." Anchored to Berlin, `16:30` lands mid-US-session (10:30 ET) — wrong. Moved into the same overnight block. |
-| Strategy tuning (WFO) | **Saturday 03:00 only, not nightly** | Compute-heavy, doesn't need daily freshness (verified: no EDGAR/fundamentals dependency, OHLCV-only via `historical_store.get_bars`'s self-heal). Weekly is the standard cadence; running after Friday's ingestion sees a full settled week. |
+| Strategy tuning (WFO) | **Saturday 05:00 only, not nightly** | Compute-heavy, doesn't need daily freshness (verified: no EDGAR/fundamentals dependency, OHLCV-only via `historical_store.get_bars`'s self-heal). Weekly is the standard cadence; running after Friday's ingestion sees a full settled week. Set to 05:00, not 03:00 as in an earlier draft of this table — 03:00 would collide with EDGAR's *daily* 03:00 job on Saturdays specifically (EDGAR runs every day, tuning only Saturdays); 05:00 keeps the same sequential-overnight-block pattern already used for ingestion→EDGAR→S&P500, after both have had time to finish. |
 | Strategy-watch EOD trigger | **16:30 America/New_York** (market timezone, not operator) | 30 min past the 16:00 ET close, matching the ingestion buffer logic. Deliberately NOT expressed in Berlin time — see 1.3. |
 | `audit.log` rotation/prune | Piggybacks on the ingestion job, no separate slot | A few hundred lines/day doesn't need its own cadence. |
 | New profile-based scan entries (Part 3) | User-defined per entry | See Part 3 — no single default, this is the point of the feature. |
@@ -639,15 +639,25 @@ worse than round 1's original concern since it looks fixed on paper.
 
 **Real fix**: the client-side resolver this plan builds (3.4/open-items)
 must explicitly read the live `riskStore` (`useRiskStore.getState()` or
-equivalent) and set `account_size`/`risk_pct`/`risk_fixed_usd` on the
-resolved request itself, **overriding** whatever `runStockScan()`'s own
-request-building would otherwise produce — not relying on that function's
-existing behavior to already do it, since it demonstrably doesn't. This is
-new logic the resolver adds on top of reusing `runStockScan()`'s other
-field-mapping, not a byproduct of calling it. Whether `runStockScan()`'s
-own hardcoded defaults are also worth fixing for the *manual* path is a
-separate, pre-existing bug outside this plan's scope — flagged here for
-visibility, not silently fixed as a side effect.
+equivalent) and set fields on the resolved request itself, **overriding**
+whatever `runStockScan()`'s own request-building would otherwise produce —
+not relying on that function's existing behavior to already do it, since it
+demonstrably doesn't. **Correction (audit round 3): only two of the three
+fields named above actually have a source.** Checked `riskStore.ts`'s
+`RiskLimits` directly: `portfolioValue` → `account_size` and
+`maxLossPerTradePct` → `risk_pct` both exist and map cleanly;
+**`risk_fixed_usd` has no corresponding field anywhere in the frontend
+today** (grep confirms it's never populated anywhere in the current
+codebase — it's a backend-only optional field,
+`StockScanRequest.risk_fixed_usd: Optional[float] = None`). The resolver
+sets `account_size`/`risk_pct` from `riskStore`; `risk_fixed_usd` is left
+`None` (its documented default) — stated explicitly here rather than
+implied as a third mapped field. This is new logic the resolver adds on top
+of reusing `runStockScan()`'s other field-mapping, not a byproduct of
+calling it. Whether `runStockScan()`'s own hardcoded defaults are also worth
+fixing for the *manual* path is a separate, pre-existing bug outside this
+plan's scope — flagged here for visibility, not silently fixed as a side
+effect.
 
 New file `backend/app/schemas/scan_schedule.py`:
 
@@ -661,6 +671,7 @@ class ScanScheduleEntry(BaseModel):
     mode:             Literal['options', 'stocks']
     profile_id:       str              # frontend-side SearchProfile.id, for display/re-sync matching only
     profile_name:     str              # denormalized for display without a round-trip
+    profile_synced_at: str             # ISO 8601, set by the frontend on every successful push (3.4) — lets the UI flag a stale/failed re-sync
     resolved_request:  dict            # a full ScanRequest or StockScanRequest body, already resolved client-side
     pattern:          Literal['fixed_time', 'loop']
     enabled:          bool = True
@@ -707,6 +718,18 @@ Because `resolved_request` is validated against the *real* `ScanRequest`/
 `strategy` field is rejected immediately by Pydantic (that field is required
 on `StockScanRequest`) — not discovered as a silent failure the first time
 the entry fires unattended.
+
+**Note: this schema deliberately carries no runtime state** (no
+`last_run_at`/`last_status`/`last_result`) — audit round 2's version of this
+section added such fields directly here, and audit round 3 caught that
+mixing frequently-mutated runtime data into what 3.2 defines as an
+infrequently-written YAML config store means every scan completion — for a
+`loop`-pattern entry, potentially every 5 minutes (`cadence_minutes`'s
+schema floor) — would trigger a full in-memory-dict-rewrite-and-`os.replace`
+of every entry's config, contradicting 3.2's own stated rationale for using
+that storage shape at all. Runtime state lives in the new table introduced
+in 3.5 instead, keyed by `schedule_entry_id`, entirely separate from this
+config record.
 
 This is deliberately its own schema, not an extension of the existing
 `ScheduleConfig` (`backend/app/schemas/schedule.py`) — `ScheduleConfig` is a
@@ -793,6 +816,18 @@ always reflects the profile's last explicit save" — the backend never reads
 `localStorage`, it just receives pushes, including this automatic one
 triggered by the save action itself.
 
+**Push-failure handling — flagged by audit round 3 as unaddressed.** This
+whole guarantee depends on that `PUT` actually landing; a network blip or a
+backend restart mid-save leaves an entry silently running a stale
+`resolved_request` indefinitely — precisely the drift class this feature
+exists to eliminate elsewhere. Retry the push a small, bounded number of
+times (e.g. 3 attempts with brief backoff); if all fail, surface a visible
+warning in the UI (a toast, or a per-entry "may be out of date" badge sourced
+from comparing the profile's `updatedAt` against a `profile_synced_at`
+timestamp Part 3's schema should also carry) rather than failing silently.
+Exact UX is an implementation-time call; the requirement is that a failed
+re-sync must be visible somewhere, not swallowed.
+
 ### 3.5 Execution core — factored out so scheduled runs can never touch manual-run state
 
 Audit round 1's most severe finding: calling `run_scan()`/`run_stock_scan()`
@@ -820,27 +855,59 @@ would otherwise reuse unmodified.
 **Real fix — each schedule entry gets its own persisted state (its own
 "last result," "last status," delta baseline), entirely separate from the
 UI's single-slot `_last_request`/`_last_result`/`_last_status`/
-`ScanSession(id="current")` and from every other entry's state:**
+`ScanSession(id="current")`, from every other entry's state, and — per audit
+round 3 — kept out of `ScanScheduleEntry`'s YAML config record entirely (see
+3.1's note added above).**
 
-Extend `ScanScheduleEntry` (3.1) with a small block of *runtime* fields the
-backend owns and the frontend only ever reads, not writes — analogous to
-how `next_run_time()` already works for the other four schedulers:
+**Correction (audit round 3): there is no existing scan-history persistence
+to "reuse" here — this was checked and it doesn't exist.** `ScanHistoryEntry`
+(`backend/app/schemas/scan.py`) is only ever instantiated as an in-memory
+Python list on the `ScanScheduler` object (`scan_scheduler.py`'s `_history`
+attribute) — never written to a database — and that object is either deleted
+or left permanently uninstantiated once 3.9's retirement lands. The only
+persisted options/stocks scan state anywhere in the backend is the
+single-row `scan_sessions` table (`models/scan_session.py`, hardcoded
+`id="current"`, one row total) and its stocks-mode equivalent. Neither is
+addressable by scan id, and there's nothing to add a `schedule_entry_id`
+column to.
+
+**Real fix: a genuinely new, small DB table**, `ScheduledScanRunModel`
+(`backend/app/models/scheduled_scan_run.py`, new Alembic migration):
 
 ```python
-    # Runtime state, backend-owned — set by _run_scheduled_entry, read-only from the API
-    last_run_at:     Optional[str] = None   # ISO 8601 UTC
-    last_status:     Optional[Literal['success', 'error']] = None
-    last_error:      Optional[str] = None   # populated only on last_status == 'error'
-    last_result_id:  Optional[str] = None   # ScanResult.scan_id / StockScanResult equivalent, for delta baseline + lookup
+class ScheduledScanRunModel(Base):
+    __tablename__ = "scheduled_scan_runs"
+    id                = Column(String, primary_key=True)          # uuid
+    schedule_entry_id = Column(String, index=True, nullable=False)  # ScanScheduleEntry.id
+    mode              = Column(String, nullable=False)             # 'options' | 'stocks'
+    fired_at          = Column(DateTime(timezone=True), nullable=False)
+    status            = Column(String, nullable=False)             # 'success' | 'error'
+    error             = Column(Text, nullable=True)                # populated only on status == 'error'
+    result_json       = Column(Text, nullable=True)                # full ScanResult/StockScanResult JSON, null on error
 ```
 
-`ScanResult`/`StockScanResult` themselves already get persisted through the
-existing scan-history mechanism (`ScanHistoryEntry` / whatever the stocks
-side's equivalent is — confirm the exact table/model during implementation)
-independent of the single "current" slot; a scheduled run's result rides
-that same existing history path, just tagged with which entry produced it
-(add an optional `schedule_entry_id` column/field to that history record) —
-reuse, not a new parallel history mechanism.
+This is where all of a scheduled entry's runtime state actually lives — not
+on `ScanScheduleEntry`, resolving both round 3 findings at once:
+
+- `_run_scheduled_entry` writes one row here per completion (success or
+  error) instead of calling `scan_schedule_store.upsert()` — `ScanScheduleEntry`
+  itself is now only ever written on explicit create/edit/delete, restoring
+  3.2's "infrequently written" property.
+- Delta baseline lookup: `SELECT * FROM scheduled_scan_runs WHERE
+  schedule_entry_id = :id AND status = 'success' ORDER BY fired_at DESC LIMIT 1`,
+  deserialize `result_json` back into a `ScanResult`/`StockScanResult`, pass
+  as `previous_result` — correctly isolated per entry, a real, queryable
+  history instead of an assumed one.
+- New endpoint `GET /api/scan-schedule/{entry_id}/runs` (paginated, most
+  recent first) serves both the delta-baseline lookup internally and 3.8's
+  UI display of last-run status/error (see 3.8's update below) — one store,
+  two consumers, not a duplicated mechanism.
+- A retention/pruning story for this table follows the same pattern as
+  everything else in Part 2 — e.g. `prune_old_history`-style age-based
+  deletion, reusing `history_retention_years` — worth adding to the nightly
+  batch alongside Part 2's audit-log maintenance rather than left unbounded;
+  flagged here, not fully speced, since it's a smaller, lower-risk addendum
+  than the core design.
 
 ```python
 # routers/scan.py
@@ -873,10 +940,11 @@ async def run_scan(req: ScanRequest, db: AsyncSession) -> ScanResult:
 ```
 
 `_run_scheduled_entry` (3.6) calls `_execute_scan_core` the same way, but
-passes `previous_result` loaded from *that entry's own* `last_result_id`
-(via the shared history lookup, not `_last_result`) — so deltas are always
-computed against the entry's own prior run, correctly isolated per entry,
-never against the UI's state or another entry's.
+passes `previous_result` loaded from `ScheduledScanRunModel`'s most recent
+successful row for *that entry's own* `schedule_entry_id` (not `_last_result`,
+not another entry's rows) — so deltas are always computed against the
+entry's own prior run, correctly isolated per entry, never against the UI's
+state or another entry's.
 
 For `stock_scan.py`: the reusable core is **not** `_run_stock_scan_body()`
 as-is (it ends by calling the global-mutating `_upsert_stock_session()`).
@@ -897,29 +965,63 @@ stop, for either mode. An unattended background job placing trades is a
 large enough change in risk posture that it deserves its own conversation if
 you want it later; it is out of scope here.
 
+**Concurrency — flagged by audit round 3, unaddressed in every prior version
+of this section.** The codebase's own comment (`routers/scan.py` lines
+262-267) already documents that a manual scan and today's single continuous
+scan scheduler "can run fully concurrently — nothing serializes them," with
+only a narrow, Heston-calibration-specific semaphore as a safety net (not
+candle/quote fetching, DB pool usage, or data-provider rate limits). Part 3
+multiplies the number of independent firing sources — N `fixed_time` jobs
+plus one shared `loop` runner iterating any number of entries — so two
+entries landing in the same minute (or an entry firing while another is
+still mid-run) is a real, not hypothetical, scenario once several entries
+exist. **Fix**: one process-wide `asyncio.Semaphore`, scoped to Part 3's
+scheduled executions only (not manual runs — those stay interactive and
+unblocked, as today):
+
+```python
+_SCHEDULED_SCAN_SEMAPHORE = asyncio.Semaphore(1)  # serializes scheduled runs only
+```
+
+`_run_scheduled_entry` acquires this before calling `_execute_scan_core`/its
+stocks-side equivalent and releases it after. A second entry firing while
+one is already running simply waits its turn instead of racing it for the
+candle cache, DB connections, or broker/data-provider rate limits — an
+acceptable tradeoff for unattended background work with no latency
+requirement. Starting at `1` (fully serial) is the safe default; widening it
+later is a one-line change once real usage shows it's needed, not a
+day-one requirement.
+
 **Observability — flagged by audit round 2 as missing entirely from round 1's
-version of this section.** A feature whose entire point is "find candidates
-while I'm not watching" cannot silently discard what happened:
+version of this section; storage design corrected by round 3 (see the
+`ScheduledScanRunModel` table above).** A feature whose entire point is
+"find candidates while I'm not watching" cannot silently discard what
+happened:
 
 - `_run_scheduled_entry(entry_id)` opens its own DB session
   (`async with AsyncSessionLocal() as db:`, mirroring the pattern the
   *existing* `_scheduled_scan()` wrapper already uses at `routers/scan.py`
   line 1386 — APScheduler's job callback has no `Depends(get_db)` request
   context to draw one from).
-- Wraps the `_execute_scan_core` call in `try/except`. `_execute_scan_core`'s
-  body can raise `fastapi.HTTPException` today (validation failures inside
-  what is currently `run_scan()`) — a type that only makes sense inside a
+- Acquires `_SCHEDULED_SCAN_SEMAPHORE`, wraps the `_execute_scan_core` call
+  in `try/except`. `_execute_scan_core`'s body can raise
+  `fastapi.HTTPException` today (validation failures inside what is
+  currently `run_scan()`) — a type that only makes sense inside a
   request/response cycle. In the scheduled path, catch it (and any other
-  exception) at this boundary, set `last_status='error'`/`last_error=str(exc)`
-  on the entry via `scan_schedule_store.upsert(...)`, log at `error` level,
-  and send one notification via the existing
-  `notifications/dispatch.py::notify_enabled_channels()` (the same
-  Gmail/Telegram layer `strategy_watch_evaluator.py` already uses) — "scan
+  exception) at this boundary and write one `ScheduledScanRunModel` row with
+  `status='error'`/`error=str(exc)`, log at `error` level, and send one
+  notification via the existing `notifications/dispatch.py::notify_enabled_channels(subject, plain_body, html_body)`
+  — note its real three-argument signature, and that
+  `strategy_watch_evaluator.py`'s existing notification code carries real
+  HTML-escaping logic for Telegram's restrictive tag allowlist (with a
+  comment there explaining a prior silent-failure bug from getting this
+  wrong) — **reuse that same escaping helper**, don't reimplement it — "scan
   entry '<label>' failed: <error>" — rather than a job that fails silently
   forever.
-- On success: set `last_status='success'`/`last_result_id`/`last_run_at` on
-  the entry, and send one summary notification via the same dispatch layer
-  — "scan entry '<label>': N candidates found" (mirroring the shape of
+- On success: write one `ScheduledScanRunModel` row with
+  `status='success'`/`result_json=<serialized result>`, and send one summary
+  notification via the same dispatch layer — "scan entry '<label>': N
+  candidates found" (mirroring the shape and escaping of
   `strategy_watch_evaluator`'s existing notification, not inventing a new
   format).
 
@@ -1049,6 +1151,20 @@ pattern-specific fields (time + days-of-week picker for `fixed_time`; cadence
 button, "Run now" button (calls 3.3's `run-now` endpoint). An "Add entry"
 button appends a new row defaulting to `pattern='fixed_time'`.
 
+**Last-run status display — added per audit round 3.** 3.5 builds real
+observability (`ScheduledScanRunModel` rows, Gmail/Telegram notifications on
+every completion) specifically because a scheduled scan runs unattended —
+but round 3 caught that nothing in the UI actually surfaced it, leaving a
+user with notifications off (or who just doesn't check email) with no
+in-app way to see a failing entry. Each row also shows: last-run timestamp
+and status (success/error, with the error message on hover/expand if
+`status='error'`) and a link/count to that entry's candidate results if
+successful — sourced from `GET /api/scan-schedule/{entry_id}/runs?limit=1`
+(3.5), fetched alongside the entry list rather than requiring a separate
+per-row round-trip if that's a meaningful latency concern at implementation
+time (e.g. have `GET /api/scan-schedule` embed each entry's latest run
+summary directly in its response).
+
 ### 3.9 Retiring the old continuous-scan mechanism
 
 Per the resolved decision at the top of Part 3: the pre-existing
@@ -1079,21 +1195,47 @@ call site must be found and updated, not just the two endpoints:
   entirely and let the frontend read schedule-entry state directly via
   `GET /api/scan-schedule` instead — confirm which during implementation,
   but the current line cannot survive unmodified).
+- **Audit round 3 found a fourth call site round 2 missed**:
+  `backend/app/routers/risk_settings.py` line 189, inside
+  `PUT /api/settings/schedule`: `scan_router._scheduler.configure(cfg)`,
+  wrapped in a broad `except Exception`. Deleting `_scheduler` wouldn't crash
+  the process here (the exception is swallowed) — worse, it would make this
+  endpoint silently become a no-op that rewrites `settings.yaml` and returns
+  `200 OK` while doing nothing, with the failure buried in a warning log.
+  This endpoint needs a real answer for what it does once `ScanScheduler` is
+  gone — either remove it too (if nothing meaningful reads `ScheduleConfig`
+  post-3.9) or repoint it at whatever does — not left as dead code with a
+  swallowed exception. Resolve which before implementation; don't leave this
+  as a silent no-op.
 
 **Migration story — also missing from the original section, per audit round
-2's question about a user with continuous scan already enabled today**: on
-first boot after this ships, if `restore_from_db()` reports the old
-continuous-scan session was `status == "running"` (i.e. exactly the case the
-now-deleted startup-resume code existed to handle), run a one-time migration
-instead of silently dropping it: read the persisted `ScheduleConfig` and the
-last-known `_last_request` from that session row, and create one
-`pattern='loop'` `ScanScheduleEntry` (`mode='options'`, `resolved_request`
-= that last request, cadence/window from the old `ScheduleConfig`, label
-e.g. "Migrated from continuous scan") via `scan_schedule_store.upsert(...)`
-directly at startup, then mark the old session `stopped` so this migration
-only ever runs once. This is a small, one-shot piece of startup code in
-`main.py`'s lifespan hook, not a full migration framework — scope it as
-such.
+2's question about a user with continuous scan already enabled today; the
+data source corrected by round 3**: on first boot after this ships, if
+`restore_from_db()` reports the old continuous-scan session was
+`status == "running"` (i.e. exactly the case the now-deleted startup-resume
+code existed to handle), run a one-time migration instead of silently
+dropping it: read `ScheduleConfig` from `settings.yaml`'s `scan.schedule`
+block (**not** from the `ScanSession` DB row — that row only ever holds
+`status`/`last_result_json`/`last_request_json`, per `models/scan_session.py`;
+`ScheduleConfig` is never stored there, corrected wording per round 3) the
+same way `main.py`'s existing auto-resume code already reads it, and the
+last-known `_last_request` from the session row's `last_request_json`. **If
+`last_request_json` is null or unparseable** (e.g. a crash between
+`_scheduler.start()` and the first completed scan — `restore_from_db()`,
+`routers/scan.py` lines 1051-1072, only sets `_last_request` if that column
+is truthy) — **skip the migration and just mark the session `stopped`**;
+there's no request to build a `ScanScheduleEntry` from, and
+`resolved_request` is a required, Pydantic-validated field (3.1), so this
+case cannot silently produce an empty/invalid entry. (A single `ScanSession`
+row is hardcoded to `id="current"` — there is only ever one candidate
+session, so "multiple candidate sessions" is not a case this needs to
+handle.) Otherwise create one `pattern='loop'` `ScanScheduleEntry`
+(`mode='options'`, `resolved_request` = that last request, cadence/window
+from `ScheduleConfig`, label e.g. "Migrated from continuous scan") via
+`scan_schedule_store.upsert(...)` directly at startup, then mark the old
+session `stopped` either way so this migration only ever runs once. This is
+a small, one-shot piece of startup code in `main.py`'s lifespan hook, not a
+full migration framework — scope it as such.
 
 ### 3.10 Tests
 
@@ -1119,11 +1261,29 @@ such.
   with different windows don't interfere with each other).
 - `ScanScheduleStore`: concurrent `upsert()` calls from different entries
   don't lose either write (in-memory-canonical-state-under-lock, not
-  reload-per-call).
+  reload-per-call); `upsert()`/`delete()` are called only on explicit
+  create/edit/delete, never on scan completion (regression test for audit
+  round 3's YAML-rewrite-frequency finding).
+- `ScheduledScanRunModel`: a completed scheduled run writes exactly one row;
+  the delta-baseline lookup for a given `schedule_entry_id` returns the most
+  recent `status='success'` row and correctly ignores rows from other
+  entries and `status='error'` rows.
+- `_SCHEDULED_SCAN_SEMAPHORE`: two entries "fired" concurrently in a test
+  (both `_run_scheduled_entry` calls started without awaiting the first)
+  execute serially, not overlapping — regression test for audit round 3's
+  concurrency finding. Manual `run_scan()` is unaffected by the semaphore
+  (doesn't acquire it).
+- Migration (3.9): a `ScanSession` with `status="running"` and a valid
+  `last_request_json` produces exactly one migrated `loop`-pattern entry and
+  marks the session stopped; the same with `last_request_json` null skips
+  entry creation but still marks the session stopped; running the migration
+  logic twice (simulating a second boot) doesn't create a duplicate entry.
 - Frontend: saving/updating a profile that a schedule entry references issues
   the expected `PUT /api/scan-schedule/{id}` re-sync call with a freshly
-  re-resolved request body; saving a profile with *no* referencing entries
-  issues no such call.
+  re-resolved request body and updates `profile_synced_at`; saving a profile
+  with *no* referencing entries issues no such call; a re-sync push that
+  fails after retries surfaces the stale/failed indicator rather than
+  failing silently.
 
 ---
 
