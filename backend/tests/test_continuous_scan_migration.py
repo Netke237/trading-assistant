@@ -9,6 +9,28 @@ import yaml
 from app.schemas import ScanRequest, ScanResult
 
 
+def test_settings_yaml_path_resolves_to_the_real_config_file():
+    """Direct check on app.main._SETTINGS_YAML_PATH's real, UNMOCKED value —
+    added after a live audit-verification exercise found a gap: the other
+    tests in this file all monkeypatch this constant to a tmp_path fixture,
+    so none of them actually exercise whether the constant itself is
+    computed correctly. Reintroducing the exact bug this file's other tests
+    were written to catch (backend/app/main.py's _SETTINGS_YAML_PATH using
+    `.parent` instead of `.parent.parent`, resolving to the nonexistent
+    backend/app/config/settings.yaml instead of the real backend/config/
+    settings.yaml) and rerunning the suite did NOT fail any existing test —
+    proof this check was missing, not just belt-and-suspenders."""
+    from app.main import _SETTINGS_YAML_PATH
+    assert _SETTINGS_YAML_PATH.name == "settings.yaml"
+    assert _SETTINGS_YAML_PATH.parent.name == "config"
+    assert _SETTINGS_YAML_PATH.parent.parent.name == "backend"
+    assert _SETTINGS_YAML_PATH.exists(), (
+        f"{_SETTINGS_YAML_PATH} does not exist — if this ever legitimately "
+        "changes (e.g. settings.yaml is removed from the repo), that's a "
+        "reason to update this test, not to weaken it silently."
+    )
+
+
 @pytest.mark.asyncio
 async def test_migration_noop_when_not_running():
     from app.main import _migrate_continuous_scan_session_if_running
