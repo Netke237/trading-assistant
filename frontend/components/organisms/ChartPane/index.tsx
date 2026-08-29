@@ -284,7 +284,9 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
         );
       } else {
         (s as ISeriesApi<'Line' | 'Histogram'>).setData(
-          (cfg.data as Point[]).map(p => ({ time: p.time as Time, value: p.value }))
+          (cfg.data as Point[])
+            .filter(p => Number.isFinite(p.value))
+            .map(p => ({ time: p.time as Time, value: p.value }))
         );
       }
     });

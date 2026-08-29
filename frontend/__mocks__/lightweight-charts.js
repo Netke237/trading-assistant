@@ -12,6 +12,7 @@ function makeSeriesApi(seriesOptions) {
     __options: seriesOptions,
     setData: jest.fn(),
     applyOptions: jest.fn(),
+    createPriceLine: jest.fn(),
   };
 }
 
@@ -22,11 +23,23 @@ function makePaneApi() {
   };
 }
 
+// v5 sub-pane API used by IndicatorPanel (chart.addPane() → pane.addSeries()),
+// distinct from the plain makePaneApi() above used for chart.panes()[0].
+function makeIndicatorPaneApi(index) {
+  return {
+    setStretchFactor: jest.fn(),
+    paneIndex: jest.fn(() => index),
+    addSeries: jest.fn((_type, seriesOptions) => makeSeriesApi(seriesOptions)),
+  };
+}
+
 const createChart = jest.fn((_container, options) => {
   const panes = [makePaneApi()];
+  let nextPaneIndex = 1; // pane 0 is the main chart pane, never created via addPane
   return {
     __options: options,
     addSeries: jest.fn((_type, seriesOptions) => makeSeriesApi(seriesOptions)),
+    addPane: jest.fn(() => makeIndicatorPaneApi(nextPaneIndex++)),
     removeSeries: jest.fn(),
     removePane: jest.fn(),
     panes: jest.fn(() => panes),

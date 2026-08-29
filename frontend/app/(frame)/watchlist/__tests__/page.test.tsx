@@ -25,9 +25,7 @@ jest.mock('@/lib/api', () => ({
 import { api } from '@/lib/api';
 
 // Selecting a row opens InlineChartPanel, which renders the real
-// CandlestickChart/IndicatorPanel — not under test here, and the shared
-// lightweight-charts jest mock doesn't implement the v5 addPane API those
-// components call, so rendering it for real throws. Stub it out; row
+// CandlestickChart/IndicatorPanel — not under test here. Stub it out; row
 // selection is exercised via the store, not the chart it happens to open.
 jest.mock('@/components/organisms/InlineChartPanel', () => ({
   InlineChartPanel: () => null,

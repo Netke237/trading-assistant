@@ -170,4 +170,30 @@ describe('ChartPane — malformed bars', () => {
       { time: '2026-01-07', open: 102, high: 103, low: 101, close: 102.5 },
     ]);
   });
+
+  // Same class of bug as the Candlestick test above, but for the Line/Histogram
+  // branch — used by the standalone Chart workspace's RSI/MACD/overlay panes,
+  // which are Line/Histogram series rendered through ChartPane, not
+  // CandlestickChart's own IndicatorPanel. That branch has its own unguarded
+  // setData() call, so it needs its own filter and its own regression test.
+  it('drops non-finite values before calling setData on a Line series', () => {
+    const data = [
+      { time: '2026-01-05', value: 50 },
+      { time: '2026-01-06', value: null },
+      { time: '2026-01-07', value: 55 },
+    ];
+
+    render(
+      <ChartPane
+        series={[{ id: 'rsi', type: 'Line', data: data as any }]}
+      />,
+    );
+
+    const chart = (createChart as jest.Mock).mock.results[0].value;
+    const lineSeries = chart.addSeries.mock.results[0].value;
+    expect(lineSeries.setData).toHaveBeenCalledWith([
+      { time: '2026-01-05', value: 50 },
+      { time: '2026-01-07', value: 55 },
+    ]);
+  });
 });

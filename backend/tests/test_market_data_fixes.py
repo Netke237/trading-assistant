@@ -1145,3 +1145,179 @@ def test_fetch_intraday_yf_drops_nan_ohlc_rows():
         for r in result
         for k in ("open", "high", "low", "close")
     )
+
+
+# ── Fix: a NaN-only Volume must not drop an otherwise-valid bar ──────────────
+# _fetch_intraday_yf used to include "Volume" in its dropna subset, discarding
+# the whole bar (valid OHLC included) whenever only volume was NaN, instead of
+# coercing to 0 like _fetch_daily_yf already did. Mirrors the daily behavior.
+
+
+def test_fetch_daily_yf_keeps_bar_with_valid_ohlc_but_nan_volume():
+    from app.data.market import _fetch_daily_yf
+
+    idx = pd.to_datetime(["2026-01-05"])
+    df = pd.DataFrame(
+        {
+            "Open":   [100.0],
+            "High":   [101.0],
+            "Low":    [99.0],
+            "Close":  [100.5],
+            "Volume": [float("nan")],
+        },
+        index=idx,
+    )
+
+    with patch("yfinance.download", return_value=df):
+        result = _fetch_daily_yf("AAPL")
+
+    assert len(result) == 1
+    assert result[0]["volume"] == 0
+
+
+def test_fetch_intraday_yf_keeps_bar_with_valid_ohlc_but_nan_volume():
+    from app.data.market import _fetch_intraday_yf
+
+    idx = pd.to_datetime(["2026-01-05 09:30"], utc=True)
+    df = pd.DataFrame(
+        {
+            "Open":   [100.0],
+            "High":   [101.0],
+            "Low":    [99.0],
+            "Close":  [100.5],
+            "Volume": [float("nan")],
+        },
+        index=idx,
+    )
+
+    with patch("yfinance.download", return_value=df):
+        result = _fetch_intraday_yf("AAPL", interval="15m", days=1)
+
+    assert len(result) == 1
+    assert result[0]["volume"] == 0
+
+
+# ── Fix: NaN OHLC bars from Tradier (not just yfinance) must be dropped too ──
+# float("NaN") succeeds and returns nan rather than raising, so a Tradier bar
+# whose OHLC field comes back as the literal string "NaN" (a real pattern for
+# a thin/halted session) sails through float(d["open"]) unfiltered unless
+# explicitly checked. The first pass of this fix only guarded the yfinance
+# helpers; fetch_candles/fetch_intraday_candles/fetch_candles_async try
+# Tradier first and need the same guard on that path.
+
+
+def test_fetch_candles_drops_nan_ohlc_from_tradier():
+    import app.data.market as mkt
+
+    saved = dict(mkt._candles_cache)
+    mkt._candles_cache.clear()
+    try:
+        with patch("app.data.market.httpx.get") as mock_get:
+            resp = MagicMock()
+            resp.raise_for_status.return_value = None
+            resp.json.return_value = {
+                "history": {
+                    "day": [
+                        {"date": "2026-01-05", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 1000},
+                        {"date": "2026-01-06", "open": "NaN", "high": "NaN", "low": "NaN", "close": "NaN", "volume": 500},
+                        {"date": "2026-01-07", "open": 102.0, "high": 103.0, "low": 101.0, "close": 102.5, "volume": 1200},
+                    ]
+                }
+            }
+            mock_get.return_value = resp
+            result = mkt.fetch_candles("AAPL", bars=10)
+    finally:
+        mkt._candles_cache.clear()
+        mkt._candles_cache.update(saved)
+
+    assert [r["time"] for r in result] == ["2026-01-05", "2026-01-07"]
+
+
+def test_fetch_candles_cache_never_stores_the_dropped_nan_row():
+    """The NaN row filtered out of the Tradier response must not leak back in
+    via the cache-hit fast path either -- fetch_candles's cache read applies
+    no filter of its own, so the write side (where the fix lives) must be the
+    only place a bad row could enter. bars=1 so the cache-hit length check
+    (len(data) >= bars) is satisfied by the single clean row."""
+    import app.data.market as mkt
+
+    saved = dict(mkt._candles_cache)
+    mkt._candles_cache.clear()
+    try:
+        with patch("app.data.market.httpx.get") as mock_get:
+            resp = MagicMock()
+            resp.raise_for_status.return_value = None
+            resp.json.return_value = {
+                "history": {
+                    "day": [
+                        {"date": "2026-01-05", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 1000},
+                        {"date": "2026-01-06", "open": "NaN", "high": "NaN", "low": "NaN", "close": "NaN", "volume": 500},
+                    ]
+                }
+            }
+            mock_get.return_value = resp
+            mkt.fetch_candles("AAPL", bars=1)
+            second = mkt.fetch_candles("AAPL", bars=1)  # served from cache, no new httpx call
+    finally:
+        mkt._candles_cache.clear()
+        mkt._candles_cache.update(saved)
+
+    assert [r["time"] for r in second] == ["2026-01-05"]
+    assert mock_get.call_count == 1
+
+
+def test_fetch_intraday_candles_drops_nan_ohlc_from_tradier():
+    from app.data.market import fetch_intraday_candles
+
+    with (
+        patch("app.data.market.TRADIER_TOKEN", "fake-token"),
+        patch("app.data.market._fetch_intraday_yf", return_value=[]),
+        patch("app.data.market.httpx.get") as mock_get,
+    ):
+        resp = MagicMock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {
+            "series": {
+                "data": [
+                    {"time": "2026-01-05T09:30:00", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 1000},
+                    {"time": "2026-01-05T09:45:00", "open": "NaN", "high": "NaN", "low": "NaN", "close": "NaN", "volume": 500},
+                ]
+            }
+        }
+        mock_get.return_value = resp
+        result = fetch_intraday_candles("SPY", interval="15min", days=1)
+
+    assert len(result) == 1
+    assert result[0]["close"] == 100.5
+
+
+@pytest.mark.asyncio
+async def test_fetch_candles_async_drops_nan_ohlc_from_tradier():
+    """Mirrors test_fetch_candles_drops_nan_ohlc_from_tradier for the async
+    variant used by the scan hot path (scan.py, stock_scan.py, contracts.py) --
+    a second, independent Tradier-parsing implementation that needs the same
+    guard, since it shares _candles_cache with the sync fetch_candles."""
+    import app.data.market as mkt
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.json.return_value = {
+        "history": {
+            "day": [
+                {"date": "2026-01-05", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 1000},
+                {"date": "2026-01-06", "open": "NaN", "high": "NaN", "low": "NaN", "close": "NaN", "volume": 500},
+            ]
+        }
+    }
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    saved = dict(mkt._candles_cache)
+    mkt._candles_cache.clear()
+    try:
+        result = await mkt.fetch_candles_async(mock_client, "AAPL")
+    finally:
+        mkt._candles_cache.clear()
+        mkt._candles_cache.update(saved)
+
+    assert [r["time"] for r in result] == ["2026-01-05"]

@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import io
 import logging
+import math
 import os
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -76,6 +77,20 @@ _YF_SYMBOL_MAP: dict[str, str] = {
     "RUT": "^RUT",
     "DJI": "^DJI",
 }
+
+
+def _finite_ohlc(row: dict) -> bool:
+    """True if a bar's open/high/low/close are all finite numbers.
+
+    A source can hand back NaN via a path float() doesn't reject — e.g. the
+    literal string "NaN" (float("NaN") succeeds and returns nan rather than
+    raising) — so this must be checked explicitly rather than relying on a
+    conversion failure to catch it. Applied to every source (Tradier, IBKR,
+    yfinance) at the point their rows are merged/returned, not just the
+    yfinance helpers, since any of them can hand back a bad bar for a thin
+    or halted trading session.
+    """
+    return all(math.isfinite(row[k]) for k in ("open", "high", "low", "close"))
 
 
 def _headers() -> dict:
@@ -165,6 +180,7 @@ def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
                 }
                 for d in day_list
             ]
+            rows = [r for r in rows if _finite_ohlc(r)]
     except Exception as exc:
         # Kept broad deliberately (the request, response-shape parsing, and the
         # dict-comprehension below can each fail in different ways) — but this
@@ -299,7 +315,7 @@ def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 55) -> li
         # yfinance ≥1.1 returns MultiIndex columns (Price, Ticker) for single-ticker downloads
         if isinstance(df.columns, pd.MultiIndex):
             df = df.droplevel(1, axis=1)
-        df = df.dropna(subset=["Open", "High", "Low", "Close", "Volume"])
+        df = df.dropna(subset=["Open", "High", "Low", "Close"])
         return [
             {
                 "time":   int(ts.timestamp()),
@@ -307,7 +323,7 @@ def _fetch_intraday_yf(symbol: str, interval: str = "15m", days: int = 55) -> li
                 "high":   round(float(row["High"]),   4),
                 "low":    round(float(row["Low"]),    4),
                 "close":  round(float(row["Close"]),  4),
-                "volume": int(row["Volume"]),
+                "volume": 0 if pd.isna(row["Volume"]) else int(row["Volume"]),
             }
             for ts, row in df.iterrows()
         ]
@@ -376,6 +392,7 @@ def fetch_intraday_candles(
                         "close":  round(float(d.get("close",  0)), 4),
                         "volume": int(d.get("volume", 0)),
                     })
+            tradier_rows = [r for r in tradier_rows if _finite_ohlc(r)]
             if tradier_rows:
                 logger.info("Tradier returned %d bars for %s", len(tradier_rows), symbol)
             else:
@@ -419,7 +436,9 @@ def fetch_intraday_candles(
     if tradier_rows:
         merged.update({b["time"]: b for b in tradier_rows})  # Tradier overwrites all
 
-    result = sorted(merged.values(), key=lambda b: b["time"])
+    # Catch-all: a bad bar from IBKR or yfinance (not just Tradier, already
+    # filtered above) must not reach the merged result either.
+    result = sorted((b for b in merged.values() if _finite_ohlc(b)), key=lambda b: b["time"])
     logger.info(
         "Merged %d Tradier + %d IBKR + %d yf → %d total bars for %s",
         len(tradier_rows), len(ibkr_rows), len(yf_rows), len(result), symbol,
@@ -1070,6 +1089,7 @@ async def fetch_candles_async(
                     "close": round(float(d["close"]), 2),
                     "volume": int(d["volume"]),
                 })
+            rows = [r for r in rows if _finite_ohlc(r)]
     except Exception:
         pass
 

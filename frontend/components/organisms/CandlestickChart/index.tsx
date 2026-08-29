@@ -122,41 +122,56 @@ export function CandlestickChart({
     };
   }, [height, theme, autoFill]);
 
+  // Upstream OHLCV providers occasionally emit a NaN bar (thin/halted
+  // trading days) that round-trips through JSON as null — lightweight-charts
+  // asserts on any non-number field and would otherwise crash the whole
+  // chart. Filtered once here so the candle series AND every indicator pane
+  // derived from `data` (volume, RSI, MACD — each with its own setData()
+  // call in IndicatorPanel) see only clean bars, not just the main pane.
+  // Volume is checked separately from OHLC: RSI/MACD never read `volume`
+  // (only `close`), and a bar with valid OHLC but a corrupted volume should
+  // still plot on the price chart and feed RSI/MACD — it only needs
+  // excluding from the volume pane specifically.
+  const cleanCandles = useMemo(
+    () =>
+      data.filter(
+        (c) =>
+          Number.isFinite(c.open) &&
+          Number.isFinite(c.high) &&
+          Number.isFinite(c.low) &&
+          Number.isFinite(c.close),
+      ),
+    [data],
+  );
+  const cleanVolumeCandles = useMemo(
+    () => cleanCandles.filter((c) => Number.isFinite(c.volume)),
+    [cleanCandles],
+  );
+
   // Data update — never recreates the chart, just replaces series data.
   // chartVersion dep ensures this re-runs after a theme-triggered chart rebuild.
   useEffect(() => {
     const candle = candleSeriesRef.current;
     if (!candle) return;
-    // Upstream OHLCV providers occasionally emit a NaN bar (thin/halted
-    // trading days) that round-trips through JSON as null — lightweight-charts
-    // asserts on any non-number field and would otherwise crash the whole chart.
     candle.setData(
-      data
-        .filter(
-          (c) =>
-            Number.isFinite(c.open) &&
-            Number.isFinite(c.high) &&
-            Number.isFinite(c.low) &&
-            Number.isFinite(c.close),
-        )
-        .map((c) => ({
-          time: c.time as Time,
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close,
-        })),
+      cleanCandles.map((c) => ({
+        time: c.time as Time,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+      })),
     );
     chartRef.current?.timeScale().fitContent();
-  }, [data, chartVersion]);
+  }, [cleanCandles, chartVersion]);
 
   const indicatorData = useMemo(
     () => ({
-      volume: calculateVolume(data),
-      rsi: calculateRSI(data),
-      macd: calculateMACD(data),
+      volume: calculateVolume(cleanVolumeCandles),
+      rsi: calculateRSI(cleanCandles),
+      macd: calculateMACD(cleanCandles),
     }),
-    [data],
+    [cleanCandles, cleanVolumeCandles],
   );
 
   const toggleIndicator = (type: IndicatorType) => {
