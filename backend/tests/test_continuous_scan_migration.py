@@ -3,14 +3,10 @@ continuous-scan session left status=='running' must be migrated into one
 `pattern='loop'` ScanScheduleEntry, not silently dropped."""
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import yaml
 
 from app.schemas import ScanRequest, ScanResult
-
-_REAL_SETTINGS_PATH = Path(__file__).parent.parent / "config" / "settings.yaml"
 
 
 @pytest.mark.asyncio
@@ -66,18 +62,25 @@ async def test_migration_creates_loop_entry_when_running_with_request(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_migration_reads_real_settings_yaml_not_class_defaults(monkeypatch):
+async def test_migration_reads_real_settings_yaml_not_class_defaults(monkeypatch, tmp_path):
     """Regression test for a bug caught by adversarial review: the migration's
-    settings.yaml path resolution (`_Path(__file__).parent...` inside
-    app/main.py) once had one `.parent` too few, pointing at a nonexistent
-    file — the surrounding try/except silently swallowed the resulting
-    FileNotFoundError and fell back to ScheduleConfig()'s class defaults.
-    The original version of this test file didn't catch it because the real
-    repo's settings.yaml happened to coincide with the class defaults on
-    every field it asserted on (cadence_minutes/window_start_hour/
-    window_end_hour/days_of_week). This test writes a fixture with values
+    settings.yaml path resolution once had one `.parent` too few, pointing at
+    a nonexistent file — the surrounding try/except silently swallowed the
+    resulting FileNotFoundError and fell back to ScheduleConfig()'s class
+    defaults. The original version of this test didn't catch it because the
+    real repo's settings.yaml happened to coincide with the class defaults
+    on every field it asserted on. This test writes a fixture with values
     that deliberately differ from every one of ScheduleConfig's defaults, so
-    a silent fallback is observably distinguishable from a real read."""
+    a silent fallback is observably distinguishable from a real read.
+
+    Uses a tmp_path fixture, monkeypatching app.main._SETTINGS_YAML_PATH,
+    rather than touching the real backend/config/settings.yaml — a prior
+    version of this test wrote directly to that real, gitignored file and
+    left it permanently corrupted with fixture garbage on any host where it
+    didn't already exist before the test ran (a fresh clone or CI box —
+    exactly where this regression test would most need to catch the bug it
+    exists for), caught by post-implementation adversarial review."""
+    import app.main as main_module
     from app.main import _migrate_continuous_scan_session_if_running
     from app.services.scan_schedule_store import scan_schedule_store
     from app.schemas.schedule import ScheduleConfig
@@ -103,19 +106,17 @@ async def test_migration_reads_real_settings_yaml_not_class_defaults(monkeypatch
     req = ScanRequest(universe=["AAPL"], direction="Bullish", horizon="Swing", overrides={})
     result = ScanResult(scan_id="REC-MIG-2", timestamp="2026-01-01T00:00:00+00:00", candidates=[], rejected=[])
 
+    fixture_path = tmp_path / "settings.yaml"
+    fixture_path.write_text(yaml.dump({"scan": {"schedule": fixture_schedule}}))
+    monkeypatch.setattr(main_module, "_SETTINGS_YAML_PATH", fixture_path)
+
     orig_request, orig_result = scan_module._last_request, scan_module._last_result
     scan_module._last_request = req
     scan_module._last_result = result
     monkeypatch.setattr(dbmod, "AsyncSessionLocal", _TestSession)
 
-    original_settings_text = _REAL_SETTINGS_PATH.read_text() if _REAL_SETTINGS_PATH.exists() else None
-    original_raw = yaml.safe_load(original_settings_text) if original_settings_text else {}
+    before_ids = {e["id"] for e in scan_schedule_store.list()}
     try:
-        patched_raw = dict(original_raw)
-        patched_raw["scan"] = {**patched_raw.get("scan", {}), "schedule": fixture_schedule}
-        _REAL_SETTINGS_PATH.write_text(yaml.dump(patched_raw))
-
-        before_ids = {e["id"] for e in scan_schedule_store.list()}
         await _migrate_continuous_scan_session_if_running("running")
         new_entries = [e for e in scan_schedule_store.list() if e["id"] not in before_ids]
         assert len(new_entries) == 1
@@ -125,8 +126,6 @@ async def test_migration_reads_real_settings_yaml_not_class_defaults(monkeypatch
         assert migrated["window_end_hour"] == fixture_schedule["window_end_hour"]
         assert migrated["days_of_week"] == fixture_schedule["days_of_week"]
     finally:
-        if original_settings_text is not None:
-            _REAL_SETTINGS_PATH.write_text(original_settings_text)
         for e in scan_schedule_store.list():
             if e["id"] not in before_ids:
                 scan_schedule_store.delete(e["id"])

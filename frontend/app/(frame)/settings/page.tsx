@@ -519,7 +519,13 @@ function ScheduledScanRetentionSection() {
   async function handleSave() {
     setSaveResult('');
     try {
-      await api.saveScheduledScanRunRetention(days);
+      // Re-sync from the response rather than assuming the posted value
+      // stuck — the backend clamps to [1, 3650] — flagged by
+      // post-implementation adversarial review: without this, typing e.g.
+      // 99999 and saving showed "Saved" while the input kept displaying
+      // 99999, silently diverging from the 3650 actually persisted.
+      const r = await api.saveScheduledScanRunRetention(days);
+      setDays(r.scheduledScanRunRetentionDays);
       setSaveResult('Saved');
     } catch {
       setSaveResult('Save failed');
@@ -534,14 +540,15 @@ function ScheduledScanRetentionSection() {
         title="Scheduled scan history retention"
         blurb="How long completed scheduled-scan runs (Part 3 below) are kept before being pruned — separate from the trade-history retention setting, since this is operational scan-run history, not the trade-rationale audit trail. Each entry's most recent successful run is always kept regardless of age, as the baseline for its next run's rank/score deltas."
       />
-      <Row label="Retention (days)" defaultValue="90">
+      <Row label="Retention (days)" hint="1-3650" defaultValue="90">
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <input
             type="number"
             min={1}
+            max={3650}
             className={styles.input}
             value={days}
-            onChange={(e) => setDays(Math.max(1, Number(e.target.value) || 1))}
+            onChange={(e) => setDays(Math.min(3650, Math.max(1, Number(e.target.value) || 1)))}
           />
           <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave}>
             Save

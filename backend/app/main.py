@@ -52,6 +52,11 @@ _portfolio_monitor_task: asyncio.Task | None = None
 _regime_monitor_task: asyncio.Task | None = None
 _chart_alert_scheduler_task: asyncio.Task | None = None
 
+# Module-level so tests can monkeypatch it to a tmp_path fixture instead of
+# touching the real repo settings.yaml — see test_continuous_scan_migration.py.
+from pathlib import Path as _Path
+_SETTINGS_YAML_PATH = _Path(__file__).parent.parent / "config" / "settings.yaml"
+
 
 async def _migrate_continuous_scan_session_if_running(status: str | None) -> None:
     """One-shot startup migration (Part 3, §3.9) for the retired
@@ -87,15 +92,13 @@ async def _migrate_continuous_scan_session_if_running(status: str | None) -> Non
 
     import uuid
     from datetime import datetime, timezone
-    from pathlib import Path as _Path
     import yaml as _yaml
     from app.schemas.schedule import ScheduleConfig as _ScheduleConfig
     from app.schemas.scan_schedule import ScanScheduleEntry
     from app.services.scan_schedule_store import scan_schedule_store
 
     try:
-        _settings_path = _Path(__file__).parent.parent / "config" / "settings.yaml"
-        _raw = _yaml.safe_load(_settings_path.read_text()) or {} if _settings_path.exists() else {}
+        _raw = _yaml.safe_load(_SETTINGS_YAML_PATH.read_text()) or {} if _SETTINGS_YAML_PATH.exists() else {}
         sched_cfg = _ScheduleConfig(**_raw.get("scan", {}).get("schedule", {}))
     except Exception:
         sched_cfg = _ScheduleConfig()

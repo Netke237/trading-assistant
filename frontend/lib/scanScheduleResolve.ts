@@ -32,7 +32,21 @@ function parseSymbols(raw: string): string[] {
   );
 }
 
-function resolveOptionsUniverse(profile: SearchProfile): string[] {
+/**
+ * Resolve a profile's raw universe pick ('Custom'/'Watchlist'/a preset name)
+ * into an actual symbol list — shared by both options and stocks mode.
+ *
+ * Fixed by post-implementation adversarial review: this used to be
+ * options-mode-only (resolveOptionsUniverse), and the stocks-mode branch
+ * below just wrapped `profile.universe.pick` in an array directly. Since
+ * the backend's expand_universe() passes any non-preset string through
+ * unchanged as "an individual ticker," a stocks-mode schedule entry saved
+ * from a profile whose universe pick was literally 'Custom' or 'Watchlist'
+ * would fire on schedule forever, "successfully" scan a single nonexistent
+ * ticker named CUSTOM/WATCHLIST, find 0 candidates, and give no indication
+ * anywhere that the schedule was broken.
+ */
+function resolveUniversePick(profile: SearchProfile): string[] {
   const u = profile.universe;
   if (u.pick === 'Custom') return parseSymbols(u.customRaw);
   if (u.pick === 'Watchlist') return useWatchlistStore.getState().added;
@@ -60,7 +74,7 @@ export function resolveProfileToScanRequest(
     }
     const scoringHz = presetByKey(resolveParamsHorizon(profile.horizonPreset, profile.holdMax)).scoringHorizon;
     return buildOptionsScanRequestBody({
-      universe: resolveOptionsUniverse(profile),
+      universe: resolveUniversePick(profile),
       direction: profile.direction,
       horizon: scoringHz,
       holdMinDays: profile.holdMin,
@@ -98,7 +112,7 @@ export function resolveProfileToScanRequest(
   const risk = useRiskStore.getState().limits;
 
   return buildStockScanRequestBody({
-    universe: [profile.universe.pick],
+    universe: resolveUniversePick(profile),
     direction: profile.direction,
     horizon: scoringHz,
     strategy: profile.strategy,
