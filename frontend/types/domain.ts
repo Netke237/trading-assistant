@@ -166,6 +166,12 @@ export interface FirstPassageTarget {
 export interface FirstPassageEstimate {
   targets:      FirstPassageTarget[];
   invalidation: { probability: number; expectedDays: number | null };
+  /** ISO timestamp of when this estimate was computed — client-set on
+   *  receipt, the same way `ExitPlan.computedAt` works (the backend endpoint
+   *  is stateless/fresh on every call, so this isn't returned by it). Feature
+   *  8 (Final Recommendation) compares this against `ExitPlan.computedAt` to
+   *  show whichever method — Arithmetic or Monte Carlo — ran most recently. */
+  computedAt?: string;
 }
 
 /** The inputs a `FirstPassageEstimate` was actually computed against — captured

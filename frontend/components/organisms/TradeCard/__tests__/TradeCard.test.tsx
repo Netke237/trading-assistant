@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
 import type { TradeCardData } from '@/types/domain';
@@ -369,7 +369,10 @@ describe('TradeCard', () => {
       );
     });
     await waitFor(() => {
-      expect(screen.getByText('T20%')).toBeInTheDocument();
+      // Feature 8 — once an estimate exists, the Final Recommendation card
+      // (below) ALSO renders a "T20%" summary row when Monte Carlo was the
+      // most recently run method, so this may legitimately match twice.
+      expect(screen.getAllByText('T20%').length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByText('$3.30')).toBeInTheDocument();     // T20% Est. option
     expect(screen.getByText('$190.50')).toBeInTheDocument();   // T20% Stock price
@@ -377,7 +380,10 @@ describe('TradeCard', () => {
     expect(screen.getByText('~5d')).toBeInTheDocument();       // T20% Expected time
     expect(screen.getByText('$193.20')).toBeInTheDocument();   // T35% Stock price
     expect(screen.getByText('not reachable')).toBeInTheDocument(); // T50% Stock price (null)
-    expect(screen.getByText('30%')).toBeInTheDocument();       // Invalidation probability
+    // Feature 8 — the Final Recommendation card also renders an
+    // "Invalidation probability" row once Monte Carlo is the most recently
+    // run method, so "30%" may legitimately match twice.
+    expect(screen.getAllByText('30%').length).toBeGreaterThanOrEqual(1); // Invalidation probability
     expect(screen.getByText('~4d')).toBeInTheDocument();       // Invalidation expected time
     // Purely additive: the premium-based invalidation must be untouched.
     expandLadder();
@@ -485,7 +491,10 @@ describe('TradeCard', () => {
     // sync assertion, matching how every other post-effect assertion in this
     // file is written.
     await waitFor(() => {
-      expect(screen.getByText('T20%')).toBeInTheDocument();
+      // Feature 8 — once an estimate exists, the Final Recommendation card
+      // (below) ALSO renders a "T20%" summary row when Monte Carlo was the
+      // most recently run method, so this may legitimately match twice.
+      expect(screen.getAllByText('T20%').length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByText('$3.30')).toBeInTheDocument();
     // ...the % inputs show the percentages the estimate was RUN at (10, not the
@@ -626,7 +635,10 @@ describe('TradeCard', () => {
 
     // The rows render (the estimate itself succeeded)...
     await waitFor(() => {
-      expect(screen.getByText('T20%')).toBeInTheDocument();
+      // Feature 8 — once an estimate exists, the Final Recommendation card
+      // (below) ALSO renders a "T20%" summary row when Monte Carlo was the
+      // most recently run method, so this may legitimately match twice.
+      expect(screen.getAllByText('T20%').length).toBeGreaterThanOrEqual(1);
     });
     // ...the stale level is gone rather than silently paired with the fresh
     // estimate...
@@ -731,7 +743,10 @@ describe('TradeCard', () => {
     const { rerender } = render(<TradeCard data={mockTradeCard} />);
     rerender(<TradeCard data={cachedCard} />);
     await waitFor(() => {
-      expect(screen.getByText('T20%')).toBeInTheDocument();
+      // Feature 8 — once an estimate exists, the Final Recommendation card
+      // (below) ALSO renders a "T20%" summary row when Monte Carlo was the
+      // most recently run method, so this may legitimately match twice.
+      expect(screen.getAllByText('T20%').length).toBeGreaterThanOrEqual(1);
     });
 
     // A genuinely fresh "Check structure" — a very different stock price
@@ -1143,7 +1158,10 @@ describe('TradeCard', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await waitFor(() => {
-      expect(screen.getByText('T20%')).toBeInTheDocument();
+      // Feature 8 — once an estimate exists, the Final Recommendation card
+      // (below) ALSO renders a "T20%" summary row when Monte Carlo was the
+      // most recently run method, so this may legitimately match twice.
+      expect(screen.getAllByText('T20%').length).toBeGreaterThanOrEqual(1);
     });
 
     // structuralRR is null when stockMove is 0 (division guard in the
@@ -1243,9 +1261,10 @@ describe('TradeCard', () => {
     expect(screen.getByRole('button', { name: /hide chart/i })).toBeInTheDocument();
   });
 
-  it('shows historical accuracy label for confidence row', () => {
+  it('Feature 8 — no longer shows the historical-accuracy/contract-confidence rows on the Final Recommendation card (already shown via ScoreCardPanel above)', () => {
     render(<TradeCard data={mockTradeCard} />);
-    expect(screen.getByText('Historical accuracy (3×ATR exit)')).toBeInTheDocument();
+    expect(screen.queryByText('Historical accuracy (3×ATR exit)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Contract confidence')).not.toBeInTheDocument();
     expect(screen.queryByText('Stock confidence')).not.toBeInTheDocument();
   });
 
@@ -1253,6 +1272,98 @@ describe('TradeCard', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Projected R/R (+8% stock move)')).toBeInTheDocument();
     expect(screen.queryByText('R:R ratio')).not.toBeInTheDocument();
+  });
+
+  describe('Final Recommendation (Feature 8)', () => {
+    it('empty state — before any method is run, falls back to the Fixed % Ladder Plan\'s live T1/T2/T3 targets AND R:R, explicitly labeled as a default', () => {
+      render(<TradeCard data={mockTradeCard} />);
+      expect(screen.getByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).toBeInTheDocument();
+      // mockTradeCard's single target: stockPrice/targetPrice 200.02.
+      expect(screen.getByText('$200.02')).toBeInTheDocument();
+      expect(screen.getByText('Projected R/R (+8% stock move)')).toBeInTheDocument();
+      expect(screen.getByText('2.50x')).toBeInTheDocument();
+      // Neither method's own content shows.
+      expect(screen.queryByText(/computed via:/)).not.toBeInTheDocument();
+    });
+
+    it('still renders the finalStatus badge, with tooltip copy that no longer references the dropped confidence rows', () => {
+      render(<TradeCard data={mockTradeCard} />);
+      const badge = screen.getByTestId('labeled-badge');
+      expect(badge).toHaveTextContent('Final Status: PASS');
+      expect(screen.queryByText(/the worse of the stock signal's historical accuracy and the contract's quality verdict below/)).not.toBeInTheDocument();
+    });
+
+    it('switches to Arithmetic\'s output (with the alert-monitoring caveat) once it is the most recently run method, with a correct HH:MM timestamp', async () => {
+      (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+      (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+        price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+      });
+      (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+        stop: {
+          price: 180.0, source: 'structural' as const, contractPrice: 1.0,
+          rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+          structuralPrice: 180.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
+        },
+        targets: [
+          { rrRatio: 2.0, arithmeticPrice: 195.0, price: 195.0, tpSource: 'arithmetic' as const,
+            structuralPrice: null, contractPrice: 4.5, rrModel: 'Heston repriced' as const,
+            probability: 0.6, expectedDays: 8, qualityGood: true, qualityReasons: [],
+            distanceDollar: null, toleranceDollar: 1.5 },
+        ],
+        atr: 3.5,
+      });
+      const fixedNow = new Date('2026-08-30T14:32:00.000Z');
+      jest.useFakeTimers().setSystemTime(fixedNow);
+      try {
+        render(<TradeCard data={mockTradeCard} onExitPlanChange={jest.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+        await screen.findByText(/computed via: Arithmetic/);
+        const expectedHHMM = `${String(fixedNow.getHours()).padStart(2, '0')}:${String(fixedNow.getMinutes()).padStart(2, '0')}`;
+        expect(screen.getByText(`computed via: Arithmetic, ${expectedHHMM}`)).toBeInTheDocument();
+        expect(screen.getByText(
+          /This stop price is not automatically monitored by alerts unless copied into the position's stop field after opening\./,
+        )).toBeInTheDocument();
+        // The empty-state Ladder fallback is gone now that a method has run.
+        expect(screen.queryByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).not.toBeInTheDocument();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('switches to Monte Carlo\'s output once IT is the most recently run method (no alert caveat — that\'s Arithmetic-only)', async () => {
+      (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+        targets: [{ pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 }],
+        invalidation: { probability: 0.30, expectedDays: 4 },
+      });
+      render(<TradeCard data={mockTradeCard} />);
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+      await screen.findByText(/computed via: Monte Carlo/);
+      expect(screen.queryByText(/not automatically monitored by alerts/)).not.toBeInTheDocument();
+      expect(screen.queryByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).not.toBeInTheDocument();
+    });
+
+    it('does not build any cross-method comparison — Arithmetic\'s output never references Monte Carlo/Ladder figures or vice versa', async () => {
+      (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+        stop: {
+          price: 180.0, source: 'structural' as const, contractPrice: 1.0,
+          rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+          structuralPrice: 180.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
+        },
+        targets: [],
+        atr: 3.5,
+      });
+      render(<TradeCard data={mockTradeCard} onExitPlanChange={jest.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+      await screen.findByText(/computed via: Arithmetic/);
+      // No "agree"/"disagree"/"vs." reconciliation language WITHIN the Final
+      // Recommendation card specifically — scoped there because the OTHER
+      // method cards legitimately carry their own "...they can disagree"
+      // disclaimers elsewhere on the page (Features 1/2/3), which is
+      // unrelated to this card building its own comparison.
+      const finalRecSection = screen.getByText('Final Recommendation').closest('section')!;
+      expect(within(finalRecSection).queryByText(/disagree/i)).not.toBeInTheDocument();
+      expect(within(finalRecSection).queryByText(/agrees?/i)).not.toBeInTheDocument();
+    });
   });
 
   describe('editable fields', () => {

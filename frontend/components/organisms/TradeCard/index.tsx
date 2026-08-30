@@ -196,6 +196,12 @@ function targetCompareLabel(state: TargetCompareState): string {
   }
 }
 
+/** Feature 8 — "computed via: <method>, HH:MM" timestamp label. */
+function formatHHMM(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 function structuralStopSourceLabel(source: 'order_block' | 'swing_low' | 'swing_high' | null | undefined): string {
   if (source === 'order_block') return 'Structural stop — Order Block';
   if (source === 'swing_low') return 'Structural stop — Swing Low';
@@ -682,7 +688,10 @@ export function TradeCard({
         t3_pct: targetPct.t3,
       }, controller.signal);
       if (controller.signal.aborted) return;
-      setFirstPassage({ targets: res.targets, invalidation: res.invalidation });
+      // Feature 8 (Final Recommendation) — computedAt stamped here, the same
+      // client-set-on-receipt pattern as ExitPlan.computedAt (this endpoint
+      // is stateless/fresh on every call, so it isn't returned by the API).
+      setFirstPassage({ targets: res.targets, invalidation: res.invalidation, computedAt: new Date().toISOString() });
       // optionPrice in each target is premium*(1+pct) built from THIS
       // premium (first_passage.py) — persist it so a later R:R calc
       // subtracts the matching baseline, not data.contractDetails.mid.
@@ -871,6 +880,22 @@ export function TradeCard({
     if (!dirty) return { rr: data.rrRatio, model: data.rrModel };
     return computeEditedRR(overlay, data);
   }, [dirty, overlay, data]);
+
+  // Feature 8 (Final Recommendation) — whichever of Arithmetic/Monte Carlo
+  // was most recently explicitly run, determined purely by comparing their
+  // own computedAt timestamps (no cross-method reconciliation/comparison of
+  // the actual VALUES — that's explicitly out of scope). A restored/cached
+  // value still carries a real computedAt from whenever it was genuinely
+  // computed, so this naturally extends to "most recently run, including a
+  // prior session" without needing a separate session-scoped flag.
+  const lastRunMethod = useMemo<'arithmetic' | 'monte_carlo' | null>(() => {
+    const exitAt = exitPlan?.computedAt ? Date.parse(exitPlan.computedAt) : null;
+    const fpAt = firstPassage?.computedAt ? Date.parse(firstPassage.computedAt) : null;
+    if (exitAt == null && fpAt == null) return null;
+    if (exitAt == null) return 'monte_carlo';
+    if (fpAt == null) return 'arithmetic';
+    return exitAt >= fpAt ? 'arithmetic' : 'monte_carlo';
+  }, [exitPlan?.computedAt, firstPassage?.computedAt]);
 
   const stockBars = [
     { label: 'Trend',     value: data.stockBreakdown.trend,     detailText: trendDetailText(data.stockBreakdown.trendDetail) },
@@ -1413,41 +1438,85 @@ export function TradeCard({
           </section>
         </CollapsibleSection>
 
-        {/* 7. Final Recommendation Scorecard */}
+        {/* 7. Final Recommendation — Feature 8: documentation, not
+             reconciliation. No cross-method comparison logic between
+             Arithmetic/Monte Carlo/Fixed % Ladder — their bases aren't on the
+             same axis. Shows whichever of Arithmetic/Monte Carlo ran most
+             recently (lastRunMethod), falling back to the Ladder's live
+             T1/T2/T3 + R:R when neither has been explicitly run. Stands
+             alone — NOT inside the Fixed % Ladder Plan collapsible group. */}
         <section className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
           <div className={styles.scoreCardHeader}>
             <Text size={14} weight={600}>Final Recommendation</Text>
             <LabeledStatusBadge
               label="Final Status"
               status={data.finalStatus}
-              tooltip="Overall recommendation for this trade — the worse of the stock signal's historical accuracy and the contract's quality verdict below."
+              tooltip="Overall recommendation for this trade, combining the stock signal's historical accuracy and the contract's quality verdict — see the Stock Scorecard and Contract panels above."
             />
           </div>
           <div className={styles.scoreCardBody}>
-            <div className={styles.scoreRow}>
-              <Text size={12} tone="secondary">Historical accuracy (3×ATR exit)</Text>
-              <StatusBadge
-                status={data.stockConfidence}
-                tooltip="Backtested confidence tier for the stock signal. CAUTION means the pattern's historical win rate is marginal — consider reducing position size or waiting for a higher-conviction entry."
-              />
-            </div>
-            <div className={styles.scoreRow}>
-              <Text size={12} tone="secondary">Contract confidence</Text>
-              <StatusBadge
-                status={data.contractConfidence}
-                tooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
-              />
-            </div>
-            <div className={styles.scoreRow}>
-              <Text size={12} tone="secondary">Projected R/R (+8% stock move)</Text>
-              <Data size={14} tone="primary">{editedRR.rr.toFixed(2)}x</Data>
-            </div>
-            <div className={styles.scoreRow}>
-              <Text size={11} tone="dim">
-                {editedRR.model}
-                {dirty ? ' — edited' : ''}
-              </Text>
-            </div>
+            {lastRunMethod === 'arithmetic' && exitPlan && (
+              <>
+                <Text size={11} tone="dim">computed via: Arithmetic, {formatHHMM(exitPlan.computedAt)}</Text>
+                <div className={styles.scoreRow}>
+                  <Text size={12} tone="secondary">Bottom (final stop)</Text>
+                  <Data size={14} tone="primary">${exitPlan.stop.price.toFixed(2)}</Data>
+                </div>
+                <Text size={10} tone="dim">{stopJustification(exitPlan.stop)}</Text>
+                {exitPlan.targets.map((t) => (
+                  <div className={styles.scoreRow} key={t.rrRatio}>
+                    <Text size={12} tone="secondary">{t.rrRatio}:1 target</Text>
+                    <Data size={13} tone="primary">${t.price.toFixed(2)} ({(t.probability * 100).toFixed(0)}%)</Data>
+                  </div>
+                ))}
+                <Text size={10} tone="caution">
+                  This stop price is not automatically monitored by alerts unless copied into the position&apos;s
+                  stop field after opening.
+                </Text>
+              </>
+            )}
+            {lastRunMethod === 'monte_carlo' && firstPassage && (
+              <>
+                <Text size={11} tone="dim">
+                  computed via: Monte Carlo{firstPassage.computedAt ? `, ${formatHHMM(firstPassage.computedAt)}` : ''}
+                </Text>
+                {firstPassage.targets.map((t, i) => (
+                  <div className={styles.scoreRow} key={`${t.pct}-${i}`}>
+                    <Text size={12} tone="secondary">{`T${Math.round(t.pct * 100)}%`}</Text>
+                    <Data size={13} tone="primary">
+                      ${t.optionPrice.toFixed(2)} ({(t.probability * 100).toFixed(0)}%)
+                    </Data>
+                  </div>
+                ))}
+                <div className={styles.scoreRow}>
+                  <Text size={12} tone="secondary">Invalidation probability</Text>
+                  <Data size={13} tone="primary">{(firstPassage.invalidation.probability * 100).toFixed(0)}%</Data>
+                </div>
+              </>
+            )}
+            {lastRunMethod === null && (
+              <>
+                <Text size={11} tone="caution">
+                  No method explicitly run — showing Fixed % Ladder Plan (default)
+                </Text>
+                {data.exit.targets.map((t, i) => (
+                  <div className={styles.scoreRow} key={t.id ?? i}>
+                    <Text size={12} tone="secondary">{t.id ? t.id.toUpperCase() : `T${i + 1}`}</Text>
+                    <Data size={13} tone="primary">${(t.targetPrice ?? t.stockPrice).toFixed(2)}</Data>
+                  </div>
+                ))}
+                <div className={styles.scoreRow}>
+                  <Text size={12} tone="secondary">Projected R/R (+8% stock move)</Text>
+                  <Data size={14} tone="primary">{editedRR.rr.toFixed(2)}x</Data>
+                </div>
+                <div className={styles.scoreRow}>
+                  <Text size={11} tone="dim">
+                    {editedRR.model}
+                    {dirty ? ' — edited' : ''}
+                  </Text>
+                </div>
+              </>
+            )}
           </div>
         </section>
       </div>
