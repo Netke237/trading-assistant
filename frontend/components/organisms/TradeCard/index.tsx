@@ -1103,8 +1103,23 @@ export function TradeCard({
           <Text size={10} tone="dim">Independent of the other profit-target methods on this page; they can disagree.</Text>
 
           {/* Feature 5 — pre-trade max-loss override. Feeds recommendedSize
-               (and therefore Risk-derived size / Apply below) immediately. */}
+               (and therefore Risk-derived size / Apply below) immediately.
+               `key` is tied to the candidate identity so the editor fully
+               remounts (clearing its own local editing/draftMode/draftValue
+               state) on every candidate switch — TradeCard itself is never
+               remounted on Prev/Next (no key at ITS call site), and the
+               existing contract-switch effect only resets the RESOLVED
+               `maxLossOverride` value, not this child's in-progress draft.
+               Without this, opening the editor on symbol A, typing a value,
+               and hitting Next before clicking Apply would leave that draft
+               sitting in the (still-mounted) editor instance; if the user
+               then clicked Apply while looking at symbol B, A's typed value
+               would silently become B's override. Remounting via key is
+               simpler and more robust here than lifting the draft state up
+               (nothing else needs it) or wiring a reset callback/ref through
+               TradeCard's own contract-switch effect. */}
           <MaxLossOverrideEditor
+            key={`${data.symbol}|${data.contract}`}
             override={maxLossOverride}
             limitDollar={maxLossLimitDollar}
             onApply={applyMaxLossOverride}

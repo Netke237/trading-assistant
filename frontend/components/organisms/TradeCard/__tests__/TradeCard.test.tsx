@@ -937,6 +937,41 @@ describe('TradeCard', () => {
     expect(await screen.findByText(/Risk-derived size: 10 contracts/)).toBeInTheDocument();
   });
 
+  it('Feature 5 regression — does not carry a mid-edit max-loss override draft from the previous candidate into Apply on the new one', () => {
+    // Adversarial-audit finding: MaxLossOverrideEditor's local
+    // editing/draftMode/draftValue state used to live for as long as
+    // TradeCard stayed mounted (it never remounts on Prev/Next — no key at
+    // its own call site), so opening the editor, typing a value, and
+    // switching candidates BEFORE clicking Apply left that draft sitting in
+    // the still-mounted editor instance. A user who then clicked Apply while
+    // looking at the NEW candidate would silently apply the OLD candidate's
+    // typed value to it. The fix keys MaxLossOverrideEditor to the candidate
+    // identity so it fully remounts (clean draft state) on every switch.
+    const onMaxLossOverrideChange = jest.fn();
+    const { rerender } = render(
+      <TradeCard data={mockTradeCard} onMaxLossOverrideChange={onMaxLossOverrideChange} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: '$' }));
+    fireEvent.change(screen.getByLabelText('Max loss override value'), { target: { value: '9999' } });
+    // Deliberately do NOT click Apply — switch candidates mid-edit instead.
+
+    const nextCard: TradeCardData = { ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT 300C 06/19' };
+    rerender(<TradeCard data={nextCard} onMaxLossOverrideChange={onMaxLossOverrideChange} />);
+
+    // The editor remounted for the new candidate — back to the closed
+    // "Set override" state, not still showing the $9999 draft mid-edit.
+    expect(screen.getByRole('button', { name: /set override/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Max loss override value')).not.toBeInTheDocument();
+
+    // Opening and applying fresh on the new candidate must not reuse 9999 —
+    // a fresh editor's default draft (0, percent mode) applies instead.
+    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply max loss override' }));
+    expect(onMaxLossOverrideChange).toHaveBeenLastCalledWith({ mode: 'percent', value: 0 });
+  });
+
   it('never surfaces the previous candidate\'s exit plan under the new contract\'s callback', async () => {
     (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
       stop: {
@@ -1272,6 +1307,180 @@ describe('TradeCard', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Projected R/R (+8% stock move)')).toBeInTheDocument();
     expect(screen.queryByText('R:R ratio')).not.toBeInTheDocument();
+  });
+
+  describe('Arithmetic Profit Target (Feature 3) — additional coverage', () => {
+    it('renders placeholder rows for the stop and both target rows before either button is clicked', () => {
+      render(<TradeCard data={mockTradeCard} />);
+      expect(screen.getByText('Bottom (final stop) — not yet computed —')).toBeInTheDocument();
+      expect(screen.getByText('2:1 target — not yet computed —')).toBeInTheDocument();
+      expect(screen.getByText('3:1 target — not yet computed —')).toBeInTheDocument();
+    });
+
+    it('renders all 4 distinct target-comparison states, not collapsing "before" into "beyond"', async () => {
+      (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+      (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+        price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+      });
+      (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+        stop: {
+          price: 180.0, source: 'structural' as const, contractPrice: 1.0,
+          rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+          structuralPrice: 180.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
+        },
+        targets: [
+          // State 1: no structural level found ahead at all.
+          { rrRatio: 2.0, arithmeticPrice: 195.0, price: 195.0, tpSource: 'arithmetic' as const,
+            structuralPrice: null, contractPrice: 4.5, rrModel: 'Heston repriced' as const,
+            probability: 0.6, expectedDays: 8, qualityGood: true, qualityReasons: [],
+            distanceDollar: null, toleranceDollar: 1.5 },
+          // State 2: within tolerance -> snapped onto the structural level.
+          { rrRatio: 3.0, arithmeticPrice: 204.0, price: 206.0, tpSource: 'structural_snap' as const,
+            structuralPrice: 206.0, contractPrice: 6.0, rrModel: 'Heston repriced' as const,
+            probability: 0.4, expectedDays: 14, qualityGood: true, qualityReasons: [],
+            distanceDollar: 2.0, toleranceDollar: 3.0 },
+          // State 3: outside tolerance, but still short of (before) the structural level — quality-fine.
+          { rrRatio: 4.0, arithmeticPrice: 210.0, price: 210.0, tpSource: 'arithmetic' as const,
+            structuralPrice: 225.0, contractPrice: 7.0, rrModel: 'Heston repriced' as const,
+            probability: 0.3, expectedDays: 20, qualityGood: true, qualityReasons: [],
+            distanceDollar: 15.0, toleranceDollar: 3.0 },
+          // State 4: outside tolerance AND beyond the structural level — the warning case.
+          { rrRatio: 5.0, arithmeticPrice: 240.0, price: 240.0, tpSource: 'arithmetic' as const,
+            structuralPrice: 225.0, contractPrice: 8.0, rrModel: 'Heston repriced' as const,
+            probability: 0.15, expectedDays: 30, qualityGood: false, qualityReasons: ['target_beyond_structural'],
+            distanceDollar: 15.0, toleranceDollar: 3.0 },
+        ],
+        atr: 3.5,
+      });
+
+      render(<TradeCard data={mockTradeCard} onExitPlanChange={jest.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+      await screen.findByText('No structural level found ahead — nothing to compare against.');
+
+      // Scoped to the Arithmetic card specifically — Feature 8's Final
+      // Recommendation ALSO renders each target row's heading (without the
+      // compare-state label or the warning glyph) once Arithmetic is the
+      // most recently run method, so an unscoped query can hit ambiguous
+      // matches (e.g. "4:1 target" appears in both places).
+      const arithmeticSection = screen.getByText('Arithmetic Profit Target').closest('section')!;
+      const within_ = within(arithmeticSection);
+      expect(within_.getByText('No structural level found ahead — nothing to compare against.')).toBeInTheDocument();
+      expect(within_.getByText('Within tolerance — snapped onto the structural level.')).toBeInTheDocument();
+      // The distinguishing assertion: "before" must NOT read the same as "beyond".
+      expect(within_.getByText('Outside tolerance — using arithmetic price, sits before the next structural level.')).toBeInTheDocument();
+      expect(within_.getByText('Target sits beyond the next real structural level.')).toBeInTheDocument();
+      // The warning glyph appears only on the 4th (beyond) row's heading.
+      // rrRatio is a plain JS number (5.0 === 5), so it renders as "5", not "5.0".
+      expect(within_.getByText('5:1 target ⚠')).toBeInTheDocument();
+      expect(within_.getByText('4:1 target')).toBeInTheDocument();
+    });
+
+    it('stopJustification case 1 — structural found and won: clears the ATR floor, no widening needed', async () => {
+      (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+      (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+        price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+      });
+      (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+        stop: {
+          price: 180.0, source: 'structural' as const, contractPrice: 1.0,
+          rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+          structuralPrice: 180.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
+        },
+        targets: [],
+        atr: 3.5,
+      });
+      render(<TradeCard data={mockTradeCard} onExitPlanChange={jest.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+      // getAllByText — Feature 8's Final Recommendation renders the SAME
+      // justification sentence once Arithmetic becomes the most recently run
+      // method, so this text legitimately appears twice; the point of this
+      // test is that the sentence itself is correct, not that it's singular.
+      expect((await screen.findAllByText(
+        'Using structural — it already clears the ATR floor by $5.00, no widening needed',
+      )).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('stopJustification case 2 — structural found but lost: widened to the ATR floor', async () => {
+      (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+      (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+        price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+      });
+      (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+        stop: {
+          price: 175.0, source: 'atr_widened' as const, contractPrice: 1.0,
+          rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+          structuralPrice: 179.0, atrFloorPrice: 175.0, distanceDollar: 4.0,
+        },
+        targets: [],
+        atr: 3.5,
+      });
+      render(<TradeCard data={mockTradeCard} onExitPlanChange={jest.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+      // getAllByText — see case 1's comment: Final Recommendation renders the
+      // same sentence once Arithmetic is the most recently run method.
+      expect((await screen.findAllByText(
+        'Structural stop $179.00 was inside the ATR floor — widened to $175.00 for a minimum-distance stop',
+      )).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('stopJustification case 3 — no structural candidate at all: stop set at the ATR floor', async () => {
+      (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+      (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+        price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+      });
+      (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+        stop: {
+          price: 175.0, source: 'atr_widened' as const, contractPrice: 1.0,
+          rrModel: 'Heston repriced' as const, structuralSource: null, structuralConfidence: null,
+          structuralPrice: null, atrFloorPrice: 175.0, distanceDollar: null,
+        },
+        targets: [],
+        atr: 3.5,
+      });
+      render(<TradeCard data={mockTradeCard} onExitPlanChange={jest.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+      // getAllByText — see case 1's comment: Final Recommendation renders the
+      // same sentence once Arithmetic is the most recently run method.
+      expect((await screen.findAllByText(
+        'No structural stop found nearby — stop set at the ATR floor of $175.00',
+      )).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('isDirty regression — a Contracts-only edit self-cancels once the shared per-symbol map round-trips initialContracts back to match (cosmetic-only gap; computeEditedRR never reads overlay.contracts, so R:R numbers are unaffected)', async () => {
+    const onEditsChange = jest.fn();
+    const { rerender } = render(
+      <TradeCard data={mockTradeCard} contracts={1} onEditsChange={onEditsChange} />,
+    );
+
+    const contractsTrigger = screen.getByLabelText('Edit Contracts');
+    await act(async () => {
+      fireEvent.click(contractsTrigger);
+    });
+    const input = screen.getByDisplayValue('1');
+    await act(async () => {
+      fireEvent.change(input, { target: { value: '5' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+
+    // onEditsChange fired with the new value — this is what a real page-level
+    // handler (step-7-trade-card/page.tsx's handleEditsChange) uses to update
+    // the shared per-symbol contracts map.
+    expect(onEditsChange).toHaveBeenCalledWith(expect.objectContaining({ contracts: 5 }));
+
+    // Simulate that page-level round-trip: the shared map updates, and the
+    // new value flows back down as the `contracts` prop on the next render —
+    // exactly what orderContractsBySymbol[symbol] does in production.
+    await act(async () => {
+      rerender(<TradeCard data={mockTradeCard} contracts={5} onEditsChange={onEditsChange} />);
+    });
+
+    // isDirty's contracts check (overlay.contracts !== initialContracts) is
+    // now comparing 5 against 5 — it self-cancels. No "edited" indicator
+    // appears for this Contracts-only edit, unlike every other overlay field.
+    // This is a known, accepted cosmetic gap (confirmed not to affect any
+    // rendered number — computeEditedRR never reads overlay.contracts).
+    expect(screen.queryAllByText(/edited/).length).toBe(0);
   });
 
   describe('Final Recommendation (Feature 8)', () => {
