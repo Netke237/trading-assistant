@@ -182,6 +182,11 @@ export function checkTradeRisk(
   limits: RiskLimits,
   positions: PortfolioPosition[],
   dailyRecommendations: number,
+  /** Feature 5 (Arithmetic Profit Target card) — the active PRE-trade
+   *  max-loss override for this symbol, if the user has set one via the
+   *  Arithmetic card. `undefined`/`null` inherits the global
+   *  `maxLossPerTradePct` default, same as no override at all. */
+  maxLossOverride?: MaxLossOverride | null,
 ): RiskCheckResult {
   const reasons: string[] = [];
   let approved = true;
@@ -222,10 +227,13 @@ export function checkTradeRisk(
     approved = false;
   }
 
-  // No per-trade override exists pre-trade — that field lives on
-  // PortfolioPosition, set only after the position is open — so this always
-  // checks against the global default. Skipped entirely when no exit plan
-  // has been computed yet (nothing to reprice against).
+  // Feature 5 — a per-trade PRE-trade override now can exist (set on the
+  // Arithmetic card, passed in via `maxLossOverride` above), resolved through
+  // the same shared `resolveMaxLossLimitDollar` the post-trade override
+  // (PortfolioPosition.maxLossOverride, via the Portfolio EditDrawer) already
+  // uses — one resolution function, not two subtly different ones. Absent an
+  // override, this still falls back to the global default. Skipped entirely
+  // when no exit plan has been computed yet (nothing to reprice against).
   let lossAtStop: number | undefined;
   let lossLimitDollar: number | undefined;
   const exitPlan = card.exit.exitPlan;
@@ -241,7 +249,7 @@ export function checkTradeRisk(
     // field, which is out of scope here.
     const entryPremium = card.contractDetails?.mid ?? 0;
     lossAtStop = maxLossAtStop(entryPremium, exitPlan.stop.contractPrice, proposedContracts);
-    lossLimitDollar = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct);
+    lossLimitDollar = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride);
     if (lossAtStop > lossLimitDollar) {
       reasons.push('max_loss_per_trade_exceeded');
       approved = false;

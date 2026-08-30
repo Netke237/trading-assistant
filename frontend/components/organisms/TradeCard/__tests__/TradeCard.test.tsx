@@ -889,6 +889,39 @@ describe('TradeCard', () => {
     expect(await screen.findByText(/Risk-derived size: 25 contracts \(25\.00 exact\)/)).toBeInTheDocument();
   });
 
+  it('Feature 5 — feeds an active max-loss override into the risk-derived size immediately, and surfaces it via onMaxLossOverrideChange', async () => {
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    // riskPerContract = (mid 2.5 - stop.contractPrice 1.0) * 100 * 1 = $150.
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop: {
+        price: 180.0, source: 'structural' as const, contractPrice: 1.0,
+        rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+        structuralPrice: 180.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
+      },
+      targets: [],
+      atr: 3.5,
+    });
+    const onMaxLossOverrideChange = jest.fn();
+    render(
+      <TradeCard data={mockTradeCard} onExitPlanChange={jest.fn()} onMaxLossOverrideChange={onMaxLossOverrideChange} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+    expect(await screen.findByText(/Risk-derived size: 25 contracts/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: '$' }));
+    const input = screen.getByLabelText('Max loss override value');
+    fireEvent.change(input, { target: { value: '1500' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply max loss override' }));
+
+    expect(onMaxLossOverrideChange).toHaveBeenCalledWith({ mode: 'dollar', value: 1500 });
+    // riskBudget is now the $1500 override, not the account default -> 1500/150 = 10 exactly.
+    expect(await screen.findByText(/Risk-derived size: 10 contracts/)).toBeInTheDocument();
+  });
+
   it('never surfaces the previous candidate\'s exit plan under the new contract\'s callback', async () => {
     (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
       stop: {

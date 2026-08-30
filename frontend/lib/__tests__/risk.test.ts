@@ -233,6 +233,26 @@ describe('risk helpers', () => {
       expect(result.approved).toBe(true);
       expect(result.reasons).not.toContain('max_loss_per_trade_exceeded');
     });
+
+    it('Feature 5 — a pre-trade max-loss override resolves through resolveMaxLossLimitDollar, not a reimplementation', () => {
+      // Same card as the "rejects" case above: lossAtStop = $2,000, global
+      // default limit = $1,875 (rejected without an override). A $2,500
+      // dollar override raises the limit above the loss, flipping approval.
+      const card = makeCard({ exit: { ...makeCard().exit, exitPlan: makeExitPlan({ contractPrice: 0.5 }) } });
+      const result = checkTradeRisk(card, 10, DEFAULT_LIMITS, [], 0, { mode: 'dollar', value: 2500 });
+      expect(result.approved).toBe(true);
+      expect(result.reasons).not.toContain('max_loss_per_trade_exceeded');
+      expect(result.maxLossAtStop).toBe(2000);
+      expect(result.maxLossLimitDollar).toBe(2500);
+    });
+
+    it('Feature 5 — a percent-mode override is resolved against portfolioValue, same as the global default', () => {
+      const card = makeCard({ exit: { ...makeCard().exit, exitPlan: makeExitPlan({ contractPrice: 0.5 }) } });
+      // 10% of the 50,000 portfolioValue = $5,000 — well above the $2,000 loss.
+      const result = checkTradeRisk(card, 10, DEFAULT_LIMITS, [], 0, { mode: 'percent', value: 0.10 });
+      expect(result.approved).toBe(true);
+      expect(result.maxLossLimitDollar).toBe(5000);
+    });
   });
 });
 

@@ -15,7 +15,7 @@ import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedCon
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
-import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow } from '@/types/domain';
+import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride } from '@/types/domain';
 import {
   triggerDetailText,
   pullbackDetailText,
@@ -245,6 +245,24 @@ interface TradeCardProps {
    *  pairing/freshness to track), so the parent can cache it per contract
    *  on its own. */
   onExitPlanChange?: (plan: ExitPlan | null | undefined) => void;
+  /** Feature 5 — the active pre-trade max-loss override, seeded from the
+   *  page-level `maxLossOverrideBySymbol` cache (keyed by SYMBOL — a risk
+   *  decision about the underlying, same keying as `structuralBySymbol`, not
+   *  `exitPlanByContract`). `null`/absent means "inherit the global
+   *  `maxLossPerTradePct` default". */
+  initialMaxLossOverride?: MaxLossOverride | null;
+  /** Fired whenever the override changes (Apply/Clear inside the Arithmetic
+   *  card's max-loss override editor) — direct call inside the setter, the
+   *  same pattern `onEditsChange` already uses. Not the ref-synced-effect
+   *  pattern `onStructuralStopChange`/`onFirstPassageChange` use: those exist
+   *  to protect against an ASYNC callback (a `.then()` body) closing over a
+   *  stale, pre-navigation `onXChange` prop after the user has already
+   *  switched candidates mid-flight. The override has no such async gap —
+   *  Apply/Clear are synchronous, user-triggered state updates, so the
+   *  direct-call pattern (call the current prop value inline, same render) is
+   *  sufficient and simpler; there is no in-flight request whose resolution
+   *  could race a candidate switch. */
+  onMaxLossOverrideChange?: (v: MaxLossOverride | null) => void;
 }
 
 function targetStatusTooltip(statusVal: TargetLevel['status']): string {
@@ -268,6 +286,8 @@ export function TradeCard({
   onStructuralStopChange,
   onFirstPassageChange,
   onExitPlanChange,
+  initialMaxLossOverride = null,
+  onMaxLossOverrideChange,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
   const [altOpen, setAltOpen] = useState(false);
@@ -275,6 +295,12 @@ export function TradeCard({
     ...defaultOverlay(data),
     contracts: initialContracts,
   }));
+  // Feature 5 — pre-trade max-loss override, seeded from the page-level cache
+  // (keyed by symbol there; this local state just mirrors whatever the parent
+  // resolved for the CURRENT candidate). Reset alongside overlay/structuralStop/
+  // etc. in the contract-change effect below — see that effect's own comment
+  // for why a per-candidate reset is required.
+  const [maxLossOverride, setMaxLossOverride] = useState<MaxLossOverride | null>(initialMaxLossOverride);
   const [structuralStop, setStructuralStop] = useState<StructuralStop | null | undefined>(
     data.exit.structuralStop,
   );
@@ -422,10 +448,14 @@ export function TradeCard({
       setExitPlan(data.exit.exitPlan);
       setExitPlanError(false);
       setExitPlanLoading(false);
+      // Feature 5 — re-sync to whatever the parent resolved for the incoming
+      // candidate (its symbol-keyed cache), so the newly active card never
+      // briefly shows the PREVIOUS candidate's override.
+      setMaxLossOverride(initialMaxLossOverride);
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
     }
-  }, [data.symbol, data.contract, initialContracts, defaultTargetPct]);
+  }, [data.symbol, data.contract, initialContracts, defaultTargetPct, initialMaxLossOverride]);
 
   // Cancel any outstanding requests on unmount.
   useEffect(() => () => structuralRequestRef.current?.abort(), []);
@@ -802,19 +832,38 @@ export function TradeCard({
   );
 
   // Risk-derived contract size: how many contracts the account's max-loss
-  // budget affords at this exit plan's final stop. No per-trade override
-  // exists pre-trade (same reasoning as checkTradeRisk's identical note) —
-  // always the global default. entryPremium intentionally mirrors
-  // checkTradeRisk's basis (cd.mid, a scan-time snapshot) for consistency,
-  // not a fresh quote — see risk.ts's comment on that same tradeoff.
+  // budget affords at this exit plan's final stop. Feature 5 — now uses the
+  // 3-arg resolveMaxLossLimitDollar form so an active pre-trade override
+  // feeds this calculation immediately, the same shared resolution function
+  // (not a reimplementation) the Portfolio EditDrawer's post-trade override
+  // already calls. entryPremium intentionally mirrors checkTradeRisk's basis
+  // (cd.mid, a scan-time snapshot) for consistency, not a fresh quote — see
+  // risk.ts's comment on that same tradeoff.
   const limits = useRiskStore((s) => s.limits);
   const recommendedSize = useMemo(() => {
     if (!exitPlan) return null;
     const entryPremium = data.contractDetails?.mid ?? 0;
     const riskPerContract = maxLossAtStop(entryPremium, exitPlan.stop.contractPrice, 1);
-    const riskBudget = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct);
+    const riskBudget = resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride);
     return recommendedContractSize(riskBudget, riskPerContract);
-  }, [exitPlan, data.contractDetails?.mid, limits.portfolioValue, limits.maxLossPerTradePct]);
+  }, [exitPlan, data.contractDetails?.mid, limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride]);
+
+  // Feature 5 — the $ figure the override editor displays as the "basis",
+  // always shown (not silently used) whether or not an override is active.
+  const maxLossLimitDollar = useMemo(
+    () => resolveMaxLossLimitDollar(limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride),
+    [limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride],
+  );
+
+  // Direct-call pattern (see the prop's own doc comment for why this doesn't
+  // need the ref-synced-effect pattern onStructuralStopChange/onFirstPassageChange use).
+  const applyMaxLossOverride = useCallback(
+    (next: MaxLossOverride | null) => {
+      setMaxLossOverride(next);
+      onMaxLossOverrideChange?.(next);
+    },
+    [onMaxLossOverrideChange],
+  );
 
   const dirty = useMemo(() => isDirty(overlay, data, initialContracts), [overlay, data, initialContracts]);
 
@@ -1028,6 +1077,14 @@ export function TradeCard({
           </div>
           <Text size={10} tone="dim">Independent of the other profit-target methods on this page; they can disagree.</Text>
 
+          {/* Feature 5 — pre-trade max-loss override. Feeds recommendedSize
+               (and therefore Risk-derived size / Apply below) immediately. */}
+          <MaxLossOverrideEditor
+            override={maxLossOverride}
+            limitDollar={maxLossLimitDollar}
+            onApply={applyMaxLossOverride}
+          />
+
           {/* Standalone Check Structure — runs independently of the full
                compute below; its result shows on its own. Reuses the same
                checkStructure handler / structuralStop state as before. */}
@@ -1136,6 +1193,7 @@ export function TradeCard({
                           type="button"
                           className={styles.btn}
                           onClick={() => patch({ contracts: recommendedSize.recommended })}
+                          aria-label="Apply recommended contract size"
                         >
                           <Text size={12} weight={500}>Apply</Text>
                         </button>
@@ -1827,6 +1885,102 @@ function DetailCell({ label, value, mono }: { label: string; value: string; mono
       {mono
         ? <Data size={13} weight={500}>{value}</Data>
         : <Text size={13} weight={500}>{value}</Text>}
+    </div>
+  );
+}
+
+/** Feature 5 — pre-trade max-loss override editor on the Arithmetic card.
+ *  Mirrors the shape of the Portfolio EditDrawer's post-trade MaxLossBanner
+ *  override UI (mode toggle + input + Apply), but usable before a position
+ *  exists — and deliberately without a free-text "Reason" field (explicitly
+ *  decided against) and without the post-trade banner's own lossAtStop/
+ *  exceeded display (there's no live position to check yet, just the budget
+ *  this card's recommendedSize draws from). Always displays the resolved $
+ *  basis, whether or not an override is active — never silently uses it. */
+function MaxLossOverrideEditor({
+  override,
+  limitDollar,
+  onApply,
+}: {
+  override: MaxLossOverride | null;
+  limitDollar: number;
+  onApply: (v: MaxLossOverride | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draftMode, setDraftMode] = useState<'dollar' | 'percent'>(override?.mode ?? 'percent');
+  const [draftValue, setDraftValue] = useState(() =>
+    override
+      ? (override.mode === 'percent' ? override.value * 100 : override.value)
+      : 0,
+  );
+
+  const startEdit = () => {
+    setDraftMode(override?.mode ?? 'percent');
+    setDraftValue(override ? (override.mode === 'percent' ? override.value * 100 : override.value) : 0);
+    setEditing(true);
+  };
+
+  const apply = () => {
+    const value = draftMode === 'percent' ? draftValue / 100 : draftValue;
+    onApply({ mode: draftMode, value });
+    setEditing(false);
+  };
+
+  const clear = () => {
+    onApply(null);
+    setEditing(false);
+  };
+
+  return (
+    <div className={styles.structuralStop}>
+      <Text size={10} tone="dim">Max loss budget</Text>
+      <Text size={11} tone="secondary">
+        ${Math.round(limitDollar).toLocaleString('en-US')}
+        {override
+          ? ` (override: ${override.mode === 'percent' ? `${(override.value * 100).toFixed(2)}%` : `$${override.value.toLocaleString('en-US')}`})`
+          : ' (account default)'}
+      </Text>
+      {!editing ? (
+        <button type="button" className={styles.btn} onClick={startEdit}>
+          <Text size={12} weight={500}>{override ? 'Edit override' : 'Set override'}</Text>
+        </button>
+      ) : (
+        <div className={styles.targetPctRow}>
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={() => setDraftMode('percent')}
+            aria-pressed={draftMode === 'percent'}
+          >
+            <Text size={12} weight={draftMode === 'percent' ? 600 : 400}>%</Text>
+          </button>
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={() => setDraftMode('dollar')}
+            aria-pressed={draftMode === 'dollar'}
+          >
+            <Text size={12} weight={draftMode === 'dollar' ? 600 : 400}>$</Text>
+          </button>
+          <input
+            type="number"
+            className={styles.editInput}
+            value={draftValue}
+            min={0}
+            step={draftMode === 'percent' ? 0.25 : 10}
+            onChange={(e) => setDraftValue(Math.max(0, Number(e.target.value) || 0))}
+            aria-label="Max loss override value"
+          />
+          <button type="button" className={styles.btn} onClick={apply} aria-label="Apply max loss override">
+            <Text size={12} weight={500}>Apply</Text>
+          </button>
+          {override && (
+            <button type="button" className={styles.btn} onClick={clear}>
+              <Text size={12} weight={500}>Use default</Text>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -696,17 +696,24 @@ export interface RiskCheckResult {
    *  stop-repriced contract price, floored at 0, times contracts). Undefined
    *  when no exit plan has been computed yet — there is nothing to check. */
   maxLossAtStop?: number;
-  /** The $ threshold `maxLossAtStop` was compared against — global
-   *  `maxLossPerTradePct * portfolioValue` (no per-trade override exists
-   *  pre-trade; that field lives on `PortfolioPosition` only). */
+  /** The $ threshold `maxLossAtStop` was compared against — either the global
+   *  `maxLossPerTradePct * portfolioValue` default, or an active per-trade
+   *  override (Feature 5, resolved via `resolveMaxLossLimitDollar`) — set
+   *  pre-trade on the Arithmetic Profit Target card, or post-trade via
+   *  `PortfolioPosition.maxLossOverride` from the Portfolio editor. */
   maxLossLimitDollar?: number;
 }
 
-/** Per-trade override for Feature C's max-loss-per-trade warning — either a
- *  fixed dollar figure or a percent of portfolioValue. `null`/absent means
- *  "inherit the global `maxLossPerTradePct` default". Post-trade only (set
- *  from the Portfolio editor) — pre-trade (TradeCard/SendToBrokerDialog) uses
- *  the existing two-click override UX instead of a persisted field. */
+/** Per-trade override for the max-loss-per-trade warning — either a fixed
+ *  dollar figure or a percent of portfolioValue. `null`/absent means
+ *  "inherit the global `maxLossPerTradePct` default". Settable in TWO places
+ *  now (Feature 5): pre-trade on the TradeCard's Arithmetic Profit Target
+ *  card (threaded through `initialMaxLossOverride`/`onMaxLossOverrideChange`,
+ *  cached per symbol at the page level, and carried onto the created
+ *  `PortfolioPosition` at send time), and post-trade from the Portfolio
+ *  editor (`PortfolioPosition.maxLossOverride` directly) — same shape, same
+ *  resolution function (`resolveMaxLossLimitDollar`), just set at different
+ *  points in the trade's lifecycle. */
 export interface MaxLossOverride {
   mode:  'dollar' | 'percent';
   value: number;

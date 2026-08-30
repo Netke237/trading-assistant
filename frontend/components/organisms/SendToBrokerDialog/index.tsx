@@ -13,7 +13,7 @@ import { Text, Data } from '@/components/primitives';
 import { useRiskStore } from '@/lib/riskStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { checkTradeRisk } from '@/lib/risk';
-import type { TradeCardData, RiskCheckResult } from '@/types/domain';
+import type { TradeCardData, RiskCheckResult, MaxLossOverride } from '@/types/domain';
 import styles from './SendToBrokerDialog.module.css';
 
 export interface DraftOrder {
@@ -32,6 +32,13 @@ interface Props {
    *  finalizes a snapshot right before sending, not a place for live pre-trade
    *  state the rest of the page also reads from. */
   contractsBySymbol: Record<string, number>;
+  /** Feature 5 — the page-level shared per-symbol max-loss override cache,
+   *  sourced from the same `maxLossOverrideBySymbol` state TradeCard's
+   *  Arithmetic card writes to. Read directly into `checkTradeRisk` below so
+   *  this dialog's own risk check knows about an active override and doesn't
+   *  force a spurious extra confirmation click for a trade the user already
+   *  explicitly sized up under a raised budget. */
+  overridesBySymbol: Record<string, MaxLossOverride | null>;
   onClose:  () => void;
   onSubmit: (orders: DraftOrder[], riskOverridden: boolean) => void;
 }
@@ -41,7 +48,7 @@ interface RowState {
   autoSend:  boolean;
 }
 
-export function SendToBrokerDialog({ cards, contractsBySymbol, onClose, onSubmit }: Props) {
+export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol, onClose, onSubmit }: Props) {
   const [rows, setRows] = useState<Record<string, RowState>>(() =>
     Object.fromEntries(cards.map((c) => [c.symbol, { contracts: contractsBySymbol[c.symbol] ?? 1, autoSend: true }])),
   );
@@ -66,10 +73,13 @@ export function SendToBrokerDialog({ cards, contractsBySymbol, onClose, onSubmit
     const checks: Record<string, RiskCheckResult> = {};
     for (const c of cards) {
       const r = rows[c.symbol] ?? { contracts: 1, autoSend: true };
-      checks[c.symbol] = checkTradeRisk(c, Math.max(1, Math.round(r.contracts)), limits, positions, dailyRecommendations);
+      checks[c.symbol] = checkTradeRisk(
+        c, Math.max(1, Math.round(r.contracts)), limits, positions, dailyRecommendations,
+        overridesBySymbol[c.symbol] ?? null,
+      );
     }
     return checks;
-  }, [cards, rows, limits, positions, dailyRecommendations]);
+  }, [cards, rows, limits, positions, dailyRecommendations, overridesBySymbol]);
 
   const hasMissingInvalidation = useMemo(
     () => Object.values(riskChecks).some((rc) => rc.reasons.includes('missing_invalidation')),

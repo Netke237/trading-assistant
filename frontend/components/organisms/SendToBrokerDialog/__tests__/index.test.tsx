@@ -99,7 +99,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
       // lossAtStop = (50 - 1) * 100 * 1 = $4,900
     });
 
-    render(<SendToBrokerDialog cards={[aaa, bbb]} contractsBySymbol={{}} onClose={noop} onSubmit={noop} />);
+    render(<SendToBrokerDialog cards={[aaa, bbb]} contractsBySymbol={{}} overridesBySymbol={{}} onClose={noop} onSubmit={noop} />);
 
     expect(screen.queryByText('Single trade exposure too high')).not.toBeInTheDocument();
     expect(screen.getByText(/Max loss at stop \(BBB\) ≈ \$4,900 \(limit \$3,750\)/)).toBeInTheDocument();
@@ -126,8 +126,34 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
       // lossAtStop = (2 - 1.5) * 100 * 1 = $50, well within the $3,750 limit.
     });
 
-    render(<SendToBrokerDialog cards={[aaa]} contractsBySymbol={{}} onClose={noop} onSubmit={noop} />);
+    render(<SendToBrokerDialog cards={[aaa]} contractsBySymbol={{}} overridesBySymbol={{}} onClose={noop} onSubmit={noop} />);
 
     expect(screen.getByText('Within risk limits.')).toBeInTheDocument();
+  });
+
+  it('Feature 5 — an active pre-trade max-loss override avoids a spurious extra-confirmation click', () => {
+    // Same shape as the worst-offender BBB case above: lossAtStop =
+    // (50 - 1) * 100 * 1 = $4,900, which exceeds the $3,750 ACCOUNT-DEFAULT
+    // limit — without the override this would show a warning and force a
+    // second "Submit" click. A $5,000 override raises the limit above the
+    // $4,900 loss, so the dialog must read straight through as clean.
+    const bbb = makeCard({ symbol: 'BBB' });
+
+    const { rerender } = render(
+      <SendToBrokerDialog cards={[bbb]} contractsBySymbol={{}} overridesBySymbol={{}} onClose={noop} onSubmit={noop} />,
+    );
+    expect(screen.getByText(/Max loss at stop \(BBB\)/)).toBeInTheDocument();
+
+    rerender(
+      <SendToBrokerDialog
+        cards={[bbb]}
+        contractsBySymbol={{}}
+        overridesBySymbol={{ BBB: { mode: 'dollar', value: 5000 } }}
+        onClose={noop}
+        onSubmit={noop}
+      />,
+    );
+    expect(screen.getByText('Within risk limits.')).toBeInTheDocument();
+    expect(screen.queryByText(/Max loss at stop \(BBB\)/)).not.toBeInTheDocument();
   });
 });

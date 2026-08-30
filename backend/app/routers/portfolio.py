@@ -282,6 +282,9 @@ async def add_position(
         targets=adjusted_targets,
         dte_total=body.dteTotal,
         entry_stock_price=entry_stock_price,
+        # Feature 5 — pre-trade max-loss override, set on the Arithmetic
+        # Profit Target card and carried through here at creation time.
+        max_loss_override=body.maxLossOverride,
     )
     db.add(position)
     try:
