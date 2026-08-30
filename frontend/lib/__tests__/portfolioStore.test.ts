@@ -594,7 +594,11 @@ describe('portfolioStore', () => {
       // this fix, so the very next syncFromBackend silently erased it.
       const exitPlan = {
         computedAt: '2026-08-26T12:00:00.000Z',
-        stop: { price: 89.0, source: 'structural' as const, contractPrice: 1.1, rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80 },
+        stop: {
+          price: 89.0, source: 'structural' as const, contractPrice: 1.1, rrModel: 'Heston repriced' as const,
+          structuralSource: 'order_block' as const, structuralConfidence: 80,
+          structuralPrice: 89.0, atrFloorPrice: 85.0, distanceDollar: 4.0,
+        },
         targets: [],
         atr: 2.0,
       };
