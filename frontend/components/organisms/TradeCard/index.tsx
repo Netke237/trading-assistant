@@ -51,7 +51,13 @@ function defaultOverlay(data: TradeCardData): EditOverlay {
   };
 }
 
-function isDirty(overlay: EditOverlay, data: TradeCardData): boolean {
+// `initialContracts` is an explicit parameter (not a literal `1`) because the
+// TradeCard `contracts` prop is no longer always 1 once Feature 7's shared
+// per-symbol contracts map (and, later, Feature 3's "Apply" button) can seed
+// a non-default value — `overlay.contracts` initializes to THAT value on
+// mount (see defaultOverlay's caller), so comparing against a hardcoded `1`
+// would wrongly flag an untouched card as manually edited.
+function isDirty(overlay: EditOverlay, data: TradeCardData, initialContracts: number): boolean {
   return (
     overlay.entryLimit !== data.entry.limit ||
     overlay.maxFill !== data.entry.maxFill ||
@@ -61,7 +67,7 @@ function isDirty(overlay: EditOverlay, data: TradeCardData): boolean {
     overlay.targets.some(
       (t, i) => t !== (data.exit.targets[i]?.targetPrice ?? data.exit.targets[i]?.stockPrice),
     ) ||
-    overlay.contracts !== 1
+    overlay.contracts !== initialContracts
   );
 }
 
@@ -763,7 +769,7 @@ export function TradeCard({
     return recommendedContractSize(riskBudget, riskPerContract);
   }, [exitPlan, data.contractDetails?.mid, limits.portfolioValue, limits.maxLossPerTradePct]);
 
-  const dirty = useMemo(() => isDirty(overlay, data), [overlay, data]);
+  const dirty = useMemo(() => isDirty(overlay, data, initialContracts), [overlay, data, initialContracts]);
 
   const editedRR = useMemo(() => {
     if (!dirty) return { rr: data.rrRatio, model: data.rrModel };
@@ -913,11 +919,21 @@ export function TradeCard({
           </div>
         )}
 
-        {/* 4. Entry plan */}
-        <section className={styles.planCard}>
-          <Text size={14} weight={600}>Entry Plan</Text>
-          <dl className={styles.kvList}>
-            <KV label="Order type" value={data.entry.orderType} />
+        {/* 4. Order Entry strip — thin, always-visible, non-collapsible. Pulled
+             out of the old Entry Plan card; sits above the three profit-target
+             method cards (Arithmetic / Monte Carlo / Fixed % Ladder) below.
+             Rendered exactly once per TradeCard (this component itself is
+             rendered once per active/basket candidate on Step 7). Max fill's
+             DEFAULT is a global YAML formula (mid * (1 + slippage%)) but the
+             resulting dollar value has always been, and remains, freely
+             per-trade editable — this EditableKV is unchanged from the old
+             Entry Plan card's, just relocated. */}
+        <div className={styles.orderStrip}>
+          <div className={styles.orderStripItem}>
+            <Text size={11} tone="secondary">Order type</Text>
+            <Data size={13} weight={500}>{data.entry.orderType}</Data>
+          </div>
+          <div className={styles.orderStripItem}>
             <EditableKV
               label="Limit"
               value={overlay.entryLimit}
@@ -927,6 +943,8 @@ export function TradeCard({
               step={0.01}
               mono
             />
+          </div>
+          <div className={styles.orderStripItem}>
             <EditableKV
               label="Max fill"
               value={overlay.maxFill}
@@ -936,6 +954,8 @@ export function TradeCard({
               step={0.01}
               mono
             />
+          </div>
+          <div className={styles.orderStripItem}>
             <EditableKV
               label="Contracts"
               value={overlay.contracts}
@@ -945,8 +965,8 @@ export function TradeCard({
               mono
               decimals={0}
             />
-          </dl>
-        </section>
+          </div>
+        </div>
 
         {/* 5. Exit plan */}
         <section className={styles.planCard}>

@@ -136,9 +136,9 @@ describe('TradeCard', () => {
     expect(mids.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders entry plan section', () => {
+  it('renders the Order Entry strip (Feature 6 — Entry Plan card was folded into this strip)', () => {
     render(<TradeCard data={mockTradeCard} />);
-    expect(screen.getByText('Entry Plan')).toBeInTheDocument();
+    expect(screen.getByText('Order type')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Max fill')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
@@ -313,7 +313,7 @@ describe('TradeCard', () => {
 
   it('renders an Estimate button that does not fire on its own', () => {
     render(<TradeCard data={mockTradeCard} />);
-    expect(screen.getByRole('button', { name: /^estimate$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /run monte carlo estimate/i })).toBeInTheDocument();
     expect(api.getFirstPassageEstimate).not.toHaveBeenCalled();
   });
 
@@ -331,7 +331,7 @@ describe('TradeCard', () => {
       invalidation: { probability: 0.30, expectedDays: 4 },
     });
     render(<TradeCard data={mockTradeCard} />);
-    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
 
     await waitFor(() => {
       expect(api.getFirstPassageEstimate).toHaveBeenCalledWith(
@@ -370,7 +370,7 @@ describe('TradeCard', () => {
   it('shows an error message when the first-passage request fails', async () => {
     (api.getFirstPassageEstimate as jest.Mock).mockRejectedValueOnce(new Error('network error'));
     render(<TradeCard data={mockTradeCard} />);
-    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await waitFor(() => {
       expect(screen.getByText(/Couldn.t compute an estimate/)).toBeInTheDocument();
     });
@@ -387,7 +387,7 @@ describe('TradeCard', () => {
     });
     render(<TradeCard data={mockTradeCard} />);
     fireEvent.change(screen.getByLabelText('T1 profit target %'), { target: { value: '10' } });
-    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
 
     await waitFor(() => {
       expect(api.getFirstPassageEstimate).toHaveBeenCalledWith(
@@ -404,7 +404,7 @@ describe('TradeCard', () => {
 
     const { rerender } = render(<TradeCard data={mockTradeCard} />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
       await new Promise((r) => setTimeout(r, 0));
     });
 
@@ -547,7 +547,7 @@ describe('TradeCard', () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     });
 
     // The restored value's presence did NOT suppress the refetch — this is
@@ -601,7 +601,7 @@ describe('TradeCard', () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     });
 
     // The rows render (the estimate itself succeeded)...
@@ -665,7 +665,7 @@ describe('TradeCard', () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     });
 
     await waitFor(() => {
@@ -754,7 +754,7 @@ describe('TradeCard', () => {
 
     const onFirstPassageChange = jest.fn();
     render(<TradeCard data={mockTradeCard} onFirstPassageChange={onFirstPassageChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
 
     await waitFor(() => {
       expect(onFirstPassageChange).toHaveBeenCalledWith(
@@ -775,7 +775,7 @@ describe('TradeCard', () => {
     const { rerender } = render(<TradeCard data={mockTradeCard} onFirstPassageChange={onChangeForAAPL} />);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     });
     await waitFor(() => {
       expect(onChangeForAAPL).toHaveBeenCalledWith(
@@ -959,7 +959,7 @@ describe('TradeCard', () => {
     await waitFor(() => {
       expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await waitFor(() => {
       expect(screen.getAllByText('R:R vs. structural stop').length).toBe(3);
     });
@@ -1000,7 +1000,7 @@ describe('TradeCard', () => {
     await waitFor(() => {
       expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await waitFor(() => {
       expect(screen.getAllByText('R:R vs. structural stop').length).toBeGreaterThanOrEqual(1);
     });
@@ -1039,7 +1039,7 @@ describe('TradeCard', () => {
     await waitFor(() => {
       expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await waitFor(() => {
       expect(screen.getAllByText('R:R vs. structural stop').length).toBeGreaterThanOrEqual(1);
     });
@@ -1074,7 +1074,7 @@ describe('TradeCard', () => {
     await waitFor(() => {
       expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await waitFor(() => {
       expect(screen.getByText('T20%')).toBeInTheDocument();
     });
@@ -1111,7 +1111,7 @@ describe('TradeCard', () => {
     render(<TradeCard data={mockTradeCard} />);
     fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
     await waitFor(() => screen.getByText(/Structural stop — Order Block/));
-    fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await waitFor(() => screen.getAllByText('R:R vs. structural stop'));
 
     // The top Risk/Reward card (fixed ladder) is untouched.
@@ -1346,6 +1346,31 @@ describe('TradeCard', () => {
       });
       const editedLabels = screen.getAllByText(/edited/);
       expect(editedLabels.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('does not show an "edited" indicator when the contracts prop seeds a non-default value (Feature 7 isDirty fix)', () => {
+      // Regression test: isDirty used to compare overlay.contracts against a
+      // hardcoded 1, not the initialContracts prop that seeds overlay.contracts
+      // on mount. Once a shared per-symbol contracts map (Feature 7) can pass a
+      // non-1 `contracts` prop, the untouched card must NOT be flagged dirty —
+      // the R:R sections must show the plain (non-"edited") ratio.
+      render(<TradeCard data={mockTradeCard} contracts={4} />);
+      expect(screen.getByLabelText('Edit Contracts')).toHaveTextContent('4');
+      expect(screen.queryAllByText(/edited/).length).toBe(0);
+    });
+
+    it('DOES show an "edited" indicator when contracts is hand-edited away from a non-default initial value', async () => {
+      render(<TradeCard data={mockTradeCard} contracts={4} />);
+      const contractsTrigger = screen.getByLabelText('Edit Contracts');
+      await act(async () => {
+        fireEvent.click(contractsTrigger);
+      });
+      const input = screen.getByDisplayValue('4');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '6' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+      });
+      expect(screen.getAllByText(/edited/).length).toBeGreaterThanOrEqual(1);
     });
   });
 });

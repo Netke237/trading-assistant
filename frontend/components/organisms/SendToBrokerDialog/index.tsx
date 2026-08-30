@@ -24,6 +24,14 @@ export interface DraftOrder {
 
 interface Props {
   cards:    TradeCardData[];
+  /** Feature 7 — the page-level shared per-symbol contracts map (same one fed
+   *  into TradeCard's `contracts` prop and read by the quick-order/auto-trade
+   *  paths), used only to SEED this dialog's row state. Editing the quantity
+   *  inside this dialog is a one-off override for that submission only — it
+   *  deliberately does NOT write back to the shared map; the dialog reviews/
+   *  finalizes a snapshot right before sending, not a place for live pre-trade
+   *  state the rest of the page also reads from. */
+  contractsBySymbol: Record<string, number>;
   onClose:  () => void;
   onSubmit: (orders: DraftOrder[], riskOverridden: boolean) => void;
 }
@@ -33,9 +41,9 @@ interface RowState {
   autoSend:  boolean;
 }
 
-export function SendToBrokerDialog({ cards, onClose, onSubmit }: Props) {
+export function SendToBrokerDialog({ cards, contractsBySymbol, onClose, onSubmit }: Props) {
   const [rows, setRows] = useState<Record<string, RowState>>(() =>
-    Object.fromEntries(cards.map((c) => [c.symbol, { contracts: 1, autoSend: true }])),
+    Object.fromEntries(cards.map((c) => [c.symbol, { contracts: contractsBySymbol[c.symbol] ?? 1, autoSend: true }])),
   );
   const [overrideReady, setOverrideReady] = useState(false);
 

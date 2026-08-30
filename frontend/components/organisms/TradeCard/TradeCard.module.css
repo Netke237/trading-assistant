@@ -373,6 +373,31 @@
   margin-top: 8px;
 }
 
+/* Order Entry strip (Feature 6) — thin, always-visible, non-collapsible bar
+   above the three profit-target method cards. */
+.orderStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  grid-column: 1 / -1;
+}
+
+.orderStripItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 140px;
+}
+
+.orderStripItem .kvRow {
+  width: 100%;
+}
+
 .recIdFooter {
   border-top: 1px solid var(--border-subtle);
   padding-top: var(--space-2);

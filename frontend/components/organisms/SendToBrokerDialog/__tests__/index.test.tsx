@@ -97,7 +97,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
       // lossAtStop = (50 - 1) * 100 * 1 = $4,900
     });
 
-    render(<SendToBrokerDialog cards={[aaa, bbb]} onClose={noop} onSubmit={noop} />);
+    render(<SendToBrokerDialog cards={[aaa, bbb]} contractsBySymbol={{}} onClose={noop} onSubmit={noop} />);
 
     expect(screen.queryByText('Single trade exposure too high')).not.toBeInTheDocument();
     expect(screen.getByText(/Max loss at stop \(BBB\) ≈ \$4,900 \(limit \$3,750\)/)).toBeInTheDocument();
@@ -123,7 +123,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
       // lossAtStop = (2 - 1.5) * 100 * 1 = $50, well within the $3,750 limit.
     });
 
-    render(<SendToBrokerDialog cards={[aaa]} onClose={noop} onSubmit={noop} />);
+    render(<SendToBrokerDialog cards={[aaa]} contractsBySymbol={{}} onClose={noop} onSubmit={noop} />);
 
     expect(screen.getByText('Within risk limits.')).toBeInTheDocument();
   });

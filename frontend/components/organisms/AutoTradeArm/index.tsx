@@ -12,6 +12,14 @@ import styles from './AutoTradeArm.module.css';
 interface AutoTradeArmProps {
   card: TradeCardData;
   broker: string | null;
+  /** Feature 7 — sourced from the page-level shared per-symbol contracts map
+   *  at the call site, read only inside handleArm below. Note: handleFireNow
+   *  has no quantity to change — it calls api.fireAutoTrade() with an empty
+   *  body, and the backend re-fires whatever ArmedStrategy (quantity
+   *  included) was captured earlier by /auto-trade/arm. A later Contracts
+   *  edit will NOT retroactively change what "Fire now" submits once armed —
+   *  this is auto-trade's own existing design, out of scope to change here. */
+  contracts?: number;
 }
 
 const MODE_LABELS: Record<AutoTradeMode, string> = {
@@ -20,7 +28,7 @@ const MODE_LABELS: Record<AutoTradeMode, string> = {
   armed:     'Armed — fire on next qualifying condition',
 };
 
-export function AutoTradeArm({ card, broker }: AutoTradeArmProps) {
+export function AutoTradeArm({ card, broker, contracts = 1 }: AutoTradeArmProps) {
   const { autoMode, setAutoMode, armed, setArmed, lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -54,7 +62,7 @@ export function AutoTradeArm({ card, broker }: AutoTradeArmProps) {
         symbol:          card.symbol,
         option_symbol:   contractId,
         action:          'BUY',   // long single-leg option (call or put) is always buy-to-open
-        quantity:        1,
+        quantity:        contracts,
         order_type:      'LMT',
         limit_price:     card.entry.limit,
         entry_premium:   card.contractDetails?.mid ?? card.entry.limit,
