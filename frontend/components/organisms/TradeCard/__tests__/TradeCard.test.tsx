@@ -92,6 +92,13 @@ const mockTradeCard: TradeCardData = {
   finalStatus: 'PASS',
 };
 
+// Feature 1 — the "Fixed % Ladder Plan" CollapsibleSection (Exit Plan +
+// Sell-to-Close Plan + Risk-Reward) defaults to collapsed; any test touching
+// content inside it must expand it first.
+function expandLadder() {
+  fireEvent.click(screen.getByRole('button', { name: /fixed % ladder plan/i }));
+}
+
 describe('TradeCard', () => {
   it('shows a negative per-target R:R instead of hiding the row (M2 parity)', () => {
     // Mirrors the backend's reward_risk.py M2 fix: a target priced below
@@ -108,6 +115,7 @@ describe('TradeCard', () => {
       },
     };
     render(<TradeCard data={dataWithLosingTarget} />);
+    expandLadder();
     expect(screen.getByText('-1.0x')).toBeInTheDocument();
   });
 
@@ -144,8 +152,9 @@ describe('TradeCard', () => {
     expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
   });
 
-  it('renders exit plan section', () => {
+  it('renders exit plan section (inside the collapsed Fixed % Ladder Plan group)', () => {
     render(<TradeCard data={mockTradeCard} />);
+    expandLadder();
     expect(screen.getByText('Exit Plan')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
@@ -153,6 +162,12 @@ describe('TradeCard', () => {
   });
 
   beforeEach(() => {
+    // Feature 1 wraps Exit Plan / Sell-to-Close Plan / Risk-Reward in a
+    // CollapsibleSection whose collapsed state persists to localStorage —
+    // clear it so every test starts from the deterministic default-collapsed
+    // state (jsdom's window/localStorage persists across tests within one
+    // file, unlike a real browser tab per test).
+    window.localStorage.clear();
     (api.getStockQuote as jest.Mock).mockResolvedValue({ symbol: 'AAPL', price: mockTradeCard.price });
     (api.getContractQuote as jest.Mock).mockResolvedValue({
       price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
@@ -194,6 +209,7 @@ describe('TradeCard', () => {
     });
     expect(screen.getByText('$178.50 (3.6% away)')).toBeInTheDocument();
     // Purely additive: the premium-based invalidation must be untouched.
+    expandLadder();
     expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
   });
 
@@ -219,7 +235,7 @@ describe('TradeCard', () => {
     render(<TradeCard data={mockTradeCard} />);
     fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
     await waitFor(() => {
-      expect(screen.getByText(/No order block or swing level found/)).toBeInTheDocument();
+      expect(screen.getByText('No structural stop found')).toBeInTheDocument();
     });
   });
 
@@ -364,6 +380,7 @@ describe('TradeCard', () => {
     expect(screen.getByText('30%')).toBeInTheDocument();       // Invalidation probability
     expect(screen.getByText('~4d')).toBeInTheDocument();       // Invalidation expected time
     // Purely additive: the premium-based invalidation must be untouched.
+    expandLadder();
     expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
   });
 
@@ -491,7 +508,10 @@ describe('TradeCard', () => {
     // this isn't: a real (merely unconfirmed-fresh) stop is restored and
     // shown in the Exit Plan section below, just not combined into an R:R.
     expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
-    expect(screen.getByText('—')).toBeInTheDocument();
+    // Both the pre-existing "R:R vs. structural stop" cell AND Feature 2's new
+    // "Structural level found" line share the same gating, so both fall back
+    // to the defensive '—' placeholder here — getAllByText, not getByText.
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText('0.2×')).not.toBeInTheDocument();
     // Nothing was re-fetched to get any of that back.
     expect((api.getFirstPassageEstimate as jest.Mock).mock.calls.length).toBe(callsBefore.firstPassage);
@@ -619,8 +639,10 @@ describe('TradeCard', () => {
     // as a specific, plausible-looking, and wrong ratio here). structuralStop
     // is cleared to `null` (not `undefined`) so the parent's cache actually
     // overwrites the stale entry — see the `.catch` handler's comment — which
-    // is what makes this cell read as "unavailable" rather than "—".
-    expect(screen.getByText('No structural stop found')).toBeInTheDocument();
+    // is what makes this cell read as "unavailable" rather than "—". Both the
+    // "R:R vs. structural stop" cell AND Feature 2's new "Structural level
+    // found" line share this gate, so both render it — getAllByText.
+    expect(screen.getAllByText('No structural stop found').length).toBeGreaterThanOrEqual(1);
   });
 
   it('clears to null (not undefined) so a failed refresh actually overwrites the parent cache, surviving a second navigation', async () => {
@@ -808,17 +830,20 @@ describe('TradeCard', () => {
       stop: {
         price: 180.0, source: 'structural' as const, contractPrice: 1.2,
         rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+        structuralPrice: 180.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
       },
       targets: [
         {
           rrRatio: 2.0, arithmeticPrice: 195.0, price: 195.0, tpSource: 'arithmetic' as const,
           structuralPrice: null, contractPrice: 4.5, rrModel: 'Heston repriced' as const,
           probability: 0.6, expectedDays: 8, qualityGood: true, qualityReasons: [],
+          distanceDollar: null, toleranceDollar: 1.5,
         },
         {
           rrRatio: 3.0, arithmeticPrice: 204.0, price: 204.0, tpSource: 'arithmetic' as const,
           structuralPrice: null, contractPrice: 6.0, rrModel: 'Heston repriced' as const,
           probability: 0.4, expectedDays: 14, qualityGood: true, qualityReasons: [],
+          distanceDollar: null, toleranceDollar: 1.5,
         },
       ],
       atr: 3.5,
@@ -827,7 +852,7 @@ describe('TradeCard', () => {
 
     const onExitPlanChange = jest.fn();
     render(<TradeCard data={mockTradeCard} onExitPlanChange={onExitPlanChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /compute exit plan/i }));
+    fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
 
     await waitFor(() => {
       expect(onExitPlanChange).toHaveBeenCalledWith(
@@ -852,20 +877,25 @@ describe('TradeCard', () => {
       stop: {
         price: 180.0, source: 'structural' as const, contractPrice: 1.0,
         rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+        structuralPrice: 180.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
       },
       targets: [],
       atr: 3.5,
     });
 
     render(<TradeCard data={mockTradeCard} onExitPlanChange={jest.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /compute exit plan/i }));
+    fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
 
     expect(await screen.findByText(/Risk-derived size: 25 contracts \(25\.00 exact\)/)).toBeInTheDocument();
   });
 
   it('never surfaces the previous candidate\'s exit plan under the new contract\'s callback', async () => {
     (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
-      stop: { price: 180.0, source: 'structural', contractPrice: 1.2, rrModel: 'Heston repriced', structuralSource: null, structuralConfidence: null },
+      stop: {
+        price: 180.0, source: 'structural', contractPrice: 1.2, rrModel: 'Heston repriced',
+        structuralSource: null, structuralConfidence: null,
+        structuralPrice: null, atrFloorPrice: 175.0, distanceDollar: null,
+      },
       targets: [],
       atr: 3.5,
     });
@@ -873,7 +903,7 @@ describe('TradeCard', () => {
     const { rerender } = render(<TradeCard data={mockTradeCard} onExitPlanChange={onChangeForAAPL} />);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /compute exit plan/i }));
+      fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
     });
     await waitFor(() => {
       expect(onChangeForAAPL).toHaveBeenCalledWith(expect.objectContaining({ atr: 3.5 }));
@@ -905,13 +935,13 @@ describe('TradeCard', () => {
     render(<TradeCard data={mockTradeCard} onExitPlanChange={onExitPlanChange} />);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /compute exit plan/i }));
+      fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
     });
 
     await waitFor(() => {
       expect(onExitPlanChange).toHaveBeenLastCalledWith(null);
     });
-    expect(screen.getByText(/Couldn't compute an exit plan/i)).toBeInTheDocument();
+    expect(screen.getByText(/Couldn't compute an arithmetic plan/i)).toBeInTheDocument();
   });
 
   it('shows no Profit Targets rows (and no stale two-click hint) until Estimate has been run', async () => {
@@ -1071,8 +1101,12 @@ describe('TradeCard', () => {
 
     render(<TradeCard data={mockTradeCard} />);
     fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    // The standalone Check Structure block (Feature 3) on the Arithmetic card
+    // distinguishes this exact degenerate case (found a level, but it
+    // resolves to the current price) as its own "N/A (stop = price)" state,
+    // rather than rendering the source+price+distance success block.
     await waitFor(() => {
-      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+      expect(screen.getByText('N/A (stop = price)')).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await waitFor(() => {
@@ -1086,7 +1120,10 @@ describe('TradeCard', () => {
     // "N/A (stop = price)" placeholder rather than an actual ratio. (Not
     // asserting a page-wide absence of "×" text here — the top Risk/Reward
     // badge legitimately renders its own unrelated ratio, e.g. "2.5×".)
-    expect(screen.getAllByText('N/A (stop = price)').length).toBe(3);
+    // Three targets × two lines each ("Structural level found" + "R:R vs.
+    // structural stop", Feature 2) plus the one standalone Check Structure
+    // block above (Feature 3) = 7.
+    expect(screen.getAllByText('N/A (stop = price)').length).toBe(7);
   });
 
   it('does not affect the original R:R card or the sell-to-close R:R column', async () => {
@@ -1109,6 +1146,7 @@ describe('TradeCard', () => {
     });
 
     render(<TradeCard data={mockTradeCard} />);
+    expandLadder();
     fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
     await waitFor(() => screen.getByText(/Structural stop — Order Block/));
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
@@ -1123,12 +1161,14 @@ describe('TradeCard', () => {
 
   it('renders sell-to-close plan with editable target', () => {
     render(<TradeCard data={mockTradeCard} />);
+    expandLadder();
     expect(screen.getByText('Sell-to-Close Plan')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit target stock price for TP1')).toBeInTheDocument();
   });
 
   it('renders risk/reward ratio', () => {
     render(<TradeCard data={mockTradeCard} />);
+    expandLadder();
     expect(screen.getByText('Risk / Reward')).toBeInTheDocument();
     expect(screen.getByText('2.5×')).toBeInTheDocument();
   });
@@ -1185,6 +1225,7 @@ describe('TradeCard', () => {
   describe('editable fields', () => {
     it('renders editable fields with aria-label affordance', () => {
       render(<TradeCard data={mockTradeCard} />);
+      expandLadder();
       expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument();
       expect(screen.getByLabelText('Edit Max fill')).toBeInTheDocument();
       expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
@@ -1262,6 +1303,7 @@ describe('TradeCard', () => {
 
     it('shows edited badge in target row when stock price is changed', async () => {
       render(<TradeCard data={mockTradeCard} />);
+      expandLadder();
       const targetTrigger = screen.getByLabelText('Edit target stock price for TP1');
       await act(async () => {
         fireEvent.click(targetTrigger);

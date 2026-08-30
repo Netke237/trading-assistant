@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
+import { CollapsibleSection } from '@/components/molecules/CollapsibleSection';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import { AlternativeContractRow } from '@/components/molecules/AlternativeContractRow';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
@@ -14,7 +15,7 @@ import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedCon
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
-import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan } from '@/types/domain';
+import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow } from '@/types/domain';
 import {
   triggerDetailText,
   pullbackDetailText,
@@ -154,6 +155,52 @@ function normalizeStructuralStopResponse(res: {
     && res.confidence != null && res.distancePct != null
     ? { price: res.price, source: res.source, confidence: res.confidence, distancePct: res.distancePct }
     : null;
+}
+
+/** Feature 3 (Arithmetic Profit Target card) — the stop row's one-sentence,
+ *  client-composed justification. Backend (exit_plan.py) only returns the raw
+ *  numbers (structuralPrice/atrFloorPrice/distanceDollar/source); this is the
+ *  three-case prose built from them, not a new backend text field. */
+function stopJustification(stop: ExitPlan['stop']): string {
+  if (stop.structuralPrice == null) {
+    return `No structural stop found nearby — stop set at the ATR floor of $${stop.atrFloorPrice.toFixed(2)}`;
+  }
+  if (stop.source === 'structural') {
+    const cleared = stop.distanceDollar != null ? stop.distanceDollar.toFixed(2) : '0.00';
+    return `Using structural — it already clears the ATR floor by $${cleared}, no widening needed`;
+  }
+  return `Structural stop $${stop.structuralPrice.toFixed(2)} was inside the ATR floor — widened to $${stop.atrFloorPrice.toFixed(2)} for a minimum-distance stop`;
+}
+
+/** Feature 3 — one of FOUR explicit states per target row (not three — the
+ *  "outside tolerance but still short of the structural level" case gets its
+ *  own label rather than folding into the "beyond" warning bucket). */
+type TargetCompareState = 'none' | 'within' | 'before' | 'beyond';
+
+function targetCompareState(t: ExitPlanTargetRow): TargetCompareState {
+  if (t.structuralPrice == null) return 'none';
+  if (t.tpSource === 'structural_snap') return 'within';
+  return t.qualityReasons.includes('target_beyond_structural') ? 'beyond' : 'before';
+}
+
+function targetCompareLabel(state: TargetCompareState): string {
+  switch (state) {
+    case 'none':
+      return 'No structural level found ahead — nothing to compare against.';
+    case 'within':
+      return 'Within tolerance — snapped onto the structural level.';
+    case 'before':
+      return 'Outside tolerance — using arithmetic price, sits before the next structural level.';
+    case 'beyond':
+      return 'Target sits beyond the next real structural level.';
+  }
+}
+
+function structuralStopSourceLabel(source: 'order_block' | 'swing_low' | 'swing_high' | null | undefined): string {
+  if (source === 'order_block') return 'Structural stop — Order Block';
+  if (source === 'swing_low') return 'Structural stop — Swing Low';
+  if (source === 'swing_high') return 'Structural stop — Swing High';
+  return 'Structural stop';
 }
 
 interface TradeCardProps {
@@ -968,39 +1015,22 @@ export function TradeCard({
           </div>
         </div>
 
-        {/* 5. Exit plan */}
-        <section className={styles.planCard}>
-          <Text size={14} weight={600}>Exit Plan</Text>
-          <dl className={styles.kvList}>
-            <EditableKV
-              label="Invalidation"
-              value={overlay.invalidation}
-              onChange={(v) => patch({ invalidation: v })}
-              prefix="$"
-              min={0.01}
-              step={0.01}
-              mono
-            />
-            <EditableKV
-              label="Premium stop"
-              value={overlay.premiumStop}
-              onChange={(v) => patch({ premiumStop: v })}
-              prefix="$"
-              min={0.01}
-              step={0.01}
-              mono
-            />
-            <EditableKV
-              label="Time stop"
-              value={overlay.timeStopDays}
-              onChange={(v) => patch({ timeStopDays: v })}
-              min={1}
-              step={1}
-              suffix="d"
-              mono
-              decimals={0}
-            />
-          </dl>
+        {/* Arithmetic Profit Target (Feature 3) — the primary method, expanded
+             by default, full width matching the Monte Carlo card below. */}
+        <section className={`${styles.planCard} ${styles.fullWidth}`}>
+          <div className={styles.scoreCardHeader}>
+            <Text size={14} weight={600}>Arithmetic Profit Target</Text>
+            <Text size={11} tone="secondary">{data.direction}</Text>
+          </div>
+          <div className={styles.kvRow}>
+            <Text size={12} tone="secondary">Stock entry price</Text>
+            <Data size={13} weight={500}>${data.price.toFixed(2)}</Data>
+          </div>
+          <Text size={10} tone="dim">Independent of the other profit-target methods on this page; they can disagree.</Text>
+
+          {/* Standalone Check Structure — runs independently of the full
+               compute below; its result shows on its own. Reuses the same
+               checkStructure handler / structuralStop state as before. */}
           <div className={styles.structuralStop}>
             <button
               type="button"
@@ -1009,27 +1039,37 @@ export function TradeCard({
               disabled={structuralLoading}
             >
               <Text size={12} weight={500}>
-                {structuralLoading ? 'Checking structure…' : 'Check structure'}
+                {structuralLoading ? 'Checking structure…' : 'Check Structure'}
               </Text>
             </button>
             {structuralError && (
               <Text size={11} tone="reject">Couldn&apos;t check structure — try again.</Text>
             )}
-            {!structuralError && structuralStop === null && (
-              <Text size={11} tone="dim">No order block or swing level found nearby.</Text>
+            {!structuralError && structuralLoading && (
+              <Text size={11} tone="dim">Checking…</Text>
             )}
-            {structuralStop && (
+            {!structuralError && !structuralLoading && structuralStop === undefined && (
+              <Text size={11} tone="dim">—</Text>
+            )}
+            {!structuralError && !structuralLoading && structuralStop === null && (
+              <Text size={11} tone="dim">No structural stop found</Text>
+            )}
+            {!structuralError && !structuralLoading && structuralStop != null && structuralStop.distancePct === 0 && (
+              <Text size={11} tone="dim">N/A (stop = price)</Text>
+            )}
+            {!structuralError && !structuralLoading && structuralStop != null && structuralStop.distancePct !== 0 && (
               <dl className={styles.kvList}>
                 <KV
-                  label={structuralStop.source === 'order_block' ? 'Structural stop — Order Block'
-                    : structuralStop.source === 'swing_low' ? 'Structural stop — Swing Low'
-                    : 'Structural stop — Swing High'}
+                  label={structuralStopSourceLabel(structuralStop.source)}
                   value={`$${structuralStop.price.toFixed(2)} (${structuralStop.distancePct.toFixed(1)}% away)`}
                   mono
                 />
               </dl>
             )}
           </div>
+
+          {/* Compute Arithmetic Plan — renamed from "Compute Exit Plan". Runs
+               the full pipeline: stop + both target rows. */}
           <div className={styles.structuralStop}>
             <button
               type="button"
@@ -1038,80 +1078,119 @@ export function TradeCard({
               disabled={exitPlanLoading || !data.contractDetails}
             >
               <Text size={12} weight={500}>
-                {exitPlanLoading ? 'Computing exit plan…' : 'Compute Exit Plan'}
+                {exitPlanLoading ? 'Computing arithmetic plan…' : 'Compute Arithmetic Plan'}
               </Text>
             </button>
             {exitPlanError && (
-              <Text size={11} tone="reject">Couldn&apos;t compute an exit plan — try again.</Text>
+              <Text size={11} tone="reject">Couldn&apos;t compute an arithmetic plan — try again.</Text>
+            )}
+            {!exitPlan && (
+              <div className={styles.targetsTable}>
+                <div className={styles.targetRow}>
+                  <div className={styles.targetMain}>
+                    <Text size={12} tone="dim">Bottom (final stop) — not yet computed —</Text>
+                  </div>
+                </div>
+                <div className={styles.targetRow}>
+                  <div className={styles.targetMain}>
+                    <Text size={12} tone="dim">2:1 target — not yet computed —</Text>
+                  </div>
+                </div>
+                <div className={styles.targetRow}>
+                  <div className={styles.targetMain}>
+                    <Text size={12} tone="dim">3:1 target — not yet computed —</Text>
+                  </div>
+                </div>
+              </div>
             )}
             {exitPlan && (
               <div className={styles.targetsTable}>
                 <div className={styles.targetRow}>
                   <div className={styles.targetMain}>
                     <div className={styles.targetId}>
-                      <Text size={12} weight={600}>
-                        Final stop {exitPlan.stop.source === 'structural' ? '(structural)' : '(ATR-widened)'}
-                      </Text>
+                      <Text size={12} weight={600}>Bottom (final stop)</Text>
                     </div>
                     <div className={styles.targetValues}>
-                      <KV label="Stock price" value={`$${exitPlan.stop.price.toFixed(2)}`} mono />
-                      <KV label="Contract price" value={`$${exitPlan.stop.contractPrice.toFixed(2)}`} mono />
-                      <KV label="Pricing" value={exitPlan.stop.rrModel} mono />
+                      <KV label="Price" value={`$${exitPlan.stop.price.toFixed(2)}`} mono />
+                      <KV
+                        label={structuralStopSourceLabel(exitPlan.stop.structuralSource)}
+                        value={exitPlan.stop.structuralPrice != null ? `$${exitPlan.stop.structuralPrice.toFixed(2)}` : 'No structural stop found'}
+                        mono
+                      />
+                      <KV label="ATR-floor price" value={`$${exitPlan.stop.atrFloorPrice.toFixed(2)}`} mono />
+                      <KV label="ATR(14)" value={`$${exitPlan.atr.toFixed(2)}`} mono />
+                      <KV
+                        label="Structural ↔ ATR-floor distance"
+                        value={exitPlan.stop.distanceDollar != null ? `$${exitPlan.stop.distanceDollar.toFixed(2)}` : '—'}
+                        mono
+                      />
                     </div>
+                    <Text size={10} tone="dim">{stopJustification(exitPlan.stop)}</Text>
                     {recommendedSize && (
-                      <Text size={10} tone="dim">
-                        Risk-derived size: {recommendedSize.recommended} contract{recommendedSize.recommended === 1 ? '' : 's'}{' '}
-                        ({formatRecommendedContractSizeRaw(recommendedSize)} exact)
-                      </Text>
+                      <div className={styles.structuralStop}>
+                        <Text size={10} tone="dim">
+                          Risk-derived size: {recommendedSize.recommended} contract{recommendedSize.recommended === 1 ? '' : 's'}{' '}
+                          ({formatRecommendedContractSizeRaw(recommendedSize)} exact)
+                        </Text>
+                        <button
+                          type="button"
+                          className={styles.btn}
+                          onClick={() => patch({ contracts: recommendedSize.recommended })}
+                        >
+                          <Text size={12} weight={500}>Apply</Text>
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
-                {exitPlan.targets.map((t) => (
-                  <div className={styles.targetRow} key={t.rrRatio}>
-                    <div className={styles.targetMain}>
-                      <div className={styles.targetId}>
-                        <Text size={12} weight={600}>
-                          {t.rrRatio}R {t.qualityGood ? '✓' : '⚠'}
-                        </Text>
-                        <Text size={10} tone="dim">
-                          {t.tpSource === 'structural_snap' ? 'Snapped to structural level' : 'Arithmetic target'}
+                {exitPlan.targets.map((t) => {
+                  const compareState = targetCompareState(t);
+                  return (
+                    <div className={styles.targetRow} key={t.rrRatio}>
+                      <div className={styles.targetMain}>
+                        <div className={styles.targetId}>
+                          <Text size={12} weight={600}>
+                            {t.rrRatio}:1 target {compareState === 'beyond' ? '⚠' : ''}
+                          </Text>
+                        </div>
+                        <div className={styles.targetValues}>
+                          <KV label="Arithmetic price" value={`$${t.arithmeticPrice.toFixed(2)}`} mono />
+                          <KV
+                            label="Nearest structural level"
+                            value={t.structuralPrice != null ? `$${t.structuralPrice.toFixed(2)}` : 'No structural stop found'}
+                            mono
+                          />
+                          <KV
+                            label="Distance"
+                            value={t.distanceDollar != null ? `$${t.distanceDollar.toFixed(2)}` : '—'}
+                            mono
+                          />
+                          <KV label="Tolerance" value={`$${t.toleranceDollar.toFixed(2)}`} mono />
+                          <KV label="Contract price" value={`$${t.contractPrice.toFixed(2)}`} mono />
+                          <KV label="Pricing" value={t.rrModel} mono />
+                          <KV label="Probability before expiry" value={`${(t.probability * 100).toFixed(0)}%`} mono />
+                          <KV
+                            label="Expected time"
+                            value={t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}
+                            mono
+                          />
+                        </div>
+                        <Text size={10} tone={compareState === 'beyond' ? 'caution' : 'dim'}>
+                          {targetCompareLabel(compareState)}
                         </Text>
                       </div>
-                      <div className={styles.targetValues}>
-                        <KV label="Stock price" value={`$${t.price.toFixed(2)}`} mono />
-                        <KV label="Contract price" value={`$${t.contractPrice.toFixed(2)}`} mono />
-                        <KV label="Pricing" value={t.rrModel} mono />
-                        <KV label="Probability before expiry" value={`${(t.probability * 100).toFixed(0)}%`} mono />
-                        <KV
-                          label="Expected time"
-                          value={t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}
-                          mono
-                        />
-                      </div>
-                      {!t.qualityGood && (
-                        <Text size={10} tone="caution">
-                          {t.qualityReasons.includes('stop_widened') && t.qualityReasons.includes('target_beyond_structural')
-                            ? 'Stop was ATR-widened and target overshoots the next structural level.'
-                            : t.qualityReasons.includes('stop_widened')
-                            ? 'Stop was ATR-widened — no structural level cleared the floor.'
-                            : 'Target overshoots the next real structural level.'}
-                        </Text>
-                      )}
                     </div>
-                  </div>
-                ))}
-                <Text size={10} tone="dim">
-                  ATR(14): ${exitPlan.atr.toFixed(2)} · as of {new Date(exitPlan.computedAt).toLocaleTimeString()}
-                </Text>
+                  );
+                })}
               </div>
             )}
           </div>
         </section>
 
-        {/* 5c. Profit-target first-passage estimate */}
+        {/* Monte Carlo Profit Target (Feature 2 — renamed from "Profit Targets") */}
         <section className={`${styles.planCard} ${styles.fullWidth}`}>
-          <Text size={14} weight={600}>Profit Targets</Text>
-          <Text size={10} tone="dim">Monte Carlo estimate — independent of the Sell-to-Close Plan below; the two can disagree.</Text>
+          <Text size={14} weight={600}>Monte Carlo Profit Target</Text>
+          <Text size={10} tone="dim">Monte Carlo estimate — independent of the other profit-target methods on this page; they can disagree.</Text>
           <div className={styles.targetPctRow}>
             {(['t1', 't2', 't3'] as const).map((key) => (
               <label key={key} className={styles.targetPctInput}>
@@ -1141,7 +1220,7 @@ export function TradeCard({
               disabled={firstPassageLoading || !data.contractDetails}
             >
               <Text size={12} weight={500}>
-                {firstPassageLoading ? 'Estimating…' : 'Estimate'}
+                {firstPassageLoading ? 'Estimating…' : 'Run Monte Carlo Estimate'}
               </Text>
             </button>
             {firstPassageError && (
@@ -1162,6 +1241,7 @@ export function TradeCard({
                     && firstPassageContext != null && structuralRR == null && !structuralLoading
                     && structuralPairEligible
                   }
+                  structuralStop={structuralStop}
                 />
               ))}
               <div className={styles.targetRow}>
@@ -1187,42 +1267,93 @@ export function TradeCard({
           )}
         </section>
 
-        {/* 5b. Sell-to-close plan */}
-        <section className={`${styles.planCard} ${styles.targetsCard}`}>
-          <Text size={14} weight={600}>Sell-to-Close Plan</Text>
-          <Text size={10} tone="dim">Fixed-formula ladder — independent of the Profit Targets estimate above; the two can disagree.</Text>
-          <div className={styles.targetsTable}>
-            {data.exit.targets.map((t, i) => (
-              <EditableTargetRow
-                key={t.id ?? i}
-                target={t}
-                index={i}
-                editedStockPrice={overlay.targets[i] ?? t.targetPrice ?? t.stockPrice}
-                entryLimit={overlay.entryLimit}
-                premiumStop={overlay.premiumStop}
-                data={data}
-                onStockPriceChange={(v) => {
-                  const next = [...overlay.targets];
-                  next[i] = v;
-                  patch({ targets: next });
-                }}
-                totalContracts={overlay.contracts}
+        {/* Fixed % Ladder Plan (Feature 1) — collapsible group containing, in
+             order: the reverted Exit Plan, Sell-to-Close Plan, and
+             Risk-Reward. Final Recommendation is explicitly excluded (built
+             standalone, Feature 8). Default collapsed; state persists per
+             browser under a colon-form localStorage key. */}
+        <CollapsibleSection
+          title="Fixed % Ladder Plan"
+          storageKey="bamendjou:tradecard-ladder-collapsed"
+          defaultCollapsed
+          className={styles.fullWidth}
+        >
+          <section className={styles.planCard}>
+            <Text size={14} weight={600}>Exit Plan</Text>
+            <dl className={styles.kvList}>
+              <EditableKV
+                label="Invalidation"
+                value={overlay.invalidation}
+                onChange={(v) => patch({ invalidation: v })}
+                prefix="$"
+                min={0.01}
+                step={0.01}
+                mono
               />
-            ))}
-          </div>
-        </section>
-
-        {/* 6. R:R */}
-        <section className={styles.rrCard}>
-          <Text size={14} weight={600}>Risk / Reward</Text>
-          <div className={styles.rrBody}>
-            <Data size={24} weight={500}>{editedRR.rr.toFixed(1)}×</Data>
-            <Text size={11} tone="secondary">
-              {editedRR.model}
-              {dirty ? ' — edited' : ''}
+              <EditableKV
+                label="Premium stop"
+                value={overlay.premiumStop}
+                onChange={(v) => patch({ premiumStop: v })}
+                prefix="$"
+                min={0.01}
+                step={0.01}
+                mono
+              />
+              <EditableKV
+                label="Time stop"
+                value={overlay.timeStopDays}
+                onChange={(v) => patch({ timeStopDays: v })}
+                min={1}
+                step={1}
+                suffix="d"
+                mono
+                decimals={0}
+              />
+            </dl>
+            <Text size={10} tone="dim">
+              Invalidation is a fixed-% stop, independent of the Arithmetic card&apos;s structural/ATR stop above.
+              It also remains functionally load-bearing, not just a display figure: Send to broker stays disabled
+              (&quot;Invalidation stop required&quot;) whenever this field is missing, regardless of what the
+              Arithmetic card&apos;s stop shows — the two are not just independently-displayed numbers, one of them
+              is a hard submit gate the other has no relationship to.
             </Text>
-          </div>
-        </section>
+          </section>
+
+          <section className={`${styles.planCard} ${styles.targetsCard}`}>
+            <Text size={14} weight={600}>Sell-to-Close Plan</Text>
+            <Text size={10} tone="dim">Fixed-formula ladder — independent of the other profit-target methods on this page; they can disagree.</Text>
+            <div className={styles.targetsTable}>
+              {data.exit.targets.map((t, i) => (
+                <EditableTargetRow
+                  key={t.id ?? i}
+                  target={t}
+                  index={i}
+                  editedStockPrice={overlay.targets[i] ?? t.targetPrice ?? t.stockPrice}
+                  entryLimit={overlay.entryLimit}
+                  premiumStop={overlay.premiumStop}
+                  data={data}
+                  onStockPriceChange={(v) => {
+                    const next = [...overlay.targets];
+                    next[i] = v;
+                    patch({ targets: next });
+                  }}
+                  totalContracts={overlay.contracts}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.rrCard}>
+            <Text size={14} weight={600}>Risk / Reward</Text>
+            <div className={styles.rrBody}>
+              <Data size={24} weight={500}>{editedRR.rr.toFixed(1)}×</Data>
+              <Text size={11} tone="secondary">
+                {editedRR.model}
+                {dirty ? ' — edited' : ''}
+              </Text>
+            </div>
+          </section>
+        </CollapsibleSection>
 
         {/* 7. Final Recommendation Scorecard */}
         <section className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
@@ -1612,12 +1743,17 @@ function ProfitTargetRow({
   structuralPending,
   structuralUnavailable,
   structuralZeroRisk,
+  structuralStop,
 }: {
   target: FirstPassageTarget;
   structuralRRValue: number | null;
   structuralPending: boolean;
   structuralUnavailable: boolean;
   structuralZeroRisk: boolean;
+  /** Feature 2 — the raw structural-stop level backing structuralRRValue,
+   *  reused (not re-fetched) to render the new "Structural level found" line
+   *  below. Same value the Arithmetic card's "Check Structure" block reads. */
+  structuralStop: StructuralStop | null | undefined;
 }) {
   const label = `T${Math.round(target.pct * 100)}%`;
   // Order matters: a stop that resolved to exactly the current stock price
@@ -1630,6 +1766,25 @@ function ProfitTargetRow({
   // in the Exit Plan section while this cell still shows '—', by design.
   const structuralValue = structuralRRValue != null
     ? `${structuralRRValue.toFixed(1)}×`
+    : structuralPending
+      ? 'Checking…'
+      : structuralUnavailable
+        ? 'No structural stop found'
+        : structuralZeroRisk
+          ? 'N/A (stop = price)'
+          : '—';
+
+  // "Structural level found" — Feature 2's new line, reusing the SAME four
+  // gating states as the R:R row above (Checking… / No structural stop found
+  // / N/A (stop = price) / —), swapping only the success-case content
+  // (a price instead of a ratio). Deliberately gated on `structuralRRValue !=
+  // null` (not merely `structuralStop != null`) — a truthy structuralStop can
+  // be on screen while the R:R cell still shows '—' because the freshness
+  // pairing hasn't been reconfirmed this mount (see the comment above); this
+  // line must show that SAME gated state, not a confident-looking price next
+  // to a gated ratio.
+  const structuralLevelValue = structuralRRValue != null && structuralStop
+    ? `$${structuralStop.price.toFixed(2)}`
     : structuralPending
       ? 'Checking…'
       : structuralUnavailable
@@ -1657,6 +1812,7 @@ function ProfitTargetRow({
             value={target.expectedDays != null ? `~${Math.round(target.expectedDays)}d` : 'unlikely'}
             mono
           />
+          <KV label="Structural level found" value={structuralLevelValue} mono />
           <KV label="R:R vs. structural stop" value={structuralValue} mono />
         </div>
       </div>
