@@ -46,6 +46,7 @@ from app.routers.config          import router as config_router
 from app.routers.symbols         import router as symbols_router
 from app.routers.symbol_notes    import router as symbol_notes_router
 from app.routers.scan_schedule   import router as scan_schedule_router
+from app.routers.journal         import router as journal_router
 
 
 _portfolio_monitor_task: asyncio.Task | None = None
@@ -388,6 +389,7 @@ def create_app() -> FastAPI:
     app.include_router(strategy_tuning_router)
     app.include_router(config_router)
     app.include_router(scan_schedule_router)
+    app.include_router(journal_router)
 
     return app
 

@@ -4,6 +4,7 @@ import type { StockScanResult, StockFirstPassageEstimate } from '@/types/stockDo
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import type { AlertRule, AlertHistory } from '@/types/alerts';
+import type { JournalEntry, JournalEntryInput, JournalEntryFilters } from '@/types/journal';
 import type { OptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
 import type { StockScanRequestBody } from '@/lib/resolveStockScanRequest';
 
@@ -738,6 +739,29 @@ export const api = {
     get<SymbolNote>(`/api/notes/${encodeURIComponent(symbol)}`),
   putSymbolNote: (symbol: string, body: string) =>
     put<SymbolNote>(`/api/notes/${encodeURIComponent(symbol)}`, { body }),
+
+  // ── Trading Journal ──────────────────────────────────────────────────────
+  // Query string built the same way getRegime() above builds one: conditionally
+  // `.set(...)` per present key, never an empty string for an absent filter — an
+  // empty string against the router's `Optional[datetime]` date_from/date_to
+  // params would fail Pydantic's datetime parser (422).
+  getJournalEntries: (filters?: JournalEntryFilters) => {
+    const params = new URLSearchParams();
+    if (filters?.symbol)        params.set('symbol',        filters.symbol);
+    if (filters?.strategy_tag)  params.set('strategy_tag',  filters.strategy_tag);
+    if (filters?.status)        params.set('status',        filters.status);
+    if (filters?.entry_type)    params.set('entry_type',    filters.entry_type);
+    if (filters?.date_from)     params.set('date_from',     filters.date_from);
+    if (filters?.date_to)       params.set('date_to',       filters.date_to);
+    const qs = params.toString();
+    return get<JournalEntry[]>(`/journal/entries${qs ? `?${qs}` : ''}`);
+  },
+  createJournalEntry: (body: JournalEntryInput) =>
+    post<JournalEntry>('/journal/entries', body),
+  updateJournalEntry: (id: string, body: JournalEntryInput) =>
+    put<JournalEntry>(`/journal/entries/${encodeURIComponent(id)}`, body),
+  deleteJournalEntry: (id: string) =>
+    del(`/journal/entries/${encodeURIComponent(id)}`),
 };
 
 /* ---------- Risk settings ---------- */

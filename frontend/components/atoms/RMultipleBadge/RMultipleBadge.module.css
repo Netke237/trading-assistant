@@ -1,0 +1,10 @@
+.wrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.r {
+  opacity: 0.8;
+}

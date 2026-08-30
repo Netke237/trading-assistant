@@ -23,6 +23,7 @@ const ITEMS: NavItemDef[] = [
   { label: 'Chart',     match: '/chart',     href: '/chart',     Icon: ChartIcon     },
   { label: 'Alerts',    match: '/alerts',    href: '/alerts',    Icon: AlertsIcon    },
   { label: 'Strategy Watch', match: '/strategy-watch', href: '/strategy-watch', Icon: StrategyWatchIcon },
+  { label: 'Journal',   match: '/journal',   href: '/journal',   Icon: JournalIcon   },
   { label: 'Settings',  match: '/settings',  href: '/settings',  Icon: SettingsIcon  },
 ];
 
@@ -144,6 +145,15 @@ function StrategyWatchIcon() {
   return (
     <svg {...svgProps()}>
       <path d="M2 12h4l3 8 4-16 3 8h6" />
+    </svg>
+  );
+}
+function JournalIcon() {
+  return (
+    <svg {...svgProps()}>
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22.5v-18Z" />
+      <path d="M4 19.5a2.5 2.5 0 0 1 2.5-2.5H20" />
+      <path d="M8 7h8M8 11h8" />
     </svg>
   );
 }
