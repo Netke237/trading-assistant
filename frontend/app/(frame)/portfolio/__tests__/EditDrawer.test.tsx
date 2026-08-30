@@ -477,6 +477,7 @@ describe('MaxLossBanner', () => {
     stop: {
       price: 180, source: 'structural' as const, contractPrice: 2.0,
       rrModel: 'BS repriced (IV-derived)' as const, structuralSource: 'swing_low' as const, structuralConfidence: 0.8,
+      structuralPrice: 180, atrFloorPrice: 175, distanceDollar: 5,
     },
     targets: [],
     atr: 3.1,
@@ -597,12 +598,13 @@ describe('EditDrawer active TP method selector', () => {
         stop: {
           price: 180, source: 'structural', contractPrice: 2.5,
           rrModel: 'BS repriced (IV-derived)', structuralSource: 'swing_low', structuralConfidence: 0.8,
+          structuralPrice: 180, atrFloorPrice: 175, distanceDollar: 5,
         },
         targets: [
           {
             rrRatio: 2, arithmeticPrice: 230, price: 230, tpSource: 'arithmetic', structuralPrice: null,
             contractPrice: 7.2, rrModel: 'BS repriced (IV-derived)', probability: 0.55, expectedDays: 6,
-            qualityGood: true, qualityReasons: [],
+            qualityGood: true, qualityReasons: [], distanceDollar: null, toleranceDollar: 1.5,
           },
         ],
       },

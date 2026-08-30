@@ -51,6 +51,7 @@ function makeCard(overrides: Partial<TradeCardData> & { symbol: string }): Trade
         stop: {
           price: 90, source: 'structural', contractPrice: 1,
           rrModel: 'BS repriced (IV-derived)', structuralSource: 'swing_low', structuralConfidence: 0.8,
+          structuralPrice: 90, atrFloorPrice: 85, distanceDollar: 5,
         },
         targets: [],
         atr: 3,
@@ -84,6 +85,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
           stop: {
             price: 90, source: 'structural', contractPrice: 10,
             rrModel: 'BS repriced (IV-derived)', structuralSource: 'swing_low', structuralConfidence: 0.8,
+            structuralPrice: 90, atrFloorPrice: 85, distanceDollar: 5,
           },
           targets: [],
           atr: 3,
@@ -115,6 +117,7 @@ describe('SendToBrokerDialog risk summary — max-loss worst offender', () => {
           stop: {
             price: 90, source: 'structural', contractPrice: 1.5,
             rrModel: 'BS repriced (IV-derived)', structuralSource: 'swing_low', structuralConfidence: 0.8,
+            structuralPrice: 90, atrFloorPrice: 85, distanceDollar: 5,
           },
           targets: [],
           atr: 3,

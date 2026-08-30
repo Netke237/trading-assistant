@@ -201,6 +201,12 @@ export interface ExitPlanTargetRow {
   expectedDays:    number | null;
   qualityGood:     boolean;
   qualityReasons:  string[];
+  /** |structuralPrice - arithmeticPrice|; null when no structural candidate
+   *  was found ahead of entry. */
+  distanceDollar:  number | null;
+  /** The snap band (snap_atr_multiplier * ATR) — always computable, whether
+   *  or not this row actually snapped. */
+  toleranceDollar: number;
 }
 
 /** Result of POST /api/contracts/exit-plan — final stop (wider of the
@@ -221,6 +227,16 @@ export interface ExitPlan {
     rrModel:              'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation';
     structuralSource:     'order_block' | 'swing_low' | 'swing_high' | null;
     structuralConfidence: number | null;
+    /** The structural stop candidate's raw price, whether or not it decided
+     *  the final stop (i.e. populated even when source === 'atr_widened'). */
+    structuralPrice:      number | null;
+    /** The ATR-floor price, whether or not it decided the final stop. */
+    atrFloorPrice:        number;
+    /** |structuralPrice - atrFloorPrice|; null when no structural candidate
+     *  was found at all. No toleranceDollar counterpart here — the stop
+     *  comparison is a strict "whichever is further from entry wins", not a
+     *  tolerance band (that concept only applies on the target side). */
+    distanceDollar:       number | null;
   };
   targets: ExitPlanTargetRow[];
   atr:     number;

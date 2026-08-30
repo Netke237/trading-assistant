@@ -447,6 +447,9 @@ class ExitPlanStopOut(BaseModel):
     rrModel:              RrModel
     structuralSource:     Optional[Literal["order_block", "swing_low", "swing_high"]] = None
     structuralConfidence: Optional[int] = None
+    structuralPrice:      Optional[float] = None
+    atrFloorPrice:        float
+    distanceDollar:       Optional[float] = None
 
 
 class ExitPlanTargetRowOut(BaseModel):
@@ -461,6 +464,8 @@ class ExitPlanTargetRowOut(BaseModel):
     expectedDays:    Optional[float] = None
     qualityGood:     bool
     qualityReasons:  list[str]
+    distanceDollar:  Optional[float] = None
+    toleranceDollar: float
 
 
 class ExitPlanResponse(BaseModel):
@@ -533,6 +538,9 @@ async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
         expiry_years=expiry_years, current_premium=req.premium, is_call=is_call,
     )
 
+    structural_price = round(final_stop.structural.price, 2) if final_stop.structural else None
+    atr_floor_price = round(final_stop.atr_floor_price, 2)
+
     stop_out = ExitPlanStopOut(
         price=round(final_stop.price, 2),
         source=final_stop.source,
@@ -540,6 +548,9 @@ async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
         rrModel=stop_priced.model_used,
         structuralSource=final_stop.structural.source if final_stop.structural else None,
         structuralConfidence=final_stop.structural.confidence if final_stop.structural else None,
+        structuralPrice=structural_price,
+        atrFloorPrice=atr_floor_price,
+        distanceDollar=abs(structural_price - atr_floor_price) if structural_price is not None else None,
     )
 
     targets_out: list[ExitPlanTargetRowOut] = []
@@ -605,6 +616,8 @@ async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
             expectedDays=expected_days,
             qualityGood=row.quality_good,
             qualityReasons=row.quality_reasons,
+            distanceDollar=round(row.distance_dollar, 2) if row.distance_dollar is not None else None,
+            toleranceDollar=round(row.tolerance_dollar, 2),
         ))
 
     return ExitPlanResponse(stop=stop_out, targets=targets_out, atr=round(atr, 2))

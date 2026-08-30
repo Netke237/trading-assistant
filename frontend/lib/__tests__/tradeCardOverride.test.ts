@@ -215,7 +215,11 @@ describe('resolveBasketCards', () => {
     // loss over the configured limit.
     const plan: ExitPlan = {
       computedAt: '2026-08-27T00:00:00.000Z',
-      stop: { price: 294.5, source: 'structural', contractPrice: 11.2, rrModel: 'Heston repriced', structuralSource: 'order_block', structuralConfidence: 71 },
+      stop: {
+        price: 294.5, source: 'structural', contractPrice: 11.2, rrModel: 'Heston repriced',
+        structuralSource: 'order_block', structuralConfidence: 71,
+        structuralPrice: 294.5, atrFloorPrice: 288.0, distanceDollar: 6.5,
+      },
       targets: [],
       atr: 5.4,
     };
@@ -333,7 +337,11 @@ describe('withCachedEstimate', () => {
   const exitPlan = {
     plan: {
       computedAt: '2026-08-26T12:00:00.000Z',
-      stop: { price: 294.5, source: 'structural' as const, contractPrice: 11.2, rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 71 },
+      stop: {
+        price: 294.5, source: 'structural' as const, contractPrice: 11.2, rrModel: 'Heston repriced' as const,
+        structuralSource: 'order_block' as const, structuralConfidence: 71,
+        structuralPrice: 294.5, atrFloorPrice: 288.0, distanceDollar: 6.5,
+      },
       targets: [],
       atr: 5.4,
     },
@@ -497,9 +505,17 @@ describe('cacheFirstPassage', () => {
 describe('cacheExitPlan', () => {
   const planA: ExitPlan = {
     computedAt: '2026-08-26T12:00:00.000Z',
-    stop: { price: 294.5, source: 'structural', contractPrice: 11.2, rrModel: 'Heston repriced', structuralSource: 'order_block', structuralConfidence: 71 },
+    stop: {
+      price: 294.5, source: 'structural', contractPrice: 11.2, rrModel: 'Heston repriced',
+      structuralSource: 'order_block', structuralConfidence: 71,
+      structuralPrice: 294.5, atrFloorPrice: 288.0, distanceDollar: 6.5,
+    },
     targets: [
-      { rrRatio: 2.0, arithmeticPrice: 340.0, price: 340.0, tpSource: 'arithmetic', structuralPrice: null, contractPrice: 25.94, rrModel: 'Heston repriced', probability: 0.62, expectedDays: 12, qualityGood: true, qualityReasons: [] },
+      {
+        rrRatio: 2.0, arithmeticPrice: 340.0, price: 340.0, tpSource: 'arithmetic', structuralPrice: null,
+        contractPrice: 25.94, rrModel: 'Heston repriced', probability: 0.62, expectedDays: 12, qualityGood: true,
+        qualityReasons: [], distanceDollar: null, toleranceDollar: 1.6,
+      },
     ],
     atr: 5.4,
   };
