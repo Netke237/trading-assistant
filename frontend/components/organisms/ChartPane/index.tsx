@@ -28,11 +28,11 @@ export interface SeriesConfig {
 // opposed to a main-pane indicator overlay — EMA, SMA, BB, MASUITE, AVWAP,
 // KEYLEVELS, HTFLEVELS... — which can share the same series `type`, e.g.
 // Line when chartType is 'line'). ChartWorkspace's buildMainSeries is the
-// only place that constructs this id (`${mainSeriesId(chartType)}`); this
-// module's own series-creation loop (below) is the only place that reads it
-// back to decide what becomes mainSeries/fires onSeriesReady. Centralized
-// here, not duplicated as a bare string literal in both files, so the two
-// stay in sync.
+// only place that constructs this id (via mainSeriesId(chartType) below);
+// this module's own series-creation loop (below) and ChartRightPanel (which
+// filters the main series out of the crosshair indicator-values list) are
+// its only readers. All three go through mainSeriesId()/isMainSeriesId
+// instead of a bare `'candles-'` string literal, so they can't drift apart.
 //
 // Why this matters: whichever pane-0 series shares a type with the main
 // series and is created LAST would otherwise silently become mainSeries.
@@ -45,7 +45,7 @@ const MAIN_SERIES_ID_PREFIX = 'candles-';
 export function mainSeriesId(chartType: ChartType): string {
   return `${MAIN_SERIES_ID_PREFIX}${chartType}`;
 }
-function isMainSeriesId(id: string): boolean {
+export function isMainSeriesId(id: string): boolean {
   return id.startsWith(MAIN_SERIES_ID_PREFIX);
 }
 
@@ -257,8 +257,8 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
     series.forEach((cfg) => {
       let s = seriesMap.current.get(cfg.id);
       if (!s) {
-        // Gate on id (isMainSeriesId above), not type — see its comment for
-        // why. Applied uniformly here rather than duplicated per branch.
+        // Gate on id, not type — see the comment above MAIN_SERIES_ID_PREFIX
+        // for why. Applied uniformly here rather than duplicated per branch.
         const isMain = (cfg.paneIndex ?? 0) === 0 && isMainSeriesId(cfg.id);
         if (cfg.type === 'Candlestick') {
           s = chart.addSeries(CandlestickSeries, {

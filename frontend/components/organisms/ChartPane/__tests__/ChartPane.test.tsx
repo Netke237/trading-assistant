@@ -212,6 +212,34 @@ describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
     expect(mainSeriesRef.current).toBe(mainLineSeries);
   });
 
+  // Same guarantee for the chartType === 'bar' case. The Candlestick/Bar/Line
+  // branches used to each carry their own separate paneIndex-0 check before
+  // this fix unified them behind one isMain gate — this covers the Bar
+  // branch specifically so a regression there isn't only caught for
+  // Candlestick and Line.
+  it('fires onSeriesReady for a Bar-type main series (chartType=bar) and not for a Line indicator alongside it', () => {
+    const onSeriesReady = jest.fn();
+    const mainSeriesRef: Parameters<typeof ChartPane>[0]['mainSeriesRef'] = { current: null };
+
+    render(
+      <ChartPane
+        series={[
+          { id: mainSeriesId('bar'), type: 'Bar', data: [] },
+          { id: 'ema-20', type: 'Line', data: [], color: '#4f8ef7' },
+        ]}
+        onSeriesReady={onSeriesReady}
+        mainSeriesRef={mainSeriesRef}
+      />,
+    );
+
+    const chart = (createChart as jest.Mock).mock.results[0].value;
+    const barSeries = chart.addSeries.mock.results[0].value;
+
+    expect(onSeriesReady).toHaveBeenCalledTimes(1);
+    expect(onSeriesReady).toHaveBeenCalledWith(chart, barSeries);
+    expect(mainSeriesRef.current).toBe(barSeries);
+  });
+
   // End-to-end version of the above: add EMA-20 then EMA-50 (last, so it's
   // the one that would have hijacked mainSeries pre-fix), then remove both
   // — the exact user action ("toggle EMA off") that used to leave
