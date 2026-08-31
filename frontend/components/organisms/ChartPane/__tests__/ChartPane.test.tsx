@@ -1,6 +1,6 @@
 import { render, act } from '@testing-library/react';
 import { createChart } from 'lightweight-charts';
-import ChartPane from '@/components/organisms/ChartPane';
+import ChartPane, { mainSeriesId } from '@/components/organisms/ChartPane';
 import { useThemeStore } from '@/lib/theme';
 
 const TOKENS: Record<string, string> = {
@@ -151,12 +151,18 @@ describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
   // instead of staying on the actual main candlestick series. Both the main
   // series (when chartType would be 'line') and an indicator overlay share
   // SeriesConfig['type'] === 'Line', so ChartPane must distinguish them by id
-  // (`candles-${chartType}` vs an indicator id like `ema-...`) rather than
+  // (mainSeriesId(chartType) vs an indicator id like `ema-...`) rather than
   // firing onSeriesReady for every pane-0 Line series it creates. If it
   // doesn't, removing the last-created indicator later leaves mainSeries
   // pointing at a detached series with no price scale — e.g. breaking
   // VolumeProfilePrimitive, which attaches to mainSeries and silently
   // stops rendering.
+  //
+  // Fixtures below build the main-series id via mainSeriesId(), the same
+  // helper ChartWorkspace's buildMainSeries calls, rather than hardcoding
+  // the `candles-...` string — a hardcoded literal here would keep passing
+  // even if mainSeriesId's own prefix drifted from what ChartPane's
+  // isMainSeriesId checks against, defeating the point of centralizing it.
   it('fires onSeriesReady only for the main candlestick series, not for pane-0 indicator Line series created after it', () => {
     const onSeriesReady = jest.fn();
     const mainSeriesRef: Parameters<typeof ChartPane>[0]['mainSeriesRef'] = { current: null };
@@ -164,7 +170,7 @@ describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
     render(
       <ChartPane
         series={[
-          { id: 'candles-candle', type: 'Candlestick', data: [] },
+          { id: mainSeriesId('candle'), type: 'Candlestick', data: [] },
           { id: 'ema-20', type: 'Line', data: [], color: '#4f8ef7' },
           { id: 'ema-50', type: 'Line', data: [], color: '#e0a030' },
         ]}
@@ -182,9 +188,9 @@ describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
   });
 
   // Same guarantee for the chartType === 'line' case, where the main series
-  // itself IS a Line series (id `candles-line`) sharing a pane with indicator
-  // overlays — onSeriesReady must still fire for it, and stay pointed at it
-  // rather than the indicator lines created alongside it.
+  // itself IS a Line series (id mainSeriesId('line')) sharing a pane with
+  // indicator overlays — onSeriesReady must still fire for it, and stay
+  // pointed at it rather than the indicator lines created alongside it.
   it('fires onSeriesReady for a Line-type main series (chartType=line) and not for indicator lines around it', () => {
     const onSeriesReady = jest.fn();
     const mainSeriesRef: Parameters<typeof ChartPane>[0]['mainSeriesRef'] = { current: null };
@@ -192,7 +198,7 @@ describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
     render(
       <ChartPane
         series={[
-          { id: 'candles-line', type: 'Line', data: [] },
+          { id: mainSeriesId('line'), type: 'Line', data: [] },
           { id: 'ema-20', type: 'Line', data: [], color: '#4f8ef7' },
         ]}
         onSeriesReady={onSeriesReady}
@@ -216,25 +222,32 @@ describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
   // priceToCoordinate would return null, so the profile drew nothing, with
   // no error anywhere. This reproduces exactly that sequence (add EMA-20,
   // then EMA-50 last so it's the one that would have hijacked mainSeries;
-  // remove both) and asserts mainSeriesRef stayed on a series that is both
-  // still present in the chart's live pane-0 series list and still resolves
-  // coordinates — the two facts VolumeProfilePrimitive's draw() depends on.
-  it('keeps mainSeriesRef pointed at a live, coordinate-resolving series through an indicator add-then-remove cycle', () => {
+  // remove both) and asserts mainSeriesRef ends up reference-identical
+  // (`toBe`, not just "some live series that happens to satisfy these
+  // properties") to the ORIGINAL candlestick series from the initial
+  // render, with onSeriesReady having fired exactly once across all three
+  // renders — not just that it landed on *a* live, coordinate-resolving
+  // pane-0 series, which a spurious extra reassignment to some other
+  // main-pane-shaped object could also satisfy.
+  it('keeps mainSeriesRef pointed at the original candlestick series through an indicator add-then-remove cycle', () => {
     const onSeriesReady = jest.fn();
     const mainSeriesRef: Parameters<typeof ChartPane>[0]['mainSeriesRef'] = { current: null };
 
     const { rerender } = render(
       <ChartPane
-        series={[{ id: 'candles-candle', type: 'Candlestick', data: [] }]}
+        series={[{ id: mainSeriesId('candle'), type: 'Candlestick', data: [] }]}
         onSeriesReady={onSeriesReady}
         mainSeriesRef={mainSeriesRef}
       />,
     );
 
+    const chart = (createChart as jest.Mock).mock.results[0].value;
+    const candleSeries = chart.addSeries.mock.results[0].value;
+
     rerender(
       <ChartPane
         series={[
-          { id: 'candles-candle', type: 'Candlestick', data: [] },
+          { id: mainSeriesId('candle'), type: 'Candlestick', data: [] },
           { id: 'ema-20', type: 'Line', data: [], color: '#4f8ef7' },
           { id: 'ema-50', type: 'Line', data: [], color: '#e0a030' },
         ]}
@@ -247,18 +260,86 @@ describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
     // that left mainSeries dangling on a detached series pre-fix.
     rerender(
       <ChartPane
-        series={[{ id: 'candles-candle', type: 'Candlestick', data: [] }]}
+        series={[{ id: mainSeriesId('candle'), type: 'Candlestick', data: [] }]}
+        onSeriesReady={onSeriesReady}
+        mainSeriesRef={mainSeriesRef}
+      />,
+    );
+
+    const pane0Series = chart.panes()[0].getSeries();
+
+    expect(onSeriesReady).toHaveBeenCalledTimes(1);
+    expect(mainSeriesRef.current).toBe(candleSeries);
+    expect(pane0Series).toContain(candleSeries);
+    expect(candleSeries.priceToCoordinate(100)).not.toBeNull();
+  });
+
+  // The scenario onSeriesReady's own doc comment calls out explicitly
+  // ("Called whenever the pane-0 main series is created or replaced, e.g.
+  // chart-type switch"): switching chartType while a Line-typed indicator
+  // sits on the same pane must retarget mainSeriesRef to the NEW main
+  // series exactly once per switch, never landing on the coexisting
+  // indicator line even though both are pane-0 Line series during the
+  // candle→line transition.
+  it('retargets mainSeriesRef to the new main series on a chartType switch, never to a coexisting indicator line', () => {
+    const onSeriesReady = jest.fn();
+    const mainSeriesRef: Parameters<typeof ChartPane>[0]['mainSeriesRef'] = { current: null };
+
+    const { rerender } = render(
+      <ChartPane
+        series={[
+          { id: mainSeriesId('candle'), type: 'Candlestick', data: [] },
+          { id: 'ema-20', type: 'Line', data: [], color: '#4f8ef7' },
+        ]}
         onSeriesReady={onSeriesReady}
         mainSeriesRef={mainSeriesRef}
       />,
     );
 
     const chart = (createChart as jest.Mock).mock.results[0].value;
-    const pane0Series = chart.panes()[0].getSeries();
+    const candleSeries = chart.addSeries.mock.results[0].value;
+    expect(mainSeriesRef.current).toBe(candleSeries);
 
-    expect(mainSeriesRef.current).not.toBeNull();
-    expect(pane0Series).toContain(mainSeriesRef.current);
-    expect(mainSeriesRef.current!.priceToCoordinate(100)).not.toBeNull();
+    // chartType candle -> line: the old candles-candle series is dropped
+    // from the config, a new candles-line series takes its place, and the
+    // ema-20 indicator (still Line-typed, still on pane 0) stays put.
+    rerender(
+      <ChartPane
+        series={[
+          { id: mainSeriesId('line'), type: 'Line', data: [] },
+          { id: 'ema-20', type: 'Line', data: [], color: '#4f8ef7' },
+        ]}
+        onSeriesReady={onSeriesReady}
+        mainSeriesRef={mainSeriesRef}
+      />,
+    );
+
+    const emaSeries = chart.addSeries.mock.results[1].value;
+    const lineSeries = chart.addSeries.mock.results[2].value;
+
+    expect(onSeriesReady).toHaveBeenCalledTimes(2);
+    expect(onSeriesReady).toHaveBeenLastCalledWith(chart, lineSeries);
+    expect(mainSeriesRef.current).toBe(lineSeries);
+    expect(mainSeriesRef.current).not.toBe(emaSeries);
+
+    // And back again, switching line -> candle with the indicator still present.
+    rerender(
+      <ChartPane
+        series={[
+          { id: mainSeriesId('candle'), type: 'Candlestick', data: [] },
+          { id: 'ema-20', type: 'Line', data: [], color: '#4f8ef7' },
+        ]}
+        onSeriesReady={onSeriesReady}
+        mainSeriesRef={mainSeriesRef}
+      />,
+    );
+
+    const secondCandleSeries = chart.addSeries.mock.results[3].value;
+
+    expect(onSeriesReady).toHaveBeenCalledTimes(3);
+    expect(onSeriesReady).toHaveBeenLastCalledWith(chart, secondCandleSeries);
+    expect(mainSeriesRef.current).toBe(secondCandleSeries);
+    expect(mainSeriesRef.current).not.toBe(emaSeries);
   });
 });
 

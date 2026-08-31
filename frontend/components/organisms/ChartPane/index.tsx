@@ -11,6 +11,7 @@ import {
   type Time,
 } from 'lightweight-charts';
 import type { Candle, Point } from '@/lib/indicators';
+import type { ChartType } from '@/lib/chartStore';
 import { useThemeStore } from '@/lib/theme';
 import styles from './ChartPane.module.css';
 
@@ -33,8 +34,8 @@ export interface SeriesConfig {
 // duplicated as a bare string literal in both files, so the two stay in
 // sync — a bare literal drifting on either side would silently reintroduce
 // the mainSeries-hijack bug this file's tests guard against.
-export const MAIN_SERIES_ID_PREFIX = 'candles-';
-export function mainSeriesId(chartType: string): string {
+const MAIN_SERIES_ID_PREFIX = 'candles-';
+export function mainSeriesId(chartType: ChartType): string {
   return `${MAIN_SERIES_ID_PREFIX}${chartType}`;
 }
 function isMainSeriesId(id: string): boolean {

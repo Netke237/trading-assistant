@@ -69,6 +69,15 @@ const createChart = jest.fn((_container, options) => {
     }),
     addPane: jest.fn(() => makeIndicatorPaneApi(nextPaneIndex++)),
     removeSeries: jest.fn((s) => {
+      // Real lightweight-charts throws if the series was already removed
+      // (it looks the series up in an internal map via ensureDefined, which
+      // throws once the entry is gone). Match that instead of silently
+      // no-op'ing on a double-remove, for the same reason removePane below
+      // mirrors the real destroy-on-removal behavior: a mock that tolerates
+      // a call pattern the real library would reject can hide a bug that
+      // only breaks in the browser while every test using this mock stays
+      // green.
+      if (s.__removed) throw new Error('removeSeries: series already removed');
       s.__removed = true;
       for (const list of paneSeriesLists) {
         const i = list.indexOf(s);

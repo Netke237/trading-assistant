@@ -112,8 +112,6 @@ function buildIndicatorLabels(indicators: IndicatorConfig[]): Record<string, str
       labels[`${ind.id}-hist`] = 'Histogram';
     }
     if (ind.type === 'VOL') labels[`${ind.id}-vol`] = 'Volume';
-    // candle series id
-    labels[`candles-${ind.type}`] = 'Close'; // fallback for candles
   }
   return labels;
 }
