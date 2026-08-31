@@ -27,6 +27,7 @@ class FinalStopResult:
     price: float
     source: StopSource
     structural: Optional[StructuralStop]   # the raw structural lookup, whether or not it decided the price
+    atr_floor_price: float                 # the ATR-floor price, whether or not it decided the final price
 
 
 def compute_final_stop(
@@ -51,9 +52,15 @@ def compute_final_stop(
     if structural is not None:
         structural_distance = abs(entry_price - structural.price)
         if structural_distance >= atr_floor_distance:
-            return FinalStopResult(price=structural.price, source="structural", structural=structural)
+            return FinalStopResult(
+                price=structural.price, source="structural", structural=structural,
+                atr_floor_price=atr_floor_price,
+            )
 
-    return FinalStopResult(price=atr_floor_price, source="atr_widened", structural=structural)
+    return FinalStopResult(
+        price=atr_floor_price, source="atr_widened", structural=structural,
+        atr_floor_price=atr_floor_price,
+    )
 
 
 @dataclass
@@ -63,6 +70,8 @@ class TargetRowResult:
     price: float                          # the price actually used — arithmetic, or snapped
     tp_source: TpSource
     structural: Optional[StructuralStop]  # nearest real level ahead of entry, if any (regardless of snap)
+    distance_dollar: Optional[float]      # |structural.price - arithmetic_price|; None when no structural candidate
+    tolerance_dollar: float               # snap_atr_multiplier * atr — the snap band, always computable
     quality_good: bool
     quality_reasons: list[str]
 
@@ -96,11 +105,12 @@ def compute_target_row(
     )
 
     structural_target = find_structural_target(candles, direction, entry_price)
-    snap_distance = max(snap_atr_multiplier, 0.0) * max(atr, 0.0)
+    tolerance_dollar = max(snap_atr_multiplier, 0.0) * max(atr, 0.0)
+    distance_dollar = abs(structural_target.price - arithmetic_price) if structural_target is not None else None
 
     tp_source: TpSource = "arithmetic"
     price = arithmetic_price
-    if structural_target is not None and abs(structural_target.price - arithmetic_price) <= snap_distance:
+    if distance_dollar is not None and distance_dollar <= tolerance_dollar:
         tp_source = "structural_snap"
         price = structural_target.price
 
@@ -123,6 +133,8 @@ def compute_target_row(
         price=price,
         tp_source=tp_source,
         structural=structural_target,
+        distance_dollar=distance_dollar,
+        tolerance_dollar=tolerance_dollar,
         quality_good=not quality_reasons,
         quality_reasons=quality_reasons,
     )

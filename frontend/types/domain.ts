@@ -166,6 +166,12 @@ export interface FirstPassageTarget {
 export interface FirstPassageEstimate {
   targets:      FirstPassageTarget[];
   invalidation: { probability: number; expectedDays: number | null };
+  /** ISO timestamp of when this estimate was computed — client-set on
+   *  receipt, the same way `ExitPlan.computedAt` works (the backend endpoint
+   *  is stateless/fresh on every call, so this isn't returned by it). Feature
+   *  8 (Final Recommendation) compares this against `ExitPlan.computedAt` to
+   *  show whichever method — Arithmetic or Monte Carlo — ran most recently. */
+  computedAt?: string;
 }
 
 /** The inputs a `FirstPassageEstimate` was actually computed against — captured
@@ -201,6 +207,12 @@ export interface ExitPlanTargetRow {
   expectedDays:    number | null;
   qualityGood:     boolean;
   qualityReasons:  string[];
+  /** |structuralPrice - arithmeticPrice|; null when no structural candidate
+   *  was found ahead of entry. */
+  distanceDollar:  number | null;
+  /** The snap band (snap_atr_multiplier * ATR) — always computable, whether
+   *  or not this row actually snapped. */
+  toleranceDollar: number;
 }
 
 /** Result of POST /api/contracts/exit-plan — final stop (wider of the
@@ -221,6 +233,16 @@ export interface ExitPlan {
     rrModel:              'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation';
     structuralSource:     'order_block' | 'swing_low' | 'swing_high' | null;
     structuralConfidence: number | null;
+    /** The structural stop candidate's raw price, whether or not it decided
+     *  the final stop (i.e. populated even when source === 'atr_widened'). */
+    structuralPrice:      number | null;
+    /** The ATR-floor price, whether or not it decided the final stop. */
+    atrFloorPrice:        number;
+    /** |structuralPrice - atrFloorPrice|; null when no structural candidate
+     *  was found at all. No toleranceDollar counterpart here — the stop
+     *  comparison is a strict "whichever is further from entry wins", not a
+     *  tolerance band (that concept only applies on the target side). */
+    distanceDollar:       number | null;
   };
   targets: ExitPlanTargetRow[];
   atr:     number;
@@ -680,17 +702,24 @@ export interface RiskCheckResult {
    *  stop-repriced contract price, floored at 0, times contracts). Undefined
    *  when no exit plan has been computed yet — there is nothing to check. */
   maxLossAtStop?: number;
-  /** The $ threshold `maxLossAtStop` was compared against — global
-   *  `maxLossPerTradePct * portfolioValue` (no per-trade override exists
-   *  pre-trade; that field lives on `PortfolioPosition` only). */
+  /** The $ threshold `maxLossAtStop` was compared against — either the global
+   *  `maxLossPerTradePct * portfolioValue` default, or an active per-trade
+   *  override (Feature 5, resolved via `resolveMaxLossLimitDollar`) — set
+   *  pre-trade on the Arithmetic Profit Target card, or post-trade via
+   *  `PortfolioPosition.maxLossOverride` from the Portfolio editor. */
   maxLossLimitDollar?: number;
 }
 
-/** Per-trade override for Feature C's max-loss-per-trade warning — either a
- *  fixed dollar figure or a percent of portfolioValue. `null`/absent means
- *  "inherit the global `maxLossPerTradePct` default". Post-trade only (set
- *  from the Portfolio editor) — pre-trade (TradeCard/SendToBrokerDialog) uses
- *  the existing two-click override UX instead of a persisted field. */
+/** Per-trade override for the max-loss-per-trade warning — either a fixed
+ *  dollar figure or a percent of portfolioValue. `null`/absent means
+ *  "inherit the global `maxLossPerTradePct` default". Settable in TWO places
+ *  now (Feature 5): pre-trade on the TradeCard's Arithmetic Profit Target
+ *  card (threaded through `initialMaxLossOverride`/`onMaxLossOverrideChange`,
+ *  cached per symbol at the page level, and carried onto the created
+ *  `PortfolioPosition` at send time), and post-trade from the Portfolio
+ *  editor (`PortfolioPosition.maxLossOverride` directly) — same shape, same
+ *  resolution function (`resolveMaxLossLimitDollar`), just set at different
+ *  points in the trade's lifecycle. */
 export interface MaxLossOverride {
   mode:  'dollar' | 'percent';
   value: number;

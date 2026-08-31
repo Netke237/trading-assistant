@@ -627,6 +627,11 @@ class PortfolioPositionCreate(BaseModel):
     portfolioValue: float = Field(alias="portfolio_value", default=50000.0)
     scanStockPrice: Optional[float] = Field(alias="scan_stock_price", default=None)
     tradeCardSnapshot: Optional[dict] = Field(alias="trade_card_snapshot", default=None)
+    # Feature 5 (TradeCard Exit-Plan Restructure) — pre-trade max-loss override
+    # set on the Arithmetic Profit Target card, carried through at creation
+    # time. Mirrors PortfolioPositionUpdate.maxLossOverride, which already
+    # supports this field for the post-trade (PATCH) path.
+    maxLossOverride: Optional[dict] = Field(alias="max_loss_override", default=None)
 
     def __init__(self, **data):
         # Support both camelCase and snake_case field names
@@ -641,6 +646,7 @@ class PortfolioPositionCreate(BaseModel):
             "portfolio_value": "portfolioValue",
             "scan_stock_price": "scanStockPrice",
             "trade_card_snapshot": "tradeCardSnapshot",
+            "max_loss_override": "maxLossOverride",
         }
         for k, v in data.items():
             mapped[aliases.get(k, k)] = v

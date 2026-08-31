@@ -594,7 +594,11 @@ describe('portfolioStore', () => {
       // this fix, so the very next syncFromBackend silently erased it.
       const exitPlan = {
         computedAt: '2026-08-26T12:00:00.000Z',
-        stop: { price: 89.0, source: 'structural' as const, contractPrice: 1.1, rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80 },
+        stop: {
+          price: 89.0, source: 'structural' as const, contractPrice: 1.1, rrModel: 'Heston repriced' as const,
+          structuralSource: 'order_block' as const, structuralConfidence: 80,
+          structuralPrice: 89.0, atrFloorPrice: 85.0, distanceDollar: 4.0,
+        },
         targets: [],
         atr: 2.0,
       };
@@ -611,6 +615,22 @@ describe('portfolioStore', () => {
       await persistPosition({ ...abt, recId: 'REC-EP-2' });
       const body = JSON.parse(fetchMock.mock.calls[0][1].body);
       expect(body.exitPlan).toBeNull();
+    });
+
+    it('persistPosition includes maxLossOverride in the POST body (Feature 5) — the create payload has no such key at all without this, so a pre-trade override appears to work in optimistic local UI state but the backend never receives it, and the next sync silently overwrites it with null', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      await persistPosition({ ...abt, recId: 'REC-MLO-1', maxLossOverride: { mode: 'percent', value: 0.05 } });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.maxLossOverride).toEqual({ mode: 'percent', value: 0.05 });
+    });
+
+    it('persistPosition sends maxLossOverride as null when the position has none', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      await persistPosition({ ...abt, recId: 'REC-MLO-2' });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.maxLossOverride).toBeNull();
     });
 
     it('persistPosition surfaces adjustedQty when the backend auto-reduces the size', async () => {

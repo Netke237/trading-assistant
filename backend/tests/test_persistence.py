@@ -200,6 +200,37 @@ async def test_portfolio_add_persists_exit_plan(client):
 
 
 @pytest.mark.asyncio
+async def test_portfolio_add_persists_max_loss_override(client):
+    """POST /api/portfolio must persist maxLossOverride (Feature 5 — the
+    pre-trade override set on TradeCard's Arithmetic Profit Target card, sent
+    once at creation time), not silently drop it — same regression class as
+    the exitPlan create-path fix above: PortfolioPositionCreate previously had
+    no such field, so a pre-trade override appeared to work in the client's
+    optimistic local UI state but the backend never received it, and the next
+    sync silently overwrote it with null."""
+    override = {"mode": "percent", "value": 0.05}
+    payload = {**_POSITION_PAYLOAD, "recId": "REC-MAXLOSS-001", "maxLossOverride": override}
+    resp = await client.post("/api/portfolio", json=payload)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["maxLossOverride"] == override
+
+    get_resp = await client.get("/api/portfolio")
+    assert get_resp.status_code == 200
+    saved = next(p for p in get_resp.json() if p["recId"] == "REC-MAXLOSS-001")
+    assert saved["maxLossOverride"] == override
+
+
+@pytest.mark.asyncio
+async def test_portfolio_add_max_loss_override_defaults_to_none(client):
+    """A position created with no maxLossOverride key at all must persist as
+    null, not error or silently default to some other shape."""
+    payload = {**_POSITION_PAYLOAD, "recId": "REC-MAXLOSS-002"}
+    resp = await client.post("/api/portfolio", json=payload)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["maxLossOverride"] is None
+
+
+@pytest.mark.asyncio
 async def test_portfolio_delete(client):
     """POST then DELETE by rec_id → GET returns empty list."""
     await client.post("/api/portfolio", json=_POSITION_PAYLOAD)

@@ -165,6 +165,15 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     stop:           floorStop(p.stop),
     structuralStop: floorStop(p.structuralStop),
     exitPlan:       p.exitPlan ?? null,
+    // Feature 5 — without this key, a pre-trade override set on the
+    // Arithmetic card appears to work in the client's optimistic local UI
+    // state right after submit, but the backend never receives it: the row
+    // is created with max_loss_override=None regardless of schema/router
+    // wiring, and the next backend sync silently overwrites the optimistic
+    // value with null. Mirrors toUpdatePayload's existing
+    // `if ('maxLossOverride' in patch) body.maxLossOverride = ...` handling
+    // for the post-trade PATCH path.
+    maxLossOverride: p.maxLossOverride ?? null,
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,

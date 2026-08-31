@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text } from '@/components/primitives';
-import { TradeCard } from '@/components/organisms/TradeCard';
+import { TradeCard, type EditOverlay } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/lib/portfolioStore';
@@ -21,7 +21,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { logAudit } from '@/lib/audit';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import type {
-  PortfolioPosition, TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan,
+  PortfolioPosition, TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan, MaxLossOverride,
 } from '@/types/domain';
 import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
@@ -75,6 +75,10 @@ function positionFromOrder(
   order: DraftOrder,
   structuralStop: number | null = null,
   exitPlan: ExitPlan | null = null,
+  // Feature 5 — the active pre-trade override for this symbol, read by the
+  // caller from the shared maxLossOverrideBySymbol cache (this is a module-
+  // level function, no closure access to component state).
+  maxLossOverride: MaxLossOverride | null = null,
 ): PortfolioPosition {
   const c   = order.card;
   const cd  = c.contractDetails;
@@ -95,6 +99,7 @@ function positionFromOrder(
     stop:          c.exit.invalidation,
     structuralStop,
     exitPlan,
+    maxLossOverride,
     targets:       c.exit.targets,
     status:        c.finalStatus,
     ivRank:        cd?.ivRank,
@@ -150,6 +155,39 @@ export default function Step7Page() {
   // that contract's own strike/dte/premium, so it must be keyed by contract,
   // not symbol.
   const [exitPlanByContract, setExitPlanByContract] = useState<Record<string, CachedExitPlan>>({});
+  // Feature 7 — the single shared source of truth for "how many contracts" a
+  // given symbol's order carries. Keyed by SYMBOL (not contract), matching
+  // structuralBySymbol's keying: a contract switch within the same symbol
+  // should not reset a user's sizing choice. Fed into TradeCard's existing
+  // `contracts` prop (which already seeds `overlay.contracts` on mount and
+  // re-syncs via a `[initialContracts]` effect) and updated from the existing
+  // `onEditsChange` callback — no new prop/callback pair needed on TradeCard
+  // itself. Every order-placement path (quick Place Limit/Market, auto-trade
+  // arm, and SendToBrokerDialog's initial row seed) reads from this same map,
+  // fixing the pre-existing bug where each of those defaulted to a hardcoded
+  // 1 independent of what the card displayed.
+  // Named `orderContractsBySymbol` (not `contractsBySymbol`) to avoid
+  // colliding with the pre-existing scanStore selector of that name below
+  // (`Record<symbol, OptionContract[]>` — the picked-contract-per-symbol map,
+  // an unrelated concept that happens to share a plausible name).
+  const [orderContractsBySymbol, setOrderContractsBySymbol] = useState<Record<string, number>>({});
+  const handleEditsChange = (symbol: string, overlay: EditOverlay) => {
+    setOrderContractsBySymbol((prev) =>
+      prev[symbol] === overlay.contracts ? prev : { ...prev, [symbol]: overlay.contracts },
+    );
+  };
+  // Feature 5 — the shared pre-trade max-loss override cache, keyed by SYMBOL
+  // (a risk decision about the underlying, same keying as structuralBySymbol,
+  // not exitPlanByContract). Fed into TradeCard's initialMaxLossOverride prop
+  // and updated from onMaxLossOverrideChange; also read by
+  // buildPaperPosition/positionFromOrder (to carry the override onto the
+  // created PortfolioPosition) and SendToBrokerDialog (so its own risk check
+  // knows about an active override and doesn't force a spurious extra
+  // confirmation click).
+  const [maxLossOverrideBySymbol, setMaxLossOverrideBySymbol] = useState<Record<string, MaxLossOverride | null>>({});
+  const handleMaxLossOverrideChange = (symbol: string, override: MaxLossOverride | null) => {
+    setMaxLossOverrideBySymbol((prev) => ({ ...prev, [symbol]: override }));
+  };
   // Both write paths delegate to a pure reducer in lib/tradeCardOverride.ts,
   // alongside the read side (withCachedEstimate) — the two rules they enforce are
   // the highest-consequence logic in this feature and are unit-tested there rather
@@ -559,7 +597,7 @@ export default function Step7Page() {
    *  at fill time, not when the scan ran. The backend re-fetches again at save
    *  time as the authoritative baseline; this keeps the local view correct
    *  until the next portfolio sync. */
-  function buildPaperPosition(card: TradeCardData, orderType: 'LMT' | 'MKT', broker: string, orderId: string, livePrice?: number): PortfolioPosition {
+  function buildPaperPosition(card: TradeCardData, orderType: 'LMT' | 'MKT', broker: string, orderId: string, livePrice?: number, contracts = 1): PortfolioPosition {
     const cd  = card.contractDetails;
     const mid = livePrice ?? cd?.mid ?? card.entry.limit;
     const dte = cd?.dte ?? 24;
@@ -584,13 +622,14 @@ export default function Step7Page() {
       stop:          card.exit.invalidation,
       structuralStop: structuralBySymbol[card.symbol]?.stop?.price ?? null,
       exitPlan:      cardContractKey ? exitPlanByContract[cardContractKey]?.plan ?? null : null,
+      maxLossOverride: maxLossOverrideBySymbol[card.symbol] ?? null,
       targets:       card.exit.targets,
       status:        card.finalStatus,
       ivRank:        cd?.ivRank,
       delta:         cd?.delta,
       theta:         cd?.theta,
       vega:          0.20,
-      contracts:     1,
+      contracts,
       source:        'paper',
       sourceLabel:   `${brokerLabel} — ${typeLabel} (ID: ${orderId})`,
       orderedAt:     nowISOLocal(),
@@ -605,18 +644,24 @@ export default function Step7Page() {
     if (!card || !selectedBroker) return;
     setLimitPlacing(true); setOrderError(null);
     try {
+      // Floored defensively: the shared map is a plausible target for a
+      // future write path to drop a sub-1 value into (e.g. Feature 3's Apply
+      // button before its own clamp/disable) — `?? 1` alone only catches
+      // null/undefined, not 0, and the backend rejects quantity:0 with an
+      // opaque 422 that gives no clue this map is where it came from.
+      const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
       const res = await api.postOptionOrder({
         broker:        selectedBroker,
         symbol:        card.symbol,
         option_symbol: toOptionSymbol(card),
         action:        'BUY',
         effect:        'OPEN',
-        quantity:      1,
+        quantity:      contracts,
         order_type:    'LMT',
         limit_price:   card.entry.limit,
         tif:           'DAY',
       });
-      const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id, liveQuote?.price);
+      const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id, liveQuote?.price, contracts);
       const saved = await persistPosition(pos);
       const { rejected, detail } = applyPersistedPosition(saved, pos, addPosition, (adjustedQty) => {
         setSizeAdjustedNote(`Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
@@ -638,18 +683,20 @@ export default function Step7Page() {
     if (!card || !selectedBroker) return;
     setMarketPlacing(true); setOrderError(null);
     try {
+      // Floored defensively — see placeLimitPaper's identical comment above.
+      const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
       const res = await api.postOptionOrder({
         broker:        selectedBroker,
         symbol:        card.symbol,
         option_symbol: toOptionSymbol(card),
         action:        'BUY',
         effect:        'OPEN',
-        quantity:      1,
+        quantity:      contracts,
         order_type:    'MKT',
         limit_price:   null,
         tif:           'DAY',
       });
-      const pos = buildPaperPosition(card, 'MKT', selectedBroker, res.order_id, liveQuote?.price);
+      const pos = buildPaperPosition(card, 'MKT', selectedBroker, res.order_id, liveQuote?.price, contracts);
       const saved = await persistPosition(pos);
       const { rejected, detail } = applyPersistedPosition(saved, pos, addPosition, (adjustedQty) => {
         setSizeAdjustedNote(`Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
@@ -688,7 +735,8 @@ export default function Step7Page() {
       const structuralStop = structuralBySymbol[o.card.symbol]?.stop?.price ?? null;
       const orderContractKey = contractKeyFor(o.card);
       const orderExitPlan = orderContractKey ? exitPlanByContract[orderContractKey]?.plan ?? null : null;
-      const res = await addPosition({ ...positionFromOrder(o, structuralStop, orderExitPlan), recId });
+      const orderMaxLossOverride = maxLossOverrideBySymbol[o.card.symbol] ?? null;
+      const res = await addPosition({ ...positionFromOrder(o, structuralStop, orderExitPlan, orderMaxLossOverride), recId });
 
       if (res.status === 'rejected') {
         // Backend refused it and the optimistic row was dropped — a real failure.
@@ -791,9 +839,13 @@ export default function Step7Page() {
               onSendToBroker={() => !basketEmpty && !basketPlansPending && setDialogOpen(true)}
               sendLabel={sendLabel}
               sendDisabled={basketEmpty || basketPlansPending}
+              contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
+              onEditsChange={(overlay) => handleEditsChange(effectiveCard.symbol, overlay)}
               onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(effectiveCard.symbol, stop, stockPrice)}
               onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
               onExitPlanChange={(plan) => handleExitPlanChange(contractKey, plan)}
+              initialMaxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
+              onMaxLossOverrideChange={(v) => handleMaxLossOverrideChange(effectiveCard.symbol, v)}
             />
           )}
           {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (
@@ -853,7 +905,13 @@ export default function Step7Page() {
               {paperOrderId && <Text size={12} tone="pass">Order placed — ID: {paperOrderId}</Text>}
               {sizeAdjustedNote && <Text size={12} tone="caution">{sizeAdjustedNote}</Text>}
               {orderError   && <Text size={12} tone="reject">{orderError}</Text>}
-              {planReady && <AutoTradeArm card={effectiveCard} broker={selectedBroker} />}
+              {planReady && (
+                <AutoTradeArm
+                  card={effectiveCard}
+                  broker={selectedBroker}
+                  contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
+                />
+              )}
             </>
           )}
         </div>
@@ -862,6 +920,8 @@ export default function Step7Page() {
       {dialogOpen && (
         <SendToBrokerDialog
           cards={basketCards}
+          contractsBySymbol={orderContractsBySymbol}
+          overridesBySymbol={maxLossOverrideBySymbol}
           onClose={() => setDialogOpen(false)}
           onSubmit={handleSubmit}
         />
