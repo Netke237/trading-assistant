@@ -231,6 +231,22 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
     series.forEach((cfg) => {
       let s = seriesMap.current.get(cfg.id);
       if (!s) {
+        // Only the main price series — always id `candles-${chartType}`, built
+        // exclusively by ChartWorkspace's buildMainSeries — should become
+        // mainSeries/fire onSeriesReady. Every other pane-0 series is an
+        // indicator overlay (EMA, SMA, BB, MASUITE, AVWAP, KEYLEVELS,
+        // HTFLEVELS...), and overlays can share a SeriesConfig['type'] with
+        // the main series — Line is the case that actually occurs today,
+        // since chartType can be 'line' — so this check is keyed on id, not
+        // type, and applied uniformly below rather than duplicated per
+        // branch. Without it, whichever pane-0 series of a shared type is
+        // created LAST would silently overwrite mainSeries/mainSeriesRef,
+        // leaving it pointing at an indicator instead of the real main
+        // series. If that indicator is later removed, mainSeries keeps
+        // referencing a now-detached series (no price scale), so anything
+        // attached to it — e.g. VolumeProfilePrimitive — silently fails to
+        // render.
+        const isMain = (cfg.paneIndex ?? 0) === 0 && cfg.id.startsWith('candles-');
         if (cfg.type === 'Candlestick') {
           s = chart.addSeries(CandlestickSeries, {
             upColor: passColor,
@@ -239,18 +255,10 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
             wickUpColor: passColor,
             wickDownColor: rejColor,
           }, cfg.paneIndex ?? 0);
-          if ((cfg.paneIndex ?? 0) === 0) {
-            if (mainSeriesRef) mainSeriesRef.current = s as ISeriesApi<'Candlestick'>;
-            onSeriesReadyRef.current?.(chart, s as ISeriesApi<'Candlestick'>);
-          }
         } else if (cfg.type === 'Bar') {
           s = chart.addSeries(BarSeries, {
             upColor: passColor, downColor: rejColor,
           }, cfg.paneIndex ?? 0);
-          if ((cfg.paneIndex ?? 0) === 0) {
-            if (mainSeriesRef) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
-            onSeriesReadyRef.current?.(chart, s as unknown as ISeriesApi<'Candlestick'>);
-          }
         } else if (cfg.type === 'Histogram') {
           s = chart.addSeries(HistogramSeries, {
             color: cfg.color ?? colorsRef.current.gridSoft,
@@ -262,21 +270,10 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
             lineWidth: 1,
             priceScaleId: cfg.priceScaleId ?? 'right',
           }, cfg.paneIndex ?? 0);
-          // Only the main price series (id `candles-${chartType}`, created when
-          // chartType === 'line') should become mainSeries/fire onSeriesReady.
-          // A plain Line-type indicator overlay (EMA, SMA, BB, MASUITE, AVWAP,
-          // KEYLEVELS, HTFLEVELS...) also lands in this branch since it shares
-          // the same SeriesConfig['type'] — without this id check, whichever
-          // such indicator is created LAST on pane 0 would silently overwrite
-          // mainSeries/mainSeriesRef, leaving it pointing at an indicator line
-          // instead of the real main series. If that indicator is later
-          // removed, mainSeries keeps referencing a now-detached series (no
-          // price scale), so anything attached to it — e.g. VolumeProfilePrimitive
-          // — silently fails to render.
-          if ((cfg.paneIndex ?? 0) === 0 && cfg.id.startsWith('candles-')) {
-            if (mainSeriesRef) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
-            onSeriesReadyRef.current?.(chart, s as unknown as ISeriesApi<'Candlestick'>);
-          }
+        }
+        if (isMain) {
+          if (mainSeriesRef) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
+          onSeriesReadyRef.current?.(chart, s as unknown as ISeriesApi<'Candlestick'>);
         }
         seriesMap.current.set(cfg.id, s);
       }

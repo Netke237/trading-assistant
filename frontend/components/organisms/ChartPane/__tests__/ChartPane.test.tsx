@@ -159,7 +159,7 @@ describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
   // stops rendering.
   it('fires onSeriesReady only for the main candlestick series, not for pane-0 indicator Line series created after it', () => {
     const onSeriesReady = jest.fn();
-    const mainSeriesRef = { current: null } as unknown as Parameters<typeof ChartPane>[0]['mainSeriesRef'] & { current: unknown };
+    const mainSeriesRef: Parameters<typeof ChartPane>[0]['mainSeriesRef'] = { current: null };
 
     render(
       <ChartPane
@@ -187,7 +187,7 @@ describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
   // rather than the indicator lines created alongside it.
   it('fires onSeriesReady for a Line-type main series (chartType=line) and not for indicator lines around it', () => {
     const onSeriesReady = jest.fn();
-    const mainSeriesRef = { current: null } as unknown as Parameters<typeof ChartPane>[0]['mainSeriesRef'] & { current: unknown };
+    const mainSeriesRef: Parameters<typeof ChartPane>[0]['mainSeriesRef'] = { current: null };
 
     render(
       <ChartPane
@@ -206,6 +206,59 @@ describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
     expect(onSeriesReady).toHaveBeenCalledTimes(1);
     expect(onSeriesReady).toHaveBeenCalledWith(chart, mainLineSeries);
     expect(mainSeriesRef.current).toBe(mainLineSeries);
+  });
+
+  // End-to-end regression test for the actual user-visible symptom (not just
+  // ChartPane's internal wiring): Volume Profile attaches to whatever
+  // mainSeriesRef points at and calls series.priceToCoordinate() to lay out
+  // its bars. Before the fix, removing the last-added pane-0 indicator left
+  // mainSeriesRef pointing at that now-detached indicator series — its
+  // priceToCoordinate would return null, so the profile drew nothing, with
+  // no error anywhere. This reproduces exactly that sequence (add EMA-20,
+  // then EMA-50 last so it's the one that would have hijacked mainSeries;
+  // remove both) and asserts mainSeriesRef stayed on a series that is both
+  // still present in the chart's live pane-0 series list and still resolves
+  // coordinates — the two facts VolumeProfilePrimitive's draw() depends on.
+  it('keeps mainSeriesRef pointed at a live, coordinate-resolving series through an indicator add-then-remove cycle', () => {
+    const onSeriesReady = jest.fn();
+    const mainSeriesRef: Parameters<typeof ChartPane>[0]['mainSeriesRef'] = { current: null };
+
+    const { rerender } = render(
+      <ChartPane
+        series={[{ id: 'candles-candle', type: 'Candlestick', data: [] }]}
+        onSeriesReady={onSeriesReady}
+        mainSeriesRef={mainSeriesRef}
+      />,
+    );
+
+    rerender(
+      <ChartPane
+        series={[
+          { id: 'candles-candle', type: 'Candlestick', data: [] },
+          { id: 'ema-20', type: 'Line', data: [], color: '#4f8ef7' },
+          { id: 'ema-50', type: 'Line', data: [], color: '#e0a030' },
+        ]}
+        onSeriesReady={onSeriesReady}
+        mainSeriesRef={mainSeriesRef}
+      />,
+    );
+
+    // Both indicators removed again — the exact user action ("toggle EMA off")
+    // that left mainSeries dangling on a detached series pre-fix.
+    rerender(
+      <ChartPane
+        series={[{ id: 'candles-candle', type: 'Candlestick', data: [] }]}
+        onSeriesReady={onSeriesReady}
+        mainSeriesRef={mainSeriesRef}
+      />,
+    );
+
+    const chart = (createChart as jest.Mock).mock.results[0].value;
+    const pane0Series = chart.panes()[0].getSeries();
+
+    expect(mainSeriesRef.current).not.toBeNull();
+    expect(pane0Series).toContain(mainSeriesRef.current);
+    expect(mainSeriesRef.current!.priceToCoordinate(100)).not.toBeNull();
   });
 });
 

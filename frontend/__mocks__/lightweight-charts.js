@@ -7,19 +7,35 @@ const BarSeries = { __brand: 'BarSeries' };
 const LineSeries = { __brand: 'LineSeries' };
 const HistogramSeries = { __brand: 'HistogramSeries' };
 
+// priceToCoordinate returns a fixed non-null coordinate while the series is
+// live, and null once removed — mirroring the real library (a series with no
+// price scale, because it's been detached from every pane, can't resolve a
+// coordinate). This is what let a real-browser repro of the volume-profile
+// bug prove mainSeries had been silently hijacked to a since-removed
+// indicator series: VolumeProfilePrimitive's draw() calls priceToCoordinate
+// on whatever series it was attached to, and got null for every bin.
 function makeSeriesApi(seriesOptions) {
-  return {
+  const api = {
     __options: seriesOptions,
+    __removed: false,
     setData: jest.fn(),
     applyOptions: jest.fn(),
     createPriceLine: jest.fn(),
+    priceToCoordinate: jest.fn(() => (api.__removed ? null : 100)),
   };
+  return api;
 }
 
-function makePaneApi() {
+// Backed by a live array (not a fixed jest.fn(() => [])) so a test can
+// render, add/remove series across a rerender, and then assert on which
+// series a given pane *actually* still holds — the mechanism the real
+// volume-profile bug hinged on (mainSeries pointing at a series no pane
+// holds any more). A static empty-array stub can't distinguish that from
+// the correct case.
+function makePaneApi(seriesList) {
   return {
     setHeight: jest.fn(),
-    getSeries: jest.fn(() => []),
+    getSeries: jest.fn(() => seriesList),
   };
 }
 
@@ -34,14 +50,35 @@ function makeIndicatorPaneApi(index) {
 }
 
 const createChart = jest.fn((_container, options) => {
-  const panes = [makePaneApi()];
+  const paneSeriesLists = [[]]; // paneSeriesLists[i] backs panes[i].getSeries()
+  const panes = [makePaneApi(paneSeriesLists[0])];
   let nextPaneIndex = 1; // pane 0 is the main chart pane, never created via addPane
+
+  function ensurePane(index) {
+    while (paneSeriesLists.length <= index) paneSeriesLists.push([]);
+    while (panes.length <= index) panes.push(makePaneApi(paneSeriesLists[panes.length]));
+  }
+
   return {
     __options: options,
-    addSeries: jest.fn((_type, seriesOptions) => makeSeriesApi(seriesOptions)),
+    addSeries: jest.fn((_type, seriesOptions, paneIndex = 0) => {
+      ensurePane(paneIndex);
+      const s = makeSeriesApi(seriesOptions);
+      paneSeriesLists[paneIndex].push(s);
+      return s;
+    }),
     addPane: jest.fn(() => makeIndicatorPaneApi(nextPaneIndex++)),
-    removeSeries: jest.fn(),
-    removePane: jest.fn(),
+    removeSeries: jest.fn((s) => {
+      s.__removed = true;
+      for (const list of paneSeriesLists) {
+        const i = list.indexOf(s);
+        if (i !== -1) list.splice(i, 1);
+      }
+    }),
+    removePane: jest.fn((index) => {
+      paneSeriesLists.splice(index, 1);
+      panes.splice(index, 1);
+    }),
     panes: jest.fn(() => panes),
     subscribeCrosshairMove: jest.fn(),
     applyOptions: jest.fn(),
