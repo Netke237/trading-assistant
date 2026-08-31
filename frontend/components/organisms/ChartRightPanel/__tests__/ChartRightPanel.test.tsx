@@ -2,6 +2,8 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
 import ChartRightPanel from '@/components/organisms/ChartRightPanel';
 import { mainSeriesId } from '@/lib/chart/mainSeriesId';
+import { useWatchlistStore } from '@/lib/watchlistStore';
+import { useChartAlertStore } from '@/lib/chartAlertStore';
 
 // Regression test for a duplicated-literal bug: this panel used to filter
 // the main price series out of the crosshair "indicator values" list via a
@@ -12,6 +14,11 @@ import { mainSeriesId } from '@/lib/chart/mainSeriesId';
 // the shared isMainSeriesId this component imports, not just a coincidence
 // of two literals matching.
 describe('ChartRightPanel — Data tab indicator filtering', () => {
+  beforeEach(() => {
+    useWatchlistStore.setState({ added: [] });
+    useChartAlertStore.setState({ history: [], rules: [], newSinceView: 0 });
+  });
+
   it('filters the main price series out of the indicator-values list but keeps real indicators', () => {
     render(
       <ChartRightPanel
