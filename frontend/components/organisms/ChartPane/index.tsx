@@ -23,6 +23,24 @@ export interface SeriesConfig {
   paneIndex?: number;
 }
 
+// The id prefix that marks a SeriesConfig as THE main price series (as
+// opposed to a main-pane indicator overlay — EMA, SMA, BB, MASUITE, AVWAP,
+// KEYLEVELS, HTFLEVELS... — which can share the same series `type`, e.g.
+// Line when chartType is 'line'). ChartWorkspace's buildMainSeries is the
+// only place that constructs this id (`${mainSeriesId(chartType)}`); this
+// module's own series-creation loop is the only place that reads it back to
+// decide what becomes mainSeries/fires onSeriesReady. Centralized here, not
+// duplicated as a bare string literal in both files, so the two stay in
+// sync — a bare literal drifting on either side would silently reintroduce
+// the mainSeries-hijack bug this file's tests guard against.
+export const MAIN_SERIES_ID_PREFIX = 'candles-';
+export function mainSeriesId(chartType: string): string {
+  return `${MAIN_SERIES_ID_PREFIX}${chartType}`;
+}
+function isMainSeriesId(id: string): boolean {
+  return id.startsWith(MAIN_SERIES_ID_PREFIX);
+}
+
 interface Props {
   series: SeriesConfig[];
   onCrosshairMove?: (time: string | null, values: Record<string, number>) => void;
@@ -231,8 +249,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
     series.forEach((cfg) => {
       let s = seriesMap.current.get(cfg.id);
       if (!s) {
-        // Only the main price series — always id `candles-${chartType}`, built
-        // exclusively by ChartWorkspace's buildMainSeries — should become
+        // Only the main price series (see isMainSeriesId above) should become
         // mainSeries/fire onSeriesReady. Every other pane-0 series is an
         // indicator overlay (EMA, SMA, BB, MASUITE, AVWAP, KEYLEVELS,
         // HTFLEVELS...), and overlays can share a SeriesConfig['type'] with
@@ -246,7 +263,7 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
         // referencing a now-detached series (no price scale), so anything
         // attached to it — e.g. VolumeProfilePrimitive — silently fails to
         // render.
-        const isMain = (cfg.paneIndex ?? 0) === 0 && cfg.id.startsWith('candles-');
+        const isMain = (cfg.paneIndex ?? 0) === 0 && isMainSeriesId(cfg.id);
         if (cfg.type === 'Candlestick') {
           s = chart.addSeries(CandlestickSeries, {
             upColor: passColor,

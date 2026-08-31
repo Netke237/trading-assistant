@@ -76,6 +76,13 @@ const createChart = jest.fn((_container, options) => {
       }
     }),
     removePane: jest.fn((index) => {
+      // Real lightweight-charts destroys a pane's series along with the
+      // pane itself — mark them removed too, not just drop the pane's
+      // tracking arrays, so a series held by a removed-but-nonempty pane
+      // can't be mistaken for still-live by a test (ChartPane itself only
+      // ever calls removePane on an already-empty pane, but the mock
+      // shouldn't rely on that to stay faithful to the real API's contract).
+      for (const s of paneSeriesLists[index] ?? []) s.__removed = true;
       paneSeriesLists.splice(index, 1);
       panes.splice(index, 1);
     }),

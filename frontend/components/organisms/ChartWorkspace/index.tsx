@@ -20,7 +20,7 @@ import AlertToast from '@/components/organisms/AlertToast';
 import ChartClickPopover from '@/components/molecules/ChartClickPopover';
 import TextInputPopover from '@/components/molecules/TextInputPopover';
 import type { SeriesConfig } from '@/components/organisms/ChartPane';
-import ChartPane from '@/components/organisms/ChartPane';
+import ChartPane, { mainSeriesId } from '@/components/organisms/ChartPane';
 import ChartTopBar from '@/components/organisms/ChartTopBar';
 import DrawingToolbar, { type DrawingTool } from '@/components/organisms/DrawingToolbar';
 import IndicatorPanel from '@/components/organisms/IndicatorPanel';
@@ -50,7 +50,7 @@ function buildMainSeries(candles: Candle[], indicators: IndicatorConfig[], chart
     : candles;
 
   const series: SeriesConfig[] = [
-    { id: `candles-${chartType}`, type: mainType, data: mainData },
+    { id: mainSeriesId(chartType), type: mainType, data: mainData },
   ];
   for (const ind of indicators) {
     if (ind.pane !== 'main') continue;
