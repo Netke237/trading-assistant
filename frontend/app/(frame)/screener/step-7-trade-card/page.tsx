@@ -644,7 +644,12 @@ export default function Step7Page() {
     if (!card || !selectedBroker) return;
     setLimitPlacing(true); setOrderError(null);
     try {
-      const contracts = orderContractsBySymbol[card.symbol] ?? 1;
+      // Floored defensively: the shared map is a plausible target for a
+      // future write path to drop a sub-1 value into (e.g. Feature 3's Apply
+      // button before its own clamp/disable) — `?? 1` alone only catches
+      // null/undefined, not 0, and the backend rejects quantity:0 with an
+      // opaque 422 that gives no clue this map is where it came from.
+      const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
       const res = await api.postOptionOrder({
         broker:        selectedBroker,
         symbol:        card.symbol,
@@ -678,7 +683,8 @@ export default function Step7Page() {
     if (!card || !selectedBroker) return;
     setMarketPlacing(true); setOrderError(null);
     try {
-      const contracts = orderContractsBySymbol[card.symbol] ?? 1;
+      // Floored defensively — see placeLimitPaper's identical comment above.
+      const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
       const res = await api.postOptionOrder({
         broker:        selectedBroker,
         symbol:        card.symbol,

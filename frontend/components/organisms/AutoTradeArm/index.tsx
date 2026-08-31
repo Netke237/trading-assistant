@@ -62,7 +62,13 @@ export function AutoTradeArm({ card, broker, contracts = 1 }: AutoTradeArmProps)
         symbol:          card.symbol,
         option_symbol:   contractId,
         action:          'BUY',   // long single-leg option (call or put) is always buy-to-open
-        quantity:        contracts,
+        // Floored defensively: `contracts` comes from the shared per-symbol
+        // Contracts map (Feature 7), which a caller could in principle write
+        // a sub-1 value into (e.g. Feature 3's Apply button before its own
+        // clamp/disable) — 0 would otherwise reach the backend, which
+        // rejects quantity:0 with an opaque 422 that gives no clue this is
+        // where it came from.
+        quantity:        Math.max(1, contracts),
         order_type:      'LMT',
         limit_price:     card.entry.limit,
         entry_premium:   card.contractDetails?.mid ?? card.entry.limit,

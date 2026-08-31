@@ -323,6 +323,18 @@ export function TradeCard({
   const [structuralStopStockPrice, setStructuralStopStockPrice] = useState<number | null>(
     data.exit.structuralStopStockPrice ?? null,
   );
+  // Adversarial-audit finding 2 — the live stock price most recently fetched
+  // by EITHER "Check Structure" or "Compute Arithmetic Plan" on the
+  // Arithmetic card, so its "Stock entry price" header shows the SAME number
+  // the stop/target math directly below it was computed against, instead of
+  // the scan-time `data.price` snapshot silently drifting from the live
+  // quote once either button has actually run. null until either has been
+  // run this mount (reset alongside structuralStop/exitPlan/etc. on a
+  // contract switch). Deliberately NOT cleared on a failed refetch — the
+  // header keeps showing the last successfully fetched price rather than
+  // reverting to the stale snapshot, same spirit as structuralStop's own
+  // "a restored value stays on screen" behavior.
+  const [arithmeticLiveStockPrice, setArithmeticLiveStockPrice] = useState<number | null>(null);
   // Tracks the in-flight "Check structure" request (if any) so a stale response
   // for a contract the user has since navigated away from (via CandidateNav
   // Prev/Next) can never overwrite the display for the new one — same class of
@@ -454,6 +466,10 @@ export function TradeCard({
       setExitPlan(data.exit.exitPlan);
       setExitPlanError(false);
       setExitPlanLoading(false);
+      // Adversarial-audit finding 2 — reset the Arithmetic header's live-quote
+      // tracker too, or the new candidate would briefly show the PREVIOUS
+      // candidate's live price above its own (freshly-reset) stop/target math.
+      setArithmeticLiveStockPrice(null);
       // Feature 5 — re-sync to whatever the parent resolved for the incoming
       // candidate (its symbol-keyed cache), so the newly active card never
       // briefly shows the PREVIOUS candidate's override.
@@ -557,6 +573,7 @@ export function TradeCard({
       }, controller.signal);
       if (controller.signal.aborted) return;
       setExitPlan({ ...res, computedAt: new Date().toISOString() });
+      setArithmeticLiveStockPrice(entryPrice);
     } catch {
       if (controller.signal.aborted) return;
       setExitPlanError(true);
@@ -802,6 +819,7 @@ export function TradeCard({
       if (controller.signal.aborted) return;
       setStructuralStop(normalizeStructuralStopResponse(res));
       setStructuralStopStockPrice(referenceStockPrice);
+      setArithmeticLiveStockPrice(referenceStockPrice);
       structuralIsFreshRef.current = true;
     } catch {
       if (controller.signal.aborted) return;
@@ -1098,7 +1116,12 @@ export function TradeCard({
           </div>
           <div className={styles.kvRow}>
             <Text size={12} tone="secondary">Stock entry price</Text>
-            <Data size={13} weight={500}>${data.price.toFixed(2)}</Data>
+            {/* Adversarial-audit finding 2 — shows the SAME live-refreshed
+                 quote the Check Structure / Compute Arithmetic Plan buttons
+                 below use, once either has actually run this mount; falls
+                 back to the scan-time data.price snapshot until then, same
+                 as those buttons' own stockQuote?.price ?? data.price. */}
+            <Data size={13} weight={500}>${(arithmeticLiveStockPrice ?? data.price).toFixed(2)}</Data>
           </div>
           <Text size={10} tone="dim">Independent of the other profit-target methods on this page; they can disagree.</Text>
 
@@ -1136,7 +1159,7 @@ export function TradeCard({
               disabled={structuralLoading}
             >
               <Text size={12} weight={500}>
-                {structuralLoading ? 'Checking structure…' : 'Check Structure'}
+                {structuralLoading ? 'Checking structure…' : 'Check structure'}
               </Text>
             </button>
             {structuralError && (
@@ -1232,7 +1255,20 @@ export function TradeCard({
                         <button
                           type="button"
                           className={styles.btn}
-                          onClick={() => patch({ contracts: recommendedSize.recommended })}
+                          // recommendedContractSize() only returns null when riskBudget<=0 —
+                          // whenever 0 < riskBudget/riskPerContract < 1 (a modest override, or
+                          // just a portfolio-default budget smaller than one contract's risk on
+                          // an expensive/wide-stop name), `recommended` is legitimately 0. The
+                          // shared per-symbol Contracts map (Feature 7) is read with `?? 1` at
+                          // its two order-placement sites, which does NOT catch 0 (only null/
+                          // undefined) — writing 0 here would silently corrupt the shared field
+                          // and the backend would then reject quantity:0 with an opaque 422 that
+                          // gives the user no clue Apply is what broke it. Clamped at the write
+                          // site AND disabled below for defense in depth: disabling communicates
+                          // the actual budget constraint instead of silently flooring to 1, which
+                          // could otherwise mislead the user about position size.
+                          onClick={() => patch({ contracts: Math.max(1, recommendedSize.recommended) })}
+                          disabled={recommendedSize.recommended < 1}
                           aria-label="Apply recommended contract size"
                         >
                           <Text size={12} weight={500}>Apply</Text>

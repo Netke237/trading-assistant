@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
+import { useRiskStore } from '@/lib/riskStore';
 import type { TradeCardData } from '@/types/domain';
 
 jest.mock('@/lib/api', () => ({
@@ -902,6 +903,58 @@ describe('TradeCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
 
     expect(await screen.findByText(/Risk-derived size: 25 contracts \(25\.00 exact\)/)).toBeInTheDocument();
+  });
+
+  it('audit finding 1 regression — Apply never writes contracts:0 into the shared map when the recommended size floors to 0', async () => {
+    // recommendedContractSize() only returns null when riskBudget<=0 — a
+    // budget that's positive but smaller than one contract's risk legitimately
+    // floors `recommended` to 0. Before the fix, the Apply button had no
+    // disabled guard and wrote that 0 straight into the shared per-symbol
+    // Contracts map via patch()/onEditsChange, which two of the four
+    // order-placement paths then read with `?? 1` — a check that does not
+    // catch 0. Shrink the account's risk budget below one contract's risk to
+    // force this exact scenario.
+    const originalLimits = useRiskStore.getState().limits;
+    act(() => {
+      useRiskStore.setState({ limits: { ...originalLimits, portfolioValue: 100, maxLossPerTradePct: 0.0375 } });
+    });
+    try {
+      (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+      (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+        price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+      });
+      // riskPerContract = (mid 2.5 - stop.contractPrice 2.0) * 100 * 1 = $50.
+      // riskBudget = portfolioValue 100 * maxLossPerTradePct 0.0375 = $3.75.
+      // recommended = floor(3.75 / 50) = 0.
+      (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+        stop: {
+          price: 180.0, source: 'structural' as const, contractPrice: 2.0,
+          rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+          structuralPrice: 180.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
+        },
+        targets: [],
+        atr: 3.5,
+      });
+      const onEditsChange = jest.fn();
+      render(<TradeCard data={mockTradeCard} onExitPlanChange={jest.fn()} onEditsChange={onEditsChange} />);
+      fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+
+      expect(await screen.findByText(/Risk-derived size: 0 contracts/)).toBeInTheDocument();
+
+      const applyBtn = screen.getByRole('button', { name: 'Apply recommended contract size' });
+      expect(applyBtn).toBeDisabled();
+
+      fireEvent.click(applyBtn);
+      // A disabled button's onClick never fires — the shared map must never
+      // see contracts:0, and the always-visible Contracts field in the Order
+      // Entry strip must stay at its untouched default.
+      expect(onEditsChange).not.toHaveBeenCalledWith(expect.objectContaining({ contracts: 0 }));
+      expect(screen.getByLabelText('Edit Contracts')).toHaveTextContent('1');
+    } finally {
+      act(() => {
+        useRiskStore.setState({ limits: originalLimits });
+      });
+    }
   });
 
   it('Feature 5 — feeds an active max-loss override into the risk-derived size immediately, and surfaces it via onMaxLossOverrideChange', async () => {
