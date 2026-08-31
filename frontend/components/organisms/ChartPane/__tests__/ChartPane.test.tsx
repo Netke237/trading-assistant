@@ -140,6 +140,75 @@ describe('ChartPane — theme token colors', () => {
   });
 });
 
+describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
+  beforeEach(() => {
+    (createChart as jest.Mock).mockClear();
+    mockComputedStyle(TOKENS);
+  });
+
+  // Regression test for a bug where onSeriesReady/mainSeriesRef could be
+  // silently reassigned to a pane-0 indicator overlay (EMA, SMA, BB...)
+  // instead of staying on the actual main candlestick series. Both the main
+  // series (when chartType would be 'line') and an indicator overlay share
+  // SeriesConfig['type'] === 'Line', so ChartPane must distinguish them by id
+  // (`candles-${chartType}` vs an indicator id like `ema-...`) rather than
+  // firing onSeriesReady for every pane-0 Line series it creates. If it
+  // doesn't, removing the last-created indicator later leaves mainSeries
+  // pointing at a detached series with no price scale — e.g. breaking
+  // VolumeProfilePrimitive, which attaches to mainSeries and silently
+  // stops rendering.
+  it('fires onSeriesReady only for the main candlestick series, not for pane-0 indicator Line series created after it', () => {
+    const onSeriesReady = jest.fn();
+    const mainSeriesRef = { current: null } as unknown as Parameters<typeof ChartPane>[0]['mainSeriesRef'] & { current: unknown };
+
+    render(
+      <ChartPane
+        series={[
+          { id: 'candles-candle', type: 'Candlestick', data: [] },
+          { id: 'ema-20', type: 'Line', data: [], color: '#4f8ef7' },
+          { id: 'ema-50', type: 'Line', data: [], color: '#e0a030' },
+        ]}
+        onSeriesReady={onSeriesReady}
+        mainSeriesRef={mainSeriesRef}
+      />,
+    );
+
+    const chart = (createChart as jest.Mock).mock.results[0].value;
+    const candleSeries = chart.addSeries.mock.results[0].value;
+
+    expect(onSeriesReady).toHaveBeenCalledTimes(1);
+    expect(onSeriesReady).toHaveBeenCalledWith(chart, candleSeries);
+    expect(mainSeriesRef.current).toBe(candleSeries);
+  });
+
+  // Same guarantee for the chartType === 'line' case, where the main series
+  // itself IS a Line series (id `candles-line`) sharing a pane with indicator
+  // overlays — onSeriesReady must still fire for it, and stay pointed at it
+  // rather than the indicator lines created alongside it.
+  it('fires onSeriesReady for a Line-type main series (chartType=line) and not for indicator lines around it', () => {
+    const onSeriesReady = jest.fn();
+    const mainSeriesRef = { current: null } as unknown as Parameters<typeof ChartPane>[0]['mainSeriesRef'] & { current: unknown };
+
+    render(
+      <ChartPane
+        series={[
+          { id: 'candles-line', type: 'Line', data: [] },
+          { id: 'ema-20', type: 'Line', data: [], color: '#4f8ef7' },
+        ]}
+        onSeriesReady={onSeriesReady}
+        mainSeriesRef={mainSeriesRef}
+      />,
+    );
+
+    const chart = (createChart as jest.Mock).mock.results[0].value;
+    const mainLineSeries = chart.addSeries.mock.results[0].value;
+
+    expect(onSeriesReady).toHaveBeenCalledTimes(1);
+    expect(onSeriesReady).toHaveBeenCalledWith(chart, mainLineSeries);
+    expect(mainSeriesRef.current).toBe(mainLineSeries);
+  });
+});
+
 describe('ChartPane — malformed bars', () => {
   beforeEach(() => {
     (createChart as jest.Mock).mockClear();

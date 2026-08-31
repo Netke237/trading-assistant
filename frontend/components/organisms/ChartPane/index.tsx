@@ -262,7 +262,18 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
             lineWidth: 1,
             priceScaleId: cfg.priceScaleId ?? 'right',
           }, cfg.paneIndex ?? 0);
-          if ((cfg.paneIndex ?? 0) === 0) {
+          // Only the main price series (id `candles-${chartType}`, created when
+          // chartType === 'line') should become mainSeries/fire onSeriesReady.
+          // A plain Line-type indicator overlay (EMA, SMA, BB, MASUITE, AVWAP,
+          // KEYLEVELS, HTFLEVELS...) also lands in this branch since it shares
+          // the same SeriesConfig['type'] — without this id check, whichever
+          // such indicator is created LAST on pane 0 would silently overwrite
+          // mainSeries/mainSeriesRef, leaving it pointing at an indicator line
+          // instead of the real main series. If that indicator is later
+          // removed, mainSeries keeps referencing a now-detached series (no
+          // price scale), so anything attached to it — e.g. VolumeProfilePrimitive
+          // — silently fails to render.
+          if ((cfg.paneIndex ?? 0) === 0 && cfg.id.startsWith('candles-')) {
             if (mainSeriesRef) mainSeriesRef.current = s as unknown as ISeriesApi<'Candlestick'>;
             onSeriesReadyRef.current?.(chart, s as unknown as ISeriesApi<'Candlestick'>);
           }
