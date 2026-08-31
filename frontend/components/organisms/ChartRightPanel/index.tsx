@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
 import { useChartStore } from '@/lib/chartStore';
-import { isMainSeriesId } from '@/components/organisms/ChartPane';
+import { isMainSeriesId } from '@/lib/chart/mainSeriesId';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { Text } from '@/components/primitives';
 import type { StructureSignal } from '@/types/structure';

@@ -1,6 +1,7 @@
 import { render, act } from '@testing-library/react';
 import { createChart } from 'lightweight-charts';
-import ChartPane, { mainSeriesId } from '@/components/organisms/ChartPane';
+import ChartPane from '@/components/organisms/ChartPane';
+import { mainSeriesId } from '@/lib/chart/mainSeriesId';
 import { useThemeStore } from '@/lib/theme';
 
 const TOKENS: Record<string, string> = {
@@ -146,7 +147,7 @@ describe('ChartPane — theme token colors', () => {
 // chartType is 'line') and an indicator overlay share SeriesConfig['type']
 // === 'Line', so ChartPane must distinguish them by id (mainSeriesId()'s
 // `candles-` prefix vs an indicator id like `ema-...`), not type — see
-// isMainSeriesId's own comment in ChartPane/index.tsx for the full
+// isMainSeriesId's own comment in lib/chart/mainSeriesId.ts for the full
 // mechanism and consequence (VolumeProfilePrimitive silently drawing
 // nothing once mainSeries is left pointing at a removed indicator).
 //

@@ -11,7 +11,7 @@ import {
   type Time,
 } from 'lightweight-charts';
 import type { Candle, Point } from '@/lib/indicators';
-import type { ChartType } from '@/lib/chartStore';
+import { isMainSeriesId } from '@/lib/chart/mainSeriesId';
 import { useThemeStore } from '@/lib/theme';
 import styles from './ChartPane.module.css';
 
@@ -22,31 +22,6 @@ export interface SeriesConfig {
   color?: string;
   priceScaleId?: string;
   paneIndex?: number;
-}
-
-// The id prefix that marks a SeriesConfig as THE main price series (as
-// opposed to a main-pane indicator overlay — EMA, SMA, BB, MASUITE, AVWAP,
-// KEYLEVELS, HTFLEVELS... — which can share the same series `type`, e.g.
-// Line when chartType is 'line'). ChartWorkspace's buildMainSeries is the
-// only place that constructs this id (via mainSeriesId(chartType) below);
-// this module's own series-creation loop (below) and ChartRightPanel (which
-// filters the main series out of the crosshair indicator-values list) are
-// its only readers. All three go through mainSeriesId()/isMainSeriesId
-// instead of a bare `'candles-'` string literal, so they can't drift apart.
-//
-// Why this matters: whichever pane-0 series shares a type with the main
-// series and is created LAST would otherwise silently become mainSeries.
-// mainSeriesRef/onSeriesReady feed ChartWorkspace's `mainSeries` state,
-// which things like VolumeProfilePrimitive attach to and call
-// priceToCoordinate() on — if mainSeries ends up pointing at an indicator
-// that's later removed, priceToCoordinate returns null for a detached
-// series and the primitive silently draws nothing.
-const MAIN_SERIES_ID_PREFIX = 'candles-';
-export function mainSeriesId(chartType: ChartType): string {
-  return `${MAIN_SERIES_ID_PREFIX}${chartType}`;
-}
-export function isMainSeriesId(id: string): boolean {
-  return id.startsWith(MAIN_SERIES_ID_PREFIX);
 }
 
 interface Props {
@@ -257,8 +232,9 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
     series.forEach((cfg) => {
       let s = seriesMap.current.get(cfg.id);
       if (!s) {
-        // Gate on id, not type — see the comment above MAIN_SERIES_ID_PREFIX
-        // for why. Applied uniformly here rather than duplicated per branch.
+        // Gate on id, not type — see isMainSeriesId's own comment (in
+        // lib/chart/mainSeriesId.ts) for why. Applied uniformly here rather
+        // than duplicated per branch.
         const isMain = (cfg.paneIndex ?? 0) === 0 && isMainSeriesId(cfg.id);
         if (cfg.type === 'Candlestick') {
           s = chart.addSeries(CandlestickSeries, {
