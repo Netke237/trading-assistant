@@ -72,11 +72,9 @@ const createChart = jest.fn((_container, options) => {
       // Real lightweight-charts throws if the series was already removed
       // (it looks the series up in an internal map via ensureDefined, which
       // throws once the entry is gone). Match that instead of silently
-      // no-op'ing on a double-remove, for the same reason removePane below
-      // mirrors the real destroy-on-removal behavior: a mock that tolerates
-      // a call pattern the real library would reject can hide a bug that
-      // only breaks in the browser while every test using this mock stays
-      // green.
+      // no-op'ing on a double-remove — a mock that tolerates a call pattern
+      // the real library would reject can hide a bug that only breaks in
+      // the browser while every test using this mock stays green.
       if (s.__removed) throw new Error('removeSeries: series already removed');
       s.__removed = true;
       for (const list of paneSeriesLists) {
@@ -85,12 +83,17 @@ const createChart = jest.fn((_container, options) => {
       }
     }),
     removePane: jest.fn((index) => {
-      // Real lightweight-charts destroys a pane's series along with the
-      // pane itself — mark them removed too, not just drop the pane's
-      // tracking arrays, so a series held by a removed-but-nonempty pane
-      // can't be mistaken for still-live by a test (ChartPane itself only
-      // ever calls removePane on an already-empty pane, but the mock
-      // shouldn't rely on that to stay faithful to the real API's contract).
+      // ChartPane only ever calls removePane on an already-empty pane (it
+      // removes each series individually via removeSeries first, in the
+      // same effect pass), so paneSeriesLists[index] is normally empty here
+      // already. This loop is a defensive invariant for THAT contract, not
+      // a simulation of the real library's internals — real
+      // lightweight-charts' removePane does not clear a pane's series data
+      // the way removeSeries does, so don't extend this mock to model
+      // removePane as "destroying" contained series if that's ever relied
+      // on; a test that violates ChartPane's empty-pane-only contract
+      // should be caught by seeing series unexpectedly marked __removed,
+      // not by trusting this mock to match real removePane semantics.
       for (const s of paneSeriesLists[index] ?? []) s.__removed = true;
       paneSeriesLists.splice(index, 1);
       panes.splice(index, 1);

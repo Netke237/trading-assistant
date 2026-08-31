@@ -29,11 +29,18 @@ export interface SeriesConfig {
 // KEYLEVELS, HTFLEVELS... — which can share the same series `type`, e.g.
 // Line when chartType is 'line'). ChartWorkspace's buildMainSeries is the
 // only place that constructs this id (`${mainSeriesId(chartType)}`); this
-// module's own series-creation loop is the only place that reads it back to
-// decide what becomes mainSeries/fires onSeriesReady. Centralized here, not
-// duplicated as a bare string literal in both files, so the two stay in
-// sync — a bare literal drifting on either side would silently reintroduce
-// the mainSeries-hijack bug this file's tests guard against.
+// module's own series-creation loop (below) is the only place that reads it
+// back to decide what becomes mainSeries/fires onSeriesReady. Centralized
+// here, not duplicated as a bare string literal in both files, so the two
+// stay in sync.
+//
+// Why this matters: whichever pane-0 series shares a type with the main
+// series and is created LAST would otherwise silently become mainSeries.
+// mainSeriesRef/onSeriesReady feed ChartWorkspace's `mainSeries` state,
+// which things like VolumeProfilePrimitive attach to and call
+// priceToCoordinate() on — if mainSeries ends up pointing at an indicator
+// that's later removed, priceToCoordinate returns null for a detached
+// series and the primitive silently draws nothing.
 const MAIN_SERIES_ID_PREFIX = 'candles-';
 export function mainSeriesId(chartType: ChartType): string {
   return `${MAIN_SERIES_ID_PREFIX}${chartType}`;
@@ -250,20 +257,8 @@ export default function ChartPane({ series, onCrosshairMove, height = 0, chartAp
     series.forEach((cfg) => {
       let s = seriesMap.current.get(cfg.id);
       if (!s) {
-        // Only the main price series (see isMainSeriesId above) should become
-        // mainSeries/fire onSeriesReady. Every other pane-0 series is an
-        // indicator overlay (EMA, SMA, BB, MASUITE, AVWAP, KEYLEVELS,
-        // HTFLEVELS...), and overlays can share a SeriesConfig['type'] with
-        // the main series — Line is the case that actually occurs today,
-        // since chartType can be 'line' — so this check is keyed on id, not
-        // type, and applied uniformly below rather than duplicated per
-        // branch. Without it, whichever pane-0 series of a shared type is
-        // created LAST would silently overwrite mainSeries/mainSeriesRef,
-        // leaving it pointing at an indicator instead of the real main
-        // series. If that indicator is later removed, mainSeries keeps
-        // referencing a now-detached series (no price scale), so anything
-        // attached to it — e.g. VolumeProfilePrimitive — silently fails to
-        // render.
+        // Gate on id (isMainSeriesId above), not type — see its comment for
+        // why. Applied uniformly here rather than duplicated per branch.
         const isMain = (cfg.paneIndex ?? 0) === 0 && isMainSeriesId(cfg.id);
         if (cfg.type === 'Candlestick') {
           s = chart.addSeries(CandlestickSeries, {

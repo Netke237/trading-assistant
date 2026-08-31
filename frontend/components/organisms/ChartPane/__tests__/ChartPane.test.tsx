@@ -140,29 +140,27 @@ describe('ChartPane — theme token colors', () => {
   });
 });
 
+// Regression suite for a bug where onSeriesReady/mainSeriesRef could be
+// silently reassigned to a pane-0 indicator overlay (EMA, SMA, BB...)
+// instead of staying on the actual main series. Both the main series (when
+// chartType is 'line') and an indicator overlay share SeriesConfig['type']
+// === 'Line', so ChartPane must distinguish them by id (mainSeriesId()'s
+// `candles-` prefix vs an indicator id like `ema-...`), not type — see
+// isMainSeriesId's own comment in ChartPane/index.tsx for the full
+// mechanism and consequence (VolumeProfilePrimitive silently drawing
+// nothing once mainSeries is left pointing at a removed indicator).
+//
+// Fixtures below build the main-series id via mainSeriesId(), the same
+// helper ChartWorkspace's buildMainSeries calls, rather than hardcoding the
+// `candles-...` string — a hardcoded literal here would keep passing even
+// if mainSeriesId's own prefix drifted from what isMainSeriesId checks
+// against, defeating the point of centralizing it.
 describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
   beforeEach(() => {
     (createChart as jest.Mock).mockClear();
     mockComputedStyle(TOKENS);
   });
 
-  // Regression test for a bug where onSeriesReady/mainSeriesRef could be
-  // silently reassigned to a pane-0 indicator overlay (EMA, SMA, BB...)
-  // instead of staying on the actual main candlestick series. Both the main
-  // series (when chartType would be 'line') and an indicator overlay share
-  // SeriesConfig['type'] === 'Line', so ChartPane must distinguish them by id
-  // (mainSeriesId(chartType) vs an indicator id like `ema-...`) rather than
-  // firing onSeriesReady for every pane-0 Line series it creates. If it
-  // doesn't, removing the last-created indicator later leaves mainSeries
-  // pointing at a detached series with no price scale — e.g. breaking
-  // VolumeProfilePrimitive, which attaches to mainSeries and silently
-  // stops rendering.
-  //
-  // Fixtures below build the main-series id via mainSeriesId(), the same
-  // helper ChartWorkspace's buildMainSeries calls, rather than hardcoding
-  // the `candles-...` string — a hardcoded literal here would keep passing
-  // even if mainSeriesId's own prefix drifted from what ChartPane's
-  // isMainSeriesId checks against, defeating the point of centralizing it.
   it('fires onSeriesReady only for the main candlestick series, not for pane-0 indicator Line series created after it', () => {
     const onSeriesReady = jest.fn();
     const mainSeriesRef: Parameters<typeof ChartPane>[0]['mainSeriesRef'] = { current: null };
@@ -214,21 +212,13 @@ describe('ChartPane — onSeriesReady / mainSeriesRef identity', () => {
     expect(mainSeriesRef.current).toBe(mainLineSeries);
   });
 
-  // End-to-end regression test for the actual user-visible symptom (not just
-  // ChartPane's internal wiring): Volume Profile attaches to whatever
-  // mainSeriesRef points at and calls series.priceToCoordinate() to lay out
-  // its bars. Before the fix, removing the last-added pane-0 indicator left
-  // mainSeriesRef pointing at that now-detached indicator series — its
-  // priceToCoordinate would return null, so the profile drew nothing, with
-  // no error anywhere. This reproduces exactly that sequence (add EMA-20,
-  // then EMA-50 last so it's the one that would have hijacked mainSeries;
-  // remove both) and asserts mainSeriesRef ends up reference-identical
-  // (`toBe`, not just "some live series that happens to satisfy these
-  // properties") to the ORIGINAL candlestick series from the initial
-  // render, with onSeriesReady having fired exactly once across all three
-  // renders — not just that it landed on *a* live, coordinate-resolving
-  // pane-0 series, which a spurious extra reassignment to some other
-  // main-pane-shaped object could also satisfy.
+  // End-to-end version of the above: add EMA-20 then EMA-50 (last, so it's
+  // the one that would have hijacked mainSeries pre-fix), then remove both
+  // — the exact user action ("toggle EMA off") that used to leave
+  // mainSeries dangling on a detached series. Asserts reference-identity to
+  // the ORIGINAL candlestick series and a call-count of exactly 1, not just
+  // "some live, coordinate-resolving pane-0 series" — the latter could in
+  // principle be satisfied by a different, spurious reassignment.
   it('keeps mainSeriesRef pointed at the original candlestick series through an indicator add-then-remove cycle', () => {
     const onSeriesReady = jest.fn();
     const mainSeriesRef: Parameters<typeof ChartPane>[0]['mainSeriesRef'] = { current: null };
