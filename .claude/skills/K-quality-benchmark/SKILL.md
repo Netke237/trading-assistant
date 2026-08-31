@@ -17,10 +17,13 @@ by a different AI tool running the `bmad-review-adversarial-general` skill from
 public skill that already covers axis 1 well (PRD/code-correctness auditing). This
 skill (`K-quality-benchmark`, named after this repo's own `K-adversarial-audit-loop`
 convention in `docs/superpowers/plans/*.md`) exists because axes 2 and 3 are
-domain-specific to Bamendjou and no generic external tool grades them. If
-BMAD-METHOD or a similar skill is ever committed into this repo's own
-`.claude/skills/`, prefer running it for axis 1 instead of re-deriving code-quality
-findings by hand.
+domain-specific to Bamendjou and no generic external tool grades them.
+
+`bmad-review-adversarial-general` is now committed in this repo's own
+`.claude/skills/bmad-review-adversarial-general/` (a standalone port — the upstream
+ID is a v6 shim forwarding into installer-dependent infrastructure this repo doesn't
+run; see that skill's own file for why). **Axis 1 must invoke it via the `Skill`
+tool** (see Axis 1 below) instead of re-deriving code-quality findings by hand.
 
 The user has their own bespoke trader-perspective settings-audit skill, built
 locally on their machine, not (yet) committed to this repo. Axis 3 below is a
@@ -40,6 +43,23 @@ repo's `.claude/skills/`, defer to it for axis 3 instead.
    (dependency/reproducibility issues are legitimate code-quality findings, not
    noise to hide).
 3. Combine into one overall grade and write/update `TRADING_QUALITY_BENCHMARK.md`.
+
+### Axis 1 — Frontend/backend code quality
+
+Two layers, both required — the review skill does not replace the gating commands,
+and the gating commands don't catch what an adversarial read of the diff does:
+
+1. **Adversarial code review.** Invoke `bmad-review-adversarial-general` via the
+   `Skill` tool, pointed at what's being graded (the working-tree diff against the
+   last commit `TRADING_QUALITY_BENCHMARK.md` was written for, or the whole repo on
+   a first run with no prior benchmark to diff against). Fold its findings directly
+   into axis 1's findings table — don't re-derive the same class of finding by hand
+   first and treat the skill as a second pass; run it as the primary code-quality
+   pass and add anything it plausibly missed.
+2. **Gating commands** (below) — typecheck/test/build/audit, run from a genuine
+   clean room. These catch what a diff-level review can't: whether the repo actually
+   installs and builds from nothing, real test-suite pass/fail counts, dependency
+   drift.
 
 ### Clean-room verification methodology — read before axis 1
 
