@@ -115,3 +115,15 @@ export function sanitizeHoldDays(holdMin: number, holdMax: number): { hold_min_d
   const hi = Math.max(lo, Math.round(holdMax));
   return { hold_min_days: lo, hold_max_days: hi };
 }
+
+/** The scoring horizon behind a display label like "Position (45–60d)".
+ *
+ * The same ternary is written inline in five places today (step-4-ranking,
+ * step-5-vol-events, the step-7 context rail, cardToRow, ScanLog). This is the
+ * shared version — new callers use it; the existing five are deliberately left
+ * alone rather than refactored as a side effect of an unrelated feature. */
+export function scoringHorizonFromLabel(label: string | null | undefined): ScoringHorizon {
+  if (label?.startsWith('Intraday')) return 'Intraday';
+  if (label?.startsWith('Position')) return 'Position';
+  return 'Swing';
+}

@@ -115,6 +115,21 @@ horizons:
       iv_rank_pass_max: 34     # IV rank <= this -> PASS; mirrors frontend ivThresholds.ts
       iv_rank_caution_max: 55
 
+    stop_premium:
+      # Stop-vs-premium gate (frontend TradeCard + step-4 ranking). What share of
+      # the option's premium is lost if the underlying reaches its stop. REJECT
+      # means the stop sits at or beyond a total loss of premium — it is not a
+      # risk control on that contract, just a marker for a position that was
+      # already worthless before price got there.
+      #
+      # Per-horizon because tolerance genuinely differs: an Intraday contract is
+      # expected to run closer to the edge; a Position contract has time for the
+      # thesis to work and should not be bought where the stop is a wipeout.
+      # ONE threshold, and the verdict is PASS or CAUTION — never REJECT. The
+      # gate sorts candidates into "the stop is survivable on this contract" and
+      # "it isn't", so the cheaper-to-be-wrong trades surface early. It is not a
+      # verdict on the trade and it blocks nothing, so it never paints red.
+      pass_max_fraction: 0.8
   intraday:
     weights:
       trend: 0.35
@@ -189,6 +204,21 @@ horizons:
       iv_rank_pass_max: null
       iv_rank_caution_max: null
 
+    stop_premium:
+      # Stop-vs-premium gate (frontend TradeCard + step-4 ranking). What share of
+      # the option's premium is lost if the underlying reaches its stop. REJECT
+      # means the stop sits at or beyond a total loss of premium — it is not a
+      # risk control on that contract, just a marker for a position that was
+      # already worthless before price got there.
+      #
+      # Per-horizon because tolerance genuinely differs: an Intraday contract is
+      # expected to run closer to the edge; a Position contract has time for the
+      # thesis to work and should not be bought where the stop is a wipeout.
+      # ONE threshold, and the verdict is PASS or CAUTION — never REJECT. The
+      # gate sorts candidates into "the stop is survivable on this contract" and
+      # "it isn't", so the cheaper-to-be-wrong trades surface early. It is not a
+      # verdict on the trade and it blocks nothing, so it never paints red.
+      pass_max_fraction: 0.85
   position:
     weights:
       trend: 0.30
@@ -264,6 +294,21 @@ horizons:
       iv_rank_caution_max: 65
 
 # Entry quality thresholds (FR-45)
+    stop_premium:
+      # Stop-vs-premium gate (frontend TradeCard + step-4 ranking). What share of
+      # the option's premium is lost if the underlying reaches its stop. REJECT
+      # means the stop sits at or beyond a total loss of premium — it is not a
+      # risk control on that contract, just a marker for a position that was
+      # already worthless before price got there.
+      #
+      # Per-horizon because tolerance genuinely differs: an Intraday contract is
+      # expected to run closer to the edge; a Position contract has time for the
+      # thesis to work and should not be bought where the stop is a wipeout.
+      # ONE threshold, and the verdict is PASS or CAUTION — never REJECT. The
+      # gate sorts candidates into "the stop is survivable on this contract" and
+      # "it isn't", so the cheaper-to-be-wrong trades surface early. It is not a
+      # verdict on the trade and it blocks nothing, so it never paints red.
+      pass_max_fraction: 0.7
 entry_quality:
   spread_tolerance_pct: 0.10
   max_slippage_pct: 0.03

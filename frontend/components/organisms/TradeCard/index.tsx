@@ -11,10 +11,13 @@ import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthC
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
-import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw } from '@/lib/risk';
+import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk } from '@/lib/risk';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
+import { useScanStore } from '@/lib/scanStore';
+import { useStopPremiumThresholdsStore, getStopPremiumThresholds } from '@/lib/stopPremiumThresholdsStore';
+import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
 import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride } from '@/types/domain';
 import {
   triggerDetailText,
@@ -748,6 +751,42 @@ export function TradeCard({
   // independent, user-triggered fetches, so if they're clicked minutes
   // apart the two stock prices they captured can legitimately differ; this
   // R:R is only as consistent as how close together the user ran both.
+  // Gate thresholds: per-horizon from scoring_rules.yaml, with Step 3's per-run
+  // override winning when set. Resolved here rather than inside `stopPremiumRisk`
+  // so the helper stays a pure function of its arguments.
+  const scanHorizon = useScanStore((s) => s.context?.horizon ?? null);
+  const stopPremiumThresholds = useStopPremiumThresholdsStore((s) => s.thresholds);
+  const stopPremiumOverride = useStopPremiumThresholdsStore((s) => s.override);
+
+  // Stop-vs-premium gate. Deliberately reads the SCAN-TIME `contractDetails`
+  // (mid/delta) rather than `firstPassageContext`'s fresh pair, unlike
+  // `structuralRR` below: the gate's whole job is to fire before the user has
+  // run an Estimate, so it cannot depend on one having run. The stock price
+  // prefers the fresh one Check-structure measured against, falling back to the
+  // scan snapshot. That mixes vintages by a few cents — accepted here and
+  // nowhere else on this card, because the verdict is a coarse band (is this
+  // stop ~a total loss?) that a few cents cannot move across a threshold, and a
+  // gate that only speaks after two round-trips is not a gate.
+  const stopRisk = useMemo(() => {
+    if (!structuralStop || structuralStop.distancePct === 0) return null;
+    const cd = data.contractDetails;
+    if (!cd) return null;
+    return stopPremiumRisk(
+      structuralStop.price,
+      structuralStopStockPrice ?? data.price,
+      cd.delta,
+      cd.mid,
+      getStopPremiumThresholds(
+        scoringHorizonFromLabel(scanHorizon),
+        stopPremiumThresholds,
+        stopPremiumOverride,
+      ),
+    );
+  }, [
+    structuralStop, structuralStopStockPrice, data.price, data.contractDetails,
+    scanHorizon, stopPremiumThresholds, stopPremiumOverride,
+  ]);
+
   const structuralRR = useMemo(() => {
     if (!structuralStop || structuralStopStockPrice == null || !firstPassage || !firstPassageContext) {
       return null;
@@ -841,15 +880,25 @@ export function TradeCard({
     setOverlay((prev) => ({ ...prev, contracts: initialContracts }));
   }, [initialContracts]);
 
+  // Direct-call pattern (see `onEditsChange`'s own doc comment) — same shape
+  // as `applyMaxLossOverride` below: setOverlay and onEditsChange are two
+  // sibling statements, not one nested inside the other's updater. An
+  // earlier version called `onEditsChange` from INSIDE the setOverlay
+  // functional updater; React updater functions must be pure, and it can
+  // invoke them during another component's render pass, so that nested call
+  // was actually updating Step7Page's state while React was rendering
+  // TradeCard — "Cannot update a component while rendering a different
+  // component". Depending on `overlay` here (instead of using the updater
+  // form) is safe: every call site is a single discrete user event (a click
+  // or an input's onChange), never several patch() calls batched in the same
+  // tick against a stale closure.
   const patch = useCallback(
     (partial: Partial<EditOverlay>) => {
-      setOverlay((prev) => {
-        const next = { ...prev, ...partial };
-        onEditsChange?.(next);
-        return next;
-      });
+      const next = { ...overlay, ...partial };
+      setOverlay(next);
+      onEditsChange?.(next);
     },
-    [onEditsChange],
+    [overlay, onEditsChange],
   );
 
   const displayRecId = useMemo(() => propRecId ?? generateRecId(), [propRecId]);
@@ -1185,6 +1234,28 @@ export function TradeCard({
                   mono
                 />
               </dl>
+            )}
+            {!structuralError && !structuralLoading && stopRisk && (
+              <div className={styles.stopRiskGate}>
+                <div className={styles.stopRiskHead}>
+                  <Text size={10} tone="dim">STOP COST</Text>
+                  <StatusBadge
+                    status={stopRisk.status}
+                    label={`${(stopRisk.fraction * 100).toFixed(0)}% OF PREMIUM`}
+                    tooltip={
+                      stopRisk.status === 'PASS'
+                        ? 'The contract still holds meaningful value if this stop is hit — the cheaper candidate to be wrong on.'
+                        : stopRisk.capped
+                          ? 'At this stop the contract is a total loss, so the stop is not a risk control on it. A closer stop, or a higher-delta strike, would make it one. Not a reason to skip the trade — a reason to size it knowing that.'
+                          : 'This stop costs most of the premium. Little is left to salvage if it is hit.'
+                    }
+                  />
+                </div>
+                {/* Every input, so the verdict is auditable at a glance — the
+                    whole complaint that produced this gate was a ratio whose
+                    inputs were invisible. */}
+                <Data size={11} tone="secondary">{formatStopPremiumRisk(stopRisk)}</Data>
+              </div>
             )}
           </div>
 

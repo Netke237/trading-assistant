@@ -1822,3 +1822,73 @@ describe('TradeCard', () => {
     });
   });
 });
+describe('TradeCard — stop-vs-premium gate', () => {
+  // The gate reads scan-time contractDetails (mid/delta) plus whatever
+  // structural stop is available, so it renders WITHOUT the user having run an
+  // Estimate or an Arithmetic plan. That early availability is the whole point:
+  // a gate that only speaks after two round-trips cannot warn anyone.
+  function cardWithStop(
+    stop: { price: number; source: 'order_block' | 'swing_low' | 'swing_high'; confidence: number; distancePct: number },
+    stockPrice: number,
+    contractDetails?: Partial<NonNullable<TradeCardData['contractDetails']>>,
+  ): TradeCardData {
+    return {
+      ...mockTradeCard,
+      contractDetails: { ...mockTradeCard.contractDetails!, ...contractDetails },
+      exit: { ...mockTradeCard.exit, structuralStop: stop, structuralStopStockPrice: stockPrice },
+    };
+  }
+
+  const ORDER_BLOCK = { price: 178.5, source: 'order_block' as const, confidence: 75, distancePct: 3.6 };
+
+  it('flags a stop that costs the whole premium, and shows every input behind it', () => {
+    // 190.0 -> 178.5 is $11.50; x delta 0.45 = $5.175 against a $2.50 premium.
+    // You cannot lose $5.18 on a $2.50 option, so it caps at $2.50 = 100%.
+    render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0)} />);
+
+    expect(screen.getByText('STOP COST')).toBeInTheDocument();
+    expect(screen.getByText('100% OF PREMIUM')).toBeInTheDocument();
+    // Inputs are on screen, not just the verdict — the complaint that produced
+    // this gate was a ratio whose inputs were invisible.
+    expect(screen.getByText(/\$11\.50 away × Δ0\.45 = \$2\.50 of \$2\.50 premium/)).toBeInTheDocument();
+    // ...including the uncapped figure, so "how far past total loss" is visible.
+    // 11.50 * 0.45 === 5.175, which toFixed(2) renders "5.17" — 5.175 is stored
+    // just below the exact value in IEEE754 (same class of thing the
+    // formatRecommendedContractSizeRaw comments document).
+    expect(screen.getByText(/uncapped \$5\.17/)).toBeInTheDocument();
+ 
+    // The gate sorts candidates, it never refuses one -- so even a total-loss
+    // stop is framed as a sizing input, not a verdict. (The "never REJECT"
+    // guarantee itself is asserted on the helper in risk.test.ts; CSS modules
+    // mock to {} here so the badge's colour class is not observable in jsdom.)
+    expect(screen.getByText(/Not a reason to skip the trade/)).toBeInTheDocument();
+  });
+
+  it('PASSes a contract that keeps real value at the same stop', () => {
+    // Same $11.50 move and delta, but a $20 premium: $5.175 / $20 = 26%.
+    render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0, { mid: 20 })} />);
+
+    expect(screen.getByText('26% OF PREMIUM')).toBeInTheDocument();
+    expect(screen.getByText(/\$11\.50 away × Δ0\.45 = \$5.17 of \$20.00 premium/)).toBeInTheDocument();
+    expect(screen.queryByText(/uncapped/)).not.toBeInTheDocument();
+  });
+
+  it('renders with no Estimate and no Arithmetic plan run', () => {
+    render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0)} />);
+    // Neither of the two round-trip-gated blocks is present...
+    expect(screen.queryByText('R:R vs. structural stop')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bottom (final stop)')).not.toBeInTheDocument();
+    // ...but the gate already has its verdict.
+    expect(screen.getByText('STOP COST')).toBeInTheDocument();
+  });
+
+  it('stays hidden when there is no structural stop to measure against', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    expect(screen.queryByText('STOP COST')).not.toBeInTheDocument();
+  });
+
+  it('stays hidden when the stop sits exactly at the current price', () => {
+    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, price: 190.0, distancePct: 0 }, 190.0)} />);
+    expect(screen.queryByText('STOP COST')).not.toBeInTheDocument();
+  });
+});

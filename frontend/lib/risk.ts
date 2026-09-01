@@ -22,6 +22,114 @@ export function exposurePct(notional: number, portfolioValue: number): number {
   return notional / portfolioValue;
 }
 
+/* ── Stop-vs-premium gate ──────────────────────────────────────────────────
+ *
+ * How much of the premium a long option loses if the underlying reaches its
+ * structural stop. The point of the gate: on a cheap, low-delta contract a
+ * far-away structural stop is often BEYOND the point of total premium loss,
+ * so the "stop" is not a risk control at all — it is a marker for a position
+ * that was already worthless before it got there.
+ *
+ * This is deliberately the cheap delta-linear estimate (same basis as
+ * TradeCard's `structuralRR`), not a Black-Scholes reprice: it must be
+ * computable from the scan payload alone, with no "Check structure" /
+ * "Estimate" / "Compute Arithmetic Plan" round-trip, or it cannot fire early
+ * enough to be a gate. It answers "is this stop roughly a full-premium loss?",
+ * a question a 5% error does not change — not "what exactly will I lose",
+ * which is what the exit-plan pipeline's repriced `stop.contractPrice` is for.
+ */
+
+/** Last-resort threshold, used only when no caller supplies one. The live value
+ *  is per-horizon and comes from scoring_rules.yaml via
+ *  `stopPremiumThresholdsStore` (which can also carry a per-run override) — this
+ *  mirrors the Swing default so a caller that forgets to pass one degrades to a
+ *  sane gate rather than to no gate.
+ *
+ *  ONE threshold, not two, and the verdict is PASS or CAUTION — never REJECT.
+ *  The gate exists to sort candidates into "the stop is survivable on this
+ *  contract" and "it isn't", so a screener can surface the cheaper-to-be-wrong
+ *  trades up front; it is not a verdict on the trade and it blocks nothing.
+ *  REJECT is the red badge in this design system, and a red badge on a
+ *  contract the user may perfectly well want to trade reads as a refusal. */
+export const STOP_PREMIUM_PASS_MAX_FRACTION = 0.8;
+
+export interface StopPremiumRisk {
+  stockMove: number;   // $ from the underlying's price to the stop
+  delta:     number;   // |delta| actually used (floored, see below)
+  rawLoss:   number;   // stockMove x delta, per share — UNCAPPED, may exceed premium
+  loss:      number;   // min(rawLoss, premium) — the real per-share max loss
+  premium:   number;   // per share
+  fraction:  number;   // loss / premium, 0..1
+  capped:    boolean;  // rawLoss >= premium — the stop is at/beyond total loss
+  status:    Status;
+}
+
+/** Returns null when there is no meaningful answer: a non-positive premium, a
+ *  stop sitting exactly at the current price (the card already renders that as
+ *  "N/A (stop = price)"), or any non-finite input. */
+export function stopPremiumRisk(
+  stopPrice: number,
+  stockPrice: number,
+  delta: number,
+  premium: number,
+  thresholds?: { pass_max_fraction: number } | null,
+): StopPremiumRisk | null {
+  if (![stopPrice, stockPrice, delta, premium].every(Number.isFinite)) return null;
+  if (premium <= 0) return null;
+
+  // A caller passing a non-finite or out-of-range threshold gets the default
+  // rather than a gate that silently passes everything. The per-run override in
+  // Step 3 is user-editable, so this is a reachable input, not a defensive
+  // nicety. Above 1.0 is meaningless (the loss caps at the premium, so nothing
+  // could ever exceed it) and would make CAUTION unreachable.
+  const passMax =
+    thresholds && Number.isFinite(thresholds.pass_max_fraction)
+      && thresholds.pass_max_fraction > 0 && thresholds.pass_max_fraction <= 1
+      ? thresholds.pass_max_fraction : STOP_PREMIUM_PASS_MAX_FRACTION;
+
+  const stockMove = Math.abs(stopPrice - stockPrice);
+  if (stockMove === 0) return null;
+
+  // Floored at 0.05 exactly as TradeCard's `structuralRR` does — a delta at or
+  // near zero would otherwise report a rounding artifact as "no risk at the
+  // stop", which is the most dangerous direction to be wrong in.
+  const usedDelta = Math.max(Math.abs(delta), 0.05);
+  const rawLoss = stockMove * usedDelta;
+  // A long option cannot lose more than it cost, however far the stop sits.
+  const loss = Math.min(rawLoss, premium);
+  const fraction = loss / premium;
+  // `capped` is a fact about the instrument, not a policy: the uncapped estimate
+  // has run past what the contract cost. Kept separate from the threshold (which
+  // moved to a single configurable pass line) because `fraction` is pinned at
+  // 1.0 for every capped case and so can never distinguish "exactly a total
+  // loss" from "twice a total loss" — the formatter surfaces that difference.
+  const capped = rawLoss >= premium;
+
+  // Two states by design — see STOP_PREMIUM_PASS_MAX_FRACTION. A contract whose
+  // stop costs 85% of premium and one whose stop is twice the premium both read
+  // CAUTION; the percentage in the badge and the "(uncapped $X)" tail carry the
+  // magnitude, so nothing is hidden by collapsing the verdict.
+  const status: Status = fraction < passMax ? 'PASS' : 'CAUTION';
+
+  return { stockMove, delta: usedDelta, rawLoss, loss, premium, fraction, capped, status };
+}
+
+/** The gate's inputs on one line, so the verdict is auditable at a glance:
+ *  "$11.50 away × Δ0.45 = $2.50 of $2.50 premium (uncapped $5.18)".
+ *
+ *  A formatter rather than inline JSX because interpolating this many values
+ *  into markup splits it across text nodes — unreadable in the DOM and
+ *  untestable by `getByText`. Same reasoning as
+ *  `formatRecommendedContractSizeRaw`. The uncapped tail appears only when the
+ *  cap actually bound, where it answers "how far past a total loss is this?" —
+ *  a question `loss` alone cannot, since it is pinned to `premium`. */
+export function formatStopPremiumRisk(r: StopPremiumRisk): string {
+  const base =
+    `$${r.stockMove.toFixed(2)} away × Δ${r.delta.toFixed(2)} = ` +
+    `$${r.loss.toFixed(2)} of $${r.premium.toFixed(2)} premium`;
+  return r.capped ? `${base} (uncapped $${r.rawLoss.toFixed(2)})` : base;
+}
+
 export function checkInvalidation(invalidation: number | undefined): boolean {
   return invalidation !== undefined && invalidation > 0;
 }

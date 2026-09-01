@@ -9,6 +9,8 @@ import {
   resolveMaxLossLimitDollar,
   recommendedContractSize,
   formatRecommendedContractSizeRaw,
+  stopPremiumRisk,
+  formatStopPremiumRisk,
 } from '@/lib/risk';
 import type { PortfolioPosition, RiskLimits, TradeCardData, ExitPlan } from '@/types/domain';
 
@@ -348,5 +350,146 @@ describe('formatRecommendedContractSizeRaw', () => {
     // object by hand rather than via recommendedContractSize: raw sitting a
     // hair below the integer recommended claims to be.
     expect(formatRecommendedContractSizeRaw({ raw: 4.999999999999999, recommended: 5 })).toBe('5.00');
+  });
+});
+
+describe('stopPremiumRisk', () => {
+  // The CVX contract that produced this gate: stock $201.86, swing-low stop
+  // $185.87, delta 0.30, premium $5.20. Uncapped loss 15.99 * 0.30 = $4.797,
+  // which is 92% of the premium -- the stop works, but only just.
+  it('reports the real fraction of premium a stop costs, with every input', () => {
+    const r = stopPremiumRisk(185.87, 201.86, 0.30, 5.20)!;
+    expect(r.stockMove).toBeCloseTo(15.99, 2);
+    expect(r.delta).toBe(0.30);
+    expect(r.rawLoss).toBeCloseTo(4.797, 3);
+    expect(r.loss).toBeCloseTo(4.797, 3);
+    expect(r.fraction).toBeCloseTo(0.9225, 4);
+    expect(r.capped).toBe(false);
+    expect(r.status).toBe('CAUTION');
+  });
+
+  it('flags CAUTION (never REJECT) when the stop is at or beyond a total loss', () => {
+    // Same stop, same premium, but a higher-delta contract: 15.99 * 0.60 =
+    // $9.59 against a $5.20 premium. You cannot lose $9.59 on a $5.20 option,
+    // so the loss caps -- and the cap is the whole point: the stop sits past
+    // the point where there is anything left to protect.
+    const r = stopPremiumRisk(185.87, 201.86, 0.60, 5.20)!;
+    expect(r.rawLoss).toBeCloseTo(9.594, 3);
+    expect(r.loss).toBe(5.20);        // capped at premium
+    expect(r.fraction).toBe(1);
+    expect(r.capped).toBe(true);
+    // Two states by design: a total-loss stop is the same verdict as an 85%
+    // one. `capped` and the percentage carry the magnitude the badge doesn't.
+    expect(r.status).toBe('CAUTION');
+  });
+
+  it('PASSes when the contract keeps meaningful value at the stop', () => {
+    // A tight stop $2 away on the same delta: 2 * 0.30 = $0.60 of $5.20 = 12%.
+    const r = stopPremiumRisk(199.86, 201.86, 0.30, 5.20)!;
+    expect(r.fraction).toBeCloseTo(0.1154, 4);
+    expect(r.status).toBe('PASS');
+  });
+
+  it('is contract-specific -- the same stop and stock price give different verdicts per contract', () => {
+    // This is the property the two rejected R:R designs did NOT have: their
+    // reward and risk were both proportional to premium, so premium cancelled
+    // and every contract scored identically. Here it genuinely discriminates.
+    const cheapOtm = stopPremiumRisk(185.87, 201.86, 0.30, 5.20)!;
+    const richerItm = stopPremiumRisk(185.87, 201.86, 0.30, 20.00)!;
+    expect(cheapOtm.fraction).not.toBeCloseTo(richerItm.fraction, 4);
+    expect(cheapOtm.status).toBe('CAUTION');
+    expect(richerItm.status).toBe('PASS');   // 4.797 / 20.00 = 24%
+  });
+
+  it('works bearish -- a stop above the current price is the same distance', () => {
+    const bullish = stopPremiumRisk(185.87, 201.86, 0.30, 5.20)!;
+    const bearish = stopPremiumRisk(217.85, 201.86, -0.30, 5.20)!;
+    expect(bearish.stockMove).toBeCloseTo(bullish.stockMove, 2);
+    expect(bearish.delta).toBe(0.30);        // |delta|
+    expect(bearish.fraction).toBeCloseTo(bullish.fraction, 4);
+  });
+
+  it('floors a near-zero delta rather than reporting "no risk at the stop"', () => {
+    const r = stopPremiumRisk(185.87, 201.86, 0.001, 5.20)!;
+    expect(r.delta).toBe(0.05);
+    expect(r.rawLoss).toBeCloseTo(0.7995, 4);
+  });
+
+  it('lands CAUTION exactly at the 80% threshold, PASS just below', () => {
+    // stockMove * delta / premium == 0.80 exactly: 8.0 * 0.50 / 5.00
+    expect(stopPremiumRisk(92.0, 100.0, 0.50, 5.00)!.status).toBe('CAUTION');
+    // A CLOSER stop (92.1, not 91.9) is the cheaper one -- less distance to the
+    // stop means less loss: 7.9 * 0.50 / 5.00 = 0.79.
+    expect(stopPremiumRisk(92.1, 100.0, 0.50, 5.00)!.status).toBe('PASS');
+  });
+
+  it('never emits REJECT — the gate sorts candidates, it does not refuse them', () => {
+    // Sweep from a trivial stop to one at twice the premium: only ever PASS or
+    // CAUTION. REJECT is the red badge in this design system and a red badge on
+    // a tradeable contract reads as a refusal.
+    for (const stop of [99.9, 95, 92.1, 92.0, 90.1, 90.0, 80, 50]) {
+      expect(stopPremiumRisk(stop, 100.0, 0.50, 5.00)!.status).not.toBe('REJECT');
+    }
+    expect(stopPremiumRisk(90.0, 100.0, 0.50, 5.00)!.capped).toBe(true);   // still detectable
+  });
+
+  it('returns null when there is no meaningful answer', () => {
+    expect(stopPremiumRisk(185.87, 185.87, 0.30, 5.20)).toBeNull();  // stop == price
+    expect(stopPremiumRisk(185.87, 201.86, 0.30, 0)).toBeNull();     // no premium
+    expect(stopPremiumRisk(185.87, 201.86, 0.30, -1)).toBeNull();
+    expect(stopPremiumRisk(NaN, 201.86, 0.30, 5.20)).toBeNull();
+    expect(stopPremiumRisk(185.87, Infinity, 0.30, 5.20)).toBeNull();
+    expect(stopPremiumRisk(185.87, 201.86, NaN, 5.20)).toBeNull();
+  });
+});
+
+describe('formatStopPremiumRisk', () => {
+  it('puts every input on one line so the verdict is auditable', () => {
+    const r = stopPremiumRisk(185.87, 201.86, 0.30, 5.20)!;
+    expect(formatStopPremiumRisk(r)).toBe('$15.99 away × Δ0.30 = $4.80 of $5.20 premium');
+  });
+
+  it('appends the uncapped loss only when the cap actually bound', () => {
+    const capped = stopPremiumRisk(185.87, 201.86, 0.60, 5.20)!;
+    // Without the tail, `loss` is pinned to `premium` and the reader cannot see
+    // HOW far past a total loss the stop sits -- $9.59 on a $5.20 contract.
+    expect(formatStopPremiumRisk(capped)).toBe('$15.99 away × Δ0.60 = $5.20 of $5.20 premium (uncapped $9.59)');
+
+    const uncapped = stopPremiumRisk(199.86, 201.86, 0.30, 5.20)!;
+    expect(formatStopPremiumRisk(uncapped)).not.toMatch(/uncapped/);
+  });
+});
+
+describe('stopPremiumRisk — configurable thresholds', () => {
+  // The gate's bands are per-horizon in scoring_rules.yaml and overridable per
+  // run from Step 3, so the helper must take them rather than own them.
+  it('uses the caller-supplied threshold instead of the module default', () => {
+    // 70% loss: CAUTION under the Position band (0.70), PASS under Swing (0.80).
+    const args = [93.0, 100.0, 0.50, 5.00] as const;   // 7.0 * 0.50 / 5.00 = 0.70
+    expect(stopPremiumRisk(...args, { pass_max_fraction: 0.70 })!.status).toBe('CAUTION');
+    expect(stopPremiumRisk(...args, { pass_max_fraction: 0.80 })!.status).toBe('PASS');
+  });
+
+  it('honours a tightened pass line', () => {
+    // 50% loss passes at the 0.80 default, fails once the line drops to 0.40.
+    const args = [95.0, 100.0, 0.50, 5.00] as const;   // 5.0 * 0.50 / 5.00 = 0.50
+    expect(stopPremiumRisk(...args, { pass_max_fraction: 0.80 })!.status).toBe('PASS');
+    expect(stopPremiumRisk(...args, { pass_max_fraction: 0.40 })!.status).toBe('CAUTION');
+  });
+
+  it('falls back to the default when the threshold is out of range or non-finite', () => {
+    // The per-run override in Step 3 is user-editable, so these are reachable
+    // inputs. Above 1.0 is meaningless -- the loss caps at the premium, so
+    // nothing could exceed it and CAUTION would be unreachable.
+    const at70 = [93.0, 100.0, 0.50, 5.00] as const;   // 70% loss
+    const at85 = [91.5, 100.0, 0.50, 5.00] as const;   // 85% loss
+    for (const bad of [{ pass_max_fraction: 1.5 }, { pass_max_fraction: 0 },
+                       { pass_max_fraction: -0.5 }, { pass_max_fraction: NaN }]) {
+      expect(stopPremiumRisk(...at70, bad)!.status).toBe('PASS');      // 0.80 default
+      expect(stopPremiumRisk(...at85, bad)!.status).toBe('CAUTION');
+    }
+    // ...and omitting it entirely still gates, at the Swing default.
+    expect(stopPremiumRisk(...at70)!.status).toBe('PASS');
+    expect(stopPremiumRisk(...at85)!.status).toBe('CAUTION');
   });
 });
