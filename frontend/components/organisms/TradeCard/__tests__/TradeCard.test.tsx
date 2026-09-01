@@ -1945,3 +1945,96 @@ describe('TradeCard — stop-vs-premium gate', () => {
     expect(screen.queryByText('STOP COST')).not.toBeInTheDocument();
   });
 });
+
+describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR', () => {
+  // Both a raw structural stop (via Check structure) AND an exit plan (via
+  // Compute Arithmetic Plan) exist for this contract, with DELIBERATELY
+  // different stop.price values (178.50 raw vs. 170.00 exit-plan) and
+  // different paired stock prices, so the two branches produce materially
+  // different numbers if either consumer picks the wrong one. Before this
+  // fix, the gate (stopRisk) and structuralRR each read the raw structural
+  // pair directly — a "fifth stop" no one asked for once an Arithmetic Plan
+  // existed. After the fix, both should agree on the exit-plan's stop once
+  // one has been computed this mount.
+  it('gate and structuralRR both use the exit-plan stop, not the raw structural stop, once an Arithmetic Plan is computed', async () => {
+    // 1) Check structure — raw structural stop at $178.50, fresh stock price $182.00.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 182.0 });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 80, distancePct: 1.92,
+    });
+
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+
+    // Before any Arithmetic Plan exists, the gate reads the raw structural
+    // pair: |178.50 - 182.00| = 3.50 away x delta 0.45 = $1.575 of $2.50
+    // premium = 63%. Sanity-checks the pre-fix baseline before it changes.
+    expect(screen.getByText('63% OF PREMIUM')).toBeInTheDocument();
+
+    // 2) Compute Arithmetic Plan — exit-plan stop at $170.00, a DIFFERENT
+    // fresh stock price ($190.00) than Check structure captured.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 190.0 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.6, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop: {
+        price: 170.0, source: 'structural' as const, contractPrice: 1.0,
+        rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+        structuralPrice: 170.0, atrFloorPrice: 165.0, distanceDollar: 5.0,
+      },
+      targets: [],
+      atr: 3.5,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText('Bottom (final stop)').length).toBeGreaterThanOrEqual(1);
+    });
+
+    // The gate must now read the exit-plan pair, not the raw structural pair:
+    // |170.00 - 190.00| = 20.00 away x delta 0.45 = $9.00 (uncapped) against a
+    // $2.50 premium -> capped at 100%. If it had stayed on the raw pair this
+    // would still read 63%.
+    expect(screen.getByText('100% OF PREMIUM')).toBeInTheDocument();
+    expect(screen.getByText(/\$20\.00 away × Δ0\.45 = \$2\.50 of \$2\.50 premium \(uncapped \$9\.00\)/)).toBeInTheDocument();
+    expect(screen.queryByText('63% OF PREMIUM')).not.toBeInTheDocument();
+
+    // 3) Run Monte Carlo Estimate — fresh premium/delta for firstPassageContext.
+    // structuralIsFreshRef is already true from step 1, so this does NOT
+    // re-fetch the structural stop.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 190.0 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 25, delta: 0.5, theta: -0.05, ivRank: 50, spread: 0.1, volume: 50,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [
+        { pct: 0.20, stockPrice: 210.0, optionPrice: 45.0, probability: 0.6, expectedDays: 5 },
+      ],
+      invalidation: { probability: 0.3, expectedDays: 4 },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    await waitFor(() => {
+      expect(screen.getByText('R:R vs. structural stop')).toBeInTheDocument();
+    });
+
+    // structuralRR must also use the exit-plan pair: stockMove = |170.00 -
+    // 190.00| = 20.00, deltaEst = 0.5, risk = min(20.00*0.5, 25) = 10.00,
+    // reward = 45.00 - 25.00 = 20.00 -> rr = 2.0. Had it stayed on the raw
+    // structural pair (178.50 vs. 182.00), stockMove would be 3.50, risk =
+    // min(3.50*0.5, 25) = 1.75, giving rr = 20.00 / 1.75 = 11.4 instead.
+    expect(screen.getByText('2.0×')).toBeInTheDocument();
+    expect(screen.queryByText('11.4×')).not.toBeInTheDocument();
+
+    // The "Structural level found" line (ProfitTargetRow) must also show the
+    // exit-plan's price, not the raw structural stop's — "$170.00" appears at
+    // least twice: once in the Arithmetic card's own "Bottom (final stop)"
+    // block, once in ProfitTargetRow's "Structural level found" line.
+    expect(screen.getAllByText('$170.00').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('$178.50')).not.toBeInTheDocument();
+  });
+});
