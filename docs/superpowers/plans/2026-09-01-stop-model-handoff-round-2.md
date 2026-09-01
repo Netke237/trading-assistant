@@ -275,8 +275,11 @@ dead on arrival.
 
 ## 7. Recommended order
 
-1. **Open the PR from this branch and merge it.** Four commits and four documents are unmerged. Not
-   yet done as of this update — do this next.
+> **Superseded by `2026-09-01-stop-model-handoff-round-3.md` §3.** PR [#19] was opened and its
+> backend CI came back red (`KeyError: 'reject_fraction'` — a test left behind by the D8 two-state
+> revision); that is fixed. Round 3 is the current order. The rest of *this* file still stands.
+
+1. ~~Open the PR from this branch~~ **Done** — PR #19, open, not yet merged.
 2. ~~Close the piece-1/2 gap.~~ **Done** (§4).
 3. **Piece 3 — scan-time `finalStop`.** Backend + `TradeExit` schema echo + `scanStore` v12→v13
    migration + the ranking badge. This is what makes pieces 1 and 2 fire by default. (§5)
