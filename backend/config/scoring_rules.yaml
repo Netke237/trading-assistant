@@ -117,10 +117,10 @@ horizons:
 
     stop_premium:
       # Stop-vs-premium gate (frontend TradeCard + step-4 ranking). What share of
-      # the option's premium is lost if the underlying reaches its stop. REJECT
-      # means the stop sits at or beyond a total loss of premium — it is not a
-      # risk control on that contract, just a marker for a position that was
-      # already worthless before price got there.
+      # the option's premium is lost if the underlying reaches its stop. At or
+      # above the threshold the stop costs most or all of the premium — it is not
+      # a meaningful risk control on that contract, just a marker for a position
+      # that would be near-worthless before price got there.
       #
       # Per-horizon because tolerance genuinely differs: an Intraday contract is
       # expected to run closer to the edge; a Position contract has time for the
@@ -206,10 +206,10 @@ horizons:
 
     stop_premium:
       # Stop-vs-premium gate (frontend TradeCard + step-4 ranking). What share of
-      # the option's premium is lost if the underlying reaches its stop. REJECT
-      # means the stop sits at or beyond a total loss of premium — it is not a
-      # risk control on that contract, just a marker for a position that was
-      # already worthless before price got there.
+      # the option's premium is lost if the underlying reaches its stop. At or
+      # above the threshold the stop costs most or all of the premium — it is not
+      # a meaningful risk control on that contract, just a marker for a position
+      # that would be near-worthless before price got there.
       #
       # Per-horizon because tolerance genuinely differs: an Intraday contract is
       # expected to run closer to the edge; a Position contract has time for the
@@ -296,10 +296,10 @@ horizons:
 # Entry quality thresholds (FR-45)
     stop_premium:
       # Stop-vs-premium gate (frontend TradeCard + step-4 ranking). What share of
-      # the option's premium is lost if the underlying reaches its stop. REJECT
-      # means the stop sits at or beyond a total loss of premium — it is not a
-      # risk control on that contract, just a marker for a position that was
-      # already worthless before price got there.
+      # the option's premium is lost if the underlying reaches its stop. At or
+      # above the threshold the stop costs most or all of the premium — it is not
+      # a meaningful risk control on that contract, just a marker for a position
+      # that would be near-worthless before price got there.
       #
       # Per-horizon because tolerance genuinely differs: an Intraday contract is
       # expected to run closer to the edge; a Position contract has time for the
