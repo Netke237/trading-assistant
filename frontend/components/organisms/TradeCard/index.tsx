@@ -702,7 +702,23 @@ export function TradeCard({
         premium,
         delta,
         trend_score: data.stockBreakdown.trend,
-        invalidation_price: data.exit.invalidation,
+        // Per D1 (stop-model-unification plan), Monte Carlo owns the same
+        // structural+ATR stop as the Arithmetic card, not the flat scan-time
+        // -3% (`data.exit.invalidation`). Sending the flat stop here was a
+        // real discrepancy, not a display nit: the "probability of
+        // invalidation" was being measured against a level up to 3x tighter
+        // than the structural+ATR stop shown a few inches above on the same
+        // card. `exitPlan` is optional/user-triggered (Compute Arithmetic
+        // Plan), so it's frequently absent — fall back to the flat stop when
+        // it hasn't been computed yet.
+        //
+        // Known limitation, deliberately not fixed here (tracked separately,
+        // plan's Phase 2.4 "Freshness"): if the user re-runs Compute
+        // Arithmetic Plan AFTER already running this estimate, the
+        // already-rendered Monte Carlo probability does NOT retroactively
+        // update to the new exit plan stop — it silently goes stale until
+        // the user re-runs the estimate.
+        invalidation_price: exitPlan?.stop.price ?? data.exit.invalidation,
         t1_pct: targetPct.t1,
         t2_pct: targetPct.t2,
         t3_pct: targetPct.t3,
@@ -739,7 +755,7 @@ export function TradeCard({
     } finally {
       if (!controller.signal.aborted) setFirstPassageLoading(false);
     }
-  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, targetPct, structuralLoading]);
+  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, exitPlan, targetPct, structuralLoading]);
 
   // R:R using the structural stop (order block / swing level) as the risk
   // basis instead of the original fixed "premium * 60%" assumption — only

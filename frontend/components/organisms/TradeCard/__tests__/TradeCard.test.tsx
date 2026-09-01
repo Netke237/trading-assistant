@@ -391,6 +391,59 @@ describe('TradeCard', () => {
     expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
   });
 
+  it('sends the exit plan\'s structural+ATR stop as invalidation_price once a plan has been computed, instead of the flat scan-time stop', async () => {
+    // Step 1 — compute the Arithmetic plan so exitPlan.stop.price is populated.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    const plan = {
+      stop: {
+        price: 185.87, source: 'structural' as const, contractPrice: 1.2,
+        rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+        structuralPrice: 183.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
+      },
+      targets: [],
+      atr: 3.5,
+    };
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce(plan);
+
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+
+    // Wait for the plan to actually land before running the estimate. (Two
+    // sections render the stop price once a plan exists — the "Compute
+    // Arithmetic Plan" KV list and the Final Recommendation card — so match
+    // on all of them rather than assuming a single occurrence.)
+    await waitFor(() => {
+      expect(screen.getAllByText('$185.87').length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Step 2 — run the Monte Carlo estimate. It should now send the exit
+    // plan's structural+ATR stop, not the flat scan-time data.exit.invalidation
+    // (179.64 on this fixture).
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [
+        { pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 },
+        { pct: 0.35, stockPrice: 193.2, optionPrice: 3.71, probability: 0.55, expectedDays: 9 },
+        { pct: 0.50, stockPrice: null, optionPrice: 4.13, probability: 0.10, expectedDays: null },
+      ],
+      invalidation: { probability: 0.30, expectedDays: 4 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+
+    await waitFor(() => {
+      expect(api.getFirstPassageEstimate).toHaveBeenCalledWith(
+        expect.objectContaining({ invalidation_price: 185.87 }),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
   it('shows an error message when the first-passage request fails', async () => {
     (api.getFirstPassageEstimate as jest.Mock).mockRejectedValueOnce(new Error('network error'));
     render(<TradeCard data={mockTradeCard} />);
