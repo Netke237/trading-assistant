@@ -80,6 +80,39 @@ lines below it in the same block.
 **Verified:** backend `1799 passed, 1 skipped` (was `1797 passed, 2 failed`); `npm run typecheck`
 clean.
 
+### 1.4 The `test` (Playwright e2e) check is red — and has been on `main` since 2026-08-28
+
+Separate from §1.3, and **not this PR's**. Three tests fail:
+
+```
+e2e/tests/screener-steps-1-3.spec.ts:5  › Step 2 - universe page loads with selectable tiles
+e2e/tests/screener-steps-1-3.spec.ts:17 › Step 2 - universe selection sends correct payload to scan API
+e2e/tests/screener-steps-1-3.spec.ts:52 › Step 3 - direction toggle works
+```
+
+**Evidence it is not this PR's:** the identical three tests fail with the identical signature on
+`main` at `1f2d8c22` — this PR's own base commit (run #128,
+`actions/runs/33522254305`). The Playwright workflow has failed on `main` for **10 consecutive runs
+going back to 2026-08-28** (#118 through #128). It is a long-standing broken check, not a flake and
+not a regression from this branch.
+
+**Symptom.** Steps 2 and 3 render without their controls — universe tiles not found, Bullish/Bearish
+not found — and `clickNext()` from Step 2 lands on `step-1-regime` instead of `step-3-direction`.
+
+**Two hypotheses already ruled out**, so the next session does not repeat them:
+
+- *The `StopPremiumThresholdsBootstrap` this PR adds to `app/(frame)/layout.tsx` breaks every framed
+  page.* No — it is a faithful copy of the existing `IvThresholdsBootstrap` /
+  `EventThresholdsBootstrap` pattern, its store's `fetch` is wrapped in try/catch and keeps the
+  fallback, and the same tests fail on the base commit that does not contain it.
+- *The 1200 px `MinWidthGate` hides the content.* No — `playwright.config.ts` uses
+  `devices['Desktop Chrome']`, which is 1280×720, above the gate.
+
+**Not fixed here, deliberately.** The failure is in Steps 1–3 navigation; this PR's diff is Step 7
+`TradeCard`, `lib/risk.ts`, the config endpoint and YAML. Fixing it inside this PR would widen it
+into unrelated code. No fix PR exists to port. **It needs its own change** — and until it lands,
+`test` will be red on every PR, so it cannot be used as a merge signal.
+
 ---
 
 ## 2. The lesson from §1.3 — carry this forward
@@ -109,9 +142,16 @@ terms of "the gate" rather than in terms of every file naming the key.
 
 | # | Item | State |
 |---|---|---|
-| 1 | PR #19 CI green on `659b788b` | **Verify.** Was re-running at the end of this session. |
-| 2 | Merge PR #19 | **Kenneth's call.** Six commits and four documents unmerged. |
-| 3 | Piece 3 — scan-time `finalStop` | **Next build.** §4 below. |
+| 1 | `backend` + `frontend` checks green on this PR's head | **Verify.** Were re-running at the end of this session. |
+| 2 | `test` (Playwright e2e) check | **Red, and red on `main` too** — 10 consecutive runs since 2026-08-28. Not this PR's. §1.4. |
+| 3 | Merge PR #19 | **Kenneth's call.** Seven commits and five documents unmerged. |
+| 4 | Piece 3 — scan-time `finalStop` | **Next build.** §4 below. |
+
+**On the `test` check:** it cannot be used as a merge signal for this PR, because it is red on the
+base branch for reasons that predate this branch by five days. Either merge on `backend` + `frontend`
+green, or fix the e2e suite first **in its own PR** — that is a real, separate piece of work worth
+scheduling, because right now the repository has a permanently-red check and no one can tell a new
+e2e regression from the standing failure.
 
 **Do not start piece 3 on top of an unmerged PR #19 if it can be avoided** — piece 3 edits
 `TradeExit`, `scanStore` and the ranking table, and stacking it would make #19 harder to review than
