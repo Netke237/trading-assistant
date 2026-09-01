@@ -591,6 +591,40 @@ export function TradeCard({
     }
   }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend]);
 
+  // Piece 2 (stop-model unification) — the stop level shared by the
+  // stop-vs-premium gate, structuralRR, and (below) the Monte Carlo request's
+  // invalidation_price, so none of the three ever quotes a different number
+  // for "the stop" on the same card. Prefers the exit plan's structural+ATR
+  // final stop (compute_final_stop: max(structural, 2x ATR)) over the raw
+  // order-block/swing level once an Arithmetic Plan has been computed for
+  // this contract. `arithmeticLiveStockPrice` gates the exit-plan branch
+  // (rather than falling back to data.price) because it doubles as a
+  // freshness signal: it is set only when computeExitPlan actually ran THIS
+  // mount (reset to null on every contract switch), so a cache-restored
+  // exitPlan with no matching live price falls through to the raw
+  // structural branch below instead of pairing a possibly-stale final stop
+  // with a placeholder stock price.
+  //
+  // Declared here, ahead of estimateFirstPassage, specifically so the Monte
+  // Carlo request below can read it instead of `exitPlan` directly — piece 1
+  // originally read `exitPlan?.stop.price` unconditionally, which (unlike
+  // this memo) accepts a cache-restored plan with no fresh stock price to
+  // pair it with. That let Next/Prev in CandidateNav land on a card where
+  // Monte Carlo measured against the exit-plan stop while the gate and
+  // structuralRR — both already reading `sharedStop` — measured against the
+  // raw structural level: two different stops on one card. Routing the MC
+  // request through `sharedStop` too closes that gap; keep it that way
+  // rather than reverting to `exitPlan?.stop.price` for "simplicity".
+  const sharedStop = useMemo(() => {
+    if (exitPlan && arithmeticLiveStockPrice != null) {
+      return { price: exitPlan.stop.price, stockPrice: arithmeticLiveStockPrice, source: 'exit_plan' as const };
+    }
+    if (structuralStop) {
+      return { price: structuralStop.price, stockPrice: structuralStopStockPrice ?? data.price, source: 'structural' as const };
+    }
+    return null;
+  }, [exitPlan, arithmeticLiveStockPrice, structuralStop, structuralStopStockPrice, data.price]);
+
   const estimateFirstPassage = useCallback(async () => {
     firstPassageRequestRef.current?.abort();
     const controller = new AbortController();
@@ -708,9 +742,16 @@ export function TradeCard({
         // real discrepancy, not a display nit: the "probability of
         // invalidation" was being measured against a level up to 3x tighter
         // than the structural+ATR stop shown a few inches above on the same
-        // card. `exitPlan` is optional/user-triggered (Compute Arithmetic
-        // Plan), so it's frequently absent — fall back to the flat stop when
-        // it hasn't been computed yet.
+        // card. Reads `sharedStop` (declared above, ahead of this callback)
+        // rather than `exitPlan?.stop.price` directly so this resolves
+        // through the exact same memo the gate and structuralRR use —
+        // `sharedStop` refuses a cache-restored exit plan that has no fresh
+        // stock price to pair it with and falls back to the raw structural
+        // level instead, which `exitPlan?.stop.price` alone would not do.
+        // `exitPlan` is optional/user-triggered (Compute Arithmetic Plan) and
+        // `structuralStop` only populates after a Check-structure/Estimate
+        // click, so `sharedStop` itself is frequently null — fall back to
+        // the flat stop when it hasn't been computed yet.
         //
         // Known limitation, deliberately not fixed here (tracked separately,
         // plan's Phase 2.4 "Freshness"): if the user re-runs Compute
@@ -718,7 +759,7 @@ export function TradeCard({
         // already-rendered Monte Carlo probability does NOT retroactively
         // update to the new exit plan stop — it silently goes stale until
         // the user re-runs the estimate.
-        invalidation_price: exitPlan?.stop.price ?? data.exit.invalidation,
+        invalidation_price: sharedStop?.price ?? data.exit.invalidation,
         t1_pct: targetPct.t1,
         t2_pct: targetPct.t2,
         t3_pct: targetPct.t3,
@@ -755,7 +796,7 @@ export function TradeCard({
     } finally {
       if (!controller.signal.aborted) setFirstPassageLoading(false);
     }
-  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, exitPlan, targetPct, structuralLoading]);
+  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, sharedStop, targetPct, structuralLoading]);
 
   // R:R using the structural stop (order block / swing level) as the risk
   // basis instead of the original fixed "premium * 60%" assumption — only
@@ -773,28 +814,6 @@ export function TradeCard({
   const scanHorizon = useScanStore((s) => s.context?.horizon ?? null);
   const stopPremiumThresholds = useStopPremiumThresholdsStore((s) => s.thresholds);
   const stopPremiumOverride = useStopPremiumThresholdsStore((s) => s.override);
-
-  // Piece 2 (stop-model unification) — the stop level shared by the
-  // stop-vs-premium gate and structuralRR, so they never quote two different
-  // numbers for "the stop" on the same card. Prefers the exit plan's
-  // structural+ATR final stop (compute_final_stop: max(structural, 2x ATR))
-  // over the raw order-block/swing level once an Arithmetic Plan has been
-  // computed for this contract — same D1 preference the Monte Carlo request
-  // uses. `arithmeticLiveStockPrice` gates the exit-plan branch (rather than
-  // falling back to data.price) because it doubles as a freshness signal: it
-  // is set only when computeExitPlan actually ran THIS mount (reset to null
-  // on every contract switch), so a cache-restored exitPlan with no matching
-  // live price falls through to the raw structural branch below instead of
-  // pairing a possibly-stale final stop with a placeholder stock price.
-  const sharedStop = useMemo(() => {
-    if (exitPlan && arithmeticLiveStockPrice != null) {
-      return { price: exitPlan.stop.price, stockPrice: arithmeticLiveStockPrice, source: 'exit_plan' as const };
-    }
-    if (structuralStop) {
-      return { price: structuralStop.price, stockPrice: structuralStopStockPrice ?? data.price, source: 'structural' as const };
-    }
-    return null;
-  }, [exitPlan, arithmeticLiveStockPrice, structuralStop, structuralStopStockPrice, data.price]);
 
   // Stop-vs-premium gate. Deliberately reads the SCAN-TIME `contractDetails`
   // (mid/delta) rather than `firstPassageContext`'s fresh pair, unlike

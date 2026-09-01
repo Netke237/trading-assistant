@@ -2038,3 +2038,77 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     expect(screen.queryByText('$178.50')).not.toBeInTheDocument();
   });
 });
+
+describe('TradeCard — piece 1/2 gap: cache-restored exit plan with no fresh click this mount', () => {
+  // Reproduces the CandidateNav Next-then-Prev scenario from the handoff doc:
+  // the parent (step-7-trade-card/page.tsx) splices a previously-computed
+  // exit plan AND a previously-fetched structural stop back into `data.exit`
+  // on remount, but neither "Compute Arithmetic Plan" nor "Check structure"
+  // has been clicked THIS mount, so `arithmeticLiveStockPrice` is still null
+  // and `structuralIsFreshRef`/`firstPassageIsFreshRef` are both false.
+  // Before the fix, the Monte Carlo request read `exitPlan?.stop.price`
+  // directly and would send the restored exit-plan stop (185.87) even though
+  // `sharedStop` — already used by the gate and structuralRR — refuses a
+  // restored plan with no fresh stock price and falls back to the restored
+  // structural stop (178.50) instead. That mismatch is exactly the "two
+  // stops on one card" regression this test guards against.
+  const restoredCard: TradeCardData = {
+    ...mockTradeCard,
+    exit: {
+      ...mockTradeCard.exit,
+      exitPlan: {
+        computedAt: '2026-08-30T12:00:00.000Z',
+        stop: {
+          price: 185.87, source: 'structural', contractPrice: 1.2,
+          rrModel: 'Heston repriced', structuralSource: 'order_block', structuralConfidence: 80,
+          structuralPrice: 183.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
+        },
+        targets: [],
+        atr: 3.5,
+      },
+      structuralStop: { price: 178.5, source: 'order_block', confidence: 80, distancePct: 1.92 },
+      structuralStopStockPrice: 182.0,
+    },
+  };
+
+  it('sends the restored structural stop, not the restored exit-plan stop, as invalidation_price', async () => {
+    // structuralIsFreshRef starts false (the structural stop above is a
+    // restore, not a fetch this mount), so clicking Estimate auto-fires a
+    // structural-stop sub-fetch alongside the main request — give it a
+    // resolvable mock even though this test doesn't care about its result.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 80, distancePct: 1.92,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [
+        { pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 },
+      ],
+      invalidation: { probability: 0.30, expectedDays: 4 },
+    });
+
+    render(<TradeCard data={restoredCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+
+    await waitFor(() => {
+      expect(api.getFirstPassageEstimate).toHaveBeenCalled();
+    });
+    // Assert on THIS test's own call specifically (the mock's call history is
+    // shared across the whole file, so `.not.toHaveBeenCalledWith` on the
+    // restored exit-plan price would spuriously fail if an earlier,
+    // unrelated test happened to send that same number).
+    const [lastCallArgs] = (api.getFirstPassageEstimate as jest.Mock).mock.calls.at(-1)!;
+    expect(lastCallArgs.invalidation_price).toBe(178.5);
+  });
+
+  it('agrees with the gate on the same restored stop', () => {
+    render(<TradeCard data={restoredCard} />);
+    // stopRisk: |178.50 - 182.00| = 3.50 away x delta 0.45 = $1.575 of $2.50
+    // premium = 63%. If the gate had instead picked up the restored exit-plan
+    // stop (185.87) it would read a different percentage here.
+    expect(screen.getByText('63% OF PREMIUM')).toBeInTheDocument();
+  });
+});

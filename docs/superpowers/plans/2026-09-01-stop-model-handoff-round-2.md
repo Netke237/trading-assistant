@@ -105,10 +105,25 @@ Full frontend suite green (97 suites, 999 tests), `npm run typecheck` clean.
 
 ---
 
-## 4. Prerequisite: the gap between pieces 1 and 2
+## 4. ~~Prerequisite~~ CLOSED: the gap between pieces 1 and 2
 
-**Fix this before starting piece 3.** It is small — roughly one line plus a test — and it gets
-harder once piece 3 adds a third source of the stop.
+**Status: fixed in this session.** `components/organisms/TradeCard/index.tsx` — the Monte Carlo
+request's `invalidation_price` now reads `sharedStop?.price ?? data.exit.invalidation` instead of
+`exitPlan?.stop.price ?? data.exit.invalidation`. `sharedStop` was moved up in the file (declared
+ahead of `estimateFirstPassage`, right after the state it depends on — `exitPlan`,
+`arithmeticLiveStockPrice`, `structuralStop`, `structuralStopStockPrice` are all already in scope
+there) so the memo itself didn't move logically, only its position in the file. Two new tests in
+`TradeCard.test.tsx` (describe block `"TradeCard — piece 1/2 gap: cache-restored exit plan with no
+fresh click this mount"`) reproduce the Next-then-Prev CandidateNav scenario — an exit plan AND a
+structural stop both restored from cache, neither refreshed this mount — and assert the Monte Carlo
+request, the gate, and (transitively, since both already read `sharedStop`) `structuralRR` all
+resolve to the same restored structural stop rather than the restored exit-plan stop. Confirmed the
+test fails against the pre-fix code (reverted the one line locally, re-ran, got the expected
+185.87-vs-178.50 mismatch) before restoring the fix. Full suite green (97 suites, 1001 tests
+including the two new ones), `npm run typecheck` clean.
+
+The rest of this section is kept for the record of what the gap was and why it mattered — no action
+needed here anymore.
 
 ### The gap
 
@@ -260,10 +275,9 @@ dead on arrival.
 
 ## 7. Recommended order
 
-1. **Open the PR from this branch and merge it.** Three commits and four documents are unmerged.
-   (§1)
-2. **Close the piece-1/2 gap.** Frontend only, ~one line plus a test. Do it before piece 3, while
-   there are only two sources of the stop to reconcile. (§4)
+1. **Open the PR from this branch and merge it.** Four commits and four documents are unmerged. Not
+   yet done as of this update — do this next.
+2. ~~Close the piece-1/2 gap.~~ **Done** (§4).
 3. **Piece 3 — scan-time `finalStop`.** Backend + `TradeExit` schema echo + `scanStore` v12→v13
    migration + the ranking badge. This is what makes pieces 1 and 2 fire by default. (§5)
 4. **Piece 4 — per-position `premium_stop_pct`.** Independent of everything above.
