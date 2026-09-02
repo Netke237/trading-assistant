@@ -163,9 +163,65 @@ export interface FirstPassageTarget {
   expectedDays: number | null;   // median days to hit; null if probability is 0
 }
 
+/** One target's row of the barrier race. The four `p*` fields are an
+ *  ATTRIBUTION, not four independent probabilities: every simulated path is
+ *  counted exactly once, so they sum to 1. `FirstPassageTarget.probability` and
+ *  `invalidation.probability` are each measured on their own and can sum past
+ *  100% — that difference is the whole reason this exists.
+ *
+ *  Every `days*` is a CONDITIONAL median: the median day of the paths that
+ *  resolved to that outcome, not of all paths. */
+export interface BarrierRaceOutcome {
+  targetPct:            number;
+  targetOptionPrice:    number;
+
+  pTargetFirst:         number;
+  pStockStopFirst:      number;
+  pPremiumStopFirst:    number;
+  pNeither:             number;
+
+  daysTarget:           number | null;
+  daysStockStop:        number | null;
+  daysPremiumStop:      number | null;
+  /** Mean option value at expiry over the `pNeither` paths — the input to the
+   *  edge's fourth term, which is SIGNED: those paths can end above the premium
+   *  paid, so it is not always a loss. */
+  terminalMean:         number | null;
+
+  // The card prints every term of the risk / R:R / edge chains, so the payload
+  // carries the inputs, not just the results.
+  rewardDollar:         number;
+  repriceDaysStockStop: number;
+  stopRepricedValue:    number | null;
+  riskStockStop:        number | null;
+  riskPremiumStop:      number;
+  /** THE measurement. Its risk leg is `premium - BS(stop, ...)`, which is not
+   *  proportional to premium, so premium does not cancel and this genuinely
+   *  varies by contract. `null` when the risk leg is <= 0 (possible on a
+   *  deep-ITM contract with a tight stop) — render an em dash, never a negative
+   *  or infinite ratio. */
+  rrStockStop:          number | null;
+  /** Constant by construction: exactly `targetPct / premiumStopPct`. Its risk
+   *  leg IS proportional to premium, so premium cancels. Shown for completeness
+   *  and explicitly labelled as not a measurement. */
+  rrPremiumStop:        number;
+  edgePerContract:      number | null;
+}
+
+export interface BarrierRace {
+  outcomes:         BarrierRaceOutcome[];
+  premiumStopPrice: number;   // the option-value barrier actually used
+  premiumStopPct:   number;
+  stockStopPrice:   number;   // echo of the invalidation price, for auditability
+  nPaths:           number;
+}
+
 export interface FirstPassageEstimate {
   targets:      FirstPassageTarget[];
   invalidation: { probability: number; expectedDays: number | null };
+  /** `null`/absent when the simulation was refused (dte < 1). The card renders
+   *  "not simulated" in that case, never four zeroes. */
+  race?:        BarrierRace | null;
   /** ISO timestamp of when this estimate was computed — client-set on
    *  receipt, the same way `ExitPlan.computedAt` works (the backend endpoint
    *  is stateless/fresh on every call, so this isn't returned by it). Feature

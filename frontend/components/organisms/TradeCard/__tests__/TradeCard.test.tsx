@@ -365,6 +365,15 @@ describe('TradeCard', () => {
           t1_pct: 0.20,
           t2_pct: 0.35,
           t3_pct: 0.50,
+          // The barrier race's third barrier. The card's "Premium stop" field
+          // holds a DOLLAR amount ($1.50 in this fixture); the barrier is a
+          // FRACTION of the fresh premium ($2.75), so 1.50 / 2.75.
+          premium_stop_pct: 1.5 / 2.75,
+          // No scan context in this test, so the backend's own Swing default
+          // applies rather than a guessed preset.
+          horizon_preset: undefined,
+          hold_min: undefined,
+          hold_max: undefined,
         },
         expect.any(AbortSignal),
       );
@@ -381,11 +390,15 @@ describe('TradeCard', () => {
     expect(screen.getByText('~5d')).toBeInTheDocument();       // T20% Expected time
     expect(screen.getByText('$193.20')).toBeInTheDocument();   // T35% Stock price
     expect(screen.getByText('not reachable')).toBeInTheDocument(); // T50% Stock price (null)
-    // Feature 8 — the Final Recommendation card also renders an
-    // "Invalidation probability" row once Monte Carlo is the most recently
-    // run method, so "30%" may legitimately match twice.
-    expect(screen.getAllByText('30%').length).toBeGreaterThanOrEqual(1); // Invalidation probability
-    expect(screen.getByText('~4d')).toBeInTheDocument();       // Invalidation expected time
+    // The invalidation row moved off this card to the Barrier Race card
+    // (barrier-race spec section 3.4). This mock returns no `race`, so the race card
+    // renders nothing and the standalone invalidation numbers are not on
+    // screen at all — deliberately, rather than being shown twice in two
+    // places that count paths differently.
+    expect(screen.queryByText('~4d')).not.toBeInTheDocument();
+    // Feature 8's Final Recommendation still shows the standalone
+    // probability when no race came back with the estimate.
+    expect(screen.getAllByText('30%').length).toBeGreaterThanOrEqual(1);
     // Purely additive: the premium-based invalidation must be untouched.
     expandLadder();
     expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
@@ -1179,95 +1192,28 @@ describe('TradeCard', () => {
       expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    // The "R:R vs. structural stop" cell this test used to read is gone
+    // (barrier-race spec section 3.4). What it was gating on is not: the
+    // "Structural level found" cell appears on all three rows only once BOTH
+    // the stop and the estimate have been confirmed fresh THIS mount, and it
+    // shows the FRESH stop, not the scan-time one.
     await waitFor(() => {
-      expect(screen.getAllByText('R:R vs. structural stop').length).toBe(3);
+      expect(screen.getAllByText('Structural level found').length).toBe(3);
     });
-
-    // stockMove = |190 - 200| = 10; deltaEst = 0.5; risk = 5.0
-    // T1: reward = 15.0 - 5.0 = 10.0 -> rr = 2.0
-    // T2: reward = 18.0 - 5.0 = 13.0 -> rr = 2.6
-    // T3: reward = 21.0 - 5.0 = 16.0 -> rr = 3.2
-    expect(screen.getByText('2.0×')).toBeInTheDocument();
-    expect(screen.getByText('2.6×')).toBeInTheDocument();
-    expect(screen.getByText('3.2×')).toBeInTheDocument();
+    expect(screen.getAllByText('$190.00').length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText('R:R vs. structural stop')).not.toBeInTheDocument();
   });
 
-  it('shows a negative structural-stop R:R instead of "—" (M2 parity)', async () => {
-    // Mirrors the backend's reward_risk.py M2 fix: a target whose estimated
-    // option price falls below the premium paid (a real loss against the
-    // structural stop) must show the negative ratio, not "—" (which reads as
-    // "not yet computed" — indistinguishable from the two-checks-pending hint
-    // shown before Check Structure/Estimate have even run).
-    (api.getStockQuote as jest.Mock)
-      .mockResolvedValueOnce({ symbol: 'AAPL', price: 200.0 })
-      .mockResolvedValueOnce({ symbol: 'AAPL', price: 200.0 });
-    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
-      available: true, price: 190.0, source: 'order_block', confidence: 80, distancePct: 5.0,
-    });
-    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
-      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 50, spread: 0.1, volume: 10,
-    });
-    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
-      targets: [
-        { pct: 0.20, stockPrice: 210.0, optionPrice: 3.0, probability: 0.6, expectedDays: 5 },
-      ],
-      invalidation: { probability: 0.3, expectedDays: 4 },
-    });
-
-    render(<TradeCard data={mockTradeCard} />);
-    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
-    await waitFor(() => {
-      expect(screen.getAllByText('R:R vs. structural stop').length).toBeGreaterThanOrEqual(1);
-    });
-
-    // stockMove = |190 - 200| = 10; deltaEst = 0.5; risk = 5.0
-    // reward = 3.0 - 5.0 = -2.0 -> rr = -0.4
-    expect(screen.getByText('-0.4×')).toBeInTheDocument();
-  });
-
-  it('clamps structural-stop risk to the option premium instead of the uncapped delta approximation', async () => {
-    // stockMove = |150 - 200| = 50; deltaEst = 0.5 -> uncapped risk = 25.0,
-    // which is more than a long option could ever actually lose (premium
-    // paid = 5.0). If the clamp regressed to the uncapped value, T1's R:R
-    // would read 0.4x instead of 2.0x -- these are far enough apart that a
-    // clamp regression can't hide as a rounding difference.
-    (api.getStockQuote as jest.Mock)
-      .mockResolvedValueOnce({ symbol: 'AAPL', price: 200.0 })   // checkStructure's fetch
-      .mockResolvedValueOnce({ symbol: 'AAPL', price: 200.0 });  // estimateFirstPassage's fetch
-    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
-      available: true, price: 150.0, source: 'order_block', confidence: 80, distancePct: 25.0,
-    });
-    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
-      price: 5.0, delta: 0.5, theta: -0.1, ivRank: 50, spread: 0.1, volume: 10,
-    });
-    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
-      targets: [
-        { pct: 0.20, stockPrice: 210.0, optionPrice: 15.0, probability: 0.6, expectedDays: 5 },
-        { pct: 0.35, stockPrice: 220.0, optionPrice: 18.0, probability: 0.4, expectedDays: 9 },
-        { pct: 0.50, stockPrice: 230.0, optionPrice: 21.0, probability: 0.2, expectedDays: 14 },
-      ],
-      invalidation: { probability: 0.3, expectedDays: 4 },
-    });
-
-    render(<TradeCard data={mockTradeCard} />);
-    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
-    await waitFor(() => {
-      expect(screen.getAllByText('R:R vs. structural stop').length).toBeGreaterThanOrEqual(1);
-    });
-
-    // risk = min(50 * 0.5, 5.0) = 5.0 (clamped, not 25.0)
-    // T1: reward = 15.0 - 5.0 = 10.0 -> rr = 10.0 / 5.0 = 2.0
-    expect(screen.getByText('2.0×')).toBeInTheDocument();
-    expect(screen.queryByText('0.4×')).not.toBeInTheDocument();
-  });
+  // REMOVED with the "R:R vs. structural stop" cell (barrier-race spec section 3.4):
+  //   - 'shows a negative structural-stop R:R instead of "—" (M2 parity)'
+  //   - 'clamps structural-stop risk to the option premium ...'
+  // Both asserted on the ratio the cell displayed. The ratio's risk leg was a
+  // delta approximation of the stop distance clamped to premium; once the clamp
+  // bound — routinely, for a distant stop or a low-delta contract — the ratio
+  // reduced to exactly the typed target percentage, the same number on every
+  // contract. The arithmetic is deleted, not hidden, so there is nothing left
+  // for these to pin. Sign preservation (the M2 half) is covered on the
+  // replacement in lib/barrierRace.test.ts.
 
   it('shows — instead of dividing by zero when the structural stop equals the fresh stock price', async () => {
     (api.getStockQuote as jest.Mock)
@@ -1309,13 +1255,13 @@ describe('TradeCard', () => {
     // useMemo), but the structural stop WAS found and both checks HAVE
     // completed — ProfitTargetRow's structuralZeroRisk branch distinguishes
     // this from "not checked yet", so every row shows the explicit
-    // "N/A (stop = price)" placeholder rather than an actual ratio. (Not
-    // asserting a page-wide absence of "×" text here — the top Risk/Reward
-    // badge legitimately renders its own unrelated ratio, e.g. "2.5×".)
-    // Three targets × two lines each ("Structural level found" + "R:R vs.
-    // structural stop", Feature 2) plus the one standalone Check Structure
-    // block above (Feature 3) = 7.
-    expect(screen.getAllByText('N/A (stop = price)').length).toBe(7);
+    // "N/A (stop = price)" placeholder rather than a level.
+    // Three targets × one line each ("Structural level found", Feature 2) plus
+    // the one standalone Check Structure block above (Feature 3) = 4. It was 7
+    // until the "R:R vs. structural stop" line was removed alongside it
+    // (barrier-race spec section 3.4) — the state itself is unchanged, there is
+    // simply one cell per row carrying it now instead of two.
+    expect(screen.getAllByText('N/A (stop = price)').length).toBe(4);
   });
 
   it('does not affect the original R:R card or the sell-to-close R:R column', async () => {
@@ -1342,12 +1288,17 @@ describe('TradeCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
     await waitFor(() => screen.getByText(/Structural stop — Order Block/));
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
-    await waitFor(() => screen.getAllByText('R:R vs. structural stop'));
+    await waitFor(() => screen.getAllByText('Structural level found'));
 
-    // The top Risk/Reward card (fixed ladder) is untouched.
-    expect(screen.getByText('2.5×')).toBeInTheDocument();
-    // The Sell-to-Close-Plan's own per-target R:R now uses premiumStop (1.5)
-    // as its risk basis: reward=5.0-2.5=2.5, rr=2.5/1.5=1.666...→1.7.
+    // The ladder's standalone "Risk / Reward" readout is gone (barrier-race
+    // spec section 3.4): its risk leg was premium x a fixed percentage, so premium
+    // cancelled and it printed the same ratio on every contract.
+    expect(screen.queryByText('Risk / Reward')).not.toBeInTheDocument();
+    expect(screen.queryByText('2.5×')).not.toBeInTheDocument();
+    // The FIELD it divided by is untouched — it is a live risk denominator,
+    // not a display. The Sell-to-Close-Plan's own per-target R:R still uses
+    // premiumStop (1.5): reward=5.0-2.5=2.5, rr=2.5/1.5=1.666...→1.7.
+    expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
     expect(screen.getByText('1.7x')).toBeInTheDocument();
   });
 
@@ -1358,11 +1309,20 @@ describe('TradeCard', () => {
     expect(screen.getByLabelText('Edit target stock price for TP1')).toBeInTheDocument();
   });
 
-  it('renders risk/reward ratio', () => {
+  it('no longer renders the ladder R:R readout, but keeps the field it divided by', () => {
+    // Removed by the barrier-race spec (section 3.4). It degenerated to the typed
+    // target % over the typed stop % — the same number on every contract you
+    // could pick — and is replaced by the Barrier Race's stock-stop R:R, whose
+    // risk leg is not proportional to premium.
+    //
+    // overlay.premiumStop is NOT display-only, so removing the readout must
+    // not touch the field: computeEditedRR, rrContribution and isDirty all
+    // still read it, and it is now the barrier race's third barrier too.
     render(<TradeCard data={mockTradeCard} />);
     expandLadder();
-    expect(screen.getByText('Risk / Reward')).toBeInTheDocument();
-    expect(screen.getByText('2.5×')).toBeInTheDocument();
+    expect(screen.queryByText('Risk / Reward')).not.toBeInTheDocument();
+    expect(screen.queryByText('2.5×')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
   });
 
   it('renders final status', () => {
@@ -1929,7 +1889,7 @@ describe('TradeCard — stop-vs-premium gate', () => {
   it('renders with no Estimate and no Arithmetic plan run', () => {
     render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0)} />);
     // Neither of the two round-trip-gated blocks is present...
-    expect(screen.queryByText('R:R vs. structural stop')).not.toBeInTheDocument();
+    expect(screen.queryByText('Structural level found')).not.toBeInTheDocument();
     expect(screen.queryByText('Bottom (final stop)')).not.toBeInTheDocument();
     // ...but the gate already has its verdict.
     expect(screen.getByText('STOP COST')).toBeInTheDocument();
@@ -2019,16 +1979,14 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
 
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await waitFor(() => {
-      expect(screen.getByText('R:R vs. structural stop')).toBeInTheDocument();
+      expect(screen.getByText('Structural level found')).toBeInTheDocument();
     });
 
-    // structuralRR must also use the exit-plan pair: stockMove = |170.00 -
-    // 190.00| = 20.00, deltaEst = 0.5, risk = min(20.00*0.5, 25) = 10.00,
-    // reward = 45.00 - 25.00 = 20.00 -> rr = 2.0. Had it stayed on the raw
-    // structural pair (178.50 vs. 182.00), stockMove would be 3.50, risk =
-    // min(3.50*0.5, 25) = 1.75, giving rr = 20.00 / 1.75 = 11.4 instead.
-    expect(screen.getByText('2.0×')).toBeInTheDocument();
-    expect(screen.queryByText('11.4×')).not.toBeInTheDocument();
+    // The row must quote the EXIT-PLAN stop ($170.00), not the raw structural
+    // one ($178.50) — that is Piece 2's whole point, and reading the level
+    // directly asserts it more plainly than the ratio derived from it did.
+    expect(screen.getAllByText('$170.00').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('$178.50')).not.toBeInTheDocument();
 
     // The "Structural level found" line (ProfitTargetRow) must also show the
     // exit-plan's price, not the raw structural stop's — "$170.00" appears at

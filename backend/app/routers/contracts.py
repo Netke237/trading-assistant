@@ -332,6 +332,16 @@ class FirstPassageRequest(BaseModel):
     t1_pct: Optional[float] = Field(default=None, gt=0)
     t2_pct: Optional[float] = Field(default=None, gt=0)
     t3_pct: Optional[float] = Field(default=None, gt=0)
+    # The barrier race's third barrier. lt=1 because a 100% premium stop is a
+    # total loss, which makes the barrier unreachable-by-definition rather than
+    # a stop. None resolves to risk_rules.yaml's reward_risk.premium_stop_pct,
+    # matching how t1/t2/t3_pct already resolve.
+    premium_stop_pct: Optional[float] = Field(default=None, gt=0, lt=1)
+    # Feed resolve_reprice_days()'s fallback. Optional so existing callers keep
+    # working; absent means "Swing", the app's own default preset.
+    horizon_preset: Optional[str] = None
+    hold_min: Optional[float] = Field(default=None, ge=0)
+    hold_max: Optional[float] = Field(default=None, ge=0)
 
 
 class FirstPassageTargetOut(BaseModel):
@@ -347,9 +357,46 @@ class FirstPassageInvalidationOut(BaseModel):
     expectedDays: Optional[float] = None
 
 
+class BarrierRaceOutcomeOut(BaseModel):
+    """One target's row of the race. The four p* fields are an ATTRIBUTION —
+    every simulated path is counted exactly once, so they sum to 1.0."""
+    targetPct:              float
+    targetOptionPrice:      float
+
+    pTargetFirst:           float
+    pStockStopFirst:        float
+    pPremiumStopFirst:      float
+    pNeither:               float
+
+    daysTarget:             Optional[float] = None
+    daysStockStop:          Optional[float] = None
+    daysPremiumStop:        Optional[float] = None
+    terminalMean:           Optional[float] = None
+
+    rewardDollar:           float
+    repriceDaysStockStop:   float
+    stopRepricedValue:      Optional[float] = None
+    riskStockStop:          Optional[float] = None
+    riskPremiumStop:        float
+    rrStockStop:            Optional[float] = None   # the measurement
+    rrPremiumStop:          float                    # constant by construction
+    edgePerContract:        Optional[float] = None
+
+
+class BarrierRaceOut(BaseModel):
+    outcomes:          list[BarrierRaceOutcomeOut]
+    premiumStopPrice:  float
+    premiumStopPct:    float
+    stockStopPrice:    float
+    nPaths:            int
+
+
 class FirstPassageResponse(BaseModel):
     targets:      list[FirstPassageTargetOut]
     invalidation: FirstPassageInvalidationOut
+    # None when the simulation was refused (dte < 1). The card must render
+    # "not simulated - contract expires today", never four zeroes.
+    race:         Optional[BarrierRaceOut] = None
 
 
 @router.post('/contracts/first-passage', response_model=FirstPassageResponse)
@@ -375,6 +422,9 @@ async def first_passage(req: FirstPassageRequest) -> FirstPassageResponse:
     t1_pct = req.t1_pct if req.t1_pct is not None else rr_cfg["target_t1_pct"]
     t2_pct = req.t2_pct if req.t2_pct is not None else rr_cfg["target_t2_pct"]
     t3_pct = req.t3_pct if req.t3_pct is not None else rr_cfg["target_t3_pct"]
+    premium_stop_pct = (
+        req.premium_stop_pct if req.premium_stop_pct is not None else rr_cfg["premium_stop_pct"]
+    )
 
     async with httpx.AsyncClient(timeout=8) as client:
         candles = await fetch_candles_async(client, req.symbol.upper())
@@ -389,7 +439,13 @@ async def first_passage(req: FirstPassageRequest) -> FirstPassageResponse:
     # security reasons, so it is NOT stable across restarts/reloads/workers despite
     # looking deterministic within a single run — use a fixed-algorithm hash instead
     # so "identical inputs" genuinely means identical output everywhere, always.
-    seed_key = f"{req.symbol.upper()}|{req.strike}|{req.dte}|{round(req.stock_price, 2)}|{t1_pct}|{t2_pct}|{t3_pct}"
+    # premium_stop_pct is part of the key: it is a real simulation input (the
+    # race's third barrier), so leaving it out would return a bit-identical
+    # answer after the user moved the premium stop and make the card look frozen.
+    seed_key = (
+        f"{req.symbol.upper()}|{req.strike}|{req.dte}|{round(req.stock_price, 2)}"
+        f"|{t1_pct}|{t2_pct}|{t3_pct}|{premium_stop_pct}"
+    )
     seed = int(hashlib.sha256(seed_key.encode()).hexdigest(), 16) % (2 ** 32)
 
     result = estimate_first_passage(
@@ -405,6 +461,10 @@ async def first_passage(req: FirstPassageRequest) -> FirstPassageResponse:
         t1_pct=t1_pct,
         t2_pct=t2_pct,
         t3_pct=t3_pct,
+        premium_stop_pct=premium_stop_pct,
+        horizon_preset=req.horizon_preset,
+        hold_min=req.hold_min,
+        hold_max=req.hold_max,
         max_drift_pct=fp_cfg["max_drift_pct"],
         n_paths=fp_cfg["n_paths"],
         sigma_floor=fp_cfg["sigma_floor"],
@@ -427,6 +487,46 @@ async def first_passage(req: FirstPassageRequest) -> FirstPassageResponse:
             probability=round(result.invalidation.probability, 4),
             expectedDays=result.invalidation.expected_days,
         ),
+        race=_race_out(result.race),
+    )
+
+
+def _race_out(race) -> Optional[BarrierRaceOut]:
+    """Map the scoring layer's BarrierRaceResult onto the wire shape.
+
+    Money is already quantized to cents by first_passage (so the printed
+    arithmetic chains add up); only the probabilities are rounded here, to the
+    same 4 places the existing target/invalidation probabilities use."""
+    if race is None:
+        return None
+    return BarrierRaceOut(
+        outcomes=[
+            BarrierRaceOutcomeOut(
+                targetPct=o.target_pct,
+                targetOptionPrice=round(o.target_option_price, 2),
+                pTargetFirst=round(o.p_target_first, 4),
+                pStockStopFirst=round(o.p_stock_stop_first, 4),
+                pPremiumStopFirst=round(o.p_premium_stop_first, 4),
+                pNeither=round(o.p_neither, 4),
+                daysTarget=o.days_target,
+                daysStockStop=o.days_stock_stop,
+                daysPremiumStop=o.days_premium_stop,
+                terminalMean=round(o.terminal_mean, 2) if o.terminal_mean is not None else None,
+                rewardDollar=o.reward_dollar,
+                repriceDaysStockStop=round(o.reprice_days_stock_stop, 2),
+                stopRepricedValue=o.stop_repriced_value,
+                riskStockStop=o.risk_stock_stop,
+                riskPremiumStop=o.risk_premium_stop,
+                rrStockStop=round(o.rr_stock_stop, 4) if o.rr_stock_stop is not None else None,
+                rrPremiumStop=round(o.rr_premium_stop, 4),
+                edgePerContract=round(o.edge_per_contract, 2) if o.edge_per_contract is not None else None,
+            )
+            for o in race.outcomes
+        ],
+        premiumStopPrice=round(race.premium_stop_price, 2),
+        premiumStopPct=race.premium_stop_pct,
+        stockStopPrice=round(race.stock_stop_price, 2),
+        nPaths=race.n_paths,
     )
 
 

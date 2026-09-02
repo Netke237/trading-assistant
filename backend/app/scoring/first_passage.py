@@ -33,6 +33,7 @@ import numpy as np
 from scipy.stats import norm
 
 from app.models.black_scholes import bs_price
+from app.scoring.reprice_horizon import resolve_reprice_days
 from app.scoring.reward_risk import _derive_fallback_sigma
 from app.scoring.stock_scorer import _atr
 
@@ -53,11 +54,104 @@ class InvalidationEstimate:
 
 
 @dataclass
+class RaceOutcome:
+    """One target's row of the barrier race.
+
+    The four probabilities are an ATTRIBUTION, not four independent estimates:
+    every simulated path is assigned to exactly one of them, so they sum to 1.0
+    by construction. That is the whole point of the race — the pre-existing
+    TargetEstimate.probability and InvalidationEstimate.probability are each
+    measured on their own and can sum past 100%.
+
+    Every days_* is a CONDITIONAL median: the median day of the paths that
+    resolved to that outcome, not of all paths.
+    """
+    target_pct:            float
+    target_option_price:   float
+
+    p_target_first:        float
+    p_stock_stop_first:    float
+    p_premium_stop_first:  float
+    p_neither:             float
+
+    days_target:           Optional[float]
+    days_stock_stop:       Optional[float]
+    days_premium_stop:     Optional[float]
+
+    terminal_mean:         Optional[float]   # mean option value at expiry, over p_neither paths
+
+    # -- Printable arithmetic (barrier-race spec 2.4) ------------------------
+    # The card renders the full chain, so the response carries the INPUTS to
+    # each number, not just the number.
+    reward_dollar:           float           # target_option_price - premium
+    reprice_days_stock_stop: float           # days ahead the stop leg was repriced at
+    stop_repriced_value:     Optional[float] # contract value AT the stock stop, repriced
+    risk_stock_stop:         Optional[float] # premium - stop_repriced_value
+    risk_premium_stop:       float           # premium * premium_stop_pct
+    rr_stock_stop:           Optional[float] # THE measurement; None when risk <= 0
+    rr_premium_stop:         float           # constant by construction: pct / premium_stop_pct
+    edge_per_contract:       Optional[float]
+
+
+@dataclass
+class BarrierRaceResult:
+    outcomes:            list[RaceOutcome]   # one per target, same order as `targets`
+    premium_stop_price:  float               # the option-value barrier actually used
+    premium_stop_pct:    float
+    stock_stop_price:    float               # echo of invalidation_price, for auditability
+    n_paths:             int
+
+
+@dataclass
 class FirstPassageResult:
     targets: list[TargetEstimate]
     invalidation: InvalidationEstimate
     sigma_stock: float
     mu: float
+    # None when the simulation was refused (dte < 1). Deliberately NOT four
+    # zeroes: a refusal is not a 100%-summing result. See spec 2.1.1.
+    race: Optional["BarrierRaceResult"] = None
+
+
+def _first_day(mask: np.ndarray, n_days: int) -> np.ndarray:
+    """Index of each row's first True, or `n_days` where the row never hits.
+
+    THE TRAP THIS EXISTS FOR: np.argmax on a boolean row returns 0 both for
+    "first True at index 0" (a hit on day 1) and for "no True anywhere". Used
+    bare in a first-hit race, every never-hitting path would masquerade as the
+    fastest possible hit and win outright. So every argmax here is paired with
+    its own .any(axis=1), and non-hitting rows are pushed to n_days — an index
+    no real hit can occupy, so a never-hit path always LOSES a first-hit race
+    against any path that did hit.
+    """
+    ever = mask.any(axis=1)
+    day = np.argmax(mask, axis=1)
+    return np.where(ever, day, n_days)
+
+
+def _attribute(
+    d_tgt: np.ndarray, d_stop: np.ndarray, d_prem: np.ndarray, n_days: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Assign every path to exactly one of four outcomes, given each barrier's
+    first-hit day (with `n_days` meaning "never").
+
+    Returns (target_first, stock_stop_first, premium_stop_first, neither, best).
+    The four masks are mutually exclusive and jointly exhaustive, so their means
+    sum to exactly 1.0 by construction.
+
+    TIE RULE: the simulation resolves to daily closes, so two barriers can be
+    crossed on the same simulated day. Ties resolve PESSIMISTICALLY — a stop
+    ahead of the target, and the premium stop ahead of the stock stop (in
+    option-value terms it is the tighter of the two whenever both are hit the
+    same day). This never flatters the trade. Deliberate and documented, not an
+    accident of evaluation order.
+    """
+    best = np.minimum(np.minimum(d_tgt, d_stop), d_prem)
+    neither = best == n_days
+    prem_first = (d_prem == best) & ~neither
+    stop_first = (d_stop == best) & ~prem_first & ~neither
+    tgt_first = (d_tgt == best) & ~prem_first & ~stop_first & ~neither
+    return tgt_first, stop_first, prem_first, neither, best
 
 
 def _vectorized_bs_price(
@@ -141,6 +235,11 @@ def estimate_first_passage(
     t1_pct: float,
     t2_pct: float,
     t3_pct: float,
+    premium_stop_pct: float = 0.60,
+    horizon_preset: Optional[str] = None,
+    hold_min: Optional[float] = None,
+    hold_max: Optional[float] = None,
+    reprice_cfg: Optional[dict] = None,
     r: float = 0.05,
     sigma_fallback: float = 0.25,
     max_drift_pct: float = 0.40,
@@ -158,6 +257,14 @@ def estimate_first_passage(
     trade-plan functions but is not used directly: its effect on time-to-
     target is implicit in the option repricing itself (see module
     docstring), not a separate day-count adjustment.
+
+    `premium_stop_pct` is the barrier race's THIRD barrier: the option-value
+    level at which the premium stop fires, premium * (1 - premium_stop_pct). It
+    is defaulted so that every pre-existing caller keeps compiling and simply
+    ignores the `race` field on the result.
+
+    `horizon_preset` / `hold_min` / `hold_max` feed resolve_reprice_days()'s
+    fallback when the simulation itself produced no median days to a barrier.
 
     `seed` makes this deterministic for a given set of inputs — callers
     (the API endpoint) are expected to derive it from the request's own
@@ -180,7 +287,12 @@ def estimate_first_passage(
     direction_sign = 1.0 if is_call else -1.0
     mu = direction_sign * (trend_score - 50) / 50 * max_drift_pct
 
-    dte_at_target = max(expiry_years * 0.5, 7 / 365)
+    # Stage 1's display-only back-solve reprices at the same resolved horizon
+    # as everything else. sim_median is None here by necessity — Stage 1 runs
+    # before the simulation exists — so this always takes the preset fallback.
+    dte_at_target = resolve_reprice_days(
+        horizon_preset, hold_min, hold_max, float(dte), None, reprice_cfg,
+    ) / 365.0
     pcts = [t1_pct, t2_pct, t3_pct]
     target_option_prices = [premium * (1 + p) for p in pcts]
     target_stock_prices = [
@@ -246,11 +358,138 @@ def estimate_first_passage(
         stop_first_hit_day = np.argmax(stop_hit_mask, axis=1)
         stop_expected_days = float(np.median(stop_first_hit_day[stop_ever_hit]) + 1)
 
+    # -- Barrier race ---------------------------------------------------------
+    # A REFEREE, not a fourth profit-target method: it proposes no level of its
+    # own, it only compares per-path first-hit days of levels the existing cards
+    # already produced. Runs over the SAME stock_paths / option_paths arrays
+    # built above — no second simulation, no extra paths, no new model.
+    premium_stop_price = premium * (1.0 - premium_stop_pct)
+    prem_hit_mask = option_paths <= premium_stop_price
+
+    d_stop = _first_day(stop_hit_mask, n_days)
+    d_prem = _first_day(prem_hit_mask, n_days)
+
+    race_outcomes: list[RaceOutcome] = []
+    for pct, target_option in zip(pcts, target_option_prices):
+        d_tgt = _first_day(option_paths >= target_option, n_days)
+        tgt_first, stop_first, prem_first, none_hit, best = _attribute(
+            d_tgt, d_stop, d_prem, n_days,
+        )
+
+        def _median_days(m: np.ndarray, _best: np.ndarray = best) -> Optional[float]:
+            # +1: column 0 is the end of day 1.
+            return float(np.median(_best[m]) + 1) if bool(m.any()) else None
+
+        p_target = float(tgt_first.mean())
+        p_stock = float(stop_first.mean())
+        p_prem = float(prem_first.mean())
+        p_none = float(none_hit.mean())
+
+        days_target = _median_days(tgt_first)
+        days_stock = _median_days(stop_first)
+        days_prem = _median_days(prem_first)
+
+        # Terminal value of the paths that reached NO barrier. Uses the payoff,
+        # not a repriced value: at expiry there is no time value left.
+        terminal_mean: Optional[float] = None
+        if bool(none_hit.any()):
+            s_t = stock_paths[none_hit, -1]
+            payoff = np.maximum(s_t - strike, 0.0) if is_call else np.maximum(strike - s_t, 0.0)
+            terminal_mean = float(payoff.mean())
+
+        # -- The arithmetic the card prints -----------------------------------
+        # QUANTIZED TO CENTS ON PURPOSE. The card renders every term of these
+        # chains ("$5.20 premium - $1.09 at the stop = $4.11"), so a chain that
+        # visibly fails to add up is a bug the user sees. Doing the arithmetic at
+        # the precision it is printed at makes that impossible, and costs nothing
+        # real: an option does not quote below a cent, and sub-cent precision is
+        # far inside the Monte Carlo's own noise at n_paths=2000.
+        prem_c = round(premium, 2)
+        tgt_c = round(target_option, 2)
+        reward_dollar = round(tgt_c - prem_c, 2)   # round() only trims binary-float tails here
+
+        # Reprice the stock stop at when the simulation says it actually gets
+        # hit (its conditional median), falling back to the preset table.
+        reprice_days = resolve_reprice_days(
+            horizon_preset, hold_min, hold_max, float(dte), days_stock, reprice_cfg,
+        )
+        stop_repriced = float(bs_price(
+            invalidation_price, strike, max(reprice_days / 365.0, 1e-6), r, sigma_iv, is_call,
+        ))
+        stop_repriced_value: Optional[float] = (
+            round(stop_repriced, 2) if math.isfinite(stop_repriced) else None
+        )
+
+        risk_stock_stop: Optional[float] = None
+        if stop_repriced_value is not None:
+            risk_stock_stop = round(prem_c - stop_repriced_value, 2)
+
+        risk_premium_stop = round(prem_c * premium_stop_pct, 2)
+
+        # WHY PREMIUM DOES NOT CANCEL HERE — the trap that killed two earlier
+        # designs. reward_dollar is premium * pct by construction, so ANY risk
+        # leg proportional to premium cancels it. risk_stock_stop is
+        # premium - BS(stop, ...), and BS(stop, ...) is not proportional to
+        # premium — it depends on strike, spot at the stop, time and IV
+        # independently. So rr_stock_stop genuinely varies by contract.
+        # rr_premium_stop DOES cancel (it is exactly pct / premium_stop_pct) and
+        # is therefore a labelled constant, not a discriminating metric.
+        rr_stock_stop: Optional[float] = None
+        if risk_stock_stop is not None and risk_stock_stop > 0:
+            rr_stock_stop = reward_dollar / risk_stock_stop
+
+        rr_premium_stop = reward_dollar / risk_premium_stop if risk_premium_stop > 0 else 0.0
+
+        edge_per_contract: Optional[float] = None
+        if risk_stock_stop is not None:
+            # The last term is a SIGNED contribution, not a loss: a no-barrier
+            # path can end above the premium paid. Writing it as
+            # `- p_none * loss` would be wrong whenever terminal_mean > premium.
+            neither_term = (round(terminal_mean, 2) - prem_c) if terminal_mean is not None else 0.0
+            edge = (
+                p_target * reward_dollar
+                - p_stock * risk_stock_stop
+                - p_prem * risk_premium_stop
+                + p_none * neither_term
+            ) * 100.0
+            if math.isfinite(edge):
+                edge_per_contract = edge
+
+        race_outcomes.append(RaceOutcome(
+            target_pct=pct,
+            target_option_price=target_option,
+            p_target_first=p_target,
+            p_stock_stop_first=p_stock,
+            p_premium_stop_first=p_prem,
+            p_neither=p_none,
+            days_target=days_target,
+            days_stock_stop=days_stock,
+            days_premium_stop=days_prem,
+            terminal_mean=terminal_mean,
+            reward_dollar=reward_dollar,
+            reprice_days_stock_stop=reprice_days,
+            stop_repriced_value=stop_repriced_value,
+            risk_stock_stop=risk_stock_stop,
+            risk_premium_stop=risk_premium_stop,
+            rr_stock_stop=rr_stock_stop,
+            rr_premium_stop=rr_premium_stop,
+            edge_per_contract=edge_per_contract,
+        ))
+
+    race = BarrierRaceResult(
+        outcomes=race_outcomes,
+        premium_stop_price=premium_stop_price,
+        premium_stop_pct=premium_stop_pct,
+        stock_stop_price=invalidation_price,
+        n_paths=n_paths,
+    )
+
     return FirstPassageResult(
         targets=targets,
         invalidation=InvalidationEstimate(probability=stop_probability, expected_days=stop_expected_days),
         sigma_stock=sigma_stock,
         mu=mu,
+        race=race,
     )
 
 

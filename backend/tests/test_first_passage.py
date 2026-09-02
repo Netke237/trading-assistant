@@ -217,9 +217,11 @@ class TestEndpoint:
             "trend_score": 75, "invalidation_price": 95.0,
         }
         # Mirrors contracts.py's own seed_key construction exactly (including
-        # falling back to the YAML target_t1/t2/t3_pct defaults, since this
-        # payload doesn't override them).
-        expected_seed_key = "AAPL|105.0|45|100.0|0.2|0.35|0.5"
+        # falling back to the YAML target_t1/t2/t3_pct and premium_stop_pct
+        # defaults, since this payload doesn't override them). premium_stop_pct
+        # is part of the key because it is a real simulation input — the barrier
+        # race's third barrier — so moving it must produce a different draw.
+        expected_seed_key = "AAPL|105.0|45|100.0|0.2|0.35|0.5|0.6"
         expected_seed = int(hashlib.sha256(expected_seed_key.encode()).hexdigest(), 16) % (2 ** 32)
 
         with patch("app.routers.contracts.fetch_candles_async", AsyncMock(return_value=_FLAT_CANDLES)), \
