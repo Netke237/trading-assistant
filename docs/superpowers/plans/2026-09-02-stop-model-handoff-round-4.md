@@ -159,12 +159,15 @@ One key only. There is deliberately **no** `reject_fraction` — see §2.1.
 
 ---
 
-## 4. Open questions — unanswered, Kenneth's to decide
+## 4. Open questions
+
+One is genuinely open and blocks piece 6 (**Q-A**, Kenneth's call). **A1 is settled** — not by a
+decision but by reading the shipped code; the evidence is below.
 
 | # | Question | State |
 |---|---|---|
 | **Q-A** | **The stocks gate basis.** `compute_final_stop` returns a stop ≥ 2.0 ATR away by construction (`max(structural, atr_multiplier × ATR)`), so an "ATR-multiple" gate can never fire against it. Either (a) the stocks gate measures the **strategy signal's** stop, or (b) thresholds become relative to `atr_multiplier`. | **Blocks piece 6** |
-| **A1** | **Gate loss basis:** cheap delta-linear (works from scan data, so the badge can exist in the ranking table) vs. the exit plan's Black-Scholes repriced value (more accurate, needs a click first). If the repriced basis drives the **verdict**, `dte_at_target = expiry_years × 0.5` becomes verdict-bearing rather than display-only. | **Open — and piece 3 forces it. See below.** |
+| **A1** | **Gate loss basis:** cheap delta-linear (works from scan data, so the badge can exist in the ranking table) vs. the exit plan's Black-Scholes repriced value (more accurate, needs a click first). If the repriced basis drives the **verdict**, `dte_at_target = expiry_years × 0.5` becomes verdict-bearing rather than display-only. | **SETTLED for piece 3 — delta-linear, which is what the shipped card gate already uses. Does not block. See below.** |
 | Q23–Q27 | Answered by Claude, not by Kenneth — he said "go ahead" without responding. Flagged as reversible assumptions in the plan's §1.1. | Open, low risk |
 
 **Evidence gathered on Q-A** (round 2) — this does not decide it, but removes the reason to assume
@@ -179,12 +182,13 @@ floor:
 | `mean_reversion_bb` | `lower[-1] − stop_atr_mult * atr` (`:921,934`) | configurable |
 | `mean_reversion_vwap` | `current − stop_atr_mult * atr` (`:1024,1035`) | configurable |
 
-**A1 is no longer safely deferrable.** Piece 3 part 5 puts a gate badge in the ranking table, before
-any contract has an exit plan — so the badge **must** use the delta-linear basis by construction; it
-cannot wait for a click.
+### A1, settled
 
-**Correction to the framing above (established after this doc was first written).** The shipped card
-gate is *already* delta-linear and always has been: `TradeCard/index.tsx:820-842` calls
+Piece 3 part 5 puts a gate badge in the ranking table, before any contract has an exit plan — so the
+badge **must** use the delta-linear basis; it cannot wait for a click. That is not a compromise, and
+framing it as an open question here was an error, corrected on the evidence below.
+
+**The shipped card gate is *already* delta-linear and always has been:** `TradeCard/index.tsx:820-842` calls
 `stopPremiumRisk(sharedStop.price, sharedStop.stockPrice, cd.delta, cd.mid, …)` off the **scan-time**
 `contractDetails`, with an explicit comment that it must fire before any Estimate has run. The
 Black-Scholes reprice (`estimate_rr` → `exit.stop.contractPrice`) is a *different quantity* — the
@@ -249,8 +253,8 @@ default.** That is a stronger argument than "it is next in the list".
 5. **Ranking-table badge (D8).** `WatchlistRow` carries no `exit` and no `contractDetails`. Add
    `stopCostPct` + `stopCostStatus`, populate in `cardToRow`, add one grid track to `COLUMNS` and to
    `TableRow`, verify against the 1200 px min-width gate. State on the badge that it describes the
-   **auto-picked** contract, since a Step 6 override can later change it. **This part forces A1 —
-   see §4.**
+   **auto-picked** contract, since a Step 6 override can later change it. **Use the delta-linear basis — see A1 in §4;
+   it matches the shipped card gate by construction, so no decision is pending.**
 
 ---
 
@@ -345,8 +349,10 @@ trusting, but do not assume the naive reading. Full detail in
 
 ## 10. Where to start
 
-1. **Confirm A1 with Kenneth** (§4) — piece 3 part 5 needs the answer, and it is one question.
-2. **Build piece 3** (§6), all five parts. Branch from `main`; `main` is green, so any red you see is
-   yours.
-3. **Then piece 4** — independent, can run in parallel.
-4. Leave pieces 5 and 6. Piece 6 is blocked on Q-A regardless.
+1. **Build piece 3** (§6), all five parts. Branch from `main`; `main` is green, so any red you see is
+   yours. **Nothing needs asking first** — A1 is settled (delta-linear, matching the shipped card
+   gate by construction, §4), and part 5's required "auto-picked contract" label already covers the
+   one residual divergence, a Step 6 contract override.
+2. **Then piece 4** — independent, can run in parallel.
+3. Leave pieces 5 and 6. Piece 6 is blocked on **Q-A**, which is still genuinely open and is
+   Kenneth's call — do not confuse it with A1.
