@@ -223,9 +223,35 @@ premium stop returns a bit-identical cached-looking answer and the card appears 
 
 ### 2.4 R:R and edge — computed where?
 
-**Backend**, in the router, not the client. Both need `bs_price` at a resolved horizon; duplicating
-Black-Scholes in TypeScript to serve one card is exactly the kind of drift this codebase has been
-bitten by. Per target row the response carries:
+**Backend**, in the router, not the client — **and the card prints every term** (Kenneth's decision,
+2026-09-02: *"show the arithmetic"*).
+
+The frontend contains no option-pricing maths at all today: no Black-Scholes, no normal CDF, not a
+single `Math.exp` in `frontend/lib/`. Every price on every card comes from Python. Computing R:R
+client-side would mean introducing the first pricer plus an IV solver into TypeScript, permanently
+duplicated against the Python one — the hazard `_vectorized_bs_price` already carries a dedicated
+agreement test to guard against, and that is two copies in the *same* language. It would also buy
+nothing live: every interesting number depends on the simulation's path shares, and moving a barrier
+invalidates them (§3.3), so the card must clear and re-run either way.
+
+**So the transparency requirement is met by disclosure, not relocation.** Each row carries its
+inputs alongside its result, and the card renders the full chain — the same pattern
+`formatStopPremiumRisk` already uses (`"$15.99 away × Δ0.34 = $5.20 of $5.20 premium"`):
+
+```
+Risk   $5.20 premium − $1.09 at the stop (repriced at 7d) = $4.11
+R:R    $1.56 ÷ $4.11 = 0.38×
+Edge   0.31 × $1.56 − 0.52 × $3.12 − 0.02 × $4.11 + 0.15 × −$1.20 = −$1.40  →  −$140
+```
+
+Formatters, not inline JSX — interpolating this many values into markup splits them across text
+nodes, which is unreadable in the DOM and untestable by `getByText`. Same reasoning as
+`formatRecommendedContractSizeRaw` and `formatStopPremiumRisk`. Three of them:
+`formatRaceRisk`, `formatRaceRR`, `formatRaceEdge`, each unit-tested against a known row.
+
+To make that printable the response must carry the **inputs**, not just the results — the stop's
+repriced contract value and the resolved reprice days per barrier, both of which the client would
+otherwise have no way to show. Per target row the response carries:
 
 ```
 rewardDollar        = target_option_price - premium
@@ -296,12 +322,27 @@ Organism, not molecule: it composes StatusBadge, KV and a table.
 Rendered in `TradeCard/index.tsx` directly below the Monte Carlo section. Props: the `race`, the
 resolved barrier prices, and the same freshness signals `ProfitTargetRow` already receives.
 
-Four blocks, per the reference drawing:
+Four blocks. Specified here in full, so this document does not depend on the artifact being
+reachable:
 
-1. **The three barriers** — level, how it is set, and which is armed
-2. **Race outcome** — one row per target, a 100%-stacked bar per row, and the four shares
-3. **Risk / reward** — reward, both risk legs, both ratios, with the constant one labelled
-4. **Edge** — the contribution table and the per-contract total
+1. **The three barriers** — a three-row table: barrier name, level (with its unit — `$6.76 option`
+   vs `$185.87 stock`, never a bare number), how it is set, and which one is armed.
+2. **Race outcome** — one row per target. Each row: the target and its option price, a
+   100%-stacked mini-bar, the four shares, and the median days to that target. One shared legend
+   above the table. Two notes below it: that every row sums to 100% because each path is attributed
+   once, and that the medians are **conditional** on that outcome (`~11d to T30%` is the median over
+   the 31% that got there first, not over all paths).
+3. **Risk / reward** — one row per target: reward, stock-stop risk, stock-stop R:R (**bold — the
+   measurement**), premium-stop risk, premium-stop R:R (**greyed — a constant**). Below it, the
+   printed arithmetic chain from §2.4, and the sentence explaining that the greyed column reduces to
+   `your target % ÷ your stop %` and is therefore shown for completeness only.
+4. **Edge** — one row per target with the four signed contributions and the per-contract total, then
+   the printed chain, then two notes: that the "Neither" term is the mean value of those paths at
+   expiry minus premium (signed, not a loss), and the IV-frozen caveat.
+
+The IV caveat, verbatim: *"Assumes implied volatility is unchanged when a barrier is reached. On a
+long call that is pessimistic at the stop and optimistic at the target — a real fear bid would leave
+more premium than shown."*
 
 CSS follows CLAUDE.md: `border: 1px solid var(--border-subtle)`, **no card shadow**; status tints
 via `color-mix(in srgb, var(--pass) N%, var(--bg-surface))`; `Data` for every number.
@@ -334,6 +375,7 @@ stop and watching the bars re-sort requires a click; it must not appear to updat
 | Remove `R:R vs. structural stop` | `ProfitTargetRow`, MC card | Degenerates to the typed percent. Replaced by §2.4's `rrStockStop`. **Kenneth's OK obtained.** |
 | Move the Invalidation row | MC card → race card | Not a deletion |
 | New line on the MC card | MC card | "Each probability is measured on its own … the Barrier Race card below counts every path once." |
+| Add Barrier Race as a fourth `lastRunMethod` source | `Final Recommendation` | Shows armed stop and edge. Still "whichever ran most recently" — the explicit per-trade pick stays D4/D5, piece 5 |
 | `Risk / Reward` readout | Fixed % Ladder | Display removed. **The `overlay.premiumStop` field stays** — it is a live risk denominator (`computeEditedRR`, `rrContribution`, `isDirty`) *and now also the race's third barrier.* |
 
 > **`overlay.premiumStop` is not display-only** (handoff #4 §7 fact 9). Removing the readout must not
