@@ -14,6 +14,16 @@ export class ScreenerPage {
       7: 'step-7-trade-card',
     };
     await this.page.goto(`/screener/${stepNames[step]}`);
+    // A screener step page is an empty server shell: ScreenerStepGate renders
+    // children only once the persisted store has hydrated on the client, and
+    // React attaches click handlers at that same moment. A click dispatched
+    // before then is silently swallowed — Playwright's actionability checks
+    // cannot see a missing React handler, so the button looks clickable and the
+    // click does nothing. That is what made the Next-navigation tests flaky.
+    // The step header is rendered by the page itself, so its appearance is a
+    // reliable "the client tree is live" signal. (The REJECT test waits on the
+    // nav's data-regime attribute for the same reason.)
+    await this.page.getByText(/STEP \d+ OF \d+/).first().waitFor({ state: 'visible' });
   }
 
   get nextButton(): Locator {
