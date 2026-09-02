@@ -1,0 +1,126 @@
+/* No card shadow anywhere in this app — a 1px subtle border is the surface
+   convention (CLAUDE.md). Every colour comes from the global token sheet. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  grid-column: 1 / -1;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Wide content scrolls inside its own container rather than pushing the card
+   past the 1200px min-width gate. */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.table thead th {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── The 100%-stacked bar ─────────────────────────────────────────────────── */
+
+.bar {
+  display: flex;
+  width: 180px;
+  min-width: 180px;
+  height: 10px;
+  border-radius: 2px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.segment {
+  height: 100%;
+  display: block;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+
+.legendKey {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* Status tints, mixed against the surface rather than hardcoded — the same
+   construction the rest of the app uses for pass/caution/reject shading. */
+.swatchTarget {
+  background: color-mix(in srgb, var(--pass) 70%, var(--bg-surface));
+}
+
+.swatchStock {
+  background: color-mix(in srgb, var(--reject) 70%, var(--bg-surface));
+}
+
+.swatchPremium {
+  background: color-mix(in srgb, var(--caution) 70%, var(--bg-surface));
+}
+
+.swatchNeither {
+  background: color-mix(in srgb, var(--text-dim) 35%, var(--bg-surface));
+}
+
+/* ── Printed arithmetic chains ────────────────────────────────────────────── */
+
+.chainGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.chainGroup:last-of-type {
+  border-bottom: none;
+}
+
+.chain {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+
+/* The premium-stop ratio is a constant, not a measurement. It is shown for
+   completeness and must not read as competing with the row above it. */
+.muted {
+  opacity: 0.72;
+}

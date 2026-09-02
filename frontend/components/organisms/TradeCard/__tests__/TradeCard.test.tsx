@@ -365,6 +365,15 @@ describe('TradeCard', () => {
           t1_pct: 0.20,
           t2_pct: 0.35,
           t3_pct: 0.50,
+          // The barrier race's third barrier. The card's "Premium stop" field
+          // holds a DOLLAR amount ($1.50 in this fixture); the barrier is a
+          // FRACTION of the fresh premium ($2.75), so 1.50 / 2.75.
+          premium_stop_pct: 1.5 / 2.75,
+          // No scan context in this test, so the backend's own Swing default
+          // applies rather than a guessed preset.
+          horizon_preset: undefined,
+          hold_min: undefined,
+          hold_max: undefined,
         },
         expect.any(AbortSignal),
       );

@@ -9,6 +9,7 @@ import { AlternativeContractRow } from '@/components/molecules/AlternativeContra
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
+import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk } from '@/lib/risk';
@@ -18,6 +19,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
 import { useStopPremiumThresholdsStore, getStopPremiumThresholds } from '@/lib/stopPremiumThresholdsStore';
 import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
+import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride } from '@/types/domain';
 import {
   triggerDetailText,
@@ -423,6 +425,11 @@ export function TradeCard({
     data.exit.firstPassageContext ?? null,
   );
   // Same stale-response guard as structuralRequestRef above.
+  // The barrier levels the currently-rendered race was computed against. Not
+  // persisted to the parent cache: it exists only to detect that a barrier has
+  // MOVED since this mount's estimate, and a restored estimate is refused by
+  // firstPassageIsFreshRef anyway.
+  const [raceBarriers, setRaceBarriers] = useState<{ stockStop: number; premiumStop: number } | null>(null);
   const firstPassageRequestRef = useRef<AbortController | null>(null);
 
   const [exitPlan, setExitPlan] = useState<ExitPlan | null | undefined>(data.exit.exitPlan);
@@ -464,6 +471,7 @@ export function TradeCard({
       setTargetPct(data.exit.firstPassageContext?.targetPct ?? defaultTargetPct);
       setFirstPassage(data.exit.firstPassage);
       setFirstPassageContext(data.exit.firstPassageContext ?? null);
+      setRaceBarriers(null);
       setFirstPassageError(false);
       setFirstPassageLoading(false);
       setExitPlan(data.exit.exitPlan);
@@ -625,6 +633,16 @@ export function TradeCard({
     return null;
   }, [exitPlan, arithmeticLiveStockPrice, structuralStop, structuralStopStockPrice, data.price]);
 
+  // The barrier race's repricing horizon falls back to a per-PRESET table when
+  // the simulation itself produced no median days to a barrier. Key on the
+  // holding preset, not `scanHorizon` (a display string derived from the
+  // collapsed scoring horizon) — Quarterly, SemiAnnual and Annual all collapse
+  // to "Position", and repricing a 200-day hold like a 20-day one is exactly
+  // the error the preset table exists to avoid.
+  const horizonPreset = useScanStore((s) => s.context?.horizonPreset ?? null);
+  const holdMin = useScanStore((s) => s.context?.holdMin ?? null);
+  const holdMax = useScanStore((s) => s.context?.holdMax ?? null);
+
   const estimateFirstPassage = useCallback(async () => {
     firstPassageRequestRef.current?.abort();
     const controller = new AbortController();
@@ -633,6 +651,7 @@ export function TradeCard({
     setFirstPassageError(false);
     setFirstPassage(undefined);
     setFirstPassageContext(null);
+    setRaceBarriers(null);
     firstPassageIsFreshRef.current = false;
     try {
       const cd = data.contractDetails;
@@ -763,12 +782,29 @@ export function TradeCard({
         t1_pct: targetPct.t1,
         t2_pct: targetPct.t2,
         t3_pct: targetPct.t3,
+        // The barrier race's THIRD barrier, read from the card's own editable
+        // "Premium stop" field (Q10 — piece 4's per-position stop stays
+        // deferred). That field holds a DOLLAR amount; the barrier is defined
+        // as a fraction of premium, so convert. `undefined` falls back to
+        // risk_rules.yaml's premium_stop_pct rather than sending a value the
+        // backend would reject.
+        premium_stop_pct: premiumStopPctFromDollars(overlay.premiumStop, premium),
+        horizon_preset: horizonPreset ?? undefined,
+        hold_min: holdMin ?? undefined,
+        hold_max: holdMax ?? undefined,
       }, controller.signal);
       if (controller.signal.aborted) return;
       // Feature 8 (Final Recommendation) — computedAt stamped here, the same
       // client-set-on-receipt pattern as ExitPlan.computedAt (this endpoint
       // is stateless/fresh on every call, so it isn't returned by the API).
-      setFirstPassage({ targets: res.targets, invalidation: res.invalidation, computedAt: new Date().toISOString() });
+      setFirstPassage({
+        targets: res.targets,
+        invalidation: res.invalidation,
+        // `null` when the backend refused to simulate (dte < 1). Carried
+        // through as-is: the card distinguishes "refused" from "not run yet".
+        race: res.race ?? null,
+        computedAt: new Date().toISOString(),
+      });
       // optionPrice in each target is premium*(1+pct) built from THIS
       // premium (first_passage.py) — persist it so a later R:R calc
       // subtracts the matching baseline, not data.contractDetails.mid.
@@ -776,6 +812,15 @@ export function TradeCard({
       // stored alongside the estimate is exactly the trio the request above
       // carried, even if the user edited an input while it was in flight.
       setFirstPassageContext({ premium, delta, targetPct: { ...targetPct } });
+      // The two barriers the race was actually run against, snapshotted at
+      // request time. Both are live and user-movable, so the card compares
+      // them against their current values and CLEARS the race when either has
+      // moved — never silently re-sorts bars that were measured against a stop
+      // the user has since changed.
+      setRaceBarriers({
+        stockStop: sharedStop?.price ?? data.exit.invalidation,
+        premiumStop: overlay.premiumStop,
+      });
       firstPassageIsFreshRef.current = true;
     } catch {
       if (controller.signal.aborted) return;
@@ -796,7 +841,7 @@ export function TradeCard({
     } finally {
       if (!controller.signal.aborted) setFirstPassageLoading(false);
     }
-  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, sharedStop, targetPct, structuralLoading]);
+  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, sharedStop, targetPct, structuralLoading, overlay.premiumStop, horizonPreset, holdMin, holdMax]);
 
   // R:R using the structural stop (order block / swing level) as the risk
   // basis instead of the original fixed "premium * 60%" assumption — only
@@ -1014,6 +1059,20 @@ export function TradeCard({
     if (!dirty) return { rr: data.rrRatio, model: data.rrModel };
     return computeEditedRR(overlay, data);
   }, [dirty, overlay, data]);
+
+  // Has either barrier the race was run against moved since? The race is then
+  // CLEARED, not recomputed: its bars, medians and both risk legs were all
+  // measured against that stop, and re-running the simulation is the only way
+  // to get honest ones. Editing the premium stop and watching the bars re-sort
+  // must require a click; it must never appear to update on its own.
+  const raceBarriersMoved = useMemo(() => {
+    if (raceBarriers == null || firstPassage?.race == null) return false;
+    const currentStockStop = sharedStop?.price ?? data.exit.invalidation;
+    return (
+      currentStockStop !== raceBarriers.stockStop
+      || overlay.premiumStop !== raceBarriers.premiumStop
+    );
+  }, [raceBarriers, firstPassage, sharedStop, data.exit.invalidation, overlay.premiumStop]);
 
   // Feature 8 (Final Recommendation) — whichever of Arithmetic/Monte Carlo
   // was most recently explicitly run, determined purely by comparing their
@@ -1537,7 +1596,23 @@ export function TradeCard({
               </div>
             </div>
           )}
+          <Text size={10} tone="dim">
+            Each probability above is measured on its own, so they can sum past 100% — a path that
+            hits the target and later the stop is counted in both. The Barrier Race card below
+            counts every path once, for whichever barrier it reached first.
+          </Text>
         </section>
+
+        {/* Barrier Race (barrier-race spec section 3.2) — its own card, directly
+             below Monte Carlo, off the SAME simulation and the same click. It
+             proposes no level of its own; it only decides which of the three
+             existing barriers each simulated path reaches first. */}
+        <BarrierRaceCard
+          race={firstPassage?.race}
+          premium={firstPassageContext?.premium ?? 0}
+          isFresh={firstPassageIsFreshRef.current && firstPassageContext != null}
+          barriersChanged={raceBarriersMoved}
+        />
 
         {/* Fixed % Ladder Plan (Feature 1) — collapsible group containing, in
              order: the reverted Exit Plan, Sell-to-Close Plan, and

@@ -1,5 +1,5 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
-              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan } from '@/types/domain';
+              MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace } from '@/types/domain';
 import type { StockScanResult, StockFirstPassageEstimate } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -425,10 +425,18 @@ export const api = {
     t1_pct?: number;
     t2_pct?: number;
     t3_pct?: number;
+    /** The barrier race's third barrier. Omitted resolves to risk_rules.yaml's
+     *  reward_risk.premium_stop_pct, same as the t*_pct fields. */
+    premium_stop_pct?: number;
+    /** Feed the reprice-horizon fallback. Omitted means "Swing". */
+    horizon_preset?: string;
+    hold_min?: number;
+    hold_max?: number;
   }, signal?: AbortSignal) =>
     post<{
       targets: { pct: number; stockPrice: number | null; optionPrice: number; probability: number; expectedDays: number | null }[];
       invalidation: { probability: number; expectedDays: number | null };
+      race?: BarrierRace | null;
     }>('/api/contracts/first-passage', req, signal),
   /** On-demand exit-plan pipeline compute — fired only by the trade card's/
    *  Portfolio editor's "Compute Exit Plan" button, never automatically. See
