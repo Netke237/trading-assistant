@@ -81,9 +81,16 @@ def test_max_fraction_of_dte_binds_for_annual_on_a_short_contract():
     assert days == pytest.approx(0.75 * dte)
     assert days < 80
 
-    # It also clamps a simulation median that runs past the same ceiling.
-    clamped = resolve_reprice_days("Swing", None, None, dte=dte, sim_median=29.0)
-    assert clamped == pytest.approx(0.75 * dte)
+    # It does NOT clamp a simulation median. That ceiling protects the fallback
+    # from a holding-period table that knows nothing about this contract; a
+    # simulated median is a day index inside the simulation and cannot exceed
+    # the contract's life. Clamping it overrode an observed 26d with 22.5d on
+    # the reference contract, valuing the option at the stop as if 7.5 days of
+    # life were left instead of 4 — risk understated ~3.5% and R:R overstated
+    # ~3.6%, always flattering, on the number the card bolds as THE measurement,
+    # while the card printed "median ~26d" a few lines above "repriced at 22.5d".
+    observed = resolve_reprice_days("Swing", None, None, dte=dte, sim_median=29.0)
+    assert observed == pytest.approx(29.0)
 
 
 def test_min_days_floors_the_result_but_the_dte_ceiling_outranks_it():
@@ -96,8 +103,8 @@ def test_min_days_floors_the_result_but_the_dte_ceiling_outranks_it():
     intrinsic value only — precisely what max_fraction_of_dte exists to
     prevent."""
     assert resolve_reprice_days("Intraday", None, None, dte=1, sim_median=None) == 0.75
-    assert resolve_reprice_days("Swing", None, None, dte=1, sim_median=0.1) == 0.75
-    # With room to spare, the floor is what binds.
+    # The floor still applies to a simulated median, which the ceiling does not.
+    assert resolve_reprice_days("Swing", None, None, dte=1, sim_median=0.1) == 1.0
     assert resolve_reprice_days("Swing", None, None, dte=30, sim_median=0.1) == 1.0
 
 

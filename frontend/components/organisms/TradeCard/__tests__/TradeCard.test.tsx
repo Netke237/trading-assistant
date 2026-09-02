@@ -2113,6 +2113,7 @@ const RACE_RESPONSE = {
     premiumStopPct: 0.60,
     stockStopPrice: 180.0,
     premiumUsed: 2.75,
+    ivSolved: true,
     nPaths: 2000,
   },
 };
@@ -2211,5 +2212,136 @@ describe('the barrier race, through the card that owns it', () => {
     expect(screen.queryByText(/T20% edge/)).not.toBeInTheDocument();
     // ...and the honest fallback it was suppressing is back.
     expect(screen.getByText('Invalidation probability')).toBeInTheDocument();
+  });
+});
+
+// -- Round 2: the two button sequences the awaited refresh did not cover ------
+//
+// Awaiting the auto structural refresh inside the estimate handler closed the
+// case where nothing had been fetched yet. It did not cover a fetch the USER
+// started first, and both of those are ordinary sequences on this card: the
+// handler skipped its own refresh (structuralLoading already true) or read an
+// exit plan that landed after the estimate was already in flight. Either way
+// the race cleared itself with "Barriers changed" on a click just made, and the
+// Monte Carlo probability had been measured against a stop other than the one
+// on screen.
+
+describe('the estimate never races a level it depends on', () => {
+  beforeEach(() => {
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue(RACE_RESPONSE);
+  });
+
+  it('cannot be started while a structural-stop fetch the user began is still in flight', async () => {
+    let releaseStructural: (v: unknown) => void = () => {};
+    (api.getStructuralStop as jest.Mock).mockReturnValueOnce(
+      new Promise((resolve) => { releaseStructural = resolve; }),
+    );
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    });
+
+    // The estimate must be unavailable, not merely slow: dispatching here sent
+    // the flat scan stop (179.64) and then watched the structural land at 180.
+    expect(screen.getByRole('button', { name: /run monte carlo estimate/i })).toBeDisabled();
+    expect(screen.getByText(/Waiting for the stop this estimate races against/)).toBeInTheDocument();
+
+    await act(async () => {
+      releaseStructural({
+        available: true, price: 180.0, source: 'order_block', confidence: 75, distancePct: 3.3,
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /run monte carlo estimate/i })).toBeEnabled();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getAllByTestId('segment-Target first')).toHaveLength(3);
+    });
+    expect(screen.queryByText(/Barriers changed/)).not.toBeInTheDocument();
+    expect(api.getFirstPassageEstimate).toHaveBeenCalledWith(
+      expect.objectContaining({ invalidation_price: 180.0 }),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('cannot be started while an Arithmetic Plan the user began is still in flight', async () => {
+    (api.getStructuralStop as jest.Mock).mockResolvedValue({
+      available: true, price: 180.0, source: 'order_block', confidence: 75, distancePct: 3.3,
+    });
+    let releasePlan: (v: unknown) => void = () => {};
+    (api.getExitPlan as jest.Mock).mockReturnValueOnce(
+      new Promise((resolve) => { releasePlan = resolve; }),
+    );
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+    });
+
+    // The plan supplies sharedStop's higher-precedence branch, so an estimate
+    // dispatched now races it: the plan lands afterwards, sharedStop switches
+    // to exit_plan, and the race clears itself.
+    expect(screen.getByRole('button', { name: /run monte carlo estimate/i })).toBeDisabled();
+
+    await act(async () => {
+      releasePlan({
+        stop: {
+          price: 176.5, source: 'structural', contractPrice: 1.2, rrModel: 'Heston repriced',
+          structuralSource: 'order_block', structuralConfidence: 80, structuralPrice: 176.5,
+          atrFloorPrice: 175.0, distanceDollar: 8.6,
+        },
+        targets: [],
+        atr: 3.5,
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /run monte carlo estimate/i })).toBeEnabled();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getAllByTestId('segment-Target first')).toHaveLength(3);
+    });
+    expect(screen.queryByText(/Barriers changed/)).not.toBeInTheDocument();
+    expect(api.getFirstPassageEstimate).toHaveBeenCalledWith(
+      expect.objectContaining({ invalidation_price: 176.5 }),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('drops the previous contract\'s race numbers when the contract changes', async () => {
+    // The reset effect is what this pins. The narrower hazard it is paired
+    // with — firstPassageIsFreshRef is cleared inside that effect, which runs
+    // AFTER commit, so for one painted frame the ref still reads true beside
+    // the previous contract's values — is NOT observable here: React Testing
+    // Library flushes effects inside `rerender`, so the intermediate frame
+    // never reaches an assertion. `raceBarriers.contract === data.contract` in
+    // raceIsShowable closes it from state rather than from a ref, and is
+    // deliberately kept as defence in depth even though only this coarser
+    // behaviour can be tested.
+    (api.getStructuralStop as jest.Mock).mockResolvedValue({
+      available: true, price: 180.0, source: 'order_block', confidence: 75, distancePct: 3.3,
+    });
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getAllByTestId('segment-Target first')).toHaveLength(3);
+    });
+    expect(screen.getByText(/Armed stop/)).toBeInTheDocument();
+
+    rerender(
+      <TradeCard data={{ ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT 300C 06/19' }} />,
+    );
+    expect(screen.queryByText(/Armed stop/)).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId('segment-Target first')).toHaveLength(0);
   });
 });

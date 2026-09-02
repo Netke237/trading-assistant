@@ -32,9 +32,8 @@ from typing import Optional
 import numpy as np
 from scipy.stats import norm
 
-from app.models.black_scholes import bs_price
+from app.models.black_scholes import bs_iv, bs_price
 from app.scoring.reprice_horizon import remaining_years_at_barrier, resolve_reprice_days
-from app.scoring.reward_risk import _derive_fallback_sigma
 from app.scoring.stock_scorer import _atr
 
 
@@ -110,6 +109,11 @@ class BarrierRaceResult:
     # Python's round() is banker's rounding and JavaScript's toFixed() is not,
     # so the two disagree on exact halves and the chain would stop adding up.
     premium_used:        float
+    # False when the contract's own IV could not be backed out of its quote and
+    # the simulation fell back to a generic volatility. Every number on the card
+    # is then about a contract the market is not pricing — the card says so
+    # rather than presenting a confident dollar edge.
+    iv_solved:           bool
     n_paths:             int
 
 
@@ -122,6 +126,24 @@ class FirstPassageResult:
     # None when the simulation was refused (dte < 1). Deliberately NOT four
     # zeroes: a refusal is not a 100%-summing result. See spec 2.1.1.
     race: Optional["BarrierRaceResult"] = None
+
+
+def _as_printed(v: float) -> float:
+    """Round to 2dp THE WAY JAVASCRIPT'S toFixed(2) DOES — half away from zero.
+
+    Python's round() is half-to-even, so the two disagree on an exactly
+    representable half: round(0.125, 2) is 0.12 while (0.125).toFixed(2) is
+    "0.13". With n_paths = 2000 every share is a multiple of 0.0005, so 0.125
+    (250 paths) and 0.625 (1250 paths) are directly reachable — and when the
+    backend weights the edge with 0.12 while the card prints "0.13 x", the
+    printed terms no longer sum to the printed total. That is the one thing this
+    card's premise ("you can check its arithmetic") forbids.
+
+    The money chains avoid this by shipping premium_used pre-quantized; the
+    probabilities are quantized here instead, because the raw shares must stay
+    raw (the bars and the 100%-sum claim are computed from them).
+    """
+    return math.floor(abs(v) * 100.0 + 0.5) / 100.0 * (1.0 if v >= 0 else -1.0)
 
 
 def _first_day(mask: np.ndarray, n_days: int) -> np.ndarray:
@@ -294,7 +316,17 @@ def estimate_first_passage(
     expiry_years = dte / 365.0
     premium = max(float(premium), 0.01)
 
-    sigma_iv = _derive_fallback_sigma(premium, stock_price, strike, expiry_years, r, is_call, sigma_fallback)
+    # bs_iv called directly rather than through _derive_fallback_sigma, which
+    # discards the one bit we need: WHETHER it converged. When it does not
+    # (a degenerate or extreme-moneyness quote), sigma silently becomes the
+    # 0.25 default and the simulation then runs on a volatility that has
+    # nothing to do with this contract — on a quote far below intrinsic it
+    # prices day 1 above the target and reports 100% target-first with a
+    # confident dollar edge. Every other consumer of that fallback shows a
+    # probability; the race is the first to turn it into money, so it says so.
+    solved_iv = bs_iv(premium, stock_price, strike, expiry_years, r, is_call)
+    iv_solved = solved_iv is not None
+    sigma_iv = solved_iv if solved_iv is not None else sigma_fallback
 
     atr = _atr(candles, 14) if candles else 0.0
     sigma_stock = sigma_floor
@@ -397,7 +429,11 @@ def estimate_first_passage(
     # own, it only compares per-path first-hit days of levels the existing cards
     # already produced. Runs over the SAME stock_paths / option_paths arrays
     # built above — no second simulation, no extra paths, no new model.
-    premium_stop_price = premium * (1.0 - premium_stop_pct)
+    # Quantized to cents BEFORE it is used as a barrier, not just before it is
+    # printed. Rounding it only on the way out meant the level the card showed
+    # as "the option-value barrier actually used" was up to half a cent away
+    # from the one the paths were actually tested against.
+    premium_stop_price = round(premium * (1.0 - premium_stop_pct), 2)
     prem_hit_mask = option_paths <= premium_stop_price
 
     d_stop = _first_day(stop_hit_mask, n_days)
@@ -521,7 +557,8 @@ def estimate_first_passage(
             # `- p_none * loss` would be wrong whenever terminal_mean > premium.
             neither_term = (round(terminal_mean, 2) - prem_c) if terminal_mean is not None else 0.0
             e_target, e_stock, e_prem, e_none = (
-                round(p_target, 2), round(p_stock, 2), round(p_prem, 2), round(p_none, 2),
+                _as_printed(p_target), _as_printed(p_stock),
+                _as_printed(p_prem), _as_printed(p_none),
             )
             # x100: one US equity option contract covers 100 shares. Assumed,
             # not looked up — an adjusted contract (post-split or merger
@@ -567,6 +604,7 @@ def estimate_first_passage(
         premium_stop_pct=premium_stop_pct,
         stock_stop_price=invalidation_price,
         premium_used=round(premium, 2),
+        iv_solved=iv_solved,
         n_paths=n_paths,
     )
 

@@ -16,12 +16,25 @@ The rule, in order:
 2. Otherwise fall back to a per-preset table, keyed on the HOLDING preset
    (Intraday…Annual), never on the collapsed scoring horizon.
 3. ``Custom`` has no table row: derive it from the typed hold range.
-4. Clamp to at least ``min_days`` and at most ``max_fraction_of_dte`` of the
-   contract's remaining life — repricing past expiry silently prices every
-   level at intrinsic value only. When those two bounds conflict (a 1-DTE
-   contract, where 0.75 x dte is under a day) the DTE CEILING WINS: the floor
-   exists to stop an absurdly short horizon, but letting it push the barrier
-   past expiry is the worse error of the two.
+4. Clamp THE FALLBACK to at least ``min_days`` and at most
+   ``max_fraction_of_dte`` of the contract's remaining life — a table keyed on
+   how long you intend to HOLD knows nothing about this contract's expiry, so
+   "Annual" on a 30-day contract would otherwise reprice at 80 days, past
+   expiry, and price every level at intrinsic value only. When those two bounds
+   conflict (a 1-DTE contract, where 0.75 x dte is under a day) the DTE CEILING
+   WINS: the floor exists to stop an absurdly short horizon, but letting it push
+   the barrier past expiry is the worse error of the two.
+
+   THE CEILING DOES NOT APPLY TO ``sim_median``. A simulated median cannot
+   exceed the contract's own life — it is a day index inside the simulation —
+   so there is nothing to protect against, and clamping it silently overrode an
+   OBSERVED number with an arbitrary fraction. On the reference contract the
+   simulation said the stop is typically reached on day 26 of 30 and the clamp
+   returned 22.5, which valued the contract at the stop as though 7.5 days of
+   life were left instead of 4: risk understated ~3.5%, R:R overstated ~3.6%,
+   always in the flattering direction, on the number the card bolds as THE
+   measurement — and the card printed "median ~26d" three inches above
+   "repriced at 22.5d" with nothing to explain the gap.
 
 DAYS ELAPSED, NOT TIME REMAINING. Everything this module returns is a number of
 days UNTIL a barrier is reached, counted forward from today. Black-Scholes wants
@@ -57,10 +70,12 @@ def resolve_reprice_days(
     expiry. Returns a number of days ELAPSED until the barrier — never a time
     to expiry; see the module docstring and ``remaining_years_at_barrier``.
 
-    Bounds: when ``dte`` is positive the result is always
-    <= ``max_fraction_of_dte * dte``, so the barrier can never land at or past
-    expiry; otherwise it is always >= ``clamp.min_days``. The ceiling wins when
-    the two conflict.
+    Bounds apply to the FALLBACK only: a table value is clamped to
+    ``[min_days, max_fraction_of_dte * dte]`` (the ceiling wins when those
+    conflict), because a holding-period table knows nothing about this
+    contract's expiry. A usable ``sim_median`` is returned as observed — it
+    cannot exceed the contract's life by construction, and overriding a measured
+    value with a fraction is a worse answer, not a safer one.
     """
     cfg = cfg if cfg is not None else load_reprice_horizon_cfg()
     fallback = cfg.get("fallback_days", {}) or {}
@@ -68,13 +83,16 @@ def resolve_reprice_days(
     min_days = float(clamp.get("min_days", 1))
     max_fraction = float(clamp.get("max_fraction_of_dte", 0.75))
 
-    days: Optional[float] = None
-
     if cfg.get("source", "simulation_median") == "simulation_median" and _usable(sim_median):
-        days = float(sim_median)   # type: ignore[arg-type]
+        # Returned as observed, NOT clamped. See the module docstring: the
+        # ceiling exists to protect the FALLBACK from a holding-period table
+        # that knows nothing about this contract's expiry. A simulated median is
+        # a day index inside the simulation, so it cannot exceed the contract's
+        # life, and overriding a measurement with an arbitrary fraction of DTE
+        # is a worse answer rather than a safer one.
+        return max(min_days, float(sim_median))   # type: ignore[arg-type]
 
-    if days is None:
-        days = _fallback_days(preset, hold_min, hold_max, fallback, cfg)
+    days = _fallback_days(preset, hold_min, hold_max, fallback, cfg)
 
     # Clamp. The DTE ceiling only applies when we actually know the DTE — a
     # non-positive or non-finite dte means "unknown", and silently collapsing
@@ -112,6 +130,13 @@ def _fallback_days(
             return float(fallback.get("Swing", 7))
         lo = lo if lo is not None else hi
         hi = hi if hi is not None else lo
+        if (lo + hi) <= 0:
+            # A typed 0-0 range is the same non-information as an empty one, and
+            # reachable: HORIZON_PRESETS' Intraday row carries holdMin 0, so
+            # zeros do arrive here. Deriving 0 days from it, then flooring to 1,
+            # is the made-up-answer-dressed-as-a-derived-one this branch exists
+            # to avoid.
+            return float(fallback.get("Swing", 7))
         # Chosen over snapping to the nearest preset: a manual 30-35 day range
         # sits between Position and Quarterly and either snap moves the
         # repriced loss by real money. scoringHorizonForHold already sets the

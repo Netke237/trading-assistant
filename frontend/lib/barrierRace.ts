@@ -30,6 +30,37 @@ function pct(v: number): string {
   return `${(v * 100).toFixed(0)}%`;
 }
 
+/**
+ * The four shares as whole percentages that ACTUALLY SUM TO 100.
+ *
+ * Rounding each share independently does not: on the reference contract's T35%
+ * row the shares 0.138 / 0.000 / 0.785 / 0.077 render as 14 + 0 + 79 + 8 =
+ * 101%, directly beneath the sentence "Every row sums to 100% because each path
+ * is counted once" — and beside a stacked bar that does sum to 100, because it
+ * is drawn from the raw values. A sweep of real backend output put 11-20% of
+ * rows at 99% or 101%.
+ *
+ * Largest-remainder allocation: floor everything, then hand the leftover points
+ * to whichever shares lost the most to the floor. Each label lands within one
+ * point of its true share and the row sums to exactly 100.
+ */
+export function sharePercents(shares: readonly number[]): number[] {
+  const scaled = shares.map((v) => v * 100);
+  const floors = scaled.map(Math.floor);
+  let remaining = 100 - floors.reduce((a, b) => a + b, 0);
+  // Ties broken by index, so the same shares always render the same way.
+  const order = scaled
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => (b.frac - a.frac) || (a.i - b.i));
+  const out = [...floors];
+  for (const { i } of order) {
+    if (remaining <= 0) break;
+    out[i] += 1;
+    remaining -= 1;
+  }
+  return out;
+}
+
 function days(v: number): string {
   // The reprice horizon can be a fractional day once the DTE clamp binds
   // (0.75 x a 3-day contract). Show a whole number when it is one.
@@ -88,7 +119,12 @@ export function formatRaceRR(o: BarrierRaceOutcome): string {
  * the card must say it is not a measurement.
  */
 export function formatRacePremiumRR(o: BarrierRaceOutcome, premiumStopPct: number): string {
-  const legs = `${money(o.rewardDollar)} / ${money(o.riskPremiumStop)}`;
+  // "legs A and B", never "A / B". A slash between two dollar amounts reads as
+  // a division to the one audience this card is built for — someone checking
+  // the arithmetic — and on a $1.03 premium the cent-quantized legs $0.21 and
+  // $0.62 divide to 0.34x, not the 0.33x this column is BY DEFINITION. The
+  // dollars are inputs, not a sum to be performed.
+  const legs = `legs ${money(o.rewardDollar)} and ${money(o.riskPremiumStop)}`;
   if (o.rrPremiumStop == null) {
     return `${legs} - no premium-stop risk to divide by`;
   }
@@ -99,7 +135,7 @@ export function formatRacePremiumRR(o: BarrierRaceOutcome, premiumStopPct: numbe
   // exactly the contracts where this column matters least. The ratio comes
   // from the definition; the dollars are shown as its inputs, not as a sum.
   return (
-    `${legs} - ${pct(o.targetPct)} / ${pct(premiumStopPct)} = `
+    `${legs} - ratio is ${pct(o.targetPct)} / ${pct(premiumStopPct)} = `
     + `${o.rrPremiumStop.toFixed(2)}x on every contract`
   );
 }
@@ -143,20 +179,27 @@ export function formatRaceEdge(o: BarrierRaceOutcome, premium: number): string {
  *
  * The card used to state unconditionally that the level came "from the editable
  * field above". It often does not. The field holds a DOLLAR amount derived at
- * SCAN time (`premium x premium_stop_pct`), while the conversion below divides
- * it by the premium quoted NOW — so a contract that has since fallen turns a
- * "60% stop" into a 94% one, and one that has fallen far enough makes the
- * fraction >= 1, at which point nothing is sent and the backend silently
- * applies risk_rules.yaml's own default. Saying so is the fix; the mismatch
- * itself is the field being stale, which is the user's to resolve.
+ * SCAN time (`premium x premium_stop_pct`), while the conversion divides it by
+ * the premium quoted NOW — so a contract that has since fallen turns a "60%
+ * stop" into a 94% one, and one that has fallen far enough makes the fraction
+ * >= 1, at which point nothing is sent and the backend silently applies
+ * risk_rules.yaml's own default. Saying so is the fix; the mismatch itself is
+ * the field being stale, which is the user's to resolve.
+ *
+ * `fromField` is decided AT REQUEST TIME by the caller, from the same premium
+ * the request used — not re-derived here. Re-deriving it from the backend's
+ * cent-rounded `premiumUsed` disagreed with the request in the band where the
+ * two straddle 1.0: a quoted premium of 2.996 against a $2.998 field made the
+ * request send nothing (1.0007) while the note credited the field (0.9993).
  */
 export function premiumStopSourceNote(
   appliedPct: number,
+  fromField: boolean,
   dollarStop: number | null | undefined,
   premium: number,
 ): string {
   const applied = `${(appliedPct * 100).toFixed(0)}% of premium`;
-  if (premiumStopPctFromDollars(dollarStop, premium) != null) {
+  if (fromField) {
     return `${applied}, from the editable field above`;
   }
   if (dollarStop != null && Number.isFinite(dollarStop) && dollarStop > 0

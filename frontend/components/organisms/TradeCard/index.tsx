@@ -429,7 +429,17 @@ export function TradeCard({
   // persisted to the parent cache: it exists only to detect that a barrier has
   // MOVED since this mount's estimate, and a restored estimate is refused by
   // firstPassageIsFreshRef anyway.
-  const [raceBarriers, setRaceBarriers] = useState<{ stockStop: number; premiumStop: number } | null>(null);
+  // `contract` rides along so freshness can be derived from STATE rather than
+  // from a ref cleared in an effect: on the first render after a contract
+  // switch, `firstPassage`/`raceBarriers` still hold the previous contract's
+  // values while `firstPassageIsFreshRef` has not been cleared yet, so a
+  // ref-only gate rendered the PREVIOUS contract's armed stop and dollar edge
+  // under the new symbol for one committed frame. `fromField` records whether
+  // the editable premium-stop field actually set the barrier, decided at
+  // request time against the premium the request used.
+  const [raceBarriers, setRaceBarriers] = useState<
+    { contract: string; stockStop: number; premiumStop: number; fromField: boolean } | null
+  >(null);
   const firstPassageRequestRef = useRef<AbortController | null>(null);
 
   const [exitPlan, setExitPlan] = useState<ExitPlan | null | undefined>(data.exit.exitPlan);
@@ -767,6 +777,11 @@ export function TradeCard({
       // has not re-rendered yet, so it still holds the pre-refresh level. Both
       // the request below and the race's barrier snapshot must use this one, or
       // they disagree with each other the moment the render lands.
+      // Computed once, so the value SENT and the value the card later reports
+      // as "from the editable field above" are the same decision, taken against
+      // the same premium.
+      const sentPremiumStopPct = premiumStopPctFromDollars(overlay.premiumStop, premium);
+
       const resolvedStockStop = (exitPlan && arithmeticLiveStockPrice != null)
         ? exitPlan.stop.price
         : (resolvedStructural?.price ?? data.exit.invalidation);
@@ -786,16 +801,15 @@ export function TradeCard({
         // real discrepancy, not a display nit: the "probability of
         // invalidation" was being measured against a level up to 3x tighter
         // than the structural+ATR stop shown a few inches above on the same
-        // card. Reads `sharedStop` (declared above, ahead of this callback)
-        // rather than `exitPlan?.stop.price` directly so this resolves
-        // through the exact same memo the gate and structuralRR use —
-        // `sharedStop` refuses a cache-restored exit plan that has no fresh
-        // stock price to pair it with and falls back to the raw structural
-        // level instead, which `exitPlan?.stop.price` alone would not do.
-        // `exitPlan` is optional/user-triggered (Compute Arithmetic Plan) and
+        // card. Uses `resolvedStockStop` (above), which applies `sharedStop`'s
+        // OWN precedence to the values this click resolved rather than reading
+        // the memo, which React has not recomputed yet. That precedence is what
+        // refuses a cache-restored exit plan with no fresh stock price to pair
+        // it with and falls back to the raw structural level — something
+        // `exitPlan?.stop.price` alone would not do. Both are frequently
+        // absent (Compute Arithmetic Plan is user-triggered, and
         // `structuralStop` only populates after a Check-structure/Estimate
-        // click, so `sharedStop` itself is frequently null — fall back to
-        // the flat stop when it hasn't been computed yet.
+        // click), so it falls back to the flat stop when neither exists.
         //
         // Known limitation, deliberately not fixed here (tracked separately,
         // plan's Phase 2.4 "Freshness"): if the user re-runs Compute
@@ -813,7 +827,7 @@ export function TradeCard({
         // as a fraction of premium, so convert. `undefined` falls back to
         // risk_rules.yaml's premium_stop_pct rather than sending a value the
         // backend would reject.
-        premium_stop_pct: premiumStopPctFromDollars(overlay.premiumStop, premium),
+        premium_stop_pct: sentPremiumStopPct,
         horizon_preset: horizonPreset ?? undefined,
         hold_min: holdMin ?? undefined,
         hold_max: holdMax ?? undefined,
@@ -843,8 +857,10 @@ export function TradeCard({
       // moved — never silently re-sorts bars that were measured against a stop
       // the user has since changed.
       setRaceBarriers({
+        contract: data.contract,
         stockStop: resolvedStockStop,
         premiumStop: overlay.premiumStop,
+        fromField: sentPremiumStopPct != null,
       });
       firstPassageIsFreshRef.current = true;
     } catch {
@@ -866,7 +882,14 @@ export function TradeCard({
     } finally {
       if (!controller.signal.aborted) setFirstPassageLoading(false);
     }
-  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, sharedStop, targetPct, structuralLoading, overlay.premiumStop, horizonPreset, holdMin, holdMax]);
+    // `structuralStop`, `exitPlan` and `arithmeticLiveStockPrice` are read
+    // directly (to re-derive sharedStop's precedence from what THIS click
+    // resolved), so they are listed. They were correct while omitted only
+    // because sharedStop's own memo depends on exactly those three, so its
+    // identity moved with them — an unstated coincidence that would break
+    // silently the moment that memo is narrowed. `data.contract` is stamped
+    // into raceBarriers for the freshness check.
+  }, [data.symbol, data.direction, data.price, data.contract, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, structuralStop, exitPlan, arithmeticLiveStockPrice, targetPct, structuralLoading, overlay.premiumStop, horizonPreset, holdMin, holdMax]);
 
   // R:R using the structural stop (order block / swing level) as the risk
   // basis instead of the original fixed "premium * 60%" assumption — only
@@ -1099,6 +1122,12 @@ export function TradeCard({
   // Hoisted and named so the two sites cannot drift apart again.
   const raceIsShowable = firstPassageIsFreshRef.current
     && firstPassageContext != null
+    // State, not just the ref: the ref is cleared in the contract-change
+    // effect, which runs AFTER commit, so on the first render of a new
+    // contract it still reads true while every value beside it belongs to the
+    // previous one. raceBarriers carries the contract it was computed for, so
+    // this closes that frame.
+    && raceBarriers?.contract === data.contract
     && !raceBarriersMoved;
 
   // NOTE ON THE BARRIER RACE AS A "FOURTH SOURCE" (spec section 3.4): it is not a
@@ -1579,16 +1608,42 @@ export function TradeCard({
             ))}
           </div>
           <div className={styles.structuralStop}>
+            {/* Disabled while EITHER level the simulation depends on is still
+                in flight, not just while the estimate itself is. Awaiting the
+                auto-refresh inside the handler closed the case where nothing
+                had been fetched yet; it does not cover a fetch the user
+                started first. Both of these are the two most natural button
+                sequences on the card:
+                  - "Check structure" then Estimate: the handler skipped its
+                    own refresh (structuralLoading was already true), sent the
+                    flat scan stop, and the in-flight structural then landed
+                    and moved sharedStop.
+                  - "Compute Arithmetic Plan" then Estimate: the plan landed
+                    afterwards and sharedStop switched to its exit_plan branch.
+                Either way the race cleared itself with "Barriers changed" on a
+                click the user had just made, and the Monte Carlo probability
+                had been measured against a different stop from the one on
+                screen — the D1 discrepancy this card is not allowed to have.
+                Disabling is preferred over awaiting a foreign promise: it
+                needs no second copy of "which level wins" and cannot go stale
+                against the sharedStop memo the freshness check compares to. */}
             <button
               type="button"
               className={styles.btn}
               onClick={estimateFirstPassage}
-              disabled={firstPassageLoading || !data.contractDetails}
+              disabled={
+                firstPassageLoading || structuralLoading || exitPlanLoading || !data.contractDetails
+              }
             >
               <Text size={12} weight={500}>
                 {firstPassageLoading ? 'Estimating…' : 'Run Monte Carlo Estimate'}
               </Text>
             </button>
+            {!firstPassageLoading && (structuralLoading || exitPlanLoading) && (
+              <Text size={11} tone="dim">
+                Waiting for the stop this estimate races against…
+              </Text>
+            )}
             {firstPassageError && (
               <Text size={11} tone="reject">Couldn&apos;t compute an estimate — try again.</Text>
             )}
@@ -1635,6 +1690,7 @@ export function TradeCard({
         <BarrierRaceCard
           race={firstPassage?.race}
           invalidation={firstPassage?.invalidation ?? null}
+          premiumStopFromField={raceBarriers?.fromField ?? false}
           premiumStopField={overlay.premiumStop ?? null}
           isFresh={firstPassageIsFreshRef.current && firstPassageContext != null}
           barriersChanged={raceBarriersMoved}

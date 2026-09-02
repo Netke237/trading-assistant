@@ -22,7 +22,11 @@ function outcome(over: Partial<BarrierRaceOutcome> = {}): BarrierRaceOutcome {
     riskPremiumStop: 3.12,
     rrStockStop: 0.2072,
     rrPremiumStop: 0.3333,
-    edgePerContract: -193.28,
+    // The four printed terms sum to exactly this per share: 0.27 x 1.04
+  // - 0.00 x 5.02 - 0.68 x 3.12 + 0.05 x -1.56 = -1.9188. The old -193.28 left
+  // the card's own test rendering a chain that does not add up, because the
+  // assertion below only regex-matched the terms and never the total.
+  edgePerContract: -191.88,
     ...over,
   };
 }
@@ -39,6 +43,7 @@ const RACE: BarrierRace = {
   // The premium every printed chain subtracts, quantized to cents by the
   // backend. The card must print this rather than re-round its own copy.
   premiumUsed: 5.20,
+  ivSolved: true,
   nPaths: 2000,
 };
 
@@ -48,7 +53,13 @@ const PREMIUM_STOP_FIELD = 3.12;
 
 function renderCard(props: Partial<React.ComponentProps<typeof BarrierRaceCard>> = {}) {
   return render(
-    <BarrierRaceCard race={RACE} premiumStopField={PREMIUM_STOP_FIELD} isFresh {...props} />,
+    <BarrierRaceCard
+      race={RACE}
+      premiumStopFromField
+      premiumStopField={PREMIUM_STOP_FIELD}
+      isFresh
+      {...props}
+    />,
   );
 }
 
@@ -138,7 +149,7 @@ describe('the printed arithmetic', () => {
   it('marks the premium-stop ratio as a constant, not a measurement', () => {
     renderCard();
     expect(
-      screen.getByText(/20% \/ 60% = 0\.33x on every contract/),
+      screen.getByText(/ratio is 20% \/ 60% = 0\.33x on every contract/),
     ).toBeInTheDocument();
     expect(screen.getByText(/Only the first ratio is a measurement/)).toBeInTheDocument();
   });
@@ -148,7 +159,7 @@ describe('the printed arithmetic', () => {
     // since fallen below it makes the fraction >= 1, so nothing is sent and the
     // backend applies its own default — while the card stated unconditionally
     // that the level came "from the editable field above".
-    renderCard({ premiumStopField: 9.99 });
+    renderCard({ premiumStopFromField: false, premiumStopField: 9.99 });
     expect(screen.getByText(/the default/)).toBeInTheDocument();
     expect(screen.queryByText(/from the editable field above/)).not.toBeInTheDocument();
   });
@@ -170,7 +181,7 @@ describe('the printed arithmetic', () => {
 
 describe('when the simulation was refused', () => {
   it('renders the "not simulated" copy, not an empty card and not four zeroes', () => {
-    render(<BarrierRaceCard race={null} premiumStopField={PREMIUM_STOP_FIELD} isFresh />);
+    render(<BarrierRaceCard race={null} premiumStopFromField premiumStopField={PREMIUM_STOP_FIELD} isFresh />);
     expect(screen.getByText(/Not simulated — contract expires today/)).toBeInTheDocument();
     expect(screen.queryAllByRole('img')).toHaveLength(0);
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
@@ -197,13 +208,13 @@ describe('when the estimate was restored from cache rather than fetched this mou
     // Pairing them is the mixed-vintage hazard structuralRR's freshness
     // machinery exists to prevent.
     const { container } = render(
-      <BarrierRaceCard race={RACE} premiumStopField={PREMIUM_STOP_FIELD} isFresh={false} />,
+      <BarrierRaceCard race={RACE} premiumStopFromField premiumStopField={PREMIUM_STOP_FIELD} isFresh={false} />,
     );
     expect(container).toBeEmptyDOMElement();
   });
 
   it('still renders the refusal copy, which depends on no live barrier', () => {
-    render(<BarrierRaceCard race={null} premiumStopField={PREMIUM_STOP_FIELD} isFresh={false} />);
+    render(<BarrierRaceCard race={null} premiumStopFromField premiumStopField={PREMIUM_STOP_FIELD} isFresh={false} />);
     expect(screen.getByText(/Not simulated — contract expires today/)).toBeInTheDocument();
   });
 });
@@ -211,8 +222,87 @@ describe('when the estimate was restored from cache rather than fetched this mou
 describe('when nothing has been run yet', () => {
   it('renders nothing', () => {
     const { container } = render(
-      <BarrierRaceCard race={undefined} premiumStopField={PREMIUM_STOP_FIELD} isFresh />,
+      <BarrierRaceCard race={undefined} premiumStopFromField premiumStopField={PREMIUM_STOP_FIELD} isFresh />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+// -- Round 2: what the card claims vs what it renders -------------------------
+
+describe('the numbers the card promises', () => {
+  it('renders four whole percentages that sum to 100 on a REAL share set', () => {
+    // The default fixture (0.27 / 0.00 / 0.68 / 0.05) is four values that are
+    // already exact whole percents, so the "sum to 100%" assertion above cannot
+    // fail — it asserted a property it did not test. This is the reference
+    // contract's actual T35% row: rounded independently it renders
+    // 14 + 0 + 79 + 8 = 101%, printed directly under "Every row sums to 100%"
+    // and beside a bar that does sum to 100 because it uses the raw values.
+    render(
+      <BarrierRaceCard
+        race={{
+          ...RACE,
+          outcomes: [outcome({
+            pTargetFirst: 0.138, pStockStopFirst: 0.0, pPremiumStopFirst: 0.785, pNeither: 0.077,
+          })],
+        }}
+        premiumStopFromField
+        premiumStopField={PREMIUM_STOP_FIELD}
+        isFresh
+      />,
+    );
+    const label = screen.getAllByRole('img')[0].getAttribute('aria-label') ?? '';
+    // Skip the leading "20% target:" and read the four share percentages.
+    const spoken = [...label.matchAll(/(\d+)%/g)].slice(1).map((m) => Number(m[1]));
+    expect(spoken).toHaveLength(4);
+    expect(spoken.reduce((a, b) => a + b, 0)).toBe(100);
+  });
+
+  it('keeps the stock-stop probability on screen when only the PREMIUM stop moved', () => {
+    // The standalone invalidation probability moved onto this card (spec 3.4),
+    // and the barriersChanged short-circuit sat above it — so editing the
+    // premium stop deleted a number the premium stop cannot affect.
+    renderCard({ barriersChanged: true, invalidation: { probability: 0.30, expectedDays: 4 } });
+    expect(screen.getByText(/Barriers changed/)).toBeInTheDocument();
+    expect(screen.getByText(/30% of paths touch the stock stop/)).toBeInTheDocument();
+  });
+
+  it('caveats every number when the contract IV could not be solved', () => {
+    renderCard({ race: { ...RACE, ivSolved: false } });
+    expect(
+      screen.getByText(/implied volatility could not be backed out of its quote/),
+    ).toBeInTheDocument();
+  });
+
+  it('warns when the bolded R:R describes an outcome the simulation never reached', () => {
+    // Every row of the default fixture has pStockStopFirst == 0, which is the
+    // reference contract's real behaviour: the premium stop fires first on
+    // every losing path, so the stock-stop R:R contributes nothing to the edge.
+    renderCard();
+    expect(
+      screen.getByText(/describes an outcome the simulation never reached/),
+    ).toBeInTheDocument();
+  });
+
+  it('renders the conditional medians to both stops, not only to the target', () => {
+    // daysStockStop and daysPremiumStop were computed, mapped onto the wire and
+    // typed, and then never rendered.
+    renderCard();
+    expect(screen.getAllByText('~20d').length).toBe(3);   // daysPremiumStop
+    expect(screen.getAllByText('~7d').length).toBe(3);    // daysTarget
+  });
+
+  it('prints an edge chain whose terms sum to the total it prints', () => {
+    renderCard();
+    expect(
+      screen.getAllByText(
+        // Testing Library normalises runs of whitespace, so the chain's double
+        // spaces around the arrow are matched loosely. The point of the
+        // assertion is the TOTAL: 0.27x1.04 - 0 - 0.68x3.12 + 0.05x-1.56 is
+        // -1.9188, and the card must print that, not the -193.28 this fixture
+        // used to carry while the assertion only checked the four terms.
+        /0\.27 x \$1\.04 - 0\.00 x \$5\.02 - 0\.68 x \$3\.12 \+ 0\.05 x -\$1\.56 = -\$1\.92\s+->\s+-\$191\.88 per contract/,
+      ).length,
+    ).toBeGreaterThan(0);
   });
 });

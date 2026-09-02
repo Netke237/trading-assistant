@@ -5,6 +5,7 @@ import {
   formatRaceEdge,
   premiumStopPctFromDollars,
   premiumStopSourceNote,
+  sharePercents,
   money,
 } from './barrierRace';
 import type { BarrierRaceOutcome } from '@/types/domain';
@@ -89,11 +90,49 @@ describe('formatRaceRR', () => {
   });
 });
 
+describe('sharePercents', () => {
+  it('makes the four labels sum to exactly 100', () => {
+    // The reference contract's T35% row. Rounding each share on its own gives
+    // 14 + 0 + 79 + 8 = 101%, printed directly under "Every row sums to 100%"
+    // and beside a bar that does sum to 100 because it uses the raw values.
+    // A sweep of real backend output put 11-20% of rows at 99% or 101%.
+    expect(sharePercents([0.138, 0.0, 0.785, 0.077])).toEqual([14, 0, 78, 8]);
+    expect(sharePercents([0.138, 0.0, 0.785, 0.077]).reduce((a, b) => a + b, 0)).toBe(100);
+  });
+
+  it('sums to 100 across every share set the simulation can produce', () => {
+    // n_paths = 2000, so every share is a multiple of 0.0005. Walk a spread of
+    // real four-way splits rather than asserting one hand-picked row.
+    for (let a = 0; a <= 2000; a += 37) {
+      for (let b = 0; a + b <= 2000; b += 53) {
+        const c = Math.floor((2000 - a - b) / 3);
+        const d = 2000 - a - b - c;
+        const out = sharePercents([a, b, c, d].map((v) => v / 2000));
+        expect(out.reduce((x, y) => x + y, 0)).toBe(100);
+      }
+    }
+  });
+
+  it('keeps every label within one point of its true share', () => {
+    const shares = [0.138, 0.0, 0.785, 0.077];
+    sharePercents(shares).forEach((label, i) => {
+      expect(Math.abs(label - shares[i] * 100)).toBeLessThan(1);
+    });
+  });
+
+  it('leaves an exact split alone', () => {
+    expect(sharePercents([0.27, 0.00, 0.68, 0.05])).toEqual([27, 0, 68, 5]);
+  });
+});
+
 describe('formatRacePremiumRR', () => {
   it('labels itself as the constant it is, showing the dollars as inputs', () => {
     const s = formatRacePremiumRR(ROW, 0.60);
-    expect(s).toContain('$1.04 / $3.12');
-    expect(s).toContain('20% / 60% = 0.33x on every contract');
+    expect(s).toContain('legs $1.04 and $3.12');
+    expect(s).toContain('ratio is 20% / 60% = 0.33x on every contract');
+    // No slash between the two dollar amounts: it reads as a division to the
+    // one audience this card is for, and the quotient is not the ratio.
+    expect(s).not.toContain('$1.04 / $3.12');
   });
 
   it('does not claim the two rounded dollar legs divide to the constant', () => {
@@ -111,9 +150,9 @@ describe('formatRacePremiumRR', () => {
       { ...ROW, rewardDollar: 0.21, riskPremiumStop: 0.62, rrPremiumStop: 1 / 3 },
       0.60,
     );
-    expect(small).toContain('$0.21 / $0.62');
-    expect(small).toContain('20% / 60% = 0.33x on every contract');
-    expect(small).not.toContain('$0.62 = 0.33x');
+    expect(small).toContain('legs $0.21 and $0.62');
+    expect(small).toContain('ratio is 20% / 60% = 0.33x on every contract');
+    expect(small).not.toContain('$0.21 / $0.62');
   });
 
   it('says so plainly when there is no premium-stop risk to divide by', () => {
@@ -128,7 +167,18 @@ describe('formatRacePremiumRR', () => {
 
 describe('premiumStopSourceNote', () => {
   it('credits the editable field when the field is what set the barrier', () => {
-    expect(premiumStopSourceNote(0.60, 3.12, 5.20))
+    expect(premiumStopSourceNote(0.60, true, 3.12, 5.20))
+      .toBe('60% of premium, from the editable field above');
+  });
+
+  it('takes the decision from the caller, not from the rounded premium', () => {
+    // The request divides by the RAW quoted premium; this note used to
+    // re-derive the decision from the backend's cent-rounded premiumUsed. In
+    // the band where the two straddle 1.0 they disagree: a 2.996 quote against
+    // a $2.998 field makes the request send nothing (1.0007 -> undefined) while
+    // re-deriving gives 2.998/3.00 = 0.9993, crediting a field that was ignored.
+    expect(premiumStopSourceNote(0.60, false, 2.998, 3.00)).toContain('the default');
+    expect(premiumStopSourceNote(0.60, true, 3.00, 3.00))
       .toBe('60% of premium, from the editable field above');
   });
 
@@ -138,7 +188,7 @@ describe('premiumStopSourceNote', () => {
     // >= 1, nothing is sent, and the backend applies its own default — while
     // the card used to state unconditionally that the level came "from the
     // editable field above".
-    const s = premiumStopSourceNote(0.60, 3.00, 2.50);
+    const s = premiumStopSourceNote(0.60, false, 3.00, 2.50);
     expect(s).toContain('the default');
     expect(s).toContain('$3.00');
     expect(s).toContain('$2.50');
@@ -146,7 +196,7 @@ describe('premiumStopSourceNote', () => {
   });
 
   it('says the default was used when no premium stop is set at all', () => {
-    expect(premiumStopSourceNote(0.60, null, 5.20))
+    expect(premiumStopSourceNote(0.60, false, null, 5.20))
       .toContain('because no premium stop is set above');
   });
 });

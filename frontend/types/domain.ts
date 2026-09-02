@@ -225,6 +225,11 @@ export interface BarrierRace {
    *  round() is banker's rounding and JavaScript's toFixed() is not, so the two
    *  disagree on an exact half-cent and the chain stops adding up. */
   premiumUsed:      number;
+  /** False when the contract's own IV could not be backed out of its quote, so
+   *  the simulation ran on a generic fallback volatility. Every number on the
+   *  card is then about a contract the market is not pricing that way — the
+   *  card caveats them rather than showing a confident dollar edge. */
+  ivSolved:         boolean;
   nPaths:           number;
 }
 

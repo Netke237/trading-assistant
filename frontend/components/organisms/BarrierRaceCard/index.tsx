@@ -7,6 +7,7 @@ import {
   formatRacePremiumRR,
   formatRaceEdge,
   premiumStopSourceNote,
+  sharePercents,
   money,
 } from '@/lib/barrierRace';
 import type { BarrierRace, BarrierRaceOutcome } from '@/types/domain';
@@ -16,6 +17,10 @@ export interface BarrierRaceCardProps {
   /** `undefined` while nothing has been run, `null` when the simulation was
    *  refused (dte < 1). The two render differently and neither renders bars. */
   race: BarrierRace | null | undefined;
+  /** True when the editable "Premium stop" field is what actually set the
+   *  barrier — decided at REQUEST time, from the premium the request used, not
+   *  re-derived here from the cent-rounded one. */
+  premiumStopFromField: boolean;
   /** The card's editable "Premium stop" field, in DOLLARS, as it stands now.
    *  Only used to say whether that field actually set the barrier or the
    *  backend fell back to its own default — never to compute a level. The
@@ -59,9 +64,23 @@ function daysLabel(v: number | null): string {
  * sum past 100% and a path that hit both is counted twice. Here every path is
  * assigned to whichever barrier it reached FIRST, so each row sums to exactly
  * 100% and the medians mean something.
+ *
+ * NO STATUS BADGE, DELIBERATELY. Spec section 3.2 lists StatusBadge among the
+ * things this organism composes, and D8 specifies "two states, PASS/CAUTION,
+ * never REJECT". Neither the spec nor any config says what would make a race
+ * PASS rather than CAUTION — no threshold on edge, R:R or any share is defined
+ * anywhere — and D8 itself says "the race adds no new gate". Inventing a
+ * threshold to fill the badge would BE that gate. The caution-toned notes below
+ * carry the warnings a badge would have summarised; the decision is recorded
+ * here rather than left as a silent omission from the spec.
+ *
+ * The stacked bar's "stock stop" segment uses var(--reject) as a segment COLOUR
+ * (it is the losing outcome in a four-way legend), which is not a status tint
+ * and does not make the card red in D8's sense.
  */
 export default function BarrierRaceCard({
   race,
+  premiumStopFromField,
   premiumStopField,
   isFresh,
   barriersChanged = false,
@@ -87,6 +106,23 @@ export default function BarrierRaceCard({
           Barriers changed — re-run the estimate. These bars were measured against a stop that has
           since moved, so they no longer describe this trade.
         </Text>
+        {/* The standalone invalidation probability moved onto this card (spec
+            section 3.4), and short-circuiting above it deleted it from the
+            screen whenever a barrier moved — including when the PREMIUM stop
+            moved, which cannot affect "did any path ever touch the stock
+            stop". It survives here: it is a property of the stock stop and the
+            simulation, not of the attribution the moved barrier invalidated. */}
+        {invalidation && (
+          <Text size={10} tone="dim">
+            The stock-stop probability is unaffected by the premium stop:{' '}
+            {(invalidation.probability * 100).toFixed(0)}% of paths touch the stock stop at some
+            point
+            {invalidation.expectedDays != null
+              ? ` (median ~${Math.round(invalidation.expectedDays)}d)`
+              : ''}
+            . The attribution above is what needs the re-run.
+          </Text>
+        )}
       </section>
     );
   }
@@ -136,7 +172,9 @@ export default function BarrierRaceCard({
               <td><Data size={11}>{money(race.premiumStopPrice)} option</Data></td>
               <td>
                 <Text size={11} tone="secondary">
-                  {premiumStopSourceNote(race.premiumStopPct, premiumStopField, race.premiumUsed)}
+                  {premiumStopSourceNote(
+                    race.premiumStopPct, premiumStopFromField, premiumStopField, race.premiumUsed,
+                  )}
                 </Text>
               </td>
               <td><Text size={11} tone="secondary">yes — whichever fires first</Text></td>
@@ -175,24 +213,40 @@ export default function BarrierRaceCard({
               <th scope="col"><Text size={10} tone="dim">Stock stop</Text></th>
               <th scope="col"><Text size={10} tone="dim">Premium stop</Text></th>
               <th scope="col"><Text size={10} tone="dim">Neither</Text></th>
+              {/* All three conditional medians. The stop ones were computed,
+                  mapped onto the wire and typed, but never rendered — dead
+                  payload on a card whose point is that the medians are
+                  conditional on the outcome they belong to. */}
               <th scope="col"><Text size={10} tone="dim">Median to target</Text></th>
+              <th scope="col"><Text size={10} tone="dim">to stock stop</Text></th>
+              <th scope="col"><Text size={10} tone="dim">to premium stop</Text></th>
             </tr>
           </thead>
           <tbody>
-            {race.outcomes.map((o) => (
-              <tr key={o.targetPct}>
-                <td>
-                  <Text size={11} weight={500}>{pctLabel(o.targetPct)}</Text>
-                  <Data size={10} tone="dim">{money(o.targetOptionPrice)}</Data>
-                </td>
-                <td><StackedBar o={o} /></td>
-                <td><Data size={11}>{pctLabel(o.pTargetFirst)}</Data></td>
-                <td><Data size={11}>{pctLabel(o.pStockStopFirst)}</Data></td>
-                <td><Data size={11}>{pctLabel(o.pPremiumStopFirst)}</Data></td>
-                <td><Data size={11}>{pctLabel(o.pNeither)}</Data></td>
-                <td><Data size={11}>{daysLabel(o.daysTarget)}</Data></td>
-              </tr>
-            ))}
+            {race.outcomes.map((o) => {
+              // Allocated, not rounded one by one. Independent rounding put
+              // 11-20% of real rows at 99% or 101% directly under the "every row
+              // sums to 100%" note below, and beside a bar that summed to 100.
+              const [sTarget, sStock, sPrem, sNone] = sharePercents([
+                o.pTargetFirst, o.pStockStopFirst, o.pPremiumStopFirst, o.pNeither,
+              ]);
+              return (
+                <tr key={o.targetPct}>
+                  <td>
+                    <Text size={11} weight={500}>{pctLabel(o.targetPct)}</Text>
+                    <Data size={10} tone="dim">{money(o.targetOptionPrice)}</Data>
+                  </td>
+                  <td><StackedBar o={o} /></td>
+                  <td><Data size={11}>{sTarget}%</Data></td>
+                  <td><Data size={11}>{sStock}%</Data></td>
+                  <td><Data size={11}>{sPrem}%</Data></td>
+                  <td><Data size={11}>{sNone}%</Data></td>
+                  <td><Data size={11}>{daysLabel(o.daysTarget)}</Data></td>
+                  <td><Data size={11}>{daysLabel(o.daysStockStop)}</Data></td>
+                  <td><Data size={11}>{daysLabel(o.daysPremiumStop)}</Data></td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         <Text size={10} tone="dim">
@@ -227,6 +281,20 @@ export default function BarrierRaceCard({
             </div>
           </div>
         ))}
+        {race.outcomes.every((o) => Math.round(o.pStockStopFirst * 100) === 0) && (
+          <Text size={10} tone="caution">
+            On this contract the premium stop fires first on every losing path, so the bolded
+            stock-stop R:R describes an outcome the simulation never reached — its term contributes
+            exactly nothing to the edge below.
+          </Text>
+        )}
+        {!race.ivSolved && (
+          <Text size={10} tone="caution">
+            The contract&apos;s own implied volatility could not be backed out of its quote, so this
+            simulation ran on a generic fallback volatility. Treat every number on this card as
+            describing a contract the market is not pricing this way — re-check the quote.
+          </Text>
+        )}
         <Text size={10} tone="dim">
           Only the first ratio is a measurement. Its risk leg is the premium minus what the
           contract would still be worth at the stock stop, which depends on strike, spot, time and
@@ -289,13 +357,17 @@ function StackedBar({ o }: { o: BarrierRaceOutcome }) {
     [styles.swatchPremium, o.pPremiumStopFirst, 'Premium stop first'],
     [styles.swatchNeither, o.pNeither, 'Neither'],
   ];
+  // The spoken label carries the same allocated percentages as the visible
+  // ones, so a screen-reader user hears a row that sums to 100% too. Rounding
+  // each share independently here read out 101% on ~1 row in 6.
+  const spoken = sharePercents(segments.map(([, v]) => v));
   return (
     <div
       className={styles.bar}
       role="img"
       aria-label={
         `${(o.targetPct * 100).toFixed(0)}% target: `
-        + segments.map(([, v, label]) => `${label} ${(v * 100).toFixed(0)}%`).join(', ')
+        + segments.map(([, , label], i) => `${label} ${spoken[i]}%`).join(', ')
       }
     >
       {segments.map(([cls, v, label]) => (

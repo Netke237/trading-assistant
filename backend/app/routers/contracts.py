@@ -397,6 +397,10 @@ class BarrierRaceOut(BaseModel):
     # round() is banker's rounding and JavaScript's toFixed() is not, so on an
     # exact half-cent the two disagree and the chain stops adding up.
     premiumUsed:       float
+    # False when the contract's own IV could not be backed out of its quote, so
+    # the simulation ran on a generic fallback volatility. The card caveats
+    # every number rather than presenting a confident dollar edge.
+    ivSolved:          bool = True
     nPaths:            int
 
 
@@ -536,6 +540,7 @@ def _race_out(race) -> Optional[BarrierRaceOut]:
         premiumStopPct=race.premium_stop_pct,
         stockStopPrice=round(race.stock_stop_price, 2),
         premiumUsed=race.premium_used,
+        ivSolved=race.iv_solved,
         nPaths=race.n_paths,
     )
 

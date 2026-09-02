@@ -209,11 +209,25 @@ def test_a_premium_stop_that_rounds_to_zero_dollars_yields_no_ratio():
 # -- 8. The degenerate risk leg -----------------------------------------------
 
 def test_non_positive_stock_stop_risk_yields_no_ratio():
-    """A deep-ITM contract on a tight stop can still be worth more at the stop
-    than it cost, making risk_stock_stop <= 0. Render an em dash, never a
-    negative or infinite ratio."""
-    race = _run(strike=100.0, premium=5.20).race
+    """Render an em dash, never a negative or infinite ratio.
+
+    WHERE THIS IS ACTUALLY REACHABLE, which is not where the spec says. The spec
+    calls it "possible for a deep-ITM contract on a tight stop", and that was
+    true only while the stop was being repriced at the WRONG time — the old code
+    fed elapsed days into bs_price as remaining life, so a stop reached late
+    was priced with MORE life than the contract was quoted with. With the
+    repricing fixed, a call at its stop has both a lower spot AND less time
+    remaining, so it can only be worth less than it cost: risk is positive for
+    every quote the model can actually solve. Swept strikes 165-180 against
+    premiums $10-$21 to confirm.
+
+    What does reach it is a quote bs_iv cannot solve, where sigma falls back to
+    a generic 0.25 that has nothing to do with the contract. So that is the
+    fixture, and it is the same state test_a_quote_the_model_cannot_solve...
+    below says the card must caveat rather than price confidently."""
+    race = _run(strike=170.0, premium=15.60, invalidation_price=184.5).race
     assert race is not None
+    assert race.iv_solved is False
     o = race.outcomes[0]
     assert o.risk_stock_stop is not None
     assert o.risk_stock_stop <= 0
@@ -221,6 +235,36 @@ def test_non_positive_stock_stop_risk_yields_no_ratio():
     # The edge is still computable: a negative "risk" is a signed contribution,
     # not an error.
     assert o.edge_per_contract is not None
+
+
+def test_a_solvable_quote_never_produces_a_non_positive_stock_stop_risk():
+    """The other half of the above, asserted rather than left in prose: with a
+    solvable IV and the repricing the right way round, the risk leg is positive
+    across a real deep-ITM chain. If this ever starts failing, the reprice
+    direction has been inverted again."""
+    for strike, premium in ((180.0, 6.00), (177.5, 8.40), (175.0, 10.80), (172.5, 13.60)):
+        race = _run(strike=strike, premium=premium, invalidation_price=184.0).race
+        assert race is not None
+        assert race.iv_solved, f"K={strike} must be solvable for this test to mean anything"
+        for o in race.outcomes:
+            assert o.risk_stock_stop is not None and o.risk_stock_stop > 0
+            assert o.rr_stock_stop is not None
+
+
+def test_a_quote_the_model_cannot_solve_is_flagged_rather_than_priced_confidently():
+    """When bs_iv cannot back the contract's own IV out of its quote, sigma
+    silently becomes the 0.25 default and the simulation is no longer about this
+    contract at all. On a quote far below intrinsic it then prices day 1 above
+    the target and reports 100% target-first with a confident dollar edge.
+
+    Every other consumer of that fallback shows a probability; the race is the
+    first to turn it into money, so the flag rides with it and the card
+    caveats every number."""
+    unsolvable = _run(strike=100.0, premium=5.20).race   # ~$85 of intrinsic, quoted at $5.20
+    assert unsolvable is not None
+    assert unsolvable.iv_solved is False
+    assert unsolvable.outcomes[0].p_target_first == 1.0   # the fabricated certainty
+    assert _run().race.iv_solved is True
 
 
 def test_an_absent_stock_stop_reprices_to_nothing_rather_than_to_zero_dollars():
@@ -268,8 +312,18 @@ def test_every_money_field_is_actually_quantized_to_cents():
     and a `risk_premium_stop` tolerance of 5e-3, wider than a cent). Deleting
     every round() in the money block left it passing. This asserts the
     quantization itself, on a premium that does NOT survive it by accident."""
-    race = _run(premium=5.17).race
+    # A premium with sub-cent precision, which a live quote genuinely can carry.
+    # At 5.17 the assertion below is vacuous for premium_used: the input is
+    # already exact, so removing round() changes nothing and the mutation
+    # survives.
+    race = _run(premium=5.174).race
     assert race is not None
+    # The result-level money too: premium_used is what BOTH printed chains
+    # subtract from, and premium_stop_price is the barrier the card renders.
+    # Neither was covered, so removing their quantization was invisible.
+    for name in ("premium_used", "premium_stop_price"):
+        v = getattr(race, name)
+        assert v == round(v, 2), f"{name} is not quantized to cents: {v!r}"
     for o in race.outcomes:
         for name in (
             "reward_dollar", "stop_repriced_value", "risk_stock_stop",
@@ -287,23 +341,39 @@ def test_the_printed_edge_chain_sums_to_the_printed_total():
     printed total — out by 1.6c per share, which at 100 shares is $1.56 a
     contract, on a card whose entire premise is that you can check its
     arithmetic."""
-    race = _run().race
-    assert race is not None
-    for o in race.outcomes:
-        assert o.edge_per_contract is not None
-        assert o.risk_stock_stop is not None
-        neither = (round(o.terminal_mean, 2) - 5.20) if o.terminal_mean is not None else 0.0
-        printed_terms = (
-            round(o.p_target_first, 2) * o.reward_dollar
-            - round(o.p_stock_stop_first, 2) * o.risk_stock_stop
-            - round(o.p_premium_stop_first, 2) * o.risk_premium_stop
-            + round(o.p_neither, 2) * neither
-        )
-        printed_total = o.edge_per_contract / 100.0
-        # Both are rendered at 2dp; they must agree once rendered.
-        assert round(printed_terms, 2) == pytest.approx(round(printed_total, 2), abs=1e-9), (
-            f"printed terms sum to {printed_terms} but the printed total is {printed_total}"
-        )
+    def as_the_card_prints_it(v: float) -> float:
+        """What JavaScript's toFixed(2) renders — half AWAY from zero. Written
+        out here rather than importing the module's own helper, so this test
+        pins the card's behaviour instead of restating the implementation.
+        Python's round() is half-to-even and disagrees on an exactly
+        representable half: with n_paths=2000 the shares are multiples of
+        0.0005, so 0.125 (250 paths) and 0.625 (1250 paths) are reachable, and
+        round() gives 0.12 where the card shows "0.13 x"."""
+        from decimal import Decimal, ROUND_HALF_UP
+        return float(Decimal(repr(v)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+    # Premiums chosen to include rows whose shares land on those halves.
+    for premium in (5.20, 6.63, 2.47):
+        race = _run(premium=premium).race
+        assert race is not None
+        for o in race.outcomes:
+            assert o.edge_per_contract is not None
+            assert o.risk_stock_stop is not None
+            prem_c = round(premium, 2)
+            neither = (round(o.terminal_mean, 2) - prem_c) if o.terminal_mean is not None else 0.0
+            printed_terms = (
+                as_the_card_prints_it(o.p_target_first) * o.reward_dollar
+                - as_the_card_prints_it(o.p_stock_stop_first) * o.risk_stock_stop
+                - as_the_card_prints_it(o.p_premium_stop_first) * o.risk_premium_stop
+                + as_the_card_prints_it(o.p_neither) * neither
+            )
+            printed_total = o.edge_per_contract / 100.0
+            assert round(printed_terms, 2) == pytest.approx(round(printed_total, 2), abs=1e-9), (
+                f"premium {premium}, T{o.target_pct}: printed terms sum to {printed_terms} "
+                f"but the printed total is {printed_total}"
+            )
+
+
 
 
 def test_the_stop_leg_is_repriced_at_the_life_REMAINING_not_the_days_elapsed():
@@ -341,6 +411,48 @@ def test_the_stop_leg_is_repriced_at_the_life_REMAINING_not_the_days_elapsed():
     late = _run(reprice_cfg=cfg_late).race.outcomes[0]
     assert early.stop_repriced_value > late.stop_repriced_value
     assert early.risk_stock_stop < late.risk_stock_stop
+
+
+def test_the_stop_leg_reprices_at_the_simulation_median_not_the_preset_table():
+    """Decision Q2's entire point: "no fixed half-life, every reprice uses the
+    simulation's own median days to that barrier, falling back to a per-preset
+    YAML value". Nothing pinned the wiring — replacing the sim median with None
+    (so the stop leg silently fell back to Swing's 7 days, a $1.38 swing in the
+    repriced value and a 0.21 -> 0.29 swing in R:R) left every test passing.
+
+    Both halves are asserted: that the horizon IS the simulation's observed
+    median, and that it is not the table's."""
+    res = _run(dte=60)
+    race = res.race
+    assert race is not None
+    observed = res.invalidation.expected_days
+    assert observed is not None
+    o = race.outcomes[0]
+    assert o.reprice_days_stock_stop == pytest.approx(observed)
+    assert o.reprice_days_stock_stop != 7.0, "fell back to the Swing table row"
+
+    # And when the simulation reached no barrier at all, the table is what runs.
+    no_stop = _run(dte=60, invalidation_price=1.0)   # unreachable stop
+    assert no_stop.invalidation.expected_days is None
+    assert no_stop.race is not None
+    assert no_stop.race.outcomes[0].reprice_days_stock_stop == pytest.approx(7.0)
+
+
+def test_the_race_is_skipped_entirely_when_the_caller_does_not_want_it():
+    """The exit-plan endpoint calls this once PER TARGET ROW with t1=t2=t3 and
+    reads only .targets[0]. Leaving the race on ran three attributions, a
+    Black-Scholes reprice and a median over a 2000-row array per row, and threw
+    all of it away. Deleting the argument at the call site was invisible to CI."""
+    res = _run(compute_race=False)
+    assert res.race is None
+    # Everything that path actually reads is still there.
+    assert len(res.targets) == 3
+    assert res.targets[0].probability >= 0.0
+    assert res.invalidation.probability >= 0.0
+    # ...and it is the same answer the race-computing call gives.
+    full = _run()
+    assert [t.probability for t in res.targets] == [t.probability for t in full.targets]
+    assert res.invalidation.expected_days == full.invalidation.expected_days
 
 
 def test_the_stop_leg_is_identical_on_all_three_rows():
