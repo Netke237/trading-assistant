@@ -275,7 +275,7 @@ dead on arrival.
 
 ## 7. Recommended order
 
-> **Superseded by `2026-09-01-stop-model-handoff-round-3.md` §3.** PR [#19] was opened and its
+> **Superseded by `2026-09-01-stop-model-handoff-round-3.md` §3.** PR [#19](https://github.com/Netke237/trading-assistant/pull/19) was opened and its
 > backend CI came back red (`KeyError: 'reject_fraction'` — a test left behind by the D8 two-state
 > revision); that is fixed. Round 3 is the current order. The rest of *this* file still stands.
 

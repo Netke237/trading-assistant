@@ -92,8 +92,8 @@ e2e/tests/screener-steps-1-3.spec.ts:52 › Step 3 - direction toggle works
 
 **Evidence it is not this PR's:** the identical three tests fail with the identical signature on
 `main` at `1f2d8c22` — this PR's own base commit (run #128,
-`actions/runs/33522254305`). The Playwright workflow has failed on `main` for **10 consecutive runs
-going back to 2026-08-28** (#118 through #128). It is a long-standing broken check, not a flake and
+`actions/runs/33522254305`). The Playwright workflow has failed on `main` for **at least 30 consecutive runs
+going back to 2026-08-26** (#98 through #128). It is a long-standing broken check, not a flake and
 not a regression from this branch.
 
 **Symptom.** Steps 2 and 3 render without their controls — universe tiles not found, Bullish/Bearish
@@ -108,10 +108,45 @@ not found — and `clickNext()` from Step 2 lands on `step-1-regime` instead of 
 - *The 1200 px `MinWidthGate` hides the content.* No — `playwright.config.ts` uses
   `devices['Desktop Chrome']`, which is 1280×720, above the gate.
 
-**Not fixed here, deliberately.** The failure is in Steps 1–3 navigation; this PR's diff is Step 7
-`TradeCard`, `lib/risk.ts`, the config endpoint and YAML. Fixing it inside this PR would widen it
-into unrelated code. No fix PR exists to port. **It needs its own change** — and until it lands,
-`test` will be red on every PR, so it cannot be used as a merge signal.
+**Not fixed here, deliberately** — fixed in its own PR instead: **[#20](https://github.com/Netke237/trading-assistant/pull/20), all three checks green.**
+
+### RESOLVED — and it was an app bug, not a test defect
+
+The root cause was in `frontend/lib/scanStore.ts`. Its persist `merge` callback dereferenced
+`persisted` without a null guard:
+
+```ts
+const p = persisted as Partial<ScanStoreState>;
+const lastState = p.scanState;   // throws when persisted === undefined
+```
+
+On a **first visit** — empty `localStorage`, so `persisted` is `undefined` — this threw
+`TypeError: Cannot read properties of undefined (reading 'scanState')`. **zustand swallows that in
+its internal catch**, so `rehydrate()` resolves normally while `onFinishHydration` never fires and
+`persist.hasHydrated()` stays `false` forever. `ScreenerStepGate` mirrors that flag; when it never
+flips, the gate's 1500ms grace timer treats storage as corrupt and redirects to `step-1-regime`.
+
+**This shipped to users.** With a fresh browser profile, Steps 2–7 were unreachable — every deep
+screener URL bounced to Step 1 and Next appeared dead. It also explains why `localStorage` stayed
+empty: the throw happens before persist's `setItem`, so no store ever saved.
+
+Fix mirrors the guard `migrate` in the same config already uses (`persistedState ?? {}`), plus
+`lib/__tests__/scanStoreMergeHydration.test.ts`, verified failing against the pre-fix code.
+
+Two flakes underneath, both fixed in #20: a click dispatched before React attached its handler
+(`ScreenerPage.goto()` now waits for the step header — measured 3/3 cold runs navigate with it,
+dropped without), and genuine `next dev` first-visit route compile exceeding the 5s default (the two
+Next-navigation assertions got an explicit 20s budget; nothing skipped or quarantined).
+
+Cold run, `.next/cache` cleared: **19 passed, 2 skipped, 0 failed, 0 flaky** (was 3 failed + 1
+flaky). CI on #20: `backend`, `frontend` and `test` all green — the first green Playwright run on
+this repo since 2026-08-26.
+
+### The lesson worth keeping
+
+A permanently-red check is not a tidiness problem. This bug shipped for a week **because** `test`
+was red — a real regression was indistinguishable from the standing failure. That is the same
+blindness that let PR #19 be opened with a red `backend` check. Do not let a check stay red.
 
 ---
 
@@ -143,7 +178,7 @@ terms of "the gate" rather than in terms of every file naming the key.
 | # | Item | State |
 |---|---|---|
 | 1 | `backend` + `frontend` checks green on this PR's head | **Verify.** Were re-running at the end of this session. |
-| 2 | `test` (Playwright e2e) check | **Red, and red on `main` too** — 10 consecutive runs since 2026-08-28. Not this PR's. §1.4. |
+| 2 | `test` (Playwright e2e) check | **FIXED in [#20](https://github.com/Netke237/trading-assistant/pull/20)** — all three checks green there. Was red on `main` for 30+ runs since 2026-08-26; root cause was a real app bug (see §1.4). |
 | 3 | Merge PR #19 | **Kenneth's call.** Seven commits and five documents unmerged. |
 | 4 | Piece 3 — scan-time `finalStop` | **Next build.** §4 below. |
 
