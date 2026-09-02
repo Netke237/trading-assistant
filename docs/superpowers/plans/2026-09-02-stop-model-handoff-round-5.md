@@ -18,6 +18,9 @@ is still the record of what shipped. This one is the record of what was decided.
 |---|---|---|
 | **Trade Card Schematic** | Artifact `e8843f48-17f3-406d-98fd-0351408ea3ed` | **Kenneth's reference.** All seven Step 7 cards field by field, with on-card explanation text, the new Barrier Race card, the re-derived gate thresholds, and every proposed removal flagged. He approved it explicitly. |
 | **Barrier Race spec** | `docs/superpowers/plans/2026-09-02-barrier-race-spec.md` | Implementation specification. Backend, schema, frontend, config, 16 named tests, definition of done. |
+| **Gate basis spec** | `2026-09-02-gate-basis-spec.md` | Q3/Q7. Black-Scholes at today's date, thresholds 0.80/0.70/0.60, and the endpoint change the moving stop forces. |
+| **Piece 4 spec** | `2026-09-02-piece-4-per-position-premium-stop-spec.md` | Per-position premium stop: column, schemas, three alert paths, both send paths, the auto-trader. |
+| **Piece 6 spec** | `2026-09-02-piece-6-stocks-arithmetic-plan-spec.md` | The options exit plan with every premium-dependent step stripped. **Closes Q-A.** |
 
 The artifact is not reachable from a new session's tooling. If it is needed, ask Kenneth for the
 link or rebuild from the spec — the spec is self-contained.
@@ -132,7 +135,7 @@ overturned them. D8 in particular: two states, PASS/CAUTION, never REJECT, never
 
 | # | Question | State |
 |---|---|---|
-| **Q-A** | **The stocks gate basis.** `compute_final_stop` returns a stop ≥ 2.0 ATR away by construction, so an "ATR-multiple" gate can never fire against it. Either (a) the stocks gate measures the *strategy signal's* stop (those span 0.2–2.0 ATR), or (b) thresholds become relative to `atr_multiplier`. | **Still open. Blocks piece 6.** Unchanged from round 4. |
+| **Q-A** | **CLOSED 2026-09-02.** There is no stocks gate. The gate measures what share of the *premium* a stop costs — a question that exists only because of an option's nonlinearity. A stock's stop cost is exact (`distance × shares`) and position sizing already covers it. Kenneth: *"for stock … strip away everything regarding options / premium."* See the piece 6 spec §1. | **Piece 6 unblocked** |
 | — | **Whether the 0.80 / 0.70 / 0.60 thresholds hold up on a real universe.** Taken as proposed (Q7). Revisit only if the observed flag rate looks wrong once the new basis ships. | Low risk, one YAML edit |
 | Q23–Q27 | Answered by Claude, not by Kenneth. Reversible assumptions. | Open, low risk |
 
@@ -147,11 +150,11 @@ table and is what Q3 selected. Do not reopen it as a two-way question.
 | Piece | Status |
 |---|---|
 | **Barrier race + reprice horizon** | **NEXT.** Spec is written: `2026-09-02-barrier-race-spec.md`. Nothing left to ask. |
-| **Gate basis + thresholds (Q3/Q7)** | After the race. Rides piece 3's scan payload — both need the contract IV field added |
+| **Gate basis + thresholds (Q3/Q7)** | After the race. Spec written. Rides piece 3's scan payload — both need the contract IV field added |
 | **3** — scan-time `finalStop` | After that. Five parts, unchanged from round 4 §6 |
-| **4** — per-position `premium_stop_pct` | Deferred, independent |
+| **4** — per-position `premium_stop_pct` | Spec written, independent, buildable in parallel today |
 | **5** — the per-trade method selection (D4/D5) | Deferred, largest. The race *informs* it, does not implement it |
-| **6** — stocks | Deferred, **blocked on Q-A** |
+| **6** — stocks | **Unblocked.** Spec written. Mostly assembly: `compute_final_stop` and `compute_target_row` take no contract input, and `/contracts/structural-stop` and `/stocks/first-passage` already exist |
 
 ---
 
