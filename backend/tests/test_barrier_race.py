@@ -238,3 +238,80 @@ def test_echoed_barriers_match_the_inputs():
     assert race.stock_stop_price == pytest.approx(176.0)
     assert race.premium_stop_price == pytest.approx(5.20 * 0.40)
     assert race.n_paths == 2000
+
+
+# -- Over the wire ------------------------------------------------------------
+#
+# The dataclass tests above say nothing about the router's mapping onto the
+# response model. A field dropped or mis-cased there is invisible to every test
+# in this file until it reaches the card as `undefined`.
+
+class TestEndpoint:
+    def _client(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.routers.contracts import router
+        app = FastAPI()
+        app.include_router(router)
+        return TestClient(app)
+
+    _PAYLOAD = {
+        "symbol": "AAPL", "direction": "Bullish", "stock_price": 185.0,
+        "strike": 190.0, "dte": 30, "premium": 5.20, "delta": 0.40,
+        "trend_score": 70, "invalidation_price": 176.0,
+    }
+
+    def _post(self, **extra):
+        from unittest.mock import AsyncMock, patch
+        from tests.test_first_passage import _FLAT_CANDLES
+        with patch("app.routers.contracts.fetch_candles_async", AsyncMock(return_value=_FLAT_CANDLES)):
+            return self._client().post(
+                "/api/contracts/first-passage", json={**self._PAYLOAD, **extra},
+            )
+
+    def test_the_race_reaches_the_client_with_its_shares_still_summing_to_one(self):
+        r = self._post()
+        assert r.status_code == 200, r.text
+        race = r.json()["race"]
+        assert race is not None
+        assert len(race["outcomes"]) == 3
+        for o in race["outcomes"]:
+            total = (
+                o["pTargetFirst"] + o["pStockStopFirst"]
+                + o["pPremiumStopFirst"] + o["pNeither"]
+            )
+            # Rounded to 4 places on the wire, so this is not the exact-1.0
+            # assertion the dataclass test makes — but a dropped or mis-mapped
+            # share still fails here.
+            assert total == pytest.approx(1.0, abs=2e-4), o
+
+    def test_every_field_the_card_prints_survives_the_mapping(self):
+        o = self._post().json()["race"]["outcomes"][0]
+        for key in (
+            "targetPct", "targetOptionPrice", "rewardDollar", "repriceDaysStockStop",
+            "stopRepricedValue", "riskStockStop", "riskPremiumStop",
+            "rrStockStop", "rrPremiumStop", "edgePerContract",
+            "daysTarget", "daysStockStop", "daysPremiumStop", "terminalMean",
+        ):
+            assert key in o, f"{key} missing from the response"
+
+    def test_a_moved_premium_stop_changes_the_answer_over_the_wire(self):
+        """The seed key includes premium_stop_pct. Without that, moving the
+        stop would return a bit-identical answer and the card would look
+        frozen."""
+        tight = self._post(premium_stop_pct=0.30).json()["race"]
+        loose = self._post(premium_stop_pct=0.80).json()["race"]
+        assert tight["premiumStopPrice"] != loose["premiumStopPrice"]
+        assert (
+            [o["pPremiumStopFirst"] for o in tight["outcomes"]]
+            != [o["pPremiumStopFirst"] for o in loose["outcomes"]]
+        )
+
+    def test_a_premium_stop_of_one_is_rejected_rather_than_silently_accepted(self):
+        """pct >= 1 is a total loss, which makes the barrier unreachable by
+        definition rather than a stop."""
+        assert self._post(premium_stop_pct=1.0).status_code == 422
+        assert self._post(premium_stop_pct=0.0).status_code == 422
+
+    def test_an_expiring_contract_returns_no_race_over_the_wire(self):
+        assert self._post(dte=0).json()["race"] is None
