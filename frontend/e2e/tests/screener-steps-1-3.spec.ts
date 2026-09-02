@@ -1,6 +1,14 @@
 import { test, expect } from '../fixtures';
 import { ScreenerPage } from '../pages/ScreenerPage';
 
+// Client-side route transitions get an explicit, more forgiving budget than the
+// 5s default. CI runs these against `next dev`, which compiles each route on
+// first visit, and that first compile can exceed 5s on a cold runner. This waits
+// longer for a compile; it does not weaken what is asserted. (The other half of
+// this flake — a click dispatched before React attached its handler — is fixed
+// in ScreenerPage.goto().)
+const ROUTE_TRANSITION_TIMEOUT = 20_000;
+
 test.describe('Screener Steps 1-3 @smoke', () => {
   test('Step 2 - universe page loads with selectable tiles', async ({ page }) => {
     const screener = new ScreenerPage(page);
@@ -46,7 +54,7 @@ test.describe('Screener Steps 1-3 @smoke', () => {
     const screener = new ScreenerPage(page);
     await screener.goto(2);
     await screener.clickNext();
-    await expect(page).toHaveURL(/step-3-direction/);
+    await expect(page).toHaveURL(/step-3-direction/, { timeout: ROUTE_TRANSITION_TIMEOUT });
   });
 
   test('Step 3 - direction toggle works', async ({ page }) => {
@@ -67,7 +75,7 @@ test.describe('Screener Steps 1-3 @smoke', () => {
     const screener = new ScreenerPage(page);
     await screener.goto(2);
     await screener.clickNext();
-    await expect(page).toHaveURL(/step-3-direction/);
+    await expect(page).toHaveURL(/step-3-direction/, { timeout: ROUTE_TRANSITION_TIMEOUT });
   });
 
   test('Step 1 - regime banner and charts render', async ({ page }) => {
