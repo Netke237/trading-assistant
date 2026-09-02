@@ -40,6 +40,18 @@ def load_exit_plan_cfg() -> dict:
 
 
 @lru_cache(maxsize=1)
+def load_reprice_horizon_cfg() -> dict:
+    """Return risk_rules.yaml's reprice_horizon block (source, fallback_days per
+    HOLDING preset, custom.fraction, clamp.min_days / clamp.max_fraction_of_dte).
+
+    Consumed only by app.scoring.reprice_horizon.resolve_reprice_days(), which
+    is the single place the rule lives."""
+    import yaml
+    full = yaml.safe_load((_CONFIG_DIR / "risk_rules.yaml").read_text())
+    return full["reprice_horizon"]
+
+
+@lru_cache(maxsize=1)
 def load_first_passage_cfg() -> dict:
     """Return risk_rules.yaml's first_passage block (Monte Carlo simulation
     tunables: max_drift_pct, n_paths, sigma_floor, sigma_ceiling)."""

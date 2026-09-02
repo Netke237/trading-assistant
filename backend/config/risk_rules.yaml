@@ -58,3 +58,32 @@ auto_trade:
   # of Phase D config audit (2026-07-01). Leave in place; do not remove without adding the
   # feature that consumes it.
   gap_threshold_pct: 0.05
+
+# Repricing horizon (barrier-race spec Q2, docs/superpowers/plans/
+# 2026-09-02-barrier-race-spec.md §2.2). "How far into the future do we reprice
+# an option when we ask what it is worth AT a barrier."
+#
+# source: simulation_median — when the Monte Carlo produced a conditional median
+# number of days to that barrier, use it. Only when it did not (nobody hit the
+# barrier) do we fall back to the per-preset table below.
+#
+# Keyed on the HOLDING PRESET, not the scoring horizon. scoringHorizonForHold()
+# collapses Quarterly/SemiAnnual/Annual into "Position"; keying on that would
+# give a 200-day hold and a 20-day hold the same repricing time.
+reprice_horizon:
+  source: simulation_median
+  fallback_days:
+    Intraday: 1
+    Swing: 7
+    Position: 14
+    Quarterly: 25
+    SemiAnnual: 45
+    Annual: 80
+  custom:
+    rule: fraction_of_hold      # days = mean(holdMin, holdMax) * fraction
+    fraction: 0.50
+  clamp:
+    min_days: 1
+    # Not decoration: without it, Annual on a 30-day contract reprices at 80
+    # days — past expiry — and every level silently prices at intrinsic only.
+    max_fraction_of_dte: 0.75

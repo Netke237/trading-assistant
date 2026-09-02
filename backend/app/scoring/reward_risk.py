@@ -64,6 +64,18 @@ def _bs_reprice_or_delta_approx(
     return current_premium + delta * price_move, False
 
 
+# The repricing horizon: "how far ahead do we reprice, when we ask what the
+# option is worth AT a level". Historically this was hardcoded here and in
+# first_passage.py as `max(expiry_years * 0.5, 7/365)` — a fixed half-life that
+# ignores both how long the user intends to hold and what the simulation itself
+# observed. app.scoring.reprice_horizon.resolve_reprice_days() now owns that
+# rule; both functions below accept the resolved value as `reprice_years` and
+# fall back to the historical formula when a caller does not supply one, so
+# every existing call site keeps its current numbers.
+def _default_reprice_years(expiry_years: float) -> float:
+    return max(expiry_years * 0.5, 7 / 365)
+
+
 def estimate_rr(
     stock_price: float,
     target_price: float,
@@ -76,10 +88,11 @@ def estimate_rr(
     heston_params: HestonParams | None = None,
     sigma_fallback: float = 0.25,
     premium_stop_pct: float = 0.60,   # fraction of premium at risk (stop-loss basis)
+    reprice_years: float | None = None,   # resolve_reprice_days(...) / 365; None = historical half-life
 ) -> RrResult:
     model_used: RrModel
     heston_ok = False
-    dte_at_target = max(expiry_years * 0.5, 7 / 365)
+    dte_at_target = reprice_years if reprice_years is not None else _default_reprice_years(expiry_years)
 
     if heston_params is not None:
         try:
@@ -125,6 +138,7 @@ def estimate_targets(
     heston_params: HestonParams | None = None,
     sigma_fallback: float = 0.25,
     premium_stop_pct: float = 0.60,
+    reprice_years: float | None = None,   # resolve_reprice_days(...) / 365; None = historical half-life
 ) -> list:
     """
     Build 3 target levels: T1=base, T2=base*1.5 move, T3=base*2.0 move.
@@ -160,8 +174,9 @@ def estimate_targets(
                                  # later level that also needs it — current_premium,
                                  # stock_price, strike, expiry_years and is_call are identical
                                  # across T1/T2/T3, only t_price changes per level.
-    dte_at_target = max(expiry_years * 0.5, 7 / 365)  # invariant across T1/T2/T3 — same
-                                                        # reasoning as fallback_sigma above.
+    dte_at_target = (reprice_years if reprice_years is not None
+                     else _default_reprice_years(expiry_years))   # invariant across T1/T2/T3 —
+                                                        # same reasoning as fallback_sigma above.
     for t_price in targets_prices:
         opt_price: float
         method: PricingMethod
