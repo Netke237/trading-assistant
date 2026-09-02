@@ -383,7 +383,13 @@ export const useScanStore = create<ScanStoreState>()(
         lastStockScanStrategy:    state.lastStockScanStrategy,
       }),
       merge: (persisted, current) => {
-        const p = persisted as Partial<ScanStoreState>;
+        // `persisted` is undefined on a first visit (nothing in localStorage yet)
+        // and whenever the stored blob is absent. Dereferencing it directly threw
+        // a TypeError that zustand swallows in its internal catch, so
+        // onFinishHydration never fired and persist.hasHydrated() stayed false
+        // forever — which left ScreenerStepGate's grace timer to bounce every
+        // deep step URL to step-1-regime. Guard exactly as `migrate` above does.
+        const p = (persisted ?? {}) as Partial<ScanStoreState>;
         const lastState = p.scanState;
         // Restore only terminal states; an in-progress state from before a crash
         // or server restart is meaningless — reset to IDLE.
