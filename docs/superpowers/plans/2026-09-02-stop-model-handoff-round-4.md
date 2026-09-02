@@ -181,9 +181,28 @@ floor:
 
 **A1 is no longer safely deferrable.** Piece 3 part 5 puts a gate badge in the ranking table, before
 any contract has an exit plan — so the badge **must** use the delta-linear basis by construction; it
-cannot wait for a click. Either confirm that with Kenneth, or accept that the ranking badge and the
-card can disagree once he clicks Compute Arithmetic Plan — and if so, **say which is which in the
-UI** rather than letting two numbers differ silently.
+cannot wait for a click.
+
+**Correction to the framing above (established after this doc was first written).** The shipped card
+gate is *already* delta-linear and always has been: `TradeCard/index.tsx:820-842` calls
+`stopPremiumRisk(sharedStop.price, sharedStop.stockPrice, cd.delta, cd.mid, …)` off the **scan-time**
+`contractDetails`, with an explicit comment that it must fire before any Estimate has run. The
+Black-Scholes reprice (`estimate_rr` → `exit.stop.contractPrice`) is a *different quantity* — the
+contract's modelled value at the stop, at `dte_at_target = max(expiry_years × 0.5, 7/365)` — and it
+drives sizing and the max-loss approval (`risk.ts:359-364`, `maxLossAtStop`), never the gate verdict.
+So the two numbers already coexist on today's card, answering different questions.
+
+Consequences for piece 3:
+
+- A delta-linear ranking badge **agrees with the card gate by construction**. It is not a new
+  approximation; it is the same function on the same inputs, moved one step earlier.
+- Making the *gate* BS-repriced would not remove a disagreement — it would create one, between the
+  gate and every card where no plan has been computed, and would promote `expiry_years × 0.5` from
+  display-only to verdict-bearing.
+- The residual disagreement is real but narrow and is **not** about the loss model: a **Step 6
+  contract override** changes `delta`/`mid`, so the badge (auto-picked contract) and the card
+  (overridden contract) describe different contracts. Piece 3 part 5 already requires the badge to
+  say it describes the auto-picked contract; that label is what closes this, not a change of basis.
 
 ---
 
