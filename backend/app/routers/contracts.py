@@ -379,7 +379,11 @@ class BarrierRaceOutcomeOut(BaseModel):
     riskStockStop:          Optional[float] = None
     riskPremiumStop:        float
     rrStockStop:            Optional[float] = None   # the measurement
-    rrPremiumStop:          float                    # constant by construction
+    # Constant by construction (pct / premium_stop_pct), so it is taken from
+    # that definition rather than by dividing the two rounded dollar legs.
+    # None only when premium_stop_pct is non-positive, which this endpoint
+    # rejects at validation but the scoring default cannot.
+    rrPremiumStop:          Optional[float] = None
     edgePerContract:        Optional[float] = None
 
 
@@ -388,6 +392,11 @@ class BarrierRaceOut(BaseModel):
     premiumStopPrice:  float
     premiumStopPct:    float
     stockStopPrice:    float
+    # The premium every printed chain subtracts, already quantized to cents.
+    # The card prints this rather than re-rounding its own copy: Python's
+    # round() is banker's rounding and JavaScript's toFixed() is not, so on an
+    # exact half-cent the two disagree and the chain stops adding up.
+    premiumUsed:       float
     nPaths:            int
 
 
@@ -518,7 +527,7 @@ def _race_out(race) -> Optional[BarrierRaceOut]:
                 riskStockStop=o.risk_stock_stop,
                 riskPremiumStop=o.risk_premium_stop,
                 rrStockStop=round(o.rr_stock_stop, 4) if o.rr_stock_stop is not None else None,
-                rrPremiumStop=round(o.rr_premium_stop, 4),
+                rrPremiumStop=round(o.rr_premium_stop, 4) if o.rr_premium_stop is not None else None,
                 edgePerContract=round(o.edge_per_contract, 2) if o.edge_per_contract is not None else None,
             )
             for o in race.outcomes
@@ -526,6 +535,7 @@ def _race_out(race) -> Optional[BarrierRaceOut]:
         premiumStopPrice=round(race.premium_stop_price, 2),
         premiumStopPct=race.premium_stop_pct,
         stockStopPrice=round(race.stock_stop_price, 2),
+        premiumUsed=race.premium_used,
         nPaths=race.n_paths,
     )
 
@@ -697,6 +707,11 @@ async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
                 premium=req.premium, delta=0.45, is_call=is_call,
                 trend_score=req.trend_score, invalidation_price=final_stop.price,
                 candles=candles, t1_pct=pct, t2_pct=pct, t3_pct=pct,
+                # This loop runs once PER TARGET ROW with t1=t2=t3, and reads
+                # only .targets[0]. Leaving the race on would run three full
+                # attributions, a Black-Scholes reprice and a median over a
+                # 2000-row array for every row, and discard all of it.
+                compute_race=False,
                 max_drift_pct=fp_cfg["max_drift_pct"], n_paths=fp_cfg["n_paths"],
                 sigma_floor=fp_cfg["sigma_floor"], sigma_ceiling=fp_cfg["sigma_ceiling"],
                 seed=seed,

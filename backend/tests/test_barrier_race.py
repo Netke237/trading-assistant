@@ -163,8 +163,13 @@ def test_stock_stop_rr_discriminates_between_strikes_but_premium_stop_rr_cannot(
     only. risk_stock_stop is premium - BS(stop, ...), and BS(stop, ...) depends
     on strike, spot at the stop, time and IV independently, so rr_stock_stop
     genuinely varies. Asserted here rather than asserted in prose."""
-    strikes = [180.0, 190.0, 200.0]
-    premiums = [9.80, 5.20, 2.40]   # a real chain: further OTM costs less
+    strikes = [180.0, 190.0, 200.0, 205.0, 210.0]
+    # Deliberately NOT round premiums. An earlier version of this test used
+    # [9.80, 5.20, 2.40], every one of which survives cent quantization exactly,
+    # so it passed while rr_premium_stop was in fact computed by dividing two
+    # rounded dollar legs and varied by up to 14% on sub-$1 premiums. A real
+    # option chain is full of prices like these.
+    premiums = [9.83, 5.17, 2.43, 1.03, 0.37]
 
     rr_stock, rr_prem = [], []
     for k, prem in zip(strikes, premiums):
@@ -180,8 +185,25 @@ def test_stock_stop_rr_discriminates_between_strikes_but_premium_stop_rr_cannot(
     assert len({round(v, 6) for v in rr_prem}) == 1, (
         f"rr_premium_stop should be constant by construction: {rr_prem}"
     )
-    # And it is exactly the typed ratio, which is why it is not a measurement.
-    assert rr_prem[0] == pytest.approx(_BASE["t1_pct"] / 0.60, rel=1e-3)
+    # And it is EXACTLY the typed ratio — not approximately. That is the whole
+    # claim the card prints beside it ("equals your 20% target / 60% stop, on
+    # every contract you could pick"), so it is asserted exactly.
+    for v in rr_prem:
+        assert v == pytest.approx(_BASE["t1_pct"] / 0.60, rel=1e-12)
+
+
+def test_a_premium_stop_that_rounds_to_zero_dollars_yields_no_ratio():
+    """A 5c contract with a 5% premium stop puts the risk leg at $0.0025, which
+    is $0.00 in cents. Dividing by it returned 0.00x — a plausible-looking ratio
+    on a card that simultaneously printed "equals your 20% target / 5% stop",
+    which is 4.00x. Contradicting itself in one sentence is worse than an em
+    dash, and it silently deleted the third term from the edge."""
+    race = _run(premium=0.05, premium_stop_pct=0.05).race
+    assert race is not None
+    o = race.outcomes[0]
+    assert o.risk_premium_stop == 0.0
+    # Constant by construction, so it is still the honest 4.00x, not 0.00x.
+    assert o.rr_premium_stop == pytest.approx(0.20 / 0.05)
 
 
 # -- 8. The degenerate risk leg -----------------------------------------------
@@ -199,6 +221,24 @@ def test_non_positive_stock_stop_risk_yields_no_ratio():
     # The edge is still computable: a negative "risk" is a signed contribution,
     # not an error.
     assert o.edge_per_contract is not None
+
+
+def test_an_absent_stock_stop_reprices_to_nothing_rather_than_to_zero_dollars():
+    """bs_price returns 0.0 for every degenerate input, S <= 0 included, so a
+    non-positive stop price used to produce stop_repriced_value == $0.00 — "the
+    contract is worth nothing at the stop", which silently makes the risk leg
+    the whole premium. It is not a $0.00 contract, it is an absent barrier.
+
+    This also makes the Optional on the wire honest: before it, no input could
+    ever produce None there, so formatRaceRisk's "could not reprice at the stop"
+    branch was unreachable and its unit test constructed the state by hand."""
+    race = _run(invalidation_price=0.0).race
+    assert race is not None
+    o = race.outcomes[0]
+    assert o.stop_repriced_value is None
+    assert o.risk_stock_stop is None
+    assert o.rr_stock_stop is None
+    assert o.edge_per_contract is None
 
 
 # -- 9. Determinism -----------------------------------------------------------
@@ -219,17 +259,117 @@ def test_same_seed_reproduces_and_a_moved_premium_stop_changes_the_answer():
 
 # -- Printed-arithmetic consistency -------------------------------------------
 
-def test_the_printed_chains_add_up_at_the_precision_they_are_printed_at():
-    """The card renders every term of these chains. A chain that visibly fails
-    to add up is a bug the user sees, so the arithmetic is done in cents."""
+def test_every_money_field_is_actually_quantized_to_cents():
+    """The decision under test is that money is rounded IN THE SCORING LAYER
+    rather than at the presentation boundary, so the printed chains add up.
+
+    An earlier version of this test asserted relations that hold identically
+    with and without the rounding (`reward_dollar ~= round(target,2) - 5.20`,
+    and a `risk_premium_stop` tolerance of 5e-3, wider than a cent). Deleting
+    every round() in the money block left it passing. This asserts the
+    quantization itself, on a premium that does NOT survive it by accident."""
+    race = _run(premium=5.17).race
+    assert race is not None
+    for o in race.outcomes:
+        for name in (
+            "reward_dollar", "stop_repriced_value", "risk_stock_stop",
+            "risk_premium_stop", "edge_per_contract",
+        ):
+            v = getattr(o, name)
+            assert v is not None
+            assert v == round(v, 2), f"{name} is not quantized to cents: {v!r}"
+
+
+def test_the_printed_edge_chain_sums_to_the_printed_total():
+    """The card prints "0.27 x $1.04 - 0.00 x $5.02 - 0.68 x $3.12 + 0.05 x
+    -$1.56 = -$1.93". Before the probabilities were quantized to the 2dp they
+    are PRINTED at, the four printed terms summed to a different number than the
+    printed total — out by 1.6c per share, which at 100 shares is $1.56 a
+    contract, on a card whose entire premise is that you can check its
+    arithmetic."""
     race = _run().race
     assert race is not None
     for o in race.outcomes:
-        assert o.reward_dollar == pytest.approx(
-            round(o.target_option_price, 2) - 5.20, abs=1e-9
+        assert o.edge_per_contract is not None
+        assert o.risk_stock_stop is not None
+        neither = (round(o.terminal_mean, 2) - 5.20) if o.terminal_mean is not None else 0.0
+        printed_terms = (
+            round(o.p_target_first, 2) * o.reward_dollar
+            - round(o.p_stock_stop_first, 2) * o.risk_stock_stop
+            - round(o.p_premium_stop_first, 2) * o.risk_premium_stop
+            + round(o.p_neither, 2) * neither
         )
-        assert o.risk_stock_stop == pytest.approx(5.20 - o.stop_repriced_value, abs=1e-9)
-        assert o.risk_premium_stop == pytest.approx(5.20 * 0.60, abs=5e-3)
+        printed_total = o.edge_per_contract / 100.0
+        # Both are rendered at 2dp; they must agree once rendered.
+        assert round(printed_terms, 2) == pytest.approx(round(printed_total, 2), abs=1e-9), (
+            f"printed terms sum to {printed_terms} but the printed total is {printed_total}"
+        )
+
+
+def test_the_stop_leg_is_repriced_at_the_life_REMAINING_not_the_days_elapsed():
+    """THE BUG THIS PINS. resolve_reprice_days returns days ELAPSED until the
+    stop is reached; bs_price's third argument is the life REMAINING at that
+    moment. Passing the former as the latter inverts theta: a stop reached on
+    day 2 of a 30-day contract was priced as if two days of life were left
+    (worth ~nothing, so the risk leg swallowed the whole premium), while a stop
+    reached on day 25 was priced as if 25 days were left — worth MORE. Risk was
+    overstated by ~39% and R:R understated by ~28% on the reference contract.
+
+    Asserted two independent ways: against bs_price at the remaining life, and
+    directionally, which holds whatever the pricing formula is."""
+    from app.models.black_scholes import bs_price
+    from app.scoring.reward_risk import _derive_fallback_sigma
+
+    race = _run().race
+    assert race is not None
+    o = race.outcomes[0]
+    dte, premium = float(_BASE["dte"]), _BASE["premium"]
+    sigma_iv = _derive_fallback_sigma(premium, 185.0, 190.0, dte / 365.0, 0.05, True, 0.25)
+    expected = bs_price(
+        176.0, 190.0, (dte - o.reprice_days_stock_stop) / 365.0, 0.05, sigma_iv, True,
+    )
+    assert o.stop_repriced_value == pytest.approx(round(expected, 2), abs=1e-9)
+
+    # Directional, formula-independent: a stop the simulation says is reached
+    # LATER leaves LESS life, so the contract is worth LESS at it and the risk
+    # leg is BIGGER. Under the bug this relation ran backwards.
+    cfg_early = {"source": "table", "fallback_days": {"Swing": 3},
+                 "clamp": {"min_days": 1, "max_fraction_of_dte": 0.75}}
+    cfg_late = {"source": "table", "fallback_days": {"Swing": 20},
+                "clamp": {"min_days": 1, "max_fraction_of_dte": 0.75}}
+    early = _run(reprice_cfg=cfg_early).race.outcomes[0]
+    late = _run(reprice_cfg=cfg_late).race.outcomes[0]
+    assert early.stop_repriced_value > late.stop_repriced_value
+    assert early.risk_stock_stop < late.risk_stock_stop
+
+
+def test_the_stop_leg_is_identical_on_all_three_rows():
+    """The stop leg is a property of the STOP, not of which target is being
+    raced against it. Deriving its reprice horizon from a per-target conditional
+    median made one stop, at one level, carry three different dollar risks — the
+    card printed "$6.00 premium - $1.27 / $1.64 / $1.64 at the stop" with
+    nothing explaining why."""
+    race = _run(dte=45, strike=185.0, invalidation_price=182.0, premium_stop_pct=0.95).race
+    assert race is not None
+    assert len({o.stop_repriced_value for o in race.outcomes}) == 1
+    assert len({o.risk_stock_stop for o in race.outcomes}) == 1
+    assert len({o.reprice_days_stock_stop for o in race.outcomes}) == 1
+
+
+def test_stage_one_target_stock_price_is_pinned():
+    """Stage 1's displayed "roughly what stock price gets you there" moved by
+    $2.64-$4.71 when the reprice rule changed, unpinned and unremarked. A LEAP
+    was the tell: its target price was solved as though 7 days of life remained,
+    because "Swing: 7" is a table about how long you HOLD, not what is left."""
+    thirty = _run(dte=30).targets[0].stock_price
+    leap = _run(dte=365).targets[0].stock_price
+    # Repriced with 23 of its 30 days left, not with 7 days left ($194.34 under
+    # the bug, +$5.06).
+    assert thirty == pytest.approx(189.28, abs=0.05)
+    # The LEAP is the tell: 358 days of life left needs a far smaller move than
+    # the 7 days the bug assumed ($196.06, +$9.55).
+    assert leap == pytest.approx(186.51, abs=0.05)
+    assert leap < thirty
 
 
 def test_echoed_barriers_match_the_inputs():

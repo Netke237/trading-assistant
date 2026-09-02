@@ -2070,3 +2070,146 @@ describe('TradeCard — piece 1/2 gap: cache-restored exit plan with no fresh cl
     expect(screen.getByText('63% OF PREMIUM')).toBeInTheDocument();
   });
 });
+
+// -- The Barrier Race, driven through the real card ---------------------------
+//
+// Spec section 4 tests 12 and 13 were previously satisfied by rendering
+// BarrierRaceCard with `barriersChanged` / `isFresh` set by hand — which proves
+// the card honours a prop, and nothing about whether TradeCard ever computes
+// that prop correctly. Every first-passage mock in this file returned a
+// response with no `race` key at all, so no test in the suite had ever rendered
+// the race through the component that owns it. Both of the bugs below were
+// reachable by a ten-line test and shipped anyway.
+
+const RACE_RESPONSE = {
+  targets: [
+    { pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 },
+    { pct: 0.35, stockPrice: 193.2, optionPrice: 3.71, probability: 0.55, expectedDays: 9 },
+    { pct: 0.50, stockPrice: null, optionPrice: 4.13, probability: 0.10, expectedDays: null },
+  ],
+  invalidation: { probability: 0.30, expectedDays: 4 },
+  race: {
+    outcomes: [0.20, 0.35, 0.50].map((targetPct) => ({
+      targetPct,
+      targetOptionPrice: 3.3,
+      pTargetFirst: 0.27,
+      pStockStopFirst: 0.00,
+      pPremiumStopFirst: 0.68,
+      pNeither: 0.05,
+      daysTarget: 7,
+      daysStockStop: null,
+      daysPremiumStop: 20,
+      terminalMean: 1.19,
+      rewardDollar: 0.55,
+      repriceDaysStockStop: 7,
+      stopRepricedValue: 0.18,
+      riskStockStop: 2.57,
+      riskPremiumStop: 1.65,
+      rrStockStop: 0.2140,
+      rrPremiumStop: 0.3333,
+      edgePerContract: -111.42,
+    })),
+    premiumStopPrice: 1.10,
+    premiumStopPct: 0.60,
+    stockStopPrice: 180.0,
+    premiumUsed: 2.75,
+    nPaths: 2000,
+  },
+};
+
+describe('the barrier race, through the card that owns it', () => {
+  beforeEach(() => {
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    // A structural stop that DIFFERS from the flat scan-time invalidation
+    // (179.64). That difference is the whole point: it is what the estimate
+    // used to race against itself over.
+    (api.getStructuralStop as jest.Mock).mockResolvedValue({
+      available: true, price: 180.0, source: 'order_block', confidence: 75, distancePct: 3.3,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue(RACE_RESPONSE);
+  });
+
+  it('renders the race on the FIRST estimate click of a mount', async () => {
+    // THE BUG: the auto structural refresh was fired without being awaited, so
+    // the estimate went out carrying the flat scan stop (179.64), the race
+    // snapshotted that same level, the structural fetch then landed at 180.0
+    // and `raceBarriersMoved` flipped true. The first click rendered
+    // "Barriers changed - re-run the estimate" and no bars at all, and the
+    // estimate really had been computed against the wrong stop.
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('segment-Target first')).toHaveLength(3);
+    });
+    expect(screen.queryByText(/Barriers changed/)).not.toBeInTheDocument();
+    // And it raced against the structural stop, not the flat scan-time one.
+    expect(api.getFirstPassageEstimate).toHaveBeenCalledWith(
+      expect.objectContaining({ invalidation_price: 180.0 }),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('clears the race, rather than re-sorting it, when the premium stop is edited', async () => {
+    // Spec section 3.3: both barriers are live and user-movable, and every bar
+    // on the card was measured against the values at request time. Watching the
+    // bars re-sort must require a click; it must never appear to happen on its
+    // own. Driven here through the real editable field, not a prop.
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getAllByTestId('segment-Target first')).toHaveLength(3);
+    });
+
+    expandLadder();
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Edit Premium stop'));
+    });
+    const input = screen.getByDisplayValue('1.5');
+    await act(async () => {
+      fireEvent.change(input, { target: { value: '0.90' } });
+      fireEvent.blur(input);
+    });
+
+    expect(screen.getByText(/Barriers changed/)).toBeInTheDocument();
+    expect(screen.queryAllByTestId('segment-Target first')).toHaveLength(0);
+  });
+
+  it('prints no race numbers anywhere for a restored, never-refetched estimate', async () => {
+    // THE OTHER BUG. `firstPassage` is seeded from the parent's per-contract
+    // cache at mount and `raceBarriers` is null then, so nothing looked
+    // "moved": BarrierRaceCard correctly refused to render, while the Final
+    // Recommendation printed that same arbitrarily-old race's armed stop and
+    // dollar edge — and suppressed the un-stale invalidation fallback beneath
+    // it. A stale armed level and a stale dollar edge, in the one place on the
+    // card a number is most likely to be acted on.
+    const cachedCard: TradeCardData = {
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        firstPassage: { ...RACE_RESPONSE, computedAt: '2026-08-01T10:00:00.000Z' },
+        firstPassageContext: { premium: 2.75, delta: 0.42, targetPct: { t1: 0.20, t2: 0.35, t3: 0.50 } },
+      },
+    };
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    rerender(<TradeCard data={cachedCard} />);
+    await waitFor(() => {
+      expect(screen.getAllByText('T20%').length).toBeGreaterThanOrEqual(1);
+    });
+
+    expect(screen.queryAllByTestId('segment-Target first')).toHaveLength(0);
+    expect(screen.queryByText(/Armed stop/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/T20% edge/)).not.toBeInTheDocument();
+    // ...and the honest fallback it was suppressing is back.
+    expect(screen.getByText('Invalidation probability')).toBeInTheDocument();
+  });
+});

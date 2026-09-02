@@ -203,8 +203,15 @@ export interface BarrierRaceOutcome {
   rrStockStop:          number | null;
   /** Constant by construction: exactly `targetPct / premiumStopPct`. Its risk
    *  leg IS proportional to premium, so premium cancels. Shown for completeness
-   *  and explicitly labelled as not a measurement. */
-  rrPremiumStop:        number;
+   *  and explicitly labelled as not a measurement.
+   *
+   *  Taken from that definition rather than by dividing the two rounded dollar
+   *  legs — dividing them does not reproduce it once the money is quantized to
+   *  cents (at a $1.03 premium the legs give 0.34x and at $1.07 they give
+   *  0.33x), which would make the "on every contract" claim printed beside it
+   *  false by up to 14% on sub-$1 premiums. `null` only when `premiumStopPct`
+   *  is non-positive, which the endpoint rejects. */
+  rrPremiumStop:        number | null;
   edgePerContract:      number | null;
 }
 
@@ -213,6 +220,11 @@ export interface BarrierRace {
   premiumStopPrice: number;   // the option-value barrier actually used
   premiumStopPct:   number;
   stockStopPrice:   number;   // echo of the invalidation price, for auditability
+  /** The premium every printed chain subtracts, already quantized to cents by
+   *  the backend. Print THIS rather than re-rounding a local copy: Python's
+   *  round() is banker's rounding and JavaScript's toFixed() is not, so the two
+   *  disagree on an exact half-cent and the chain stops adding up. */
+  premiumUsed:      number;
   nPaths:           number;
 }
 

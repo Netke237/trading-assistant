@@ -33,7 +33,7 @@ import numpy as np
 from scipy.stats import norm
 
 from app.models.black_scholes import bs_price
-from app.scoring.reprice_horizon import resolve_reprice_days
+from app.scoring.reprice_horizon import remaining_years_at_barrier, resolve_reprice_days
 from app.scoring.reward_risk import _derive_fallback_sigma
 from app.scoring.stock_scorer import _atr
 
@@ -84,12 +84,18 @@ class RaceOutcome:
     # The card renders the full chain, so the response carries the INPUTS to
     # each number, not just the number.
     reward_dollar:           float           # target_option_price - premium
-    reprice_days_stock_stop: float           # days ahead the stop leg was repriced at
+    # Days ELAPSED from today until the stock stop is reached — not a time to
+    # expiry. Identical on all three rows: the stop leg is a property of the
+    # stop, not of the target being raced against it.
+    reprice_days_stock_stop: float
     stop_repriced_value:     Optional[float] # contract value AT the stock stop, repriced
     risk_stock_stop:         Optional[float] # premium - stop_repriced_value
     risk_premium_stop:       float           # premium * premium_stop_pct
     rr_stock_stop:           Optional[float] # THE measurement; None when risk <= 0
-    rr_premium_stop:         float           # constant by construction: pct / premium_stop_pct
+    # Constant by construction: exactly pct / premium_stop_pct. None only when
+    # premium_stop_pct is non-positive, which the API rejects but the default
+    # argument cannot.
+    rr_premium_stop:         Optional[float]
     edge_per_contract:       Optional[float]
 
 
@@ -99,6 +105,11 @@ class BarrierRaceResult:
     premium_stop_price:  float               # the option-value barrier actually used
     premium_stop_pct:    float
     stock_stop_price:    float               # echo of invalidation_price, for auditability
+    # The premium every printed chain subtracts, already quantized to cents
+    # here. The card must print THIS rather than re-rounding its own copy:
+    # Python's round() is banker's rounding and JavaScript's toFixed() is not,
+    # so the two disagree on exact halves and the chain would stop adding up.
+    premium_used:        float
     n_paths:             int
 
 
@@ -236,6 +247,7 @@ def estimate_first_passage(
     t2_pct: float,
     t3_pct: float,
     premium_stop_pct: float = 0.60,
+    compute_race: bool = True,
     horizon_preset: Optional[str] = None,
     hold_min: Optional[float] = None,
     hold_max: Optional[float] = None,
@@ -262,6 +274,11 @@ def estimate_first_passage(
     level at which the premium stop fires, premium * (1 - premium_stop_pct). It
     is defaulted so that every pre-existing caller keeps compiling and simply
     ignores the `race` field on the result.
+
+    `compute_race=False` skips the race outright. Ignoring the field does not
+    make it free: the exit-plan endpoint calls this once PER TARGET ROW with
+    t1=t2=t3, so leaving it on ran three full attributions plus a Black-Scholes
+    reprice over a 2000-row array for every row, and then discarded all of it.
 
     `horizon_preset` / `hold_min` / `hold_max` feed resolve_reprice_days()'s
     fallback when the simulation itself produced no median days to a barrier.
@@ -290,9 +307,16 @@ def estimate_first_passage(
     # Stage 1's display-only back-solve reprices at the same resolved horizon
     # as everything else. sim_median is None here by necessity — Stage 1 runs
     # before the simulation exists — so this always takes the preset fallback.
-    dte_at_target = resolve_reprice_days(
-        horizon_preset, hold_min, hold_max, float(dte), None, reprice_cfg,
-    ) / 365.0
+    #
+    # resolve_reprice_days returns days ELAPSED to the barrier; bs_price wants
+    # the life REMAINING at that moment. Converting is mandatory, not cosmetic:
+    # without it a 365-DTE LEAP's target stock price is solved as though 7 days
+    # of life were left, because "Swing: 7" is a table about how long you hold,
+    # not about how much contract is left.
+    dte_at_target = remaining_years_at_barrier(
+        float(dte),
+        resolve_reprice_days(horizon_preset, hold_min, hold_max, float(dte), None, reprice_cfg),
+    )
     pcts = [t1_pct, t2_pct, t3_pct]
     target_option_prices = [premium * (1 + p) for p in pcts]
     target_stock_prices = [
@@ -359,6 +383,16 @@ def estimate_first_passage(
         stop_expected_days = float(np.median(stop_first_hit_day[stop_ever_hit]) + 1)
 
     # -- Barrier race ---------------------------------------------------------
+    if not compute_race:
+        return FirstPassageResult(
+            targets=targets,
+            invalidation=InvalidationEstimate(
+                probability=stop_probability, expected_days=stop_expected_days,
+            ),
+            sigma_stock=sigma_stock,
+            mu=mu,
+        )
+
     # A REFEREE, not a fourth profit-target method: it proposes no level of its
     # own, it only compares per-path first-hit days of levels the existing cards
     # already produced. Runs over the SAME stock_paths / option_paths arrays
@@ -368,6 +402,42 @@ def estimate_first_passage(
 
     d_stop = _first_day(stop_hit_mask, n_days)
     d_prem = _first_day(prem_hit_mask, n_days)
+
+    # -- The stop leg: computed ONCE, outside the per-target loop --------------
+    # It is a property of the STOP, not of which target you happen to be aiming
+    # at. Deriving its reprice horizon from a per-target conditional median
+    # (the median day the stop won the race against THAT target) made the same
+    # stop, at the same level, carry three different dollar risks on one card —
+    # three "Risk" chains reading "$6.00 premium - $1.27 / $1.64 / $1.64 at the
+    # stop" with nothing on screen explaining why. The unconditional median day
+    # the stock stop is reached (stop_expected_days, computed above over every
+    # path that ever touched it) is the honest input, and it makes the printed
+    # horizon one number the user can check.
+    reprice_days = resolve_reprice_days(
+        horizon_preset, hold_min, hold_max, float(dte), stop_expected_days, reprice_cfg,
+    )
+    # ELAPSED -> REMAINING. See remaining_years_at_barrier: feeding elapsed days
+    # into bs_price's T inverts theta and makes a fast stop-out look like a
+    # total loss while a slow one looks cheap.
+    stop_repriced_years = remaining_years_at_barrier(float(dte), reprice_days)
+    if invalidation_price > 0:
+        stop_repriced = float(bs_price(
+            invalidation_price, strike, stop_repriced_years, r, sigma_iv, is_call,
+        ))
+        stop_repriced_value: Optional[float] = (
+            round(stop_repriced, 2) if math.isfinite(stop_repriced) else None
+        )
+    else:
+        # A non-positive stop price is not a $0.00 contract, it is an absent
+        # barrier: bs_price returns 0.0 for S <= 0, which would print as
+        # "worth nothing at the stop" and silently make risk == the whole
+        # premium. None renders "could not reprice at the stop" instead.
+        stop_repriced_value = None
+
+    risk_stock_stop: Optional[float] = None
+    if stop_repriced_value is not None:
+        # Money is quantized to cents. See the note on the printed chains below.
+        risk_stock_stop = round(round(premium, 2) - stop_repriced_value, 2)
 
     race_outcomes: list[RaceOutcome] = []
     for pct, target_option in zip(pcts, target_option_prices):
@@ -398,31 +468,27 @@ def estimate_first_passage(
             terminal_mean = float(payoff.mean())
 
         # -- The arithmetic the card prints -----------------------------------
-        # QUANTIZED TO CENTS ON PURPOSE. The card renders every term of these
-        # chains ("$5.20 premium - $1.09 at the stop = $4.11"), so a chain that
-        # visibly fails to add up is a bug the user sees. Doing the arithmetic at
-        # the precision it is printed at makes that impossible, and costs nothing
-        # real: an option does not quote below a cent, and sub-cent precision is
-        # far inside the Monte Carlo's own noise at n_paths=2000.
+        # QUANTIZED TO THE PRECISION IT IS PRINTED AT, ON PURPOSE. The card
+        # renders every term of these chains ("$5.20 premium - $1.09 at the stop
+        # = $4.11"), so a chain that visibly fails to add up is a bug the user
+        # sees. Two quantizations, for the same reason:
+        #
+        #   money -> cents. An option does not quote below a cent, and sub-cent
+        #   precision is far inside the Monte Carlo's own noise at n_paths=2000.
+        #
+        #   the four probabilities -> 2dp, but ONLY where they weight the edge.
+        #   The card prints them as "0.27 x $1.04", so computing the edge from
+        #   anything finer makes the printed terms sum to a different number
+        #   than the printed total (it was out by 1.6c per share before this).
+        #   At n_paths=2000 one standard error on a share is ~0.011, so 0.01
+        #   quantization is strictly smaller than the noise already present —
+        #   it discards nothing real. The SHARES THEMSELVES are reported raw:
+        #   rounding those would let a row's four bars sum to 101%, and "every
+        #   row sums to 100% because each path is counted once" is the whole
+        #   claim of this card.
         prem_c = round(premium, 2)
         tgt_c = round(target_option, 2)
         reward_dollar = round(tgt_c - prem_c, 2)   # round() only trims binary-float tails here
-
-        # Reprice the stock stop at when the simulation says it actually gets
-        # hit (its conditional median), falling back to the preset table.
-        reprice_days = resolve_reprice_days(
-            horizon_preset, hold_min, hold_max, float(dte), days_stock, reprice_cfg,
-        )
-        stop_repriced = float(bs_price(
-            invalidation_price, strike, max(reprice_days / 365.0, 1e-6), r, sigma_iv, is_call,
-        ))
-        stop_repriced_value: Optional[float] = (
-            round(stop_repriced, 2) if math.isfinite(stop_repriced) else None
-        )
-
-        risk_stock_stop: Optional[float] = None
-        if stop_repriced_value is not None:
-            risk_stock_stop = round(prem_c - stop_repriced_value, 2)
 
         risk_premium_stop = round(prem_c * premium_stop_pct, 2)
 
@@ -432,13 +498,21 @@ def estimate_first_passage(
         # premium - BS(stop, ...), and BS(stop, ...) is not proportional to
         # premium — it depends on strike, spot at the stop, time and IV
         # independently. So rr_stock_stop genuinely varies by contract.
-        # rr_premium_stop DOES cancel (it is exactly pct / premium_stop_pct) and
-        # is therefore a labelled constant, not a discriminating metric.
         rr_stock_stop: Optional[float] = None
         if risk_stock_stop is not None and risk_stock_stop > 0:
             rr_stock_stop = reward_dollar / risk_stock_stop
 
-        rr_premium_stop = reward_dollar / risk_premium_stop if risk_premium_stop > 0 else 0.0
+        # rr_premium_stop DOES cancel, and is therefore taken straight from the
+        # DEFINITION rather than by dividing the two rounded dollar legs.
+        # Dividing them does not reproduce it: at premium $1.03 the rounded legs
+        # give 0.21/0.62 = 0.339 and at $1.07 they give 0.21/0.64 = 0.328, so
+        # the "identical on every contract you could pick" the card prints
+        # beside it would have been false by up to 14% on sub-$1 premiums — the
+        # exact degeneracy this column exists to disclose. It is a labelled
+        # constant, not a measurement; compute it as one.
+        rr_premium_stop: Optional[float] = (
+            (pct / premium_stop_pct) if premium_stop_pct > 0 else None
+        )
 
         edge_per_contract: Optional[float] = None
         if risk_stock_stop is not None:
@@ -446,12 +520,23 @@ def estimate_first_passage(
             # path can end above the premium paid. Writing it as
             # `- p_none * loss` would be wrong whenever terminal_mean > premium.
             neither_term = (round(terminal_mean, 2) - prem_c) if terminal_mean is not None else 0.0
-            edge = (
-                p_target * reward_dollar
-                - p_stock * risk_stock_stop
-                - p_prem * risk_premium_stop
-                + p_none * neither_term
-            ) * 100.0
+            e_target, e_stock, e_prem, e_none = (
+                round(p_target, 2), round(p_stock, 2), round(p_prem, 2), round(p_none, 2),
+            )
+            # x100: one US equity option contract covers 100 shares. Assumed,
+            # not looked up — an adjusted contract (post-split or merger
+            # deliverable) can cover something else, and this figure would be
+            # wrong by that ratio.
+            # Rounded again after the x100: `round(-0.58, 2) * 100` is
+            # -57.99999999999999 in binary floating point, and that tail reaches
+            # the DOM verbatim if anything interpolates it un-formatted.
+            edge = round(round(
+                e_target * reward_dollar
+                - e_stock * risk_stock_stop
+                - e_prem * risk_premium_stop
+                + e_none * neither_term,
+                2,
+            ) * 100.0, 2)
             if math.isfinite(edge):
                 edge_per_contract = edge
 
@@ -481,6 +566,7 @@ def estimate_first_passage(
         premium_stop_price=premium_stop_price,
         premium_stop_pct=premium_stop_pct,
         stock_stop_price=invalidation_price,
+        premium_used=round(premium, 2),
         n_paths=n_paths,
     )
 

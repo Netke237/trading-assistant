@@ -4,6 +4,7 @@ import {
   formatRacePremiumRR,
   formatRaceEdge,
   premiumStopPctFromDollars,
+  premiumStopSourceNote,
   money,
 } from './barrierRace';
 import type { BarrierRaceOutcome } from '@/types/domain';
@@ -29,7 +30,11 @@ const ROW: BarrierRaceOutcome = {
   riskPremiumStop: 3.12,
   rrStockStop: 0.2072,
   rrPremiumStop: 0.3333,
-  edgePerContract: -193.28,
+  // The four printed terms sum to exactly this, per share: 0.27 x 1.04
+  // - 0.00 x 5.02 - 0.68 x 3.12 + 0.05 x -1.56 = -1.9188. The fixture used to
+  // say -193.28, so the very test asserting "the card prints a chain you can
+  // check" pinned a chain that does not add up — 1.4c per share out.
+  edgePerContract: -191.88,
 };
 
 const PREMIUM = 5.20;
@@ -85,23 +90,71 @@ describe('formatRaceRR', () => {
 });
 
 describe('formatRacePremiumRR', () => {
-  it('labels itself as the constant it is', () => {
+  it('labels itself as the constant it is, showing the dollars as inputs', () => {
     const s = formatRacePremiumRR(ROW, 0.60);
-    expect(s).toContain('$1.04 / $3.12 = 0.33x');
-    expect(s).toContain('equals your 20% target / 60% stop, on every contract');
+    expect(s).toContain('$1.04 / $3.12');
+    expect(s).toContain('20% / 60% = 0.33x on every contract');
   });
 
-  it('is exactly targetPct / premiumStopPct regardless of the premium', () => {
-    // The anti-cancellation point, asserted on the display side too: change the
-    // premium and every dollar figure moves, but the ratio does not.
-    expect(ROW.rrPremiumStop).toBeCloseTo(ROW.targetPct / 0.60, 3);
+  it('does not claim the two rounded dollar legs divide to the constant', () => {
+    // THE POINT. On a $1.03 premium the legs quantize to $0.21 and $0.62, whose
+    // quotient is 0.34x, not the 0.33x this column IS by definition. The old
+    // wording printed "$0.21 / $0.62 = 0.33x", asserting an identity that is
+    // false by up to 14% on sub-$1 premiums — on the one column whose entire
+    // purpose is to disclose that it tells you nothing.
+    //
+    // (The previous test here claimed to check this "regardless of the
+    // premium" and then varied no premium at all: it asserted the fixture's own
+    // hard-coded 0.3333 was close to 0.20/0.60. A tautology under a title that
+    // promised a property.)
+    const small = formatRacePremiumRR(
+      { ...ROW, rewardDollar: 0.21, riskPremiumStop: 0.62, rrPremiumStop: 1 / 3 },
+      0.60,
+    );
+    expect(small).toContain('$0.21 / $0.62');
+    expect(small).toContain('20% / 60% = 0.33x on every contract');
+    expect(small).not.toContain('$0.62 = 0.33x');
+  });
+
+  it('says so plainly when there is no premium-stop risk to divide by', () => {
+    // A 5c contract with a 5% stop puts the risk leg at $0.00 in cents.
+    const s = formatRacePremiumRR(
+      { ...ROW, rewardDollar: 0.01, riskPremiumStop: 0, rrPremiumStop: null }, 0.05,
+    );
+    expect(s).toContain('no premium-stop risk to divide by');
+    expect(s).not.toMatch(/=\s*0\.00x/);
+  });
+});
+
+describe('premiumStopSourceNote', () => {
+  it('credits the editable field when the field is what set the barrier', () => {
+    expect(premiumStopSourceNote(0.60, 3.12, 5.20))
+      .toBe('60% of premium, from the editable field above');
+  });
+
+  it('says the default was used when the field could not set the barrier', () => {
+    // The field holds a DOLLAR amount fixed at SCAN time; the premium below is
+    // the one quoted now. A contract that has since fallen makes the fraction
+    // >= 1, nothing is sent, and the backend applies its own default — while
+    // the card used to state unconditionally that the level came "from the
+    // editable field above".
+    const s = premiumStopSourceNote(0.60, 3.00, 2.50);
+    expect(s).toContain('the default');
+    expect(s).toContain('$3.00');
+    expect(s).toContain('$2.50');
+    expect(s).not.toContain('from the editable field above');
+  });
+
+  it('says the default was used when no premium stop is set at all', () => {
+    expect(premiumStopSourceNote(0.60, null, 5.20))
+      .toContain('because no premium stop is set above');
   });
 });
 
 describe('formatRaceEdge', () => {
   it('prints all four signed contributions, per share and per contract', () => {
     expect(formatRaceEdge(ROW, PREMIUM)).toBe(
-      '0.27 x $1.04 - 0.00 x $5.02 - 0.68 x $3.12 + 0.05 x -$1.56 = -$1.93  ->  -$193.28 per contract',
+      '0.27 x $1.04 - 0.00 x $5.02 - 0.68 x $3.12 + 0.05 x -$1.56 = -$1.92  ->  -$191.88 per contract',
     );
   });
 
@@ -109,6 +162,18 @@ describe('formatRaceEdge', () => {
     // Signed, not a loss. Writing it as "- p x loss" would be wrong here.
     const s = formatRaceEdge({ ...ROW, terminalMean: 8.00 }, PREMIUM);
     expect(s).toContain('+ 0.05 x $2.80');
+  });
+
+  it('prints a negative stock-stop risk leg as the gain it is, and says why', () => {
+    // A deep-ITM contract on a tight stop can be worth MORE at the stop than it
+    // cost. Subtracting that negative leg adds to the edge, which is correct
+    // signed EV but read as an unexplained "- 0.00 x -$70.80" beside an R:R
+    // column showing an em dash, with nothing connecting the two.
+    const s = formatRaceEdge(
+      { ...ROW, riskStockStop: -70.80, rrStockStop: null, pStockStopFirst: 0.12 }, PREMIUM,
+    );
+    expect(s).toContain('+ 0.12 x $70.80 (worth more at the stop than it cost)');
+    expect(s).not.toContain('x -$70.80');
   });
 
   it('renders an em dash when there is no edge to print', () => {

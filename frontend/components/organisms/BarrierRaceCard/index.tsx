@@ -6,6 +6,7 @@ import {
   formatRaceRR,
   formatRacePremiumRR,
   formatRaceEdge,
+  premiumStopSourceNote,
   money,
 } from '@/lib/barrierRace';
 import type { BarrierRace, BarrierRaceOutcome } from '@/types/domain';
@@ -15,10 +16,12 @@ export interface BarrierRaceCardProps {
   /** `undefined` while nothing has been run, `null` when the simulation was
    *  refused (dte < 1). The two render differently and neither renders bars. */
   race: BarrierRace | null | undefined;
-  /** The premium the estimate was computed against — the baseline every printed
-   *  chain subtracts. Comes from `firstPassageContext`, never from
-   *  `contractDetails.mid`, which is a scan-time snapshot. */
-  premium: number;
+  /** The card's editable "Premium stop" field, in DOLLARS, as it stands now.
+   *  Only used to say whether that field actually set the barrier or the
+   *  backend fell back to its own default — never to compute a level. The
+   *  premium every chain subtracts comes from `race.premiumUsed`, so that the
+   *  printed arithmetic is the backend's own and cannot drift from it. */
+  premiumStopField: number | null;
   /** True only while the estimate on screen was fetched THIS mount. See the
    *  freshness note below. */
   isFresh: boolean;
@@ -59,7 +62,7 @@ function daysLabel(v: number | null): string {
  */
 export default function BarrierRaceCard({
   race,
-  premium,
+  premiumStopField,
   isFresh,
   barriersChanged = false,
   invalidation = null,
@@ -107,6 +110,7 @@ export default function BarrierRaceCard({
               <th scope="col"><Text size={10} tone="dim">Barrier</Text></th>
               <th scope="col"><Text size={10} tone="dim">Level</Text></th>
               <th scope="col"><Text size={10} tone="dim">How it is set</Text></th>
+              <th scope="col"><Text size={10} tone="dim">Armed</Text></th>
             </tr>
           </thead>
           <tbody>
@@ -114,6 +118,7 @@ export default function BarrierRaceCard({
               <td><Text size={11}>Profit target</Text></td>
               <td><Data size={11}>per row below</Data></td>
               <td><Text size={11} tone="secondary">Your T1/T2/T3 % of premium</Text></td>
+              <td><Text size={11} tone="dim">exit, not a stop</Text></td>
             </tr>
             <tr>
               <td><Text size={11}>Stock stop</Text></td>
@@ -121,11 +126,20 @@ export default function BarrierRaceCard({
                   against the option-value barrier on the next row. */}
               <td><Data size={11}>{money(race.stockStopPrice)} stock</Data></td>
               <td><Text size={11} tone="secondary">Structural level, or structural + ATR once an Arithmetic Plan has run</Text></td>
+              {/* Both stops are live at once — Q6's armed stop is "whichever
+                  fires first", which is exactly what the race measures. Neither
+                  is a broker instruction (D10); both are in-app levels. */}
+              <td><Text size={11} tone="secondary">yes — whichever fires first</Text></td>
             </tr>
             <tr>
               <td><Text size={11}>Premium stop</Text></td>
               <td><Data size={11}>{money(race.premiumStopPrice)} option</Data></td>
-              <td><Text size={11} tone="secondary">{pctLabel(race.premiumStopPct)} of premium, from the editable field above</Text></td>
+              <td>
+                <Text size={11} tone="secondary">
+                  {premiumStopSourceNote(race.premiumStopPct, premiumStopField, race.premiumUsed)}
+                </Text>
+              </td>
+              <td><Text size={11} tone="secondary">yes — whichever fires first</Text></td>
             </tr>
           </tbody>
         </table>
@@ -201,7 +215,7 @@ export default function BarrierRaceCard({
             <Text size={11} weight={500}>{pctLabel(o.targetPct)} target</Text>
             <div className={styles.chain}>
               <Text size={10} tone="dim">Risk</Text>
-              <Data size={11}>{formatRaceRisk(o, premium)}</Data>
+              <Data size={11}>{formatRaceRisk(o, race.premiumUsed)}</Data>
             </div>
             <div className={styles.chain}>
               <Text size={10} tone="dim">R:R vs stock stop</Text>
@@ -228,7 +242,7 @@ export default function BarrierRaceCard({
         {race.outcomes.map((o) => (
           <div key={o.targetPct} className={styles.chainGroup}>
             <Text size={11} weight={500}>{pctLabel(o.targetPct)} target</Text>
-            <Data size={11}>{formatRaceEdge(o, premium)}</Data>
+            <Data size={11}>{formatRaceEdge(o, race.premiumUsed)}</Data>
           </div>
         ))}
         <Text size={10} tone="dim">

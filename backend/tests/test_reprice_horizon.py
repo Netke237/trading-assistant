@@ -10,7 +10,7 @@ the user intends to hold and what the simulation itself observed.
 """
 import pytest
 
-from app.scoring.reprice_horizon import resolve_reprice_days
+from app.scoring.reprice_horizon import remaining_years_at_barrier, resolve_reprice_days
 from app.services.config_loader import load_reprice_horizon_cfg
 
 # Every key HORIZON_PRESETS (frontend/lib/horizonPresets.ts) can send us.
@@ -86,11 +86,47 @@ def test_max_fraction_of_dte_binds_for_annual_on_a_short_contract():
     assert clamped == pytest.approx(0.75 * dte)
 
 
-def test_min_days_floors_the_result():
-    """0.75 * a 1-day contract is 0.75 of a day. Never reprice at less than the
-    configured floor — bs_price at a near-zero T collapses to intrinsic."""
-    assert resolve_reprice_days("Intraday", None, None, dte=1, sim_median=None) >= 1.0
-    assert resolve_reprice_days("Swing", None, None, dte=1, sim_median=0.1) >= 1.0
+def test_min_days_floors_the_result_but_the_dte_ceiling_outranks_it():
+    """min_days stops an absurdly short horizon; max_fraction_of_dte stops one
+    that lands at or past expiry. When they conflict the CEILING wins.
+
+    On a 1-day contract 0.75 x dte is 0.75 of a day and min_days is 1. Letting
+    the floor win puts the barrier exactly AT expiry, so
+    remaining_years_at_barrier returns its floor and every level prices at
+    intrinsic value only — precisely what max_fraction_of_dte exists to
+    prevent."""
+    assert resolve_reprice_days("Intraday", None, None, dte=1, sim_median=None) == 0.75
+    assert resolve_reprice_days("Swing", None, None, dte=1, sim_median=0.1) == 0.75
+    # With room to spare, the floor is what binds.
+    assert resolve_reprice_days("Swing", None, None, dte=30, sim_median=0.1) == 1.0
+
+
+def test_custom_with_no_typed_range_falls_back_rather_than_deriving_from_zero():
+    """"Custom" with nothing typed carries no information. Deriving from a 0-0
+    range returned 0 days, then the floor, so 1 — a made-up answer dressed as a
+    derived one, and a 1-day reprice horizon with no signal to the user."""
+    assert resolve_reprice_days("Custom", None, None, dte=60, sim_median=None) == 7.0
+    # One end typed is still information: use it for both.
+    assert resolve_reprice_days("Custom", 30.0, None, dte=180, sim_median=None) == 15.0
+    assert resolve_reprice_days("Custom", None, 30.0, dte=180, sim_median=None) == 15.0
+
+
+def test_remaining_years_at_barrier_inverts_elapsed_days_not_theta():
+    """THE BUG THIS PINS: resolve_reprice_days returns days ELAPSED to a
+    barrier; bs_price wants the life REMAINING at that moment. Feeding the
+    former in as the latter inverts theta — the later a stop is reached, the
+    MORE the contract appears to be worth at it, which understates risk on
+    exactly the fast stop-outs that hurt most."""
+    early = remaining_years_at_barrier(60, 2)
+    late = remaining_years_at_barrier(60, 45)
+    assert early > late, "a barrier reached sooner must leave MORE life, not less"
+    assert early == pytest.approx(58 / 365.0)
+    assert late == pytest.approx(15 / 365.0)
+    # Never negative, never zero: bs_price's T <= 0 branch returns 0.0 flat.
+    assert remaining_years_at_barrier(30, 30) > 0
+    assert remaining_years_at_barrier(30, 999) > 0
+    # Unusable inputs collapse to the floor rather than raising.
+    assert remaining_years_at_barrier(float("nan"), 7) > 0
 
 
 def test_an_unknown_dte_does_not_collapse_the_answer_to_the_floor():

@@ -684,26 +684,40 @@ export function TradeCard({
       // rather than leaving the old one in place. Either way structuralRR
       // never combines a stop it can't vouch for as fresh with THIS click's
       // premium/delta: it either gets a same-vintage pair or nothing to
-      // compute from, never a silent mismatch. Deliberately not awaited
-      // before continuing to the first-passage fetch below — it manages its
-      // own loading/error state independently via structuralRequestRef, same
-      // as a manual "Check structure" click would, and that ref-swap means
-      // the existing contract-change cleanup effect still aborts it
-      // correctly if the user navigates away.
+      // compute from, never a silent mismatch.
+      //
+      // AWAITED, and it did not used to be. Firing it in the background and
+      // sending the estimate immediately meant the first Estimate click of a
+      // mount raced against its own stop: the request went out carrying the
+      // flat scan-time invalidation (structuralStop still null), the race
+      // snapshotted that same level, this fetch then landed, and
+      // `raceBarriersMoved` flipped true — so the very first click rendered
+      // "Barriers changed - re-run the estimate" and no bars at all, with
+      // nothing on screen explaining why. The message was even honest: the
+      // estimate really had been computed against the flat stop rather than
+      // the structural one. The fix is not to click twice, it is not to
+      // dispatch before the level the simulation depends on has resolved.
+      // It still manages its own loading/error state via structuralRequestRef,
+      // same as a manual "Check structure" click would, and that ref-swap means
+      // the existing contract-change cleanup effect still aborts it correctly
+      // if the user navigates away.
+      let resolvedStructural = structuralStop ?? null;
       if (!structuralIsFreshRef.current && !structuralLoading) {
         structuralRequestRef.current?.abort();
         const structuralController = new AbortController();
         structuralRequestRef.current = structuralController;
         setStructuralLoading(true);
         setStructuralError(false);
-        api.getStructuralStop({
+        await api.getStructuralStop({
           symbol: data.symbol,
           direction: data.direction,
           stock_price: referenceStockPrice,
         }, structuralController.signal)
           .then((res) => {
             if (structuralController.signal.aborted) return;
-            setStructuralStop(normalizeStructuralStopResponse(res));
+            const normalized = normalizeStructuralStopResponse(res);
+            resolvedStructural = normalized;
+            setStructuralStop(normalized);
             setStructuralStopStockPrice(referenceStockPrice);
             structuralIsFreshRef.current = true;
           })
@@ -738,13 +752,24 @@ export function TradeCard({
             // failed") — an acceptable trade for never re-serving a value
             // this refresh specifically determined it could no longer vouch
             // for.
+            resolvedStructural = null;
             setStructuralStop(null);
             setStructuralStopStockPrice(null);
           })
           .finally(() => {
             if (!structuralController.signal.aborted) setStructuralLoading(false);
           });
+        if (controller.signal.aborted) return;
       }
+
+      // `sharedStop`'s own precedence, re-derived from what THIS click actually
+      // resolved. The memo cannot be read here: it is computed from state React
+      // has not re-rendered yet, so it still holds the pre-refresh level. Both
+      // the request below and the race's barrier snapshot must use this one, or
+      // they disagree with each other the moment the render lands.
+      const resolvedStockStop = (exitPlan && arithmeticLiveStockPrice != null)
+        ? exitPlan.stop.price
+        : (resolvedStructural?.price ?? data.exit.invalidation);
 
       const res = await api.getFirstPassageEstimate({
         symbol: data.symbol,
@@ -778,7 +803,7 @@ export function TradeCard({
         // already-rendered Monte Carlo probability does NOT retroactively
         // update to the new exit plan stop — it silently goes stale until
         // the user re-runs the estimate.
-        invalidation_price: sharedStop?.price ?? data.exit.invalidation,
+        invalidation_price: resolvedStockStop,
         t1_pct: targetPct.t1,
         t2_pct: targetPct.t2,
         t3_pct: targetPct.t3,
@@ -818,7 +843,7 @@ export function TradeCard({
       // moved — never silently re-sorts bars that were measured against a stop
       // the user has since changed.
       setRaceBarriers({
-        stockStop: sharedStop?.price ?? data.exit.invalidation,
+        stockStop: resolvedStockStop,
         premiumStop: overlay.premiumStop,
       });
       firstPassageIsFreshRef.current = true;
@@ -1061,6 +1086,20 @@ export function TradeCard({
       || overlay.premiumStop !== raceBarriers.premiumStop
     );
   }, [raceBarriers, firstPassage, sharedStop, data.exit.invalidation, overlay.premiumStop]);
+
+  // THE single gate on showing race numbers anywhere. It was previously spelled
+  // out inline for BarrierRaceCard and simply omitted from the Final
+  // Recommendation, so a restored estimate — `firstPassage` is seeded from the
+  // parent's per-contract cache at mount, and `raceBarriers` is null then, so
+  // nothing looked "moved" — refused to render the card and yet printed that
+  // same arbitrarily-old race's armed stop and dollar edge in the decision
+  // summary, while suppressing the un-stale invalidation fallback underneath
+  // it. That is the mixed-vintage hazard section 3.3 exists to prevent, landing
+  // in the one place on the card a number is most likely to be acted on.
+  // Hoisted and named so the two sites cannot drift apart again.
+  const raceIsShowable = firstPassageIsFreshRef.current
+    && firstPassageContext != null
+    && !raceBarriersMoved;
 
   // NOTE ON THE BARRIER RACE AS A "FOURTH SOURCE" (spec section 3.4): it is not a
   // separately-timed method and deliberately does not get its own
@@ -1573,12 +1612,20 @@ export function TradeCard({
               ))}
             </div>
           )}
-          <Text size={10} tone="dim">
-            Each probability above is measured on its own, so they can sum past 100% — a path that
-            hits the target and later the stop is counted in both. The Barrier Race card below
-            counts every path once, for whichever barrier it reached first. The invalidation row
-            moved there too, for the same reason.
-          </Text>
+          {/* Rendered INSIDE the estimate block on purpose. Outside it, this
+               ran before anything had been estimated — "each probability above
+               is measured on its own" with no probabilities above it, pointing
+               at a Barrier Race card that renders null — and in every race-less
+               state it described a move that had not happened, since the
+               invalidation row is only over there when the race is. */}
+          {firstPassage && raceIsShowable && (
+            <Text size={10} tone="dim">
+              Each probability above is measured on its own, so they can sum past 100% — a path that
+              hits the target and later the stop is counted in both. The Barrier Race card below
+              counts every path once, for whichever barrier it reached first. The invalidation row
+              moved there too, for the same reason.
+            </Text>
+          )}
         </section>
 
         {/* Barrier Race (barrier-race spec section 3.2) — its own card, directly
@@ -1588,7 +1635,7 @@ export function TradeCard({
         <BarrierRaceCard
           race={firstPassage?.race}
           invalidation={firstPassage?.invalidation ?? null}
-          premium={firstPassageContext?.premium ?? 0}
+          premiumStopField={overlay.premiumStop ?? null}
           isFresh={firstPassageIsFreshRef.current && firstPassageContext != null}
           barriersChanged={raceBarriersMoved}
         />
@@ -1737,7 +1784,7 @@ export function TradeCard({
                      it replaces was the misleading one: it counts paths that
                      touched the stock stop even when the premium stop had
                      already fired days earlier. */}
-                {firstPassage.race && !raceBarriersMoved ? (
+                {firstPassage.race && raceIsShowable ? (
                   <>
                     <div className={styles.scoreRow}>
                       <Text size={12} tone="secondary">Armed stop (whichever fires first)</Text>

@@ -36,14 +36,19 @@ const RACE: BarrierRace = {
   premiumStopPrice: 2.08,
   premiumStopPct: 0.60,
   stockStopPrice: 176.00,
+  // The premium every printed chain subtracts, quantized to cents by the
+  // backend. The card must print this rather than re-round its own copy.
+  premiumUsed: 5.20,
   nPaths: 2000,
 };
 
-const PREMIUM = 5.20;
+// The card's editable "Premium stop" field, in DOLLARS. 60% of the $5.20
+// premium, i.e. the value that genuinely did set the barrier.
+const PREMIUM_STOP_FIELD = 3.12;
 
 function renderCard(props: Partial<React.ComponentProps<typeof BarrierRaceCard>> = {}) {
   return render(
-    <BarrierRaceCard race={RACE} premium={PREMIUM} isFresh {...props} />,
+    <BarrierRaceCard race={RACE} premiumStopField={PREMIUM_STOP_FIELD} isFresh {...props} />,
   );
 }
 
@@ -133,9 +138,24 @@ describe('the printed arithmetic', () => {
   it('marks the premium-stop ratio as a constant, not a measurement', () => {
     renderCard();
     expect(
-      screen.getByText(/equals your 20% target \/ 60% stop, on every contract/),
+      screen.getByText(/20% \/ 60% = 0\.33x on every contract/),
     ).toBeInTheDocument();
     expect(screen.getByText(/Only the first ratio is a measurement/)).toBeInTheDocument();
+  });
+
+  it('does not claim the premium stop came from the field when it did not', () => {
+    // The field holds a DOLLAR amount fixed at scan time. A contract that has
+    // since fallen below it makes the fraction >= 1, so nothing is sent and the
+    // backend applies its own default — while the card stated unconditionally
+    // that the level came "from the editable field above".
+    renderCard({ premiumStopField: 9.99 });
+    expect(screen.getByText(/the default/)).toBeInTheDocument();
+    expect(screen.queryByText(/from the editable field above/)).not.toBeInTheDocument();
+  });
+
+  it('shows both stops as armed, since the armed stop is whichever fires first', () => {
+    renderCard();
+    expect(screen.getAllByText(/whichever fires first/)).toHaveLength(2);
   });
 
   it('carries the IV-frozen caveat verbatim', () => {
@@ -150,7 +170,7 @@ describe('the printed arithmetic', () => {
 
 describe('when the simulation was refused', () => {
   it('renders the "not simulated" copy, not an empty card and not four zeroes', () => {
-    render(<BarrierRaceCard race={null} premium={PREMIUM} isFresh />);
+    render(<BarrierRaceCard race={null} premiumStopField={PREMIUM_STOP_FIELD} isFresh />);
     expect(screen.getByText(/Not simulated — contract expires today/)).toBeInTheDocument();
     expect(screen.queryAllByRole('img')).toHaveLength(0);
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
@@ -177,13 +197,13 @@ describe('when the estimate was restored from cache rather than fetched this mou
     // Pairing them is the mixed-vintage hazard structuralRR's freshness
     // machinery exists to prevent.
     const { container } = render(
-      <BarrierRaceCard race={RACE} premium={PREMIUM} isFresh={false} />,
+      <BarrierRaceCard race={RACE} premiumStopField={PREMIUM_STOP_FIELD} isFresh={false} />,
     );
     expect(container).toBeEmptyDOMElement();
   });
 
   it('still renders the refusal copy, which depends on no live barrier', () => {
-    render(<BarrierRaceCard race={null} premium={PREMIUM} isFresh={false} />);
+    render(<BarrierRaceCard race={null} premiumStopField={PREMIUM_STOP_FIELD} isFresh={false} />);
     expect(screen.getByText(/Not simulated — contract expires today/)).toBeInTheDocument();
   });
 });
@@ -191,7 +211,7 @@ describe('when the estimate was restored from cache rather than fetched this mou
 describe('when nothing has been run yet', () => {
   it('renders nothing', () => {
     const { container } = render(
-      <BarrierRaceCard race={undefined} premium={PREMIUM} isFresh />,
+      <BarrierRaceCard race={undefined} premiumStopField={PREMIUM_STOP_FIELD} isFresh />,
     );
     expect(container).toBeEmptyDOMElement();
   });

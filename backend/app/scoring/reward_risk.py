@@ -72,6 +72,13 @@ def _bs_reprice_or_delta_approx(
 # rule; both functions below accept the resolved value as `reprice_years` and
 # fall back to the historical formula when a caller does not supply one, so
 # every existing call site keeps its current numbers.
+#
+# `reprice_years` IS A TIME TO EXPIRY REMAINING, in years — it goes straight
+# into bs_price's T. resolve_reprice_days() returns the opposite quantity (days
+# ELAPSED until the barrier), so a caller wiring these two together must convert
+# with reprice_horizon.remaining_years_at_barrier(dte, days) and must not pass
+# `resolve_reprice_days(...) / 365`. Passing elapsed days inverts theta: the
+# later a barrier is reached, the more the contract appears to be worth at it.
 def _default_reprice_years(expiry_years: float) -> float:
     return max(expiry_years * 0.5, 7 / 365)
 
@@ -88,7 +95,7 @@ def estimate_rr(
     heston_params: HestonParams | None = None,
     sigma_fallback: float = 0.25,
     premium_stop_pct: float = 0.60,   # fraction of premium at risk (stop-loss basis)
-    reprice_years: float | None = None,   # resolve_reprice_days(...) / 365; None = historical half-life
+    reprice_years: float | None = None,   # remaining_years_at_barrier(...); None = historical half-life
 ) -> RrResult:
     model_used: RrModel
     heston_ok = False
@@ -138,7 +145,7 @@ def estimate_targets(
     heston_params: HestonParams | None = None,
     sigma_fallback: float = 0.25,
     premium_stop_pct: float = 0.60,
-    reprice_years: float | None = None,   # resolve_reprice_days(...) / 365; None = historical half-life
+    reprice_years: float | None = None,   # remaining_years_at_barrier(...); None = historical half-life
 ) -> list:
     """
     Build 3 target levels: T1=base, T2=base*1.5 move, T3=base*2.0 move.
