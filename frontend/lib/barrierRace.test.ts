@@ -67,6 +67,14 @@ describe('formatRaceRR', () => {
     expect(formatRaceRR(ROW)).toBe('$1.04 / $5.02 = 0.21x');
   });
 
+  it('preserves the sign of a negative reward rather than nulling it to an em dash', () => {
+    // M2 parity with the backend's reward_risk.py, inherited from the readout
+    // this replaced: a target priced BELOW the premium paid is a real loss the
+    // trader should see, not an indistinguishable "not yet computed".
+    const s = formatRaceRR({ ...ROW, rewardDollar: -2.00, rrStockStop: -0.3984 });
+    expect(s).toBe('-$2.00 / $5.02 = -0.40x');
+  });
+
   it('renders an em dash, never a negative or infinite ratio, when risk is not positive', () => {
     // A deep-ITM contract on a tight stop: still worth more at the stop than
     // it cost, so there is no risk to divide by.

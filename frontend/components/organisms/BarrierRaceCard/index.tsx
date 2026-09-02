@@ -26,6 +26,12 @@ export interface BarrierRaceCardProps {
    *  not recomputed: its bars were measured against a stop the user has since
    *  moved, and re-running is a click, not something that happens on its own. */
   barriersChanged?: boolean;
+  /** The stock stop's STANDALONE measure — "did any path ever reach it",
+   *  ignoring whether the premium stop fired first. It moved here from the
+   *  Monte Carlo card because this is where the comparison is legible: shown
+   *  next to the attribution, the gap between the two IS the thing this card
+   *  exists to expose. */
+  invalidation?: { probability: number; expectedDays: number | null } | null;
 }
 
 function pctLabel(v: number): string {
@@ -56,6 +62,7 @@ export default function BarrierRaceCard({
   premium,
   isFresh,
   barriersChanged = false,
+  invalidation = null,
 }: BarrierRaceCardProps) {
   if (race === null) {
     return (
@@ -122,6 +129,18 @@ export default function BarrierRaceCard({
             </tr>
           </tbody>
         </table>
+        {invalidation && (
+          <Text size={10} tone="dim">
+            Measured on its own, {(invalidation.probability * 100).toFixed(0)}% of paths touch the
+            stock stop at some point
+            {invalidation.expectedDays != null
+              ? ` (median ~${Math.round(invalidation.expectedDays)}d)`
+              : ''}
+            {' '}— ignoring whether the premium stop had already fired. The attribution below is the
+            honest version: the gap between the two is how often you were stopped out on premium
+            before the stock ever got there.
+          </Text>
+        )}
       </div>
 
       {/* 2. Race outcome -------------------------------------------------- */}
