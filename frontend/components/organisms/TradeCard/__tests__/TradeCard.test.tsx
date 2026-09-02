@@ -391,6 +391,59 @@ describe('TradeCard', () => {
     expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
   });
 
+  it('sends the exit plan\'s structural+ATR stop as invalidation_price once a plan has been computed, instead of the flat scan-time stop', async () => {
+    // Step 1 — compute the Arithmetic plan so exitPlan.stop.price is populated.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    const plan = {
+      stop: {
+        price: 185.87, source: 'structural' as const, contractPrice: 1.2,
+        rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+        structuralPrice: 183.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
+      },
+      targets: [],
+      atr: 3.5,
+    };
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce(plan);
+
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+
+    // Wait for the plan to actually land before running the estimate. (Two
+    // sections render the stop price once a plan exists — the "Compute
+    // Arithmetic Plan" KV list and the Final Recommendation card — so match
+    // on all of them rather than assuming a single occurrence.)
+    await waitFor(() => {
+      expect(screen.getAllByText('$185.87').length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Step 2 — run the Monte Carlo estimate. It should now send the exit
+    // plan's structural+ATR stop, not the flat scan-time data.exit.invalidation
+    // (179.64 on this fixture).
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [
+        { pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 },
+        { pct: 0.35, stockPrice: 193.2, optionPrice: 3.71, probability: 0.55, expectedDays: 9 },
+        { pct: 0.50, stockPrice: null, optionPrice: 4.13, probability: 0.10, expectedDays: null },
+      ],
+      invalidation: { probability: 0.30, expectedDays: 4 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+
+    await waitFor(() => {
+      expect(api.getFirstPassageEstimate).toHaveBeenCalledWith(
+        expect.objectContaining({ invalidation_price: 185.87 }),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
   it('shows an error message when the first-passage request fails', async () => {
     (api.getFirstPassageEstimate as jest.Mock).mockRejectedValueOnce(new Error('network error'));
     render(<TradeCard data={mockTradeCard} />);
@@ -1820,5 +1873,242 @@ describe('TradeCard', () => {
       });
       expect(screen.getAllByText(/edited/).length).toBeGreaterThanOrEqual(1);
     });
+  });
+});
+describe('TradeCard — stop-vs-premium gate', () => {
+  // The gate reads scan-time contractDetails (mid/delta) plus whatever
+  // structural stop is available, so it renders WITHOUT the user having run an
+  // Estimate or an Arithmetic plan. That early availability is the whole point:
+  // a gate that only speaks after two round-trips cannot warn anyone.
+  function cardWithStop(
+    stop: { price: number; source: 'order_block' | 'swing_low' | 'swing_high'; confidence: number; distancePct: number },
+    stockPrice: number,
+    contractDetails?: Partial<NonNullable<TradeCardData['contractDetails']>>,
+  ): TradeCardData {
+    return {
+      ...mockTradeCard,
+      contractDetails: { ...mockTradeCard.contractDetails!, ...contractDetails },
+      exit: { ...mockTradeCard.exit, structuralStop: stop, structuralStopStockPrice: stockPrice },
+    };
+  }
+
+  const ORDER_BLOCK = { price: 178.5, source: 'order_block' as const, confidence: 75, distancePct: 3.6 };
+
+  it('flags a stop that costs the whole premium, and shows every input behind it', () => {
+    // 190.0 -> 178.5 is $11.50; x delta 0.45 = $5.175 against a $2.50 premium.
+    // You cannot lose $5.18 on a $2.50 option, so it caps at $2.50 = 100%.
+    render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0)} />);
+
+    expect(screen.getByText('STOP COST')).toBeInTheDocument();
+    expect(screen.getByText('100% OF PREMIUM')).toBeInTheDocument();
+    // Inputs are on screen, not just the verdict — the complaint that produced
+    // this gate was a ratio whose inputs were invisible.
+    expect(screen.getByText(/\$11\.50 away × Δ0\.45 = \$2\.50 of \$2\.50 premium/)).toBeInTheDocument();
+    // ...including the uncapped figure, so "how far past total loss" is visible.
+    // 11.50 * 0.45 === 5.175, which toFixed(2) renders "5.17" — 5.175 is stored
+    // just below the exact value in IEEE754 (same class of thing the
+    // formatRecommendedContractSizeRaw comments document).
+    expect(screen.getByText(/uncapped \$5\.17/)).toBeInTheDocument();
+ 
+    // The gate sorts candidates, it never refuses one -- so even a total-loss
+    // stop is framed as a sizing input, not a verdict. (The "never REJECT"
+    // guarantee itself is asserted on the helper in risk.test.ts; CSS modules
+    // mock to {} here so the badge's colour class is not observable in jsdom.)
+    expect(screen.getByText(/Not a reason to skip the trade/)).toBeInTheDocument();
+  });
+
+  it('PASSes a contract that keeps real value at the same stop', () => {
+    // Same $11.50 move and delta, but a $20 premium: $5.175 / $20 = 26%.
+    render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0, { mid: 20 })} />);
+
+    expect(screen.getByText('26% OF PREMIUM')).toBeInTheDocument();
+    expect(screen.getByText(/\$11\.50 away × Δ0\.45 = \$5.17 of \$20.00 premium/)).toBeInTheDocument();
+    expect(screen.queryByText(/uncapped/)).not.toBeInTheDocument();
+  });
+
+  it('renders with no Estimate and no Arithmetic plan run', () => {
+    render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0)} />);
+    // Neither of the two round-trip-gated blocks is present...
+    expect(screen.queryByText('R:R vs. structural stop')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bottom (final stop)')).not.toBeInTheDocument();
+    // ...but the gate already has its verdict.
+    expect(screen.getByText('STOP COST')).toBeInTheDocument();
+  });
+
+  it('stays hidden when there is no structural stop to measure against', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    expect(screen.queryByText('STOP COST')).not.toBeInTheDocument();
+  });
+
+  it('stays hidden when the stop sits exactly at the current price', () => {
+    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, price: 190.0, distancePct: 0 }, 190.0)} />);
+    expect(screen.queryByText('STOP COST')).not.toBeInTheDocument();
+  });
+});
+
+describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR', () => {
+  // Both a raw structural stop (via Check structure) AND an exit plan (via
+  // Compute Arithmetic Plan) exist for this contract, with DELIBERATELY
+  // different stop.price values (178.50 raw vs. 170.00 exit-plan) and
+  // different paired stock prices, so the two branches produce materially
+  // different numbers if either consumer picks the wrong one. Before this
+  // fix, the gate (stopRisk) and structuralRR each read the raw structural
+  // pair directly — a "fifth stop" no one asked for once an Arithmetic Plan
+  // existed. After the fix, both should agree on the exit-plan's stop once
+  // one has been computed this mount.
+  it('gate and structuralRR both use the exit-plan stop, not the raw structural stop, once an Arithmetic Plan is computed', async () => {
+    // 1) Check structure — raw structural stop at $178.50, fresh stock price $182.00.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 182.0 });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 80, distancePct: 1.92,
+    });
+
+    render(<TradeCard data={mockTradeCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Structural stop — Order Block/)).toBeInTheDocument();
+    });
+
+    // Before any Arithmetic Plan exists, the gate reads the raw structural
+    // pair: |178.50 - 182.00| = 3.50 away x delta 0.45 = $1.575 of $2.50
+    // premium = 63%. Sanity-checks the pre-fix baseline before it changes.
+    expect(screen.getByText('63% OF PREMIUM')).toBeInTheDocument();
+
+    // 2) Compute Arithmetic Plan — exit-plan stop at $170.00, a DIFFERENT
+    // fresh stock price ($190.00) than Check structure captured.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 190.0 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.6, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getExitPlan as jest.Mock).mockResolvedValueOnce({
+      stop: {
+        price: 170.0, source: 'structural' as const, contractPrice: 1.0,
+        rrModel: 'Heston repriced' as const, structuralSource: 'order_block' as const, structuralConfidence: 80,
+        structuralPrice: 170.0, atrFloorPrice: 165.0, distanceDollar: 5.0,
+      },
+      targets: [],
+      atr: 3.5,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText('Bottom (final stop)').length).toBeGreaterThanOrEqual(1);
+    });
+
+    // The gate must now read the exit-plan pair, not the raw structural pair:
+    // |170.00 - 190.00| = 20.00 away x delta 0.45 = $9.00 (uncapped) against a
+    // $2.50 premium -> capped at 100%. If it had stayed on the raw pair this
+    // would still read 63%.
+    expect(screen.getByText('100% OF PREMIUM')).toBeInTheDocument();
+    expect(screen.getByText(/\$20\.00 away × Δ0\.45 = \$2\.50 of \$2\.50 premium \(uncapped \$9\.00\)/)).toBeInTheDocument();
+    expect(screen.queryByText('63% OF PREMIUM')).not.toBeInTheDocument();
+
+    // 3) Run Monte Carlo Estimate — fresh premium/delta for firstPassageContext.
+    // structuralIsFreshRef is already true from step 1, so this does NOT
+    // re-fetch the structural stop.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 190.0 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 25, delta: 0.5, theta: -0.05, ivRank: 50, spread: 0.1, volume: 50,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [
+        { pct: 0.20, stockPrice: 210.0, optionPrice: 45.0, probability: 0.6, expectedDays: 5 },
+      ],
+      invalidation: { probability: 0.3, expectedDays: 4 },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    await waitFor(() => {
+      expect(screen.getByText('R:R vs. structural stop')).toBeInTheDocument();
+    });
+
+    // structuralRR must also use the exit-plan pair: stockMove = |170.00 -
+    // 190.00| = 20.00, deltaEst = 0.5, risk = min(20.00*0.5, 25) = 10.00,
+    // reward = 45.00 - 25.00 = 20.00 -> rr = 2.0. Had it stayed on the raw
+    // structural pair (178.50 vs. 182.00), stockMove would be 3.50, risk =
+    // min(3.50*0.5, 25) = 1.75, giving rr = 20.00 / 1.75 = 11.4 instead.
+    expect(screen.getByText('2.0×')).toBeInTheDocument();
+    expect(screen.queryByText('11.4×')).not.toBeInTheDocument();
+
+    // The "Structural level found" line (ProfitTargetRow) must also show the
+    // exit-plan's price, not the raw structural stop's — "$170.00" appears at
+    // least twice: once in the Arithmetic card's own "Bottom (final stop)"
+    // block, once in ProfitTargetRow's "Structural level found" line.
+    expect(screen.getAllByText('$170.00').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('$178.50')).not.toBeInTheDocument();
+  });
+});
+
+describe('TradeCard — piece 1/2 gap: cache-restored exit plan with no fresh click this mount', () => {
+  // Reproduces the CandidateNav Next-then-Prev scenario from the handoff doc:
+  // the parent (step-7-trade-card/page.tsx) splices a previously-computed
+  // exit plan AND a previously-fetched structural stop back into `data.exit`
+  // on remount, but neither "Compute Arithmetic Plan" nor "Check structure"
+  // has been clicked THIS mount, so `arithmeticLiveStockPrice` is still null
+  // and `structuralIsFreshRef`/`firstPassageIsFreshRef` are both false.
+  // Before the fix, the Monte Carlo request read `exitPlan?.stop.price`
+  // directly and would send the restored exit-plan stop (185.87) even though
+  // `sharedStop` — already used by the gate and structuralRR — refuses a
+  // restored plan with no fresh stock price and falls back to the restored
+  // structural stop (178.50) instead. That mismatch is exactly the "two
+  // stops on one card" regression this test guards against.
+  const restoredCard: TradeCardData = {
+    ...mockTradeCard,
+    exit: {
+      ...mockTradeCard.exit,
+      exitPlan: {
+        computedAt: '2026-08-30T12:00:00.000Z',
+        stop: {
+          price: 185.87, source: 'structural', contractPrice: 1.2,
+          rrModel: 'Heston repriced', structuralSource: 'order_block', structuralConfidence: 80,
+          structuralPrice: 183.0, atrFloorPrice: 175.0, distanceDollar: 5.0,
+        },
+        targets: [],
+        atr: 3.5,
+      },
+      structuralStop: { price: 178.5, source: 'order_block', confidence: 80, distancePct: 1.92 },
+      structuralStopStockPrice: 182.0,
+    },
+  };
+
+  it('sends the restored structural stop, not the restored exit-plan stop, as invalidation_price', async () => {
+    // structuralIsFreshRef starts false (the structural stop above is a
+    // restore, not a fetch this mount), so clicking Estimate auto-fires a
+    // structural-stop sub-fetch alongside the main request — give it a
+    // resolvable mock even though this test doesn't care about its result.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 178.5, source: 'order_block', confidence: 80, distancePct: 1.92,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [
+        { pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 },
+      ],
+      invalidation: { probability: 0.30, expectedDays: 4 },
+    });
+
+    render(<TradeCard data={restoredCard} />);
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+
+    await waitFor(() => {
+      expect(api.getFirstPassageEstimate).toHaveBeenCalled();
+    });
+    // Assert on THIS test's own call specifically (the mock's call history is
+    // shared across the whole file, so `.not.toHaveBeenCalledWith` on the
+    // restored exit-plan price would spuriously fail if an earlier,
+    // unrelated test happened to send that same number).
+    const [lastCallArgs] = (api.getFirstPassageEstimate as jest.Mock).mock.calls.at(-1)!;
+    expect(lastCallArgs.invalidation_price).toBe(178.5);
+  });
+
+  it('agrees with the gate on the same restored stop', () => {
+    render(<TradeCard data={restoredCard} />);
+    // stopRisk: |178.50 - 182.00| = 3.50 away x delta 0.45 = $1.575 of $2.50
+    // premium = 63%. If the gate had instead picked up the restored exit-plan
+    // stop (185.87) it would read a different percentage here.
+    expect(screen.getByText('63% OF PREMIUM')).toBeInTheDocument();
   });
 });

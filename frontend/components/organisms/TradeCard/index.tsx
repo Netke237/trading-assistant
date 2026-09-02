@@ -11,10 +11,13 @@ import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthC
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
-import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw } from '@/lib/risk';
+import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk } from '@/lib/risk';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
+import { useScanStore } from '@/lib/scanStore';
+import { useStopPremiumThresholdsStore, getStopPremiumThresholds } from '@/lib/stopPremiumThresholdsStore';
+import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
 import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride } from '@/types/domain';
 import {
   triggerDetailText,
@@ -588,6 +591,40 @@ export function TradeCard({
     }
   }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend]);
 
+  // Piece 2 (stop-model unification) — the stop level shared by the
+  // stop-vs-premium gate, structuralRR, and (below) the Monte Carlo request's
+  // invalidation_price, so none of the three ever quotes a different number
+  // for "the stop" on the same card. Prefers the exit plan's structural+ATR
+  // final stop (compute_final_stop: max(structural, 2x ATR)) over the raw
+  // order-block/swing level once an Arithmetic Plan has been computed for
+  // this contract. `arithmeticLiveStockPrice` gates the exit-plan branch
+  // (rather than falling back to data.price) because it doubles as a
+  // freshness signal: it is set only when computeExitPlan actually ran THIS
+  // mount (reset to null on every contract switch), so a cache-restored
+  // exitPlan with no matching live price falls through to the raw
+  // structural branch below instead of pairing a possibly-stale final stop
+  // with a placeholder stock price.
+  //
+  // Declared here, ahead of estimateFirstPassage, specifically so the Monte
+  // Carlo request below can read it instead of `exitPlan` directly — piece 1
+  // originally read `exitPlan?.stop.price` unconditionally, which (unlike
+  // this memo) accepts a cache-restored plan with no fresh stock price to
+  // pair it with. That let Next/Prev in CandidateNav land on a card where
+  // Monte Carlo measured against the exit-plan stop while the gate and
+  // structuralRR — both already reading `sharedStop` — measured against the
+  // raw structural level: two different stops on one card. Routing the MC
+  // request through `sharedStop` too closes that gap; keep it that way
+  // rather than reverting to `exitPlan?.stop.price` for "simplicity".
+  const sharedStop = useMemo(() => {
+    if (exitPlan && arithmeticLiveStockPrice != null) {
+      return { price: exitPlan.stop.price, stockPrice: arithmeticLiveStockPrice, source: 'exit_plan' as const };
+    }
+    if (structuralStop) {
+      return { price: structuralStop.price, stockPrice: structuralStopStockPrice ?? data.price, source: 'structural' as const };
+    }
+    return null;
+  }, [exitPlan, arithmeticLiveStockPrice, structuralStop, structuralStopStockPrice, data.price]);
+
   const estimateFirstPassage = useCallback(async () => {
     firstPassageRequestRef.current?.abort();
     const controller = new AbortController();
@@ -699,7 +736,30 @@ export function TradeCard({
         premium,
         delta,
         trend_score: data.stockBreakdown.trend,
-        invalidation_price: data.exit.invalidation,
+        // Per D1 (stop-model-unification plan), Monte Carlo owns the same
+        // structural+ATR stop as the Arithmetic card, not the flat scan-time
+        // -3% (`data.exit.invalidation`). Sending the flat stop here was a
+        // real discrepancy, not a display nit: the "probability of
+        // invalidation" was being measured against a level up to 3x tighter
+        // than the structural+ATR stop shown a few inches above on the same
+        // card. Reads `sharedStop` (declared above, ahead of this callback)
+        // rather than `exitPlan?.stop.price` directly so this resolves
+        // through the exact same memo the gate and structuralRR use —
+        // `sharedStop` refuses a cache-restored exit plan that has no fresh
+        // stock price to pair it with and falls back to the raw structural
+        // level instead, which `exitPlan?.stop.price` alone would not do.
+        // `exitPlan` is optional/user-triggered (Compute Arithmetic Plan) and
+        // `structuralStop` only populates after a Check-structure/Estimate
+        // click, so `sharedStop` itself is frequently null — fall back to
+        // the flat stop when it hasn't been computed yet.
+        //
+        // Known limitation, deliberately not fixed here (tracked separately,
+        // plan's Phase 2.4 "Freshness"): if the user re-runs Compute
+        // Arithmetic Plan AFTER already running this estimate, the
+        // already-rendered Monte Carlo probability does NOT retroactively
+        // update to the new exit plan stop — it silently goes stale until
+        // the user re-runs the estimate.
+        invalidation_price: sharedStop?.price ?? data.exit.invalidation,
         t1_pct: targetPct.t1,
         t2_pct: targetPct.t2,
         t3_pct: targetPct.t3,
@@ -736,7 +796,7 @@ export function TradeCard({
     } finally {
       if (!controller.signal.aborted) setFirstPassageLoading(false);
     }
-  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, targetPct, structuralLoading]);
+  }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, sharedStop, targetPct, structuralLoading]);
 
   // R:R using the structural stop (order block / swing level) as the risk
   // basis instead of the original fixed "premium * 60%" assumption — only
@@ -748,26 +808,68 @@ export function TradeCard({
   // independent, user-triggered fetches, so if they're clicked minutes
   // apart the two stock prices they captured can legitimately differ; this
   // R:R is only as consistent as how close together the user ran both.
+  // Gate thresholds: per-horizon from scoring_rules.yaml, with Step 3's per-run
+  // override winning when set. Resolved here rather than inside `stopPremiumRisk`
+  // so the helper stays a pure function of its arguments.
+  const scanHorizon = useScanStore((s) => s.context?.horizon ?? null);
+  const stopPremiumThresholds = useStopPremiumThresholdsStore((s) => s.thresholds);
+  const stopPremiumOverride = useStopPremiumThresholdsStore((s) => s.override);
+
+  // Stop-vs-premium gate. Deliberately reads the SCAN-TIME `contractDetails`
+  // (mid/delta) rather than `firstPassageContext`'s fresh pair, unlike
+  // `structuralRR` below: the gate's whole job is to fire before the user has
+  // run an Estimate, so it cannot depend on one having run. The stock price
+  // prefers the fresh one Check-structure measured against, falling back to the
+  // scan snapshot. That mixes vintages by a few cents — accepted here and
+  // nowhere else on this card, because the verdict is a coarse band (is this
+  // stop ~a total loss?) that a few cents cannot move across a threshold, and a
+  // gate that only speaks after two round-trips is not a gate.
+  const stopRisk = useMemo(() => {
+    if (!sharedStop) return null;
+    const cd = data.contractDetails;
+    if (!cd) return null;
+    return stopPremiumRisk(
+      sharedStop.price,
+      sharedStop.stockPrice,
+      cd.delta,
+      cd.mid,
+      getStopPremiumThresholds(
+        scoringHorizonFromLabel(scanHorizon),
+        stopPremiumThresholds,
+        stopPremiumOverride,
+      ),
+    );
+  }, [sharedStop, data.contractDetails, scanHorizon, stopPremiumThresholds, stopPremiumOverride]);
+
+  // R:R using the shared stop (structural+ATR final stop when an Arithmetic
+  // Plan has been computed this mount, else the raw order block / swing
+  // level — see `sharedStop` above) as the risk basis instead of the original
+  // fixed "premium * 60%" assumption — only computable once BOTH a stop and
+  // Estimate have been run, and using each other's FRESH persisted values
+  // (sharedStop, firstPassageContext), never data.price/data.contractDetails,
+  // for the same staleness reasons documented on those two handlers above.
+  // NOTE: "fresh" does not mean "identical" — Check structure/Compute
+  // Arithmetic Plan and Estimate are independent, user-triggered fetches, so
+  // if they're clicked minutes apart the two stock prices they captured can
+  // legitimately differ; this R:R is only as consistent as how close together
+  // the user ran both.
   const structuralRR = useMemo(() => {
-    if (!structuralStop || structuralStopStockPrice == null || !firstPassage || !firstPassageContext) {
+    if (!sharedStop || !firstPassage || !firstPassageContext) {
       return null;
     }
-    // Both existing isn't enough on its own — they also have to be safe to
-    // combine. EACH must be independently confirmed fresh this mount, or one
-    // side could be a stale restore sitting next to the other's live value —
-    // a manual "Check structure" landing next to a still-restored (and now
-    // provably older) estimate, or the reverse — which is exactly the
-    // mixed-vintage number this whole mechanism exists to prevent. See
-    // firstPassageIsFreshRef's declaration for why this no longer has a
-    // "trust a restored pair" exemption. This reads two refs during render,
-    // which is safe here specifically because every path that flips either
-    // of them also changes one of this memo's real dependencies below in the
-    // same update, so the memo is guaranteed to re-evaluate at the moment the
-    // answer could change.
-    if (!structuralIsFreshRef.current || !firstPassageIsFreshRef.current) {
-      return null;
-    }
-    const stockMove = Math.abs(structuralStop.price - structuralStopStockPrice);
+    // Each side of the pairing must be independently confirmed fresh this
+    // mount before being combined — a stale restore sitting next to a fresh
+    // value is exactly the mixed-vintage number this mechanism exists to
+    // prevent (see firstPassageIsFreshRef's declaration above). firstPassage
+    // always needs its own freshness check; sharedStop's needs depend on
+    // where it came from: the raw-structural branch is only as fresh as the
+    // last checkStructure/auto-fetch (structuralIsFreshRef), while the
+    // exit-plan branch is only ever populated (see sharedStop's own memo)
+    // when arithmeticLiveStockPrice was set THIS mount, which already IS its
+    // freshness guarantee — no separate ref needed for that branch.
+    if (!firstPassageIsFreshRef.current) return null;
+    if (sharedStop.source === 'structural' && !structuralIsFreshRef.current) return null;
+    const stockMove = Math.abs(sharedStop.price - sharedStop.stockPrice);
     const deltaEst = Math.max(Math.abs(firstPassageContext.delta), 0.05);
     // A long option's max loss is capped at the premium paid — the linear
     // delta approximation has no such cap and can overshoot it for a distant
@@ -783,7 +885,7 @@ export function TradeCard({
       // not-computable case.
       return { pct: t.pct, rr: reward / risk };
     });
-  }, [structuralStop, structuralStopStockPrice, firstPassage, firstPassageContext]);
+  }, [sharedStop, firstPassage, firstPassageContext]);
 
   // Re-derives the SAME pairing eligibility structuralRR's memo checks
   // internally, for the render below: structuralZeroRisk's "N/A (stop =
@@ -792,7 +894,11 @@ export function TradeCard({
   // (structuralRR null for a reason OTHER than risk≤0) would wrongly claim
   // the stop sits at the current price. Plain read, not memoized: cheap
   // boolean, and it only needs to be current as of this render anyway.
-  const structuralPairEligible = structuralIsFreshRef.current && firstPassageIsFreshRef.current;
+  // Generalized across both `sharedStop` sources: the exit-plan branch's
+  // freshness guarantee is baked into `sharedStop` itself (see its own memo),
+  // so only the raw-structural branch needs the extra ref check.
+  const structuralPairEligible = firstPassageIsFreshRef.current
+    && (sharedStop?.source === 'exit_plan' || structuralIsFreshRef.current);
 
   const checkStructure = useCallback(async () => {
     structuralRequestRef.current?.abort();
@@ -841,15 +947,25 @@ export function TradeCard({
     setOverlay((prev) => ({ ...prev, contracts: initialContracts }));
   }, [initialContracts]);
 
+  // Direct-call pattern (see `onEditsChange`'s own doc comment) — same shape
+  // as `applyMaxLossOverride` below: setOverlay and onEditsChange are two
+  // sibling statements, not one nested inside the other's updater. An
+  // earlier version called `onEditsChange` from INSIDE the setOverlay
+  // functional updater; React updater functions must be pure, and it can
+  // invoke them during another component's render pass, so that nested call
+  // was actually updating Step7Page's state while React was rendering
+  // TradeCard — "Cannot update a component while rendering a different
+  // component". Depending on `overlay` here (instead of using the updater
+  // form) is safe: every call site is a single discrete user event (a click
+  // or an input's onChange), never several patch() calls batched in the same
+  // tick against a stale closure.
   const patch = useCallback(
     (partial: Partial<EditOverlay>) => {
-      setOverlay((prev) => {
-        const next = { ...prev, ...partial };
-        onEditsChange?.(next);
-        return next;
-      });
+      const next = { ...overlay, ...partial };
+      setOverlay(next);
+      onEditsChange?.(next);
     },
-    [onEditsChange],
+    [overlay, onEditsChange],
   );
 
   const displayRecId = useMemo(() => propRecId ?? generateRecId(), [propRecId]);
@@ -1186,6 +1302,28 @@ export function TradeCard({
                 />
               </dl>
             )}
+            {!structuralError && !structuralLoading && stopRisk && (
+              <div className={styles.stopRiskGate}>
+                <div className={styles.stopRiskHead}>
+                  <Text size={10} tone="dim">STOP COST</Text>
+                  <StatusBadge
+                    status={stopRisk.status}
+                    label={`${(stopRisk.fraction * 100).toFixed(0)}% OF PREMIUM`}
+                    tooltip={
+                      stopRisk.status === 'PASS'
+                        ? 'The contract still holds meaningful value if this stop is hit — the cheaper candidate to be wrong on.'
+                        : stopRisk.capped
+                          ? 'At this stop the contract is a total loss, so the stop is not a risk control on it. A closer stop, or a higher-delta strike, would make it one. Not a reason to skip the trade — a reason to size it knowing that.'
+                          : 'This stop costs most of the premium. Little is left to salvage if it is hit.'
+                    }
+                  />
+                </div>
+                {/* Every input, so the verdict is auditable at a glance — the
+                    whole complaint that produced this gate was a ratio whose
+                    inputs were invisible. */}
+                <Data size={11} tone="secondary">{formatStopPremiumRisk(stopRisk)}</Data>
+              </div>
+            )}
           </div>
 
           {/* Compute Arithmetic Plan — renamed from "Compute Exit Plan". Runs
@@ -1371,11 +1509,11 @@ export function TradeCard({
                   structuralPending={structuralLoading}
                   structuralUnavailable={structuralStop === null}
                   structuralZeroRisk={
-                    structuralStop != null && structuralStopStockPrice != null
+                    sharedStop != null
                     && firstPassageContext != null && structuralRR == null && !structuralLoading
                     && structuralPairEligible
                   }
-                  structuralStop={structuralStop}
+                  sharedStopPrice={sharedStop?.price ?? null}
                 />
               ))}
               <div className={styles.targetRow}>
@@ -1921,17 +2059,20 @@ function ProfitTargetRow({
   structuralPending,
   structuralUnavailable,
   structuralZeroRisk,
-  structuralStop,
+  sharedStopPrice,
 }: {
   target: FirstPassageTarget;
   structuralRRValue: number | null;
   structuralPending: boolean;
   structuralUnavailable: boolean;
   structuralZeroRisk: boolean;
-  /** Feature 2 — the raw structural-stop level backing structuralRRValue,
-   *  reused (not re-fetched) to render the new "Structural level found" line
-   *  below. Same value the Arithmetic card's "Check Structure" block reads. */
-  structuralStop: StructuralStop | null | undefined;
+  /** The stop level backing structuralRRValue — sourced from `sharedStop`
+   *  (Piece 2: the exit plan's structural+ATR stop when computed this mount,
+   *  else the raw Check-Structure level), NOT necessarily the same object
+   *  the standalone "Check Structure" block above renders. Only the price is
+   *  needed here (for the "Structural level found" line), so this is a
+   *  number, not the full StructuralStop shape. */
+  sharedStopPrice: number | null;
 }) {
   const label = `T${Math.round(target.pct * 100)}%`;
   // Order matters: a stop that resolved to exactly the current stock price
@@ -1961,8 +2102,8 @@ function ProfitTargetRow({
   // pairing hasn't been reconfirmed this mount (see the comment above); this
   // line must show that SAME gated state, not a confident-looking price next
   // to a gated ratio.
-  const structuralLevelValue = structuralRRValue != null && structuralStop
-    ? `$${structuralStop.price.toFixed(2)}`
+  const structuralLevelValue = structuralRRValue != null && sharedStopPrice != null
+    ? `$${sharedStopPrice.toFixed(2)}`
     : structuralPending
       ? 'Checking…'
       : structuralUnavailable
