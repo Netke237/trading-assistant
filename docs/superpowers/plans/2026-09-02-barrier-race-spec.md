@@ -33,13 +33,13 @@ barrier it races is a level one of the three existing cards already produced.
 | **Q3** | The stop-cost gate reprices at today's date via Black-Scholes with the contract's own IV. |
 | **Q5** | Build the race, ahead of piece 3. |
 | **Q6** | The armed stop is whichever fires first, informed by this card. Until it ships, the structural stock stop. |
-| **Q7** | Gate thresholds re-derived to 0.80 / 0.70 / 0.60 (Intraday / Swing / Position). |
+| **Q7** | Gate thresholds re-derived to **0.80 / 0.70 / 0.60** (Intraday / Swing / Position), taken as proposed rather than measured against a real scan. Kenneth's explicit call; revisit only if the observed flag rate looks wrong in practice. |
 | **Q9** | Its own card, below Monte Carlo. Same simulation, same click. |
 | **Q10** | The premium-stop barrier reads the card's existing editable "Premium stop" field. Piece 4 stays deferred. |
 | **D8** | Two states, PASS/CAUTION, never REJECT, never red. The race adds no new gate. |
 | **D10** | No stop orders. Everything here is an in-app number, not a broker instruction. |
 
-**Refinement to the reference drawing** (introduced by this spec, pending Kenneth's OK): the drawing
+**Refinement to the reference drawing** (introduced by this spec, **approved by Kenneth 2026-09-02**; the artifact now matches): the drawing
 shows one race against a single target. This spec races **one row per target** (T1/T2/T3). The two
 stop barriers are shared across all three; only the target barrier changes. This is strictly more
 informative — it answers "which profit target is worth aiming at on this contract" — and costs
