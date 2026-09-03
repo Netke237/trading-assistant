@@ -287,23 +287,50 @@ function generateRecId(): string {
 }
 
 /**
- * Abort `controller` if nothing has settled within `ms`, and hand back the
- * cleanup. Returns the timer id so the caller can clear it on settle.
+ * Abort `controller` if nothing has settled within REQUEST_TIMEOUT_MS, and
+ * report that it was a TIMEOUT rather than a supersede.
  *
- * WHY THIS EXISTS. `lib/api.ts` sets no timeout on `fetch`, which was survivable
- * while every request here only drove its own spinner. It stopped being
- * survivable when the Estimate button was disabled on `structuralLoading ||
- * exitPlanLoading`: a request that never settles then leaves that flag true
- * forever, so "Estimating…" and "Waiting for the stop this estimate races
- * against…" sit on screen with both buttons dead and no way out but navigating
- * to another contract. Bounding these three calls is the narrow fix; a timeout
- * in `api.ts` itself would also bound scans and backtests, which legitimately
- * run for minutes.
+ * WHY THE FLAG. Every handler here distinguishes "this request was cancelled
+ * because a newer one replaced it" from "this request failed", by checking
+ * `controller.signal.aborted` in its catch and its finally. A bare
+ * `setTimeout(() => controller.abort())` is indistinguishable from the former,
+ * so on a timeout the catch returned early without setting an error AND the
+ * finally skipped clearing the loading flag — the request was cancelled and the
+ * spinner became permanent and silent. That is the exact failure the timeout
+ * was added to fix, reintroduced by the fix.
+ *
+ * WHY IT EXISTS AT ALL. `lib/api.ts` sets no timeout on `fetch`. That was
+ * survivable while each request only drove its own spinner; it stopped being
+ * survivable once the Estimate button was disabled on `structuralLoading ||
+ * exitPlanLoading`, because a request that never settles then disables a button
+ * the user has no other way to re-enable. Bounding this component's own calls is
+ * the narrow fix; a timeout inside `api.ts` would also bound scans and
+ * backtests, which legitimately run for minutes.
  */
 const REQUEST_TIMEOUT_MS = 20_000;
 
-function abortAfterTimeout(controller: AbortController): ReturnType<typeof setTimeout> {
-  return setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+interface RequestDeadline {
+  timer: ReturnType<typeof setTimeout>;
+  /** True once the deadline fired. Read it in `catch` and `finally` to tell a
+   *  timeout apart from a supersede — `controller.signal.aborted` is true for
+   *  both. */
+  timedOut: boolean;
+}
+
+function abortAfterTimeout(controller: AbortController): RequestDeadline {
+  const deadline: Partial<RequestDeadline> = { timedOut: false };
+  deadline.timer = setTimeout(() => {
+    deadline.timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+  return deadline as RequestDeadline;
+}
+
+/** True when this request should be treated as a real failure — it either threw
+ *  on its own, or our own deadline killed it. False only when a newer request
+ *  superseded it, which is the one case that must stay silent. */
+function isRealFailure(controller: AbortController, deadline: RequestDeadline): boolean {
+  return !controller.signal.aborted || deadline.timedOut;
 }
 
 export function TradeCard({
@@ -587,7 +614,7 @@ export function TradeCard({
     exitPlanRequestRef.current?.abort();
     const controller = new AbortController();
     exitPlanRequestRef.current = controller;
-    const timer = abortAfterTimeout(controller);
+    const deadline = abortAfterTimeout(controller);
     setExitPlanLoading(true);
     setExitPlanError(false);
     setExitPlan(undefined);
@@ -617,7 +644,7 @@ export function TradeCard({
       setExitPlan({ ...res, computedAt: new Date().toISOString() });
       setArithmeticLiveStockPrice(entryPrice);
     } catch {
-      if (controller.signal.aborted) return;
+      if (!isRealFailure(controller, deadline)) return;
       setExitPlanError(true);
       // Same reasoning as estimateFirstPassage's `.catch`: this was cleared to
       // `undefined` above (in-flight, which the parent's cache treats as
@@ -626,8 +653,8 @@ export function TradeCard({
       // reappear on the next navigate-away-and-back.
       setExitPlan(null);
     } finally {
-      clearTimeout(timer);
-      if (!controller.signal.aborted) setExitPlanLoading(false);
+      clearTimeout(deadline.timer);
+      if (isRealFailure(controller, deadline)) setExitPlanLoading(false);
     }
   }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend]);
 
@@ -679,6 +706,11 @@ export function TradeCard({
     firstPassageRequestRef.current?.abort();
     const controller = new AbortController();
     firstPassageRequestRef.current = controller;
+    // The one call that actually runs the 2000-path simulation, and the only
+    // one that was left unbounded: firstPassageLoading gates the Estimate
+    // button, so a hung /contracts/first-passage left "Estimating…" disabled
+    // with no way out but navigating to another contract.
+    const deadline = abortAfterTimeout(controller);
     setFirstPassageLoading(true);
     setFirstPassageError(false);
     setFirstPassage(undefined);
@@ -738,7 +770,7 @@ export function TradeCard({
         structuralRequestRef.current?.abort();
         const structuralController = new AbortController();
         structuralRequestRef.current = structuralController;
-        const structuralTimer = abortAfterTimeout(structuralController);
+        const structuralDeadline = abortAfterTimeout(structuralController);
         setStructuralLoading(true);
         setStructuralError(false);
         await api.getStructuralStop({
@@ -755,7 +787,7 @@ export function TradeCard({
             structuralIsFreshRef.current = true;
           })
           .catch(() => {
-            if (structuralController.signal.aborted) return;
+            if (!isRealFailure(structuralController, structuralDeadline)) return;
             setStructuralError(true);
             // This refresh only ever runs because structuralIsFreshRef was
             // false — i.e. whatever structuralStop currently holds (a cache
@@ -790,8 +822,8 @@ export function TradeCard({
             setStructuralStopStockPrice(null);
           })
           .finally(() => {
-            clearTimeout(structuralTimer);
-            if (!structuralController.signal.aborted) setStructuralLoading(false);
+            clearTimeout(structuralDeadline.timer);
+            if (isRealFailure(structuralController, structuralDeadline)) setStructuralLoading(false);
           });
         if (controller.signal.aborted) return;
       }
@@ -888,7 +920,7 @@ export function TradeCard({
       });
       firstPassageIsFreshRef.current = true;
     } catch {
-      if (controller.signal.aborted) return;
+      if (!isRealFailure(controller, deadline)) return;
       setFirstPassageError(true);
       // Same reasoning, same fix, as the structural sub-fetch's `.catch`
       // above — and it applies here even more directly, since this IS the
@@ -904,7 +936,8 @@ export function TradeCard({
       setFirstPassage(null);
       setFirstPassageContext(null);
     } finally {
-      if (!controller.signal.aborted) setFirstPassageLoading(false);
+      clearTimeout(deadline.timer);
+      if (isRealFailure(controller, deadline)) setFirstPassageLoading(false);
     }
     // `structuralStop`, `exitPlan` and `arithmeticLiveStockPrice` are read
     // directly (to re-derive sharedStop's precedence from what THIS click
@@ -1009,7 +1042,7 @@ export function TradeCard({
     structuralRequestRef.current?.abort();
     const controller = new AbortController();
     structuralRequestRef.current = controller;
-    const timer = abortAfterTimeout(controller);
+    const deadline = abortAfterTimeout(controller);
     setStructuralLoading(true);
     setStructuralError(false);
     setStructuralStop(undefined);
@@ -1034,7 +1067,7 @@ export function TradeCard({
       setArithmeticLiveStockPrice(referenceStockPrice);
       structuralIsFreshRef.current = true;
     } catch {
-      if (controller.signal.aborted) return;
+      if (!isRealFailure(controller, deadline)) return;
       setStructuralError(true);
       // Same fix as estimateFirstPassage's structural sub-fetch `.catch`:
       // this function cleared to `undefined` above (in-flight state, which
@@ -1045,8 +1078,8 @@ export function TradeCard({
       setStructuralStop(null);
       setStructuralStopStockPrice(null);
     } finally {
-      clearTimeout(timer);
-      if (!controller.signal.aborted) setStructuralLoading(false);
+      clearTimeout(deadline.timer);
+      if (isRealFailure(controller, deadline)) setStructuralLoading(false);
     }
   }, [data.symbol, data.direction, data.price]);
 
@@ -1146,21 +1179,29 @@ export function TradeCard({
   // it. That is the mixed-vintage hazard section 3.3 exists to prevent, landing
   // in the one place on the card a number is most likely to be acted on.
   // Hoisted and named so the two sites cannot drift apart again.
-  // Derived from STATE alone, deliberately, and no longer from
-  // firstPassageIsFreshRef. `raceBarriers` is set only on a successful estimate
-  // and cleared in exactly the places the ref is (the handler's entry, the
-  // contract-change effect), so `raceBarriers.contract === data.contract`
-  // carries everything the ref carried AND survives the frame between commit
-  // and that effect, which a ref cleared inside it cannot.
+  // Derived from STATE alone, deliberately, and not from firstPassageIsFreshRef.
+  // `raceBarriers` is set only on a successful estimate and cleared in exactly
+  // the places the ref is (the handler's entry, the contract-change effect), so
+  // `raceBarriers.contract === data.contract` carries everything the ref
+  // carried AND survives the frame between commit and that effect, which a ref
+  // cleared inside it cannot.
   //
   // Keeping both read well but made neither load-bearing: with the ref in the
-  // expression, deleting the contract term left all 138 TradeCard tests green,
+  // expression, deleting the contract term left all TradeCard tests green,
   // because the ref still hid the restored-estimate case that was the only
   // observable one. A guard no test can fail is not a guard. The ref remains
   // for its other consumers.
-  const raceIsShowable = raceBarriers?.contract === data.contract
-    && firstPassageContext != null
-    && !raceBarriersMoved;
+  //
+  // TWO SEPARATE THINGS, deliberately. `raceIsFresh` means "this race belongs
+  // to the contract on screen and was fetched this mount"; `raceIsShowable`
+  // adds "and neither barrier has moved since". The card needs the first,
+  // because it renders the "barriers changed — re-run" copy itself and would
+  // otherwise be handed a prop it can never act on. Everything that prints race
+  // NUMBERS needs the second.
+  const raceIsFresh = raceBarriers?.contract === data.contract
+    && firstPassageContext != null;
+
+  const raceIsShowable = raceIsFresh && !raceBarriersMoved;
 
   // NOTE ON THE BARRIER RACE AS A "FOURTH SOURCE" (spec section 3.4): it is not a
   // separately-timed method and deliberately does not get its own
@@ -1732,7 +1773,7 @@ export function TradeCard({
           // legs and dollar edge for the frame between commit and the reset
           // effect. Verified with a useLayoutEffect probe: bars leaked, the
           // Final Recommendation did not.
-          isFresh={raceIsShowable}
+          isFresh={raceIsFresh}
           barriersChanged={raceBarriersMoved}
         />
 

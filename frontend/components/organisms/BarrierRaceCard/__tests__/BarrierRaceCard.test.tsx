@@ -267,7 +267,13 @@ describe('the numbers the card promises', () => {
         race={{
           ...RACE,
           outcomes: [outcome({
+            // BOTH the raw shares and the weights the backend allocated from
+            // them. Overriding only the shares left the assertion below reading
+            // the base fixture's weights, so the test could not fail on the
+            // case it was written for.
             pTargetFirst: 0.138, pStockStopFirst: 0.0, pPremiumStopFirst: 0.785, pNeither: 0.077,
+            weightTargetFirst: 0.14, weightStockStopFirst: 0.0,
+            weightPremiumStopFirst: 0.78, weightNeither: 0.08,
           })],
         }}
         premiumStopFromField
@@ -280,6 +286,25 @@ describe('the numbers the card promises', () => {
     const spoken = [...label.matchAll(/(\d+)%/g)].slice(1).map((m) => Number(m[1]));
     expect(spoken).toHaveLength(4);
     expect(spoken.reduce((a, b) => a + b, 0)).toBe(100);
+    // And the fixture is genuinely capable of failing: rounding those shares
+    // one by one gives 14 + 0 + 79 + 8 = 101.
+    const naive = [0.138, 0.0, 0.785, 0.077].map((v) => Math.round(v * 100));
+    expect(naive.reduce((a, b) => a + b, 0)).toBe(101);
+  });
+
+  it('renders nothing at all for a stale race, even when its barriers moved', () => {
+    // The freshness check must outrank the barriers-changed branch. The other
+    // way round, the frame after a contract switch — isFresh already false,
+    // barriersChanged computed from the PREVIOUS contract's snapshot against
+    // the new contract's stop — painted "Barriers changed — re-run the
+    // estimate" plus the previous contract's invalidation probability under the
+    // new contract's header.
+    const { container } = renderCard({
+      isFresh: false,
+      barriersChanged: true,
+      invalidation: { probability: 0.30, expectedDays: 4 },
+    });
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('keeps the stock-stop probability on screen when only the PREMIUM stop moved', () => {

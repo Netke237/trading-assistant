@@ -27,9 +27,13 @@ export function money(v: number): string {
 }
 
 function days(v: number): string {
-  // The reprice horizon can be a fractional day once the DTE clamp binds
-  // (0.75 x a 3-day contract). Show a whole number when it is one.
-  return Number.isInteger(v) ? `${v}d` : `${v.toFixed(1)}d`;
+  // The reprice horizon can be fractional once a clamp binds (0.75 x a 3-day
+  // contract, or the half-day-before-expiry cap). Show a whole number when it
+  // is one, and otherwise enough precision to BE the value used: at 1dp,
+  // 0.75 x 21 = 15.75 printed as "15.8d", and this card's contract is that
+  // every printed input is the one the arithmetic used.
+  if (Number.isInteger(v)) return `${v}d`;
+  return `${Number(v.toFixed(2))}d`;
 }
 
 /**
@@ -39,9 +43,11 @@ function days(v: number): string {
  *
  * There used to be a largest-remainder allocation HERE, over the raw shares,
  * which fixed the labels but left the edge chain three blocks below printing a
- * separately-rounded multiplier for the same outcome: the table could read
- * "Neither 49%" while the chain read "+ 0.48 x", on 48% of real rows. One
- * allocation, done once, upstream of both.
+ * separately-rounded multiplier for the same outcome — the table reading
+ * "Neither 49%" beside a chain reading "+ 0.48 x". Any share whose allocated
+ * hundredth differs from its own 2dp rounding disagrees, which on sampled
+ * sweeps of real output ran from a few percent to a fifth of rows depending on
+ * the parameter mix. One allocation, done once, upstream of both.
  */
 export function weightPercents(o: BarrierRaceOutcome): number[] {
   return [
@@ -75,9 +81,19 @@ export function formatRaceRisk(o: BarrierRaceOutcome, premium: number): string {
   // paths — so the two legitimately differ, and on the reference contract the
   // column reads "—" while this chain says 26d. When no path reached the stop
   // at all, this is the preset fallback and no median exists anywhere on screen.
-  const basis = o.daysAnyPathReachedStop != null
-    ? ' — the median day any path reaches the stop'
-    : ' — the preset default; no path reached the stop';
+  const basis = (() => {
+    if (o.daysAnyPathReachedStop == null) {
+      return ' — the preset default; no path reached the stop';
+    }
+    // The median is capped half a day short of expiry, so on a short contract
+    // the number printed here is NOT the median: at dte=10 with a median of
+    // 10, this prints 9.5 while daysAnyPathReachedStop is 10. Calling that
+    // "the median" was simply false whenever the cap bound.
+    if (Math.abs(o.daysAnyPathReachedStop - o.repriceDaysStockStop) > 1e-9) {
+      return ` — capped just short of expiry; the median is ${days(o.daysAnyPathReachedStop)}`;
+    }
+    return ' — the median day any path reaches the stop';
+  })();
   return (
     `${money(premium)} premium - ${money(o.stopRepricedValue)} at the stop ` +
     `(repriced at ${days(o.repriceDaysStockStop)}${basis}) = ${money(o.riskStockStop)}`
@@ -204,7 +220,13 @@ export function premiumStopSourceNote(
   dollarStop: number | null | undefined,
   premium: number,
 ): string {
-  const applied = `${(appliedPct * 100).toFixed(0)}% of premium`;
+  // "~60%", with the dollars that ARE exact. appliedPct is an arbitrary float
+  // (a scan-time dollar stop over the premium quoted now), so a 0dp percentage
+  // failed to reproduce the barrier level printed in the very next cell on 84%
+  // of rows — a $3.19 barrier labelled "53% of premium" against a $6.84
+  // premium, where 53% is $3.21. Same defect as the ratio two functions above,
+  // and more checkable here because both numbers sit in one table row.
+  const applied = `~${(appliedPct * 100).toFixed(0)}% of premium`;
   if (fromField) {
     return `${applied}, from the editable field above`;
   }

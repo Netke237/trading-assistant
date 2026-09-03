@@ -2088,36 +2088,41 @@ const RACE_RESPONSE = {
     { pct: 0.50, stockPrice: null, optionPrice: 4.13, probability: 0.10, expectedDays: null },
   ],
   invalidation: { probability: 0.30, expectedDays: 4 },
+  // Genuine `estimate_first_passage` output for this card's own inputs
+  // (186.1 spot / 190 strike / 24 DTE / $2.75 premium / stop 180 /
+  // premium_stop_pct 1.5/2.75, seed 7). The previous fixture was hand-written
+  // and internally inconsistent: its `weight*` values could not be produced by
+  // the backend's allocation of its own shares (so the bar and the label
+  // disagreed within the fixture), and its `edgePerContract` of -111.42 is
+  // unreachable, since every edge is a whole number of dollars by construction.
   race: {
     outcomes: [0.20, 0.35, 0.50].map((targetPct) => ({
       targetPct,
       targetOptionPrice: 3.3,
-      pTargetFirst: 0.27,
-      pStockStopFirst: 0.00,
-      pPremiumStopFirst: 0.68,
-      pNeither: 0.05,
-      daysTarget: 7,
+      pTargetFirst: 0.5495,
+      pStockStopFirst: 0.0,
+      pPremiumStopFirst: 0.4415,
+      pNeither: 0.009,
+      daysTarget: 4,
       daysStockStop: null,
-      daysPremiumStop: 20,
-      daysAnyPathReachedStop: 26,
-      // Allocated by the backend, summing to exactly 1.00 — the same four
-      // numbers the edge was weighted with and the card prints.
-      weightTargetFirst: 0.27,
+      daysPremiumStop: 11,
+      daysAnyPathReachedStop: 17,
+      weightTargetFirst: 0.55,
       weightStockStopFirst: 0.0,
-      weightPremiumStopFirst: 0.69,
-      weightNeither: 0.04,
-      terminalMean: 1.19,
+      weightPremiumStopFirst: 0.44,
+      weightNeither: 0.01,
+      terminalMean: 2.41,
       rewardDollar: 0.55,
-      repriceDaysStockStop: 7,
-      stopRepricedValue: 0.18,
-      riskStockStop: 2.57,
-      riskPremiumStop: 1.65,
-      rrStockStop: 0.2140,
-      rrPremiumStop: 0.3333,
-      edgePerContract: -111.42,
+      repriceDaysStockStop: 17,
+      stopRepricedValue: 0.09,
+      riskStockStop: 2.66,
+      riskPremiumStop: 1.5,
+      rrStockStop: 0.2067669172932331,
+      rrPremiumStop: 0.3666666666666667,
+      edgePerContract: -36.0,
     })),
-    premiumStopPrice: 1.10,
-    premiumStopPct: 0.60,
+    premiumStopPrice: 1.25,
+    premiumStopPct: 1.5 / 2.75,
     stockStopPrice: 180.0,
     premiumUsed: 2.75,
     ivSolved: true,
@@ -2350,5 +2355,118 @@ describe('the estimate never races a level it depends on', () => {
     );
     expect(screen.queryByText(/Armed stop/)).not.toBeInTheDocument();
     expect(screen.queryAllByTestId('segment-Target first')).toHaveLength(0);
+  });
+});
+
+// -- Round 4: a request that never settles must not strand the card ----------
+//
+// `lib/api.ts` sets no timeout on fetch. That was survivable while each request
+// only drove its own spinner, and stopped being survivable once the Estimate
+// button was disabled on structuralLoading || exitPlanLoading. The first
+// attempt at a timeout made it worse: it aborted the request's own controller,
+// which every handler here reads as "superseded by a newer request", so the
+// catch returned silently AND the finally skipped clearing the loading flag.
+// The request was cancelled and the spinner became permanent.
+
+describe('a request that never settles', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+  });
+  afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
+  });
+
+  /** Rejects when the caller's signal aborts, the way a real fetch does. */
+  function neverSettles() {
+    return jest.fn((..._args: unknown[]) => {
+      const signal = _args.find((a): a is AbortSignal => a instanceof AbortSignal);
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+    });
+  }
+
+  it('gives "Check structure" back after the deadline, and says it failed', async () => {
+    (api.getStructuralStop as jest.Mock).mockImplementation(neverSettles());
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    });
+    expect(screen.getByRole('button', { name: /checking structure/i })).toBeDisabled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(21_000);
+    });
+
+    expect(screen.getByRole('button', { name: /check structure/i })).toBeEnabled();
+    // And the Estimate button, which this one's loading flag also gates.
+    expect(screen.getByRole('button', { name: /run monte carlo estimate/i })).toBeEnabled();
+  });
+
+  it('gives the Estimate button back after the deadline', async () => {
+    // The slowest request on the card, and the one left unbounded entirely.
+    (api.getStructuralStop as jest.Mock).mockResolvedValue({
+      available: true, price: 180.0, source: 'order_block', confidence: 75, distancePct: 3.3,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockImplementation(neverSettles());
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+    expect(screen.getByRole('button', { name: /estimating/i })).toBeDisabled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(21_000);
+    });
+
+    expect(screen.getByRole('button', { name: /run monte carlo estimate/i })).toBeEnabled();
+    expect(screen.getByText(/Couldn.t compute an estimate/)).toBeInTheDocument();
+  });
+
+  it('gives "Compute Arithmetic Plan" back after the deadline', async () => {
+    (api.getStructuralStop as jest.Mock).mockResolvedValue({
+      available: false, price: null, source: null, confidence: null, distancePct: null,
+    });
+    (api.getExitPlan as jest.Mock).mockImplementation(neverSettles());
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+    });
+    expect(screen.getByRole('button', { name: /computing arithmetic plan/i })).toBeDisabled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(21_000);
+    });
+
+    expect(screen.getByRole('button', { name: /compute arithmetic plan/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /run monte carlo estimate/i })).toBeEnabled();
+  });
+
+  it('stays silent when a newer request supersedes an older one', async () => {
+    // The one abort that must NOT surface as an error: two clicks in a row.
+    let resolveSecond: (v: unknown) => void = () => {};
+    (api.getStructuralStop as jest.Mock)
+      .mockImplementationOnce(neverSettles())
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+    });
+    expect(screen.queryByText(/Couldn.t check structure/)).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveSecond({
+        available: true, price: 180.0, source: 'order_block', confidence: 75, distancePct: 3.3,
+      });
+    });
+    expect(screen.queryByText(/Couldn.t check structure/)).not.toBeInTheDocument();
   });
 });

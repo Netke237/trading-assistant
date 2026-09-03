@@ -103,9 +103,36 @@ def test_min_days_floors_the_result_but_the_dte_ceiling_outranks_it():
     intrinsic value only — precisely what max_fraction_of_dte exists to
     prevent."""
     assert resolve_reprice_days("Intraday", None, None, dte=1, sim_median=None) == 0.75
-    # The floor still applies to a simulated median, which the ceiling does not.
-    assert resolve_reprice_days("Swing", None, None, dte=1, sim_median=0.1) == 1.0
+    # The floor applies to a simulated median too — but only where it does not
+    # push the barrier past the half-day-before-expiry cap (see below).
     assert resolve_reprice_days("Swing", None, None, dte=30, sim_median=0.1) == 1.0
+    assert resolve_reprice_days("Swing", None, None, dte=1, sim_median=0.1) == 0.5
+
+
+def test_a_simulated_median_is_capped_half_a_day_short_of_expiry():
+    """A simulated median cannot EXCEED the contract's life but can EQUAL it —
+    the median is a day index plus one, so it ranges 1..dte. At dte exactly, the
+    remaining life collapses to remaining_years_at_barrier's floor and every
+    level prices at intrinsic value only: the risk leg becomes the whole premium
+    and rr_stock_stop collapses to exactly the typed target percentage, which is
+    the greyed constant it is printed beside.
+
+    THE CEILING MUST WIN OVER min_days HERE. Written as
+    `max(min_days, min(median, dte - 0.5))` the floor won at dte=1 — and dte=1
+    is where a simulated median is ALWAYS exactly 1.0, so the cap did nothing on
+    precisely the contracts it existed for. Deleting the cap entirely used to
+    leave all 68 tests green."""
+    assert resolve_reprice_days("Swing", None, None, dte=10, sim_median=10.0) == 9.5
+    assert resolve_reprice_days("Swing", None, None, dte=2, sim_median=2.0) == 1.5
+    # dte=1: the floor would say 1.0, which is expiry. The cap outranks it.
+    assert resolve_reprice_days("Swing", None, None, dte=1, sim_median=1.0) == 0.5
+    # Never zero or negative, whatever the DTE.
+    assert resolve_reprice_days("Swing", None, None, dte=0.4, sim_median=1.0) > 0
+
+    # And the remaining life it implies is always genuinely positive.
+    for dte in (1, 2, 3, 10, 30):
+        days = resolve_reprice_days("Swing", None, None, dte=dte, sim_median=float(dte))
+        assert remaining_years_at_barrier(dte, days) * 365 >= 0.5
 
 
 def test_custom_with_no_typed_range_falls_back_rather_than_deriving_from_zero():

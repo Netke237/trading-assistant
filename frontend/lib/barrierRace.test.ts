@@ -68,8 +68,9 @@ describe('formatRaceRisk', () => {
   });
 
   it('shows a fractional reprice horizon when the DTE clamp bound', () => {
+    // 2.25d, not "2.3d": the printed input must BE the one the arithmetic used.
     expect(formatRaceRisk({ ...ROW, repriceDaysStockStop: 2.25 }, PREMIUM)).toContain(
-      'repriced at 2.3d',
+      'repriced at 2.25d',
     );
   });
 
@@ -197,7 +198,12 @@ describe('formatRacePremiumRR', () => {
   });
 
   it('says so plainly when there is no premium-stop risk to divide by', () => {
-    // A 5c contract with a 5% stop puts the risk leg at $0.00 in cents.
+    // A DEFENSIVE guard, not a reachable wire state. rrPremiumStop is null only
+    // when premium_stop_pct is non-positive, which the endpoint rejects
+    // (Field(gt=0, lt=1)) and the scoring default cannot produce. The 5c/5%
+    // case people reach for here does NOT hit it: the backend takes the ratio
+    // from the definition, so it returns the honest 4.00x even when the dollar
+    // risk leg quantizes to $0.00 (see the backend test of the same scenario).
     const s = formatRacePremiumRR(
       { ...ROW, rewardDollar: 0.01, riskPremiumStop: 0, rrPremiumStop: null },
     );
@@ -207,9 +213,17 @@ describe('formatRacePremiumRR', () => {
 });
 
 describe('premiumStopSourceNote', () => {
+  it('marks the percentage as approximate, because it does not reproduce the level', () => {
+    // appliedPct is an arbitrary float — a scan-time dollar stop over the
+    // premium quoted now — so a 0dp percentage failed to reproduce the barrier
+    // level printed in the next cell on 84% of rows: a $3.19 barrier labelled
+    // "53% of premium" against a $6.84 premium, where 53% is $3.21.
+    expect(premiumStopSourceNote(0.5336, true, 3.19, 6.84)).toContain('~53% of premium');
+  });
+
   it('credits the editable field when the field is what set the barrier', () => {
     expect(premiumStopSourceNote(0.60, true, 3.12, 5.20))
-      .toBe('60% of premium, from the editable field above');
+      .toBe('~60% of premium, from the editable field above');
   });
 
   it('takes the decision from the caller, not from the rounded premium', () => {
@@ -220,7 +234,7 @@ describe('premiumStopSourceNote', () => {
     // re-deriving gives 2.998/3.00 = 0.9993, crediting a field that was ignored.
     expect(premiumStopSourceNote(0.60, false, 2.998, 3.00)).toContain('the default');
     expect(premiumStopSourceNote(0.60, true, 3.00, 3.00))
-      .toBe('60% of premium, from the editable field above');
+      .toBe('~60% of premium, from the editable field above');
   });
 
   it('says the default was used when the field could not set the barrier', () => {

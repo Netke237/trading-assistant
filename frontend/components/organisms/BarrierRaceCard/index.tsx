@@ -98,6 +98,20 @@ export default function BarrierRaceCard({
     );
   }
 
+  // A restored estimate can be arbitrarily old, and its two barrier inputs
+  // (the shared stop, the editable premium stop) are live. Rendering it beside
+  // current inputs is the same mixed-vintage hazard five audit rounds built
+  // this freshness machinery to prevent.
+  //
+  // CHECKED BEFORE `barriersChanged`, deliberately. The other way round, the
+  // frame after a contract switch — where `isFresh` is already false but
+  // `barriersChanged` is computed from the previous contract's snapshot against
+  // the new contract's stop — painted "Barriers changed — re-run the estimate"
+  // plus the PREVIOUS contract's invalidation probability under the new
+  // contract's header. Only the `race === null` refusal above outranks this,
+  // because that copy depends on no live barrier at all.
+  if (!race || !isFresh) return null;
+
   if (barriersChanged) {
     return (
       <section className={styles.card}>
@@ -127,11 +141,6 @@ export default function BarrierRaceCard({
     );
   }
 
-  // A restored estimate can be arbitrarily old, and its two barrier inputs
-  // (the shared stop, the editable premium stop) are live. Rendering it beside
-  // current inputs is the same mixed-vintage hazard five audit rounds built
-  // structuralRR's freshness machinery to prevent.
-  if (!race || !isFresh) return null;
 
   return (
     <section className={styles.card}>
@@ -229,7 +238,8 @@ export default function BarrierRaceCard({
               // Scaled from the weights the BACKEND allocated and weighted the
               // edge with, so these labels, the edge chain's multipliers and
               // the printed total are all the same four numbers. Rounding each
-              // share here independently put 11-20% of rows at 99% or 101%;
+              // share here independently put a sizeable minority of real rows
+              // at 99% or 101% (12% on one sweep, 22% on another);
               // allocating them here instead fixed the row sum but still left
               // the chain below printing a different rounding of the same
               // outcome on ~48% of rows.
@@ -285,7 +295,10 @@ export default function BarrierRaceCard({
             </div>
           </div>
         ))}
-        {race.outcomes.every((o) => Math.round(o.pStockStopFirst * 100) === 0) && (
+        {/* The WEIGHT, not the raw share: a share of 0.0045 rounds to 0 but is
+             allocated 0.01, so reading the raw value let this claim the stock
+             stop never wins while the table two blocks above printed 1%. */}
+        {race.outcomes.every((o) => o.weightStockStopFirst === 0) && (
           <Text size={10} tone="caution">
             On this contract the premium stop fires first on every losing path, so the bolded
             stock-stop R:R describes an outcome the simulation never reached — its term contributes

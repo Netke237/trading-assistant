@@ -25,15 +25,15 @@ The rule, in order:
    WINS: the floor exists to stop an absurdly short horizon, but letting it push
    the barrier past expiry is the worse error of the two.
 
-   THE CEILING DOES NOT APPLY TO ``sim_median``. A simulated median cannot
+   THE ``max_fraction_of_dte`` CEILING DOES NOT APPLY TO ``sim_median``. A simulated median cannot
    exceed the contract's own life — it is a day index inside the simulation —
    so there is nothing to protect against, and clamping it silently overrode an
    OBSERVED number with an arbitrary fraction. On the reference contract the
    simulation said the stop is typically reached on day 26 of 30 and the clamp
    returned 22.5, which valued the contract at the stop as though 7.5 days of
-   life were left instead of 4: risk understated ~3.5%, R:R overstated ~3.6%,
-   always in the flattering direction, on the number the card bolds as THE
-   measurement — and the card printed "median ~26d" three inches above
+   life were left instead of 4: risk understated by about 3.5% ($5.17 -> $4.99)
+   and R:R overstated by about the same (0.2012 -> 0.2084), always in the
+   flattering direction, on the number the card bolds as THE measurement — and the card printed "median ~26d" three inches above
    "repriced at 22.5d" with nothing to explain the gap.
 
 DAYS ELAPSED, NOT TIME REMAINING. Everything this module returns is a number of
@@ -95,13 +95,21 @@ def resolve_reprice_days(
         # index plus one, so it ranges 1..dte, and at dte exactly the remaining
         # life collapses to remaining_years_at_barrier's floor and every level
         # prices at intrinsic value only — the outcome the ceiling exists to
-        # prevent, arrived at from the other direction. Measured on a sweep,
-        # this bound binds on ~8% of runs, concentrated at dte 1, 2 and 10, so
-        # it is a real boundary artifact of a discrete daily median rather than
-        # a theoretical one. Half a day of life left is the least it can mean.
-        return max(min_days, min(float(sim_median), float(dte) - 0.5)) \
-            if (dte is not None and _usable(dte) and dte > 0) \
-            else max(min_days, float(sim_median))   # type: ignore[arg-type]
+        # prevent, arrived at from the other direction. Reachable whenever the
+        # simulated median lands on the final day — always the case at dte=1,
+        # where the median is exactly 1.0.
+        #
+        # THE CEILING IS APPLIED LAST, so it wins when it conflicts with the
+        # min_days floor — the same precedence the fallback branch below uses,
+        # and for the same reason. Written the other way round (`max(min_days,
+        # min(median, dte - 0.5))`) the floor won at dte=1, which is where a
+        # simulated median is ALWAYS exactly 1.0, so the cap silently did
+        # nothing on precisely the contracts it mattered most for: a 1-DTE
+        # stop priced at zero remaining life makes the risk leg the whole
+        # premium and collapses rr_stock_stop to exactly the typed target
+        # percentage — indistinguishable from the greyed constant it is printed
+        # beside, on a card whose point is that the two differ.
+        return min(max(min_days, float(sim_median)), _latest_barrier_day(dte))
 
     days = _fallback_days(preset, hold_min, hold_max, fallback, cfg)
 
@@ -118,6 +126,15 @@ def resolve_reprice_days(
     if dte is not None and _usable(dte) and dte > 0:
         days = min(days, max_fraction * float(dte))
     return days
+
+
+def _latest_barrier_day(dte: float) -> float:
+    """The latest day a barrier may be said to be reached: half a day before
+    expiry, so there is always some life left to price. Returns +inf when the
+    DTE is unknown, so the caller's other bounds decide."""
+    if dte is None or not _usable(dte) or dte <= 0:
+        return float("inf")
+    return max(float(dte) - 0.5, 0.5)
 
 
 def _fallback_days(

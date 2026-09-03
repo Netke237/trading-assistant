@@ -192,12 +192,16 @@ def test_stock_stop_rr_discriminates_between_strikes_but_premium_stop_rr_cannot(
         assert v == pytest.approx(_BASE["t1_pct"] / 0.60, rel=1e-12)
 
 
-def test_a_premium_stop_that_rounds_to_zero_dollars_yields_no_ratio():
+def test_a_premium_stop_that_rounds_to_zero_dollars_still_yields_the_true_ratio():
     """A 5c contract with a 5% premium stop puts the risk leg at $0.0025, which
     is $0.00 in cents. Dividing by it returned 0.00x — a plausible-looking ratio
-    on a card that simultaneously printed "equals your 20% target / 5% stop",
-    which is 4.00x. Contradicting itself in one sentence is worse than an em
-    dash, and it silently deleted the third term from the edge."""
+    on a card that simultaneously said the value was the target % over the stop
+    %, which is 4.00x. Contradicting itself in one sentence is worse than an em
+    dash.
+
+    The ratio comes from the DEFINITION, not the division, so the honest 4.00x
+    survives a risk leg that quantizes away. (The test used to be named
+    "...yields_no_ratio", which its own body contradicts.)"""
     race = _run(premium=0.05, premium_stop_pct=0.05).race
     assert race is not None
     o = race.outcomes[0]
@@ -295,10 +299,23 @@ def test_same_seed_reproduces_and_a_moved_premium_stop_changes_the_answer():
     assert [o.p_target_first for o in a.outcomes] == [o.p_target_first for o in b.outcomes]
     assert [o.p_premium_stop_first for o in a.outcomes] == [o.p_premium_stop_first for o in b.outcomes]
 
+    # The SAME seed: this is the evidence that the premium stop does not need to
+    # be in the endpoint's seed key. It is a post-hoc barrier over paths that
+    # were already simulated, so moving it moves every number that depends on
+    # it without touching the draw.
     moved = _run(premium_stop_pct=0.30).race
     assert moved is not None
     assert [o.p_premium_stop_first for o in moved.outcomes] != [o.p_premium_stop_first for o in a.outcomes]
     assert moved.premium_stop_price != a.premium_stop_price
+    # ...and the shared simulation is untouched, which is the whole point: the
+    # Monte Carlo card's target probabilities do not depend on the premium stop,
+    # so they must not move when it does.
+    for o in moved.outcomes:
+        total = (o.p_target_first + o.p_stock_stop_first
+                 + o.p_premium_stop_first + o.p_neither)
+        assert total == pytest.approx(1.0, abs=1e-12)
+    assert ([t.probability for t in _run(premium_stop_pct=0.30).targets]
+            == [t.probability for t in _run().targets])
 
 
 # -- Printed-arithmetic consistency -------------------------------------------
@@ -388,17 +405,57 @@ def test_the_printed_edge_chain_sums_to_the_printed_total():
 
 
 def test_the_premium_barrier_and_its_risk_leg_come_off_the_same_premium():
-    """The card shows the barrier in one block ("$0.24 option") and the risk
-    leg in another ("legs $0.07 and $0.10"), with the premium printed beside
-    them. Quantizing the barrier off the raw premium and the risk leg off the
-    cent-rounded one broke `premium_used - premium_stop_price == risk_premium_stop`
-    on 1 contract in 6: a user checking $0.35 - $0.24 got $0.11 against a
-    printed $0.10."""
-    for premium, pct in ((0.35, 0.30), (12.345, 0.30), (5.20, 0.60), (1.07, 0.45)):
+    """The card shows the barrier in one block ("$0.06 option") and the risk leg
+    in another, with the premium printed beside them, so
+    `premium_used - premium_stop_price == risk_premium_stop` must hold exactly.
+
+    ASSERTS THE DERIVATION, NOT THE IDENTITY. Checking
+    `premium_used - premium_stop_price == risk_premium_stop` cannot fail:
+    risk_premium_stop is DEFINED as that subtraction, so it is the same
+    expression on both sides. Reverting the barrier to the buggy
+    `round(premium * (1 - pct), 2)` — off the RAW premium — left that version
+    green. What pins it is that the barrier itself comes off the cent-rounded
+    premium, checked on premiums where the two genuinely differ."""
+    # Live quotes carry sub-cent prices; these are premiums where rounding the
+    # premium first and rounding the product first disagree by a cent.
+    for premium, pct in ((0.051, 0.30), (0.063, 0.60), (0.064, 0.45), (0.054, 0.30)):
         race = _run(premium=premium, premium_stop_pct=pct).race
         assert race is not None
-        o = race.outcomes[0]
-        assert round(race.premium_used - race.premium_stop_price, 2) == o.risk_premium_stop
+        expected = round(round(premium, 2) * (1.0 - pct), 2)
+        assert race.premium_stop_price == expected, (
+            f"premium {premium}: barrier {race.premium_stop_price} was not derived "
+            f"from the cent-rounded premium ({expected}); "
+            f"off the raw premium it would be {round(premium * (1.0 - pct), 2)}"
+        )
+        assert expected != round(premium * (1.0 - pct), 2), (
+            "this premium no longer separates the two derivations — pick another"
+        )
+        # And the identity the card depends on still holds.
+        assert round(race.premium_used - race.premium_stop_price, 2) == \
+            race.outcomes[0].risk_premium_stop
+
+
+def test_the_allocation_gives_the_leftover_hundredths_to_the_biggest_remainders():
+    """_allocated_weights' docstring names largest-remainder specifically.
+    Flipping the sort to smallest-remainder-first still sums to 1.00 and is
+    still deterministic, so every other assertion here survived it — the
+    property that makes a label land within one point of its own bar did not."""
+    from app.scoring.first_passage import _allocated_weights
+
+    # 0.125 / 0.125 / 0.125 / 0.625: floors are 12/12/12/62 = 98, so two
+    # hundredths are left over and the four remainders are equal at 0.5.
+    # Largest-remainder with an index tie-break gives them to the first two.
+    assert _allocated_weights([0.125, 0.125, 0.125, 0.625]) == [0.13, 0.13, 0.12, 0.62]
+
+    # A clear ordering: remainders 0.9, 0.1, 0.0, 0.0 with one hundredth spare.
+    got = _allocated_weights([0.109, 0.101, 0.39, 0.40])
+    assert got == [0.11, 0.10, 0.39, 0.40], got
+
+    # And no label is ever more than a point from its own share.
+    for shares in ([0.2685, 0.0, 0.6865, 0.045], [0.138, 0.0, 0.785, 0.077],
+                   [0.204, 0.0045, 0.4885, 0.303]):
+        for w, raw in zip(_allocated_weights(shares), shares):
+            assert abs(w - raw) < 0.01
 
 
 def test_the_stop_leg_is_repriced_at_the_life_REMAINING_not_the_days_elapsed():

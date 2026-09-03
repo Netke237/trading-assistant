@@ -464,12 +464,28 @@ async def first_passage(req: FirstPassageRequest) -> FirstPassageResponse:
     # security reasons, so it is NOT stable across restarts/reloads/workers despite
     # looking deterministic within a single run — use a fixed-algorithm hash instead
     # so "identical inputs" genuinely means identical output everywhere, always.
-    # premium_stop_pct is part of the key: it is a real simulation input (the
-    # race's third barrier), so leaving it out would return a bit-identical
-    # answer after the user moved the premium stop and make the card look frozen.
+    # premium_stop_pct is DELIBERATELY NOT in the key, which is a departure from
+    # barrier-race spec 2.3. The spec's stated reason for including it — that
+    # otherwise "moving the premium stop returns a bit-identical answer and the
+    # card appears frozen" — is not true of the implementation: the premium stop
+    # is a post-hoc barrier applied to already-simulated option_paths, so at a
+    # FIXED seed, moving it already changes premium_stop_price,
+    # p_premium_stop_first, the risk leg and the edge. test_barrier_race.py's
+    # test_same_seed_reproduces_and_a_moved_premium_stop_changes_the_answer
+    # asserts exactly that, at seed 42.
+    #
+    # What including it actually bought was the opposite of determinism. The
+    # client sends premiumStopPctFromDollars(overlay.premiumStop, premium) — a
+    # raw quotient of a scan-time dollar field over the LIVE premium — so this
+    # float moves whenever the quote moves a cent. Every such move re-rolled the
+    # entire simulation, shifting the Monte Carlo card's target probabilities
+    # (which have nothing to do with the premium stop) by ~2 points between two
+    # Estimate clicks a minute apart on an unchanged contract, with nothing on
+    # screen to explain it. A seed exists to stop unrelated numbers moving; this
+    # made them move on an unrelated input.
     seed_key = (
         f"{req.symbol.upper()}|{req.strike}|{req.dte}|{round(req.stock_price, 2)}"
-        f"|{t1_pct}|{t2_pct}|{t3_pct}|{premium_stop_pct}"
+        f"|{t1_pct}|{t2_pct}|{t3_pct}"
     )
     seed = int(hashlib.sha256(seed_key.encode()).hexdigest(), 16) % (2 ** 32)
 
