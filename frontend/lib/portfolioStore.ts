@@ -23,6 +23,10 @@ type BackendPosition = {
   structuralStop?: number | null;
   exitPlan?: ExitPlan | null;
   maxLossOverride?: MaxLossOverride | null;
+  /** Piece 4 — per-position premium stop. Null means the row inherits the
+   *  global; it is NOT resolved server-side, because the drawer renders the
+   *  inherited-vs-set difference. */
+  premiumStopPct?: number | null;
   activeTpMethod?: TpMethod | null;
   resolvedTpPrice?: number | null;
   resolvedTpUpdatedAt?: string | null;
@@ -57,6 +61,7 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     structuralStop: floorStop(p.structuralStop),
     exitPlan:     p.exitPlan ?? null,
     maxLossOverride: p.maxLossOverride ?? null,
+    premiumStopPct: p.premiumStopPct ?? null,
     // The backend column defaults to 'ladder' server-side, but a row written
     // before that default (or a payload that omits the key) still arrives as
     // null — normalise to 'ladder' here so the drawer's segmented control and
@@ -174,6 +179,12 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     // `if ('maxLossOverride' in patch) body.maxLossOverride = ...` handling
     // for the post-trade PATCH path.
     maxLossOverride: p.maxLossOverride ?? null,
+    // Piece 4 — same reasoning as maxLossOverride directly above: omit this
+    // key and the row is created with premium_stop_pct=NULL no matter how the
+    // schema and router are wired, so the trade silently falls back to the
+    // global on its first alert while the optimistic local state shows the
+    // value the user chose.
+    premiumStopPct: p.premiumStopPct ?? null,
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,
@@ -303,6 +314,10 @@ function toUpdatePayload(patch: Partial<PortfolioPosition>): Record<string, unkn
   if ('structuralStop' in patch) body.structuralStop = floorStop(patch.structuralStop);
   if ('exitPlan' in patch) body.exitPlan = patch.exitPlan;
   if ('maxLossOverride' in patch) body.maxLossOverride = patch.maxLossOverride;
+  // Piece 4 — an explicit null CLEARS the override and returns the position to
+  // inheriting the global, same `in`-check contract as the fields above (an
+  // omitted key must not touch the stored value).
+  if ('premiumStopPct' in patch) body.premiumStopPct = patch.premiumStopPct;
   if ('activeTpMethod' in patch) body.activeTpMethod = patch.activeTpMethod;
   if ('resolvedTpPrice' in patch) body.resolvedTpPrice = floorStop(patch.resolvedTpPrice);
   if ('resolvedTpUpdatedAt' in patch) body.resolvedTpUpdatedAt = patch.resolvedTpUpdatedAt;

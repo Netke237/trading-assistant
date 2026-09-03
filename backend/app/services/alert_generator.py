@@ -13,6 +13,10 @@ from app.models.portfolio import PortfolioPositionModel
 from app.schemas import AlertItem
 from app.services.audit import log_event
 from app.services.position_alert_log import log_position_alert
+from app.services.premium_stop import (
+    resolve_premium_stop_pct,
+    premium_stop_threshold_price,
+)
 
 _CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
@@ -289,20 +293,32 @@ async def generate_alerts(
                 contract=pos.contract,
             ))
 
-        # PREMIUM_STOP
+        # PREMIUM_STOP — piece 4: this position's own percentage when it has
+        # one, otherwise the global. Resolved ONCE here so the comparison, the
+        # reported threshold price and the logged thresholdPct can never
+        # disagree with each other.
+        resolved_premium_stop_pct = resolve_premium_stop_pct(
+            pos.premium_stop_pct, _premium_stop_pct()
+        )
         premium_hit_raw = bool(
             opt_price is not None and pos.entry_price > 0
-            and opt_price <= pos.entry_price * (1 - _premium_stop_pct())
+            and opt_price <= premium_stop_threshold_price(
+                pos.entry_price, resolved_premium_stop_pct
+            )
         )
         if not _muted("PREMIUM_STOP") and _sustained("PREMIUM_STOP", premium_hit_raw):
             counter += 1
-            threshold_price = round(pos.entry_price * (1 - _premium_stop_pct()), 4)
+            threshold_price = round(
+                premium_stop_threshold_price(pos.entry_price, resolved_premium_stop_pct), 4
+            )
             log_event("alert_fired", pos.rec_id, {
                 "symbol": symbol,
                 "alertType": "PREMIUM_STOP",
                 "optPrice": opt_price,
                 "entryPrice": pos.entry_price,
-                "thresholdPct": _premium_stop_pct(),
+                # The RESOLVED value, never the global — otherwise the alert's
+                # own payload misreports why it fired.
+                "thresholdPct": resolved_premium_stop_pct,
             })
             await log_position_alert(
                 db, rec_id=pos.rec_id, symbol=symbol, alert_type="PREMIUM_STOP",

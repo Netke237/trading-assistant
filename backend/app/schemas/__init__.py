@@ -305,6 +305,8 @@ class PortfolioPosition(BaseModel):
     contracts: Optional[int] = None
     source: Optional[Literal['broker', 'manual']] = None
     orderedAt: Optional[str] = None
+    # Piece 4 — per-position premium stop. None = inherit the global.
+    premiumStopPct: Optional[float] = Field(default=None, gt=0, lt=1)
 
 
 # ── Alerts ───────────────────────────────────────────────────────────────────
@@ -642,6 +644,12 @@ class PortfolioPositionCreate(BaseModel):
     # time. Mirrors PortfolioPositionUpdate.maxLossOverride, which already
     # supports this field for the post-trade (PATCH) path.
     maxLossOverride: Optional[dict] = Field(alias="max_loss_override", default=None)
+    # Piece 4 — per-position premium stop, chosen on the trade card and carried
+    # through AT CREATION. Deliberately not update-only: activeTpMethod /
+    # resolvedTpPrice live on PortfolioPositionUpdate alone, and repeating that
+    # here would mean a trade sent from the card silently falls back to the
+    # global on its very first alert. None = inherit the global.
+    premiumStopPct: Optional[float] = Field(alias="premium_stop_pct", default=None, gt=0, lt=1)
 
     def __init__(self, **data):
         # Support both camelCase and snake_case field names
@@ -657,6 +665,7 @@ class PortfolioPositionCreate(BaseModel):
             "scan_stock_price": "scanStockPrice",
             "trade_card_snapshot": "tradeCardSnapshot",
             "max_loss_override": "maxLossOverride",
+            "premium_stop_pct": "premiumStopPct",
         }
         for k, v in data.items():
             mapped[aliases.get(k, k)] = v
@@ -707,6 +716,11 @@ class PortfolioPositionUpdate(BaseModel):
     resolvedTpPrice: Optional[float] = Field(alias="resolved_tp_price", default=None)
     resolvedTpUpdatedAt: Optional[str] = Field(alias="resolved_tp_updated_at", default=None)
     alertOverrides: Optional[dict] = Field(alias="alert_overrides", default=None)
+    # Piece 4 — editable post-entry from the Portfolio drawer. Follows the same
+    # exclude_unset pattern as stop/structuralStop: an omitted key leaves the
+    # value alone, while an explicit null CLEARS the override and returns the
+    # position to inheriting the global.
+    premiumStopPct: Optional[float] = Field(alias="premium_stop_pct", default=None, gt=0, lt=1)
 
 
 class PortfolioPositionSchema(BaseModel):
@@ -747,6 +761,10 @@ class PortfolioPositionSchema(BaseModel):
     resolvedTpPrice: Optional[float] = None
     resolvedTpUpdatedAt: Optional[str] = None
     alertOverrides: dict = {}
+    # Piece 4 — None means this position inherits the global premium stop. The
+    # frontend renders that difference ("60% (global)" vs "45%"), so it must
+    # survive the round trip rather than being resolved server-side.
+    premiumStopPct: Optional[float] = None
 
     @classmethod
     def from_orm_model(cls, obj) -> "PortfolioPositionSchema":
@@ -770,6 +788,7 @@ class PortfolioPositionSchema(BaseModel):
             resolvedTpPrice=obj.resolved_tp_price,
             resolvedTpUpdatedAt=obj.resolved_tp_updated_at.isoformat() if obj.resolved_tp_updated_at else None,
             alertOverrides=obj.alert_overrides or {},
+            premiumStopPct=obj.premium_stop_pct,
         )
 
 

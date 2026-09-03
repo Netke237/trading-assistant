@@ -19,6 +19,12 @@ class PortfolioPositionModel(Base):
     entry_date = Column(String, nullable=False)
     stop = Column(Float, nullable=True)
     structural_stop = Column(Float, nullable=True)
+    # Piece 4 — per-position premium stop. NULL means "inherit the global"
+    # (risk_rules.yaml -> reward_risk.premium_stop_pct), which is a distinct,
+    # load-bearing state and NOT a value waiting to be backfilled: a position
+    # stamped 0.60 at creation would stop responding when the global moved.
+    # Resolve every read through services/premium_stop.resolve_premium_stop_pct.
+    premium_stop_pct = Column(Float, nullable=True, default=None)
     targets = Column(JSON, nullable=True, default=list)
     dte_total = Column(Integer, nullable=True)
     entry_stock_price = Column(Float, nullable=True)

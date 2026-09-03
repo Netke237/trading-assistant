@@ -33,6 +33,7 @@ import {
   cacheStructural, cacheFirstPassage, cacheExitPlan,
   type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '@/lib/tradeCardOverride';
+import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
@@ -80,6 +81,14 @@ function positionFromOrder(
   // caller from the shared maxLossOverrideBySymbol cache (this is a module-
   // level function, no closure access to component state).
   maxLossOverride: MaxLossOverride | null = null,
+  // Piece 4 — the per-trade premium stop derived from the card's editable
+  // "Premium stop" dollar field. Module-level function, so the caller reads it
+  // the same way it reads maxLossOverride above.
+  // The card's "Premium stop" field holds a DOLLAR loss; the percentage is
+  // derived below against this path's own `mid`, so the stored fraction is
+  // always relative to the entryPrice actually persisted — which is exactly
+  // what the alert compares (`opt_price <= entry_price * (1 - pct)`).
+  premiumStopDollar: number | null = null,
 ): PortfolioPosition {
   const c   = order.card;
   const cd  = c.contractDetails;
@@ -101,6 +110,7 @@ function positionFromOrder(
     structuralStop,
     exitPlan,
     maxLossOverride,
+    premiumStopPct: premiumStopPctFromDollars(premiumStopDollar, mid) ?? null,
     targets:       c.exit.targets,
     status:        c.finalStatus,
     ivRank:        cd?.ivRank,
@@ -172,9 +182,21 @@ export default function Step7Page() {
   // (`Record<symbol, OptionContract[]>` — the picked-contract-per-symbol map,
   // an unrelated concept that happens to share a plausible name).
   const [orderContractsBySymbol, setOrderContractsBySymbol] = useState<Record<string, number>>({});
+  // Piece 4 — the card's editable "Premium stop" DOLLAR field, cached by
+  // symbol off the overlay channel that already carries `contracts`. Both send
+  // paths read it and convert to a fraction; TradeCard itself converts the
+  // same field the same way for the barrier race's third barrier, so the
+  // barrier the race simulated and the threshold the alert later fires on are
+  // the same number by construction.
+  const [premiumStopBySymbol, setPremiumStopBySymbol] = useState<Record<string, number>>({});
   const handleEditsChange = (symbol: string, overlay: EditOverlay) => {
     setOrderContractsBySymbol((prev) =>
       prev[symbol] === overlay.contracts ? prev : { ...prev, [symbol]: overlay.contracts },
+    );
+    // Same identity-preserving guard as above: an unchanged write must return
+    // `prev` untouched or every TradeCard render re-triggers this cascade.
+    setPremiumStopBySymbol((prev) =>
+      prev[symbol] === overlay.premiumStop ? prev : { ...prev, [symbol]: overlay.premiumStop },
     );
   };
   // Feature 5 — the shared pre-trade max-loss override cache, keyed by SYMBOL
@@ -626,6 +648,11 @@ export default function Step7Page() {
       structuralStop: structuralBySymbol[card.symbol]?.stop?.price ?? null,
       exitPlan:      cardContractKey ? exitPlanByContract[cardContractKey]?.plan ?? null : null,
       maxLossOverride: maxLossOverrideBySymbol[card.symbol] ?? null,
+      // Piece 4 — MUST match what positionFromOrder produces for the same card.
+      // These two send paths already disagree about stop re-anchoring; a second
+      // field they disagree on would mean the premium stop a position is armed
+      // at depends on which button was pressed.
+      premiumStopPct: premiumStopPctFromDollars(premiumStopBySymbol[card.symbol], mid) ?? null,
       targets:       card.exit.targets,
       status:        card.finalStatus,
       ivRank:        cd?.ivRank,
@@ -739,7 +766,7 @@ export default function Step7Page() {
       const orderContractKey = contractKeyFor(o.card);
       const orderExitPlan = orderContractKey ? exitPlanByContract[orderContractKey]?.plan ?? null : null;
       const orderMaxLossOverride = maxLossOverrideBySymbol[o.card.symbol] ?? null;
-      const res = await addPosition({ ...positionFromOrder(o, structuralStop, orderExitPlan, orderMaxLossOverride), recId });
+      const res = await addPosition({ ...positionFromOrder(o, structuralStop, orderExitPlan, orderMaxLossOverride, premiumStopBySymbol[o.card.symbol] ?? null), recId });
 
       if (res.status === 'rejected') {
         // Backend refused it and the optimistic row was dropped — a real failure.

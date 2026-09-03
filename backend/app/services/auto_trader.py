@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
+from app.services.premium_stop import resolve_premium_stop_pct
 
 _RISK_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "risk_rules.yaml"
 
@@ -26,6 +27,12 @@ class ArmedStrategy:
     conid:           Optional[int]
     entry_premium:   float = 0.0
     portfolio_value: float = 50_000.0
+    # Piece 4 — the per-trade premium stop the card was showing when this was
+    # armed. None inherits auto_trade.premium_stop_pct. Threaded through rather
+    # than left to the global: the auto-trader is placing the same trade the
+    # card described, so sizing it off a different number than the one the user
+    # set is a silent divergence — which is how three globals happened.
+    premium_stop_pct: Optional[float] = None
     armed_at:        datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -251,7 +258,10 @@ class AutoTradeService:
             logger.error("AutoTrader order failed for %s: %s", strategy.symbol, exc)
             raise RuntimeError(f"Order failed: {exc}") from exc
 
-        stop_pct = float(self._risk_config().get("premium_stop_pct", 0.60))
+        stop_pct = resolve_premium_stop_pct(
+            strategy.premium_stop_pct,
+            float(self._risk_config().get("premium_stop_pct", 0.60)),
+        )
         with self._lock:
             self._state.history.append({
                 "order_id":        result.order_id,
@@ -349,7 +359,10 @@ class AutoTradeService:
         """Raise RuntimeError if today's premium-at-risk exceeds the daily loss limit."""
         risk_cfg = AutoTradeService._risk_config()
         max_pct  = float(risk_cfg.get("max_daily_loss_pct", 0.02))
-        stop_pct = float(risk_cfg.get("premium_stop_pct", 0.60))
+        stop_pct = resolve_premium_stop_pct(
+            strategy.premium_stop_pct,
+            float(risk_cfg.get("premium_stop_pct", 0.60)),
+        )
         limit    = max_pct * portfolio_value
 
         today_str = datetime.now(timezone.utc).date().isoformat()   # UTC date "YYYY-MM-DD"

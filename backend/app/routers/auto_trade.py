@@ -23,6 +23,11 @@ class ArmRequest(BaseModel):
     conid:           Optional[int] = None
     entry_premium:   float = 0.0   # set to actual option mid; exposure check is skipped if 0
     portfolio_value: float = 50_000.0
+    # Piece 4 — the per-trade premium stop from the card being armed. Omitted
+    # or null inherits auto_trade.premium_stop_pct. Bounded here as well as on
+    # the portfolio schemas: this endpoint reaches the same sizing arithmetic
+    # without ever passing through PortfolioPositionCreate.
+    premium_stop_pct: Optional[float] = Field(default=None, gt=0, lt=1)
 
 
 @router.post("/arm")

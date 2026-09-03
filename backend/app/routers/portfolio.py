@@ -285,6 +285,10 @@ async def add_position(
         # Feature 5 — pre-trade max-loss override, set on the Arithmetic
         # Profit Target card and carried through here at creation time.
         max_loss_override=body.maxLossOverride,
+        # Piece 4 — per-position premium stop, set at creation so a trade sent
+        # from the card carries the stop the user chose on it. None persists as
+        # NULL, meaning "inherit the global".
+        premium_stop_pct=body.premiumStopPct,
     )
     db.add(position)
     try:
@@ -429,6 +433,13 @@ async def update_position(
         position.resolved_tp_updated_at = datetime.fromisoformat(raw) if raw else None
     if "alertOverrides" in updates:
         position.alert_overrides = updates["alertOverrides"]
+    # Piece 4 — an explicit null CLEARS the per-position premium stop and
+    # returns this position to inheriting the global, same exclude_unset /
+    # explicit-null-clears contract as stop/structuralStop above. Not floored:
+    # the schema's (0, 1) bound already rejects every meaningless value, and a
+    # floor here would silently rewrite one rather than reject it.
+    if "premiumStopPct" in updates:
+        position.premium_stop_pct = updates["premiumStopPct"]
 
     await db.commit()
     await db.refresh(position)

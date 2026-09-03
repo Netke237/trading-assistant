@@ -26,6 +26,7 @@ import { api } from '@/lib/api';
 import { POSITION_ALERT_TYPES } from '@/types/domain';
 import type { PortfolioPosition, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
 import styles from './page.module.css';
+import { resolvePremiumStopPct, hasOwnPremiumStopPct, premiumStopThresholdPrice, formatPremiumStopPct } from '@/lib/premiumStop';
 
 /** `position.contract` for an option position is a backend-generated,
  *  pipe-delimited machine ID — "SYMBOL|STRIKE|EXPIRY|C/P" (see
@@ -110,6 +111,10 @@ export function EditDrawer({
   const optionStrike = (typeof snapshot.strike === 'number' && snapshot.strike > 0 ? snapshot.strike : null) ?? optionStrikeFromContract(position.contract);
   const optionTrend = (snapshot.stockBreakdown as { trend?: number } | undefined)?.trend;
   const defaultTargetPct = useSettingsStore((s) => s.targetProfitPct);
+  // Piece 4 — the GLOBAL premium stop. Positions that carry their own value
+  // override it; this is only the fallback, and what the editor labels
+  // "(global)".
+  const globalPremiumStopPct = useSettingsStore((s) => s.premiumStopPct);
 
   // Mirrors backend/app/routers/stock_scan.py's own directional validation for
   // /api/stocks/first-passage (the stop must be on the correct side of the
@@ -330,6 +335,11 @@ export function EditDrawer({
           hint="Tighter, chart-based stop (order block / swing level) from Check structure. Optional — 0 means none was captured."
           value={position.structuralStop ?? 0}
           onChange={(n) => onChange({ structuralStop: n > 0 ? n : null })}
+        />
+        <PremiumStopEditor
+          position={position}
+          globalPremiumStopPct={globalPremiumStopPct}
+          onChange={onChange}
         />
         <TargetEditor
           targets={position.targets}
@@ -787,6 +797,66 @@ function EditField({
 }
 
 /* ------------------------------------------------------------------------ *
+ * Piece 4 — per-position premium stop
+ * (docs/superpowers/plans/2026-09-02-piece-4-per-position-premium-stop-spec.md)
+ * ------------------------------------------------------------------------ */
+
+/** Editable per-position premium stop, shown as a whole percentage.
+ *
+ *  Empty (or any non-positive entry) CLEARS the override and returns the
+ *  position to inheriting the global — which is why the field renders empty,
+ *  not `60`, when nothing is set. Pre-filling it with the resolved global
+ *  would make an inherited value indistinguishable from a set one, and a user
+ *  who then saved the drawer would silently freeze the position at today's
+ *  global. The hint states which of the two states is live. */
+function PremiumStopEditor({
+  position,
+  globalPremiumStopPct,
+  onChange,
+}: {
+  position: PortfolioPosition;
+  globalPremiumStopPct: number;
+  onChange: (patch: Partial<PortfolioPosition>) => void;
+}) {
+  const isStock = position.contract.endsWith('|STOCK');
+  const own = position.premiumStopPct;
+  const inherited = !hasOwnPremiumStopPct(own);
+  return (
+    <label className={styles.editField}>
+      <Text size={11} tone="secondary">
+        Premium stop — {formatPremiumStopPct(own, globalPremiumStopPct)}
+      </Text>
+      <input
+        type="number"
+        className={styles.editInput}
+        step={5}
+        min={1}
+        max={99}
+        placeholder={`${Math.round(globalPremiumStopPct * 100)} (global)`}
+        aria-label="Premium stop percent"
+        value={own != null ? Math.round(own * 100) : ''}
+        onChange={(e) => {
+          const raw = e.target.value.trim();
+          if (raw === '') { onChange({ premiumStopPct: null }); return; }
+          const pct = Number(raw);
+          if (!Number.isFinite(pct)) return;
+          // The backend bounds this at (0, 1) exclusive and 422s outside it.
+          // Clearing on a non-positive entry keeps the drawer's only way to
+          // reach "inherit again" obvious, rather than posting a value the
+          // API will reject.
+          onChange({ premiumStopPct: pct > 0 && pct < 100 ? pct / 100 : null });
+        }}
+      />
+      <Text size={10} tone="dim">
+        {inherited
+          ? `Inheriting the global — this position moves whenever the global does. Enter a percent to pin it${isStock ? '' : ' for this contract only'}.`
+          : `Set for this position only. Clear the field to go back to inheriting the global (${Math.round(globalPremiumStopPct * 100)}%).`}
+      </Text>
+    </label>
+  );
+}
+
+/* ------------------------------------------------------------------------ *
  * Feature D (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
  * ------------------------------------------------------------------------ */
 
@@ -893,7 +963,9 @@ function TpMethodSelector({
 function alertFiresAgainst(
   position: PortfolioPosition,
   type: PositionAlertType,
-  premiumStopPct: number,
+  /** The GLOBAL premium stop. Resolved against the position's own value below
+   *  (piece 4) so this preview cannot disagree with the alert that fires. */
+  globalPremiumStopPct: number,
 ): string | null {
   const isStock = position.contract.endsWith('|STOCK');
   switch (type) {
@@ -919,7 +991,10 @@ function alertFiresAgainst(
       // for a stock position misattributes a stock-price level as an option
       // concept the position doesn't even have.
       return position.entryPrice > 0
-        ? `${isStock ? 'stock' : 'premium'} $${(position.entryPrice * (1 - premiumStopPct)).toFixed(2)}`
+        ? `${isStock ? 'stock' : 'premium'} $${premiumStopThresholdPrice(
+            position.entryPrice,
+            resolvePremiumStopPct(position.premiumStopPct, globalPremiumStopPct),
+          ).toFixed(2)}`
         : null;
     case 'TIME_STOP':
       // Stock positions carry no expiry and (per alertEngine.ts's isStock

@@ -1,4 +1,5 @@
 import type { AlertKind, AlertType, TargetLevel, Direction, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
+import { resolvePremiumStopPct, PREMIUM_STOP_PCT_FALLBACK } from './premiumStop';
 
 export interface AlertPosition {
   recId: string;
@@ -19,6 +20,9 @@ export interface AlertPosition {
   direction: Direction;
   nextEventDays?: number;
   nextEventLabel?: string;
+  /** Per-position premium stop (piece 4). Null/absent inherits the global
+   *  passed in `ScanOptions.premiumStopPct`. */
+  premiumStopPct?: number | null;
   /** Which TP computation drives this position's TP_HIT (Feature D). Absent =
    *  'ladder'. Carried purely so the TP_HIT reason line can name the method
    *  that fired; the price itself comes from `resolvedTpPrice` below. */
@@ -49,7 +53,10 @@ export interface AlertReason {
 }
 
 export interface ScanOptions {
-  premiumStopPct?: number;  // fraction of premium lost at stop; default 0.60
+  /** GLOBAL premium-stop fraction — the fallback for positions that do not
+   *  carry their own `premiumStopPct` (piece 4). Not the value every position
+   *  uses; see the per-position resolution in the scan loop. Default 0.60. */
+  premiumStopPct?: number;
   /** The user's global `AlertConfig.enabledTypes`. Threading this in is the
    *  Feature D toast-gating bugfix: before it, `enabledTypes` gated ONLY the
    *  outbound email/Telegram dispatch (backend `notify_alert`), so turning a
@@ -97,8 +104,11 @@ export function scanPortfolio(
   positions: AlertPosition[],
   options: ScanOptions = {},
 ): AlertReason[] {
-  const premiumStopPct = options.premiumStopPct ?? 0.60;
-  const premiumStopThreshold = -(premiumStopPct * 100);  // e.g. -60 for 0.60
+  // Piece 4 — the GLOBAL fallback only. The threshold is now resolved per
+  // position inside the loop below, because a position may carry its own
+  // premium stop; hoisting one threshold out here is exactly the bug that made
+  // every open position share a single number.
+  const globalPremiumStopPct = options.premiumStopPct ?? PREMIUM_STOP_PCT_FALLBACK;
   const { enabledTypes } = options;
 
   const out: AlertReason[] = [];
@@ -222,6 +232,9 @@ export function scanPortfolio(
     // PREMIUM_STOP — option lost premiumStopPct of its value. No dollar price/
     // threshold is available in this scope (only pnlPct), so price/referenceValue
     // are left undefined rather than mislabeled.
+    const premiumStopThreshold = -(
+      resolvePremiumStopPct(p.premiumStopPct, globalPremiumStopPct) * 100
+    );  // e.g. -60 for 0.60
     if (p.pnlPct <= premiumStopThreshold && enabled('PREMIUM_STOP')) {
       out.push({
         recId: p.recId,

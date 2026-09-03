@@ -390,6 +390,13 @@ export interface PortfolioPosition {
   /** Per-trade override of the global `maxLossPerTradePct` warning threshold
    *  (Feature C). `null`/absent inherits the global default. */
   maxLossOverride?: MaxLossOverride | null;
+  /** Per-position premium stop as a fraction of entry premium (piece 4).
+   *  `null`/absent means this position INHERITS the global
+   *  (`settingsStore.premiumStopPct` / `reward_risk.premium_stop_pct`) and keeps
+   *  tracking it as it changes — a distinct state from being set to the same
+   *  number. Always read through `resolvePremiumStopPct` in lib/premiumStop.ts;
+   *  never compare it directly. */
+  premiumStopPct?: number | null;
   /** Which TP computation drives this position's TP_HIT alert (Feature D).
    *  Absent = 'ladder', matching the backend column's server-side default —
    *  every position predating this field keeps today's behavior. */
