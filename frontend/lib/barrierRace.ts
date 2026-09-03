@@ -156,10 +156,16 @@ export function formatRacePremiumRR(o: BarrierRaceOutcome): string {
   // premium prints "10% / 29%", which is 0.34, beside a true 0.35. Replacing
   // one unverifiable chain with another is not a fix. The stop percentage is
   // shown once, in the barriers block above, where it is not part of a sum.
-  return (
-    `${legs} - ${o.rrPremiumStop.toFixed(2)}x, which is your target % over your `
-    + `stop % and therefore the same on every contract`
-  );
+  // The ratio is STATED, and the reader is no longer told to derive it from the
+  // two percentages on screen. Deleting the printed division was not enough:
+  // "which is your target % over your stop %" instructs the same division, and
+  // the operands are both rendered at 0dp while the stop fraction is an
+  // arbitrary float — a 20% target against a 0.5455 stop prints "20%" and
+  // "~55%", whose quotient is 0.36, beside a true 0.37x. The block-level prose
+  // under this table explains WHY the number carries no information, which is
+  // the part worth saying, without attaching the claim to a specific pair of
+  // rounded digits.
+  return `${legs} - ${o.rrPremiumStop.toFixed(2)}x, the same on every contract`;
 }
 
 /**
@@ -220,13 +226,14 @@ export function premiumStopSourceNote(
   dollarStop: number | null | undefined,
   premium: number,
 ): string {
-  // "~60%", with the dollars that ARE exact. appliedPct is an arbitrary float
-  // (a scan-time dollar stop over the premium quoted now), so a 0dp percentage
-  // failed to reproduce the barrier level printed in the very next cell on 84%
-  // of rows — a $3.19 barrier labelled "53% of premium" against a $6.84
-  // premium, where 53% is $3.21. Same defect as the ratio two functions above,
-  // and more checkable here because both numbers sit in one table row.
-  const applied = `~${(appliedPct * 100).toFixed(0)}% of premium`;
+  // "stops out after losing ~55% of premium", NOT "~55% of premium". The
+  // percentage is the LOSS that fires the stop; the cell immediately beside it
+  // holds the resulting LEVEL, which is the complement — a $2.75 premium with a
+  // 55% stop sits at $1.25, and 55% of $2.75 is $1.51. Two numbers in one table
+  // row that cannot be reconciled without silently knowing to take the
+  // complement, on a card whose premise is that every term can be checked by
+  // hand. The `~` fixes the precision; this fixes the sense.
+  const applied = `stops out after losing ~${(appliedPct * 100).toFixed(0)}% of premium`;
   if (fromField) {
     return `${applied}, from the editable field above`;
   }

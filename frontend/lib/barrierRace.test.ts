@@ -166,7 +166,7 @@ describe('formatRacePremiumRR', () => {
   it('labels itself as the constant it is, showing the dollars as inputs', () => {
     const s = formatRacePremiumRR(ROW);
     expect(s).toContain('legs $1.04 and $3.12');
-    expect(s).toContain('0.33x, which is your target % over your stop %');
+    expect(s).toContain('0.33x, the same on every contract');
     // No slash between the two dollar amounts: it reads as a division to the
     // one audience this card is for, and the quotient is not the ratio.
     expect(s).not.toContain('$1.04 / $3.12');
@@ -187,7 +187,7 @@ describe('formatRacePremiumRR', () => {
       { ...ROW, rewardDollar: 0.21, riskPremiumStop: 0.62, rrPremiumStop: 1 / 3 },
     );
     expect(small).toContain('legs $0.21 and $0.62');
-    expect(small).toContain('0.33x, which is your target % over your stop %');
+    expect(small).toContain('0.33x, the same on every contract');
     expect(small).not.toContain('$0.21 / $0.62');
     // And no "20% / 60% = 0.33x" either. Both percentages render at 0dp while
     // premiumStopPct is an arbitrary float (a scan-time dollar stop over the
@@ -195,6 +195,11 @@ describe('formatRacePremiumRR', () => {
     // division does not produce the printed ratio: a $0.20 stop on a $0.70
     // premium prints "10% / 29%", which is 0.34, beside a true 0.35.
     expect(small).not.toMatch(/\d+% \/ \d+% =/);
+    // ...and it does not TELL the reader to perform that division either. Both
+    // operands are on screen at 0dp while the stop fraction is an arbitrary
+    // float, so a 20% target against a 0.5455 stop reads "20%" and "~55%",
+    // whose quotient is 0.36 beside a true 0.37x.
+    expect(small).not.toContain('your target % over your stop %');
   });
 
   it('says so plainly when there is no premium-stop risk to divide by', () => {
@@ -213,17 +218,18 @@ describe('formatRacePremiumRR', () => {
 });
 
 describe('premiumStopSourceNote', () => {
-  it('marks the percentage as approximate, because it does not reproduce the level', () => {
-    // appliedPct is an arbitrary float — a scan-time dollar stop over the
-    // premium quoted now — so a 0dp percentage failed to reproduce the barrier
-    // level printed in the next cell on 84% of rows: a $3.19 barrier labelled
-    // "53% of premium" against a $6.84 premium, where 53% is $3.21.
-    expect(premiumStopSourceNote(0.5336, true, 3.19, 6.84)).toContain('~53% of premium');
+  it('says the percentage is a LOSS, not the level in the cell beside it', () => {
+    // The barriers table renders the level ($1.25 option) next to this note.
+    // "~55% of premium" beside "$1.25" cannot be reconciled: 55% of the $2.75
+    // premium is $1.51, and $1.25 is the complement. Saying "stops out after
+    // losing ~55%" makes the row self-checking.
+    expect(premiumStopSourceNote(0.5336, true, 3.19, 6.84))
+      .toContain('stops out after losing ~53% of premium');
   });
 
   it('credits the editable field when the field is what set the barrier', () => {
     expect(premiumStopSourceNote(0.60, true, 3.12, 5.20))
-      .toBe('~60% of premium, from the editable field above');
+      .toBe('stops out after losing ~60% of premium, from the editable field above');
   });
 
   it('takes the decision from the caller, not from the rounded premium', () => {
@@ -234,7 +240,7 @@ describe('premiumStopSourceNote', () => {
     // re-deriving gives 2.998/3.00 = 0.9993, crediting a field that was ignored.
     expect(premiumStopSourceNote(0.60, false, 2.998, 3.00)).toContain('the default');
     expect(premiumStopSourceNote(0.60, true, 3.00, 3.00))
-      .toBe('~60% of premium, from the editable field above');
+      .toBe('stops out after losing ~60% of premium, from the editable field above');
   });
 
   it('says the default was used when the field could not set the barrier', () => {

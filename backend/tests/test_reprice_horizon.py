@@ -126,13 +126,19 @@ def test_a_simulated_median_is_capped_half_a_day_short_of_expiry():
     assert resolve_reprice_days("Swing", None, None, dte=2, sim_median=2.0) == 1.5
     # dte=1: the floor would say 1.0, which is expiry. The cap outranks it.
     assert resolve_reprice_days("Swing", None, None, dte=1, sim_median=1.0) == 0.5
-    # Never zero or negative, whatever the DTE.
-    assert resolve_reprice_days("Swing", None, None, dte=0.4, sim_median=1.0) > 0
+    # A sub-1-day contract still leaves life to price with. A flat "dte - 0.5"
+    # floored at 0.5 returns 0.5 on a 0.4-day contract — at or past expiry,
+    # which is what this cap exists to prevent, reached from the other side.
+    assert resolve_reprice_days("Swing", None, None, dte=0.4, sim_median=1.0) < 0.4
 
-    # And the remaining life it implies is always genuinely positive.
-    for dte in (1, 2, 3, 10, 30):
+    # And the remaining life it implies is always genuinely positive — including
+    # for the sub-1-day DTEs the loop used to skip, which is where the fixture
+    # was incapable of exhibiting the failure this assertion guards.
+    for dte in (0.4, 0.75, 1, 2, 3, 10, 30):
         days = resolve_reprice_days("Swing", None, None, dte=dte, sim_median=float(dte))
-        assert remaining_years_at_barrier(dte, days) * 365 >= 0.5
+        assert remaining_years_at_barrier(dte, days) * 365 > 0.0
+        if dte >= 1:
+            assert remaining_years_at_barrier(dte, days) * 365 >= 0.5
 
 
 def test_custom_with_no_typed_range_falls_back_rather_than_deriving_from_zero():

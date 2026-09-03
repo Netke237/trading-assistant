@@ -173,9 +173,17 @@ describe('the printed arithmetic', () => {
   it('marks the premium-stop ratio as a constant, not a measurement', () => {
     renderCard();
     expect(
-      screen.getByText(/0\.33x, which is your target % over your stop %/),
+      screen.getByText(/0\.33x, the same on every contract/),
     ).toBeInTheDocument();
     expect(screen.getByText(/Only the first ratio is a measurement/)).toBeInTheDocument();
+  });
+
+  it('says the premium-stop percentage is a loss, not the level beside it', () => {
+    // The barriers table puts the level ($2.08 option) next to this note.
+    // "~60% of premium" beside it cannot be reconciled — 60% of the $5.20
+    // premium is $3.12, and $2.08 is the complement.
+    renderCard();
+    expect(screen.getByText(/stops out after losing ~60% of premium/)).toBeInTheDocument();
   });
 
   it('does not claim the premium stop came from the field when it did not', () => {
@@ -323,13 +331,18 @@ describe('the numbers the card promises', () => {
     ).toBeInTheDocument();
   });
 
-  it('warns when the bolded R:R describes an outcome the simulation never reached', () => {
-    // Every row of the default fixture has pStockStopFirst == 0, which is the
-    // reference contract's real behaviour: the premium stop fires first on
-    // every losing path, so the stock-stop R:R contributes nothing to the edge.
+  it('warns when the bolded R:R describes an outcome the simulation barely reached', () => {
+    // Every row of the default fixture has weightStockStopFirst == 0, which is
+    // the reference contract's real behaviour: the premium stop fires first on
+    // essentially every losing path, so the stock-stop R:R contributes nothing
+    // to the edge. The copy says "almost never", not "never" — largest-
+    // remainder can allocate 0 to a genuinely non-zero share, so the absolute
+    // claim would be false on about half a percent of real rows, while
+    // "contributes nothing to the edge" stays exact because the edge is
+    // weighted with that same allocated zero.
     renderCard();
     expect(
-      screen.getByText(/describes an outcome the simulation never reached/),
+      screen.getByText(/describes an outcome the simulation almost never reached/),
     ).toBeInTheDocument();
   });
 
@@ -352,9 +365,10 @@ describe('the numbers the card promises', () => {
       screen.getAllByText(
         // Testing Library normalises runs of whitespace, so the chain's double
         // spaces around the arrow are matched loosely. The point of the
-        // assertion is the TOTAL: 0.27x1.04 - 0 - 0.68x3.12 + 0.05x-1.56 is
-        // -1.9188, and the card must print that, not the -193.28 this fixture
-        // used to carry while the assertion only checked the four terms.
+        // assertion is the TOTAL: with the backend's own allocated weights,
+        // 0.27x1.04 - 0.00x5.17 - 0.69x3.12 + 0.04x-1.56 is -1.9296, printed as
+        // -$1.93. The fixture used to carry -193.28 while the assertion checked
+        // only the four terms, so the total went unchecked.
         /0\.27 x \$1\.04 - 0\.00 x \$5\.17 - 0\.69 x \$3\.12 \+ 0\.04 x -\$1\.56 = -\$1\.93\s+->\s+-\$193\.00 per contract/,
       ).length,
     ).toBeGreaterThan(0);

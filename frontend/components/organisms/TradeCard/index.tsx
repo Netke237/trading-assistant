@@ -326,6 +326,13 @@ function abortAfterTimeout(controller: AbortController): RequestDeadline {
   return deadline as RequestDeadline;
 }
 
+/** True when the request is over and nothing more should be done with it —
+ *  either a newer request superseded it (stay silent) or our deadline killed it
+ *  (the caller must surface it). Callers pair this with `isRealFailure`. */
+function isFinished(controller: AbortController): boolean {
+  return controller.signal.aborted;
+}
+
 /** True when this request should be treated as a real failure — it either threw
  *  on its own, or our own deadline killed it. False only when a newer request
  *  superseded it, which is the one case that must stay silent. */
@@ -615,6 +622,13 @@ export function TradeCard({
     const controller = new AbortController();
     exitPlanRequestRef.current = controller;
     const deadline = abortAfterTimeout(controller);
+    // Same shape as estimateFirstPassage's: `null`, not `undefined`, so a real
+    // failure overwrites the parent's cached plan rather than leaving it to
+    // reappear on the next navigate-away-and-back.
+    const failExitPlan = () => {
+      setExitPlanError(true);
+      setExitPlan(null);
+    };
     setExitPlanLoading(true);
     setExitPlanError(false);
     setExitPlan(undefined);
@@ -628,7 +642,17 @@ export function TradeCard({
         api.getStockQuote(data.symbol, controller.signal).catch(() => null),
         api.getContractQuote(data.symbol, cd.strike, cd.expiry, cd.right, controller.signal).catch(() => null),
       ]);
-      if (controller.signal.aborted) return;
+      // NOT a bare `if (aborted) return`. Both sub-fetches swallow their own
+      // rejection, so a deadline that fires while they hang never throws — it
+      // arrives here instead, where a bare return would skip the error state
+      // AND leave `firstPassage` at `undefined`, which the parent's cache reads
+      // as "don't touch": the previous estimate for this contract would survive
+      // and silently reappear on the next navigate-away-and-back. That is
+      // exactly what the catch block below exists to prevent.
+      if (isFinished(controller)) {
+        if (deadline.timedOut) failExitPlan();
+        return;
+      }
       const entryPrice = stockQuote?.price ?? data.price;
       const premium = contractQuote?.price ?? cd.mid;
       const res = await api.getExitPlan({
@@ -640,18 +664,20 @@ export function TradeCard({
         premium,
         trend_score: data.stockBreakdown.trend,
       }, controller.signal);
-      if (controller.signal.aborted) return;
+      if (isFinished(controller)) {
+        if (deadline.timedOut) failExitPlan();
+        return;
+      }
       setExitPlan({ ...res, computedAt: new Date().toISOString() });
       setArithmeticLiveStockPrice(entryPrice);
     } catch {
       if (!isRealFailure(controller, deadline)) return;
-      setExitPlanError(true);
+      failExitPlan();
       // Same reasoning as estimateFirstPassage's `.catch`: this was cleared to
       // `undefined` above (in-flight, which the parent's cache treats as
       // "don't touch") — an explicit `null` here forces the overwrite on a
       // genuine failure instead of leaving a stale cached plan to silently
       // reappear on the next navigate-away-and-back.
-      setExitPlan(null);
     } finally {
       clearTimeout(deadline.timer);
       if (isRealFailure(controller, deadline)) setExitPlanLoading(false);
@@ -711,6 +737,15 @@ export function TradeCard({
     // button, so a hung /contracts/first-passage left "Estimating…" disabled
     // with no way out but navigating to another contract.
     const deadline = abortAfterTimeout(controller);
+    // What "this estimate failed" means, in one place. `null` rather than
+    // `undefined` on both pieces of state: the parent's cache treats `undefined`
+    // as "in flight, don't touch", so only an explicit `null` overwrites a
+    // stale cached entry instead of letting it reappear later.
+    const failFirstPassage = () => {
+      setFirstPassageError(true);
+      setFirstPassage(null);
+      setFirstPassageContext(null);
+    };
     setFirstPassageLoading(true);
     setFirstPassageError(false);
     setFirstPassage(undefined);
@@ -728,7 +763,17 @@ export function TradeCard({
         api.getStockQuote(data.symbol, controller.signal).catch(() => null),
         api.getContractQuote(data.symbol, cd.strike, cd.expiry, cd.right, controller.signal).catch(() => null),
       ]);
-      if (controller.signal.aborted) return;
+      // NOT a bare `if (aborted) return`. Both sub-fetches swallow their own
+      // rejection, so a deadline that fires while they hang never throws — it
+      // arrives here instead, where a bare return would skip the error state
+      // AND leave `firstPassage` at `undefined`, which the parent's cache reads
+      // as "don't touch": the previous estimate for this contract would survive
+      // and silently reappear on the next navigate-away-and-back. That is
+      // exactly what the catch block below exists to prevent.
+      if (isFinished(controller)) {
+        if (deadline.timedOut) failFirstPassage();
+        return;
+      }
       const referenceStockPrice = stockQuote?.price ?? data.price;
       const premium = contractQuote?.price ?? cd.mid;
       const delta = contractQuote?.delta ?? cd.delta;
@@ -888,7 +933,10 @@ export function TradeCard({
         hold_min: holdMin ?? undefined,
         hold_max: holdMax ?? undefined,
       }, controller.signal);
-      if (controller.signal.aborted) return;
+      if (isFinished(controller)) {
+        if (deadline.timedOut) failFirstPassage();
+        return;
+      }
       // Feature 8 (Final Recommendation) — computedAt stamped here, the same
       // client-set-on-receipt pattern as ExitPlan.computedAt (this endpoint
       // is stateless/fresh on every call, so it isn't returned by the API).
@@ -921,7 +969,7 @@ export function TradeCard({
       firstPassageIsFreshRef.current = true;
     } catch {
       if (!isRealFailure(controller, deadline)) return;
-      setFirstPassageError(true);
+      failFirstPassage();
       // Same reasoning, same fix, as the structural sub-fetch's `.catch`
       // above — and it applies here even more directly, since this IS the
       // primary fetch, not a sub-fetch. `firstPassage`/`firstPassageContext`
@@ -933,8 +981,6 @@ export function TradeCard({
       // fresh structuralStop from this very click's auto-trigger above) on
       // the next navigate-away-and-back. `null` forces the overwrite instead,
       // the same way it does for structuralStop.
-      setFirstPassage(null);
-      setFirstPassageContext(null);
     } finally {
       clearTimeout(deadline.timer);
       if (isRealFailure(controller, deadline)) setFirstPassageLoading(false);
@@ -1043,6 +1089,11 @@ export function TradeCard({
     const controller = new AbortController();
     structuralRequestRef.current = controller;
     const deadline = abortAfterTimeout(controller);
+    const failStructural = () => {
+      setStructuralError(true);
+      setStructuralStop(null);
+      setStructuralStopStockPrice(null);
+    };
     setStructuralLoading(true);
     setStructuralError(false);
     setStructuralStop(undefined);
@@ -1054,7 +1105,12 @@ export function TradeCard({
       // overrode in Step 6, which has nothing else refreshing it). Falls back
       // to data.price only if the live quote fetch itself fails.
       const stockQuote = await api.getStockQuote(data.symbol, controller.signal).catch(() => null);
-      if (controller.signal.aborted) return;
+      // `.catch(() => null)` swallows the rejection, so our own deadline would
+      // otherwise arrive at a bare early return and neither report nor clear.
+      if (isFinished(controller)) {
+        if (deadline.timedOut) failStructural();
+        return;
+      }
       const referenceStockPrice = stockQuote?.price ?? data.price;
       const res = await api.getStructuralStop({
         symbol: data.symbol,
@@ -1086,6 +1142,19 @@ export function TradeCard({
   useEffect(() => {
     setOverlay((prev) => ({ ...prev, contracts: initialContracts }));
   }, [initialContracts]);
+
+  // Unmount cleanup. Four AbortControllers and their 20-second deadlines were
+  // only ever cancelled by the CONTRACT-CHANGE effect, so navigating away from
+  // the card entirely left a timer alive to fire an abort — and its rejection
+  // handler — against an unmounted tree. React 18 makes those setState calls
+  // no-ops, so there is no user-visible bug, but the escape is real and it is
+  // what the suite's act() warning points at. Deliberately `[]`: this runs on
+  // unmount only, never between renders.
+  useEffect(() => () => {
+    structuralRequestRef.current?.abort();
+    firstPassageRequestRef.current?.abort();
+    exitPlanRequestRef.current?.abort();
+  }, []);
 
   // Direct-call pattern (see `onEditsChange`'s own doc comment) — same shape
   // as `applyMaxLossOverride` below: setOverlay and onEditsChange are two
@@ -1198,8 +1267,13 @@ export function TradeCard({
   // because it renders the "barriers changed — re-run" copy itself and would
   // otherwise be handed a prop it can never act on. Everything that prints race
   // NUMBERS needs the second.
-  const raceIsFresh = raceBarriers?.contract === data.contract
-    && firstPassageContext != null;
+  // ONE term, not two. `firstPassageContext` was listed beside this and was
+  // implied by it: setRaceBarriers is called on the line after
+  // setFirstPassageContext, and both are cleared together at the handler's
+  // entry and in the contract-change effect, so deleting it changed no test —
+  // verbatim the criticism this comment levels at the ref it replaced. A guard
+  // no test can fail is not a guard, and two of them are not better than one.
+  const raceIsFresh = raceBarriers?.contract === data.contract;
 
   const raceIsShowable = raceIsFresh && !raceBarriersMoved;
 
@@ -1761,7 +1835,13 @@ export function TradeCard({
              proposes no level of its own; it only decides which of the three
              existing barriers each simulated path reaches first. */}
         <BarrierRaceCard
-          race={firstPassage?.race}
+          // Gated on freshness too: `firstPassage` holds the PREVIOUS
+          // contract's estimate for the frame between a contract switch and the
+          // reset effect, so an un-gated `race === null` put "Not simulated —
+          // contract expires today" under the new contract's header whenever
+          // the previous one was 0-DTE. The refusal copy depends on no live
+          // BARRIER, but it does depend on which contract is on screen.
+          race={raceIsFresh ? firstPassage?.race : undefined}
           invalidation={firstPassage?.invalidation ?? null}
           premiumStopFromField={raceBarriers?.fromField ?? false}
           premiumStopField={overlay.premiumStop ?? null}

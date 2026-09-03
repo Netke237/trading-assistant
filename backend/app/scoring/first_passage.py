@@ -570,9 +570,13 @@ def estimate_first_passage(
         #   The card prints them as "0.27 x $1.04", so computing the edge from
         #   anything finer makes the printed terms sum to a different number
         #   than the printed total (it was out by 1.6c per share before this).
-        #   At n_paths=2000 one standard error on a share is ~0.011, so 0.01
-        #   quantization is strictly smaller than the noise already present —
-        #   it discards nothing real. The SHARES THEMSELVES are reported raw:
+        #   At n_paths=2000 one standard error on a share is ~0.011 near p=0.5,
+        #   so the quantization is of the same order as the noise already
+        #   present. It is NOT uniformly smaller: at p=0.02 the standard error
+        #   is ~0.003 while the allocation can move a weight by up to 0.005. The
+        #   trade-off is deliberate — a chain the user can add up is worth more
+        #   than a fourth decimal place on a weight — but it is a trade-off, not
+        #   a free lunch. The SHARES THEMSELVES are reported raw:
         #   rounding those would let a row's four bars sum to 101%, and "every
         #   row sums to 100% because each path is counted once" is the whole
         #   claim of this card.

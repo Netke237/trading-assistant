@@ -16,7 +16,8 @@ The rule, in order:
 2. Otherwise fall back to a per-preset table, keyed on the HOLDING preset
    (Intraday…Annual), never on the collapsed scoring horizon.
 3. ``Custom`` has no table row: derive it from the typed hold range.
-4. Clamp THE FALLBACK to at least ``min_days`` and at most
+4. Clamp the result. THE ``max_fraction_of_dte`` PART APPLIES TO THE FALLBACK
+   ONLY (see rule 5). Clamp a fallback to at least ``min_days`` and at most
    ``max_fraction_of_dte`` of the contract's remaining life — a table keyed on
    how long you intend to HOLD knows nothing about this contract's expiry, so
    "Annual" on a 30-day contract would otherwise reprice at 80 days, past
@@ -35,6 +36,10 @@ The rule, in order:
    and R:R overstated by about the same (0.2012 -> 0.2084), always in the
    flattering direction, on the number the card bolds as THE measurement — and the card printed "median ~26d" three inches above
    "repriced at 22.5d" with nothing to explain the gap.
+
+5. Whatever the source, the answer is capped half a day short of expiry
+   (``_latest_barrier_day``), so there is always some life left to price with.
+   A simulated median cannot exceed the contract's life but it can EQUAL it.
 
 DAYS ELAPSED, NOT TIME REMAINING. Everything this module returns is a number of
 days UNTIL a barrier is reached, counted forward from today. Black-Scholes wants
@@ -70,12 +75,21 @@ def resolve_reprice_days(
     expiry. Returns a number of days ELAPSED until the barrier — never a time
     to expiry; see the module docstring and ``remaining_years_at_barrier``.
 
-    Bounds apply to the FALLBACK only: a table value is clamped to
-    ``[min_days, max_fraction_of_dte * dte]`` (the ceiling wins when those
-    conflict), because a holding-period table knows nothing about this
-    contract's expiry. A usable ``sim_median`` is returned as observed — it
-    cannot exceed the contract's life by construction, and overriding a measured
-    value with a fraction is a worse answer, not a safer one.
+    Bounds, precisely:
+
+    * A FALLBACK value is clamped to ``[min_days, max_fraction_of_dte * dte]``,
+      the ceiling winning when the two conflict — a holding-period table knows
+      nothing about this contract's expiry.
+    * A usable ``sim_median`` is floored at ``min_days`` and capped half a day
+      short of expiry, but ``max_fraction_of_dte`` NEVER applies to it: it
+      cannot exceed the contract's life by construction, and overriding a
+      measured value with an arbitrary fraction is a worse answer, not a safer
+      one. The half-day cap is not that fraction — it only stops a median that
+      lands exactly ON expiry from leaving zero life to price with.
+
+    So ``resolve_reprice_days("Swing", None, None, dte=1, sim_median=1.0)`` is
+    0.5, and ``(..., dte=30, sim_median=0.1)`` is 1.0. Both bounds do reach the
+    simulated median; only the DTE fraction does not.
     """
     cfg = cfg if cfg is not None else load_reprice_horizon_cfg()
     fallback = cfg.get("fallback_days", {}) or {}
@@ -129,12 +143,28 @@ def resolve_reprice_days(
 
 
 def _latest_barrier_day(dte: float) -> float:
-    """The latest day a barrier may be said to be reached: half a day before
-    expiry, so there is always some life left to price. Returns +inf when the
-    DTE is unknown, so the caller's other bounds decide."""
+    """The latest day a barrier may be said to be reached, so there is always
+    some life left to price with. Returns +inf when the DTE is unknown, leaving
+    the caller's other bounds to decide.
+
+    Half a day before expiry, EXCEPT on a sub-1-day contract, where a flat
+    "dte - 0.5" floored at 0.5 lands at or past expiry — 0.5 on a 0.4-day
+    contract — which is the exact outcome this cap exists to prevent, reached
+    from the other side. Falling back to half the remaining life keeps it
+    strictly inside the contract for any positive DTE. Not reachable through
+    the race today (estimate_first_passage refuses dte < 1), but Stage 1 calls
+    resolve_reprice_days BEFORE that guard, and this module is documented as the
+    single owner of the rule."""
     if dte is None or not _usable(dte) or dte <= 0:
         return float("inf")
-    return max(float(dte) - 0.5, 0.5)
+    latest = float(dte) - 0.5
+    if latest <= 0:
+        # Sub-1-day contract: half its remaining life, which is strictly inside
+        # it. Taking a min() of the two instead would cap EVERY median at half
+        # the DTE — reintroducing the fixed half-life this module exists to
+        # replace, on every contract rather than the sub-1-day ones.
+        latest = float(dte) * 0.5
+    return latest
 
 
 def _fallback_days(

@@ -80,8 +80,8 @@ def _bs_reprice_or_delta_approx(
 # so on one TradeCard the Monte Carlo card's "Stock price" per target is now
 # back-solved at `dte - resolve_reprice_days(...)` while the Fixed % Ladder's
 # target prices are still back-solved at `expiry_years * 0.5` — two answers to
-# the same question, a few inches apart, differing by $2.64-$4.71 on a 30-DTE
-# contract and more on a LEAP.
+# the same question, a few inches apart: $189.28 against $191.70 on a 30-DTE
+# contract ($2.43), and $186.51 against $191.35 on a LEAP ($4.84).
 #
 # Deliberately not fixed here: wiring it changes numbers on the Fixed % Ladder,
 # a card outside the barrier race's remit, and rewrites ~30 tests in

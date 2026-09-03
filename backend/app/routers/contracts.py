@@ -379,10 +379,15 @@ class BarrierRaceOutcomeOut(BaseModel):
     # card prints THESE in its edge chain and derives its whole-percent labels
     # from them, so the chain, the labels and the total cannot disagree. The
     # raw p* fields above stay raw — the bars are drawn from those.
-    weightTargetFirst:      float = 0.0
-    weightStockStopFirst:   float = 0.0
-    weightPremiumStopFirst: float = 0.0
-    weightNeither:          float = 0.0
+    # REQUIRED, deliberately — no defaults. With `= 0.0` here, dropping these
+    # from _race_out was invisible: Pydantic filled them, the TypeScript side
+    # declares them required so tsc saw nothing, and the card rendered four
+    # labels of "0%" under the copy "every row sums to 100%" beside an edge
+    # chain whose four multipliers were all zero and whose total was not.
+    weightTargetFirst:      float
+    weightStockStopFirst:   float
+    weightPremiumStopFirst: float
+    weightNeither:          float
     terminalMean:           Optional[float] = None
 
     rewardDollar:           float
@@ -412,7 +417,9 @@ class BarrierRaceOut(BaseModel):
     # False when the contract's own IV could not be backed out of its quote, so
     # the simulation ran on a generic fallback volatility. The card caveats
     # every number rather than presenting a confident dollar edge.
-    ivSolved:          bool = True
+    # Required for the same reason: defaulting it to True suppressed the
+    # unsolvable-IV caveat on exactly the contracts that need it.
+    ivSolved:          bool
     nPaths:            int
 
 

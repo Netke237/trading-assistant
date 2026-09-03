@@ -300,9 +300,11 @@ export default function BarrierRaceCard({
              stop never wins while the table two blocks above printed 1%. */}
         {race.outcomes.every((o) => o.weightStockStopFirst === 0) && (
           <Text size={10} tone="caution">
-            On this contract the premium stop fires first on every losing path, so the bolded
-            stock-stop R:R describes an outcome the simulation never reached — its term contributes
-            exactly nothing to the edge below.
+            On this contract the stock stop wins under 1% of paths, so the bolded R:R above
+            describes an outcome the simulation almost never reached, and its term contributes
+            exactly nothing to the edge below. Largest-remainder allocation can round a genuinely
+            non-zero share down to 0%, so &quot;never&quot; would be too strong; &quot;contributes nothing&quot;
+            is exact, because the edge is weighted with that same allocated 0.
           </Text>
         )}
         {!race.ivSolved && (

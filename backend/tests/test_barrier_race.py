@@ -499,8 +499,9 @@ def test_the_stop_leg_reprices_at_the_simulation_median_not_the_preset_table():
     """Decision Q2's entire point: "no fixed half-life, every reprice uses the
     simulation's own median days to that barrier, falling back to a per-preset
     YAML value". Nothing pinned the wiring — replacing the sim median with None
-    (so the stop leg silently fell back to Swing's 7 days, a $1.38 swing in the
-    repriced value and a 0.21 -> 0.29 swing in R:R) left every test passing.
+    (so the stop leg silently fell back to Swing's 7 days — on a 60-DTE
+    reference contract a $0.49 -> $1.84 swing in the repriced value, and
+    0.2208 -> 0.3095 in R:R) left every test passing.
 
     Both halves are asserted: that the horizon IS the simulation's observed
     median, and that it is not the table's."""
@@ -513,11 +514,19 @@ def test_the_stop_leg_reprices_at_the_simulation_median_not_the_preset_table():
     assert o.reprice_days_stock_stop == pytest.approx(observed)
     assert o.reprice_days_stock_stop != 7.0, "fell back to the Swing table row"
 
+    # The field the CARD reads to decide which of three mutually exclusive
+    # sentences to print. Swapping it for the conditional median (None on this
+    # contract) left the whole backend suite green while the card would have
+    # said "the preset default; no path reached the stop" beside a horizon that
+    # was in fact the observed median of the paths that did.
+    assert o.days_any_path_reached_stop == observed
+
     # And when the simulation reached no barrier at all, the table is what runs.
     no_stop = _run(dte=60, invalidation_price=1.0)   # unreachable stop
     assert no_stop.invalidation.expected_days is None
     assert no_stop.race is not None
     assert no_stop.race.outcomes[0].reprice_days_stock_stop == pytest.approx(7.0)
+    assert no_stop.race.outcomes[0].days_any_path_reached_stop is None
 
 
 def test_the_race_is_skipped_entirely_when_the_caller_does_not_want_it():
@@ -620,14 +629,40 @@ class TestEndpoint:
             assert total == pytest.approx(1.0, abs=2e-4), o
 
     def test_every_field_the_card_prints_survives_the_mapping(self):
-        o = self._post().json()["race"]["outcomes"][0]
+        """Key presence AND value. The value half is what matters: every field
+        the last two rounds made load-bearing was declared with a default on the
+        wire model, so deleting its assignment in _race_out was invisible —
+        Pydantic filled the default, TypeScript declares the field required so
+        tsc saw nothing, and the whole backend suite passed while the card would
+        have rendered four "0%" labels under the copy "every row sums to 100%",
+        beside an edge chain whose four multipliers were all zero and whose
+        printed total was not."""
+        payload = self._post().json()
+        o = payload["race"]["outcomes"][0]
         for key in (
             "targetPct", "targetOptionPrice", "rewardDollar", "repriceDaysStockStop",
             "stopRepricedValue", "riskStockStop", "riskPremiumStop",
             "rrStockStop", "rrPremiumStop", "edgePerContract",
             "daysTarget", "daysStockStop", "daysPremiumStop", "terminalMean",
+            "daysAnyPathReachedStop", "weightTargetFirst", "weightStockStopFirst",
+            "weightPremiumStopFirst", "weightNeither",
         ):
             assert key in o, f"{key} missing from the response"
+
+        # The weights are both what the card prints and what the edge was
+        # weighted with, so they must be real hundredths summing to 1.00.
+        weights = [o["weightTargetFirst"], o["weightStockStopFirst"],
+                   o["weightPremiumStopFirst"], o["weightNeither"]]
+        assert round(sum(weights), 10) == 1.0, weights
+        assert any(w > 0 for w in weights), "all four weights defaulted to zero"
+        for w in weights:
+            assert abs(w * 100 - round(w * 100)) < 1e-9, f"{w} is not a hundredth"
+
+        # daysAnyPathReachedStop decides which of three mutually exclusive
+        # sentences the risk chain prints, so defaulting it to None would make
+        # the card say no path reached a stop that 2000 paths did reach.
+        assert o["daysAnyPathReachedStop"] == payload["invalidation"]["expectedDays"]
+        assert payload["race"]["ivSolved"] is True
 
     def test_a_moved_premium_stop_changes_the_answer_over_the_wire(self):
         """Moving the premium stop moves the answer over the wire.

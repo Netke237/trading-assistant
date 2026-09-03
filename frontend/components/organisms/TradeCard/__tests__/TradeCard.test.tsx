@@ -2406,6 +2406,30 @@ describe('a request that never settles', () => {
     expect(screen.getByRole('button', { name: /check structure/i })).toBeEnabled();
     // And the Estimate button, which this one's loading flag also gates.
     expect(screen.getByRole('button', { name: /run monte carlo estimate/i })).toBeEnabled();
+    // The test name promises this; it used to assert only the buttons.
+    expect(screen.getByText(/Couldn.t check structure/)).toBeInTheDocument();
+  });
+
+  it('reports a deadline that lands while the quote sub-fetches are hanging', async () => {
+    // The estimate's two quote fetches `.catch(() => null)`, so an abort never
+    // throws — it arrives at an early return instead. A bare `if (aborted)
+    // return` there skipped the error AND left firstPassage `undefined`, which
+    // the parent's cache reads as "in flight, don't touch", so the previous
+    // estimate for this contract survived and reappeared later.
+    (api.getStructuralStop as jest.Mock).mockResolvedValue({
+      available: true, price: 180.0, source: 'order_block', confidence: 75, distancePct: 3.3,
+    });
+    (api.getStockQuote as jest.Mock).mockImplementation(neverSettles());
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(21_000);
+    });
+
+    expect(screen.getByRole('button', { name: /run monte carlo estimate/i })).toBeEnabled();
+    expect(screen.getByText(/Couldn.t compute an estimate/)).toBeInTheDocument();
   });
 
   it('gives the Estimate button back after the deadline', async () => {
