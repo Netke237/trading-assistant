@@ -337,3 +337,103 @@ No live market data (both the original and the audit ran on synthetic surfaces).
 per-contract IV is good enough in production to displace a solver. Whether the Q7 thresholds
 (0.80 / 0.70 / 0.60) hold on a real universe — round 5 records them as "taken as proposed", never
 measured. American-exercise bias remains invisible to any round-trip test by construction.
+
+---
+
+# Amendment B — second adversarial round, 2026-09-03
+
+Round 2 audited Amendment A and found that **four of its nine corrections do not survive contact
+with the code.** Amendment A accepted round 1's findings too readily and propagated its errors.
+Appended, not rewritten, for the same reason as before.
+
+## B.1 The three findings that change the plan
+
+**1. A bracketed brentq IV solver already exists in this repo, and is already wired in.**
+`backend/app/data/market.py:928` `_compute_iv_bs` is `brentq` over σ ∈ [1e-6, 20.0] with an
+intrinsic guard — `if mid <= intrinsic * 1.001: return None`, using the **undiscounted** `K − S`,
+which is exactly the American floor §A.3.4 asked for. It is imported at `scan.py:51` and called at
+`scan.py:603`. **Verified.** Both this document and Amendment A re-specified working in-repo code
+from scratch, inviting a second, divergent IV solver in the same service. The question was never
+"which solver should we write" but "why does the scan path already use a good one while
+`reward_risk` and `first_passage` still call the fragile one".
+
+**2. Amendment A's `market.py` citations point at a function with no production callers.**
+Lines 598/615/629/643 live in the **synchronous** `fetch_option_chain` (line 514). Every live path
+uses `fetch_option_chain_async` (line 1171) — `contracts.py:85`, `scan.py:372,373,590`,
+`market.py:1381` — whose equivalents are at **1260/1277/1291/1308**. **Verified.** §A.3.1 as
+written patches dead code and leaves the shipped scan unchanged. Amendment A noticed the duplicate
+block at 1277 and still attributed the fix to the wrong one.
+
+**3. The gate is frontend TypeScript.** `frontend/lib/risk.ts:70 stopPremiumRisk` is where the
+stop-cost gate ships today, with `GET /api/config/stop-premium-thresholds` and
+`stopPremiumThresholdsStore.ts` behind it. `bs_iv` is backend Python. **Nothing in either document
+establishes that the reprice-at-stop calculation moves server-side** — and if it stays in
+`risk.ts`, `brentq` is unavailable in the browser and `bs_iv`'s convergence is irrelevant to the
+gate. This is the most load-bearing assumption in the whole investigation and it was never stated.
+The gate-basis spec's §2 does choose a server-side design ("the endpoints that produce a stop also
+return its cost"), so the assumption is *defensible* — but it is a prerequisite, not a given.
+
+## B.2 Corrections to Amendment A
+
+- **The performance argument was apples-to-oranges.** Measured on the same set: Newton with
+  `scipy.stats.norm` 464 µs, Newton with `math.erf` **8.5 µs**, brentq with `math.erf` **17.6 µs**.
+  The 20× was entirely the normal-CDF swap. Controlling for it, brentq is **2× slower** than
+  Newton, so "plain brentq wins outright, there is no case for Newton-first" is refuted.
+- **`math.erf` is not safe as a blanket substitute.** `0.5*(1+erf(x/√2))` underflows to exactly 0.0
+  at x = −9 — the deep-OTM/short-DTE tail this whole document is about. It belongs in a private
+  solver helper, or must use an `erfc` tail form.
+- **Corrado-Miller understated its own fix**: a CM seed with put-call parity and a clamped
+  discriminant gives **0.00%** failure on the well-posed set, not 2.58%, and recovers 230C and 240C.
+  That makes the 3-line seed change the cheapest complete fix, not third-priority tidying.
+- **The blast-radius claim was empirically false.** With `bs_iv` monkeypatched to bracketed brentq
+  the **full backend suite passes**. The "pinned" values are in comments; the assertions are
+  downstream ratios that do not move. §A.3.5 turned a measured no-op into an unsized refactor.
+- **§A.2.8 was simply wrong.** The body's headline recommendation already *was* `brentq`, so it did
+  not miss that scipy was available; and `.venv/` is gitignored, so "there is no `backend/.venv`"
+  was accurate about the repo.
+- **§A.2.1's headline example was garbled.** 0.3739 and 0.4413 belong to two different strikes
+  (240P and 250P), not one contract. Worse, both have |Δ| above `contract_rules.yaml`'s
+  `hard_reject.max_delta: 0.85` and never reach a consumer. The worst in-band case is 230P at
+  **+2.3 vol points**, not the +9.3 the example implied. The American-put *phenomenon* is real; its
+  magnitude was inflated ~4× against what the shipped filters admit.
+- **The census denominator is 6936, not 6913** — Amendment A's own 20.76% depends on 6936 while
+  certifying 6913 as exact.
+- **"Self-penalising" is filter-dependent**: no filter 20.76%, the two-part filter 17.88%, the
+  quotable-only half **14.56%**. It holds only against no filter at all.
+
+## B.3 Corrections to statements made outside this document
+
+- **The shipped `pass_max_fraction` values are 0.8 (swing), 0.85 (intraday), 0.7 (position)** —
+  three distinct values at `scoring_rules.yaml:132,221,311`. An earlier session report described
+  the file as carrying "the old single `pass_max_fraction: 0.8` gate". That was wrong. The Q7
+  proposal (0.80 / 0.70 / 0.60) therefore changes two of the three, not all three uniformly.
+- **"No downstream gate code exists yet"**, in the body's could-not-establish list, is false — see
+  §B.1.3.
+
+## B.4 Two risks neither round named
+
+- **`heston_cache.py:87,102` filters `None` out of the v0 seed average**, so today's `v0` is a
+  survivorship-biased mean over the strikes that happened to converge — ATM/ITM-weighted. Any
+  solver fix moves calibrated Heston parameters, and no test covers that. This is the one consumer
+  whose behaviour genuinely changes.
+- **`bs_price` has no dividend term.** Inverting a true q>0 price with a q=0 model biases IV down
+  for calls and up for puts — same sign as the American effect for puts, so the two compound, and
+  it scales with DTE across every dividend-paying S&P name.
+
+## B.5 Revised recommendation, superseding §A.3
+
+1. **Do not write a new solver.** Reuse or generalise `_compute_iv_bs`, which already does what
+   §A.3 specified. Reconcile its bounds (1e-6..20 vs the proposed 1e-4..5) and its guard multiplier
+   (1.001 vs "a tick") deliberately rather than by accident.
+2. **Settle the architecture first.** Confirm the gate moves server-side per the gate-basis spec
+   §2, or the solver question does not touch the gate at all.
+3. **Fix the seed** (Corrado-Miller, 3 lines) — cheapest complete fix, and it leaves any remaining
+   Newton path sound.
+4. **Re-point the `ivRank` work at the async chain** (1260/1277/1291/1308), and treat the conflated
+   field as a live scoring defect in its own right: it is compared against `iv_rank_pass_max: 34`
+   in `stock_scorer.py` and `hard_reject.max_iv_rank: 70`, so a raw 75% IV can hard-reject a
+   contract whose true rank is 20.
+5. **Measure the Heston v0 shift** before changing any shared solver.
+6. **Do not claim the four call sites are equivalent.** `first_passage` already surfaces
+   non-convergence; `reward_risk` silently swallows it and still labels the result
+   "BS repriced (IV-derived)" when no IV was derived. That false provenance label is its own bug.
