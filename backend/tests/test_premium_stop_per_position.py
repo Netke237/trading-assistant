@@ -216,6 +216,63 @@ async def test_reported_threshold_price_is_the_resolved_one_not_the_global():
     assert prem.referenceValue == pytest.approx(3.50)
 
 
+@pytest.mark.asyncio
+async def test_logged_threshold_pct_is_the_resolved_one_not_the_global(monkeypatch):
+    """The audit-log payload must not misreport WHY the alert fired.
+
+    Separate from the test above on purpose: that one asserts the threshold
+    PRICE carried on the AlertItem, this one asserts the `thresholdPct` written
+    into the audit log. An adversarial mutation round proved they are
+    independent — reverting only the logged value to `_premium_stop_pct()` left
+    every other test in this file passing, so the price assertion does not
+    cover the log and the log needs its own guard.
+    """
+    import app.services.alert_generator as ag
+
+    captured: list[tuple[str, dict]] = []
+    real_log_event = ag.log_event
+    monkeypatch.setattr(
+        ag, "log_event",
+        lambda event_type, rec_id, payload: captured.append((event_type, payload)),
+    )
+    assert real_log_event is not ag.log_event  # the patch actually took
+
+    await _alerts(
+        _position(premium_stop_pct=0.30),
+        {"AAPL": 180.0}, {"AAPL|190|2026-05-16|C": 3.40},
+    )
+
+    fired = [p for kind, p in captured
+             if kind == "alert_fired" and p.get("alertType") == "PREMIUM_STOP"]
+    assert len(fired) == 1, "expected exactly one PREMIUM_STOP audit event"
+    # 0.30 is this position's own value; 0.60 is the global it must NOT report.
+    assert fired[0]["thresholdPct"] == pytest.approx(0.30)
+
+
+@pytest.mark.asyncio
+async def test_logged_threshold_pct_reports_the_global_for_an_inheriting_position(monkeypatch):
+    """The control: an inheriting position SHOULD log the global, so the test
+    above is proving resolution rather than just a hardcoded 0.30."""
+    import app.services.alert_generator as ag
+
+    captured: list[dict] = []
+    monkeypatch.setattr(
+        ag, "log_event",
+        lambda event_type, rec_id, payload: captured.append(payload),
+    )
+
+    await _alerts(
+        _position(premium_stop_pct=None),
+        {"AAPL": 180.0}, {"AAPL|190|2026-05-16|C": 1.50},
+    )
+
+    fired = [p for p in captured if p.get("alertType") == "PREMIUM_STOP"]
+    assert len(fired) == 1
+    assert fired[0]["thresholdPct"] == pytest.approx(
+        resolve_premium_stop_pct(None, ag._premium_stop_pct())
+    )
+
+
 # ── The auto-trader sizes off the resolved value ────────────────────────────
 
 def test_auto_trader_sizes_off_the_resolved_pct():
