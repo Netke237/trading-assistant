@@ -441,3 +441,112 @@ becomes a versioned migration and CLAUDE.md's version-bump-plus-migration-branch
 - Per-position `premium_stop_pct` (piece 4) — the race reads the card's existing field
 - The Heston calibration fix (Q8) — independent, later
 - Piece 3's scan-time `finalStop` and the ranking badge — next, after this
+
+---
+
+# Amendment A — 2026-09-03
+
+**This section is APPENDED, not merged.** Everything above is the decision log as it stood when the
+race was specified and built; it is left exactly as written. Rewriting a decision log from a later
+session is how it stops being one. What follows records where the implementation deliberately
+departs from it, and why — read the original for what was decided, read this for what is true now.
+
+Three items, all raised by the adversarial audit rounds over the merged feature (PR #21) and settled
+by Kenneth on 2026-09-03.
+
+## A.1 §2.3's seed key — `premium_stop_pct` stays OUT, and §2.3's premise is wrong
+
+§2.3 says:
+
+> **The seed must include the new input.** … Add `premium_stop_pct`, otherwise moving the premium
+> stop returns a bit-identical cached-looking answer and the card appears frozen.
+
+**The implementation does not do this, and should not.** The stated reason is factually wrong.
+
+`premium_stop_pct` does not shape the simulation. It is a **post-hoc barrier applied to paths that
+have already been generated** — the same paths, evaluated against a different option-value level.
+The seed governs path generation. Feeding a post-hoc barrier into it would re-roll every path on an
+input that does not affect any of them, which is a different answer to the same question dressed up
+as a fresher one.
+
+The "card appears frozen" worry does not survive contact with the code either: moving the premium
+stop changes which paths are attributed to which outcome, so the shares, the medians, the risk leg
+and the edge all move. Nothing is bit-identical. What stays fixed — correctly — is the *path set*.
+
+**Decision: keep the deviation. Do not "fix" §2.3 back.** Round 4 already shipped the narrower
+half of this (stopping the seed re-rolling on an unrelated input); this records why the remaining
+gap between spec and code is the code being right.
+
+## A.2 §3.2 / D8's StatusBadge — dropped permanently
+
+§3.2 says the card "composes StatusBadge, KV and a table", and D8 specifies "Two states,
+PASS/CAUTION, never REJECT, never red."
+
+**The card ships without a StatusBadge, and this is now a closed decision rather than an omission.**
+
+There is no threshold, anywhere in the repo, on edge, on R:R, or on any path share. `scoring_rules.yaml`
+has none; `risk_rules.yaml` has none; nothing in `lib/status.ts` maps any of these quantities to a
+Status. To render PASS/CAUTION the card would have to **invent a cutoff** — and D8's own second
+sentence is "The race adds no new gate." Inventing a number at which a trade becomes CAUTION *is*
+that gate, arriving through the back door of a badge.
+
+The two sentences of D8 cannot both be honoured. The one that survives is the one about gates,
+because it is the substantive commitment; the badge was the incidental means.
+
+**Decision: no StatusBadge on the race card, permanently.** Recorded here so it stops being
+re-proposed as a missing feature every audit round — it has been raised in more than one, and each
+time the answer has been the same.
+
+## A.3 §2.4's `rrStockStop` guard — still correct, rationale now stale
+
+§2.4 says:
+
+> **`rrStockStop` guards.** `riskStockStop` can be ≤ 0 when the repriced value at the stop exceeds
+> the premium (possible for a deep-ITM contract on a tight stop).
+
+**The guard is correct and stays. The parenthetical is no longer true.**
+
+That case was reachable only while the stop was being repriced at the wrong time — the original code
+fed *elapsed* days into `bs_price` as *remaining* life, so a stop reached late was priced with MORE
+life than the contract was quoted with. With the repricing corrected (`remaining_years_at_barrier`),
+a call at its stop has both a lower spot AND less time remaining, so it can only be worth less than
+it cost. Risk is positive for every quote the model can actually solve — swept strikes 165–180
+against premiums $10–$21 to confirm.
+
+**What does still reach the guard** is a quote `bs_iv` cannot solve, where sigma falls back to a
+generic 0.25 that has nothing to do with the contract. That is the same state the card is required
+to caveat rather than price confidently, and it is the fixture
+`test_non_positive_stock_stop_risk_yields_no_ratio` now uses.
+
+So: keep the guard, distrust the reason. A future reader who "simplifies away" a guard whose stated
+justification no longer holds would remove a live branch.
+
+## A.4 §2.2's "ONLY place that rule lives" is now true
+
+Not a departure — a claim that was aspirational when written and has since been made good, recorded
+so the next reader does not go looking for the gap.
+
+`reward_risk.py` carried a long note saying `reprice_years` was accepted by `estimate_rr` and
+`estimate_targets` but passed by **no caller anywhere**, so the Fixed % Ladder still back-solved at
+`expiry_years * 0.5` while the Monte Carlo card above it used the resolved holding horizon — two
+answers to one question, a few inches apart, with a caution note on the card admitting it.
+
+`build_trade_plan` is now that caller. Both it and `first_passage.py`'s Stage 1 call
+`reprice_horizon.display_reprice_years()` with the same arguments, so the two agree **exactly**, not
+approximately — Stage 1 resolves with `sim_median=None` by necessity (it runs before the simulation
+exists), which makes the horizon a pure function of `(preset, hold_min, hold_max, dte)`. The caution
+note is gone.
+
+**The asymmetry that remains is correct:** the *stop* leg still passes the simulated median directly
+to `resolve_reprice_days`, and should — by then the simulation exists, and a measured median beats a
+table. Do not route it through `display_reprice_years` to make things look uniform.
+
+**One trap this had to clear, worth keeping visible:** `_fallback_days` looks the preset up in a dict
+keyed by exact string and, on a miss, falls through to Swing's 7 days **silently**. `ScanRequest.horizon`
+is `Literal['Intraday', 'Swing', 'Position']` — it structurally cannot carry Quarterly, SemiAnnual,
+Annual or Custom, all of which collapse to "Position". Reusing it for repricing would have given a
+200-day hold and a 20-day hold the same repricing time while the card beside it used 80 days, and
+removed the note that had been admitting the disagreement. The holding preset key therefore travels
+as its own field, `horizon_preset`, on `/scan` and `/contracts/recompute-plan`, alongside the scoring
+horizon rather than instead of it. Pinned by `backend/tests/test_reprice_horizon_agreement.py` and
+`frontend/lib/__tests__/repriceHorizonPayload.test.ts`.
