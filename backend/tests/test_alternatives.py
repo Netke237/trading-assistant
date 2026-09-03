@@ -164,6 +164,11 @@ async def _run_alt_scan_with_runner_ups(runner_ups: list[dict]):
         entry=entry_result, invalidation_price=175.0, premium_stop=2.7, time_stop_days=12,
         target_price=200.0, targets=[], rr_ratio=2.0, rr_model="Heston repriced",
         target_price_raw=200.0, invalidation_price_raw=175.0,
+        # Swing's 7 days on a 45-DTE contract, the horizon build_trade_plan
+        # resolves for these inputs. Stated, not defaulted: a TradePlan that
+        # cannot say what horizon it priced at is how the ladder and the
+        # Monte Carlo card drifted apart in the first place.
+        reprice_years=(45 - 7) / 365.0,
     )
 
     chain = [

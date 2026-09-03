@@ -499,6 +499,7 @@ def _heston_wiring_fixtures():
         rr_model="Heston repriced",
         target_price_raw=200.0,
         invalidation_price_raw=180.0,
+        reprice_years=(45 - 7) / 365.0,   # Swing on a 45-DTE contract
     )
     return pass_card, contract_score, fake_plan
 

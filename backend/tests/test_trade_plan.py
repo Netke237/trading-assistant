@@ -128,21 +128,31 @@ def test_heston_params_default_none_preserves_delta_approx():
 def test_heston_params_floors_non_monotonic_target_instead_of_falling_back():
     """Using _plan()'s own default (deep-OTM, long-dated) fixture together
     with heston_params: T1 is Heston-priced, T2's raw Heston price is a
-    numerical artifact (verified directly against this exact fixture:
-    12.518866931556794 / 10.086141661385824 / 14.081229812545331) and is
-    floored up to T1's price rather than switched to the delta
-    approximation, and T3's own legitimate Heston price is preserved
+    numerical artifact and is floored up to T1's price rather than switched to
+    the delta approximation, and T3's own legitimate Heston price is preserved
     unmodified — see backend/tests/test_reward_risk.py's
     test_estimate_targets_real_fixture_preserves_t3_after_t2_artifact for the
-    reward_risk-level version of this same regression."""
+    reward_risk-level version of this same regression.
+
+    horizon_preset is pinned rather than left to default because the artifact
+    is a property of the REPRICING HORIZON, not just of the fixture. Before the
+    ladder was wired to the resolved holding horizon this priced at
+    expiry_years * 0.5 (92.5 days remaining) and the raw chain came out
+    12.518866931556794 / 10.086141661385824 / 14.081229812545331. "Annual" on
+    this 185-DTE contract reprices at 80 days elapsed, so 105 days remain, and
+    the raw chain is 12.4728 / 10.6959 / 15.3402 — same shape, same three
+    branches exercised (T1 genuine, T2 artifact floored, T3 genuine and above
+    T1), different numbers. Leaving the preset implicit would make this test
+    silently stop covering the flooring branch the day the default changes."""
     from app.models.heston import HestonParams
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
-    p = _plan(heston_params=params)  # default fixture: stock=318.73, strike=375, dte=185
+    # default fixture: stock=318.73, strike=375, dte=185
+    p = _plan(heston_params=params, horizon_preset="Annual")
     assert [t.pricingMethod for t in p.targets] == [
         "Heston repriced", "Heston repriced", "Heston repriced",
     ]
     prices = [t.estimatedOptionPrice for t in p.targets]
-    assert prices == [12.52, 12.52, 14.08]
+    assert prices == [12.47, 12.47, 15.34]
 
 
 def test_recompute_endpoint_matches_helper():

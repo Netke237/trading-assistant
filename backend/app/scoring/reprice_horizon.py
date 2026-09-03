@@ -253,3 +253,41 @@ def _usable(x: Optional[float]) -> bool:
         return math.isfinite(float(x))
     except (TypeError, ValueError):
         return False
+
+
+def display_reprice_years(
+    preset: Optional[str],
+    hold_min: Optional[float],
+    hold_max: Optional[float],
+    dte: float,
+    cfg: Optional[dict] = None,
+) -> float:
+    """The repricing horizon for a DISPLAY back-solve, in years REMAINING.
+
+    Two places on one TradeCard back-solve "what is this worth at that level"
+    before any simulation exists: the Monte Carlo card's Stage 1 target stock
+    prices (``first_passage.py``) and the Fixed % Ladder's target option prices
+    (``trade_plan.py`` -> ``estimate_rr`` / ``estimate_targets``). They sit a few
+    inches apart and answer the same question, so they must answer it the same
+    way. This function is that shared answer, and BOTH call it — the two cannot
+    drift apart without this line changing.
+
+    ``sim_median`` is pinned to ``None`` here, and that is the whole point: a
+    display back-solve runs BEFORE the simulation, so no measured median exists
+    to prefer. The horizon is therefore a pure function of
+    ``(preset, hold_min, hold_max, dte)``, which is what lets the two cards
+    agree EXACTLY rather than approximately.
+
+    NOT for the stop leg. ``first_passage.py``'s stop repricing does pass the
+    simulated median to ``resolve_reprice_days`` directly, and should: by then
+    the simulation exists and a measured median beats a table. Do not "fix" that
+    call site to route through here.
+
+    Returns years REMAINING (ready for ``bs_price``'s ``T``), not days elapsed —
+    the conversion the module docstring calls non-optional is done here so no
+    caller can skip it.
+    """
+    return remaining_years_at_barrier(
+        float(dte),
+        resolve_reprice_days(preset, hold_min, hold_max, float(dte), None, cfg),
+    )

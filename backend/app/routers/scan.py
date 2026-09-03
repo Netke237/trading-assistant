@@ -438,7 +438,12 @@ async def _process_symbol(
     max_cap_usd: float | None = None,
     overrides: dict | None = None,
     dte_bounds: tuple[int, int] | None = None,
+    hold_min_days: int | None = None,
     hold_max_days: int | None = None,
+    # The HOLDING preset key ("Swing", "Annual", "Custom", ...), NOT `horizon`
+    # above — that one is the collapsed scoring horizon and cannot express
+    # Quarterly/SemiAnnual/Annual/Custom. Only the repricing horizon reads it.
+    horizon_preset: str | None = None,
     gate: dict | None = None,
     atr_mult_target: float | None = None,
     atr_mult_stop: float | None = None,
@@ -772,6 +777,9 @@ async def _process_symbol(
         entry_mid=float(contract.get("price", 0)),
         rr_cfg=_rr,
         heston_params=heston_params,
+        horizon_preset=horizon_preset,
+        hold_min=hold_min_days,
+        hold_max=hold_max_days,
     )
     entry = _plan.entry
     target_price = _plan.target_price
@@ -1222,7 +1230,9 @@ async def _execute_scan_core(
                 max_cap_usd=req.max_cap_usd,
                 overrides=dict(req.overrides) if req.overrides else None,
                 dte_bounds=_dte_bounds,
+                hold_min_days=req.hold_min_days,
                 hold_max_days=req.hold_max_days,
+                horizon_preset=req.horizon_preset,
                 gate=gate,
                 atr_mult_target=_atr_target,
                 atr_mult_stop=_atr_stop,

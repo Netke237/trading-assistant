@@ -196,6 +196,14 @@ class RecomputePlanRequest(BaseModel):
     rr_bearish_target_pct: float | None = Field(default=None, gt=0, le=2.0)
     rr_bullish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
     rr_bearish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
+    # The HOLDING preset key and typed hold range, feeding the repricing
+    # horizon behind the Fixed % Ladder. Same names, same meaning and the same
+    # "absent means Swing" default as FirstPassageRequest below — a Step-6
+    # contract override must not reprice the ladder at a different horizon from
+    # the Monte Carlo card sitting beside it on the same screen.
+    horizon_preset: str | None = None
+    hold_min: float | None = Field(default=None, ge=0)
+    hold_max: float | None = Field(default=None, ge=0)
 
 
 class RecomputePlanResponse(BaseModel):
@@ -255,6 +263,9 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
         entry_ask=entry_ask,
         entry_mid=req.premium,
         rr_cfg=_rr_cfg_merged,
+        horizon_preset=req.horizon_preset,
+        hold_min=req.hold_min,
+        hold_max=req.hold_max,
     )
 
     return RecomputePlanResponse(

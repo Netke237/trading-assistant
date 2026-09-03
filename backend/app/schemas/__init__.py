@@ -514,6 +514,16 @@ class ScanRequest(BaseModel):
     # hard_reject.min_dte/max_dte apply as a fallback.
     hold_min_days: Optional[int] = None
     hold_max_days: Optional[int] = None
+    # The HOLDING preset key the trader picked ("Intraday" ... "Annual",
+    # "Custom"). Deliberately NOT `horizon` above: that one is the collapsed
+    # scoring horizon and is Literal-restricted to three values, so it cannot
+    # carry Quarterly/SemiAnnual/Annual/Custom at all. The repricing table in
+    # risk_rules.yaml is keyed on this one — the /first-passage endpoint takes
+    # the same key under the same name, and the two must match or the Monte
+    # Carlo card and the Fixed % Ladder reprice at different horizons.
+    # Untyped (plain str) on purpose: an unknown value resolves to Swing rather
+    # than 422-ing a whole scan over a display detail.
+    horizon_preset: Optional[str] = None
     # Per-scan confidence-gate overrides (snake_case, matching this model's style)
     confidence_caution_below: Optional[int] = None
     confidence_reject_below:  Optional[int] = None

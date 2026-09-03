@@ -33,7 +33,11 @@ import numpy as np
 from scipy.stats import norm
 
 from app.models.black_scholes import bs_iv, bs_price
-from app.scoring.reprice_horizon import remaining_years_at_barrier, resolve_reprice_days
+from app.scoring.reprice_horizon import (
+    display_reprice_years,
+    remaining_years_at_barrier,
+    resolve_reprice_days,
+)
 from app.scoring.stock_scorer import _atr
 
 
@@ -383,14 +387,17 @@ def estimate_first_passage(
     # as everything else. sim_median is None here by necessity — Stage 1 runs
     # before the simulation exists — so this always takes the preset fallback.
     #
-    # resolve_reprice_days returns days ELAPSED to the barrier; bs_price wants
-    # the life REMAINING at that moment. Converting is mandatory, not cosmetic:
-    # without it a 365-DTE LEAP's target stock price is solved as though 7 days
-    # of life were left, because "Swing: 7" is a table about how long you hold,
-    # not about how much contract is left.
-    dte_at_target = remaining_years_at_barrier(
-        float(dte),
-        resolve_reprice_days(horizon_preset, hold_min, hold_max, float(dte), None, reprice_cfg),
+    # display_reprice_years owns both halves of that (the preset resolution and
+    # the mandatory elapsed-days -> years-remaining conversion — without it a
+    # 365-DTE LEAP's target stock price is solved as though 7 days of life were
+    # left, because "Swing: 7" is a table about how long you HOLD, not about how
+    # much contract is left). The Fixed % Ladder calls the SAME function via
+    # build_trade_plan, and that shared call is what makes the two cards'
+    # back-solves agree exactly; inlining the composition here again would let
+    # them drift apart silently, which is what the caution note under the ladder
+    # used to admit in prose.
+    dte_at_target = display_reprice_years(
+        horizon_preset, hold_min, hold_max, float(dte), reprice_cfg,
     )
     pcts = [t1_pct, t2_pct, t3_pct]
     target_option_prices = [premium * (1 + p) for p in pcts]

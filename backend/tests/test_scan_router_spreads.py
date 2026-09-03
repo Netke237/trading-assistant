@@ -126,6 +126,7 @@ def _make_plan(entry_result: EntryAssessment, rr_result: RrResult):
         rr_model=rr_result.model_used,
         target_price_raw=170.0,
         invalidation_price_raw=180.0,
+        reprice_years=(45 - 7) / 365.0,   # Swing on a 45-DTE contract
     )
 
 
