@@ -371,6 +371,18 @@ class BarrierRaceOutcomeOut(BaseModel):
     daysTarget:             Optional[float] = None
     daysStockStop:          Optional[float] = None
     daysPremiumStop:        Optional[float] = None
+    # The unconditional median day ANY path reaches the stock stop — the basis
+    # of repriceDaysStockStop, and a different statistic from daysStockStop.
+    daysAnyPathReachedStop: Optional[float] = None
+
+    # The four shares allocated to hundredths, summing to exactly 1.00. The
+    # card prints THESE in its edge chain and derives its whole-percent labels
+    # from them, so the chain, the labels and the total cannot disagree. The
+    # raw p* fields above stay raw — the bars are drawn from those.
+    weightTargetFirst:      float = 0.0
+    weightStockStopFirst:   float = 0.0
+    weightPremiumStopFirst: float = 0.0
+    weightNeither:          float = 0.0
     terminalMean:           Optional[float] = None
 
     rewardDollar:           float
@@ -524,14 +536,23 @@ def _race_out(race) -> Optional[BarrierRaceOut]:
                 daysTarget=o.days_target,
                 daysStockStop=o.days_stock_stop,
                 daysPremiumStop=o.days_premium_stop,
+                daysAnyPathReachedStop=o.days_any_path_reached_stop,
+                weightTargetFirst=o.weight_target,
+                weightStockStopFirst=o.weight_stock_stop,
+                weightPremiumStopFirst=o.weight_premium_stop,
+                weightNeither=o.weight_neither,
                 terminalMean=round(o.terminal_mean, 2) if o.terminal_mean is not None else None,
                 rewardDollar=o.reward_dollar,
                 repriceDaysStockStop=round(o.reprice_days_stock_stop, 2),
                 stopRepricedValue=o.stop_repriced_value,
                 riskStockStop=o.risk_stock_stop,
                 riskPremiumStop=o.risk_premium_stop,
-                rrStockStop=round(o.rr_stock_stop, 4) if o.rr_stock_stop is not None else None,
-                rrPremiumStop=round(o.rr_premium_stop, 4) if o.rr_premium_stop is not None else None,
+                # NOT rounded to 4dp. reward $0.51 / risk $1.01 is 0.504950,
+                # which 4dp rounding turns into 0.505 and toFixed(2) then
+                # renders as "0.51" — beside the very division that produces
+                # 0.50, on the number the card bolds as THE measurement.
+                rrStockStop=o.rr_stock_stop,
+                rrPremiumStop=o.rr_premium_stop,
                 edgePerContract=round(o.edge_per_contract, 2) if o.edge_per_contract is not None else None,
             )
             for o in race.outcomes

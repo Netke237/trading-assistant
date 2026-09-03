@@ -5,37 +5,48 @@ import {
   formatRaceEdge,
   premiumStopPctFromDollars,
   premiumStopSourceNote,
-  sharePercents,
+  weightPercents,
   money,
 } from './barrierRace';
 import type { BarrierRaceOutcome } from '@/types/domain';
 
-/** A known row, taken from a real run of the reference contract:
- *  AAPL-shaped long call, $185 spot / $190 strike / 30 DTE / $5.20 premium,
- *  stop at $176, 60% premium stop, T1 = +20%. */
+/** A known row — genuinely `_run()`'s output for the reference contract, not a
+ *  hand-written approximation of it: AAPL-shaped long call, $185 spot / $190
+ *  strike / 30 DTE / $5.20 premium, stop at $176, 60% premium stop, T1 = +20%,
+ *  seed 42.
+ *
+ *  It used to be hand-written, and carried values the backend cannot emit — an
+ *  `edgePerContract` of -193.28 when every edge is a whole number of dollars by
+ *  construction, and four shares that were all exact two-decimal values, which
+ *  are precisely the ones on which a rounding disagreement is impossible. A
+ *  fixture that cannot exhibit the failure cannot test for it. */
 const ROW: BarrierRaceOutcome = {
   targetPct: 0.20,
   targetOptionPrice: 6.24,
-  pTargetFirst: 0.27,
-  pStockStopFirst: 0.00,
-  pPremiumStopFirst: 0.68,
-  pNeither: 0.05,
+  pTargetFirst: 0.2685,
+  pStockStopFirst: 0.0,
+  pPremiumStopFirst: 0.6865,
+  pNeither: 0.045,
   daysTarget: 7,
   daysStockStop: null,
   daysPremiumStop: 20,
+  daysAnyPathReachedStop: 26,
+  // Allocated by the backend, summing to exactly 1.00. Note 0.045 -> 0.04:
+  // JavaScript's toFixed(2) agrees, and the Python imitation this replaced
+  // gave 0.05, which is what stopped the chain adding up.
+  weightTargetFirst: 0.27,
+  weightStockStopFirst: 0.0,
+  weightPremiumStopFirst: 0.69,
+  weightNeither: 0.04,
   terminalMean: 3.64,
   rewardDollar: 1.04,
-  repriceDaysStockStop: 7,
-  stopRepricedValue: 0.18,
-  riskStockStop: 5.02,
+  repriceDaysStockStop: 26,
+  stopRepricedValue: 0.03,
+  riskStockStop: 5.17,
   riskPremiumStop: 3.12,
-  rrStockStop: 0.2072,
-  rrPremiumStop: 0.3333,
-  // The four printed terms sum to exactly this, per share: 0.27 x 1.04
-  // - 0.00 x 5.02 - 0.68 x 3.12 + 0.05 x -1.56 = -1.9188. The fixture used to
-  // say -193.28, so the very test asserting "the card prints a chain you can
-  // check" pinned a chain that does not add up — 1.4c per share out.
-  edgePerContract: -191.88,
+  rrStockStop: 0.20116054158607352,
+  rrPremiumStop: 0.33333333333333337,
+  edgePerContract: -193.0,
 };
 
 const PREMIUM = 5.20;
@@ -51,14 +62,28 @@ describe('money', () => {
 describe('formatRaceRisk', () => {
   it('prints the chain, and the chain adds up', () => {
     expect(formatRaceRisk(ROW, PREMIUM)).toBe(
-      '$5.20 premium - $0.18 at the stop (repriced at 7d) = $5.02',
+      '$5.20 premium - $0.03 at the stop '
+      + '(repriced at 26d — the median day any path reaches the stop) = $5.17',
     );
   });
 
   it('shows a fractional reprice horizon when the DTE clamp bound', () => {
     expect(formatRaceRisk({ ...ROW, repriceDaysStockStop: 2.25 }, PREMIUM)).toContain(
-      '(repriced at 2.3d)',
+      'repriced at 2.3d',
     );
+  });
+
+  it('names where the horizon came from, so it is not a third unexplained day count', () => {
+    // The card already shows two other day counts for the stop: the table's
+    // "to stock stop" column (conditional on the stop winning the race) and
+    // the barriers block's "median ~26d" (unconditional). This chain uses the
+    // unconditional one, and printing a bare "26d" beside a column reading "—"
+    // left the user to guess which of three numbers it was.
+    expect(formatRaceRisk(ROW, PREMIUM)).toContain('the median day any path reaches the stop');
+    const noStop = formatRaceRisk(
+      { ...ROW, daysAnyPathReachedStop: null, repriceDaysStockStop: 7 }, PREMIUM,
+    );
+    expect(noStop).toContain('the preset default; no path reached the stop');
   });
 
   it('says so rather than printing a broken chain when the reprice failed', () => {
@@ -70,72 +95,83 @@ describe('formatRaceRisk', () => {
 
 describe('formatRaceRR', () => {
   it('prints reward over risk and the resulting ratio', () => {
-    expect(formatRaceRR(ROW)).toBe('$1.04 / $5.02 = 0.21x');
+    expect(formatRaceRR(ROW)).toBe('$1.04 / $5.17 = 0.20x');
   });
 
   it('preserves the sign of a negative reward rather than nulling it to an em dash', () => {
     // M2 parity with the backend's reward_risk.py, inherited from the readout
     // this replaced: a target priced BELOW the premium paid is a real loss the
     // trader should see, not an indistinguishable "not yet computed".
-    const s = formatRaceRR({ ...ROW, rewardDollar: -2.00, rrStockStop: -0.3984 });
-    expect(s).toBe('-$2.00 / $5.02 = -0.40x');
+    const s = formatRaceRR({ ...ROW, rewardDollar: -2.00, rrStockStop: -0.3868 });
+    expect(s).toBe('-$2.00 / $5.17 = -0.39x');
   });
 
   it('renders an em dash, never a negative or infinite ratio, when risk is not positive', () => {
-    // A deep-ITM contract on a tight stop: still worth more at the stop than
-    // it cost, so there is no risk to divide by.
+    // Still worth more at the stop than it cost, so there is no risk to divide
+    // by. Reachable when the quote's IV cannot be solved.
     const s = formatRaceRR({ ...ROW, riskStockStop: -70.8, rrStockStop: null });
-    expect(s).toContain('—');
+    expect(s).toContain('worth more there than it cost');
     expect(s).not.toMatch(/-?\d+\.\d+x/);
+  });
+
+  it('gives the right reason when the stop could not be repriced at all', () => {
+    // A DIFFERENT state from "worth more than it cost", and it used to print
+    // that sentence — directly under formatRaceRisk's "could not reprice at the
+    // stop", two adjacent lines explaining one state incompatibly.
+    const s = formatRaceRR({ ...ROW, stopRepricedValue: null, riskStockStop: null, rrStockStop: null });
+    expect(s).toContain('could not reprice at the stop');
+    expect(s).not.toContain('worth more there than it cost');
   });
 });
 
-describe('sharePercents', () => {
-  it('makes the four labels sum to exactly 100', () => {
-    // The reference contract's T35% row. Rounding each share on its own gives
-    // 14 + 0 + 79 + 8 = 101%, printed directly under "Every row sums to 100%"
-    // and beside a bar that does sum to 100 because it uses the raw values.
-    // A sweep of real backend output put 11-20% of rows at 99% or 101%.
-    expect(sharePercents([0.138, 0.0, 0.785, 0.077])).toEqual([14, 0, 78, 8]);
-    expect(sharePercents([0.138, 0.0, 0.785, 0.077]).reduce((a, b) => a + b, 0)).toBe(100);
+describe('weightPercents', () => {
+  it('scales the backend allocation, so the four labels sum to exactly 100', () => {
+    // The allocation happens once, in the backend, and weights the edge. This
+    // only scales it — there is no second rounding here to disagree with the
+    // first. The T35% row of the reference contract, whose raw shares
+    // (0.138 / 0 / 0.785 / 0.077) render as 14 + 0 + 79 + 8 = 101% if each is
+    // rounded on its own.
+    const row = {
+      ...ROW,
+      weightTargetFirst: 0.14,
+      weightStockStopFirst: 0.0,
+      weightPremiumStopFirst: 0.78,
+      weightNeither: 0.08,
+    };
+    expect(weightPercents(row)).toEqual([14, 0, 78, 8]);
+    expect(weightPercents(row).reduce((a, b) => a + b, 0)).toBe(100);
   });
 
-  it('sums to 100 across every share set the simulation can produce', () => {
-    // n_paths = 2000, so every share is a multiple of 0.0005. Walk a spread of
-    // real four-way splits rather than asserting one hand-picked row.
-    for (let a = 0; a <= 2000; a += 37) {
-      for (let b = 0; a + b <= 2000; b += 53) {
-        const c = Math.floor((2000 - a - b) / 3);
-        const d = 2000 - a - b - c;
-        const out = sharePercents([a, b, c, d].map((v) => v / 2000));
-        expect(out.reduce((x, y) => x + y, 0)).toBe(100);
-      }
-    }
-  });
-
-  it('keeps every label within one point of its true share', () => {
-    const shares = [0.138, 0.0, 0.785, 0.077];
-    sharePercents(shares).forEach((label, i) => {
-      expect(Math.abs(label - shares[i] * 100)).toBeLessThan(1);
+  it('is the SAME four numbers the edge chain prints', () => {
+    // The point of taking these from the backend. A largest-remainder
+    // allocation done here fixed the row sum but left the chain below printing
+    // an independently-rounded multiplier for the same outcome on ~48% of real
+    // rows — the table reading "Neither 49%" beside a chain reading "+ 0.48 x".
+    const labels = weightPercents(ROW);
+    const chain = formatRaceEdge(ROW, PREMIUM);
+    labels.forEach((label) => {
+      expect(chain).toContain(`${(label / 100).toFixed(2)} x`);
     });
   });
 
-  it('leaves an exact split alone', () => {
-    expect(sharePercents([0.27, 0.00, 0.68, 0.05])).toEqual([27, 0, 68, 5]);
+  it('survives the binary-float tail in the scaling', () => {
+    // 0.14 * 100 is 14.000000000000002.
+    expect(weightPercents({ ...ROW, weightTargetFirst: 0.14 })[0]).toBe(14);
+    expect(weightPercents({ ...ROW, weightTargetFirst: 0.29 })[0]).toBe(29);
   });
 });
 
 describe('formatRacePremiumRR', () => {
   it('labels itself as the constant it is, showing the dollars as inputs', () => {
-    const s = formatRacePremiumRR(ROW, 0.60);
+    const s = formatRacePremiumRR(ROW);
     expect(s).toContain('legs $1.04 and $3.12');
-    expect(s).toContain('ratio is 20% / 60% = 0.33x on every contract');
+    expect(s).toContain('0.33x, which is your target % over your stop %');
     // No slash between the two dollar amounts: it reads as a division to the
     // one audience this card is for, and the quotient is not the ratio.
     expect(s).not.toContain('$1.04 / $3.12');
   });
 
-  it('does not claim the two rounded dollar legs divide to the constant', () => {
+  it('does not print a division between two roundings that does not produce the ratio', () => {
     // THE POINT. On a $1.03 premium the legs quantize to $0.21 and $0.62, whose
     // quotient is 0.34x, not the 0.33x this column IS by definition. The old
     // wording printed "$0.21 / $0.62 = 0.33x", asserting an identity that is
@@ -148,17 +184,22 @@ describe('formatRacePremiumRR', () => {
     // promised a property.)
     const small = formatRacePremiumRR(
       { ...ROW, rewardDollar: 0.21, riskPremiumStop: 0.62, rrPremiumStop: 1 / 3 },
-      0.60,
     );
     expect(small).toContain('legs $0.21 and $0.62');
-    expect(small).toContain('ratio is 20% / 60% = 0.33x on every contract');
+    expect(small).toContain('0.33x, which is your target % over your stop %');
     expect(small).not.toContain('$0.21 / $0.62');
+    // And no "20% / 60% = 0.33x" either. Both percentages render at 0dp while
+    // premiumStopPct is an arbitrary float (a scan-time dollar stop over the
+    // premium quoted now), so on a third of realistic combinations the printed
+    // division does not produce the printed ratio: a $0.20 stop on a $0.70
+    // premium prints "10% / 29%", which is 0.34, beside a true 0.35.
+    expect(small).not.toMatch(/\d+% \/ \d+% =/);
   });
 
   it('says so plainly when there is no premium-stop risk to divide by', () => {
     // A 5c contract with a 5% stop puts the risk leg at $0.00 in cents.
     const s = formatRacePremiumRR(
-      { ...ROW, rewardDollar: 0.01, riskPremiumStop: 0, rrPremiumStop: null }, 0.05,
+      { ...ROW, rewardDollar: 0.01, riskPremiumStop: 0, rrPremiumStop: null },
     );
     expect(s).toContain('no premium-stop risk to divide by');
     expect(s).not.toMatch(/=\s*0\.00x/);
@@ -204,14 +245,14 @@ describe('premiumStopSourceNote', () => {
 describe('formatRaceEdge', () => {
   it('prints all four signed contributions, per share and per contract', () => {
     expect(formatRaceEdge(ROW, PREMIUM)).toBe(
-      '0.27 x $1.04 - 0.00 x $5.02 - 0.68 x $3.12 + 0.05 x -$1.56 = -$1.92  ->  -$191.88 per contract',
+      '0.27 x $1.04 - 0.00 x $5.17 - 0.69 x $3.12 + 0.04 x -$1.56 = -$1.93  ->  -$193.00 per contract',
     );
   });
 
   it('keeps the fourth term positive when those paths end above the premium paid', () => {
     // Signed, not a loss. Writing it as "- p x loss" would be wrong here.
     const s = formatRaceEdge({ ...ROW, terminalMean: 8.00 }, PREMIUM);
-    expect(s).toContain('+ 0.05 x $2.80');
+    expect(s).toContain('+ 0.04 x $2.80');
   });
 
   it('prints a negative stock-stop risk leg as the gain it is, and says why', () => {
@@ -220,7 +261,7 @@ describe('formatRaceEdge', () => {
     // signed EV but read as an unexplained "- 0.00 x -$70.80" beside an R:R
     // column showing an em dash, with nothing connecting the two.
     const s = formatRaceEdge(
-      { ...ROW, riskStockStop: -70.80, rrStockStop: null, pStockStopFirst: 0.12 }, PREMIUM,
+      { ...ROW, riskStockStop: -70.80, rrStockStop: null, weightStockStopFirst: 0.12 }, PREMIUM,
     );
     expect(s).toContain('+ 0.12 x $70.80 (worth more at the stop than it cost)');
     expect(s).not.toContain('x -$70.80');

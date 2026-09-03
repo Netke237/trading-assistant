@@ -76,6 +76,22 @@ class RaceOutcome:
     days_target:           Optional[float]
     days_stock_stop:       Optional[float]
     days_premium_stop:     Optional[float]
+    # The UNCONDITIONAL median day any path reaches the stock stop — the basis
+    # of reprice_days_stock_stop, and a different statistic from
+    # days_stock_stop, which is conditional on the stop winning the race. None
+    # when no path reached the stop at all, in which case the horizon came from
+    # the preset table. The card names which, rather than printing a bare "Nd"
+    # that matches neither number in the table beside it.
+    days_any_path_reached_stop: Optional[float]
+
+    # The four shares allocated to hundredths, summing to exactly 1.00. These
+    # are the weights the edge below was computed with and the values the card
+    # prints in its chain and derives its whole-percent labels from. The raw
+    # p_* above stay raw: the bars are drawn from those.
+    weight_target:         float
+    weight_stock_stop:     float
+    weight_premium_stop:   float
+    weight_neither:        float
 
     terminal_mean:         Optional[float]   # mean option value at expiry, over p_neither paths
 
@@ -123,27 +139,48 @@ class FirstPassageResult:
     invalidation: InvalidationEstimate
     sigma_stock: float
     mu: float
-    # None when the simulation was refused (dte < 1). Deliberately NOT four
-    # zeroes: a refusal is not a 100%-summing result. See spec 2.1.1.
+    # None means "no race here", and now covers two cases: the simulation was
+    # refused (dte < 1 — deliberately NOT four zeroes, since a refusal is not a
+    # 100%-summing result; spec 2.1.1), or the caller passed compute_race=False
+    # and never wanted one. Only /contracts/first-passage asks for a race, so
+    # nothing downstream has to tell them apart today; a caller that did would
+    # need a separate flag rather than more meaning loaded onto this one.
     race: Optional["BarrierRaceResult"] = None
 
 
-def _as_printed(v: float) -> float:
-    """Round to 2dp THE WAY JAVASCRIPT'S toFixed(2) DOES — half away from zero.
+def _allocated_weights(shares: list[float]) -> list[float]:
+    """The four shares as hundredths that sum to EXACTLY 1.00.
 
-    Python's round() is half-to-even, so the two disagree on an exactly
-    representable half: round(0.125, 2) is 0.12 while (0.125).toFixed(2) is
-    "0.13". With n_paths = 2000 every share is a multiple of 0.0005, so 0.125
-    (250 paths) and 0.625 (1250 paths) are directly reachable — and when the
-    backend weights the edge with 0.12 while the card prints "0.13 x", the
-    printed terms no longer sum to the printed total. That is the one thing this
-    card's premise ("you can check its arithmetic") forbids.
+    ONE SOURCE OF TRUTH, and the reason there is no longer a Python imitation
+    of JavaScript's toFixed here. There used to be: the edge was weighted with
+    `floor(p*100 + 0.5)/100` while the card printed the same p through
+    `toFixed(2)`, and the two disagree on 44 of the 2001 shares reachable at
+    n_paths=2000 — every k/2000 whose third decimal is a 5, because multiplying
+    by 100 first perturbs the double that decides the tie. On the reference
+    contract itself the card printed "+ 0.04 x -$1.56" while the backend had
+    weighted the term with 0.05, so the four printed terms summed to -$1.93
+    beside a printed total of -$1.95. Two implementations of one rounding rule,
+    in two languages, is a bug generator; the fix is to have one.
 
-    The money chains avoid this by shipping premium_used pre-quantized; the
-    probabilities are quantized here instead, because the raw shares must stay
-    raw (the bars and the 100%-sum claim are computed from them).
+    These values are what the card prints, what the edge is weighted with, AND
+    what the table's whole-percent labels are derived from — so the chain, the
+    labels and the total cannot disagree, and every row still sums to 100%.
+
+    Largest-remainder allocation: floor everything to a hundredth, then give the
+    leftover hundredths to whichever shares lost the most to the floor. Ties
+    break by index so the same shares always allocate the same way.
     """
-    return math.floor(abs(v) * 100.0 + 0.5) / 100.0 * (1.0 if v >= 0 else -1.0)
+    scaled = [s * 100.0 for s in shares]
+    floors = [math.floor(x) for x in scaled]
+    remaining = 100 - sum(floors)
+    order = sorted(range(len(scaled)), key=lambda i: (-(scaled[i] - floors[i]), i))
+    out = list(floors)
+    for i in order:
+        if remaining <= 0:
+            break
+        out[i] += 1
+        remaining -= 1
+    return [v / 100.0 for v in out]
 
 
 def _first_day(mask: np.ndarray, n_days: int) -> np.ndarray:
@@ -313,6 +350,12 @@ def estimate_first_passage(
     """
     del delta  # see docstring — folded in via option repricing, not used directly here
 
+    # Quantized before it is used as a barrier, for the same reason
+    # premium_stop_price is: the card echoes this level "for auditability", and
+    # echoing a rounded number for a barrier the paths were tested against at
+    # full precision is exactly the mismatch that echo exists to rule out.
+    invalidation_price = round(float(invalidation_price), 2)
+
     expiry_years = dte / 365.0
     premium = max(float(premium), 0.01)
 
@@ -433,7 +476,14 @@ def estimate_first_passage(
     # printed. Rounding it only on the way out meant the level the card showed
     # as "the option-value barrier actually used" was up to half a cent away
     # from the one the paths were actually tested against.
-    premium_stop_price = round(premium * (1.0 - premium_stop_pct), 2)
+    #
+    # Derived from the CENT-ROUNDED premium, so that
+    # `premium_used - premium_stop_price == risk_premium_stop` holds exactly.
+    # Quantizing the barrier off the raw premium and the risk leg off the
+    # rounded one broke that identity on 1 contract in 6: the card showed a
+    # $0.24 barrier against a $0.35 premium and then printed a $0.10 risk leg,
+    # and a user checking 0.35 - 0.24 got 0.11.
+    premium_stop_price = round(round(premium, 2) * (1.0 - premium_stop_pct), 2)
     prem_hit_mask = option_paths <= premium_stop_price
 
     d_stop = _first_day(stop_hit_mask, n_days)
@@ -491,6 +541,10 @@ def estimate_first_passage(
         p_prem = float(prem_first.mean())
         p_none = float(none_hit.mean())
 
+        # Allocated once, up here: they weight the edge below AND are what the
+        # card prints, so nothing downstream re-rounds them.
+        weights = _allocated_weights([p_target, p_stock, p_prem, p_none])
+
         days_target = _median_days(tgt_first)
         days_stock = _median_days(stop_first)
         days_prem = _median_days(prem_first)
@@ -526,7 +580,9 @@ def estimate_first_passage(
         tgt_c = round(target_option, 2)
         reward_dollar = round(tgt_c - prem_c, 2)   # round() only trims binary-float tails here
 
-        risk_premium_stop = round(prem_c * premium_stop_pct, 2)
+        # The complement of the barrier, not an independent rounding of the
+        # same product — see premium_stop_price above.
+        risk_premium_stop = round(prem_c - premium_stop_price, 2)
 
         # WHY PREMIUM DOES NOT CANCEL HERE — the trap that killed two earlier
         # designs. reward_dollar is premium * pct by construction, so ANY risk
@@ -556,10 +612,7 @@ def estimate_first_passage(
             # path can end above the premium paid. Writing it as
             # `- p_none * loss` would be wrong whenever terminal_mean > premium.
             neither_term = (round(terminal_mean, 2) - prem_c) if terminal_mean is not None else 0.0
-            e_target, e_stock, e_prem, e_none = (
-                _as_printed(p_target), _as_printed(p_stock),
-                _as_printed(p_prem), _as_printed(p_none),
-            )
+            e_target, e_stock, e_prem, e_none = weights
             # x100: one US equity option contract covers 100 shares. Assumed,
             # not looked up — an adjusted contract (post-split or merger
             # deliverable) can cover something else, and this figure would be
@@ -567,6 +620,13 @@ def estimate_first_passage(
             # Rounded again after the x100: `round(-0.58, 2) * 100` is
             # -57.99999999999999 in binary floating point, and that tail reaches
             # the DOM verbatim if anything interpolates it un-formatted.
+            # NOTE: when risk_premium_stop rounds to $0.00 (a 5c contract with
+            # a 5% stop), the third term contributes exactly nothing and the
+            # edge is overstated by the un-quantized fraction of a cent. Left
+            # as-is deliberately: quantizing the money is what makes the
+            # printed chain checkable, and a sub-cent term on a 5c contract is
+            # far inside the simulation's own noise. The RATIO for that state
+            # is handled — it comes from the definition, not the division.
             edge = round(round(
                 e_target * reward_dollar
                 - e_stock * risk_stock_stop
@@ -587,6 +647,11 @@ def estimate_first_passage(
             days_target=days_target,
             days_stock_stop=days_stock,
             days_premium_stop=days_prem,
+            days_any_path_reached_stop=stop_expected_days,
+            weight_target=weights[0],
+            weight_stock_stop=weights[1],
+            weight_premium_stop=weights[2],
+            weight_neither=weights[3],
             terminal_mean=terminal_mean,
             reward_dollar=reward_dollar,
             reprice_days_stock_stop=reprice_days,

@@ -2099,6 +2099,13 @@ const RACE_RESPONSE = {
       daysTarget: 7,
       daysStockStop: null,
       daysPremiumStop: 20,
+      daysAnyPathReachedStop: 26,
+      // Allocated by the backend, summing to exactly 1.00 — the same four
+      // numbers the edge was weighted with and the card prints.
+      weightTargetFirst: 0.27,
+      weightStockStopFirst: 0.0,
+      weightPremiumStopFirst: 0.69,
+      weightNeither: 0.04,
       terminalMean: 1.19,
       rewardDollar: 0.55,
       repriceDaysStockStop: 7,

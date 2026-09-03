@@ -286,6 +286,26 @@ function generateRecId(): string {
   return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
 }
 
+/**
+ * Abort `controller` if nothing has settled within `ms`, and hand back the
+ * cleanup. Returns the timer id so the caller can clear it on settle.
+ *
+ * WHY THIS EXISTS. `lib/api.ts` sets no timeout on `fetch`, which was survivable
+ * while every request here only drove its own spinner. It stopped being
+ * survivable when the Estimate button was disabled on `structuralLoading ||
+ * exitPlanLoading`: a request that never settles then leaves that flag true
+ * forever, so "Estimating…" and "Waiting for the stop this estimate races
+ * against…" sit on screen with both buttons dead and no way out but navigating
+ * to another contract. Bounding these three calls is the narrow fix; a timeout
+ * in `api.ts` itself would also bound scans and backtests, which legitimately
+ * run for minutes.
+ */
+const REQUEST_TIMEOUT_MS = 20_000;
+
+function abortAfterTimeout(controller: AbortController): ReturnType<typeof setTimeout> {
+  return setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+}
+
 export function TradeCard({
   data,
   recId: propRecId,
@@ -324,7 +344,7 @@ export function TradeCard({
   // specifically written to avoid). Seeded from data.exit alongside
   // structuralStop above, so a cached structure check the parent splices back
   // in on re-navigation restores BOTH halves — restoring the stop alone would
-  // leave structuralRR null and every row's R:R cell showing the defensive '—'.
+  // leave structuralPairing null and every row showing the defensive '—'.
   const [structuralStopStockPrice, setStructuralStopStockPrice] = useState<number | null>(
     data.exit.structuralStopStockPrice ?? null,
   );
@@ -352,7 +372,7 @@ export function TradeCard({
   // viewed, which may be minutes, hours, or days ago. Gates
   // estimateFirstPassage's auto-fetch below: without this, restoring a cached
   // structuralStop makes `structuralStop === undefined` false, so the
-  // auto-fetch never fires again for this candidate, and structuralRR then
+  // auto-fetch never fires again for this candidate, and structuralPairing then
   // permanently combines that stale check-time price with the FRESH
   // premium/delta the estimate just fetched — silently overstating or
   // understating risk by however much the stock has moved since the cache was
@@ -360,18 +380,18 @@ export function TradeCard({
   // to gate a callback's branch the next time it runs.
   const structuralIsFreshRef = useRef(false);
   // The mirror image of structuralIsFreshRef, tracking the OTHER side of
-  // structuralRR's pairing: whether the current firstPassageContext was
+  // structuralPairing: whether the current firstPassageContext was
   // obtained by a fetch performed this mount, as opposed to a cache restore.
   // estimateFirstPassage already auto-refreshes a not-yet-fresh
   // structuralStop when Estimate is clicked, so that direction is covered —
   // but a MANUAL "Check structure" click can independently refresh
   // structuralStop while a restored (possibly stale) estimate is still on
-  // screen, which is exactly the same mixed-vintage hazard structuralRR
+  // screen, which is exactly the same mixed-vintage hazard structuralPairing
   // exists to avoid, just from the other side. Rather than also auto-firing
   // a full Estimate computation from "Check structure" (tried, reverted — it
   // adds two unwanted network calls for a user who only asked to check
   // structure, and duplicates a fetch on the very next real Estimate click
-  // regardless), this ref instead feeds structuralRR's own gate below:
+  // regardless), this ref instead feeds structuralPairing's own gate below:
   // computing an R:R requires BOTH sides confirmed fresh THIS mount. A fresh
   // Check-structure against a stale estimate simply shows no R:R until the
   // user's own next Estimate click brings both sides current — conservative,
@@ -469,7 +489,7 @@ export function TradeCard({
       // incoming contract it splices all of them in together, so the estimate,
       // its baseline premium/delta, its % inputs, the structural stop and the
       // price that stop was measured against are restored as ONE consistent
-      // set — never a half-restore that would leave structuralRR null.
+      // set — never a half-restore that would leave structuralPairing null.
       setStructuralStop(data.exit.structuralStop);
       setStructuralStopStockPrice(data.exit.structuralStopStockPrice ?? null);
       setStructuralError(false);
@@ -567,6 +587,7 @@ export function TradeCard({
     exitPlanRequestRef.current?.abort();
     const controller = new AbortController();
     exitPlanRequestRef.current = controller;
+    const timer = abortAfterTimeout(controller);
     setExitPlanLoading(true);
     setExitPlanError(false);
     setExitPlan(undefined);
@@ -605,12 +626,13 @@ export function TradeCard({
       // reappear on the next navigate-away-and-back.
       setExitPlan(null);
     } finally {
+      clearTimeout(timer);
       if (!controller.signal.aborted) setExitPlanLoading(false);
     }
   }, [data.symbol, data.direction, data.price, data.contractDetails, data.stockBreakdown.trend]);
 
   // Piece 2 (stop-model unification) — the stop level shared by the
-  // stop-vs-premium gate, structuralRR, and (below) the Monte Carlo request's
+  // stop-vs-premium gate, structuralPairing, and (below) the Monte Carlo request's
   // invalidation_price, so none of the three ever quotes a different number
   // for "the stop" on the same card. Prefers the exit plan's structural+ATR
   // final stop (compute_final_stop: max(structural, 2x ATR)) over the raw
@@ -629,7 +651,7 @@ export function TradeCard({
   // this memo) accepts a cache-restored plan with no fresh stock price to
   // pair it with. That let Next/Prev in CandidateNav land on a card where
   // Monte Carlo measured against the exit-plan stop while the gate and
-  // structuralRR — both already reading `sharedStop` — measured against the
+  // structuralPairing — both already reading `sharedStop` — measured against the
   // raw structural level: two different stops on one card. Routing the MC
   // request through `sharedStop` too closes that gap; keep it that way
   // rather than reverting to `exitPlan?.stop.price` for "simplicity".
@@ -691,7 +713,7 @@ export function TradeCard({
       // restored value stays on screen (no flash to blank) while this runs
       // and is only replaced once the fresh pair actually lands — and if the
       // refresh fails instead, its `.catch` below clears structuralStop
-      // rather than leaving the old one in place. Either way structuralRR
+      // rather than leaving the old one in place. Either way structuralPairing
       // never combines a stop it can't vouch for as fresh with THIS click's
       // premium/delta: it either gets a same-vintage pair or nothing to
       // compute from, never a silent mismatch.
@@ -716,6 +738,7 @@ export function TradeCard({
         structuralRequestRef.current?.abort();
         const structuralController = new AbortController();
         structuralRequestRef.current = structuralController;
+        const structuralTimer = abortAfterTimeout(structuralController);
         setStructuralLoading(true);
         setStructuralError(false);
         await api.getStructuralStop({
@@ -740,7 +763,7 @@ export function TradeCard({
             // failure, don't leave that unconfirmed pair sitting next to
             // firstPassageContext, which below may already hold THIS click's
             // fresh premium/delta by the time this rejection lands —
-            // structuralRR would otherwise silently render a mixed-vintage
+            // structuralPairing would otherwise silently render a mixed-vintage
             // number with no staleness cue, the exact failure mode this
             // whole mechanism exists to prevent.
             //
@@ -767,6 +790,7 @@ export function TradeCard({
             setStructuralStopStockPrice(null);
           })
           .finally(() => {
+            clearTimeout(structuralTimer);
             if (!structuralController.signal.aborted) setStructuralLoading(false);
           });
         if (controller.signal.aborted) return;
@@ -910,7 +934,7 @@ export function TradeCard({
 
   // Stop-vs-premium gate. Deliberately reads the SCAN-TIME `contractDetails`
   // (mid/delta) rather than `firstPassageContext`'s fresh pair, unlike
-  // `structuralRR` below: the gate's whole job is to fire before the user has
+  // `structuralPairing` below: the gate's whole job is to fire before the user has
   // run an Estimate, so it cannot depend on one having run. The stock price
   // prefers the fresh one Check-structure measured against, falling back to the
   // scan snapshot. That mixes vintages by a few cents — accepted here and
@@ -985,6 +1009,7 @@ export function TradeCard({
     structuralRequestRef.current?.abort();
     const controller = new AbortController();
     structuralRequestRef.current = controller;
+    const timer = abortAfterTimeout(controller);
     setStructuralLoading(true);
     setStructuralError(false);
     setStructuralStop(undefined);
@@ -1020,6 +1045,7 @@ export function TradeCard({
       setStructuralStop(null);
       setStructuralStopStockPrice(null);
     } finally {
+      clearTimeout(timer);
       if (!controller.signal.aborted) setStructuralLoading(false);
     }
   }, [data.symbol, data.direction, data.price]);
@@ -1120,14 +1146,20 @@ export function TradeCard({
   // it. That is the mixed-vintage hazard section 3.3 exists to prevent, landing
   // in the one place on the card a number is most likely to be acted on.
   // Hoisted and named so the two sites cannot drift apart again.
-  const raceIsShowable = firstPassageIsFreshRef.current
+  // Derived from STATE alone, deliberately, and no longer from
+  // firstPassageIsFreshRef. `raceBarriers` is set only on a successful estimate
+  // and cleared in exactly the places the ref is (the handler's entry, the
+  // contract-change effect), so `raceBarriers.contract === data.contract`
+  // carries everything the ref carried AND survives the frame between commit
+  // and that effect, which a ref cleared inside it cannot.
+  //
+  // Keeping both read well but made neither load-bearing: with the ref in the
+  // expression, deleting the contract term left all 138 TradeCard tests green,
+  // because the ref still hid the restored-estimate case that was the only
+  // observable one. A guard no test can fail is not a guard. The ref remains
+  // for its other consumers.
+  const raceIsShowable = raceBarriers?.contract === data.contract
     && firstPassageContext != null
-    // State, not just the ref: the ref is cleared in the contract-change
-    // effect, which runs AFTER commit, so on the first render of a new
-    // contract it still reads true while every value beside it belongs to the
-    // previous one. raceBarriers carries the contract it was computed for, so
-    // this closes that frame.
-    && raceBarriers?.contract === data.contract
     && !raceBarriersMoved;
 
   // NOTE ON THE BARRIER RACE AS A "FOURTH SOURCE" (spec section 3.4): it is not a
@@ -1692,7 +1724,15 @@ export function TradeCard({
           invalidation={firstPassage?.invalidation ?? null}
           premiumStopFromField={raceBarriers?.fromField ?? false}
           premiumStopField={overlay.premiumStop ?? null}
-          isFresh={firstPassageIsFreshRef.current && firstPassageContext != null}
+          // raceIsShowable, not the inline expression this used to carry. The
+          // hoisted gate was applied to the Monte Carlo note and the Final
+          // Recommendation but not to the card itself, so the card kept the
+          // one term the gate exists for — that raceBarriers belongs to THIS
+          // contract — and painted the previous contract's bars, medians, risk
+          // legs and dollar edge for the frame between commit and the reset
+          // effect. Verified with a useLayoutEffect probe: bars leaked, the
+          // Final Recommendation did not.
+          isFresh={raceIsShowable}
           barriersChanged={raceBarriersMoved}
         />
 
@@ -2275,11 +2315,12 @@ function ProfitTargetRow({
   // on every contract. The Barrier Race card's stock-stop R:R replaces it with
   // one whose risk leg is `premium - BS(stop, ...)`, which does not cancel.
   //
-  // structuralRRValue SURVIVES the removal as the freshness token for the
-  // "Structural level found" row below: `!= null` means the structural stop
-  // and the estimate were BOTH confirmed fresh this mount. That pairing is
-  // what five audit rounds built, and the price shown below is only honest
-  // under exactly the same condition the ratio was.
+  // `structuralPaired` SURVIVES the removal as the freshness token for the
+  // "Structural level found" row below: true means the structural stop and the
+  // estimate were BOTH confirmed fresh this mount. That pairing is what five
+  // audit rounds built, and the price shown below is only honest under exactly
+  // the same condition the ratio was. (It was `structuralRRValue != null` when
+  // the ratio still existed; the prop carries the pairing now, not a number.)
 
   // "Structural level found" — Feature 2's line, carrying the SAME four
   // gating states the removed R:R row used (Checking… / No structural stop

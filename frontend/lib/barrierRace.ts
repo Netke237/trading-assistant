@@ -26,45 +26,27 @@ export function money(v: number): string {
   return v < 0 ? `-${s}` : s;
 }
 
-function pct(v: number): string {
-  return `${(v * 100).toFixed(0)}%`;
-}
-
-/**
- * The four shares as whole percentages that ACTUALLY SUM TO 100.
- *
- * Rounding each share independently does not: on the reference contract's T35%
- * row the shares 0.138 / 0.000 / 0.785 / 0.077 render as 14 + 0 + 79 + 8 =
- * 101%, directly beneath the sentence "Every row sums to 100% because each path
- * is counted once" — and beside a stacked bar that does sum to 100, because it
- * is drawn from the raw values. A sweep of real backend output put 11-20% of
- * rows at 99% or 101%.
- *
- * Largest-remainder allocation: floor everything, then hand the leftover points
- * to whichever shares lost the most to the floor. Each label lands within one
- * point of its true share and the row sums to exactly 100.
- */
-export function sharePercents(shares: readonly number[]): number[] {
-  const scaled = shares.map((v) => v * 100);
-  const floors = scaled.map(Math.floor);
-  let remaining = 100 - floors.reduce((a, b) => a + b, 0);
-  // Ties broken by index, so the same shares always render the same way.
-  const order = scaled
-    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
-    .sort((a, b) => (b.frac - a.frac) || (a.i - b.i));
-  const out = [...floors];
-  for (const { i } of order) {
-    if (remaining <= 0) break;
-    out[i] += 1;
-    remaining -= 1;
-  }
-  return out;
-}
-
 function days(v: number): string {
   // The reprice horizon can be a fractional day once the DTE clamp binds
   // (0.75 x a 3-day contract). Show a whole number when it is one.
   return Number.isInteger(v) ? `${v}d` : `${v.toFixed(1)}d`;
+}
+
+/**
+ * The four allocated weights as whole percentages. They sum to exactly 100
+ * because the backend allocated them to hundredths that sum to 1.00 — this only
+ * scales them, it does not round anything.
+ *
+ * There used to be a largest-remainder allocation HERE, over the raw shares,
+ * which fixed the labels but left the edge chain three blocks below printing a
+ * separately-rounded multiplier for the same outcome: the table could read
+ * "Neither 49%" while the chain read "+ 0.48 x", on 48% of real rows. One
+ * allocation, done once, upstream of both.
+ */
+export function weightPercents(o: BarrierRaceOutcome): number[] {
+  return [
+    o.weightTargetFirst, o.weightStockStopFirst, o.weightPremiumStopFirst, o.weightNeither,
+  ].map((w) => Math.round(w * 100));
 }
 
 /**
@@ -87,9 +69,18 @@ export function formatRaceRisk(o: BarrierRaceOutcome, premium: number): string {
   if (o.stopRepricedValue == null || o.riskStockStop == null) {
     return `${money(premium)} premium - could not reprice at the stop`;
   }
+  // The horizon is named, not just numbered. It is the UNCONDITIONAL median day
+  // any path reaches the stop (shown in the barriers block above), while the
+  // table's "to stock stop" column is the CONDITIONAL median over stop-first
+  // paths — so the two legitimately differ, and on the reference contract the
+  // column reads "—" while this chain says 26d. When no path reached the stop
+  // at all, this is the preset fallback and no median exists anywhere on screen.
+  const basis = o.daysAnyPathReachedStop != null
+    ? ' — the median day any path reaches the stop'
+    : ' — the preset default; no path reached the stop';
   return (
     `${money(premium)} premium - ${money(o.stopRepricedValue)} at the stop ` +
-    `(repriced at ${days(o.repriceDaysStockStop)}) = ${money(o.riskStockStop)}`
+    `(repriced at ${days(o.repriceDaysStockStop)}${basis}) = ${money(o.riskStockStop)}`
   );
 }
 
@@ -103,7 +94,14 @@ export function formatRaceRisk(o: BarrierRaceOutcome, premium: number): string {
  * the stop than it cost. Never render a negative or infinite ratio.
  */
 export function formatRaceRR(o: BarrierRaceOutcome): string {
-  if (o.rrStockStop == null || o.riskStockStop == null || o.riskStockStop <= 0) {
+  // Two different states, two different sentences. Folding them together
+  // printed "worth more there than it cost" for a stop that could not be
+  // repriced AT ALL — directly under formatRaceRisk's "could not reprice at
+  // the stop", two adjacent lines explaining the same state incompatibly.
+  if (o.riskStockStop == null || o.stopRepricedValue == null) {
+    return `${money(o.rewardDollar)} / could not reprice at the stop = —`;
+  }
+  if (o.rrStockStop == null || o.riskStockStop <= 0) {
     return `${money(o.rewardDollar)} / no risk at the stop (worth more there than it cost) = —`;
   }
   return `${money(o.rewardDollar)} / ${money(o.riskStockStop)} = ${o.rrStockStop.toFixed(2)}x`;
@@ -118,7 +116,7 @@ export function formatRaceRR(o: BarrierRaceOutcome): string {
  * and it reduces to the two percentages the user typed. Shown for completeness;
  * the card must say it is not a measurement.
  */
-export function formatRacePremiumRR(o: BarrierRaceOutcome, premiumStopPct: number): string {
+export function formatRacePremiumRR(o: BarrierRaceOutcome): string {
   // "legs A and B", never "A / B". A slash between two dollar amounts reads as
   // a division to the one audience this card is built for — someone checking
   // the arithmetic — and on a $1.03 premium the cent-quantized legs $0.21 and
@@ -134,9 +132,17 @@ export function formatRacePremiumRR(o: BarrierRaceOutcome, premiumStopPct: numbe
   // printing an equals sign there would assert an identity that is false on
   // exactly the contracts where this column matters least. The ratio comes
   // from the definition; the dollars are shown as its inputs, not as a sum.
+  // NO PERCENTAGES HERE, and the stop percentage is no longer even a parameter.
+  // Printing "20% / 60% = 0.33x" renders both at 0dp while premiumStopPct is an
+  // arbitrary float — the field holds a scan-time dollar amount over the
+  // premium quoted now — so on a third of realistic combinations the printed
+  // division does not produce the printed ratio: a $0.20 stop on a $0.70
+  // premium prints "10% / 29%", which is 0.34, beside a true 0.35. Replacing
+  // one unverifiable chain with another is not a fix. The stop percentage is
+  // shown once, in the barriers block above, where it is not part of a sum.
   return (
-    `${legs} - ratio is ${pct(o.targetPct)} / ${pct(premiumStopPct)} = `
-    + `${o.rrPremiumStop.toFixed(2)}x on every contract`
+    `${legs} - ${o.rrPremiumStop.toFixed(2)}x, which is your target % over your `
+    + `stop % and therefore the same on every contract`
   );
 }
 
@@ -163,13 +169,13 @@ export function formatRaceEdge(o: BarrierRaceOutcome, premium: number): string {
   // is, and say why — the R:R column shows an em dash in the same state, and
   // nothing else on the card connects the two.
   const stopTerm = o.riskStockStop < 0
-    ? ` + ${o.pStockStopFirst.toFixed(2)} x ${money(-o.riskStockStop)} (worth more at the stop than it cost)`
-    : ` - ${o.pStockStopFirst.toFixed(2)} x ${money(o.riskStockStop)}`;
+    ? ` + ${o.weightStockStopFirst.toFixed(2)} x ${money(-o.riskStockStop)} (worth more at the stop than it cost)`
+    : ` - ${o.weightStockStopFirst.toFixed(2)} x ${money(o.riskStockStop)}`;
   return (
-    `${o.pTargetFirst.toFixed(2)} x ${money(o.rewardDollar)}` +
+    `${o.weightTargetFirst.toFixed(2)} x ${money(o.rewardDollar)}` +
     stopTerm +
-    ` - ${o.pPremiumStopFirst.toFixed(2)} x ${money(o.riskPremiumStop)}` +
-    ` + ${o.pNeither.toFixed(2)} x ${money(neither)}` +
+    ` - ${o.weightPremiumStopFirst.toFixed(2)} x ${money(o.riskPremiumStop)}` +
+    ` + ${o.weightNeither.toFixed(2)} x ${money(neither)}` +
     ` = ${money(perShare)}  ->  ${money(o.edgePerContract)} per contract`
   );
 }

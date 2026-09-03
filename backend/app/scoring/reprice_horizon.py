@@ -84,13 +84,24 @@ def resolve_reprice_days(
     max_fraction = float(clamp.get("max_fraction_of_dte", 0.75))
 
     if cfg.get("source", "simulation_median") == "simulation_median" and _usable(sim_median):
-        # Returned as observed, NOT clamped. See the module docstring: the
-        # ceiling exists to protect the FALLBACK from a holding-period table
-        # that knows nothing about this contract's expiry. A simulated median is
-        # a day index inside the simulation, so it cannot exceed the contract's
-        # life, and overriding a measurement with an arbitrary fraction of DTE
-        # is a worse answer rather than a safer one.
-        return max(min_days, float(sim_median))   # type: ignore[arg-type]
+        # Returned as observed, NOT clamped to max_fraction_of_dte. See the
+        # module docstring: that ceiling exists to protect the FALLBACK from a
+        # holding-period table that knows nothing about this contract's expiry,
+        # and overriding a measurement with an arbitrary fraction of DTE is a
+        # worse answer rather than a safer one.
+        #
+        # It IS capped just short of expiry, though. A simulated median cannot
+        # exceed the contract's life, but it can EQUAL it: the median is a day
+        # index plus one, so it ranges 1..dte, and at dte exactly the remaining
+        # life collapses to remaining_years_at_barrier's floor and every level
+        # prices at intrinsic value only — the outcome the ceiling exists to
+        # prevent, arrived at from the other direction. Measured on a sweep,
+        # this bound binds on ~8% of runs, concentrated at dte 1, 2 and 10, so
+        # it is a real boundary artifact of a discrete daily median rather than
+        # a theoretical one. Half a day of life left is the least it can mean.
+        return max(min_days, min(float(sim_median), float(dte) - 0.5)) \
+            if (dte is not None and _usable(dte) and dte > 0) \
+            else max(min_days, float(sim_median))   # type: ignore[arg-type]
 
     days = _fallback_days(preset, hold_min, hold_max, fallback, cfg)
 

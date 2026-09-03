@@ -335,37 +335,50 @@ def test_every_money_field_is_actually_quantized_to_cents():
 
 
 def test_the_printed_edge_chain_sums_to_the_printed_total():
-    """The card prints "0.27 x $1.04 - 0.00 x $5.02 - 0.68 x $3.12 + 0.05 x
-    -$1.56 = -$1.93". Before the probabilities were quantized to the 2dp they
-    are PRINTED at, the four printed terms summed to a different number than the
-    printed total — out by 1.6c per share, which at 100 shares is $1.56 a
-    contract, on a card whose entire premise is that you can check its
-    arithmetic."""
-    def as_the_card_prints_it(v: float) -> float:
-        """What JavaScript's toFixed(2) renders — half AWAY from zero. Written
-        out here rather than importing the module's own helper, so this test
-        pins the card's behaviour instead of restating the implementation.
-        Python's round() is half-to-even and disagrees on an exactly
-        representable half: with n_paths=2000 the shares are multiples of
-        0.0005, so 0.125 (250 paths) and 0.625 (1250 paths) are reachable, and
-        round() gives 0.12 where the card shows "0.13 x"."""
-        from decimal import Decimal, ROUND_HALF_UP
-        return float(Decimal(repr(v)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    """The card prints "0.27 x $1.04 - 0.00 x $5.17 - 0.69 x $3.12 + 0.05 x
+    -$1.56 = -$1.95". Those four multipliers are `weight_*`, shipped from here,
+    so the terms the user can add up ARE the terms the edge was computed from.
 
-    # Premiums chosen to include rows whose shares land on those halves.
-    for premium in (5.20, 6.63, 2.47):
+    THE BUG THIS REPLACES. The weights used to be produced by a Python
+    imitation of JavaScript's toFixed (`floor(p*100 + 0.5)/100`), which
+    disagrees with the real thing on 44 of the 2001 shares reachable at
+    n_paths=2000 — every k/2000 whose third decimal is a 5, because multiplying
+    by 100 first perturbs the double that decides the tie. On THIS contract's
+    T20% row the backend weighted the last term with 0.05 while the card
+    printed 0.04, so the printed terms summed to -$1.93 under a printed total
+    of -$1.95.
+
+    And the test that was supposed to catch it could not: its oracle was
+    `Decimal(repr(v))`, and the repr() round-trip discards exactly the
+    information that decides the tie, so it reproduced the bug rather than
+    detecting it. There is now one implementation and no oracle to get wrong."""
+    for premium in (5.20, 6.63, 2.47, 0.37):
         race = _run(premium=premium).race
         assert race is not None
         for o in race.outcomes:
             assert o.edge_per_contract is not None
             assert o.risk_stock_stop is not None
+            weights = (o.weight_target, o.weight_stock_stop,
+                       o.weight_premium_stop, o.weight_neither)
+
+            # Each is a whole number of hundredths, so JavaScript's toFixed(2)
+            # renders it exactly and cannot disagree with what was used here.
+            for w in weights:
+                # `abs(... ) < 1e-9`, not `==`: 0.14 * 100 is 14.000000000000002
+                # in binary floating point. The value IS a whole hundredth; the
+                # multiplication is what has the tail.
+                assert abs(w * 100 - round(w * 100)) < 1e-9, f"weight {w} is not a hundredth"
+            # And they sum to exactly 1.00, so the labels derived from them sum
+            # to exactly 100%.
+            assert round(sum(weights), 10) == 1.0, f"weights sum to {sum(weights)}"
+
             prem_c = round(premium, 2)
             neither = (round(o.terminal_mean, 2) - prem_c) if o.terminal_mean is not None else 0.0
             printed_terms = (
-                as_the_card_prints_it(o.p_target_first) * o.reward_dollar
-                - as_the_card_prints_it(o.p_stock_stop_first) * o.risk_stock_stop
-                - as_the_card_prints_it(o.p_premium_stop_first) * o.risk_premium_stop
-                + as_the_card_prints_it(o.p_neither) * neither
+                o.weight_target * o.reward_dollar
+                - o.weight_stock_stop * o.risk_stock_stop
+                - o.weight_premium_stop * o.risk_premium_stop
+                + o.weight_neither * neither
             )
             printed_total = o.edge_per_contract / 100.0
             assert round(printed_terms, 2) == pytest.approx(round(printed_total, 2), abs=1e-9), (
@@ -374,6 +387,18 @@ def test_the_printed_edge_chain_sums_to_the_printed_total():
             )
 
 
+def test_the_premium_barrier_and_its_risk_leg_come_off_the_same_premium():
+    """The card shows the barrier in one block ("$0.24 option") and the risk
+    leg in another ("legs $0.07 and $0.10"), with the premium printed beside
+    them. Quantizing the barrier off the raw premium and the risk leg off the
+    cent-rounded one broke `premium_used - premium_stop_price == risk_premium_stop`
+    on 1 contract in 6: a user checking $0.35 - $0.24 got $0.11 against a
+    printed $0.10."""
+    for premium, pct in ((0.35, 0.30), (12.345, 0.30), (5.20, 0.60), (1.07, 0.45)):
+        race = _run(premium=premium, premium_stop_pct=pct).race
+        assert race is not None
+        o = race.outcomes[0]
+        assert round(race.premium_used - race.premium_stop_price, 2) == o.risk_premium_stop
 
 
 def test_the_stop_leg_is_repriced_at_the_life_REMAINING_not_the_days_elapsed():
@@ -548,9 +573,12 @@ class TestEndpoint:
             assert key in o, f"{key} missing from the response"
 
     def test_a_moved_premium_stop_changes_the_answer_over_the_wire(self):
-        """The seed key includes premium_stop_pct. Without that, moving the
-        stop would return a bit-identical answer and the card would look
-        frozen."""
+        """Moving the premium stop moves the answer over the wire.
+
+        NOTE this does not pin the SEED KEY, despite what it used to claim:
+        both assertions below hold whether or not premium_stop_pct is part of
+        it, because the barrier itself moved. The seed key is genuinely pinned
+        in test_first_passage.py."""
         tight = self._post(premium_stop_pct=0.30).json()["race"]
         loose = self._post(premium_stop_pct=0.80).json()["race"]
         assert tight["premiumStopPrice"] != loose["premiumStopPrice"]

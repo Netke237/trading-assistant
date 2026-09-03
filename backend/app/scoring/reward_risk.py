@@ -73,6 +73,23 @@ def _bs_reprice_or_delta_approx(
 # fall back to the historical formula when a caller does not supply one, so
 # every existing call site keeps its current numbers.
 #
+# NOT WIRED UP, AND THAT NOW COSTS SOMETHING. No caller anywhere passes
+# `reprice_years` (`grep -rn reprice_years app/` finds only these definitions),
+# so trade_plan.py, scan.py and contracts.py all still get the historical
+# half-life via _default_reprice_years. first_passage.py's Stage 1 DID switch,
+# so on one TradeCard the Monte Carlo card's "Stock price" per target is now
+# back-solved at `dte - resolve_reprice_days(...)` while the Fixed % Ladder's
+# target prices are still back-solved at `expiry_years * 0.5` — two answers to
+# the same question, a few inches apart, differing by $2.64-$4.71 on a 30-DTE
+# contract and more on a LEAP.
+#
+# Deliberately not fixed here: wiring it changes numbers on the Fixed % Ladder,
+# a card outside the barrier race's remit, and rewrites ~30 tests in
+# test_reward_risk.py and test_multi_target.py that assert half-expiry pricing.
+# It needs its own change with its own sign-off. Until then, spec 2.2's claim
+# that resolve_reprice_days is "the ONLY place that rule lives" is aspirational,
+# not true.
+#
 # `reprice_years` IS A TIME TO EXPIRY REMAINING, in years — it goes straight
 # into bs_price's T. resolve_reprice_days() returns the opposite quantity (days
 # ELAPSED until the barrier), so a caller wiring these two together must convert

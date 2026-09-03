@@ -7,7 +7,7 @@ import {
   formatRacePremiumRR,
   formatRaceEdge,
   premiumStopSourceNote,
-  sharePercents,
+  weightPercents,
   money,
 } from '@/lib/barrierRace';
 import type { BarrierRace, BarrierRaceOutcome } from '@/types/domain';
@@ -209,7 +209,9 @@ export default function BarrierRaceCard({
             <tr>
               <th scope="col"><Text size={10} tone="dim">Target</Text></th>
               <th scope="col"><Text size={10} tone="dim">Split</Text></th>
-              <th scope="col"><Text size={10} tone="dim">Target</Text></th>
+              {/* "Target first", not "Target": the first column is the target
+                  percentage, this one is its share of the attribution. */}
+              <th scope="col"><Text size={10} tone="dim">Target first</Text></th>
               <th scope="col"><Text size={10} tone="dim">Stock stop</Text></th>
               <th scope="col"><Text size={10} tone="dim">Premium stop</Text></th>
               <th scope="col"><Text size={10} tone="dim">Neither</Text></th>
@@ -224,12 +226,14 @@ export default function BarrierRaceCard({
           </thead>
           <tbody>
             {race.outcomes.map((o) => {
-              // Allocated, not rounded one by one. Independent rounding put
-              // 11-20% of real rows at 99% or 101% directly under the "every row
-              // sums to 100%" note below, and beside a bar that summed to 100.
-              const [sTarget, sStock, sPrem, sNone] = sharePercents([
-                o.pTargetFirst, o.pStockStopFirst, o.pPremiumStopFirst, o.pNeither,
-              ]);
+              // Scaled from the weights the BACKEND allocated and weighted the
+              // edge with, so these labels, the edge chain's multipliers and
+              // the printed total are all the same four numbers. Rounding each
+              // share here independently put 11-20% of rows at 99% or 101%;
+              // allocating them here instead fixed the row sum but still left
+              // the chain below printing a different rounding of the same
+              // outcome on ~48% of rows.
+              const [sTarget, sStock, sPrem, sNone] = weightPercents(o);
               return (
                 <tr key={o.targetPct}>
                   <td>
@@ -277,7 +281,7 @@ export default function BarrierRaceCard({
             </div>
             <div className={`${styles.chain} ${styles.muted}`}>
               <Text size={10} tone="dim">R:R vs premium stop</Text>
-              <Data size={11} tone="dim">{formatRacePremiumRR(o, race.premiumStopPct)}</Data>
+              <Data size={11} tone="dim">{formatRacePremiumRR(o)}</Data>
             </div>
           </div>
         ))}
@@ -360,7 +364,7 @@ function StackedBar({ o }: { o: BarrierRaceOutcome }) {
   // The spoken label carries the same allocated percentages as the visible
   // ones, so a screen-reader user hears a row that sums to 100% too. Rounding
   // each share independently here read out 101% on ~1 row in 6.
-  const spoken = sharePercents(segments.map(([, v]) => v));
+  const spoken = weightPercents(o);
   return (
     <div
       className={styles.bar}

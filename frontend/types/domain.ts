@@ -183,6 +183,27 @@ export interface BarrierRaceOutcome {
   daysTarget:           number | null;
   daysStockStop:        number | null;
   daysPremiumStop:      number | null;
+  /** The UNCONDITIONAL median day any path reaches the stock stop — the basis
+   *  of `repriceDaysStockStop`. Different from `daysStockStop`, which is
+   *  conditional on the stop winning the race, so the two legitimately differ;
+   *  `null` means no path reached the stop and the horizon came from the preset
+   *  table instead. */
+  daysAnyPathReachedStop: number | null;
+
+  /** The four shares allocated to hundredths by the backend, summing to
+   *  exactly 1.00. Print THESE in the edge chain and derive the whole-percent
+   *  labels from them: they are the weights the edge was actually computed
+   *  with, so the terms, the labels and the total cannot disagree.
+   *
+   *  Do not re-round `pTargetFirst` and friends for display. That is what these
+   *  replace: the backend weighted the edge with a Python imitation of
+   *  `toFixed`, which disagrees with the real one on 44 of the 2001 shares
+   *  reachable at 2000 paths, and the printed chain stopped adding up. The raw
+   *  p* fields are for the bars, which are continuous. */
+  weightTargetFirst:      number;
+  weightStockStopFirst:   number;
+  weightPremiumStopFirst: number;
+  weightNeither:          number;
   /** Mean option value at expiry over the `pNeither` paths — the input to the
    *  edge's fourth term, which is SIGNED: those paths can end above the premium
    *  paid, so it is not always a loss. */

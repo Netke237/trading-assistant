@@ -3,30 +3,37 @@ import { render, screen } from '@testing-library/react';
 import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
 import type { BarrierRace, BarrierRaceOutcome } from '@/types/domain';
 
+// Genuine `estimate_first_passage` output for the reference contract (185/190C,
+// 30 DTE, $5.20 premium, stop $176, 60% premium stop, seed 42) — not a
+// hand-written approximation. The old fixture carried an `edgePerContract` of
+// -193.28 when every edge is a whole number of dollars by construction, and
+// four shares that were all exact two-decimal values, which are exactly the
+// ones on which a rounding disagreement cannot show up.
 function outcome(over: Partial<BarrierRaceOutcome> = {}): BarrierRaceOutcome {
   return {
     targetPct: 0.20,
     targetOptionPrice: 6.24,
-    pTargetFirst: 0.27,
-    pStockStopFirst: 0.00,
-    pPremiumStopFirst: 0.68,
-    pNeither: 0.05,
+    pTargetFirst: 0.2685,
+    pStockStopFirst: 0.0,
+    pPremiumStopFirst: 0.6865,
+    pNeither: 0.045,
     daysTarget: 7,
     daysStockStop: null,
     daysPremiumStop: 20,
+    daysAnyPathReachedStop: 26,
+    weightTargetFirst: 0.27,
+    weightStockStopFirst: 0.0,
+    weightPremiumStopFirst: 0.69,
+    weightNeither: 0.04,
     terminalMean: 3.64,
     rewardDollar: 1.04,
-    repriceDaysStockStop: 7,
-    stopRepricedValue: 0.18,
-    riskStockStop: 5.02,
+    repriceDaysStockStop: 26,
+    stopRepricedValue: 0.03,
+    riskStockStop: 5.17,
     riskPremiumStop: 3.12,
-    rrStockStop: 0.2072,
-    rrPremiumStop: 0.3333,
-    // The four printed terms sum to exactly this per share: 0.27 x 1.04
-  // - 0.00 x 5.02 - 0.68 x 3.12 + 0.05 x -1.56 = -1.9188. The old -193.28 left
-  // the card's own test rendering a chain that does not add up, because the
-  // assertion below only regex-matched the terms and never the total.
-  edgePerContract: -191.88,
+    rrStockStop: 0.20116054158607352,
+    rrPremiumStop: 0.33333333333333337,
+    edgePerContract: -193.0,
     ...over,
   };
 }
@@ -34,8 +41,20 @@ function outcome(over: Partial<BarrierRaceOutcome> = {}): BarrierRaceOutcome {
 const RACE: BarrierRace = {
   outcomes: [
     outcome(),
-    outcome({ targetPct: 0.35, targetOptionPrice: 7.02, pTargetFirst: 0.14, pPremiumStopFirst: 0.78, pNeither: 0.08, rewardDollar: 1.82, rrStockStop: 0.3625, rrPremiumStop: 0.5833 }),
-    outcome({ targetPct: 0.50, targetOptionPrice: 7.80, pTargetFirst: 0.08, pPremiumStopFirst: 0.81, pNeither: 0.11, rewardDollar: 2.60, rrStockStop: 0.5178, rrPremiumStop: 0.8333 }),
+    outcome({
+      targetPct: 0.35, targetOptionPrice: 7.02, pTargetFirst: 0.138, pPremiumStopFirst: 0.785,
+      pNeither: 0.077, daysTarget: 12, daysPremiumStop: 21,
+      weightTargetFirst: 0.14, weightPremiumStopFirst: 0.78, weightNeither: 0.08,
+      terminalMean: 3.98, rewardDollar: 1.82, rrStockStop: 0.35203094777562866,
+      rrPremiumStop: 0.5833333333333334, edgePerContract: -228.0,
+    }),
+    outcome({
+      targetPct: 0.50, targetOptionPrice: 7.80, pTargetFirst: 0.0825, pPremiumStopFirst: 0.81,
+      pNeither: 0.1075, daysTarget: 16, daysPremiumStop: 21,
+      weightTargetFirst: 0.08, weightPremiumStopFirst: 0.81, weightNeither: 0.11,
+      terminalMean: 4.20, rewardDollar: 2.60, rrStockStop: 0.5029013539651838,
+      rrPremiumStop: 0.8333333333333334, edgePerContract: -243.0,
+    }),
   ],
   premiumStopPrice: 2.08,
   premiumStopPct: 0.60,
@@ -72,9 +91,11 @@ describe('the race outcome', () => {
     expect(targetSegments).toHaveLength(3);
     // Exact strings: a binary-float tail (0.14 * 100 = 14.000000000000002)
     // would otherwise land in the style attribute verbatim.
-    expect(targetSegments[0]).toHaveStyle({ width: '27.0000%' });
-    expect(targetSegments[1]).toHaveStyle({ width: '14.0000%' });
-    expect(targetSegments[2]).toHaveStyle({ width: '8.0000%' });
+    // Raw shares, not the allocated weights: the bar is continuous and these
+    // sum to 100% exactly on their own.
+    expect(targetSegments[0]).toHaveStyle({ width: '26.8500%' });
+    expect(targetSegments[1]).toHaveStyle({ width: '13.8000%' });
+    expect(targetSegments[2]).toHaveStyle({ width: '8.2500%' });
   });
 
   it('omits a zero-width segment rather than rendering an invisible one', () => {
@@ -92,8 +113,8 @@ describe('the race outcome', () => {
     const label = bar.getAttribute('aria-label') ?? '';
     expect(label).toContain('Target first 27%');
     expect(label).toContain('Stock stop first 0%');
-    expect(label).toContain('Premium stop first 68%');
-    expect(label).toContain('Neither 5%');
+    expect(label).toContain('Premium stop first 69%');
+    expect(label).toContain('Neither 4%');
 
     const shares = [...label.matchAll(/(\d+)%/g)]
       .map((m) => Number(m[1]))
@@ -132,24 +153,27 @@ describe('the printed arithmetic', () => {
     // stop leg depends on the stop, not on which target you are aiming at.
     // Only the reward leg differs per row.
     expect(
-      screen.getAllByText('$5.20 premium - $0.18 at the stop (repriced at 7d) = $5.02'),
+      screen.getAllByText(
+        '$5.20 premium - $0.03 at the stop '
+        + '(repriced at 26d — the median day any path reaches the stop) = $5.17',
+      ),
     ).toHaveLength(3);
-    expect(screen.getByText('$1.04 / $5.02 = 0.21x')).toBeInTheDocument();
-    expect(screen.getByText('$1.82 / $5.02 = 0.36x')).toBeInTheDocument();
-    expect(screen.getByText('$2.60 / $5.02 = 0.52x')).toBeInTheDocument();
+    expect(screen.getByText('$1.04 / $5.17 = 0.20x')).toBeInTheDocument();
+    expect(screen.getByText('$1.82 / $5.17 = 0.35x')).toBeInTheDocument();
+    expect(screen.getByText('$2.60 / $5.17 = 0.50x')).toBeInTheDocument();
   });
 
   it('prints the edge chain with all four signed contributions', () => {
     renderCard();
     expect(
-      screen.getByText(/0\.27 x \$1\.04 - 0\.00 x \$5\.02 - 0\.68 x \$3\.12 \+ 0\.05 x -\$1\.56/),
+      screen.getByText(/0\.27 x \$1\.04 - 0\.00 x \$5\.17 - 0\.69 x \$3\.12 \+ 0\.04 x -\$1\.56/),
     ).toBeInTheDocument();
   });
 
   it('marks the premium-stop ratio as a constant, not a measurement', () => {
     renderCard();
     expect(
-      screen.getByText(/ratio is 20% \/ 60% = 0\.33x on every contract/),
+      screen.getByText(/0\.33x, which is your target % over your stop %/),
     ).toBeInTheDocument();
     expect(screen.getByText(/Only the first ratio is a measurement/)).toBeInTheDocument();
   });
@@ -288,8 +312,13 @@ describe('the numbers the card promises', () => {
     // daysStockStop and daysPremiumStop were computed, mapped onto the wire and
     // typed, and then never rendered.
     renderCard();
-    expect(screen.getAllByText('~20d').length).toBe(3);   // daysPremiumStop
-    expect(screen.getAllByText('~7d').length).toBe(3);    // daysTarget
+    // Real conditional medians: 20/21/21 to the premium stop, 7/12/16 to the
+    // target, and "—" to the stock stop, which no path reached first.
+    expect(screen.getAllByText('~21d').length).toBe(2);
+    expect(screen.getByText('~20d')).toBeInTheDocument();
+    expect(screen.getByText('~7d')).toBeInTheDocument();
+    expect(screen.getByText('~12d')).toBeInTheDocument();
+    expect(screen.getByText('~16d')).toBeInTheDocument();
   });
 
   it('prints an edge chain whose terms sum to the total it prints', () => {
@@ -301,7 +330,7 @@ describe('the numbers the card promises', () => {
         // assertion is the TOTAL: 0.27x1.04 - 0 - 0.68x3.12 + 0.05x-1.56 is
         // -1.9188, and the card must print that, not the -193.28 this fixture
         // used to carry while the assertion only checked the four terms.
-        /0\.27 x \$1\.04 - 0\.00 x \$5\.02 - 0\.68 x \$3\.12 \+ 0\.05 x -\$1\.56 = -\$1\.92\s+->\s+-\$191\.88 per contract/,
+        /0\.27 x \$1\.04 - 0\.00 x \$5\.17 - 0\.69 x \$3\.12 \+ 0\.04 x -\$1\.56 = -\$1\.93\s+->\s+-\$193\.00 per contract/,
       ).length,
     ).toBeGreaterThan(0);
   });
