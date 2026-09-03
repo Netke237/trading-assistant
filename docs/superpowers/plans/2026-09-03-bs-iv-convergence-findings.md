@@ -235,3 +235,105 @@ or make configurable the `hi` bound — 5.0 is ample for equities but returns `N
 - I did not test `bs_iv`'s other callers, exotic `r` values (only r = 0.045), or negative rates.
 - The 451 vs 958 µs timings are dominated by `scipy.stats.norm` overhead in this venv and should
   not be read as a tuned benchmark.
+
+---
+
+# Amendment A — adversarial audit, 2026-09-03
+
+An independent adversarial review re-derived every load-bearing number in this document from
+scratch, against the real `bs_iv`, without reusing the scripts above. Appended rather than
+rewritten, following the Barrier Race spec's precedent: the original reasoning stays readable,
+including where it was wrong.
+
+## A.1 What survived
+
+- **The load-bearing claim holds.** 230C and 240C return `None` via the low-vega exit — reproduced
+  on an independently constructed flat-34.5% chain as well as on the original surface.
+- Headline numbers reproduce exactly: 4613 well-posed, 825 Newton failures (17.88%), brentq 0.
+- **The "well-posed" filter is honest and self-penalising.** Unfiltered Newton failure is
+  **20.76%** — *higher* than the filtered 17.88%. The filter made the result look better for the
+  code, not worse.
+- The fixture-contract trap is real: 215C inverts in 3 iterations, so a test written against it
+  alone passes and hides everything.
+
+## A.2 What was wrong
+
+**The verdict stands, but partly for the wrong reason, and the recommendation does not stand.**
+
+1. **"The hazard is silence, not a wrong number" is false**, and it was the most reassuring
+   sentence here. It is an artifact of round-tripping European prices. Real **American ITM puts**
+   trade at or above `K − S`, which on this underlying exceeds the European price: a K=250 put at
+   mid 38.19/48.19 inverts to **0.3739 / 0.4413** against a true 0.345 — silently, no `None`, in
+   both solvers. The guard proposed below does not catch it, because those mids sit *above* the
+   European floor. A confidently wrong IV is worse than a refusal, and this document said the
+   opposite.
+
+2. **The root cause is incomplete.** "Vega trips the guard before iterating" explains roughly
+   two-thirds. For the rest — **including K=230** — the seed's vega (1.2e-4) *passes* the 1e-10
+   guard, and Newton then overshoots to sigma ≈ 1.7e4 where `d1` is **+2286.7**, hugely positive.
+   The document's own "307 failures at iteration 1" row contradicts its "aborts at iteration 0"
+   sentence.
+
+3. **The hybrid recommendation is unjustified.** It traded correctness risk for a speed cost that
+   does not exist: `brentq` over a `math.erf` normal runs at **24.3 µs/contract against today's
+   Newton at 494 µs** — 20× *faster* than the status quo, because the real cost is `scipy.stats.norm`,
+   not the solver. Plain brentq wins outright. There is no case for Newton-first.
+
+4. **A seed change alone fixes most of it.** Corrado-Miller in place of Brenner-Subrahmanyam takes
+   17.88% → **2.58%** with no new solver. This document never evaluated the fix its own root-cause
+   analysis implies.
+
+5. **`bs_iv` may not be on Phase A's critical path at all.** `backend/app/data/market.py:598`
+   already reads Tradier's **per-contract `implied_volatility`** — and line 615 discards it into
+   `"ivRank": int(round(iv * 100))`, a field named for a percentile. Sourcing Phase A's `iv` from
+   the provider sidesteps the solver entirely for the gate.
+   **Nuance the audit missed:** that field is *conditionally overwritten* at `market.py:629`/`:643`
+   with a genuine IV rank from IBKR or Tastytrade when those are available, so `ivRank` currently
+   means raw IV×100 on some rows and a true percentile on others. Phase A must capture `iv` into
+   its own field *before* that overwrite — it cannot just read `ivRank`. The conflation is a
+   pre-existing data-integrity bug in its own right and should be fixed alongside, not inherited.
+
+6. **Blast radius understated.** `bs_iv` has four live production call sites — `reward_risk.py:33`,
+   `first_passage.py:374`, `heston_cache.py:87,102`, `heston.py:134,137` — and committed tests pin
+   exact outputs (e.g. `bs_iv(2.50, 185, 190, 30/365, 0.05, True) = 0.200202`). "Replace the Newton
+   loop" is **not a drop-in**. It also reframes the severity: 230C/240C already fall back to
+   `sigma_fallback = 0.25` against a true 0.345 **in production today**, so this is a current
+   defect, not only a future blocker.
+
+7. **The surviving caveat is unimplementable as written** — it does not say which floor (European
+   or American, and for puts it must be American), "a tick" versus the half-cent actually
+   validated, or whether the guard belongs inside `bs_iv` or at the four call sites.
+
+8. **`scipy` was already available**, which was this document's own best argument and it missed it:
+   `scipy==1.17.1` is pinned in `backend/requirements.txt` and `from scipy.stats import norm` is
+   already imported at `black_scholes.py:6`. The "no venv, no scipy" note in Environment above
+   describes the session, not the project.
+
+9. **The gate's constant-IV assumption is unexamined and asymmetric.** Holding IV fixed at the stop
+   reads 215C at 71.2% versus 53.0% at +6 vol points (conservative, safe), but 190P at 67.1% versus
+   **84.0%** at −6 points (optimistic, unsafe). Those gaps are wider than the spacing between the
+   0.80 / 0.70 / 0.60 thresholds, which means vol regime can move a contract across a threshold
+   more easily than moneyness can.
+
+## A.3 Revised recommendation
+
+1. **Source the contract IV from the provider** where one is available — it is already fetched and
+   thrown away. Capture it before the `ivRank` overwrite, and fix the conflated field.
+2. **Where the IV must be solved, use plain `brentq`** over a `math.erf` normal. Not a hybrid: it
+   is both more correct and 20× faster than what ships today.
+3. **Replace the seed too** (Corrado-Miller), so any remaining Newton path is not left in its
+   current state.
+4. **Guard the ill-posed region explicitly** — refuse to invert a mid below the **American**
+   intrinsic floor plus a tick for puts, and say where the guard lives.
+5. **Treat the four existing call sites as in scope.** Changing `bs_iv` changes `reward_risk` and
+   `first_passage` behaviour today and will move pinned test expectations. That is a fix, not a
+   regression — but it must be deliberate, measured, and its own commit.
+6. **Do not rely on the constant-IV assumption** without at least disclosing it on the card, given
+   §A.2.9.
+
+## A.4 Still unverified
+
+No live market data (both the original and the audit ran on synthetic surfaces). Whether Tradier's
+per-contract IV is good enough in production to displace a solver. Whether the Q7 thresholds
+(0.80 / 0.70 / 0.60) hold on a real universe — round 5 records them as "taken as proposed", never
+measured. American-exercise bias remains invisible to any round-trip test by construction.
