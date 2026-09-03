@@ -209,6 +209,57 @@ def test_recompute_endpoint_uses_bullish_invalidation_pct_not_delta():
     assert r.json()["exit"]["invalidation"] == expected_inval
 
 
+def test_recompute_endpoint_horizon_preset_reaches_build_trade_plan():
+    """Round 9 audit finding: horizon_preset/hold_min/hold_max are forwarded
+    from RecomputePlanRequest into build_trade_plan (contracts.py:266-268),
+    but no test ever POSTed a non-default horizon_preset over the wire and
+    checked it actually changed the response -- every existing test either
+    omits the field or calls build_trade_plan directly as a Python function,
+    bypassing the router/Pydantic layer entirely. A future edit that drops or
+    defaults horizon_preset in that forwarding line would ship silently: this
+    pins that "Swing" (the implicit default) and "Annual" produce different
+    Fixed % Ladder targets over the actual HTTP endpoint.
+
+    dte=185 with risk_rules.yaml's real fallback_days table: Swing/absent
+    resolves to 7 days, Annual resolves to 80 days clamped to
+    0.75*185=138.75 -- both comfortably inside [min_days, dte], so the two
+    must reprice at different remaining lives and therefore different target
+    option prices."""
+    from app.routers.contracts import router
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    base_payload = {
+        "symbol": "AAPL", "direction": "Bullish", "stock_price": 318.73,
+        "strike": 375, "dte": 185, "premium": 7.47, "delta": 0.24, "spread": 0.25,
+    }
+    r_default = client.post("/api/contracts/recompute-plan", json=base_payload)
+    r_annual = client.post("/api/contracts/recompute-plan", json={
+        **base_payload, "horizon_preset": "Annual",
+    })
+    assert r_default.status_code == 200, r_default.text
+    assert r_annual.status_code == 200, r_annual.text
+
+    default_targets = [t["estimatedOptionPrice"] for t in r_default.json()["exit"]["targets"]]
+    annual_targets = [t["estimatedOptionPrice"] for t in r_annual.json()["exit"]["targets"]]
+    assert default_targets != annual_targets, (
+        "horizon_preset='Annual' produced the same ladder as the default -- "
+        "the field is not reaching build_trade_plan through this endpoint"
+    )
+
+    # And it must match calling build_trade_plan directly with the same
+    # horizon_preset -- the router isn't just changing SOMETHING, it's
+    # changing to the right thing.
+    from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
+    expected_annual = build_trade_plan(
+        direction="Bullish", stock_price=318.73, strike=375, dte=185,
+        premium=7.47, entry_bid=max(0.01, 7.47 - 0.125), entry_ask=7.47 + 0.125,
+        entry_mid=7.47, rr_cfg=_rr_cfg(), horizon_preset="Annual",
+    )
+    assert annual_targets == [t.estimatedOptionPrice for t in expected_annual.targets]
+
+
 def test_recompute_endpoint_rejects_nonpositive_premium():
     from app.routers.contracts import router
     app = FastAPI()

@@ -309,6 +309,43 @@ def test_scan_rr_override_leaves_default_scan_unchanged(client):
     assert round(candidates[0]["exit"]["target"], 2) == round(185.0 * 1.08, 2)
 
 
+def test_scan_horizon_preset_reaches_build_trade_plan(client):
+    """Round 9 audit finding: ScanRequest.horizon_preset is forwarded through
+    _execute_scan_core -> _process_symbol -> build_trade_plan (scan.py:780),
+    but no test ever POSTed a non-default horizon_preset over /api/scan and
+    checked the response actually changed -- grepping tests/ for
+    horizon_preset turned up zero scan-related references before this. A
+    future edit that drops or defaults horizon_preset anywhere in that
+    forwarding chain would ship silently, reintroducing the exact
+    ladder/Monte-Carlo horizon mismatch this field exists to prevent, with
+    zero CI signal.
+
+    _rr_test_chain()'s dte=35: Swing/absent resolves to 7 fallback days,
+    Annual resolves to 80 clamped to 0.75*35=26.25 -- both comfortably inside
+    bounds, so the Fixed % Ladder must reprice at a different remaining life."""
+    fetch_quotes_patch, get_bars_patch = _no_db_leak()
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
+                             company="Apple Inc."), \
+         fetch_quotes_patch, get_bars_patch, _force_passing_stock_score():
+        r_default = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing", "overrides": {},
+        })
+        r_annual = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": {}, "horizon_preset": "Annual",
+        })
+    default_candidates = r_default.json()["candidates"]
+    annual_candidates = r_annual.json()["candidates"]
+    assert default_candidates, "expected AAPL to score as a candidate for this fixture"
+    assert annual_candidates, "expected AAPL to score as a candidate for this fixture"
+    default_targets = [t["estimatedOptionPrice"] for t in default_candidates[0]["exit"]["targets"]]
+    annual_targets = [t["estimatedOptionPrice"] for t in annual_candidates[0]["exit"]["targets"]]
+    assert default_targets != annual_targets, (
+        "horizon_preset='Annual' produced the same ladder as the default -- "
+        "the field is not reaching build_trade_plan through the scan pipeline"
+    )
+
+
 def test_scan_swing_hold_rejects_a_contract_expiring_before_the_hold_ends(client):
     """Adversarial-audit finding on the DTE-tolerance fix: a flat 10-day
     hard-reject tolerance would let a Swing (5-15d hold) scan accept a 12-DTE

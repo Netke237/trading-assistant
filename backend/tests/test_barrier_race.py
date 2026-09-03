@@ -790,3 +790,27 @@ class TestEndpoint:
 
     def test_an_expiring_contract_returns_no_race_over_the_wire(self):
         assert self._post(dte=0).json()["race"] is None
+
+    def test_horizon_preset_reaches_estimate_first_passage_over_the_wire(self):
+        """Round 9 audit finding: FirstPassageRequest.horizon_preset is forwarded
+        into estimate_first_passage (contracts.py:524), but no test ever POSTed a
+        non-default horizon_preset and checked the response actually changed --
+        the only tests that exercise horizon_preset call estimate_first_passage
+        directly as a Python function, bypassing the router entirely. A future
+        edit that drops or defaults horizon_preset in that forwarding line would
+        ship silently, reintroducing the exact ladder/Monte-Carlo horizon
+        mismatch this field exists to prevent, with zero CI signal.
+
+        dte=30 (this class's _PAYLOAD default): Swing/absent resolves to 7
+        fallback days, Annual resolves to 80 clamped to 0.75*30=22.5 -- both
+        comfortably inside bounds, so Stage 1's display back-solve must reprice
+        each target's stockPrice at a different remaining life."""
+        default_targets = self._post().json()["targets"]
+        annual_targets = self._post(horizon_preset="Annual").json()["targets"]
+        default_prices = [t["stockPrice"] for t in default_targets]
+        annual_prices = [t["stockPrice"] for t in annual_targets]
+        assert default_prices != annual_prices, (
+            "horizon_preset='Annual' produced the same target stock prices as "
+            "the default -- the field is not reaching estimate_first_passage "
+            "through this endpoint"
+        )
