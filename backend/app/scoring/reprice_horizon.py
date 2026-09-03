@@ -152,9 +152,9 @@ def _latest_barrier_day(dte: float) -> float:
     contract — which is the exact outcome this cap exists to prevent, reached
     from the other side. Falling back to half the remaining life keeps it
     strictly inside the contract for any positive DTE. Not reachable through
-    the race today (estimate_first_passage refuses dte < 1), but Stage 1 calls
-    resolve_reprice_days BEFORE that guard, and this module is documented as the
-    single owner of the rule."""
+    the race today (estimate_first_passage refuses dte < 1) — see the note in
+    the branch below for why Stage 1 does not reach it either. Kept so the rule
+    is total, since this module is documented as its single owner."""
     if dte is None or not _usable(dte) or dte <= 0:
         return float("inf")
     latest = float(dte) - 0.5

@@ -2082,21 +2082,25 @@ describe('TradeCard — piece 1/2 gap: cache-restored exit plan with no fresh cl
 // reachable by a ten-line test and shipped anyway.
 
 const RACE_RESPONSE = {
-  targets: [
-    { pct: 0.20, stockPrice: 190.5, optionPrice: 3.3, probability: 0.72, expectedDays: 5 },
-    { pct: 0.35, stockPrice: 193.2, optionPrice: 3.71, probability: 0.55, expectedDays: 9 },
-    { pct: 0.50, stockPrice: null, optionPrice: 4.13, probability: 0.10, expectedDays: null },
-  ],
-  invalidation: { probability: 0.30, expectedDays: 4 },
-  // Genuine `estimate_first_passage` output for this card's own inputs
-  // (186.1 spot / 190 strike / 24 DTE / $2.75 premium / stop 180 /
-  // premium_stop_pct 1.5/2.75, seed 7) — all THREE rows, re-derived.
+  // ONE real `estimate_first_passage` call, whole: targets, invalidation and
+  // race together (186.1 spot / 190 strike / 24 DTE / $2.75 premium / stop 180 /
+  // premium_stop_pct 1.5/2.75, seed 7).
   //
-  // It carried that same label while mapping one row's body over all three
-  // targets, so every row showed the $3.30 option price and $0.55 reward of
-  // T20% — contradicting the same response's own `targets` array (3.30 / 3.71 /
-  // 4.12) and making a per-target collapse, the exact failure "one row per
-  // target" guards against, invisible to every test in this file.
+  // Regenerating only the race block left two states the backend cannot
+  // produce. `invalidation.expectedDays` and `daysAnyPathReachedStop` are
+  // literally the same variable (`stop_expected_days`) — a backend test asserts
+  // the identity over the wire — and the fixture had them 13 days apart, so the
+  // card rendered "(median ~4d)" in the barriers block and "repriced at 17d —
+  // the median day any path reaches the stop" in the risk chain. And
+  // `targets[2].optionPrice` read 4.13 where the race's own
+  // `targetOptionPrice` read 4.12; both are `round(2.75 * 1.50, 2)`, which is
+  // 4.12 under Python's banker's rounding.
+  targets: [
+    { pct: 0.20, stockPrice: 189.04, optionPrice: 3.30, probability: 0.566, expectedDays: 4 },
+    { pct: 0.35, stockPrice: 189.86, optionPrice: 3.71, probability: 0.440, expectedDays: 7 },
+    { pct: 0.50, stockPrice: 190.62, optionPrice: 4.12, probability: 0.3455, expectedDays: 10 },
+  ],
+  invalidation: { probability: 0.0585, expectedDays: 17 },
   race: {
     outcomes: [
       {
@@ -2142,8 +2146,25 @@ const RACE_RESPONSE = {
   },
 };
 
+// The identity the backend asserts over the wire, mirrored here so this fixture
+// cannot drift back into a shape the endpoint cannot produce.
+it('RACE_RESPONSE is a shape the backend can actually return', () => {
+  expect(RACE_RESPONSE.invalidation.expectedDays)
+    .toBe(RACE_RESPONSE.race.outcomes[0].daysAnyPathReachedStop);
+  RACE_RESPONSE.race.outcomes.forEach((o, i) => {
+    expect(o.targetOptionPrice).toBe(RACE_RESPONSE.targets[i].optionPrice);
+    const weights = [o.weightTargetFirst, o.weightStockStopFirst,
+      o.weightPremiumStopFirst, o.weightNeither];
+    expect(Math.round(weights.reduce((a, b) => a + b, 0) * 100)).toBe(100);
+  });
+});
+
 describe('the barrier race, through the card that owns it', () => {
   beforeEach(() => {
+    // expandLadder() is a TOGGLE and CollapsibleSection persists its collapsed
+    // state to localStorage, so without this a prior test in this describe can
+    // leave it expanded and the click here collapses it instead.
+    window.localStorage.clear();
     (api.getStockQuote as jest.Mock).mockResolvedValue({ symbol: 'AAPL', price: 186.1 });
     (api.getContractQuote as jest.Mock).mockResolvedValue({
       price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
@@ -2464,6 +2485,33 @@ describe('a request that never settles', () => {
     expect(screen.getByText(/Couldn.t compute an estimate/)).toBeInTheDocument();
   });
 
+  it('reports a deadline that lands on the structural refresh inside an Estimate', async () => {
+    // A DIFFERENT guard from the sub-fetch one above: that hangs getStockQuote,
+    // which trips the first check. This hangs the auto structural refresh,
+    // whose .then().catch().finally() chain can never reject — so the deadline
+    // arrives at the check AFTER it, the one that runs on the first Estimate
+    // click of every mount. Without a deadline-aware guard there, the estimate
+    // dies with no error and firstPassage left `undefined`, which the parent's
+    // cache reads as "in flight, don't touch".
+    (api.getStructuralStop as jest.Mock).mockImplementation(neverSettles());
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue(RACE_RESPONSE);
+    // This file does not clear mocks between tests, and the call COUNT is the
+    // assertion here.
+    (api.getFirstPassageEstimate as jest.Mock).mockClear();
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(21_000);
+    });
+
+    // It never got as far as dispatching the simulation...
+    expect(api.getFirstPassageEstimate).not.toHaveBeenCalled();
+    // ...and it said so, rather than re-enabling the button in silence.
+    expect(screen.getByText(/Couldn.t compute an estimate/)).toBeInTheDocument();
+  });
+
   it('gives "Compute Arithmetic Plan" back after the deadline', async () => {
     (api.getStructuralStop as jest.Mock).mockResolvedValue({
       available: false, price: null, source: null, confidence: null, distancePct: null,
@@ -2532,6 +2580,33 @@ describe('the race gates, mutation-pinned', () => {
     (api.getStructuralStop as jest.Mock).mockResolvedValue({
       available: true, price: 180.0, source: 'order_block', confidence: 75, distancePct: 3.3,
     });
+  });
+
+  it('does not print "expires today" for a RESTORED refusal from another contract', () => {
+    // The persistent version of the same hazard, and the one that is actually
+    // observable: `firstPassage` is seeded from the parent's per-contract cache
+    // at mount, so a restored 0-DTE estimate rendered "Not simulated — contract
+    // expires today" indefinitely, not for one frame.
+    //
+    // The rerender-based test below cannot pin this: RTL flushes the
+    // contract-change reset effect inside `rerender`, so the un-gated read is
+    // already `undefined` by the time anything is asserted.
+    render(<TradeCard data={{
+      ...mockTradeCard,
+      symbol: 'MSFT',
+      contract: 'MSFT 300C 06/19',
+      exit: {
+        ...mockTradeCard.exit,
+        firstPassage: {
+          targets: [],
+          invalidation: { probability: 0.30, expectedDays: 4 },
+          race: null,
+          computedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+    }}
+    />);
+    expect(screen.queryByText(/Not simulated/)).not.toBeInTheDocument();
   });
 
   it('drops the "expires today" refusal when the contract changes', async () => {

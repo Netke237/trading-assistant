@@ -26,7 +26,7 @@ export function money(v: number): string {
   return v < 0 ? `-${s}` : s;
 }
 
-function days(v: number): string {
+export function days(v: number): string {
   // The reprice horizon can be fractional once a clamp binds (0.75 x a 3-day
   // contract, or the half-day-before-expiry cap). Show a whole number when it
   // is one, and otherwise enough precision to BE the value used: at 1dp,
@@ -203,7 +203,13 @@ export function formatRaceEdge(o: BarrierRaceOutcome, premium: number): string {
     // the premium, and terminalMean appears nowhere else on the card, so the
     // one term the card goes out of its way to explain the SIGN of was the one
     // term a user could not check.
-    ` + ${o.weightNeither.toFixed(2)} x (${money(o.terminalMean ?? 0)} at expiry - ${money(premium)})` +
+    ` + ${o.weightNeither.toFixed(2)} x ${o.terminalMean == null
+      // Not "$0.00 at expiry" — that is a number for a population that does not
+      // exist. terminalMean is null exactly when no path reached expiry
+      // unbarriered, in which case this weight is 0.00 and the term contributes
+      // nothing; saying so beats printing a price nothing was worth.
+      ? '$0.00 (no path reached expiry unbarriered)'
+      : `(${money(o.terminalMean)} at expiry - ${money(premium)})`}` +
     ` = ${money(perShare)}  ->  ${money(o.edgePerContract)} per contract`
   );
 }

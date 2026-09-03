@@ -8,6 +8,7 @@ import {
   formatRaceEdge,
   premiumStopSourceNote,
   weightPercents,
+  days,
   money,
 } from '@/lib/barrierRace';
 import type { BarrierRace, BarrierRaceOutcome } from '@/types/domain';
@@ -131,20 +132,26 @@ export default function BarrierRaceCard({
             moved, which cannot affect "did any path ever touch the stock
             stop". It survives here: it is a property of the stock stop and the
             simulation, not of the attribution the moved barrier invalidated. */}
-        {/* Only when the STOCK stop is the barrier that stayed put. With one
-             boolean for both, this rendered after a Check-structure or
-             Arithmetic-Plan click too — quoting a probability measured against
-             a level that is no longer shown anywhere on the card, under copy
-             asserting it was unaffected. */}
-        {invalidation && !stockStopMoved && (
+        {/* Two sentences, because which barrier moved changes what is true.
+             Suppressing it entirely when the stock stop moved DELETED the
+             number rather than moving it: spec 3.4 says the invalidation row
+             moves here from the Monte Carlo card, "not a deletion", and the
+             three per-target probabilities that can sum past 100% stay on
+             screen above with nothing left to explain why. So it is still
+             printed — with the level it was measured against named, which is
+             the fact that makes it stale. */}
+        {invalidation && (
           <Text size={10} tone="dim">
-            The stock-stop probability is unaffected by the premium stop:{' '}
-            {(invalidation.probability * 100).toFixed(0)}% of paths touch the stock stop at some
-            point
-            {invalidation.expectedDays != null
-              ? ` (median ~${Math.round(invalidation.expectedDays)}d)`
-              : ''}
-            . The attribution above is what needs the re-run.
+            {stockStopMoved
+              ? `${(invalidation.probability * 100).toFixed(0)}% of paths touched the stock stop at
+                 some point — but measured against the $${race.stockStopPrice.toFixed(2)} stop this
+                 estimate used, which is no longer the stop. Re-run to measure it against the
+                 current one.`
+              : `The stock-stop probability is unaffected by the premium stop: ${(
+                invalidation.probability * 100).toFixed(0)}% of paths touch the stock stop at some
+                 point${invalidation.expectedDays != null
+                   ? ` (median ~${days(invalidation.expectedDays)})` : ''}. The attribution above is
+                 what needs the re-run.`}
           </Text>
         )}
       </section>
@@ -204,8 +211,13 @@ export default function BarrierRaceCard({
           <Text size={10} tone="dim">
             Measured on its own, {(invalidation.probability * 100).toFixed(0)}% of paths touch the
             stock stop at some point
+            {/* days(), the same formatter the risk chain uses. Math.round here
+                printed "~3d" for a median of 2.5 that the risk chain, three
+                inches below, called "2.5d — the median day any path reaches the
+                stop": one statistic, two numbers. Half-integer medians are
+                reachable whenever the two middle first-hit days differ. */}
             {invalidation.expectedDays != null
-              ? ` (median ~${Math.round(invalidation.expectedDays)}d)`
+              ? ` (median ~${days(invalidation.expectedDays)})`
               : ''}
             {' '}— ignoring whether the premium stop had already fired. The attribution below is the
             honest version: the gap between the two is how often you were stopped out on premium
@@ -252,7 +264,10 @@ export default function BarrierRaceCard({
               // at 99% or 101% (12% on one sweep, 22% on another);
               // allocating them here instead fixed the row sum but still left
               // the chain below printing a different rounding of the same
-              // outcome on ~48% of rows.
+              // outcome. See lib/barrierRace.test.ts for the measured rate and
+              // the sweep behind it — three sites quoted three different
+              // unqualified figures for one quantity, which is worse than one
+              // qualified figure in one place.
               const [sTarget, sStock, sPrem, sNone] = weightPercents(o);
               return (
                 <tr key={o.targetPct}>
@@ -392,7 +407,9 @@ function StackedBar({ o }: { o: BarrierRaceOutcome }) {
   ];
   // The spoken label carries the same allocated percentages as the visible
   // ones, so a screen-reader user hears a row that sums to 100% too. Rounding
-  // each share independently here read out 101% on ~1 row in 6.
+  // each share independently here read out a total other than 100% on about
+  // one row in nine (5% of them above 100). Measured; see
+  // lib/barrierRace.test.ts for the sweep.
   const spoken = weightPercents(o);
   return (
     <div

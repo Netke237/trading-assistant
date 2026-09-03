@@ -539,7 +539,7 @@ async def first_passage(req: FirstPassageRequest) -> FirstPassageResponse:
     )
 
 
-def _race_out(race) -> Optional[BarrierRaceOut]:
+def _race_out(race: Optional[BarrierRaceResult]) -> Optional[BarrierRaceOut]:
     """Map the scoring layer's BarrierRaceResult onto the wire shape.
 
     Money is already quantized to cents by first_passage (so the printed

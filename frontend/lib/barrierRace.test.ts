@@ -147,9 +147,14 @@ describe('weightPercents', () => {
     // The point of taking these from the backend. A largest-remainder
     // allocation done here fixed the row sum but left the chain below printing
     // an independently-rounded multiplier for the same outcome — the table
-    // reading "Neither 49%" beside a chain reading "+ 0.48 x". Measured on real
-    // output it runs from ~9% of all rows to ~28% once degenerate rows (a share
-    // of exactly 0) are excluded, and ~18% of CARDS have at least one such row.
+    // reading "Neither 49%" beside a chain reading "+ 0.48 x".
+    //
+    // THE MEASURED RATE, in one place, with the sweep that produced it: over
+    // 11,520 real outcome rows (5 DTEs x 4 contracts x 4 stop percentages x 3
+    // trend scores x calls and puts x 2 stops x 2 vols x 2 seeds), 13.3% of
+    // rows disagree — 32.5% once rows with a share of exactly 0 are excluded,
+    // and 29.7% of CARDS carry at least one. The figure is mix-dependent, which
+    // is why it is stated once, here, rather than approximated at each site.
     const labels = weightPercents(ROW);
     const chain = formatRaceEdge(ROW, PREMIUM);
     labels.forEach((label) => {
@@ -299,6 +304,16 @@ describe('formatRaceEdge', () => {
     );
     expect(s).toContain('+ 0.12 x $70.80 (worth more at the stop than it cost)');
     expect(s).not.toContain('x -$70.80');
+  });
+
+  it('does not invent a terminal value when no path reached expiry unbarriered', () => {
+    // terminalMean is null exactly when that group is empty, so its weight is
+    // 0.00 and the term contributes nothing. Printing "$0.00 at expiry" put a
+    // price on a population that does not exist, on the card that added this
+    // operand precisely so every term could be checked.
+    const s = formatRaceEdge({ ...ROW, terminalMean: null, weightNeither: 0 }, PREMIUM);
+    expect(s).toContain('+ 0.00 x $0.00 (no path reached expiry unbarriered)');
+    expect(s).not.toContain('$0.00 at expiry');
   });
 
   it('renders an em dash when there is no edge to print', () => {

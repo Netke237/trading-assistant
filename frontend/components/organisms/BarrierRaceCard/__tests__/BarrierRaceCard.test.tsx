@@ -317,6 +317,30 @@ describe('the numbers the card promises', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('keeps the stock-stop probability on screen, naming the stop it belongs to, when the STOCK stop moved', () => {
+    // Spec 3.4 moves the invalidation row onto this card, "not a deletion".
+    // Suppressing it whenever the stock stop moved deleted it: the three
+    // per-target probabilities that can sum past 100% stay on screen above with
+    // nothing left to explain why. It is printed with the level it was measured
+    // against, which is the fact that makes it stale.
+    renderCard({
+      barriersChanged: true,
+      stockStopMoved: true,
+      invalidation: { probability: 0.30, expectedDays: 4 },
+    });
+    expect(screen.getByText(/30% of paths touched the stock stop/)).toBeInTheDocument();
+    expect(screen.getByText(/\$176\.00 stop this estimate used/)).toBeInTheDocument();
+    // ...and it does NOT claim the premium stop is what changed.
+    expect(screen.queryByText(/unaffected by the premium stop/)).not.toBeInTheDocument();
+  });
+
+  it('prints a half-integer median the same way the risk chain does', () => {
+    // Math.round printed "~3d" for a 2.5 median that the risk chain, three
+    // inches below, calls "2.5d — the median day any path reaches the stop".
+    renderCard({ invalidation: { probability: 0.30, expectedDays: 2.5 } });
+    expect(screen.getByText(/median ~2\.5d/)).toBeInTheDocument();
+  });
+
   it('keeps the stock-stop probability on screen when only the PREMIUM stop moved', () => {
     // The standalone invalidation probability moved onto this card (spec 3.4),
     // and the barriersChanged short-circuit sat above it — so editing the

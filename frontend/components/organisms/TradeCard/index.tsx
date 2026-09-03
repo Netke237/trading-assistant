@@ -1824,6 +1824,15 @@ export function TradeCard({
                at a Barrier Race card that renders null — and in every race-less
                state it described a move that had not happened, since the
                invalidation row is only over there when the race is. */}
+          {firstPassage && (
+            <Text size={10} tone="caution">
+              &quot;Stock price&quot; above is back-solved at this contract&apos;s resolved holding
+              horizon; the Fixed % Ladder below still back-solves its target prices at half the
+              contract&apos;s life, so the two answer the same question differently — about $2.40
+              apart on a 30-day contract and $10 or more on a one-year one. The ladder is the one
+              that has not moved yet.
+            </Text>
+          )}
           {firstPassage && raceIsShowable && (
             <Text size={10} tone="dim">
               Each probability above is measured on its own, so they can sum past 100% — a path that
