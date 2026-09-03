@@ -169,6 +169,28 @@ def test_remaining_years_at_barrier_inverts_elapsed_days_not_theta():
     assert remaining_years_at_barrier(float("nan"), 7) > 0
 
 
+def test_the_min_days_floor_applies_to_a_derived_Custom_value_too():
+    """The fallback branch's floor was never exercised: the only fallback case
+    the floor test used (Intraday at dte=1) gives 0.75 with or without it, and
+    its other assertions hit the sim-median floor instead. A Custom hold of
+    1-1 days derives 0.5, which the floor must lift to 1."""
+    cfg = load_reprice_horizon_cfg()
+    assert cfg["clamp"]["min_days"] == 1
+    assert resolve_reprice_days("Custom", 1.0, 1.0, dte=60, sim_median=None) == 1.0
+    # Unfloored it would be (1 + 1) / 2 * 0.5 = 0.5.
+    assert resolve_reprice_days("Custom", 1.0, 1.0, dte=60, sim_median=None) > 0.5
+
+
+def test_custom_with_a_typed_zero_range_falls_back_rather_than_deriving_zero():
+    """Reachable, not theoretical: HORIZON_PRESETS' Intraday row carries
+    holdMin 0, so a 0-0 range does arrive here. The existing Custom test covers
+    None/None and one-end-typed, never (0, 0) — the case the branch names."""
+    assert resolve_reprice_days("Custom", 0.0, 0.0, dte=60, sim_median=None) == 7.0
+    # Without the guard this derives 0, then the floor lifts it to 1 — a made-up
+    # answer dressed as a derived one.
+    assert resolve_reprice_days("Custom", 0.0, 0.0, dte=60, sim_median=None) != 1.0
+
+
 def test_an_unknown_dte_does_not_collapse_the_answer_to_the_floor():
     """dte <= 0 or non-finite means "unknown", not "expires immediately".
     Collapsing to min_days there would be a worse answer than the preset's."""

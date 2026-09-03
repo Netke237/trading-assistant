@@ -163,6 +163,13 @@ def _latest_barrier_day(dte: float) -> float:
         # it. Taking a min() of the two instead would cap EVERY median at half
         # the DTE — reintroducing the fixed half-life this module exists to
         # replace, on every contract rather than the sub-1-day ones.
+        #
+        # UNREACHABLE TODAY, and kept anyway so the rule is total. The only
+        # caller of _latest_barrier_day is the sim_median branch, and the only
+        # way to have a sim_median is to have run the simulation, which
+        # estimate_first_passage refuses below dte 1. An earlier version of this
+        # comment claimed Stage 1 reached it — Stage 1 passes sim_median=None
+        # and takes the fallback branch, which never calls this.
         latest = float(dte) * 0.5
     return latest
 

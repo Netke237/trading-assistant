@@ -435,6 +435,50 @@ def test_the_premium_barrier_and_its_risk_leg_come_off_the_same_premium():
             race.outcomes[0].risk_premium_stop
 
 
+def test_the_edge_uses_the_same_terminal_mean_the_wire_ships():
+    """The fourth edge term is weighted with `round(terminal_mean, 2)`, and the
+    wire ships that same rounded value — so the card's printed operand is the
+    one the total was computed from. Weighting it with the raw value instead
+    left every test green: the chain assertion rounds BOTH sides to 2dp, and
+    the difference is under half a cent per share, so it cannot see it.
+
+    Asserted on a contract where the two genuinely differ: at 60 DTE with a
+    $9.83 premium the T50% edge is -$440 with the rounded value and -$439
+    without, a whole dollar per contract."""
+    o = _run(dte=60, premium=9.83).race.outcomes[2]
+    assert o.terminal_mean is not None and o.risk_stock_stop is not None
+    prem_c = round(9.83, 2)
+
+    def edge_from(terminal: float) -> float:
+        neither = terminal - prem_c
+        return round(round(
+            o.weight_target * o.reward_dollar
+            - o.weight_stock_stop * o.risk_stock_stop
+            - o.weight_premium_stop * o.risk_premium_stop
+            + o.weight_neither * neither, 2) * 100, 2)
+
+    assert o.edge_per_contract == edge_from(round(o.terminal_mean, 2))
+    # And the fixture is genuinely capable of failing: the raw value differs.
+    assert edge_from(o.terminal_mean) != o.edge_per_contract
+
+
+def test_the_stock_stop_barrier_is_quantized_before_the_paths_are_tested_against_it():
+    """The card echoes this level "for auditability", so the level echoed must
+    be the level the 2000 paths were actually compared against. Every fixture
+    used a whole-cent stop, so removing the quantization changed nothing and the
+    guard was untested."""
+    race = _run(invalidation_price=176.004).race
+    assert race is not None
+    assert race.stock_stop_price == 176.0
+    deeper = _run(invalidation_price=176.006).race
+    assert deeper is not None
+    assert deeper.stock_stop_price == 176.01
+    # And the echo is exactly what a path was tested against: a stop just under
+    # half a cent below a level yields the identical attribution.
+    assert [o.p_stock_stop_first for o in race.outcomes] == \
+        [o.p_stock_stop_first for o in _run(invalidation_price=176.0).race.outcomes]
+
+
 def test_the_allocation_gives_the_leftover_hundredths_to_the_biggest_remainders():
     """_allocated_weights' docstring names largest-remainder specifically.
     Flipping the sort to smallest-remainder-first still sums to 1.00 and is

@@ -146,8 +146,10 @@ describe('weightPercents', () => {
   it('is the SAME four numbers the edge chain prints', () => {
     // The point of taking these from the backend. A largest-remainder
     // allocation done here fixed the row sum but left the chain below printing
-    // an independently-rounded multiplier for the same outcome on ~48% of real
-    // rows — the table reading "Neither 49%" beside a chain reading "+ 0.48 x".
+    // an independently-rounded multiplier for the same outcome — the table
+    // reading "Neither 49%" beside a chain reading "+ 0.48 x". Measured on real
+    // output it runs from ~9% of all rows to ~28% once degenerate rows (a share
+    // of exactly 0) are excluded, and ~18% of CARDS have at least one such row.
     const labels = weightPercents(ROW);
     const chain = formatRaceEdge(ROW, PREMIUM);
     labels.forEach((label) => {
@@ -263,16 +265,28 @@ describe('premiumStopSourceNote', () => {
 });
 
 describe('formatRaceEdge', () => {
+  it('spells out the fourth operand, which appears nowhere else on the card', () => {
+    // Every other number in the chain is derivable from something else on
+    // screen. terminalMean is not rendered anywhere, so "+ 0.04 x -$1.56" was
+    // the one term a user could not check — on the card whose premise is that
+    // they can check all of them, and the one term the copy below it goes out
+    // of its way to explain the sign of.
+    expect(formatRaceEdge(ROW, PREMIUM)).toContain('($3.64 at expiry - $5.20)');
+    expect(formatRaceEdge(ROW, PREMIUM)).not.toContain('x -$1.56');
+  });
+
   it('prints all four signed contributions, per share and per contract', () => {
     expect(formatRaceEdge(ROW, PREMIUM)).toBe(
-      '0.27 x $1.04 - 0.00 x $5.17 - 0.69 x $3.12 + 0.04 x -$1.56 = -$1.93  ->  -$193.00 per contract',
+      '0.27 x $1.04 - 0.00 x $5.17 - 0.69 x $3.12 + 0.04 x ($3.64 at expiry - $5.20)'
+      + ' = -$1.93  ->  -$193.00 per contract',
     );
   });
 
   it('keeps the fourth term positive when those paths end above the premium paid', () => {
     // Signed, not a loss. Writing it as "- p x loss" would be wrong here.
     const s = formatRaceEdge({ ...ROW, terminalMean: 8.00 }, PREMIUM);
-    expect(s).toContain('+ 0.04 x $2.80');
+    // Spelled out, so the operand is derivable: $8.00 at expiry - $5.20 paid.
+    expect(s).toContain('+ 0.04 x ($8.00 at expiry - $5.20)');
   });
 
   it('prints a negative stock-stop risk leg as the gain it is, and says why', () => {

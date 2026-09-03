@@ -182,7 +182,6 @@ export function formatRacePremiumRR(o: BarrierRaceOutcome): string {
  */
 export function formatRaceEdge(o: BarrierRaceOutcome, premium: number): string {
   if (o.edgePerContract == null || o.riskStockStop == null) return '—';
-  const neither = o.terminalMean == null ? 0 : o.terminalMean - premium;
   const perShare = o.edgePerContract / 100;
   // A NEGATIVE stock-stop risk leg is a real state, not an error: on a deep-ITM
   // contract with a tight stop the option can still be worth more at the stop
@@ -197,7 +196,14 @@ export function formatRaceEdge(o: BarrierRaceOutcome, premium: number): string {
     `${o.weightTargetFirst.toFixed(2)} x ${money(o.rewardDollar)}` +
     stopTerm +
     ` - ${o.weightPremiumStopFirst.toFixed(2)} x ${money(o.riskPremiumStop)}` +
-    ` + ${o.weightNeither.toFixed(2)} x ${money(neither)}` +
+    // The fourth operand spelled out. Every other number in this chain is
+    // derivable from something else on screen — $1.04 is the printed target
+    // price minus the printed premium, $3.12 is the premium minus the printed
+    // barrier, $5.17 has its own printed chain. `neither` is terminalMean minus
+    // the premium, and terminalMean appears nowhere else on the card, so the
+    // one term the card goes out of its way to explain the SIGN of was the one
+    // term a user could not check.
+    ` + ${o.weightNeither.toFixed(2)} x (${money(o.terminalMean ?? 0)} at expiry - ${money(premium)})` +
     ` = ${money(perShare)}  ->  ${money(o.edgePerContract)} per contract`
   );
 }

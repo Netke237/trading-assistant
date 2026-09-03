@@ -2090,37 +2090,49 @@ const RACE_RESPONSE = {
   invalidation: { probability: 0.30, expectedDays: 4 },
   // Genuine `estimate_first_passage` output for this card's own inputs
   // (186.1 spot / 190 strike / 24 DTE / $2.75 premium / stop 180 /
-  // premium_stop_pct 1.5/2.75, seed 7). The previous fixture was hand-written
-  // and internally inconsistent: its `weight*` values could not be produced by
-  // the backend's allocation of its own shares (so the bar and the label
-  // disagreed within the fixture), and its `edgePerContract` of -111.42 is
-  // unreachable, since every edge is a whole number of dollars by construction.
+  // premium_stop_pct 1.5/2.75, seed 7) — all THREE rows, re-derived.
+  //
+  // It carried that same label while mapping one row's body over all three
+  // targets, so every row showed the $3.30 option price and $0.55 reward of
+  // T20% — contradicting the same response's own `targets` array (3.30 / 3.71 /
+  // 4.12) and making a per-target collapse, the exact failure "one row per
+  // target" guards against, invisible to every test in this file.
   race: {
-    outcomes: [0.20, 0.35, 0.50].map((targetPct) => ({
-      targetPct,
-      targetOptionPrice: 3.3,
-      pTargetFirst: 0.5495,
-      pStockStopFirst: 0.0,
-      pPremiumStopFirst: 0.4415,
-      pNeither: 0.009,
-      daysTarget: 4,
-      daysStockStop: null,
-      daysPremiumStop: 11,
-      daysAnyPathReachedStop: 17,
-      weightTargetFirst: 0.55,
-      weightStockStopFirst: 0.0,
-      weightPremiumStopFirst: 0.44,
-      weightNeither: 0.01,
-      terminalMean: 2.41,
-      rewardDollar: 0.55,
-      repriceDaysStockStop: 17,
-      stopRepricedValue: 0.09,
-      riskStockStop: 2.66,
-      riskPremiumStop: 1.5,
-      rrStockStop: 0.2067669172932331,
-      rrPremiumStop: 0.3666666666666667,
-      edgePerContract: -36.0,
-    })),
+    outcomes: [
+      {
+        targetPct: 0.20, targetOptionPrice: 3.30,
+        pTargetFirst: 0.5495, pStockStopFirst: 0.0, pPremiumStopFirst: 0.4415, pNeither: 0.009,
+        daysTarget: 4, daysStockStop: null, daysPremiumStop: 11, daysAnyPathReachedStop: 17,
+        weightTargetFirst: 0.55, weightStockStopFirst: 0.0,
+        weightPremiumStopFirst: 0.44, weightNeither: 0.01,
+        terminalMean: 2.41, rewardDollar: 0.55, repriceDaysStockStop: 17,
+        stopRepricedValue: 0.09, riskStockStop: 2.66, riskPremiumStop: 1.5,
+        rrStockStop: 0.2067669172932331, rrPremiumStop: 0.3666666666666667,
+        edgePerContract: -36.0,
+      },
+      {
+        targetPct: 0.35, targetOptionPrice: 3.71,
+        pTargetFirst: 0.427, pStockStopFirst: 0.0, pPremiumStopFirst: 0.55, pNeither: 0.023,
+        daysTarget: 7, daysStockStop: null, daysPremiumStop: 12, daysAnyPathReachedStop: 17,
+        weightTargetFirst: 0.43, weightStockStopFirst: 0.0,
+        weightPremiumStopFirst: 0.55, weightNeither: 0.02,
+        terminalMean: 2.51, rewardDollar: 0.96, repriceDaysStockStop: 17,
+        stopRepricedValue: 0.09, riskStockStop: 2.66, riskPremiumStop: 1.5,
+        rrStockStop: 0.3609022556390977, rrPremiumStop: 0.6416666666666667,
+        edgePerContract: -42.0,
+      },
+      {
+        targetPct: 0.50, targetOptionPrice: 4.12,
+        pTargetFirst: 0.3355, pStockStopFirst: 0.0, pPremiumStopFirst: 0.616, pNeither: 0.0485,
+        daysTarget: 9, daysStockStop: null, daysPremiumStop: 13, daysAnyPathReachedStop: 17,
+        weightTargetFirst: 0.33, weightStockStopFirst: 0.0,
+        weightPremiumStopFirst: 0.62, weightNeither: 0.05,
+        terminalMean: 2.69, rewardDollar: 1.37, repriceDaysStockStop: 17,
+        stopRepricedValue: 0.09, riskStockStop: 2.66, riskPremiumStop: 1.5,
+        rrStockStop: 0.5150375939849624, rrPremiumStop: 0.9166666666666667,
+        edgePerContract: -48.0,
+      },
+    ],
     premiumStopPrice: 1.25,
     premiumStopPct: 1.5 / 2.75,
     stockStopPrice: 180.0,
@@ -2492,5 +2504,128 @@ describe('a request that never settles', () => {
       });
     });
     expect(screen.queryByText(/Couldn.t check structure/)).not.toBeInTheDocument();
+  });
+});
+
+// -- Round 6: gates that were described at length and pinned by nothing -------
+//
+// Five mutations survived the entire suite. Each of these kills one.
+
+describe('the race gates, mutation-pinned', () => {
+  beforeEach(() => {
+    // This file does not clear mocks between tests (see jest.config.ts), and a
+    // describe above installs persistent never-settling implementations and
+    // fake timers. Reset both here rather than depend on execution order.
+    jest.useRealTimers();
+    // The ladder's collapsed state persists to localStorage, so expandLadder()
+    // is a no-op if a previous test in this describe already expanded it.
+    window.localStorage.clear();
+    (api.getStockQuote as jest.Mock).mockReset();
+    (api.getContractQuote as jest.Mock).mockReset();
+    (api.getStructuralStop as jest.Mock).mockReset();
+    (api.getFirstPassageEstimate as jest.Mock).mockReset();
+    (api.getExitPlan as jest.Mock).mockReset();
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getStructuralStop as jest.Mock).mockResolvedValue({
+      available: true, price: 180.0, source: 'order_block', confidence: 75, distancePct: 3.3,
+    });
+  });
+
+  it('drops the "expires today" refusal when the contract changes', async () => {
+    // `race: null` is the backend refusing to simulate a 0-DTE contract. The
+    // card renders that copy before any freshness check, so an un-gated
+    // `race={firstPassage?.race}` put "Not simulated — contract expires today"
+    // under the NEXT contract's header for the frame between the switch and the
+    // reset effect. The gate was added with a comment and no test.
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue({
+      ...RACE_RESPONSE, race: null,
+    });
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+    expect(screen.getByText(/Not simulated/)).toBeInTheDocument();
+
+    rerender(
+      <TradeCard data={{ ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT 300C 06/19' }} />,
+    );
+    expect(screen.queryByText(/Not simulated/)).not.toBeInTheDocument();
+  });
+
+  it('stops printing race numbers in the Final Recommendation once a barrier moves', async () => {
+    // raceIsShowable = raceIsFresh && !raceBarriersMoved. Dropping the second
+    // term left every test green, because the card has its own
+    // barriers-changed branch and the Final Recommendation does not.
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue(RACE_RESPONSE);
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+    expect(screen.getByText(/Armed stop/)).toBeInTheDocument();
+
+    expandLadder();
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Edit Premium stop'));
+    });
+    const input = screen.getByDisplayValue('1.5');
+    await act(async () => {
+      fireEvent.change(input, { target: { value: '0.90' } });
+      fireEvent.blur(input);
+    });
+
+    expect(screen.queryByText(/Armed stop/)).not.toBeInTheDocument();
+    expect(screen.getByText('Invalidation probability')).toBeInTheDocument();
+  });
+
+  it('credits the default, not the field, when the field could not set the barrier', async () => {
+    // premiumStopFromField is snapshotted at REQUEST time from the premium the
+    // request used. Hard-coding it true made the card claim the editable field
+    // set a barrier the backend had actually defaulted.
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      // A premium BELOW the $1.50 dollar stop, so the fraction is >= 1 and
+      // nothing is sent.
+      price: 1.20, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue(RACE_RESPONSE);
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+
+    expect(api.getFirstPassageEstimate).toHaveBeenCalledWith(
+      expect.objectContaining({ premium_stop_pct: undefined }),
+      expect.any(AbortSignal),
+    );
+    expect(screen.getByText(/the default/)).toBeInTheDocument();
+    expect(screen.queryByText(/from the editable field above/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the stock-stop probability only when the STOCK stop is the one that held', async () => {
+    // "The stock-stop probability is unaffected by the premium stop" is only
+    // true when the premium stop is what moved. One boolean for both barriers
+    // printed it after a Check-structure click too, quoting a probability
+    // measured against a level no longer shown anywhere.
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue(RACE_RESPONSE);
+    render(<TradeCard data={mockTradeCard} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getAllByTestId('segment-Target first')).toHaveLength(3);
+    });
+
+    // Move the STOCK stop, by checking structure again at a different level.
+    (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
+      available: true, price: 170.0, source: 'swing_low', confidence: 60, distancePct: 8.6,
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
+    });
+
+    expect(screen.getByText(/Barriers changed/)).toBeInTheDocument();
+    expect(screen.queryByText(/unaffected by the premium stop/)).not.toBeInTheDocument();
   });
 });

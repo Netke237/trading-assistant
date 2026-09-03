@@ -34,6 +34,10 @@ export interface BarrierRaceCardProps {
    *  not recomputed: its bars were measured against a stop the user has since
    *  moved, and re-running is a click, not something that happens on its own. */
   barriersChanged?: boolean;
+  /** True when the STOCK stop specifically is the barrier that moved. The
+   *  standalone invalidation probability below is a property of that stop, so
+   *  it survives a moved PREMIUM stop and must not survive this one. */
+  stockStopMoved?: boolean;
   /** The stock stop's STANDALONE measure — "did any path ever reach it",
    *  ignoring whether the premium stop fired first. It moved here from the
    *  Monte Carlo card because this is where the comparison is legible: shown
@@ -84,6 +88,7 @@ export default function BarrierRaceCard({
   premiumStopField,
   isFresh,
   barriersChanged = false,
+  stockStopMoved = false,
   invalidation = null,
 }: BarrierRaceCardProps) {
   if (race === null) {
@@ -126,7 +131,12 @@ export default function BarrierRaceCard({
             moved, which cannot affect "did any path ever touch the stock
             stop". It survives here: it is a property of the stock stop and the
             simulation, not of the attribution the moved barrier invalidated. */}
-        {invalidation && (
+        {/* Only when the STOCK stop is the barrier that stayed put. With one
+             boolean for both, this rendered after a Check-structure or
+             Arithmetic-Plan click too — quoting a probability measured against
+             a level that is no longer shown anywhere on the card, under copy
+             asserting it was unaffected. */}
+        {invalidation && !stockStopMoved && (
           <Text size={10} tone="dim">
             The stock-stop probability is unaffected by the premium stop:{' '}
             {(invalidation.probability * 100).toFixed(0)}% of paths touch the stock stop at some
@@ -318,8 +328,12 @@ export default function BarrierRaceCard({
           Only the first ratio is a measurement. Its risk leg is the premium minus what the
           contract would still be worth at the stock stop, which depends on strike, spot, time and
           IV independently — so it genuinely differs between contracts. The greyed one divides two
-          numbers that are both a fixed fraction of premium, so premium cancels and it reduces to
-          your target % over your stop %. It is the same on every contract you could pick.
+          numbers that are both a fixed fraction of premium, so premium cancels out of it
+          entirely and nothing about this contract survives into the result. It is the same on
+          every contract you could pick, which is why it is greyed. Deliberately not written as a
+          division of the two percentages shown above: both are rounded for display while the stop
+          fraction is an arbitrary number, so working it out from them disagrees with the printed
+          ratio on roughly two rows in five.
         </Text>
       </div>
 

@@ -824,7 +824,7 @@ export function TradeCard({
           stock_price: referenceStockPrice,
         }, structuralController.signal)
           .then((res) => {
-            if (structuralController.signal.aborted) return;
+            if (isFinished(structuralController)) return;
             const normalized = normalizeStructuralStopResponse(res);
             resolvedStructural = normalized;
             setStructuralStop(normalized);
@@ -870,7 +870,16 @@ export function TradeCard({
             clearTimeout(structuralDeadline.timer);
             if (isRealFailure(structuralController, structuralDeadline)) setStructuralLoading(false);
           });
-        if (controller.signal.aborted) return;
+        // The chain above is .then().catch().finally(), so awaiting it can
+        // never reject — which is exactly the condition that makes a bare
+        // `if (aborted) return` wrong here. This runs on the first Estimate
+        // click of every mount, so a hung structural fetch killed the estimate
+        // silently: no error copy, and firstPassage left at `undefined`, which
+        // the parent's cache reads as "in flight, don't touch".
+        if (isFinished(controller)) {
+          if (deadline.timedOut) failFirstPassage();
+          return;
+        }
       }
 
       // `sharedStop`'s own precedence, re-derived from what THIS click actually
@@ -1143,18 +1152,6 @@ export function TradeCard({
     setOverlay((prev) => ({ ...prev, contracts: initialContracts }));
   }, [initialContracts]);
 
-  // Unmount cleanup. Four AbortControllers and their 20-second deadlines were
-  // only ever cancelled by the CONTRACT-CHANGE effect, so navigating away from
-  // the card entirely left a timer alive to fire an abort — and its rejection
-  // handler — against an unmounted tree. React 18 makes those setState calls
-  // no-ops, so there is no user-visible bug, but the escape is real and it is
-  // what the suite's act() warning points at. Deliberately `[]`: this runs on
-  // unmount only, never between renders.
-  useEffect(() => () => {
-    structuralRequestRef.current?.abort();
-    firstPassageRequestRef.current?.abort();
-    exitPlanRequestRef.current?.abort();
-  }, []);
 
   // Direct-call pattern (see `onEditsChange`'s own doc comment) — same shape
   // as `applyMaxLossOverride` below: setOverlay and onEditsChange are two
@@ -1229,14 +1226,21 @@ export function TradeCard({
   // measured against that stop, and re-running the simulation is the only way
   // to get honest ones. Editing the premium stop and watching the bars re-sort
   // must require a click; it must never appear to update on its own.
+  // WHICH barrier moved, not just whether one did. The card prints "the
+  // stock-stop probability is unaffected by the premium stop" in its
+  // barriers-changed state, and that sentence is only true when the STOCK stop
+  // is the one that stayed put. With a single boolean it was rendered after a
+  // Check-structure or Arithmetic-Plan click too, quoting a probability
+  // measured against a level that is no longer on screen anywhere.
+  const stockStopMoved = useMemo(() => {
+    if (raceBarriers == null || firstPassage?.race == null) return false;
+    return (sharedStop?.price ?? data.exit.invalidation) !== raceBarriers.stockStop;
+  }, [raceBarriers, firstPassage, sharedStop, data.exit.invalidation]);
+
   const raceBarriersMoved = useMemo(() => {
     if (raceBarriers == null || firstPassage?.race == null) return false;
-    const currentStockStop = sharedStop?.price ?? data.exit.invalidation;
-    return (
-      currentStockStop !== raceBarriers.stockStop
-      || overlay.premiumStop !== raceBarriers.premiumStop
-    );
-  }, [raceBarriers, firstPassage, sharedStop, data.exit.invalidation, overlay.premiumStop]);
+    return stockStopMoved || overlay.premiumStop !== raceBarriers.premiumStop;
+  }, [raceBarriers, firstPassage, stockStopMoved, overlay.premiumStop]);
 
   // THE single gate on showing race numbers anywhere. It was previously spelled
   // out inline for BarrierRaceCard and simply omitted from the Final
@@ -1855,6 +1859,7 @@ export function TradeCard({
           // Final Recommendation did not.
           isFresh={raceIsFresh}
           barriersChanged={raceBarriersMoved}
+          stockStopMoved={stockStopMoved}
         />
 
         {/* Fixed % Ladder Plan (Feature 1) — collapsible group containing, in

@@ -166,7 +166,9 @@ describe('the printed arithmetic', () => {
   it('prints the edge chain with all four signed contributions', () => {
     renderCard();
     expect(
-      screen.getByText(/0\.27 x \$1\.04 - 0\.00 x \$5\.17 - 0\.69 x \$3\.12 \+ 0\.04 x -\$1\.56/),
+      screen.getByText(
+        /0\.27 x \$1\.04 - 0\.00 x \$5\.17 - 0\.69 x \$3\.12 \+ 0\.04 x \(\$3\.64 at expiry - \$5\.20\)/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -369,7 +371,7 @@ describe('the numbers the card promises', () => {
         // 0.27x1.04 - 0.00x5.17 - 0.69x3.12 + 0.04x-1.56 is -1.9296, printed as
         // -$1.93. The fixture used to carry -193.28 while the assertion checked
         // only the four terms, so the total went unchecked.
-        /0\.27 x \$1\.04 - 0\.00 x \$5\.17 - 0\.69 x \$3\.12 \+ 0\.04 x -\$1\.56 = -\$1\.93\s+->\s+-\$193\.00 per contract/,
+        /0\.27 x \$1\.04 - 0\.00 x \$5\.17 - 0\.69 x \$3\.12 \+ 0\.04 x \(\$3\.64 at expiry - \$5\.20\) = -\$1\.93\s+->\s+-\$193\.00 per contract/,
       ).length,
     ).toBeGreaterThan(0);
   });

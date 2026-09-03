@@ -81,7 +81,12 @@ def _bs_reprice_or_delta_approx(
 # back-solved at `dte - resolve_reprice_days(...)` while the Fixed % Ladder's
 # target prices are still back-solved at `expiry_years * 0.5` — two answers to
 # the same question, a few inches apart: $189.28 against $191.70 on a 30-DTE
-# contract ($2.43), and $186.51 against $191.35 on a LEAP ($4.84).
+# contract ($2.43), and $191.25 against $201.47 on a one-year contract at a
+# realistic 22% IV ($10.22, rising to $13.05 at 31%). An earlier version of this
+# note quoted $4.84 for the LEAP, which only reproduces at the reference
+# contract's $5.20 premium — a 3.4% implied vol on a one-year 190 call over a
+# $185 stock, i.e. a contract that cannot exist. The hazard is ~3x what that
+# said.
 #
 # Deliberately not fixed here: wiring it changes numbers on the Fixed % Ladder,
 # a card outside the barrier race's remit, and rewrites ~30 tests in
