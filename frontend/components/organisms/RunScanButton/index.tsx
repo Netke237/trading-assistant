@@ -132,6 +132,10 @@ export function RunScanButton() {
 
     const requestBody = buildOptionsScanRequestBody({
       universe, direction, horizon,
+      // The uncollapsed preset key travels alongside the scoring horizon, not
+      // instead of it — the repricing table is keyed on this one. Same value
+      // the trade card sends to /first-passage as horizon_preset.
+      horizonPreset: presetKey,
       holdMinDays: holdMin, holdMaxDays: holdMax,
       minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw, capUnit,
       scanOverrides,

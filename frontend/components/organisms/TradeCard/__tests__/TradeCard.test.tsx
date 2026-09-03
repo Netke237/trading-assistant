@@ -399,6 +399,16 @@ describe('TradeCard', () => {
     // Feature 8's Final Recommendation still shows the standalone
     // probability when no race came back with the estimate.
     expect(screen.getAllByText('30%').length).toBeGreaterThanOrEqual(1);
+    // The round-7 caution note must NOT be here. It said the Fixed % Ladder
+    // still back-solved at half the contract's life while "Stock price" above
+    // used the resolved holding horizon. Both now call the same resolver
+    // (reprice_horizon.display_reprice_years), so that disagreement no longer
+    // exists and re-showing the note would tell a trader to discount two
+    // numbers that agree. This assertion is deliberately on the WORDING rather
+    // than a test id: the note had none, and the failure mode being guarded is
+    // someone reinstating the prose, not a component reappearing.
+    expect(screen.queryByText(/still back-solves/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/half the contract/i)).not.toBeInTheDocument();
     // Purely additive: the premium-based invalidation must be untouched.
     expandLadder();
     expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');

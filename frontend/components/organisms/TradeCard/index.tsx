@@ -20,6 +20,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { useStopPremiumThresholdsStore, getStopPremiumThresholds } from '@/lib/stopPremiumThresholdsStore';
 import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
 import { premiumStopPctFromDollars, money } from '@/lib/barrierRace';
+import { horizonFieldsFrom } from '@/lib/tradeCardOverride';
 import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride } from '@/types/domain';
 import {
   triggerDetailText,
@@ -938,9 +939,16 @@ export function TradeCard({
         // risk_rules.yaml's premium_stop_pct rather than sending a value the
         // backend would reject.
         premium_stop_pct: sentPremiumStopPct,
-        horizon_preset: horizonPreset ?? undefined,
-        hold_min: holdMin ?? undefined,
-        hold_max: holdMax ?? undefined,
+        // Same three fields, same helper, as the recomputePlan calls behind the
+        // Fixed % Ladder (step-7-trade-card/page.tsx). The two cards must
+        // reprice at the same horizon and the backend cannot tell you when they
+        // don't — resolve_reprice_days falls through to Swing on a dict miss
+        // without complaining.
+        ...horizonFieldsFrom({
+          horizonPreset: horizonPreset ?? undefined,
+          holdMin: holdMin ?? undefined,
+          holdMax: holdMax ?? undefined,
+        }),
       }, controller.signal);
       if (isFinished(controller)) {
         if (deadline.timedOut) failFirstPassage();
@@ -1824,15 +1832,19 @@ export function TradeCard({
                at a Barrier Race card that renders null — and in every race-less
                state it described a move that had not happened, since the
                invalidation row is only over there when the race is. */}
-          {firstPassage && (
-            <Text size={10} tone="caution">
-              &quot;Stock price&quot; above is back-solved at this contract&apos;s resolved holding
-              horizon; the Fixed % Ladder below still back-solves its target prices at half the
-              contract&apos;s life, so the two answer the same question differently — about $2.40
-              apart on a 30-day contract and $10 or more on a one-year one. The ladder is the one
-              that has not moved yet.
-            </Text>
-          )}
+          {/* The round-7 caution note that stood here is GONE ON PURPOSE, and
+               must not come back. It said the Fixed % Ladder still back-solved
+               at half the contract's life while "Stock price" above used the
+               resolved holding horizon. Both now call
+               reprice_horizon.display_reprice_years() with the same arguments,
+               so the disagreement it disclosed no longer exists and the note
+               would be a false disclosure — worse than none, because a trader
+               would discount two numbers that actually agree. The agreement is
+               pinned, not assumed: backend/tests/test_reprice_horizon_agreement.py
+               (equal inputs, equal horizon, per preset) and
+               frontend/lib/__tests__/repriceHorizonPayload.test.ts (the two
+               paths send equal inputs). Re-derive from those before writing any
+               note here again. */}
           {firstPassage && raceIsShowable && (
             <Text size={10} tone="dim">
               Each probability above is measured on its own, so they can sum past 100% — a path that

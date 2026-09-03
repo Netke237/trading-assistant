@@ -23,6 +23,16 @@ export interface ResolvedScanContext {
   direction: Direction;
   /** Scoring horizon string, e.g. "Swing" — presetByKey(...).scoringHorizon. */
   horizon: string;
+  /** The HOLDING preset key the trader picked — HorizonKey, e.g. "Annual".
+   *  NOT `horizon` above. That one is collapsed to the three scoring horizons
+   *  the scorer understands, so Quarterly/SemiAnnual/Annual all arrive as
+   *  "Position"; the backend's repricing table is keyed on this one and would
+   *  otherwise give a 200-day hold and a 20-day hold the same repricing time.
+   *  /api/contracts/first-passage takes the same key under the same name — if
+   *  the two ever send different spellings the Monte Carlo card and the Fixed %
+   *  Ladder silently reprice at different horizons (resolve_reprice_days falls
+   *  back to Swing on a dict miss without complaining). */
+  horizonPreset: string;
   holdMinDays: number;
   holdMaxDays: number;
   /** Raw universe filter strings — '' means "not set". */
@@ -43,6 +53,8 @@ export interface OptionsScanRequestBody {
   universe: string[];
   direction: string;
   horizon: string;
+  /** ScanRequest.horizon_preset — the holding preset key, see ResolvedScanContext. */
+  horizon_preset: string;
   overrides: Record<string, number | boolean | string>;
   hold_min_days?: number;
   hold_max_days?: number;
@@ -127,6 +139,7 @@ export function buildOptionsScanRequestBody(ctx: ResolvedScanContext): OptionsSc
     universe: ctx.universe,
     direction: ctx.direction,
     horizon: ctx.horizon,
+    horizon_preset: ctx.horizonPreset,
     ...hold,
     overrides: effectiveOverrides,
     ...filters,

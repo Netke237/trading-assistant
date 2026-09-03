@@ -387,6 +387,13 @@ export const api = {
     rr_bearish_target_pct?: number;
     rr_bullish_invalidation_pct?: number;
     rr_bearish_invalidation_pct?: number;
+    /** Feed the reprice-horizon fallback behind the Fixed % Ladder. Same field,
+     *  same meaning and the same "omitted means Swing" default as
+     *  getFirstPassageEstimate's — a Step-6 contract override must not reprice
+     *  the ladder at a different horizon from the Monte Carlo card beside it. */
+    horizon_preset?: string;
+    hold_min?: number;
+    hold_max?: number;
   }, signal?: AbortSignal) =>
     post<{
       entry: TradeCardData['entry'];

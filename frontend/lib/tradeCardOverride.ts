@@ -134,6 +134,30 @@ export function rrOverridesFrom(
   return out;
 }
 
+/** The repricing-horizon fields every trade-card backend call must carry.
+ *
+ *  Three call sites send them today — the two recomputePlan effects in
+ *  step-7-trade-card and TradeCard's own getFirstPassageEstimate — and they must
+ *  agree, because the backend's fallback table is a dict keyed by exact string
+ *  that falls through to Swing's 7 days on a miss WITHOUT complaining. A site
+ *  that sends the collapsed scoring horizon, or omits the preset while another
+ *  sends it, does not error: it silently reprices the Fixed % Ladder at a
+ *  different horizon from the Monte Carlo card directly above it. One helper so
+ *  there is one spelling.
+ *
+ *  A null context resolves to `{}`, which the backend reads as "Swing" — the
+ *  same default presetByKey() already applies on the frontend. */
+export function horizonFieldsFrom(
+  ctx: { horizonPreset?: string; holdMin?: number; holdMax?: number } | null | undefined,
+): { horizon_preset?: string; hold_min?: number; hold_max?: number } {
+  if (!ctx) return {};
+  const out: { horizon_preset?: string; hold_min?: number; hold_max?: number } = {};
+  if (ctx.horizonPreset != null) out.horizon_preset = ctx.horizonPreset;
+  if (typeof ctx.holdMin === 'number') out.hold_min = ctx.holdMin;
+  if (typeof ctx.holdMax === 'number') out.hold_max = ctx.holdMax;
+  return out;
+}
+
 /** One cached "Estimate" result, keyed by CONTRACT (contractKeyFor) — the
  *  estimate is priced off that contract's premium/strike/dte, so a symbol-level
  *  key would show contract A's numbers on contract B's card. `estimate: null`

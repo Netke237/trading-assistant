@@ -77,6 +77,7 @@ export function resolveProfileToScanRequest(
       universe: resolveUniversePick(profile),
       direction: profile.direction,
       horizon: scoringHz,
+      horizonPreset: profile.horizonPreset,
       holdMinDays: profile.holdMin,
       holdMaxDays: profile.holdMax,
       minPriceRaw: profile.universe.minPriceRaw,

@@ -210,6 +210,65 @@ def test_a_premium_stop_that_rounds_to_zero_dollars_still_yields_the_true_ratio(
     assert o.rr_premium_stop == pytest.approx(0.20 / 0.05)
 
 
+def test_rr_stock_stop_is_reward_over_risk_and_not_the_other_way_up():
+    """THE headline number's orientation, pinned.
+
+    This existed as a coverage hole first and a test second. Inverting line 599
+    of first_passage.py to `risk_stock_stop / reward_dollar` — a fully upside
+    down reward/risk ratio, the figure the card bolds as the measurement —
+    passed the entire backend suite: 1845 passed, 1 skipped, identical to
+    baseline. Every existing assertion about rr_stock_stop was satisfied by the
+    inverted value too: it still varies across strikes, is still None when risk
+    is non-positive, and is still not None when risk is positive. None of them
+    ever divided the two legs and compared.
+
+    So divide them and compare, on a fixture where the two orientations cannot
+    be confused: reward and risk are deliberately far apart, so a ratio and its
+    reciprocal differ by more than any rounding.
+    """
+    race = _run().race
+    assert race is not None
+    checked = 0
+    for o in race.outcomes:
+        if o.risk_stock_stop is None or o.risk_stock_stop <= 0:
+            continue
+        checked += 1
+        assert o.rr_stock_stop == pytest.approx(o.reward_dollar / o.risk_stock_stop)
+        # And not the reciprocal. Guarded so the assertion cannot pass vacuously
+        # on a contract where reward happens to equal risk.
+        reciprocal = o.risk_stock_stop / o.reward_dollar
+        if abs(reciprocal - (o.reward_dollar / o.risk_stock_stop)) > 1e-9:
+            assert o.rr_stock_stop != pytest.approx(reciprocal)
+    assert checked >= 2, "fixture produced too few solvable legs to mean anything"
+
+
+def test_rr_stock_stop_rises_when_reward_rises_and_falls_when_risk_rises():
+    """The same orientation from the other side, in case a future refactor
+    computes the ratio somewhere else entirely.
+
+    Across the three targets of one race, reward_dollar increases (T1 -> T3)
+    while risk_stock_stop is identical — it is a property of the STOP, which the
+    three targets share. So rr_stock_stop must increase monotonically. An
+    inverted ratio decreases, and a ratio computed off the wrong risk leg does
+    neither reliably.
+    """
+    race = _run().race
+    assert race is not None
+    solvable = [o for o in race.outcomes
+                if o.risk_stock_stop is not None and o.risk_stock_stop > 0
+                and o.rr_stock_stop is not None]
+    assert len(solvable) == 3, "all three targets should price on this fixture"
+
+    risks = {round(o.risk_stock_stop, 10) for o in solvable}
+    assert len(risks) == 1, f"the stop leg is shared across targets: {risks}"
+
+    rewards = [o.reward_dollar for o in solvable]
+    ratios = [o.rr_stock_stop for o in solvable]
+    assert rewards == sorted(rewards) and rewards[0] < rewards[-1]
+    assert ratios == sorted(ratios), f"rr_stock_stop fell as reward rose: {ratios}"
+    assert ratios[0] < ratios[-1]
+
+
 # -- 8. The degenerate risk leg -----------------------------------------------
 
 def test_non_positive_stock_stop_risk_yields_no_ratio():
