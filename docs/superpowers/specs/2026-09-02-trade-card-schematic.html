@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trade Card Schematic</title>
+<!-- Saved 2026-09-04 from Claude artifact e8843f48-17f3-406d-98fd-0351408ea3ed
+     https://claude.ai/code/artifact/e8843f48-17f3-406d-98fd-0351408ea3ed
+     Standalone copy: artifact frame-runtime removed, otherwise byte-identical content. -->
+<style>
+:root{color-scheme:light dark}
+body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}
+img{max-width:100%}
+[hidden]:not([hidden=until-found]){display:none!important}
+</style>
+</head>
+<body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --ground:#f5f6f8; --surface:#ffffff; --surface-2:#fafbfc;
+  --border:#e2e6eb; --border-strong:#c9d0d8;
+  --ink:#131820; --ink-2:#4a5563; --dim:#78828f;
+  --accent:#8a5d12; --accent-soft:#f2e9d8;
+  --pass:#2c7a55; --caution:#9d6f16; --reject:#a94436; --neutral:#8b95a1;
+  --rail-keep:#c9d0d8; --rail-new:#8a5d12; --rail-changed:#2f6a8f; --rail-flag:#a94436; --rail-moved:#6b5aa0;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0d1116; --surface:#141a21; --surface-2:#111720;
+    --border:#242d38; --border-strong:#38434f;
+    --ink:#e6ebf1; --ink-2:#b3bcc7; --dim:#828d9a;
+    --accent:#d4a04a; --accent-soft:#2a2318;
+    --pass:#5cb98d; --caution:#d9a441; --reject:#e08072; --neutral:#8b95a1;
+    --rail-keep:#38434f; --rail-new:#d4a04a; --rail-changed:#5c9ec7; --rail-flag:#e08072; --rail-moved:#a493d6;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0d1116; --surface:#141a21; --surface-2:#111720;
+  --border:#242d38; --border-strong:#38434f;
+  --ink:#e6ebf1; --ink-2:#b3bcc7; --dim:#828d9a;
+  --accent:#d4a04a; --accent-soft:#2a2318;
+  --pass:#5cb98d; --caution:#d9a441; --reject:#e08072; --neutral:#8b95a1;
+  --rail-keep:#38434f; --rail-new:#d4a04a; --rail-changed:#5c9ec7; --rail-flag:#e08072; --rail-moved:#a493d6;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.5;
+  -webkit-font-smoothing:antialiased;font-size:14px}
+.wrap{max-width:1000px;margin:0 auto;padding:44px 22px 90px;display:flex;flex-direction:column;gap:34px}
+
+h1{font-size:30px;font-weight:600;letter-spacing:-.02em;margin:0;text-wrap:balance}
+h2{font-size:12px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);
+  margin:0;font-family:var(--mono)}
+.lede{color:var(--ink-2);max-width:66ch;margin:0;font-size:15px}
+.masthead{display:flex;flex-direction:column;gap:12px;border-bottom:1px solid var(--border);padding-bottom:26px}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.09em;text-transform:uppercase;border:1px solid var(--border);background:var(--surface);
+  padding:5px 10px 5px 8px;border-radius:2px;color:var(--ink-2)}
+.dot{width:3px;height:13px;border-radius:1px;flex:none}
+
+/* cards */
+.stack{display:flex;flex-direction:column;gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--rail-keep);
+  border-radius:3px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.card.new{border-left-color:var(--rail-new)}
+.card.changed{border-left-color:var(--rail-changed)}
+.card.flag{border-left-color:var(--rail-flag)}
+.cardhead{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.cardname{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.ord{font-family:var(--mono);font-size:11px;color:var(--dim);margin-right:8px}
+.tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  padding:3px 7px;border-radius:2px;border:1px solid var(--border-strong);color:var(--ink-2);white-space:nowrap}
+.tag.new{color:var(--accent);border-color:var(--accent)}
+.tag.changed{color:var(--rail-changed);border-color:var(--rail-changed)}
+.tag.flag{color:var(--reject);border-color:var(--reject)}
+.tag.moved{color:var(--rail-moved);border-color:var(--rail-moved)}
+
+/* field grid — mirrors the app's KV / DetailCell layout */
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:1px;
+  background:var(--border);border:1px solid var(--border);border-radius:2px;overflow:hidden}
+.f{background:var(--surface-2);padding:8px 10px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.f .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.f .v{font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink);
+  overflow-wrap:anywhere}
+.f.added{background:var(--accent-soft)}
+.f.added .k{color:var(--accent)}
+.f.struck .k,.f.struck .v{text-decoration:line-through;color:var(--dim);text-decoration-thickness:1px}
+
+/* sub-blocks inside a card */
+.block{border:1px solid var(--border);border-radius:2px;padding:11px 12px;display:flex;
+  flex-direction:column;gap:9px;background:var(--surface-2)}
+.blockhead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.blocktitle{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+.btn{display:inline-block;font-family:var(--sans);font-size:12px;font-weight:500;border:1px solid var(--border-strong);
+  border-radius:2px;padding:5px 11px;color:var(--ink-2);background:var(--surface);align-self:flex-start}
+
+/* explanation text — matches <Text size={10} tone="dim"> on the real cards */
+.expl{font-size:11.5px;color:var(--dim);max-width:78ch;margin:0}
+.expl.keep{border-left:2px solid var(--border-strong);padding-left:9px}
+.expl.newtext{border-left:2px solid var(--accent);padding-left:9px}
+.expl.warn{color:var(--caution)}
+
+/* status badge, as the app renders it */
+.badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.09em;text-transform:uppercase;padding:3px 8px;border-radius:2px;border:1px solid}
+.badge.pass{color:var(--pass);border-color:var(--pass);background:color-mix(in srgb,var(--pass) 10%,transparent)}
+.badge.caution{color:var(--caution);border-color:var(--caution);background:color-mix(in srgb,var(--caution) 10%,transparent)}
+
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+.scroll{overflow-x:auto;border:1px solid var(--border);border-radius:2px}
+th{text-align:left;font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--dim);font-weight:500;padding:8px 11px;background:var(--surface-2);
+  border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:8px 11px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:none}
+td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+td.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+td strong{color:var(--ink);font-weight:600}
+.armed{color:var(--accent);font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+
+/* the race bar */
+.racebar{display:flex;gap:2px;height:34px;width:100%}
+.seg{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;
+  font-weight:600;color:var(--surface);border-radius:2px;min-width:0;overflow:hidden}
+.seg.t{background:var(--pass)} .seg.ps{background:var(--reject)}
+.seg.ss{background:var(--caution)} .seg.n{background:var(--neutral)}
+.racekey{display:flex;flex-wrap:wrap;gap:14px;font-size:11.5px;color:var(--ink-2)}
+.racekey span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:2px;flex:none}
+.minibar{display:flex;gap:2px;height:11px;width:132px;min-width:132px}
+.minibar i{border-radius:1px;display:block}
+.minibar i.t{background:var(--pass)} .minibar i.ps{background:var(--reject)}
+.minibar i.ss{background:var(--caution)} .minibar i.n{background:var(--neutral)}
+
+pre{font-family:var(--mono);font-size:11.5px;line-height:1.65;background:var(--surface-2);
+  border:1px solid var(--border);border-radius:2px;padding:13px 15px;overflow-x:auto;margin:0;color:var(--ink-2)}
+pre b{color:var(--accent);font-weight:600}
+.section{display:flex;flex-direction:column;gap:14px}
+.note{border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:2px;
+  padding:12px 14px;background:var(--surface);font-size:13px;color:var(--ink-2);max-width:76ch}
+.note b{color:var(--ink)}
+a{color:var(--accent)}
+@media (max-width:620px){ .fields{grid-template-columns:repeat(auto-fill,minmax(132px,1fr))} h1{font-size:24px} }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">Step 7 · Options trade card · post Q1–Q11</div>
+  <h1>Trade Card Schematic</h1>
+  <p class="lede">Every card that survives, in render order, with its fields and its on-card explanation
+  text. Nothing here is built yet. Removals are <em>flagged</em>, not applied — each one needs your word
+  before it goes.</p>
+  <div class="legend">
+    <span class="chip"><span class="dot" style="background:var(--rail-keep)"></span>Keep as-is</span>
+    <span class="chip"><span class="dot" style="background:var(--rail-changed)"></span>Changed</span>
+    <span class="chip"><span class="dot" style="background:var(--rail-new)"></span>New</span>
+    <span class="chip"><span class="dot" style="background:var(--rail-moved)"></span>Moved</span>
+    <span class="chip"><span class="dot" style="background:var(--rail-flag)"></span>Flagged for removal — needs your OK</span>
+  </div>
+</header>
+
+<div class="note">
+  <b>Worked example used throughout.</b> The repo's own reference contract:
+  <span style="font-family:var(--mono)">AAPL-like $201.86 stock · 215 C · 45 DTE · premium $5.20 · Δ0.34 · IV 34.5% · stop $185.87</span>.
+  Every figure below is computed from it, not invented.
+</div>
+
+<section class="section">
+  <h2>The card stack</h2>
+
+  <div class="stack">
+
+    <!-- 1 -->
+    <div class="card changed">
+      <div class="cardhead">
+        <div><span class="ord">01</span><span class="cardname">Contract Details</span></div>
+        <span class="tag changed">One field added</span>
+      </div>
+      <div class="fields">
+        <div class="f"><span class="k">Strike</span><span class="v">$215</span></div>
+        <div class="f"><span class="k">Expiry</span><span class="v">2026-10-17</span></div>
+        <div class="f"><span class="k">Right</span><span class="v">Call</span></div>
+        <div class="f"><span class="k">Mid</span><span class="v">$5.20</span></div>
+        <div class="f"><span class="k">Δ</span><span class="v">0.34</span></div>
+        <div class="f"><span class="k">Θ / day</span><span class="v">$0.06</span></div>
+        <div class="f"><span class="k">IV rank</span><span class="v">42</span></div>
+        <div class="f added"><span class="k">IV ← new</span><span class="v">34.5%</span></div>
+        <div class="f"><span class="k">DTE</span><span class="v">45d</span></div>
+        <div class="f"><span class="k">CaR</span><span class="v">$520</span></div>
+      </div>
+      <p class="expl newtext">Why the new field: <b>IV rank</b> is a percentile (where today's vol sits in its own
+      year), not a volatility. The gate's new Black-Scholes basis and the barrier race both need the
+      contract's actual implied vol. It is already computed server-side — it is just never sent.</p>
+    </div>
+
+    <!-- 2 -->
+    <div class="card">
+      <div class="cardhead">
+        <div><span class="ord">02</span><span class="cardname">Order Entry strip</span></div>
+        <span class="tag">Untouched</span>
+      </div>
+      <div class="fields">
+        <div class="f"><span class="k">Order type</span><span class="v">LMT</span></div>
+        <div class="f"><span class="k">Limit</span><span class="v">$5.20</span></div>
+        <div class="f"><span class="k">Max fill</span><span class="v">$5.36</span></div>
+        <div class="f"><span class="k">Contracts</span><span class="v">2</span></div>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="card changed">
+      <div class="cardhead">
+        <div><span class="ord">03</span><span class="cardname">Arithmetic Profit Target</span></div>
+        <span class="tag changed">Gate basis + repricing horizon</span>
+      </div>
+      <div class="fields">
+        <div class="f"><span class="k">Stock entry price</span><span class="v">$201.86</span></div>
+      </div>
+      <p class="expl keep">Independent of the other profit-target methods on this page; they can disagree.
+      <span style="color:var(--border-strong)"> ← unchanged</span></p>
+
+      <div class="block">
+        <div class="blockhead"><span class="blocktitle">Max-loss override</span></div>
+        <div class="fields">
+          <div class="f"><span class="k">Basis</span><span class="v">2.0% of portfolio</span></div>
+          <div class="f"><span class="k">Resolved</span><span class="v">$1,000</span></div>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="blockhead"><span class="blocktitle">Check structure</span><span class="btn">Check structure</span></div>
+        <div class="fields">
+          <div class="f"><span class="k">Order block</span><span class="v">$187.40 (7.2% away)</span></div>
+        </div>
+        <div class="blockhead">
+          <span class="blocktitle">Stop cost</span>
+          <span class="badge caution">Caution · 71% of premium · $1.49 left</span>
+        </div>
+        <div class="fields">
+          <div class="f struck"><span class="k">Old basis · Δ-linear</span><span class="v">$15.99 × Δ0.34 = $5.20 of $5.20 · 100% — pinned</span></div>
+          <div class="f added"><span class="k">New basis · BS today</span><span class="v">$5.20 → $1.49 at $185.87 · loss $3.71 · 71%</span></div>
+        </div>
+        <p class="expl newtext"><b>The gain is a rank where there used to be a wall.</b> The straight line pins
+        this contract — and every other out-of-the-money strike on the chain — at exactly 100%, because it
+        charges a loss bigger than the contract can produce. Priced properly at today's date the loss is
+        $3.71: 71% of premium, $1.49 still on the table. The verdict is still CAUTION at the Swing 70% line;
+        what changed is that 71% can be compared to the strike next door and 100% could not.</p>
+        <p class="expl">Tooltips unchanged. On PASS: <em>"The contract still holds meaningful value if this
+        stop is hit — the cheaper candidate to be wrong on."</em> New on the badge: the dollars left at the
+        stop ($1.49), which is more actionable than a percent when you are deciding whether to overrule it.</p>
+      </div>
+
+      <div class="block">
+        <div class="blockhead"><span class="blocktitle">Arithmetic plan</span><span class="btn">Compute Arithmetic Plan</span></div>
+        <div class="scroll"><table>
+          <thead><tr><th>Row</th><th class="num">Price</th><th>Detail</th><th class="num">Contract px</th><th>Pricing</th><th class="num">Prob</th><th class="num">Time</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Bottom (final stop)</strong></td><td class="num mono">$185.87</td>
+              <td>order block $187.40 · ATR-floor $185.87 · ATR(14) $7.99 · distance $1.53</td>
+              <td class="num mono">$1.09</td><td class="mono">BS (IV-derived)<br><span style="color:var(--accent)">· at ~7d</span></td><td class="num mono">—</td><td class="num mono">—</td></tr>
+            <tr><td><strong>2:1 target</strong></td><td class="num mono">$233.84</td>
+              <td>arithmetic $233.84 · nearest structural $231.10 · tolerance $3.99</td>
+              <td class="num mono">$21.40</td><td class="mono">BS (IV-derived)<br><span style="color:var(--accent)">· at ~19d</span></td><td class="num mono">14%</td><td class="num mono">~19d</td></tr>
+            <tr><td><strong>3:1 target</strong></td><td class="num mono">$249.83</td>
+              <td>arithmetic $249.83 · nearest structural — · tolerance $3.99</td>
+              <td class="num mono">$35.60</td><td class="mono">BS (IV-derived)<br><span style="color:var(--accent)">· at ~28d</span></td><td class="num mono">6%</td><td class="num mono">~28d</td></tr>
+          </tbody>
+        </table></div>
+        <p class="expl newtext"><b>The one real change here.</b> "Pricing" now names the repricing horizon it
+        actually used — taken from the simulation's median time to that level. Today every row is silently
+        priced at half the contract's life (~22d), which on this stop overstates the loss by $1.15 a share.</p>
+        <p class="expl keep">Risk-derived size: 2 contracts (2.43 exact) · <span class="btn" style="padding:2px 8px;font-size:11px">Apply</span>
+        <span style="color:var(--border-strong)"> ← unchanged</span></p>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="card changed">
+      <div class="cardhead">
+        <div><span class="ord">04</span><span class="cardname">Monte Carlo Profit Target</span></div>
+        <span class="tag flag">1 row removed</span><span class="tag moved">1 row moved out</span>
+      </div>
+      <div class="fields">
+        <div class="f"><span class="k">T1</span><span class="v">20%</span></div>
+        <div class="f"><span class="k">T2</span><span class="v">30%</span></div>
+        <div class="f"><span class="k">T3</span><span class="v">50%</span></div>
+      </div>
+      <span class="btn">Run Monte Carlo Estimate</span>
+      <p class="expl keep">Monte Carlo estimate — independent of the other profit-target methods on this page;
+      they can disagree. <span style="color:var(--border-strong)"> ← unchanged</span></p>
+
+      <div class="block">
+        <div class="blocktitle">T30% row — field by field</div>
+        <div class="fields">
+          <div class="f"><span class="k">Est. option</span><span class="v">$6.76</span></div>
+          <div class="f"><span class="k">Stock price</span><span class="v">$209.70</span></div>
+          <div class="f"><span class="k">Probability</span><span class="v">31%</span></div>
+          <div class="f"><span class="k">Expected time</span><span class="v">~11d</span></div>
+          <div class="f"><span class="k">Structural level found</span><span class="v">$185.87</span></div>
+          <div class="f struck"><span class="k">R:R vs. structural stop</span><span class="v">1.3× — remove</span></div>
+        </div>
+      </div>
+      <p class="expl newtext"><b>Flagged for removal: "R:R vs. structural stop".</b> Its risk leg is capped at
+      the premium, so whenever the stop costs the full premium the ratio collapses to exactly your typed
+      target percent — T30% always reads 0.3×, for every contract and every symbol. It looks like a
+      measurement and is really an echo of your own input. Replaced by the Barrier Race card's R:R.</p>
+      <p class="expl newtext"><b>Moved out: the Invalidation row.</b> Its probability and expected days are the
+      stop half of the race, and standing alone here they invite a comparison that does not hold — see the
+      new note below.</p>
+      <p class="expl newtext">New on-card line: <em>"Each probability is measured on its own — a path that
+      reaches T20% and then the stop is counted in both, so these do not add to 100%. The Barrier Race card
+      below counts every path once."</em></p>
+    </div>
+
+    <!-- 5 — THE NEW CARD -->
+    <div class="card new">
+      <div class="cardhead">
+        <div><span class="ord">05</span><span class="cardname">Barrier Race</span></div>
+        <span class="tag new">New card</span>
+      </div>
+      <p class="expl newtext">One simulation, three barriers. Every simulated path is counted once, at
+      whichever barrier it reaches first — so these add to 100%. Populated by the same
+      <em>Run Monte Carlo Estimate</em> click as the card above: one run, no second button, no second wait.</p>
+
+      <div class="block">
+        <div class="blocktitle">The three barriers</div>
+        <div class="scroll"><table>
+          <thead><tr><th>Barrier</th><th class="num">Level</th><th>How it is set</th><th>State</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Profit target — T30%</strong></td><td class="num mono">$6.76 option</td><td>premium × 1.30 — your input</td><td>—</td></tr>
+            <tr><td><strong>Stock stop — structural + ATR</strong></td><td class="num mono">$185.87 stock</td><td>order block $187.40, floored at 2.0 × ATR</td><td><span class="armed">● Armed</span></td></tr>
+            <tr><td><strong>Premium stop — −60%</strong></td><td class="num mono">$2.08 option</td><td>premium × (1 − 60%)</td><td>Advisory</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <div class="block">
+        <div class="blocktitle">Race outcome — one row per target, 2,000 paths, each counted once</div>
+        <div class="racekey">
+          <span><span class="sw" style="background:var(--pass)"></span>Target first</span>
+          <span><span class="sw" style="background:var(--reject)"></span>Premium stop first</span>
+          <span><span class="sw" style="background:var(--caution)"></span>Stock stop first</span>
+          <span><span class="sw" style="background:var(--neutral)"></span>Neither before expiry</span>
+        </div>
+        <div class="scroll"><table>
+          <thead><tr><th>Target</th><th>Race</th><th class="num">Target 1st</th><th class="num">Prem stop 1st</th><th class="num">Stock stop 1st</th><th class="num">Neither</th><th class="num">~days to target</th></tr></thead>
+          <tbody>
+            <tr><td class="mono"><strong>T20%</strong> · $6.24</td>
+              <td><span class="minibar"><i class="t" style="flex:48"></i><i class="ps" style="flex:38"></i><i class="ss" style="flex:2"></i><i class="n" style="flex:12"></i></span></td>
+              <td class="num mono">48%</td><td class="num mono">38%</td><td class="num mono">2%</td><td class="num mono">12%</td><td class="num mono">~7d</td></tr>
+            <tr><td class="mono"><strong>T30%</strong> · $6.76</td>
+              <td><span class="minibar"><i class="t" style="flex:31"></i><i class="ps" style="flex:52"></i><i class="ss" style="flex:2"></i><i class="n" style="flex:15"></i></span></td>
+              <td class="num mono">31%</td><td class="num mono">52%</td><td class="num mono">2%</td><td class="num mono">15%</td><td class="num mono">~11d</td></tr>
+            <tr><td class="mono"><strong>T50%</strong> · $7.80</td>
+              <td><span class="minibar"><i class="t" style="flex:12"></i><i class="ps" style="flex:68"></i><i class="ss" style="flex:1"></i><i class="n" style="flex:19"></i></span></td>
+              <td class="num mono">12%</td><td class="num mono">68%</td><td class="num mono">1%</td><td class="num mono">19%</td><td class="num mono">~17d</td></tr>
+          </tbody>
+        </table></div>
+        <p class="expl newtext"><b>One row per target, because only the target barrier changes.</b> The two
+        stops are identical across all three rows, so racing each target against them tells you which profit
+        target is actually worth aiming at on this contract — a single race against one hand-picked target
+        cannot. Every row sums to 100%: each of the 2,000 paths is attributed once, to whichever barrier it
+        reaches first.</p>
+        <p class="expl newtext"><b>Read what this contract is telling you.</b> The premium stop sits at $2.08;
+        the stock stop is worth $1.09 by the time it is reached. The premium stop is <em>tighter</em>, so it
+        fires first on almost every losing path — the stock stop reaches its level first only 1–2% of the
+        time, at any target. Arming the stock stop on this contract means the position is already down more
+        than 60% before it can trigger. That is a fact you cannot get from any card on the page today.</p>
+        <p class="expl">Median days are conditional on that outcome — "~11d to T30%" is the median over the
+        31% of paths that got there first, not over all paths.</p>
+      </div>
+
+      <div class="block">
+        <div class="blocktitle">Risk / reward — both legs, one clock</div>
+        <div class="scroll"><table>
+          <thead><tr><th>Target</th><th class="num">Reward</th><th class="num">Risk · stock stop</th><th class="num">R:R · stock stop</th><th class="num">Risk · premium stop</th><th class="num">R:R · premium stop</th></tr></thead>
+          <tbody>
+            <tr><td class="mono"><strong>T20%</strong></td><td class="num mono">+$1.04</td><td class="num mono">−$4.11</td><td class="num mono"><strong>0.25×</strong></td><td class="num mono">−$3.12</td><td class="num mono" style="color:var(--dim)">0.33×</td></tr>
+            <tr><td class="mono"><strong>T30%</strong></td><td class="num mono">+$1.56</td><td class="num mono">−$4.11</td><td class="num mono"><strong>0.38×</strong></td><td class="num mono">−$3.12</td><td class="num mono" style="color:var(--dim)">0.50×</td></tr>
+            <tr><td class="mono"><strong>T50%</strong></td><td class="num mono">+$2.60</td><td class="num mono">−$4.11</td><td class="num mono"><strong>0.63×</strong></td><td class="num mono">−$3.12</td><td class="num mono" style="color:var(--dim)">0.83×</td></tr>
+          </tbody>
+        </table></div>
+        <p class="expl newtext"><b>Only the bold column is a measurement.</b> The stock-stop risk is
+        <span style="font-family:var(--mono)">premium − Black-Scholes(stop)</span>, which depends on strike,
+        spot at the stop, time and IV independently — so it genuinely varies contract to contract. The
+        premium-stop column is greyed because it reduces exactly to <span style="font-family:var(--mono)">your
+        target % ÷ your stop %</span> (0.30 ÷ 0.60 = 0.50×) — the same three numbers for every contract you
+        will ever look at. It is shown for completeness and labelled so it can never be mistaken for a
+        discriminator. This is the trap that killed two earlier R:R designs.</p>
+        <p class="expl newtext">Both legs priced at the simulation's own median time to that barrier, not at a
+        fixed half of the contract's life. On the old half-life basis the T30% row reads 0.32× instead of
+        0.38× — the difference is pure time-decay you were charged for days you would never have held.</p>
+      </div>
+
+      <div class="block">
+        <div class="blocktitle">Edge — per contract, armed stop = premium stop</div>
+        <div class="scroll"><table>
+          <thead><tr><th>Target</th><th class="num">Target 1st</th><th class="num">Prem stop 1st</th><th class="num">Stock stop 1st</th><th class="num">Neither</th><th class="num">Edge</th></tr></thead>
+          <tbody>
+            <tr><td class="mono"><strong>T20%</strong></td><td class="num mono">+$0.50</td><td class="num mono">−$1.19</td><td class="num mono">−$0.08</td><td class="num mono">−$0.14</td><td class="num mono"><strong style="color:var(--caution)">−$91</strong></td></tr>
+            <tr><td class="mono"><strong>T30%</strong></td><td class="num mono">+$0.48</td><td class="num mono">−$1.62</td><td class="num mono">−$0.08</td><td class="num mono">−$0.18</td><td class="num mono"><strong style="color:var(--reject)">−$140</strong></td></tr>
+            <tr><td class="mono"><strong>T50%</strong></td><td class="num mono">+$0.31</td><td class="num mono">−$2.12</td><td class="num mono">−$0.04</td><td class="num mono">−$0.23</td><td class="num mono"><strong style="color:var(--reject)">−$208</strong></td></tr>
+          </tbody>
+        </table></div>
+        <p class="expl newtext">Reaching for a bigger target makes this contract <em>worse</em>, not better:
+        the reward grows from $1.04 to $2.60, but the share of paths that get there collapses from 48% to 12%
+        while you sit through more premium-stop hits. T20% is the least bad row and it is still negative.
+        A negative edge is not a veto — it says this contract needs a different strike, a wider premium stop,
+        or a closer target to be worth $5.20.</p>
+        <p class="expl">The "Neither" contribution is not a guess: it is the mean value of those paths at
+        expiry, from the same simulation, minus the premium paid. Written as a signed term — a path that
+        reached no barrier can still end above what you paid.</p>
+        <p class="expl warn">Assumes implied volatility is unchanged when a barrier is reached. On a long
+        call that is pessimistic at the stop and optimistic at the target: a real fear bid would leave more
+        premium than shown. On the reference contract, IV rising 5 points cuts the stop loss from 71% of
+        premium to 36%.</p>
+      </div>
+    </div>
+
+    <!-- 6 -->
+    <div class="card flag">
+      <div class="cardhead">
+        <div><span class="ord">06</span><span class="cardname">Fixed % Ladder Plan</span> <span style="color:var(--dim);font-size:12px">collapsible</span></div>
+        <span class="tag flag">1 sub-card flagged</span>
+      </div>
+      <div class="block">
+        <div class="blocktitle">Exit Plan</div>
+        <div class="fields">
+          <div class="f"><span class="k">Invalidation</span><span class="v">$195.80</span></div>
+          <div class="f"><span class="k">Premium stop</span><span class="v">$3.12</span></div>
+          <div class="f"><span class="k">Time stop</span><span class="v">18d</span></div>
+        </div>
+        <p class="expl keep">Invalidation is a fixed-% stop, independent of the Arithmetic card's
+        structural/ATR stop above. It also remains functionally load-bearing, not just a display figure:
+        Send to broker stays disabled ("Invalidation stop required") whenever this field is missing,
+        regardless of what the Arithmetic card's stop shows — the two are not just independently-displayed
+        numbers, one of them is a hard submit gate the other has no relationship to.
+        <span style="color:var(--border-strong)"> ← unchanged, verbatim</span></p>
+      </div>
+      <div class="block">
+        <div class="blocktitle">Sell-to-Close Plan</div>
+        <p class="expl keep">Fixed-formula ladder — independent of the other profit-target methods on this
+        page; they can disagree. <span style="color:var(--border-strong)"> ← unchanged</span></p>
+      </div>
+      <div class="block">
+        <div class="blockhead"><span class="blocktitle">Risk / Reward</span><span class="tag flag">Flagged</span></div>
+        <div class="fields">
+          <div class="f struck"><span class="k">Projected R/R (+8% stock move)</span><span class="v">1.9× — remove display</span></div>
+        </div>
+        <p class="expl newtext"><b>Flagged for removal — display only.</b> This is the third R:R on one page,
+        and the least defensible of the three: reward from a hardcoded +8% stock move you never chose, risk
+        from a flat 60% of premium. <b>The <em>field</em> stays</b> — <span style="font-family:var(--mono)">premiumStop</span>
+        is a live risk denominator elsewhere on the card. Only this readout goes.</p>
+      </div>
+    </div>
+
+    <!-- 7 -->
+    <div class="card changed">
+      <div class="cardhead">
+        <div><span class="ord">07</span><span class="cardname">Final Recommendation</span></div>
+        <span class="tag changed">Gains a fourth source</span>
+      </div>
+      <div class="fields">
+        <div class="f"><span class="k">Final status</span><span class="v">CAUTION</span></div>
+        <div class="f"><span class="k">Computed via</span><span class="v">Barrier Race, 14:32</span></div>
+        <div class="f"><span class="k">Armed stop</span><span class="v">$185.87 stock</span></div>
+        <div class="f"><span class="k">Edge</span><span class="v">−$131 / contract</span></div>
+      </div>
+      <p class="expl keep">This stop price is not automatically monitored by alerts unless copied into the
+      position's stop field after opening. <span style="color:var(--border-strong)"> ← unchanged, and still true</span></p>
+      <p class="expl newtext">Still "whichever method ran most recently", now with Barrier Race as a fourth
+      option. Turning that into an explicit per-trade pick is decision D4/D5 and stays deferred to piece 5 —
+      it needs a card-to-page channel and persistence that do not exist yet.</p>
+    </div>
+
+  </div>
+</section>
+
+<section class="section">
+  <h2>Everything flagged for removal — your call</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>What</th><th>Where</th><th>Why it should go</th><th>What replaces it</th></tr></thead>
+    <tbody>
+      <tr><td><strong>R:R vs. structural stop</strong></td><td>Monte Carlo card, every target row</td>
+        <td>Degenerates to your own typed percent whenever the stop costs full premium. A measurement that is really an echo.</td>
+        <td>Barrier Race → Risk / reward</td></tr>
+      <tr><td><strong>Invalidation row</strong></td><td>Monte Carlo card, bottom</td>
+        <td>Not a removal — a move. Standing beside independently-measured target probabilities it invites a comparison that does not hold.</td>
+        <td>Barrier Race → Race outcome</td></tr>
+      <tr><td><strong>Projected R/R (+8%)</strong></td><td>Fixed % Ladder → Risk / Reward</td>
+        <td>Reward from a stock move you never chose; risk from a flat 60% of premium. Third R:R on one page.</td>
+        <td>Barrier Race → Risk / reward. The stored field stays.</td></tr>
+      <tr><td><strong>Half-life repricing</strong></td><td>Every contract price, both cards</td>
+        <td>Not a visible element — a hidden constant. Overstates the stop loss by $1.15/share on the reference contract.</td>
+        <td>Simulation median time, YAML fallback</td></tr>
+    </tbody>
+  </table></div>
+  <p class="expl">Nothing else is proposed for deletion. Every other field, button and line of explanation
+  text on the seven cards stays exactly as it reads today.</p>
+</section>
+
+<section class="section">
+  <h2>Where CAUTION starts — re-derived for the new ruler</h2>
+  <p class="lede">The gate never blocks and never paints red: two states, and the raw percentage always shows
+  so a high-conviction trade can be taken anyway. The only question a threshold answers is <b>how much of the
+  premium must survive the stop</b> for the contract to count as one you can afford to be wrong on.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Horizon</th><th class="num">Old</th><th class="num">New</th><th>PASS means</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Intraday</strong></td><td class="num mono">0.85</td><td class="num mono"><strong>0.80</strong></td><td>at least <strong>20%</strong> of premium still there when the stop hits</td></tr>
+      <tr><td><strong>Swing</strong></td><td class="num mono">0.80</td><td class="num mono"><strong>0.70</strong></td><td>at least <strong>30%</strong> still there</td></tr>
+      <tr><td><strong>Position</strong></td><td class="num mono">0.70</td><td class="num mono"><strong>0.60</strong></td><td>at least <strong>40%</strong> still there</td></tr>
+    </tbody>
+  </table></div>
+  <p class="expl newtext"><b>Why they have to move.</b> The old numbers were set against a ruler that ran
+  17–29 points pessimistic. On the chain below, the <em>worst</em> contract reads 77% under the new ruler —
+  beneath the old Swing line of 0.80. Keep the old thresholds and the gate goes permanently silent.</p>
+
+  <div class="scroll"><table>
+    <thead><tr><th>Strike</th><th class="num">Premium</th><th class="num">Left at stop</th><th class="num">New</th><th class="num">Old Δ-linear</th><th>Swing @ 0.70</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">195 C</td><td class="num mono">$13.21</td><td class="num mono">$4.87</td><td class="num mono">63%</td><td class="num mono">81%</td><td><span class="badge pass">Pass</span></td></tr>
+      <tr><td class="mono">200 C</td><td class="num mono">$10.66</td><td class="num mono">$3.70</td><td class="num mono">65%</td><td class="num mono">86%</td><td><span class="badge pass">Pass</span></td></tr>
+      <tr><td class="mono">205 C</td><td class="num mono">$8.49</td><td class="num mono">$2.76</td><td class="num mono">67%</td><td class="num mono">93%</td><td><span class="badge pass">Pass</span></td></tr>
+      <tr><td class="mono">210 C</td><td class="num mono">$6.67</td><td class="num mono">$2.03</td><td class="num mono">70%</td><td class="num mono">99%</td><td><span class="badge caution">Caution</span></td></tr>
+      <tr><td class="mono">215 C <span style="color:var(--accent)">← ref</span></td><td class="num mono">$5.21</td><td class="num mono">$1.49</td><td class="num mono">71%</td><td class="num mono">100%</td><td><span class="badge caution">Caution</span></td></tr>
+      <tr><td class="mono">220 C</td><td class="num mono">$4.05</td><td class="num mono">$1.10</td><td class="num mono">73%</td><td class="num mono">100%</td><td><span class="badge caution">Caution</span></td></tr>
+      <tr><td class="mono">230 C</td><td class="num mono">$2.48</td><td class="num mono">$0.62</td><td class="num mono">75%</td><td class="num mono">100%</td><td><span class="badge caution">Caution</span></td></tr>
+      <tr><td class="mono">240 C</td><td class="num mono">$1.55</td><td class="num mono">$0.36</td><td class="num mono">77%</td><td class="num mono">100%</td><td><span class="badge caution">Caution</span></td></tr>
+    </tbody>
+  </table></div>
+  <p class="expl">Stock $201.86 → stop $185.87 (−7.9%), 45 DTE, skewed chain. The old column pins four of
+  eight contracts at exactly 100% — it cannot tell a 220 call from a 240 call. The new column ranks all
+  eight, and the 0.70 line splits the chain instead of painting it one colour.</p>
+  <p class="expl warn"><b>Read this as a stop-distance meter, not a strike picker.</b> Across the whole chain
+  the spread is 63–77% on this stop; on a tight −2.5% stop the same eight contracts read 24–34% and all pass.
+  Stop distance moves the number far more than strike does.</p>
+</section>
+
+<section class="section">
+  <h2>The holding-time YAML — one factor per preset</h2>
+  <p class="lede">Your scan offers <b>seven</b> horizon presets but the scorer only knows <b>three</b>. Today
+  Quarterly, Semi-annual and Annual all collapse into "Position" — so a 200-day hold and a 20-day hold would
+  share a fallback. The factors must key on the <em>preset</em>, not the scoring horizon.</p>
+  <pre>reprice_horizon:
+  # How long the trade is assumed to run when a level is repriced.
+  # Priority: 1) the simulation's own median days to that barrier
+  #           2) fallback_days below, when the simulation returns nothing
+  #              (dte &lt; 1, or zero paths reached the barrier)
+  source: simulation_median
+  fallback_days:
+    <b>Intraday</b>:    1      # hold 0–2d
+    <b>Swing</b>:       7      # hold 5–15d
+    <b>Position</b>:   14      # hold 15–45d
+    <b>Quarterly</b>:  25      # hold 45–60d
+    <b>SemiAnnual</b>: 45      # hold 90–105d
+    <b>Annual</b>:     80      # hold 165–200d
+
+  # Manual date selection ("Custom"), and any fallback that must not
+  # exceed the contract itself:
+  custom:
+    rule: fraction_of_hold        # fraction_of_hold | nearest_preset
+    fraction: 0.50                # median hold = (holdMin + holdMax) / 2, halved
+  clamp:
+    min_days: 1
+    max_fraction_of_dte: 0.75     # never reprice past 3/4 of the contract's life</pre>
+  <p class="expl newtext"><b>Why <span style="font-family:var(--mono)">fraction_of_hold</span> and not
+  <span style="font-family:var(--mono)">nearest_preset</span>:</b> a manual 30–35 day range sits between
+  Position and Quarterly, and snapping either way moves the repriced loss by real money. Deriving from the
+  range you actually typed — midpoint of hold, halved — is both continuous and explainable. The existing
+  <span style="font-family:var(--mono)">scoringHorizonForHold()</span> already sets the precedent for
+  deriving from the typed range rather than snapping.</p>
+  <p class="expl newtext"><b>Why the clamp:</b> without <span style="font-family:var(--mono)">max_fraction_of_dte</span>
+  an Annual preset on a 30-day contract would reprice at 80 days — past expiry — and every level would price
+  at intrinsic value only.</p>
+</section>
+
+<section class="section">
+  <h2>Where each number comes from, after the change</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Number</th><th>Model</th><th>Priced at</th><th>Changed?</th></tr></thead>
+    <tbody>
+      <tr><td>Stop-cost gate — card badge and ranking badge</td><td class="mono">Black-Scholes, contract's own IV</td><td class="mono">today, 0 days elapsed</td><td>Yes — was Δ-linear; thresholds re-derived to 0.80 / 0.70 / 0.60</td></tr>
+      <tr><td>Arithmetic card contract prices</td><td class="mono">Black-Scholes, contract's own IV</td><td class="mono">sim median days</td><td>Yes — was half-life</td></tr>
+      <tr><td>Monte Carlo probabilities and timing</td><td class="mono">GBM sim, option repriced daily</td><td class="mono">every day to expiry</td><td>No</td></tr>
+      <tr><td>Barrier race, R:R, edge</td><td class="mono">same sim, three barriers raced</td><td class="mono">sim median days</td><td>New</td></tr>
+      <tr><td>Scan-time ranking R:R</td><td class="mono">Heston, or BS on fallback</td><td class="mono">half-life</td><td>Open — see Q7</td></tr>
+      <tr><td>Sizing and max-loss approval</td><td class="mono">Black-Scholes, contract's own IV</td><td class="mono">sim median days</td><td>Yes, indirectly — it reads the stop's contract price</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+</div>
+
+</body></html>
