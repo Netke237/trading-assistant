@@ -4,7 +4,7 @@
   "updated_by": "session_01Rg4ZBTUexLsDZTwZV8CgW7 (handoff #13)",
   "main": "dc051a58",
   "working_branch": "claude/dev-state-reconstruction-hzmzbi",
-  "audit_rule": "NOTHING counts as done until an adversarial round comes back clean. audit_rounds counts rounds RUN; audit_clean is true only when a round found nothing. A phase with status=shipped and audit_clean=false is NOT finished.",
+  "audit_rule": "NOTHING counts as done until an adversarial round comes back clean. audit_rounds counts rounds RUN; audit_clean is true only when a round found nothing. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is.",
   "phases": [
     {
       "id": "A",
@@ -128,26 +128,53 @@
     {
       "name": "Stop-vs-premium gate (PASS/CAUTION)",
       "audit_clean": true,
-      "note": "Delta-linear basis -- Phase B replaces it."
+      "note": "Delta-linear basis -- Phase B replaces it.",
+      "verify": {
+        "kind": "present",
+        "pattern": "STOP_PREMIUM_PASS_MAX_FRACTION",
+        "path": "frontend/lib/risk.ts"
+      }
     },
     {
       "name": "Piece 1 -- MC uses structural+ATR stop",
-      "audit_clean": true
+      "audit_clean": true,
+      "verify": {
+        "kind": "present",
+        "pattern": "invalidation_price: resolvedStockStop",
+        "path": "frontend/components/organisms/TradeCard/index.tsx"
+      }
     },
     {
       "name": "Piece 2 (half) -- gate + MC share a stop",
       "audit_clean": true,
-      "note": "Third consumer structuralRR deleted, not repointed."
+      "note": "Third consumer structuralRR deleted, not repointed.",
+      "verify": {
+        "kind": "present",
+        "pattern": "sharedStop",
+        "path": "frontend/components/organisms/TradeCard/index.tsx"
+      }
     },
     {
       "name": "Barrier Race + reprice_horizon",
       "audit_clean": true,
-      "note": "9 audit rounds, round 9 clean. LIVE-VERIFIED 2026-09-04 from Kenneth's screenshot: all three rows sum to 100%, all three edge figures reproduce."
+      "note": "9 audit rounds, round 9 clean. LIVE-VERIFIED 2026-09-04 from Kenneth's screenshot: all three rows sum to 100%, all three edge figures reproduce.",
+      "audit_rounds": 9,
+      "verify": {
+        "kind": "present",
+        "pattern": "def display_reprice_years",
+        "path": "backend/app/scoring/reprice_horizon.py"
+      }
     },
     {
       "name": "Stop-cost notation rework",
       "audit_clean": false,
-      "note": "Frontend copy only, no logic change. Fixed a real reconciliation bug: delta printed at 2dp while the loss used full precision, so $15.41 x 0.54 read 8.32 against a printed 8.24. UNAUDITED."
+      "note": "Frontend copy only, no logic change. Fixed a real reconciliation bug: delta printed at 2dp while the loss used full precision, so $15.41 x 0.54 read 8.32 against a printed 8.24. UNAUDITED.",
+      "audit_rounds": 0,
+      "verify": {
+        "kind": "present",
+        "pattern": "formatStopLossHeadline",
+        "path": "frontend/lib/risk.ts"
+      }
     }
   ],
   "decisions": [
@@ -224,11 +251,11 @@
     },
     {
       "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-12.md",
-      "role": "Handoff #12 — the reconstruction, the plan, and Piece 4."
+      "role": "Handoff #12 \u2014 the reconstruction, the plan, and Piece 4."
     },
     {
       "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-13.md",
-      "role": "LATEST handoff — live Barrier Race verification, state tracking, stop-cost notation."
+      "role": "LATEST handoff \u2014 live Barrier Race verification, state tracking, stop-cost notation."
     },
     {
       "path": "docs/superpowers/STATE_TRACKING.md",

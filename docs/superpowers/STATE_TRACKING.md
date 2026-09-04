@@ -43,6 +43,14 @@ Three probe kinds:
 hardcoded `[0.04]` literal is what says it was not. The first run of this script
 caught that modelling error in its own state file — which is the point.
 
+It walks **both** lists: `phases` and `already_shipped`. That is not a detail —
+`already_shipped` means *the code is done*, never *the work is done*, and for one
+round the script read only `phases`, so the stop-cost notation rework sat in
+`already_shipped` with `audit_clean: false`, rendered as shipped, and was named
+in no session's audit target list. A `verify` probe is optional on an
+`already_shipped` entry (several predate the state file) but is checked exactly
+as a phase's is wherever one is given.
+
 Stdlib only, so it runs before any venv exists.
 
 ## The trigger
@@ -58,7 +66,10 @@ loudly and never swallowed.
 
 `audit_rounds` counts rounds **run**. `audit_clean` is true **only** when a round
 found nothing. A phase with `status: shipped_unaudited` renders as `SHIPPED*` and
-is listed under UNAUDITED WORK every single session until someone audits it.
+is listed under UNAUDITED WORK every single session until someone audits it — and
+so does any `already_shipped` entry with `audit_clean: false`. Shipping is not
+the finish line in either list.
+
 Use the `K-adversarial-audit-loop` skill; it is what the rule is written against.
 
 ## What every session must do

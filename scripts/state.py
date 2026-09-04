@@ -109,8 +109,50 @@ def main() -> int:
             print(f"  {BOLD}{ph['id']:<2}{RESET} {ph['name'][:42]:<42} "
                   f"{colour}{label:<13}{RESET} {audit}{gate}")
 
+    # already_shipped is not a second-class list. It holds work that is finished
+    # as CODE, which says nothing about whether it is finished as WORK -- the
+    # audit rule applies to every line of it exactly as it applies to a phase.
+    # Walking only `phases` is how the stop-cost notation rework came to sit
+    # here with audit_clean=false and never once appear in a session's target
+    # list: the render showed it as shipped, the UNAUDITED block never named it,
+    # and the next session planned an audit around a list that was missing it.
+    shipped_items = state.get("already_shipped", [])
+    for item in shipped_items:
+        if not item.get("audit_clean"):
+            rounds = item.get("audit_rounds", 0)
+            unaudited.append(
+                f"Shipped: {item['name']} — {rounds} round(s) run, none clean"
+            )
+        # A verify probe is OPTIONAL here (several of these predate the state
+        # file and have no single load-bearing marker), but where one is given
+        # it is checked exactly as a phase's is. Declaring something shipped is
+        # a claim about the code, wherever in the file the claim is written.
+        v = item.get("verify")
+        if v:
+            code_shipped, detail = probe(v)
+            if not code_shipped:
+                drift.append(
+                    f"Shipped item '{item['name']}': declared shipped but the code "
+                    f"says NOT BUILT — {detail}"
+                )
+
     if not quiet:
         print(f"\n  {DIM}SHIPPED* = code exists but has never survived an adversarial round.{RESET}")
+        if shipped_items:
+            print(f"\n  {BOLD}{'':<2} {'ALREADY SHIPPED':<42} {'STATUS':<13} {'AUDIT':<22}{RESET}")
+            for item in shipped_items:
+                clean = item.get("audit_clean")
+                rounds = item.get("audit_rounds", 0)
+                if clean:
+                    audit = f"{GREEN}clean{RESET}"
+                elif rounds:
+                    audit = f"{RED}{rounds} run, NOT clean{RESET}"
+                else:
+                    audit = f"{RED}NEVER AUDITED{RESET}"
+                colour = GREEN if clean else YELLOW
+                label = "shipped" if clean else "SHIPPED*"
+                print(f"  {BOLD}{'·':<2}{RESET} {item['name'][:42]:<42} "
+                      f"{colour}{label:<13}{RESET} {audit}")
         if state.get("pending_kenneth"):
             print(f"\n  {BOLD}Waiting on Kenneth:{RESET}")
             for item in state["pending_kenneth"]:
