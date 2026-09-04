@@ -238,3 +238,31 @@ Phase A (`iv` field), B (gate basis Q3/Q7), C (piece 3 scan-time `finalStop`), E
 - **Kenneth is a non-coder with high IT affinity.** Plain English, worked numeric examples, no
   jargon. He asks to be grilled and adversarially audited — take both literally. When something you
   said turns out wrong, say so plainly; this session had two (§0).
+
+---
+
+# Addendum — Kenneth's decisions, 2026-09-04
+
+Four items from §7 are now settled. Recorded here so they are not re-asked.
+
+| # | Question | Decision |
+|---|---|---|
+| **Gate basis (Q1)** | Replace the Δ-linear stop-cost ruler with Black-Scholes at today's date? | **APPROVED — go.** Kenneth: *"BS with todays date instead of linear Delta? Go for it. I agree."* He noted he had thought this was already decided; it was (Q3, round 5) — it had simply never been built. |
+| **Premium-stop derivation** | Move the dollar→fraction derivation server-side so a live fill cannot move the stop? | **APPROVED and SHIPPED** — commit `846fc792`. See §4.1; the defect is fixed and the test that blessed the drift is replaced. |
+| **Stock Barrier Race (piece 6 §5)** | Add the two-barrier stock version of the race to the stocks path? | **YES — in scope for Piece 6.** A stock has no premium, so two barriers plus "neither": P(target first), P(stop first), P(neither), summing to 100%. Reuses `estimate_stock_first_passage`'s existing paths — no new model, no new endpoint. |
+| **Does the gate move server-side?** | Raised in §7 as an open question. | **Less open than §7 implied — correcting that.** The gate-basis spec §2 already chose it ("the endpoints that produce a stop also return its cost") and explicitly rejected a TypeScript pricer. Kenneth's approval of the BS basis confirms the direction. The prerequisite is real but it is *decided*, not undecided. |
+
+## What this means for the build order
+
+Phase A (contract `iv`) → Phase B (gate basis) is now a green-lit, decided path. Its revised shape,
+per Amendment B, is **much smaller than the original plan**: source `iv` from the provider on the
+**async** chain path (`market.py:1260/1277/1291/1308`), reuse `_compute_iv_bs` rather than writing a
+solver, and fix the Newton seed. Not "build a bracketed solver".
+
+## Live-app note
+
+The Barrier Race card is gated on the simulation existing —
+`BarrierRaceCard/index.tsx:119`, `if (!race || !isFresh) return null`. It renders **nothing** until
+**Run Monte Carlo Estimate** is clicked, by design (one run, one button). Kenneth reported "I see no
+Barrier Race card"; the card was correct, the button was simply unclicked. Worth stating in any
+future walkthrough, because an invisible card reads as an unshipped one.
