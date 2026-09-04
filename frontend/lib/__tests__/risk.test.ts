@@ -11,6 +11,7 @@ import {
   formatRecommendedContractSizeRaw,
   stopPremiumRisk,
   formatStopPremiumRisk,
+  formatStopLossHeadline,
 } from '@/lib/risk';
 import type { PortfolioPosition, RiskLimits, TradeCardData, ExitPlan } from '@/types/domain';
 
@@ -443,17 +444,61 @@ describe('stopPremiumRisk', () => {
   });
 });
 
+describe('the printed equation reconciles', () => {
+  // The bug this replaced: delta printed at 2dp while the loss was computed
+  // from full precision, so `$15.41 × Δ0.54 = $8.24` -- 15.41 × 0.54 is 8.32.
+  // Kenneth checked it by hand and got a different answer than the card, on a
+  // card whose entire premise is showing arithmetic you can verify.
+  it('multiplies out to the printed loss at the printed precision', () => {
+    const r = stopPremiumRisk(312.80, 328.21, 0.5347, 18.90, { pass_max_fraction: 0.80 })!;
+    const printed = formatStopPremiumRisk(r);
+    const m = printed.match(/\$([\d.]+) away × Δ([\d.]+) = \$([\d.]+)/)!;
+    const [away, delta, loss] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    // Rounded to the cent, the printed factors must produce the printed answer.
+    expect(Math.abs(away * delta - loss)).toBeLessThan(0.005);
+  });
+
+  it('names its basis, so it cannot be confused with the Barrier Race figure', () => {
+    // Two cards print a stop loss for the same stop and they legitimately
+    // differ -- this one is priced today, the race's at the median day to the
+    // barrier. Unlabelled they read as a contradiction.
+    const r = stopPremiumRisk(312.80, 328.21, 0.5347, 18.90, { pass_max_fraction: 0.80 })!;
+    expect(formatStopPremiumRisk(r)).toContain('delta-linear, priced today');
+  });
+});
+
+describe('formatStopLossHeadline', () => {
+  it('gives per-contract dollars and what is left', () => {
+    const r = stopPremiumRisk(312.80, 328.21, 0.5347, 18.90, { pass_max_fraction: 0.80 })!;
+    // 8.24/share -> $824 of the $1,890 paid, $1,066 left.
+    expect(formatStopLossHeadline(r)).toBe(
+      '$824 per contract — of the $1,890 you paid, $1,066 left',
+    );
+  });
+
+  it('reads $0 left when the stop costs the whole premium', () => {
+    const capped = stopPremiumRisk(100, 200, 0.9, 5.00, { pass_max_fraction: 0.80 })!;
+    expect(capped.capped).toBe(true);
+    expect(formatStopLossHeadline(capped)).toContain('$0 left');
+  });
+});
+
 describe('formatStopPremiumRisk', () => {
   it('puts every input on one line so the verdict is auditable', () => {
     const r = stopPremiumRisk(185.87, 201.86, 0.30, 5.20)!;
-    expect(formatStopPremiumRisk(r)).toBe('$15.99 away × Δ0.30 = $4.80 of $5.20 premium');
+    expect(formatStopPremiumRisk(r)).toBe(
+      '$15.99 away × Δ0.300 = $4.80 of $5.20 premium · delta-linear, priced today',
+    );
   });
 
   it('appends the uncapped loss only when the cap actually bound', () => {
     const capped = stopPremiumRisk(185.87, 201.86, 0.60, 5.20)!;
     // Without the tail, `loss` is pinned to `premium` and the reader cannot see
     // HOW far past a total loss the stop sits -- $9.59 on a $5.20 contract.
-    expect(formatStopPremiumRisk(capped)).toBe('$15.99 away × Δ0.60 = $5.20 of $5.20 premium (uncapped $9.59)');
+    expect(formatStopPremiumRisk(capped)).toBe(
+      '$15.99 away × Δ0.600 = $5.20 of $5.20 premium (uncapped $9.59)'
+      + ' · delta-linear, priced today',
+    );
 
     const uncapped = stopPremiumRisk(199.86, 201.86, 0.30, 5.20)!;
     expect(formatStopPremiumRisk(uncapped)).not.toMatch(/uncapped/);

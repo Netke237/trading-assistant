@@ -303,6 +303,17 @@ export default function BarrierRaceCard({
       {/* 3. Risk / reward ------------------------------------------------- */}
       <div className={styles.block}>
         <Text size={12} weight={600}>Risk and reward, per target</Text>
+        {/* The two cards print two different stop losses for the same stop and
+            they will not match: this one reprices at the simulation's median
+            day to the barrier, the Arithmetic card's prices at today with no
+            decay. Both are right; without saying so they read as a
+            contradiction, which is exactly how they read to Kenneth. */}
+        <Text size={10} tone="dim">
+          Priced at each barrier&apos;s own median day, so time decay is included. For the
+          immediate figure — what this stop costs if it is hit right now — see
+          &ldquo;Max loss if the stop is hit&rdquo; on the Arithmetic Profit Target card. The two
+          differ by the decay, and both are correct.
+        </Text>
         {race.outcomes.map((o) => (
           <div key={o.targetPct} className={styles.chainGroup}>
             <Text size={11} weight={500}>{pctLabel(o.targetPct)} target</Text>

@@ -125,9 +125,29 @@ export function stopPremiumRisk(
  *  a question `loss` alone cannot, since it is pinned to `premium`. */
 export function formatStopPremiumRisk(r: StopPremiumRisk): string {
   const base =
-    `$${r.stockMove.toFixed(2)} away × Δ${r.delta.toFixed(2)} = ` +
+    `$${r.stockMove.toFixed(2)} away × Δ${r.delta.toFixed(3)} = ` +
     `$${r.loss.toFixed(2)} of $${r.premium.toFixed(2)} premium`;
-  return r.capped ? `${base} (uncapped $${r.rawLoss.toFixed(2)})` : base;
+  const basis = ' · delta-linear, priced today';
+  return r.capped
+    ? `${base} (uncapped $${r.rawLoss.toFixed(2)})${basis}`
+    : `${base}${basis}`;
+}
+
+/** The headline the badge's percentage is a summary OF: what one contract
+ *  actually loses at the stop, and what is left afterwards.
+ *
+ *  Dollars per CONTRACT, not per share, because that is the number being
+ *  risked -- the arithmetic line below it stays per-share so it reconciles
+ *  with the premium and delta printed there. `$824 of the $1,890 you paid,
+ *  $1,066 left`. The dollars-left half is deliberate: the schematic argues it
+ *  is more actionable than a percentage when deciding whether to overrule the
+ *  verdict. */
+export function formatStopLossHeadline(r: StopPremiumRisk): string {
+  const perContract = r.loss * 100;
+  const premiumTotal = r.premium * 100;
+  const left = premiumTotal - perContract;
+  const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
+  return `${usd(perContract)} per contract — of the ${usd(premiumTotal)} you paid, ${usd(left)} left`;
 }
 
 export function checkInvalidation(invalidation: number | undefined): boolean {

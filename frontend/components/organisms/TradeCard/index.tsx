@@ -12,7 +12,7 @@ import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
-import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk } from '@/lib/risk';
+import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk, formatStopLossHeadline } from '@/lib/risk';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -1587,7 +1587,7 @@ export function TradeCard({
             {!structuralError && !structuralLoading && stopRisk && (
               <div className={styles.stopRiskGate}>
                 <div className={styles.stopRiskHead}>
-                  <Text size={10} tone="dim">STOP COST</Text>
+                  <Text size={10} tone="dim">MAX LOSS IF THE STOP IS HIT</Text>
                   <StatusBadge
                     status={stopRisk.status}
                     label={`${(stopRisk.fraction * 100).toFixed(0)}% OF PREMIUM`}
@@ -1603,6 +1603,15 @@ export function TradeCard({
                 {/* Every input, so the verdict is auditable at a glance — the
                     whole complaint that produced this gate was a ratio whose
                     inputs were invisible. */}
+                {/* Headline first, in per-contract dollars: that is the sum
+                    actually at risk, and the percentage on the badge is a
+                    summary of it. The arithmetic line stays per-share so it
+                    reconciles against the premium and delta it prints. Delta
+                    is printed to 3dp because at 2dp the equation did not
+                    compute -- 15.41 x 0.54 reads 8.32 against a printed 8.24,
+                    and this card's whole premise is showing arithmetic a
+                    non-coder can check by hand. */}
+                <Data size={12} tone="primary">{formatStopLossHeadline(stopRisk)}</Data>
                 <Data size={11} tone="secondary">{formatStopPremiumRisk(stopRisk)}</Data>
               </div>
             )}

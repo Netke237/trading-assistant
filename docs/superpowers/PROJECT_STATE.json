@@ -1,98 +1,232 @@
 {
   "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree.",
   "updated": "2026-09-04",
-  "updated_by": "session_01Rg4ZBTUexLsDZTwZV8CgW7 (handoff #12)",
+  "updated_by": "session_01Rg4ZBTUexLsDZTwZV8CgW7 (handoff #13)",
   "main": "dc051a58",
   "working_branch": "claude/dev-state-reconstruction-hzmzbi",
-
   "audit_rule": "NOTHING counts as done until an adversarial round comes back clean. audit_rounds counts rounds RUN; audit_clean is true only when a round found nothing. A phase with status=shipped and audit_clean=false is NOT finished.",
-
   "phases": [
     {
-      "id": "A", "name": "Contract iv field",
-      "status": "not_started", "audit_rounds": 0, "audit_clean": false,
-      "blocks": ["B", "C"],
+      "id": "A",
+      "name": "Contract iv field",
+      "status": "not_started",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "blocks": [
+        "B",
+        "C"
+      ],
       "note": "Source iv from the provider on the ASYNC chain path (market.py:1260/1277/1291/1308). Do NOT patch the sync fetch_option_chain -- it has no production callers.",
-      "verify": {"kind": "absent", "pattern": "^    iv:", "path": "backend/app/schemas/__init__.py", "means_shipped_if_present": true}
+      "verify": {
+        "kind": "absent",
+        "pattern": "^    iv:",
+        "path": "backend/app/schemas/__init__.py",
+        "means_shipped_if_present": true
+      }
     },
     {
-      "id": "B", "name": "Gate basis -- Black-Scholes at today's date (Q3/Q7)",
-      "status": "not_started", "audit_rounds": 0, "audit_clean": false,
-      "depends_on": ["A"],
+      "id": "B",
+      "name": "Gate basis -- Black-Scholes at today's date (Q3/Q7)",
+      "status": "not_started",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [
+        "A"
+      ],
       "note": "APPROVED by Kenneth 2026-09-04. Reuse market.py:928 _compute_iv_bs, do NOT write a new solver. Thresholds 0.80/0.70/0.60 replace shipped 0.8/0.85/0.7.",
-      "verify": {"kind": "absent", "pattern": "StopCostOut", "path": "backend/app/routers/contracts.py", "means_shipped_if_present": true}
+      "verify": {
+        "kind": "absent",
+        "pattern": "StopCostOut",
+        "path": "backend/app/routers/contracts.py",
+        "means_shipped_if_present": true
+      }
     },
     {
-      "id": "C", "name": "Piece 3 -- scan-time finalStop",
-      "status": "not_started", "audit_rounds": 0, "audit_clean": false,
-      "depends_on": ["A"],
+      "id": "C",
+      "name": "Piece 3 -- scan-time finalStop",
+      "status": "not_started",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [
+        "A"
+      ],
       "note": "Makes pieces 1 and 2 take effect by default. Requires scanStore version bump 12 -> 13 with an explicit migration branch.",
-      "verify": {"kind": "absent", "pattern": "compute_final_stop", "path": "backend/app/routers/scan.py", "means_shipped_if_present": true}
+      "verify": {
+        "kind": "absent",
+        "pattern": "compute_final_stop",
+        "path": "backend/app/routers/scan.py",
+        "means_shipped_if_present": true
+      }
     },
     {
-      "id": "D", "name": "Piece 4 -- per-position premium stop",
-      "status": "shipped_unaudited", "audit_rounds": 0, "audit_clean": false,
-      "commits": ["26c44bde", "2d7a3601", "846fc792"],
+      "id": "D",
+      "name": "Piece 4 -- per-position premium stop",
+      "status": "shipped_unaudited",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "commits": [
+        "26c44bde",
+        "2d7a3601",
+        "846fc792"
+      ],
       "note": "Built and green (backend 1983, frontend 1105, typecheck clean). One defect found and fixed (846fc792): the dollar amount is now derived server-side so a live fill cannot move it. HAS NEVER SURVIVED AN ADVERSARIAL ROUND -- two audit agents were launched and neither reported.",
-      "verify": {"kind": "present", "pattern": "premium_stop_pct", "path": "backend/app/models/portfolio.py"}
+      "verify": {
+        "kind": "present",
+        "pattern": "premium_stop_pct",
+        "path": "backend/app/models/portfolio.py"
+      }
     },
     {
-      "id": "E", "name": "Piece 6 -- stocks arithmetic plan",
-      "status": "not_started", "audit_rounds": 0, "audit_clean": false,
+      "id": "E",
+      "name": "Piece 6 -- stocks arithmetic plan",
+      "status": "not_started",
+      "audit_rounds": 0,
+      "audit_clean": false,
       "note": "Independent of A-C. Kenneth approved INCLUDING the two-barrier stock Barrier Race (spec section 5). No stocks stop-cost gate -- Q-A is closed.",
-      "verify": {"kind": "absent", "pattern": "stocks/exit-plan", "path": "backend/app/routers/stock_scan.py", "means_shipped_if_present": true}
+      "verify": {
+        "kind": "absent",
+        "pattern": "stocks/exit-plan",
+        "path": "backend/app/routers/stock_scan.py",
+        "means_shipped_if_present": true
+      }
     },
     {
-      "id": "F", "name": "Heston calibration (Q8)",
-      "status": "needs_spec", "audit_rounds": 0, "audit_clean": false,
+      "id": "F",
+      "name": "Heston calibration (Q8)",
+      "status": "needs_spec",
+      "audit_rounds": 0,
+      "audit_clean": false,
       "note": "v0_grid = [0.04] is hardcoded 20% vol for every symbol. The pricer is fine; the calibration is the defect. Write the spec before building.",
-      "verify": {"kind": "defect_marker", "pattern": "v0_grid\\s*=\\s*\\[0\\.04\\]", "path": "backend/app/models/heston_cache.py"}
+      "verify": {
+        "kind": "defect_marker",
+        "pattern": "v0_grid\\s*=\\s*\\[0\\.04\\]",
+        "path": "backend/app/models/heston_cache.py"
+      }
     },
     {
-      "id": "G", "name": "Piece 5 -- per-trade method pick (D4/D5)",
-      "status": "needs_spec", "audit_rounds": 0, "audit_clean": false,
-      "depends_on": ["A", "B", "C", "D"],
+      "id": "G",
+      "name": "Piece 5 -- per-trade method pick (D4/D5)",
+      "status": "needs_spec",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
       "note": "Largest, last. Needs a card-to-page channel and persistence that do not exist yet.",
-      "verify": {"kind": "absent", "pattern": "TradeSelection", "path": "frontend/types/domain.ts", "means_shipped_if_present": true}
+      "verify": {
+        "kind": "absent",
+        "pattern": "TradeSelection",
+        "path": "frontend/types/domain.ts",
+        "means_shipped_if_present": true
+      }
     }
   ],
-
   "already_shipped": [
-    {"name": "Stop-vs-premium gate (PASS/CAUTION)", "audit_clean": true, "note": "Delta-linear basis -- Phase B replaces it."},
-    {"name": "Piece 1 -- MC uses structural+ATR stop", "audit_clean": true},
-    {"name": "Piece 2 (half) -- gate + MC share a stop", "audit_clean": true, "note": "Third consumer structuralRR deleted, not repointed."},
-    {"name": "Barrier Race + reprice_horizon", "audit_clean": true, "note": "9 audit rounds, round 9 clean. LIVE-VERIFIED 2026-09-04 from Kenneth's screenshot: all three rows sum to 100%, all three edge figures reproduce."}
+    {
+      "name": "Stop-vs-premium gate (PASS/CAUTION)",
+      "audit_clean": true,
+      "note": "Delta-linear basis -- Phase B replaces it."
+    },
+    {
+      "name": "Piece 1 -- MC uses structural+ATR stop",
+      "audit_clean": true
+    },
+    {
+      "name": "Piece 2 (half) -- gate + MC share a stop",
+      "audit_clean": true,
+      "note": "Third consumer structuralRR deleted, not repointed."
+    },
+    {
+      "name": "Barrier Race + reprice_horizon",
+      "audit_clean": true,
+      "note": "9 audit rounds, round 9 clean. LIVE-VERIFIED 2026-09-04 from Kenneth's screenshot: all three rows sum to 100%, all three edge figures reproduce."
+    },
+    {
+      "name": "Stop-cost notation rework",
+      "audit_clean": false,
+      "note": "Frontend copy only, no logic change. Fixed a real reconciliation bug: delta printed at 2dp while the loss used full precision, so $15.41 x 0.54 read 8.32 against a printed 8.24. UNAUDITED."
+    }
   ],
-
   "decisions": [
-    {"id": "Q1-2026-09-04", "q": "Gate basis: Black-Scholes at today's date instead of delta-linear?", "a": "APPROVED", "by": "Kenneth"},
-    {"id": "Q3-2026-09-04", "q": "Derive the premium stop server-side so a live fill cannot move it?", "a": "APPROVED and SHIPPED (846fc792)", "by": "Kenneth"},
-    {"id": "Q4-2026-09-04", "q": "Add the two-barrier stock Barrier Race to piece 6?", "a": "YES", "by": "Kenneth"},
-    {"id": "ARCH-2026-09-04", "q": "Does the stop-cost gate move server-side?", "a": "DECIDED, not open -- the gate-basis spec section 2 already chose it and rejected a client-side pricer.", "by": "spec"},
-    {"id": "RANK-BASIS", "q": "Ranking badge basis: delta-linear (round 4) or Black-Scholes (gate-basis spec)?", "a": "Black-Scholes, backend-computed. The later spec wins.", "by": "resolved 2026-09-03"}
+    {
+      "id": "Q1-2026-09-04",
+      "q": "Gate basis: Black-Scholes at today's date instead of delta-linear?",
+      "a": "APPROVED",
+      "by": "Kenneth"
+    },
+    {
+      "id": "Q3-2026-09-04",
+      "q": "Derive the premium stop server-side so a live fill cannot move it?",
+      "a": "APPROVED and SHIPPED (846fc792)",
+      "by": "Kenneth"
+    },
+    {
+      "id": "Q4-2026-09-04",
+      "q": "Add the two-barrier stock Barrier Race to piece 6?",
+      "a": "YES",
+      "by": "Kenneth"
+    },
+    {
+      "id": "ARCH-2026-09-04",
+      "q": "Does the stop-cost gate move server-side?",
+      "a": "DECIDED, not open -- the gate-basis spec section 2 already chose it and rejected a client-side pricer.",
+      "by": "spec"
+    },
+    {
+      "id": "RANK-BASIS",
+      "q": "Ranking badge basis: delta-linear (round 4) or Black-Scholes (gate-basis spec)?",
+      "a": "Black-Scholes, backend-computed. The later spec wins.",
+      "by": "resolved 2026-09-03"
+    },
+    {
+      "id": "NOTATION-2026-09-04",
+      "q": "Rework the stop-cost notation: name it 'Max loss if the stop is hit', lead with per-contract dollars and what is left, print delta at 3dp so the equation reconciles, name the basis, and cross-reference the Barrier Race?",
+      "a": "APPROVED and SHIPPED",
+      "by": "Kenneth"
+    }
   ],
-
   "pending_kenneth": [
     "Remove the Invalidation row readout from the Monte Carlo card (a MOVE to the race, not a deletion -- the stored field stays; exit.invalidation blocks every send).",
     "Remove the Projected R/R (+8%) readout from the Fixed % Ladder (readout only -- overlay.premiumStop stays, it is a live risk denominator and the race's third barrier)."
   ],
-
   "open_questions": [
     "Do the Q7 thresholds (0.80/0.70/0.60) hold on a real universe? Round 5 records them as taken as proposed, never measured.",
     "Is Tradier's per-contract IV good enough in production to displace a solver for Phase A?",
     "ivRank is conflated: market.py:1277 writes raw IV x100 into a field named for a percentile, 1291/1308 conditionally overwrite it with a genuine rank, and scan.py:610-616 broadcasts an ATM value across every strike. It is compared against iv_rank_pass_max: 34 and hard_reject.max_iv_rank: 70 -- a LIVE scoring/hard-reject defect, not a tidy-up."
   ],
-
   "authoritative_documents": [
-    {"path": "docs/superpowers/specs/2026-09-02-trade-card-schematic.html", "role": "Kenneth's field-by-field reference for Step 7. Reference only -- the specs win where they differ."},
-    {"path": "docs/superpowers/plans/2026-09-03-remaining-stop-model-implementation-plan.md", "role": "The build plan for A-G."},
-    {"path": "docs/superpowers/plans/2026-09-03-bs-iv-convergence-findings.md", "role": "bs_iv probe. READ ALL THREE PARTS -- Amendment B supersedes the body and Amendment A."},
-    {"path": "docs/superpowers/plans/2026-09-02-gate-basis-spec.md", "role": "Phase B spec."},
-    {"path": "docs/superpowers/plans/2026-09-02-piece-4-per-position-premium-stop-spec.md", "role": "Phase D spec."},
-    {"path": "docs/superpowers/plans/2026-09-02-piece-6-stocks-arithmetic-plan-spec.md", "role": "Phase E spec."},
-    {"path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-12.md", "role": "Latest handoff."}
+    {
+      "path": "docs/superpowers/specs/2026-09-02-trade-card-schematic.html",
+      "role": "Kenneth's field-by-field reference for Step 7. Reference only -- the specs win where they differ."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-03-remaining-stop-model-implementation-plan.md",
+      "role": "The build plan for A-G."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-03-bs-iv-convergence-findings.md",
+      "role": "bs_iv probe. READ ALL THREE PARTS -- Amendment B supersedes the body and Amendment A."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-02-gate-basis-spec.md",
+      "role": "Phase B spec."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-02-piece-4-per-position-premium-stop-spec.md",
+      "role": "Phase D spec."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-02-piece-6-stocks-arithmetic-plan-spec.md",
+      "role": "Phase E spec."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-12.md",
+      "role": "Latest handoff."
+    }
   ],
-
   "traps": [
     "migrations/env.py:41 overwrites whatever sqlalchemy.url a caller sets with settings.DATABASE_URL. An alembic test that does not also set the env var silently migrates the real dev database. get_settings() is lru_cached, so clear the cache too.",
     "An earlier migration alters a foreign-key constraint, which SQLite cannot do without batch mode. The chain cannot replay from empty -- stamp one revision back and run only the step under test.",

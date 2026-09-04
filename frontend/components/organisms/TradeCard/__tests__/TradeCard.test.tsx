@@ -1869,11 +1869,11 @@ describe('TradeCard — stop-vs-premium gate', () => {
     // You cannot lose $5.18 on a $2.50 option, so it caps at $2.50 = 100%.
     render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0)} />);
 
-    expect(screen.getByText('STOP COST')).toBeInTheDocument();
+    expect(screen.getByText('MAX LOSS IF THE STOP IS HIT')).toBeInTheDocument();
     expect(screen.getByText('100% OF PREMIUM')).toBeInTheDocument();
     // Inputs are on screen, not just the verdict — the complaint that produced
     // this gate was a ratio whose inputs were invisible.
-    expect(screen.getByText(/\$11\.50 away × Δ0\.45 = \$2\.50 of \$2\.50 premium/)).toBeInTheDocument();
+    expect(screen.getByText(/\$11\.50 away × Δ0\.450 = \$2\.50 of \$2\.50 premium/)).toBeInTheDocument();
     // ...including the uncapped figure, so "how far past total loss" is visible.
     // 11.50 * 0.45 === 5.175, which toFixed(2) renders "5.17" — 5.175 is stored
     // just below the exact value in IEEE754 (same class of thing the
@@ -1892,7 +1892,7 @@ describe('TradeCard — stop-vs-premium gate', () => {
     render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0, { mid: 20 })} />);
 
     expect(screen.getByText('26% OF PREMIUM')).toBeInTheDocument();
-    expect(screen.getByText(/\$11\.50 away × Δ0\.45 = \$5.17 of \$20.00 premium/)).toBeInTheDocument();
+    expect(screen.getByText(/\$11\.50 away × Δ0\.450 = \$5.17 of \$20.00 premium/)).toBeInTheDocument();
     expect(screen.queryByText(/uncapped/)).not.toBeInTheDocument();
   });
 
@@ -1902,17 +1902,17 @@ describe('TradeCard — stop-vs-premium gate', () => {
     expect(screen.queryByText('Structural level found')).not.toBeInTheDocument();
     expect(screen.queryByText('Bottom (final stop)')).not.toBeInTheDocument();
     // ...but the gate already has its verdict.
-    expect(screen.getByText('STOP COST')).toBeInTheDocument();
+    expect(screen.getByText('MAX LOSS IF THE STOP IS HIT')).toBeInTheDocument();
   });
 
   it('stays hidden when there is no structural stop to measure against', () => {
     render(<TradeCard data={mockTradeCard} />);
-    expect(screen.queryByText('STOP COST')).not.toBeInTheDocument();
+    expect(screen.queryByText('MAX LOSS IF THE STOP IS HIT')).not.toBeInTheDocument();
   });
 
   it('stays hidden when the stop sits exactly at the current price', () => {
     render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, price: 190.0, distancePct: 0 }, 190.0)} />);
-    expect(screen.queryByText('STOP COST')).not.toBeInTheDocument();
+    expect(screen.queryByText('MAX LOSS IF THE STOP IS HIT')).not.toBeInTheDocument();
   });
 });
 
@@ -1970,7 +1970,7 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     // $2.50 premium -> capped at 100%. If it had stayed on the raw pair this
     // would still read 63%.
     expect(screen.getByText('100% OF PREMIUM')).toBeInTheDocument();
-    expect(screen.getByText(/\$20\.00 away × Δ0\.45 = \$2\.50 of \$2\.50 premium \(uncapped \$9\.00\)/)).toBeInTheDocument();
+    expect(screen.getByText(/\$20\.00 away × Δ0\.450 = \$2\.50 of \$2\.50 premium \(uncapped \$9\.00\)/)).toBeInTheDocument();
     expect(screen.queryByText('63% OF PREMIUM')).not.toBeInTheDocument();
 
     // 3) Run Monte Carlo Estimate — fresh premium/delta for firstPassageContext.
