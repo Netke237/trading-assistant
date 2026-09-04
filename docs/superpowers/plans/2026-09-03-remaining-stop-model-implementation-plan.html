@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stop Model Build Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+:root{
+  --ground:#f4f6f7; --surface:#ffffff; --surface-2:#eef1f3;
+  --border:#d8dee2; --border-strong:#b9c3c9;
+  --ink:#161b1f; --ink-2:#414c54; --ink-dim:#69757d;
+  --accent:#1d5f6b; --accent-soft:#e2eff1;
+  --pass:#2c6e49; --pass-soft:#e3f0e8;
+  --caution:#8a5d0c; --caution-soft:#f7eeda;
+  --neutral-chip:#5b666e; --neutral-soft:#e7eaec;
+  --rule:#e4e9eb;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0e1214; --surface:#161c1f; --surface-2:#1c2429;
+    --border:#2b353b; --border-strong:#3c4950;
+    --ink:#e2e8ea; --ink-2:#b3bec4; --ink-dim:#87949b;
+    --accent:#63b6c2; --accent-soft:#173037;
+    --pass:#69b98a; --pass-soft:#16291f;
+    --caution:#d0a047; --caution-soft:#2b2211;
+    --neutral-chip:#8e9aa1; --neutral-soft:#222a2f;
+    --rule:#242e33;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0e1214; --surface:#161c1f; --surface-2:#1c2429;
+  --border:#2b353b; --border-strong:#3c4950;
+  --ink:#e2e8ea; --ink-2:#b3bec4; --ink-dim:#87949b;
+  --accent:#63b6c2; --accent-soft:#173037;
+  --pass:#69b98a; --pass-soft:#16291f;
+  --caution:#d0a047; --caution-soft:#2b2211;
+  --neutral-chip:#8e9aa1; --neutral-soft:#222a2f;
+  --rule:#242e33;
+}
+*{box-sizing:border-box}
+img{max-width:100%}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"Source Serif 4",Georgia,"Times New Roman",serif;
+  font-size:16.5px; line-height:1.62;
+  margin:0; padding:0 20px 96px;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:830px;margin:0 auto}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace}
+code{font-size:.82em;background:var(--surface-2);border:1px solid var(--rule);border-radius:3px;padding:.1em .34em;color:var(--ink-2);white-space:nowrap}
+
+/* ---------- masthead ---------- */
+header.mast{padding:52px 0 26px;border-bottom:2px solid var(--ink);margin-bottom:0}
+.eyebrow{font-family:"Archivo",system-ui,sans-serif;font-size:11px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+h1{font-family:"Archivo",system-ui,sans-serif;font-weight:700;font-size:clamp(30px,5.2vw,44px);line-height:1.06;letter-spacing:-.022em;margin:0 0 16px;text-wrap:balance}
+.standfirst{font-size:18px;line-height:1.5;color:var(--ink-2);margin:0;max-width:62ch}
+.meta{display:flex;flex-wrap:wrap;gap:0 26px;margin-top:22px;font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--ink-dim)}
+.meta b{color:var(--ink-2);font-weight:500}
+
+/* ---------- sections ---------- */
+section{padding-top:44px}
+h2{font-family:"Archivo",system-ui,sans-serif;font-weight:700;font-size:23px;letter-spacing:-.014em;margin:0 0 6px;text-wrap:balance}
+h2 .num{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700;color:var(--accent);margin-right:10px;vertical-align:2px}
+.dek{color:var(--ink-dim);font-size:15px;margin:0 0 20px;max-width:64ch}
+h3{font-family:"Archivo",system-ui,sans-serif;font-weight:600;font-size:16.5px;letter-spacing:-.005em;margin:30px 0 8px}
+p{margin:0 0 14px;max-width:68ch}
+ul,ol{margin:0 0 14px;padding-left:20px;max-width:68ch}
+li{margin-bottom:7px}
+li::marker{color:var(--ink-dim)}
+strong{font-weight:600;color:var(--ink)}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;margin:0 0 18px;border:1px solid var(--border);border-radius:5px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{font-family:"Archivo",system-ui,sans-serif;font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-dim);text-align:left;padding:11px 14px;border-bottom:1px solid var(--border);white-space:nowrap;background:var(--surface-2)}
+td{padding:10px 14px;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:none}
+td:first-child{color:var(--ink)}
+.num-col{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+
+/* ---------- chips ---------- */
+.chip{display:inline-block;font-family:"Archivo",system-ui,sans-serif;font-size:9.5px;font-weight:700;letter-spacing:.075em;text-transform:uppercase;padding:3px 7px;border-radius:3px;white-space:nowrap;line-height:1.35}
+.c-ship{background:var(--pass-soft);color:var(--pass);border:1px solid color-mix(in srgb,var(--pass) 30%,transparent)}
+.c-none{background:var(--caution-soft);color:var(--caution);border:1px solid color-mix(in srgb,var(--caution) 32%,transparent)}
+.c-spec{background:var(--neutral-soft);color:var(--neutral-chip);border:1px solid var(--border-strong)}
+.c-pend{background:var(--accent-soft);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 32%,transparent)}
+
+/* ---------- callouts ---------- */
+.note{border-left:3px solid var(--accent);background:var(--surface);padding:14px 18px;margin:0 0 18px;border-radius:0 4px 4px 0}
+.note p:last-child{margin-bottom:0}
+.note .lbl{font-family:"Archivo",system-ui,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:5px}
+.warn{border-left-color:var(--caution)}
+.warn .lbl{color:var(--caution)}
+
+/* ---------- phase blocks ---------- */
+.phase{border:1px solid var(--border);border-radius:6px;background:var(--surface);padding:20px 22px;margin:0 0 16px}
+.phase-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+.phase-key{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700;color:var(--surface);background:var(--accent);padding:3px 8px;border-radius:3px;letter-spacing:.04em}
+.phase-title{font-family:"Archivo",system-ui,sans-serif;font-weight:600;font-size:17px;letter-spacing:-.008em}
+.phase-when{font-family:"Archivo",system-ui,sans-serif;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);margin-left:auto}
+.phase p:first-of-type{margin-top:10px}
+.phase > :last-child{margin-bottom:0}
+
+/* ---------- diagram ---------- */
+figure{margin:0 0 20px}
+svg{display:block;width:100%;height:auto}
+figcaption{font-size:13px;color:var(--ink-dim);margin-top:10px;max-width:64ch}
+.d-lane{font-family:"Archivo",system-ui,sans-serif;font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase}
+.d-key{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700}
+.d-name{font-family:"Archivo",system-ui,sans-serif;font-size:12px;font-weight:600}
+.d-sub{font-family:"Archivo",system-ui,sans-serif;font-size:10px;font-weight:500}
+
+hr.div{border:none;border-top:1px solid var(--rule);margin:40px 0 0}
+footer{margin-top:52px;padding-top:20px;border-top:1px solid var(--border);font-size:13px;color:var(--ink-dim)}
+footer code{font-size:.86em}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">Bamendjou · Step 7 trade card</p>
+  <h1>Stop Model Build Plan</h1>
+  <p class="standfirst">Everything specified and not yet built, in dependency order — with each claim checked against the code rather than read off a status line.</p>
+  <div class="meta">
+    <span><b>Baseline</b> main @ dc051a5</span>
+    <span><b>Date</b> 2026-09-03</span>
+    <span><b>Pieces left</b> 5 built + 2 to spec</span>
+  </div>
+</header>
+
+<section>
+  <div class="note warn">
+    <span class="lbl">Provenance — snapshot, read the date</span>
+    <p>This page is the committed copy of artifact <code>9842a21e-ecfa-4f80-b673-d8fbc7b06f6a</code>,
+    captured verbatim as it stood on <strong>2026-09-03</strong> against <code>main @ dc051a5</code>.
+    The body below is unedited, so it will drift as work lands — <strong>Piece 4 (Phase D) shipped in
+    <code>26c44bde</code> and its row in the status ledger now reads stale.</strong> Treat the ledger as a
+    dated observation, not a live status board; the current state lives in the newest
+    <code>stop-model-handoff-round-N</code> document.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">01</span>Status ledger</h2>
+  <p class="dek">Verified against <code>dc051a5</code> this session. Doc status lines were not trusted — several were stale.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Item</th><th>State</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>Stop-vs-premium gate (PASS/CAUTION)</td><td><span class="chip c-ship">Shipped</span></td><td><code>risk.ts:70</code></td></tr>
+        <tr><td>Piece 1 — MC uses structural+ATR stop</td><td><span class="chip c-ship">Shipped</span></td><td>round 4</td></tr>
+        <tr><td>Piece 2 — gate + MC share a stop</td><td><span class="chip c-ship">Half</span></td><td>third consumer deleted, not repointed</td></tr>
+        <tr><td>Barrier Race + <code>reprice_horizon</code></td><td><span class="chip c-ship">Shipped</span></td><td>YAML matches the schematic verbatim</td></tr>
+        <tr><td>Removal — half-life repricing</td><td><span class="chip c-ship">Done</span></td><td>replaced by <code>resolve_reprice_days</code></td></tr>
+        <tr><td>Removal — <code>structuralRR</code></td><td><span class="chip c-ship">Done</span></td><td>gone from production code</td></tr>
+        <tr><td><strong>Contract <code>iv</code> field</strong></td><td><span class="chip c-none">Not built</span></td><td>only <code>ivRank</code> is sent</td></tr>
+        <tr><td><strong>Gate basis (Q3/Q7)</strong></td><td><span class="chip c-none">Not built</span></td><td>still Δ-linear; YAML still <code>0.8</code></td></tr>
+        <tr><td><strong>Piece 3 — scan-time <code>finalStop</code></strong></td><td><span class="chip c-none">Not built</span></td><td><code>scan.py</code> never calls it; store v12</td></tr>
+        <tr><td><strong>Piece 4 — per-position premium stop</strong></td><td><span class="chip c-none">Not built</span></td><td>no column, no migration</td></tr>
+        <tr><td><strong>Piece 6 — <code>/stocks/exit-plan</code></strong></td><td><span class="chip c-none">Not built</span></td><td>only the contracts route exists</td></tr>
+        <tr><td>Heston calibration (Q8)</td><td><span class="chip c-spec">Not spec'd</span></td><td>a decided paragraph only</td></tr>
+        <tr><td>Piece 5 — per-trade pick (D4/D5)</td><td><span class="chip c-spec">Not spec'd</span></td><td>needs a card→page channel</td></tr>
+        <tr><td>Removal — Invalidation row</td><td><span class="chip c-pend">Your call</span></td><td><code>TradeCard:2057</code></td></tr>
+        <tr><td>Removal — Projected R/R (+8%)</td><td><span class="chip c-pend">Your call</span></td><td><code>TradeCard:2075</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <span class="lbl">Preconditions confirmed clean</span>
+    <p>Alembic has <strong>exactly one head</strong> (<code>2bf3bf834b29</code>), so Piece 4's migration is safe to generate. <code>bs_price</code> and <code>bs_iv</code> both already exist. <code>estimate_stock_first_passage</code> is at <code>first_passage.py:714</code> — the piece-6 spec says <code>:275</code>, a stale line number for the same function.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">02</span>The critical path</h2>
+  <p class="dek">One field gates two pieces. Everything else runs in parallel from today.</p>
+  <figure>
+    <svg viewBox="0 0 800 356" role="img" aria-label="Dependency diagram: Phase A gates Phases B and C; Phases D and E are independent; Phases F and G come last and need specs first.">
+      <!-- lane labels -->
+      <text x="8" y="16" class="d-lane" fill="var(--accent)">Critical path — do in order</text>
+      <text x="304" y="16" class="d-lane" fill="var(--pass)">Start now, in parallel</text>
+      <text x="600" y="16" class="d-lane" fill="var(--ink-dim)">Last — needs a spec</text>
+
+      <!-- lane dividers -->
+      <line x1="288" y1="28" x2="288" y2="340" stroke="var(--rule)" stroke-width="1"/>
+      <line x1="584" y1="28" x2="584" y2="340" stroke="var(--rule)" stroke-width="1"/>
+
+      <!-- Phase A -->
+      <rect x="8" y="34" width="264" height="62" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="24" y="58" class="d-key" fill="var(--accent)">A</text>
+      <text x="46" y="58" class="d-name" fill="var(--ink)">Contract `iv` on the payload</text>
+      <text x="46" y="78" class="d-sub" fill="var(--ink-dim)">Small. Its own commit. Unblocks B and C.</text>
+
+      <!-- split from A -->
+      <path d="M140 96 L140 116" stroke="var(--accent)" stroke-width="1.5" fill="none"/>
+      <path d="M74 116 L206 116" stroke="var(--accent)" stroke-width="1.5" fill="none"/>
+      <path d="M74 116 L74 142" stroke="var(--accent)" stroke-width="1.5" fill="none"/>
+      <path d="M206 116 L206 142" stroke="var(--accent)" stroke-width="1.5" fill="none"/>
+      <path d="M70 136 L74 144 L78 136 Z" fill="var(--accent)"/>
+      <path d="M202 136 L206 144 L210 136 Z" fill="var(--accent)"/>
+
+      <!-- Phase B -->
+      <rect x="8" y="146" width="128" height="66" rx="5" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="1"/>
+      <text x="22" y="170" class="d-key" fill="var(--accent)">B</text>
+      <text x="40" y="170" class="d-name" fill="var(--ink)">Gate basis</text>
+      <text x="22" y="189" class="d-sub" fill="var(--ink-dim)">Q3 / Q7 · BS today</text>
+      <text x="22" y="203" class="d-sub" fill="var(--ink-dim)">0.80 / 0.70 / 0.60</text>
+
+      <!-- Phase C -->
+      <rect x="144" y="146" width="128" height="66" rx="5" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="1"/>
+      <text x="158" y="170" class="d-key" fill="var(--accent)">C</text>
+      <text x="176" y="170" class="d-name" fill="var(--ink)">Piece 3</text>
+      <text x="158" y="189" class="d-sub" fill="var(--ink-dim)">scan-time finalStop</text>
+      <text x="158" y="203" class="d-sub" fill="var(--ink-dim)">store v12 → v13</text>
+
+      <!-- Phase D -->
+      <rect x="304" y="34" width="264" height="66" rx="5" fill="var(--surface)" stroke="var(--pass)" stroke-width="1"/>
+      <text x="320" y="58" class="d-key" fill="var(--pass)">D</text>
+      <text x="340" y="58" class="d-name" fill="var(--ink)">Piece 4 — per-position premium stop</text>
+      <text x="320" y="77" class="d-sub" fill="var(--ink-dim)">Nullable column + one shared resolver.</text>
+      <text x="320" y="91" class="d-sub" fill="var(--ink-dim)">Touches nothing A, B or C touches.</text>
+
+      <!-- Phase E -->
+      <rect x="304" y="112" width="264" height="66" rx="5" fill="var(--surface)" stroke="var(--pass)" stroke-width="1"/>
+      <text x="320" y="136" class="d-key" fill="var(--pass)">E</text>
+      <text x="340" y="136" class="d-name" fill="var(--ink)">Piece 6 — stocks arithmetic plan</text>
+      <text x="320" y="155" class="d-sub" fill="var(--ink-dim)">Mostly assembly. No stocks gate —</text>
+      <text x="320" y="169" class="d-sub" fill="var(--ink-dim)">Q-A is closed.</text>
+
+      <!-- Phase F -->
+      <rect x="600" y="34" width="192" height="66" rx="5" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1" stroke-dasharray="4 3"/>
+      <text x="616" y="58" class="d-key" fill="var(--ink-dim)">F</text>
+      <text x="636" y="58" class="d-name" fill="var(--ink-2)">Heston calibration</text>
+      <text x="616" y="77" class="d-sub" fill="var(--ink-dim)">v0 seeded from the chain's</text>
+      <text x="616" y="91" class="d-sub" fill="var(--ink-dim)">own ATM IV, not 0.04.</text>
+
+      <!-- Phase G -->
+      <rect x="600" y="112" width="192" height="66" rx="5" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1" stroke-dasharray="4 3"/>
+      <text x="616" y="136" class="d-key" fill="var(--ink-dim)">G</text>
+      <text x="636" y="136" class="d-name" fill="var(--ink-2)">Piece 5 — the pick</text>
+      <text x="616" y="155" class="d-sub" fill="var(--ink-dim)">Largest. Needs A–D landed</text>
+      <text x="616" y="169" class="d-sub" fill="var(--ink-dim)">and a spec of its own.</text>
+
+      <!-- pending removals band -->
+      <rect x="8" y="238" width="784" height="66" rx="5" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+      <text x="24" y="262" class="d-lane" fill="var(--ink-dim)">Blocked on you, not on code</text>
+      <text x="24" y="284" class="d-sub" fill="var(--ink-2)">Two flagged removals still live: the Invalidation row (a move, not a deletion) and Projected R/R (+8%).</text>
+      <text x="24" y="298" class="d-sub" fill="var(--ink-2)">In both cases only the readout goes — the stored field stays load-bearing.</text>
+    </svg>
+    <figcaption>Phase A is the only shared dependency. Doing it alone, first, means the scan payload is touched once instead of twice.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2><span class="num">03</span>Phases</h2>
+  <p class="dek">Each follows its written spec. What is recorded here is the delta from this session's code read.</p>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-key">A</span><span class="phase-title">The contract <code>iv</code> field</span><span class="phase-when">First</span></div>
+    <p><code>ivRank</code> is a percentile — where today's vol sits inside its own year — not a volatility. It cannot substitute for the real thing. The value is already computed server-side and simply never sent.</p>
+    <ul>
+      <li><code>ContractDetails</code> gains <code>iv: Optional[float] = None</code>, populated from the existing <code>bs_iv</code>.</li>
+      <li><strong><code>bs_iv</code> returns <code>None</code> when it cannot converge.</strong> Carry <code>iv: null</code> through. Never substitute a default, never fall back to <code>ivRank / 100</code>.</li>
+      <li>The Contract Details card renders <strong>IV 34.5%</strong> beside IV rank, per the schematic. <code>—</code> when null.</li>
+    </ul>
+    <p><em>Done when</em> <code>iv</code> is on the wire and on the card, and a non-converging contract renders a dash rather than a plausible-looking number. No gate change yet.</p>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-key">B</span><span class="phase-title">Gate basis and thresholds</span><span class="phase-when">After A</span></div>
+    <p>The gate is evaluated at a stop <strong>that moves</strong> — <em>Check structure</em> and <em>Compute Arithmetic Plan</em> both change it. A scan-time precompute cannot serve it, and a TypeScript pricer is rejected: there is not one <code>Math.exp</code> in <code>frontend/lib/</code> today.</p>
+    <p><strong>So the endpoints that produce a stop also return its cost.</strong> The card never computes; it renders what it was given and prints the inputs.</p>
+    <ul>
+      <li><code>StructuralStopRequest</code> gains four <strong>optional</strong> fields — <code>strike</code>, <code>dte</code>, <code>premium</code>, <code>iv</code> — present together or not at all. <strong>A partial set must 422.</strong> Silently skipping the gate because one field was missing is how a contract with no verdict reads as an unremarkable one.</li>
+      <li>New <code>StopCostOut</code>; <code>/contracts/exit-plan</code> gains the same block against <code>final_stop.price</code>. <strong>The two will legitimately disagree</strong> — assert that, don't treat it as a bug.</li>
+      <li>Do not fork an alias route: the stocks-mode card calls this same endpoint, which is why the new fields are optional.</li>
+      <li>Frontend <code>stopPremiumRisk</code> becomes a <strong>presenter</strong>. The Δ-linear arithmetic is <strong>deleted, not kept as a fallback</strong> — a fallback that quietly answers a different question is worse than no answer.</li>
+      <li><code>capped</code> and the <code>(uncapped …)</code> tail go away; Black-Scholes cannot exceed the premium on a long option. <strong>I counted 21 <code>capped</code> references</strong> across <code>risk.ts</code>, its tests and <code>TradeCard</code>.</li>
+      <li>There are <strong>three</strong> <code>stop_premium:</code> blocks in <code>scoring_rules.yaml</code>, all reading <code>0.8</code>. All three move.</li>
+    </ul>
+    <div class="note warn">
+      <span class="lbl">Basis and thresholds must move together</span>
+      <p>Under the new ruler the worst contract on the reference chain reads 77% — beneath the old Swing line of 0.80. Keep the old thresholds and the gate goes <strong>permanently silent</strong>.</p>
+    </div>
+    <h3>The reference chain — a hard assertion, not a guide</h3>
+    <p>Stock $201.86 → stop $185.87, 45 DTE. The spec and the schematic agree exactly on this split, so it is a fixture.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Strike</th><th class="num-col">Premium</th><th class="num-col">Left at stop</th><th class="num-col">New</th><th class="num-col">Old Δ-linear</th><th>Swing @ 0.70</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">195 C</td><td class="num-col">$13.21</td><td class="num-col">$4.87</td><td class="num-col">63%</td><td class="num-col">81%</td><td><span class="chip c-ship">Pass</span></td></tr>
+          <tr><td class="mono">200 C</td><td class="num-col">$10.66</td><td class="num-col">$3.70</td><td class="num-col">65%</td><td class="num-col">86%</td><td><span class="chip c-ship">Pass</span></td></tr>
+          <tr><td class="mono">205 C</td><td class="num-col">$8.49</td><td class="num-col">$2.76</td><td class="num-col">67%</td><td class="num-col">93%</td><td><span class="chip c-ship">Pass</span></td></tr>
+          <tr><td class="mono">210 C</td><td class="num-col">$6.67</td><td class="num-col">$2.03</td><td class="num-col">70%</td><td class="num-col">99%</td><td><span class="chip c-none">Caution</span></td></tr>
+          <tr><td class="mono">215 C ← ref</td><td class="num-col">$5.21</td><td class="num-col">$1.49</td><td class="num-col">71%</td><td class="num-col">100%</td><td><span class="chip c-none">Caution</span></td></tr>
+          <tr><td class="mono">220 C</td><td class="num-col">$4.05</td><td class="num-col">$1.10</td><td class="num-col">73%</td><td class="num-col">100%</td><td><span class="chip c-none">Caution</span></td></tr>
+          <tr><td class="mono">230 C</td><td class="num-col">$2.48</td><td class="num-col">$0.62</td><td class="num-col">75%</td><td class="num-col">100%</td><td><span class="chip c-none">Caution</span></td></tr>
+          <tr><td class="mono">240 C</td><td class="num-col">$1.55</td><td class="num-col">$0.36</td><td class="num-col">77%</td><td class="num-col">100%</td><td><span class="chip c-none">Caution</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The old column pins four of eight contracts at exactly 100% — it cannot tell a 220 call from a 240 call. The new column ranks all eight, and the 0.70 line splits the chain <strong>3 PASS / 5 CAUTION</strong> instead of painting it one colour.</p>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-key">C</span><span class="phase-title">Piece 3 — scan-time <code>finalStop</code></span><span class="phase-when">After A</span></div>
+    <p><strong>This is what makes pieces 1 and 2 take effect by default.</strong> Today, on any card where the Arithmetic Plan button was never pressed, Monte Carlo still sends the flat −3%. The bug an early handoff called the worst factual wrongness on the card is currently fixed only for people who click an optional button first.</p>
+    <ol>
+      <li>Call <code>compute_final_stop</code> per <strong>symbol</strong> at scan time and attach <code>exit.finalStop</code>. <code>structuralSource</code> and <code>distanceDollar</code> are <strong>required</strong> — the "Bottom (final stop)" row reads both. Wrap in <code>asyncio.to_thread</code>; assembly point is <code>scan.py:863</code>.</li>
+      <li><code>stop.contractPrice</code> cannot exist at scan time — it needs a contract. Contract-priced sub-cells render <code>—</code> until a plan is computed. Say so explicitly.</li>
+      <li><strong>Survive a Step 6 override.</strong> <code>mergePlan</code> does <code>exit: plan.exit</code>, a wholesale replacement, and <code>TradeExit</code> has no <code>finalStop</code> — so it would be wiped for exactly the cards where a contract was hand-picked. Add it to <code>TradeExit</code>, echo it back, <strong>and</strong> splice it in <code>withCachedEstimate</code> as defence in depth.</li>
+      <li><strong>Migrate the store.</strong> <code>scanStore</code> is at <code>version: 12</code>. Bump to <strong>13</strong> with an explicit migration branch. Pre-13 restores render <em>"not computed — re-run the scan"</em>, never a blank and never a silent PASS.</li>
+      <li><strong>Ranking badge.</strong> Add exactly <strong>two</strong> fields to <code>WatchlistRow</code> — <code>stopCostPct</code> and <code>stopCostStatus</code>. Not five. Adding strike/dte/premium/iv/delta to every row so the client could price it would be the TypeScript-pricer decision by the back door. The badge must say it describes the <strong>auto-picked</strong> contract.</li>
+    </ol>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-key">D</span><span class="phase-title">Piece 4 — per-position premium stop</span><span class="phase-when">Independent</span></div>
+    <p>There are three global premium-stop percentages today and no per-position field at all. Changing the global silently re-arms every open position at once.</p>
+    <ul>
+      <li><code>premium_stop_pct = Column(Float, nullable=True, default=None)</code>. <strong>NULL means "inherit the global"</strong> and is a distinct, load-bearing state — a position stamped 0.60 at creation would stop responding to a global change, which is exactly today's behaviour and the thing this removes.</li>
+      <li><strong>Settable at creation, not update-only.</strong> <code>active_tp_method</code> is on the update schema only; do not repeat that. A trade sent from the card must carry the stop or its first alert silently uses the global.</li>
+      <li><strong>One shared resolver for all three alert paths.</strong> <code>scanPortfolio</code> currently takes a single <code>premiumStopPct</code> for every position — resolve inside the loop. A preview that disagrees with the alert that later fires is worse than no preview.</li>
+      <li>Both send paths carry it. They already disagree about stop re-anchoring; do not add a second field they disagree on.</li>
+      <li>The drawer distinguishes <strong>inherited</strong> from <strong>set</strong>: <code>60% (global)</code> vs <code>45%</code>.</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-key">E</span><span class="phase-title">Piece 6 — stocks arithmetic plan</span><span class="phase-when">Independent</span></div>
+    <p><strong>There is no stocks gate.</strong> Q-A is closed. The gate measures what share of the <em>premium</em> a stop costs — a question that exists only because of an option's nonlinearity. A stock's stop cost is exact, and sizing already covers it. Do not build a badge that looks like the options one but answers a different question.</p>
+    <ul>
+      <li><code>compute_final_stop</code> and <code>compute_target_row</code> take no contract input — they survive verbatim. <code>estimate_rr</code> and the gate are dropped.</li>
+      <li>New <code>POST /stocks/exit-plan</code>, because the contracts route requires <code>strike &gt; 0</code>, <code>dte</code> and <code>premium &gt; 0</code>.</li>
+      <li><strong>Carry both guards over:</strong> <code>&lt; 2</code> candles and <code>atr &lt;= 0</code> both 422. Without them the ATR floor collapses to the entry price and every target lands on entry — a "computed" plan built on no data.</li>
+      <li><strong>Disclose the day-count difference.</strong> Options counts calendar days; the stock engine counts trading days. Do not silently unify — ship <code>daysBasis</code> and render "~10 trading days".</li>
+      <li>Include the stop's probability. <em>"This stop is reached on 34% of paths, typically in 6 trading days"</em> is the most decision-relevant number on the card, and it comes free in the same call.</li>
+      <li>Assert on the schema's <strong>key set</strong> that no premium, strike, DTE, IV, delta or stop-cost field appears — so an options field cannot leak back in later.</li>
+    </ul>
+    <p>The spec also recommends the two-barrier stock version of the Barrier Race. <strong>Flagged as an addition, not assumed</strong> — it needs your yes.</p>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-key">F</span><span class="phase-title">Heston calibration</span><span class="phase-when">Spec first</span></div>
+    <p><code>heston_cache.py:36</code> has <code>v0_grid = [0.04]</code> — one value, 20% vol, hardcoded for every symbol on every scan, while the reference contract has 34.5% IV. <strong>The pricer is fine; the calibration is the defect</strong>, which is why plain Black-Scholes is currently more accurate than the shipped Heston.</p>
+    <p>Seed <code>v0</code> from the chain's own ATM IV — the correct seed already exists in the file and is used only in the fallback path — fit relative or vega-weighted error instead of absolute dollars, and use Heston only when its measured RMSE beats the BS baseline on the same chain.</p>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><span class="phase-key">G</span><span class="phase-title">Piece 5 — the per-trade pick</span><span class="phase-when">Spec first</span></div>
+    <p>Largest, last, needs A–D landed. Every decision behind it is made; what is missing is a card→page channel and persistence so the choice survives step navigation. Today "Computed via" is still <em>whichever method ran most recently</em>, now with Barrier Race as a fourth option.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">04</span>Three conflicts in the source documents</h2>
+  <p class="dek">Found by reading the chain end to end. Resolved here so the next session does not re-litigate them.</p>
+  <ol>
+    <li><strong>The ranking badge's basis.</strong> Round 4 says use the delta-linear basis and that "no decision is pending". The later gate-basis spec says the backend computes it with Black-Scholes and the row carries only the result. <strong>The spec wins</strong> — it is later, it is what Q3 decided, and the schematic's own summary table independently lists the ranking badge under Black-Scholes at today's date. Round 4's text was written while the card gate was still Δ-linear; leaving both live would put two different rulers on one screen.</li>
+    <li><strong>A stale line number.</strong> The piece-6 spec cites <code>first_passage.py:275</code>; the function is at <code>:714</code>.</li>
+    <li><strong>Who owns <code>iv</code>.</strong> Round 4 treats it as part of piece 3; the gate-basis spec treats it as shared. Pulled out as Phase A here so neither piece owns it and the payload is touched once.</li>
+  </ol>
+</section>
+
+<section>
+  <h2><span class="num">05</span>Traps carried forward</h2>
+  <ul>
+    <li><strong><code>np.argmax</code> on a boolean row returns 0</strong> both for "hit on day 1" and "never hit". Pair every <code>argmax</code> with <code>.any(axis=1)</code>.</li>
+    <li><strong><code>dte &lt; 1</code> returns probability 0.0 for every target</strong> — a refusal to simulate, not a real zero. Four zeroes summing to 0% look like a computed answer.</li>
+    <li><strong>The backend re-anchors stops on save.</strong> Defensible for a percentage level, wrong for a structural stop, which is an absolute chart level.</li>
+    <li><strong>No stop order exists anywhere.</strong> All four paper adapters are <code>MKT</code> or <code>LMT</code>. Everything called a "stop" is an in-app alert.</li>
+    <li><strong>Grep before removing.</strong> <code>capped</code> has 21 references, and an earlier handoff's "129 KB" estimate was wrong by more than 2000×. Verify; do not repeat a prior note.</li>
+  </ul>
+</section>
+
+<hr class="div">
+
+<section>
+  <h2><span class="num">06</span>First move</h2>
+  <p><strong>Phase A on its own branch, then Phase B.</strong> A is small, it is the only thing two pieces both need, and it is the cheapest possible proof that the payload change is clean before the gate rewrite lands on top of it.</p>
+  <p>If a second session is available, start <strong>Phase D or E</strong> alongside it — neither touches <code>iv</code>, the gate, or the scan payload.</p>
+</section>
+
+<footer>
+  Full plan committed at <code>docs/superpowers/plans/2026-09-03-remaining-stop-model-implementation-plan.md</code>, with the Trade Card Schematic alongside it at <code>docs/superpowers/specs/2026-09-02-trade-card-schematic.html</code> — so it is no longer reachable only from one Downloads folder and one account.
+</footer>
+
+</div>
+
+</body>
+</html>
