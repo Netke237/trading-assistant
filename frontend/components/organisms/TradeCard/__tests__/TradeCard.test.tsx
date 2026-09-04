@@ -3,6 +3,7 @@ import { render, screen, act, fireEvent, waitFor, within } from '@testing-librar
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
 import { useRiskStore } from '@/lib/riskStore';
+import { premiumStopDollarToSend } from '@/lib/premiumStop';
 import type { TradeCardData } from '@/types/domain';
 
 jest.mock('@/lib/api', () => ({
@@ -215,6 +216,61 @@ describe('TradeCard', () => {
     const moved = { ...merged, exit: { ...merged.exit, premiumStop: 0.65 } };
     rerender(<TradeCard data={moved} onEditsChange={onEditsChange} />);
     expect(shown()).toBe('$0.50');
+  });
+
+  it('reports the premium stop as UNTOUCHED when an unrelated edit precedes the merge', async () => {
+    // THE ORDERING THE TEST ABOVE DOES NOT COVER, and the one that actually
+    // shipped broken. Above, the merge lands first, so the later patch() reports
+    // the current seed and the cache self-heals. Reverse the two and it does
+    // not: the patch caches the OLD seed, the re-seed effect then moves the
+    // field without telling the parent (deliberately — see its comment), and
+    // the page was left holding a stale dollar it had no way to recognise as a
+    // default. `premiumStopDollarToSend` compared it against the NEW seed,
+    // 1.5 !== 0.8, and posted 1.5 — the card displaying $0.80 while $1.50 went
+    // to the server and armed the position at 1.5/entry.
+    //
+    // What makes it safe is not the value but the flag: an untouched field
+    // reports `premiumStopTouched: false` no matter which seed it happens to
+    // hold, and the page caches null for it.
+    const onEditsChange = jest.fn();
+    const seeded = { ...mockTradeCard, exit: { ...mockTradeCard.exit, premiumStop: 1.5 } };
+    const { rerender } = render(
+      <TradeCard data={seeded} onEditsChange={onEditsChange} />,
+    );
+    expandLadder();
+
+    // 1. An unrelated edit, BEFORE any merge. The overlay still holds the 1.5
+    //    seed and rides along — but it is flagged untouched.
+    fireEvent.click(screen.getByLabelText('Edit Contracts'));
+    const contracts = screen.getByLabelText('Edit Contracts') as HTMLInputElement;
+    fireEvent.change(contracts, { target: { value: '3' } });
+    fireEvent.blur(contracts);
+    const afterEdit = onEditsChange.mock.calls.at(-1)!;
+    expect(afterEdit[0].premiumStop).toBe(1.5);
+    expect(afterEdit[1]).toEqual({ premiumStopTouched: false });
+    // The page caches null for an untouched field, so nothing is posted.
+    expect(premiumStopDollarToSend(afterEdit[1].premiumStopTouched ? afterEdit[0].premiumStop : null))
+      .toBeNull();
+
+    // 2. mergePlan now moves the seed under the untouched field.
+    const merged = { ...seeded, exit: { ...seeded.exit, premiumStop: 0.8 } };
+    rerender(<TradeCard data={merged} onEditsChange={onEditsChange} />);
+    expect(screen.getByLabelText('Edit Premium stop').textContent).toBe('$0.80');
+
+    // 3. Still untouched, so still nothing posted — displayed and posted agree.
+    //    Under the old value-comparison this posted 1.50 against a $0.80 card.
+    const last = onEditsChange.mock.calls.at(-1)!;
+    expect(last[1].premiumStopTouched).toBe(false);
+
+    // 4. Only a real edit arms it, and then the typed value is what is posted.
+    fireEvent.click(screen.getByLabelText('Edit Premium stop'));
+    const stop = screen.getByLabelText('Edit Premium stop') as HTMLInputElement;
+    fireEvent.change(stop, { target: { value: '0.5' } });
+    fireEvent.blur(stop);
+    const armed = onEditsChange.mock.calls.at(-1)!;
+    expect(armed[1]).toEqual({ premiumStopTouched: true });
+    expect(premiumStopDollarToSend(armed[1].premiumStopTouched ? armed[0].premiumStop : null))
+      .toBe(0.5);
   });
 
   it('renders exit plan section (inside the collapsed Fixed % Ladder Plan group)', () => {
@@ -1620,7 +1676,10 @@ describe('TradeCard', () => {
     // onEditsChange fired with the new value — this is what a real page-level
     // handler (step-7-trade-card/page.tsx's handleEditsChange) uses to update
     // the shared per-symbol contracts map.
-    expect(onEditsChange).toHaveBeenCalledWith(expect.objectContaining({ contracts: 5 }));
+    expect(onEditsChange).toHaveBeenCalledWith(
+      expect.objectContaining({ contracts: 5 }),
+      expect.objectContaining({ premiumStopTouched: expect.any(Boolean) }),
+    );
 
     // Simulate that page-level round-trip: the shared map updates, and the
     // new value flows back down as the `contracts` prop on the next render —
@@ -1893,6 +1952,7 @@ describe('TradeCard', () => {
       });
       expect(onEditsChange).toHaveBeenCalledWith(
         expect.objectContaining({ entryLimit: 3.0 }),
+        expect.objectContaining({ premiumStopTouched: expect.any(Boolean) }),
       );
     });
 
@@ -1975,10 +2035,11 @@ describe('TradeCard — stop-vs-premium gate', () => {
     // this gate was a ratio whose inputs were invisible.
     expect(screen.getByText(/\$11\.50 away × Δ0\.450 = \$2\.50 of \$2\.50 premium/)).toBeInTheDocument();
     // ...including the uncapped figure, so "how far past total loss" is visible.
-    // 11.50 * 0.45 === 5.175, which toFixed(2) renders "5.17" — 5.175 is stored
-    // just below the exact value in IEEE754 (same class of thing the
-    // formatRecommendedContractSizeRaw comments document).
-    expect(screen.getByText(/uncapped \$5\.17/)).toBeInTheDocument();
+    // 11.50 * 0.45 === 5.175 exactly, and the printed product is rounded HALF-UP
+    // to $5.18 — what a reader multiplying the two printed factors gets.
+    // `toFixed(2)` used to render "5.17", because 5.175 is stored just below the
+    // exact value in IEEE754, and this assertion pinned that artefact.
+    expect(screen.getByText(/uncapped \$5\.18/)).toBeInTheDocument();
  
     // The gate sorts candidates, it never refuses one -- so even a total-loss
     // stop is framed as a sizing input, not a verdict. (The "never REJECT"
@@ -1992,8 +2053,27 @@ describe('TradeCard — stop-vs-premium gate', () => {
     render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0, { mid: 20 })} />);
 
     expect(screen.getByText('26% OF PREMIUM')).toBeInTheDocument();
-    expect(screen.getByText(/\$11\.50 away × Δ0\.450 = \$5.17 of \$20.00 premium/)).toBeInTheDocument();
+    expect(screen.getByText(/\$11\.50 away × Δ0\.450 = \$5.18 of \$20.00 premium/)).toBeInTheDocument();
     expect(screen.queryByText(/uncapped/)).not.toBeInTheDocument();
+  });
+
+  it('renders the stop-cost readout under the name the race card points at', async () => {
+    // The whole rendered surface of the notation rework was unpinned: the
+    // formatters had sweeps, but nothing asserted that the header says what
+    // BarrierRaceCard tells the reader to go and find, or that the per-contract
+    // headline reaches the screen at all. A rename on either side would have
+    // left the cross-reference pointing at a row that is nowhere on the page.
+    render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0, { mid: 20 })} />);
+    expandLadder();
+    // Matches BarrierRaceCard's "Max loss if the stop is hit" cross-reference,
+    // case-insensitively (the header is upper-cased in the markup).
+    expect(screen.getByText(/MAX LOSS IF THE STOP IS HIT/i)).toBeInTheDocument();
+    // And the headline itself: per-contract dollars plus what is left.
+    expect(screen.getByText(/per contract — of the \$[\d,]+ premium, \$[\d,]+ left/))
+      .toBeInTheDocument();
+    // The arithmetic line beneath it, carrying the basis qualifier.
+    expect(screen.getByText(/away × Δ[\d.]+ = .*delta-linear, priced today/))
+      .toBeInTheDocument();
   });
 
   it('renders with no Estimate and no Arithmetic plan run', () => {

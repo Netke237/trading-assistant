@@ -278,6 +278,19 @@ async def add_position(
     # The dollar amount wins when both are sent: it is what the user typed on
     # the card, while a client-sent fraction is at best a stale estimate of it.
     resolved_premium_stop_pct = body.premiumStopPct
+    if body.premiumStopDollar is not None and entry_price <= 0:
+        # `entryPrice` is gt=0 on the create schema, so a non-positive value
+        # here means the LIVE re-anchor above produced one -- a sub-cent quote
+        # rounded to 0.00. Logged rather than skipped in silence, for the same
+        # reason as the out-of-range branch below: the user typed a dollar stop
+        # and the position is about to inherit the global instead, which is a
+        # different threshold from the one they asked for and nothing on screen
+        # would say so.
+        _log.warning(
+            "add_position: cannot derive a premium stop from premiumStopDollar %.2f for %s "
+            "-- the persisted entry price is %.2f; this position inherits the global",
+            body.premiumStopDollar, body.contract, entry_price,
+        )
     if body.premiumStopDollar is not None and entry_price > 0:
         ratio = body.premiumStopDollar / entry_price
         if 0 < ratio < 1:

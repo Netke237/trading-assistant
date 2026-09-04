@@ -132,11 +132,29 @@ export function stopPremiumRisk(
  *  because the verdict is a comparison rather than an equation on screen. The
  *  badge's PERCENTAGE is not in that category: it is printed, so it comes from
  *  here too (see formatStopLossPct). */
+/** Half-up to cents, explicitly.
+ *
+ *  `toFixed(2)` breaks a mathematical `x.xx5` according to the BINARY value,
+ *  so the direction is effectively arbitrary — and the case this rework's own
+ *  doc comment uses as its worked example is one of the losers: 8.01 x 0.500
+ *  is exactly 4.005, whose double is 4.00499999..., so `toFixed(2)` gives
+ *  "4.00" where a reader multiplying the two printed factors by hand gets
+ *  $4.01. Only ~0.02% of ordinary inputs, but the entire premise of this line
+ *  is that Kenneth can check it by hand, and a rule that disagrees with the
+ *  hand-check on its own documented example is not a rule worth keeping.
+ *
+ *  Half-up matches what a person does on paper. The EPSILON nudge keeps a
+ *  product that is mathematically x.xx5 but a hair under it in binary (which
+ *  is most of them) on the up side of the split. */
+function roundCents(n: number): number {
+  return Math.round(n * 100 + Number.EPSILON) / 100;
+}
+
 function printedShare(r: StopPremiumRisk) {
   const move = Number(r.stockMove.toFixed(2));
   const delta = Number(r.delta.toFixed(3));
   const premium = Number(r.premium.toFixed(2));
-  const product = Number((move * delta).toFixed(2));
+  const product = roundCents(move * delta);
   // WHETHER THE CAP BINDS IS DECIDED ON THE PRINTED PRODUCT, not on
   // `r.capped`. `r.capped` is `rawLoss >= premium` at full precision, and
   // rounding the delta to 3dp moves the product to the other side of the
@@ -201,6 +219,21 @@ export function formatStopPremiumRisk(r: StopPremiumRisk): string {
  *  figures. Anything with a dollar left over reads at most 99%, so the badge
  *  and the money beside it cannot contradict each other. The PASS/CAUTION
  *  verdict is untouched: it is `status`, computed from full precision. */
+/** Whether the stop is a TOTAL LOSS on the figures actually printed.
+ *
+ *  The badge's tooltip used `r.capped`, which is `rawLoss >= premium` at full
+ *  precision, while the badge label and the headline beside it both come from
+ *  `printedShare`. Two precisions deciding one readout is the exact defect
+ *  `printedShare` was introduced to remove, and it was reachable with ordinary
+ *  4dp deltas: $55.92 away x 0.1622 on a $9.07 premium reads "99% OF PREMIUM"
+ *  and "$906 per contract — of the $907 premium, $1 left" under a tooltip
+ *  saying the contract is a total loss. Exported so the tooltip can branch on
+ *  the same figures as the words around it. */
+export function stopLossIsTotalOnPrintedFigures(r: StopPremiumRisk): boolean {
+  const p = printedShare(r);
+  return p.loss >= p.premium;
+}
+
 export function formatStopLossPct(r: StopPremiumRisk): string {
   const p = printedShare(r);
   const perContract = Math.round(p.loss * 100);

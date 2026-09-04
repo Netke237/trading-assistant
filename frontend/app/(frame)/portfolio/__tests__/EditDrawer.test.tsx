@@ -4,6 +4,9 @@ import { api } from '@/lib/api';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useNotesStore } from '@/lib/notesStore';
+import { useSettingsStore } from '@/lib/settingsStore';
+import { premiumStopThresholdPrice, resolvePremiumStopPct } from '@/lib/premiumStop';
+import { scanPortfolio } from '@/lib/alertEngine';
 import type { PortfolioPosition } from '@/types/domain';
 
 jest.mock('@/lib/api', () => ({
@@ -833,5 +836,138 @@ describe('EditDrawer Notes section gating', () => {
     render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
 
     expect(await screen.findByLabelText(`Note for ${position.symbol}`)).toBeInTheDocument();
+  });
+});
+
+// ── Piece 4: the per-position premium stop editor ───────────────────────────
+//
+// Spec §8 test #10, and the two defects that reached round 3 because the ~90
+// lines of draft-then-commit UI below had no coverage at all: the pure
+// formatter was tested, the editor was not.
+
+describe('PremiumStopEditor', () => {
+  const noop = () => {};
+
+  beforeEach(() => {
+    useSettingsStore.setState({ premiumStopPct: 0.60 });
+  });
+
+  const openStop = (position: PortfolioPosition, onChange = noop) => {
+    render(<EditDrawer position={position} onClose={noop} onChange={onChange} onRemove={noop} />);
+    return screen.getByLabelText('Premium stop percent') as HTMLInputElement;
+  };
+
+  it('labels an inheriting position with the global, and a set one with its own', () => {
+    const { unmount } = render(
+      <EditDrawer position={makeOptionPosition({ premiumStopPct: null })}
+                  onClose={noop} onChange={noop} onRemove={noop} />,
+    );
+    // "(global)" is the whole point: an inherited value that looks set is how a
+    // user comes to believe they have per-position control they do not have.
+    expect(screen.getByText(/Premium stop — 60% \(global\)/)).toBeInTheDocument();
+    unmount();
+
+    render(
+      <EditDrawer position={makeOptionPosition({ premiumStopPct: 0.45 })}
+                  onClose={noop} onChange={noop} onRemove={noop} />,
+    );
+    expect(screen.getByText('Premium stop — 45%')).toBeInTheDocument();
+  });
+
+  it('does NOT rewrite a stored stop when the field is merely focused and blurred', () => {
+    // THE DEFECT. `add_position` stores premiumStopDollar / entry_price, so a
+    // server-derived stop is almost never a whole percent: 2.00 / 4.13 =
+    // 0.4843. The editor rendered "48", committed 0.48 on blur and PATCHed it
+    // — the stop silently rewritten by reading it, moving the threshold on a
+    // $4.13 premium from $2.130 to $2.148.
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 0.4843 }), onChange);
+    expect(input.value).toBe('48.43');       // shown at the precision it is stored
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('round-trips a sub-1% stop instead of showing an unre-committable 0', () => {
+    // The card's premium-stop field has min={0.01}, so a $0.01 stop on a $5.20
+    // premium derives 0.0019. That rendered "0" — which `commit` itself
+    // rejects (it bounds at 0 < pct < 100) — so the field sat showing a value
+    // it would not accept back.
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 0.0019 }), onChange);
+    expect(input.value).toBe('0.19');
+    expect(screen.getByText('Premium stop — 0.19%')).toBeInTheDocument();
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('round-trips a >=99.5% stop instead of labelling it a total loss', () => {
+    // 0.997 rendered "100%" — the label for a total loss — for a stop that is
+    // not one, and "100" is likewise unre-committable.
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 0.997 }), onChange);
+    expect(input.value).toBe('99.7');
+    expect(screen.getByText('Premium stop — 99.7%')).toBeInTheDocument();
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('commits a real edit, and clearing the field goes back to inheriting', () => {
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 0.45 }), onChange);
+
+    fireEvent.change(input, { target: { value: '30' } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ premiumStopPct: 0.30 });
+
+    onChange.mockClear();
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.blur(input);
+    // NULL, not the global's number: the position must resume tracking the
+    // global rather than freeze at whatever it happens to be today.
+    expect(onChange).toHaveBeenCalledWith({ premiumStopPct: null });
+  });
+
+  it('reverts an out-of-range entry rather than silently clearing the override', () => {
+    // Typing 100 -- the natural way to ask for "hold it to zero" -- used to
+    // drop the override and hand the position back to the (tighter) global.
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 0.45 }), onChange);
+    fireEvent.change(input, { target: { value: '100' } });
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input.value).toBe('45');
+  });
+});
+
+// ── Spec §8 test #6: the three premium-stop paths agree ─────────────────────
+
+describe('the drawer preview, the alert engine and the backend fire at one price', () => {
+  const noop = () => {};
+
+  it.each([
+    ['a set stop',      0.45, 4.20],
+    ['an inherited one', null, 4.20],
+  ])('%s', (_label, own, entry) => {
+    useSettingsStore.setState({ premiumStopPct: 0.60 });
+    const position = makeOptionPosition({ premiumStopPct: own, entryPrice: entry });
+
+    // (1) The shared rule, which the BACKEND also implements
+    //     (premium_stop.py::premium_stop_threshold_price, verified against it
+    //     in backend/tests/test_premium_stop_per_position.py).
+    const expected = premiumStopThresholdPrice(
+      entry, resolvePremiumStopPct(own, 0.60),
+    );
+
+    // (2) The drawer's "fires at" preview, read off the rendered component.
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByText(new RegExp(`premium \\$${expected.toFixed(2)}`))).toBeInTheDocument();
+
+    // (3) The alert engine's own threshold, which is what actually fires.
+    const alerts = scanPortfolio(
+      [{ ...position, currentPrice: expected }],
+      { premiumStopPct: 0.60 } as Parameters<typeof scanPortfolio>[1],
+    ).filter((a) => a.alertType === 'PREMIUM_STOP');
+    expect(alerts).toHaveLength(1);
   });
 });

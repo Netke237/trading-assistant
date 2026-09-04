@@ -630,7 +630,12 @@ class PortfolioPositionCreate(BaseModel):
     symbol: str
     contract: str       # SYMBOL|STRIKE|EXPIRY|C/P
     direction: Direction
-    entryPrice: float = Field(alias="entry_price")
+    # gt=0: a non-positive entry price is not a price, and it is the DENOMINATOR
+    # the router divides premiumStopDollar by to derive the per-position stop.
+    # Accepting 0 meant that derivation was skipped and the user's typed dollar
+    # stop dropped on the floor, while every other unusable-input path on this
+    # endpoint reports itself.
+    entryPrice: float = Field(alias="entry_price", gt=0)
     qty: int = Field(default=1)
     entryDate: str = Field(alias="entry_date")
     stop: Optional[float] = None

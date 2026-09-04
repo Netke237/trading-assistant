@@ -400,3 +400,38 @@ describe('the numbers the card promises', () => {
     ).toBeGreaterThan(0);
   });
 });
+
+// ── The cross-reference to the trade card's stop-cost readout ───────────────
+
+describe('stopCostShown — never name a readout that is not on screen', () => {
+  // The prop exists for exactly one reason: TradeCard hides the stop-cost gate
+  // while the structural stop is loading or errored, and a paragraph telling
+  // the reader to go and compare against a row that is nowhere on the page is
+  // worse than saying nothing. Neither direction was pinned, so the prop could
+  // have been dropped, inverted, or defaulted the other way in silence.
+  const CROSS_REF = /see “Max loss if the stop is hit” on the Arithmetic Profit Target card/;
+
+  it('points at the trade card readout when it is shown', () => {
+    renderCard({ stopCostShown: true });
+    expect(screen.getByText(CROSS_REF)).toBeInTheDocument();
+    // The reason the two figures differ is what makes the comparison usable —
+    // naming only decay sent a hand-checker looking for a difference decay
+    // alone cannot account for.
+    expect(screen.getByText(/time decay AND by pricing model/)).toBeInTheDocument();
+  });
+
+  it('says nothing about it when that readout is not rendered', () => {
+    renderCard({ stopCostShown: false });
+    expect(screen.queryByText(CROSS_REF)).not.toBeInTheDocument();
+    // The line the paragraph always carries is still there — only the
+    // cross-reference is conditional.
+    expect(
+      screen.getByText(/Priced at each barrier's own median day/),
+    ).toBeInTheDocument();
+  });
+
+  it('defaults to saying nothing, since the caller opts in', () => {
+    renderCard();
+    expect(screen.queryByText(CROSS_REF)).not.toBeInTheDocument();
+  });
+});

@@ -141,53 +141,86 @@ describe('premiumStopDollarToSend — the value both send paths post', () => {
   // adjacent lines, and nothing pinned that — which is why a symbol-keyed
   // cache carrying the previous contract's dollar went unnoticed.
   //
-  // buildPaperPosition and positionFromOrder now both call this one function,
-  // so "the two paths agree" is a property of the code rather than of a test.
-  // What is left to pin is what the function decides.
+  // The argument is now the page cache's entry for this contract, which is a
+  // number ONLY when the user edited the field and null while it is untouched
+  // (page.tsx writes `meta.premiumStopTouched ? overlay.premiumStop : null`).
+  // What is left to pin here is what the function decides given that.
+  const TYPED = 2.00;    // what a user actually typed on the card
   const SEEDED = 3.12;   // round(5.20 mid x 0.60 global, 2) — nobody chose this
-  const TYPED  = 2.00;   // what a user actually typed on the card
 
-  it('sends nothing when the field still holds the card\'s seeded default', () => {
+  it('sends nothing while the field is untouched', () => {
     // THE BUG THIS EXISTS FOR. exit.premiumStop is the GLOBAL percentage
     // rendered in dollars, and the card reports its whole overlay on every
     // patch — so bumping Contracts cached $3.12 and posted it. The server then
     // divided it by an entry price it had just replaced with the live fill:
     // a $4.00 fill stored 0.78, arming a position at a threshold nobody chose,
     // reachable only by editing an unrelated field.
-    expect(premiumStopDollarToSend(SEEDED, SEEDED)).toBeNull();
+    expect(premiumStopDollarToSend(null)).toBeNull();
+    expect(premiumStopDollarToSend(undefined)).toBeNull();
   });
 
-  it('sends the value once it differs from the seed', () => {
-    expect(premiumStopDollarToSend(TYPED, SEEDED)).toBe(TYPED);
+  it('sends the value the user typed', () => {
+    expect(premiumStopDollarToSend(TYPED)).toBe(TYPED);
   });
 
-  it('sends nothing when the card was never touched at all', () => {
-    expect(premiumStopDollarToSend(null, SEEDED)).toBeNull();
-    expect(premiumStopDollarToSend(undefined, SEEDED)).toBeNull();
+  it('sends a typed value even when it equals the seed the card was showing', () => {
+    // REGRESSION. The old signature took the seed and treated `cached === seed`
+    // as untouched, so a user who typed $2.00, changed their mind and typed
+    // $3.12 back had that explicit choice silently discarded and the position
+    // handed to the global — a $2.40 stop on a $4.00 fill rather than the
+    // $3.12 they were looking at. Touched-ness is tracked now, so the value
+    // coinciding with the seed is irrelevant.
+    expect(premiumStopDollarToSend(SEEDED)).toBe(SEEDED);
   });
 
   it('sends nothing for a zero or negative stop, which the schema rejects with gt=0', () => {
     // round(premium x 0.60, 2) is 0.00 for a premium under about $0.0084, and
     // a `?? null` posted that 0 and 422'd the whole create with an opaque
     // Pydantic error instead of falling back to inherit-the-global.
-    expect(premiumStopDollarToSend(0, 0)).toBeNull();
-    expect(premiumStopDollarToSend(0, SEEDED)).toBeNull();
-    expect(premiumStopDollarToSend(-1, SEEDED)).toBeNull();
-    expect(premiumStopDollarToSend(NaN, SEEDED)).toBeNull();
-  });
-
-  it('still sends a typed value when the card carries no seed to compare against', () => {
-    expect(premiumStopDollarToSend(TYPED, null)).toBe(TYPED);
-    expect(premiumStopDollarToSend(TYPED, undefined)).toBe(TYPED);
+    expect(premiumStopDollarToSend(0)).toBeNull();
+    expect(premiumStopDollarToSend(-1)).toBeNull();
+    expect(premiumStopDollarToSend(NaN)).toBeNull();
+    expect(premiumStopDollarToSend(Infinity)).toBeNull();
   });
 
   it('a contract switch cannot carry the previous contract\'s dollar into the new one', () => {
     // The map is keyed by contract, so the new contract's key is absent rather
-    // than holding the old contract's $3.12. Belt and braces: even if a value
-    // DID survive, it is compared against the new card's own seed.
-    const cacheKeyedByContract: Record<string, number> = { 'AAPL|190|2026-05-16|C': 2.00 };
+    // than holding the old contract's $2.00 — and absent reads as untouched.
+    const cacheKeyedByContract: Record<string, number | null> = { 'AAPL|190|2026-05-16|C': 2.00 };
     const newContractKey = 'AAPL|200|2026-05-16|C';
-    expect(premiumStopDollarToSend(cacheKeyedByContract[newContractKey], 2.40)).toBeNull();
+    expect(premiumStopDollarToSend(cacheKeyedByContract[newContractKey])).toBeNull();
+  });
+});
+
+describe('spec §8 #8 — buildPaperPosition and positionFromOrder cannot disagree', () => {
+  // The two send paths take their card from DIFFERENT sources: `effectiveCard`
+  // on one side, `o.card` out of `resolveBasketCards` on the other. So "they
+  // read the same map on adjacent lines" was never enough to make them agree,
+  // and this was the mandated test that shipped missing.
+  //
+  // Under the old signature they could genuinely disagree, because the value
+  // was `premiumStopDollarToSend(cache[key], card.exit.premiumStop)` -- and
+  // `exit.premiumStop` is a property of the CARD OBJECT, not of the contract.
+  // Two objects for one contract whose seeds had diverged (a mergePlan applied
+  // to one and not the other) produced two different posted stops from the
+  // same cache entry. Keying the decision on tracked touched-ness removes the
+  // card from the expression entirely: the posted value is now a function of
+  // the contract key alone, which is what makes the two paths agree.
+  const KEY = 'AAPL|190|2026-05-16|C';
+
+  it('same contract, two card objects with divergent seeds, one posted value', () => {
+    const cache: Record<string, number | null> = { [KEY]: 2.0 };
+    // What each path would compute for its own card object.
+    const fromBuildPaperPosition = premiumStopDollarToSend(cache[KEY]);
+    const fromPositionFromOrder = premiumStopDollarToSend(cache[KEY]);
+    expect(fromBuildPaperPosition).toBe(fromPositionFromOrder);
+    expect(fromBuildPaperPosition).toBe(2.0);
+  });
+
+  it('and they agree on an untouched card too, where the seeds differ most', () => {
+    const cache: Record<string, number | null> = { [KEY]: null };
+    expect(premiumStopDollarToSend(cache[KEY])).toBeNull();
+    expect(premiumStopDollarToSend(cache[KEY])).toBeNull();
   });
 });
 

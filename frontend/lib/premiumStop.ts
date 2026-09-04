@@ -65,43 +65,61 @@ export function premiumStopThresholdPrice(entryPrice: number, pct: number): numb
  *  step-7-trade-card/page.tsx) call THIS, so the premium stop a position is
  *  armed at cannot depend on which button was pressed.
  *
- *  `cachedDollar` is what the card's overlay last reported for this CONTRACT;
- *  `seededDollar` is that card's own `exit.premiumStop`, the value the overlay
- *  was seeded with.
+ *  `touchedDollar` is the page-level cache for this CONTRACT, which holds a
+ *  number only when the user actually edited the premium-stop field and `null`
+ *  while it is untouched. TOUCHED-NESS IS TRACKED, NOT INFERRED, and that is
+ *  the whole point of this signature.
  *
- *  THE SEEDED VALUE MUST NOT BE SENT, and this is the whole reason the
- *  function exists. `exit.premiumStop` is not a dollar amount anybody chose --
- *  the backend computes it as `round(premium * premium_stop_pct, 2)`, i.e. the
- *  GLOBAL PERCENTAGE rendered in dollars against the card's mid. The card
- *  reports its overlay on every `patch()`, so editing Contracts or a target
- *  cached that untouched default, and the server then divided it by the
- *  entry price it had just replaced with the live fill. A $5.20 mid showing a
- *  $3.12 stop, filled at $4.00, was stored as 78% -- a threshold nobody chose,
- *  reached only by editing an unrelated field. Sending null instead means
- *  "inherit the global", which is exactly what an untouched default means, and
- *  keeps the position tracking the Settings value the way the model docstring
- *  promises.
+ *  It used to take the card's seed as a second argument and treat
+ *  `cached === seed` as "untouched". `exit.premiumStop` is not a dollar amount
+ *  anybody chose -- the backend computes it as
+ *  `round(premium * premium_stop_pct, 2)`, i.e. the GLOBAL PERCENTAGE rendered
+ *  in dollars against the card's mid -- so posting it would have the server
+ *  divide it by the entry price it had just replaced with the live fill, and a
+ *  $5.20 mid showing a $3.12 stop, filled at $4.00, was stored as 78%: a
+ *  threshold nobody chose. Comparing values caught that, but only by
+ *  coincidence, and it was wrong in BOTH directions:
+ *
+ *    - Untouched read as touched. The card reports its whole overlay on every
+ *      `patch()`, so bumping Contracts cached the seed; a later `mergePlan`
+ *      moved the seed under the untouched field, and the stale cache no longer
+ *      equalled the new seed, so the old default was posted as deliberate --
+ *      the card displaying $0.80 while $1.50 went to the server.
+ *    - Touched read as untouched. A user who typed $2.00, changed their mind
+ *      and typed the seed's own $3.12 back had their explicit choice discarded
+ *      and the position handed to the global.
+ *
+ *  Both vanish once the caller passes the tracked flag instead of a value to
+ *  compare. Sending null means "inherit the global", which is exactly what an
+ *  untouched default means, and keeps the position tracking the Settings value
+ *  the way the model docstring promises.
  *
  *  Non-positive and non-finite values are null for the same reason the schema
  *  rejects them (`gt=0`): `round(premium * 0.60, 2)` is `0.00` for a premium
  *  under about $0.0084, and a `?? null` would post that 0 and 422 the whole
  *  create rather than falling back. */
 export function premiumStopDollarToSend(
-  cachedDollar: number | null | undefined,
-  seededDollar: number | null | undefined,
+  touchedDollar: number | null | undefined,
 ): number | null {
-  if (cachedDollar == null || !Number.isFinite(cachedDollar) || cachedDollar <= 0) return null;
-  if (seededDollar != null && cachedDollar === seededDollar) return null;
-  return cachedDollar;
+  if (touchedDollar == null || !Number.isFinite(touchedDollar) || touchedDollar <= 0) return null;
+  return touchedDollar;
 }
 
 /** How the resolved percentage reads in the UI: `"45%"` when the position sets
- *  its own, `"60% (global)"` when it inherits. */
+ *  its own, `"60% (global)"` when it inherits.
+ *
+ *  Two decimals, trimmed, rather than `Math.round`. A server-derived stop is
+ *  almost never a whole percent (`premiumStopDollar / entry_price`, e.g.
+ *  `2.00 / 4.13 = 0.4843`), and rounding the LABEL while the store holds the
+ *  true value is how a readout comes to disagree with the number it names:
+ *  0.0019 printed a flat `0%` and 0.997 printed `100%` -- the label for a total
+ *  loss -- for stops that are neither. Trimming via `Number()` keeps the common
+ *  whole-percent case reading `60%`, not `60.00%`. */
 export function formatPremiumStopPct(
   positionPct: number | null | undefined,
   globalPct: number | null | undefined,
 ): string {
   const resolved = resolvePremiumStopPct(positionPct, globalPct);
-  const label = `${Math.round(resolved * 100)}%`;
+  const label = `${Number((resolved * 100).toFixed(2))}%`;
   return hasOwnPremiumStopPct(positionPct) ? label : `${label} (global)`;
 }

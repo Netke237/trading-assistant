@@ -574,6 +574,21 @@ export function migratePortfolioPersist(state: unknown, _version: number): unkno
       const floored = { ...synced } as Record<string, unknown>;
       if ('stop' in floored) floored.stop = floorStop(floored.stop as number | null | undefined);
       if ('structuralStop' in floored) floored.structuralStop = floorStop(floored.structuralStop as number | null | undefined);
+      // v2 -> v3, piece 4. Normalise the per-position premium stop to the
+      // shape the resolver expects, and drop `premiumStopDollar`.
+      //
+      // Both are benign by luck rather than design: a v2 row has neither key,
+      // and `undefined` already reads as "inherit the global". CLAUDE.md asks
+      // for the bump and the branch anyway, and the reason is visible here --
+      // stating it costs two lines, while the next reader otherwise has to
+      // re-derive that `undefined` is safe by reading resolvePremiumStopPct.
+      //
+      // `premiumStopDollar` is a CREATE-ONLY transport field: the server
+      // divides it by the persisted entry price and stores the fraction, so
+      // keeping it on a synced row persists a number that no longer describes
+      // the position and that nothing reads back.
+      if (floored.premiumStopPct === undefined) floored.premiumStopPct = null;
+      if (floored.syncStatus === 'synced') delete floored.premiumStopDollar;
       return floored;
     }),
   };
@@ -918,7 +933,25 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                 // promote it, on a hard rejection surface it, on network keep it.
                 const outcome = await postPosition(p, accountValue());
                 if (outcome.kind === 'ok' || outcome.kind === 'duplicate') {
-                  keep.push({ ...p, syncStatus: 'synced', syncedAt: Date.now(), syncPendingSince: undefined });
+                  // Fold the SERVER-DERIVED premiumStopPct onto the row, the
+                  // same way addPosition and applyPersistedPosition do. This
+                  // path was missed: a row created while the backend was
+                  // unreachable went pending, and this 30s retry saved it
+                  // successfully — but dropped the fraction the server derived
+                  // from premiumStopDollar. The row stayed at `undefined`, so
+                  // alertEngine.scanPortfolio resolved it to the GLOBAL while
+                  // alert_generator used the per-position value, which is the
+                  // two-engines-disagree window piece 4 exists to close. It
+                  // self-healed only on the next GET.
+                  // `duplicate` carries no body, so keep what the row has.
+                  keep.push({
+                    ...p,
+                    premiumStopPct:
+                      outcome.kind === 'ok' ? outcome.premiumStopPct ?? null : p.premiumStopPct,
+                    syncStatus: 'synced',
+                    syncedAt: Date.now(),
+                    syncPendingSince: undefined,
+                  });
                 } else if (outcome.kind === 'rejected') {
                   set({ lastSyncError: { symbol: p.symbol, contract: p.contract, detail: outcome.detail, at: Date.now() } });
                   // dropped — do not push
@@ -982,7 +1015,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     }),
     {
       name: 'bamendjou-portfolio-v1',
-      version: 2,
+      version: 3,
       skipHydration: true,
       migrate: migratePortfolioPersist,
       partialize: (state) => ({ positions: state.positions }),

@@ -282,26 +282,86 @@ async def test_logged_threshold_pct_reports_the_global_for_an_inheriting_positio
 
 # ── The auto-trader sizes off the resolved value ────────────────────────────
 
-def test_auto_trader_sizes_off_the_resolved_pct():
-    """`auto_trade.premium_stop_pct` is a DIFFERENT global from the alerts'.
-    The auto-trader is placing the trade the card described, so it must use the
-    number the user set, not either global."""
+def _armed(**kw):
     from app.services.auto_trader import ArmedStrategy
-
-    armed = ArmedStrategy(
-        broker="tradier_paper", symbol="AAPL", option_symbol="AAPL260516C00190000",
-        action="BUY", quantity=1, order_type="LMT", limit_price=5.0, conid=None,
-        entry_premium=5.0, premium_stop_pct=0.30,
-    )
-    assert resolve_premium_stop_pct(armed.premium_stop_pct, 0.60) == 0.30
-
-    inheriting = ArmedStrategy(
+    base = dict(
         broker="tradier_paper", symbol="AAPL", option_symbol="AAPL260516C00190000",
         action="BUY", quantity=1, order_type="LMT", limit_price=5.0, conid=None,
         entry_premium=5.0,
     )
-    assert inheriting.premium_stop_pct is None
-    assert resolve_premium_stop_pct(inheriting.premium_stop_pct, 0.60) == 0.60
+    base.update(kw)
+    return ArmedStrategy(**base)
+
+
+def test_auto_trader_daily_loss_gate_sizes_off_the_resolved_pct(monkeypatch):
+    """`auto_trade.premium_stop_pct` is a DIFFERENT global from the alerts'.
+    The auto-trader is placing the trade the card described, so it must size the
+    daily-loss gate on the number the user set, not on either global.
+
+    This drives `_check_daily_loss` itself. The version of this test that
+    shipped constructed an ArmedStrategy and then asserted on
+    `resolve_premium_stop_pct(...)` directly, so it passed with the auto-trader
+    still reading the global -- both call sites could be reverted with the whole
+    suite green. The gate is arithmetic on `stop_pct`, so a threshold that
+    straddles the two values is what actually pins the wiring.
+    """
+    from app.services.auto_trader import AutoTradeService
+
+    # limit = 0.02 x 10_000 = $200. this_risk = 5.00 x 1 x 100 x stop_pct,
+    # so the global's 0.60 books $300 (over) and a per-position 0.30 books
+    # $150 (under). Nothing else separates the two calls.
+    monkeypatch.setattr(
+        AutoTradeService, "_risk_config",
+        staticmethod(lambda: {"max_daily_loss_pct": 0.02, "premium_stop_pct": 0.60}),
+    )
+
+    # Inheriting: sized at the global, and the gate trips.
+    with pytest.raises(RuntimeError, match="Daily loss limit reached"):
+        AutoTradeService._check_daily_loss(_armed(), [], 10_000.0)
+
+    # The same trade with a tighter declared stop books half the risk and passes.
+    AutoTradeService._check_daily_loss(_armed(premium_stop_pct=0.30), [], 10_000.0)
+
+    # And in the other direction, so the per-position value is genuinely in the
+    # arithmetic rather than the tighter case merely failing to raise. At
+    # $20,000 the limit is $400: the global's $300 passes, a declared 0.90
+    # books $450 and trips. A gate still reading the global would let it
+    # through.
+    AutoTradeService._check_daily_loss(_armed(), [], 20_000.0)
+    with pytest.raises(RuntimeError, match="Daily loss limit reached"):
+        AutoTradeService._check_daily_loss(_armed(premium_stop_pct=0.90), [], 20_000.0)
+
+
+def test_auto_trader_books_premium_at_risk_at_the_resolved_pct(monkeypatch):
+    """`fire()` stamps `premium_at_risk` on the history entry the daily-loss
+    gate later sums. If that were still booked at the global, a per-position
+    stop would gate correctly on the way in and then mis-report what it spent,
+    so tomorrow's first trade would be sized against the wrong number."""
+    from app.services import auto_trader as at_mod
+    from app.services.auto_trader import AutoTradeService
+
+    monkeypatch.setattr(
+        AutoTradeService, "_risk_config",
+        staticmethod(lambda: {"max_daily_loss_pct": 1.0, "premium_stop_pct": 0.60}),
+    )
+
+    class _Result:
+        order_id, status, broker = "o1", "filled", "tradier_paper"
+
+    # The two things `fire` reaches outside itself: the market-open probe (a
+    # network call) and the broker. Everything between them is under test.
+    monkeypatch.setattr(at_mod, "_market_is_open", lambda symbol: True)
+    monkeypatch.setattr(at_mod, "execute_option_order", lambda strategy: _Result())
+
+    svc = AutoTradeService()
+    svc._state.armed = True
+    svc._state.strategy = _armed(premium_stop_pct=0.30)
+    svc.fire(portfolio_snapshot=None, portfolio_value=100_000.0)
+
+    booked = [e for e in svc._state.history if e.get("order_id") == "o1"]
+    assert booked, f"fire() recorded no history entry: {svc._state.history}"
+    # 5.00 x 1 x 100 x 0.30 = 150, not the global's 300.
+    assert booked[-1]["premium_at_risk"] == pytest.approx(150.0)
 
 
 def test_arm_request_carries_the_pct_into_the_strategy():

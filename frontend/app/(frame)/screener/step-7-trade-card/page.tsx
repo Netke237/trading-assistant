@@ -198,18 +198,31 @@ export default function Step7Page() {
   // which the router stores as NULL so the user's choice vanished silently.
   // Same keying as `exitPlanByContract`/`estimatesByContract`, for the same
   // reason.
-  const [premiumStopByContract, setPremiumStopByContract] = useState<Record<string, number>>({});
-  const handleEditsChange = (symbol: string, cardContractKey: string | null, overlay: EditOverlay) => {
+  // NULL means "the user has not touched this card's premium stop", which is a
+  // distinct state from any dollar amount and the reason this cache cannot
+  // simply hold `overlay.premiumStop`: the overlay is SEEDED with
+  // `exit.premiumStop` (the global percentage in dollars), the card reports its
+  // whole overlay on every patch, and the seed itself moves under an untouched
+  // field when `mergePlan` lands. Only the card knows which it is, so it tells
+  // us -- see `onEditsChange`'s `meta.premiumStopTouched`.
+  const [premiumStopByContract, setPremiumStopByContract] = useState<Record<string, number | null>>({});
+  const handleEditsChange = (
+    symbol: string,
+    cardContractKey: string | null,
+    overlay: EditOverlay,
+    meta: { premiumStopTouched: boolean },
+  ) => {
     setOrderContractsBySymbol((prev) =>
       prev[symbol] === overlay.contracts ? prev : { ...prev, [symbol]: overlay.contracts },
     );
     if (!cardContractKey) return;
     // Same identity-preserving guard as above: an unchanged write must return
     // `prev` untouched or every TradeCard render re-triggers this cascade.
+    const touched = meta.premiumStopTouched ? overlay.premiumStop : null;
     setPremiumStopByContract((prev) =>
-      prev[cardContractKey] === overlay.premiumStop
+      prev[cardContractKey] === touched
         ? prev
-        : { ...prev, [cardContractKey]: overlay.premiumStop },
+        : { ...prev, [cardContractKey]: touched },
     );
   };
   // The ONE place either send path decides what to post. Reading the map is
@@ -219,10 +232,7 @@ export default function Step7Page() {
   // `premiumStopDollarToSend`.
   const premiumStopDollarFor = (card: TradeCardData): number | null => {
     const key = contractKeyFor(card);
-    return premiumStopDollarToSend(
-      key ? premiumStopByContract[key] : null,
-      card.exit.premiumStop,
-    );
+    return premiumStopDollarToSend(key ? premiumStopByContract[key] : null);
   };
   // Feature 5 — the shared pre-trade max-loss override cache, keyed by SYMBOL
   // (a risk decision about the underlying, same keying as structuralBySymbol,
@@ -893,7 +903,7 @@ export default function Step7Page() {
               sendLabel={sendLabel}
               sendDisabled={basketEmpty || basketPlansPending}
               contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
-              onEditsChange={(overlay) => handleEditsChange(effectiveCard.symbol, contractKey, overlay)}
+              onEditsChange={(overlay, meta) => handleEditsChange(effectiveCard.symbol, contractKey, overlay, meta)}
               // Piece 4 — round-tripped like `contracts` above. The card's
               // reset on a contract change does not call `onEditsChange`, so
               // without this the field fell back to its seed while this cache

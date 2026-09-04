@@ -821,7 +821,22 @@ function PremiumStopEditor({
   const isStock = position.contract.endsWith('|STOCK');
   const own = position.premiumStopPct;
   const inherited = !hasOwnPremiumStopPct(own);
-  const stored = own != null ? String(Math.round(own * 100)) : '';
+  // TWO DECIMALS OF PERCENT, not a whole number. `Math.round(own * 100)` was
+  // lossy in both directions and the loss was silent:
+  //
+  //   - A stop the SERVER derived is almost never a whole percent -- add_position
+  //     stores premiumStopDollar / entry_price, e.g. 2.00 / 4.13 = 0.484261.
+  //     Rendering "48" and committing 0.48 meant merely clicking into the field
+  //     and clicking away rewrote the stored stop, with no edit and no
+  //     confirmation, moving the alert threshold from $2.130 to $2.148.
+  //   - A fraction below 0.005 rendered "0" and one at or above 0.995 rendered
+  //     "100", neither of which `commit` will accept back (it bounds at
+  //     0 < pct < 100), so the field sat showing a value it would itself reject.
+  //     The card's premium-stop field has min={0.01}, so a $0.01 stop on a
+  //     $5.20 premium derives 0.0019 and lands exactly there.
+  //
+  // Keeping the precision the store holds makes focus-blur a true round-trip.
+  const stored = own != null ? String(Number((own * 100).toFixed(2))) : '';
 
   // DRAFT-THEN-COMMIT, unlike the EditField siblings above, which persist on
   // every keystroke. Those hold a stop PRICE, where an intermediate value is
@@ -852,8 +867,11 @@ function PremiumStopEditor({
     // The backend bounds this at (0, 1) exclusive, so 100 has no
     // representation; showing the previous value back is the honest answer.
     if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) { setDraft(stored); return; }
-    const next = Math.round(pct) / 100;
-    setDraft(String(Math.round(pct)));
+    // 4dp on the fraction == 2dp on the percent, the same precision `stored`
+    // renders, so a value that came from the store commits back identical to
+    // itself and an untouched blur is a no-op.
+    const next = Number((pct / 100).toFixed(4));
+    setDraft(String(Number(pct.toFixed(2))));
     if (next !== own) onChange({ premiumStopPct: next });
   };
 
@@ -865,9 +883,9 @@ function PremiumStopEditor({
       <input
         type="number"
         className={styles.editInput}
-        step={5}
-        min={1}
-        max={99}
+        step="any"
+        min={0.01}
+        max={99.99}
         placeholder={`${Math.round(globalPremiumStopPct * 100)} (global)`}
         aria-label="Premium stop percent"
         value={draft}
@@ -877,7 +895,7 @@ function PremiumStopEditor({
       />
       <Text size={10} tone="dim">
         {inherited
-          ? `Inheriting the global — this position moves whenever the global does. Enter a percent (1–99) and press Enter to pin it${isStock ? '' : ' for this contract only'}.`
+          ? `Inheriting the global — this position moves whenever the global does. Enter a percent (0.01–99.99) and press Enter to pin it${isStock ? '' : ' for this contract only'}.`
           : `Set for this position only. Clear the field to go back to inheriting the global (${Math.round(globalPremiumStopPct * 100)}%).`}
       </Text>
     </label>

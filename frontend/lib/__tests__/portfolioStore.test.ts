@@ -559,6 +559,52 @@ describe('portfolioStore', () => {
       expect(migrated.positions[0]!.syncedAt).toBe(0);
     });
 
+    it('v2 -> v3: normalises premiumStopPct to null and drops the create-only dollar', () => {
+      // CLAUDE.md asks for a version bump and a branch whenever a persisted
+      // field is added; piece 4 added two without one. Benign by luck (a v2 row
+      // has neither key, and `undefined` already reads as "inherit"), which is
+      // exactly why it is worth pinning rather than leaving the next reader to
+      // re-derive it from resolvePremiumStopPct.
+      const migrated = migratePortfolioPersist(
+        {
+          positions: [
+            { recId: 'V2-ROW', symbol: 'ABT', contract: 'ABT|97|2027-01-15|C' },
+            { recId: 'SYNCED', symbol: 'ABT', contract: 'ABT|98|2027-01-15|C',
+              syncStatus: 'synced', premiumStopPct: 0.45, premiumStopDollar: 2.0 },
+          ],
+        },
+        2,
+      ) as { positions: Array<Record<string, unknown>> };
+
+      // A legacy row inherits the global, and says so explicitly.
+      expect(migrated.positions[0]!.premiumStopPct).toBeNull();
+      // An explicit per-position value is preserved, never normalised away.
+      expect(migrated.positions[1]!.premiumStopPct).toBe(0.45);
+      // premiumStopDollar is CREATE-ONLY transport: the server divided it by
+      // the persisted entry and stored the fraction, so on a synced row it
+      // describes nothing and nothing reads it back.
+      expect('premiumStopDollar' in migrated.positions[1]!).toBe(false);
+    });
+
+    it('v2 -> v3: a PENDING row keeps premiumStopDollar, because its retry re-posts it', () => {
+      // The condition on that delete is load-bearing, and getting it wrong is
+      // silent: syncFromBackend retries a pending row through postPosition,
+      // whose toBackendPayload sends premiumStopDollar for the SERVER to divide
+      // by the entry price it persists. Stripping it here would hand that row
+      // to the global on every offline-then-recovered save, with nothing to
+      // show a stop had been asked for.
+      const migrated = migratePortfolioPersist(
+        {
+          positions: [{
+            recId: 'PENDING', symbol: 'ABT', contract: 'ABT|99|2027-01-15|C',
+            syncStatus: 'pending', premiumStopDollar: 2.0,
+          }],
+        },
+        2,
+      ) as { positions: Array<Record<string, unknown>> };
+      expect(migrated.positions[0]!.premiumStopDollar).toBe(2.0);
+    });
+
     it('floors a stop/structuralStop of 0 already sitting in a pre-round-2 localStorage row', () => {
       // Round-5 audit finding: a row saved to localStorage before the
       // stop=0 fix (round 2) rehydrates straight into live state on every
@@ -815,6 +861,41 @@ describe('portfolioStore', () => {
         const row = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-NET-FAIL-2');
         expect(row).toBeDefined();
         expect(row?.syncStatus).toBe('synced');
+      });
+
+      it('the retried row keeps the premiumStopPct the SERVER derived, not undefined', async () => {
+        // Piece 4. addPosition and applyPersistedPosition both fold the
+        // server-derived fraction onto the local row; this third call site --
+        // the offline retry -- did not, and nothing covered it. A trade sent
+        // while the backend was unreachable went pending, this reconcile saved
+        // it successfully, and the row stayed at `premiumStopPct: undefined`,
+        // so alertEngine.scanPortfolio resolved it to the GLOBAL 0.60 while the
+        // backend's alert_generator used the derived 0.78. That is the two-
+        // engines-disagree window piece 4 exists to close, and it self-healed
+        // only on the next GET.
+        (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockRejectedValue(new Error('network'));
+        await runCallSiteBranch({ ...abt, recId: 'REC-NET-FAIL-PCT' });
+        expect(usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-NET-FAIL-PCT')?.premiumStopPct)
+          .toBeUndefined();
+
+        (global as unknown as { fetch: jest.Mock }).fetch = jest.fn((url: string, init?: RequestInit) => {
+          const method = init?.method ?? 'GET';
+          if (url.endsWith('/api/portfolio') && method === 'GET') {
+            return Promise.resolve(jsonResponse([], true, 200));
+          }
+          if (url.endsWith('/api/portfolio') && method === 'POST') {
+            // What the router returns once it has divided premiumStopDollar by
+            // the entry price it actually persisted.
+            return Promise.resolve(jsonResponse({ premiumStopPct: 0.78 }, true, 201));
+          }
+          return Promise.resolve(jsonResponse({}, false, 500));
+        });
+
+        await usePortfolioStore.getState().syncFromBackend();
+
+        const row = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-NET-FAIL-PCT');
+        expect(row?.syncStatus).toBe('synced');
+        expect(row?.premiumStopPct).toBe(0.78);
       });
 
       it('a genuine rejection from persistPosition is surfaced and does NOT call addPosition a second time', async () => {

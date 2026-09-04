@@ -12,6 +12,7 @@ import {
   stopPremiumRisk,
   formatStopPremiumRisk,
   formatStopLossHeadline,
+  stopLossIsTotalOnPrintedFigures,
   formatStopLossPct,
 } from '@/lib/risk';
 import type { PortfolioPosition, RiskLimits, TradeCardData, ExitPlan } from '@/types/domain';
@@ -481,7 +482,16 @@ describe('the printed equation reconciles', () => {
           // multiplied and rounded to the cent, which is what a hand-check
           // produces. An epsilon of half a cent passes 0.13 × 0.500 = 0.065
           // against a printed $0.07 either way and would hide a real drift.
-          const product = Number((away * d).toFixed(2));
+          //
+          // HALF-UP, deliberately re-derived here rather than imported: this is
+          // the arithmetic a person does on paper, and it is the whole claim
+          // the line makes. `toFixed(2)` used to stand in for it and silently
+          // disagreed on exact half-cents (8.01 × 0.500 = 4.005 printed $4.00),
+          // because it breaks the tie on the binary value. Importing
+          // `roundCents` would make this assert that the code agrees with
+          // itself; spelling the rule out keeps it asserting that the code
+          // agrees with the hand-check.
+          const product = Math.round(away * d * 100 + Number.EPSILON) / 100;
           const expected = Math.min(product, premiumShown);
           if (loss !== expected) failures.push(`${printed} (expected $${expected})`);
           // CAPPED ROWS ARE CHECKED TOO. This used to `continue` past them, and
@@ -507,6 +517,33 @@ describe('the printed equation reconciles', () => {
     expect(failures).toEqual([]);
   });
 
+  it('the badge tooltip agrees with the badge and the headline beside it', () => {
+    // The tooltip used `r.capped` (full precision) while the label and the
+    // headline came from the printed figures, so one element could call the
+    // contract a total loss while the two next to it showed money left. Found
+    // by sweep at $55.92 away × Δ0.1622 on a $9.07 premium: "99% OF PREMIUM"
+    // and "$906 ... $1 left" under "the contract is a total loss".
+    const contradictions: string[] = [];
+    for (const away of [0.41, 8.01, 35.24, 55.92, 57.93, 70.02, 70.10]) {
+      for (const d of [0.1622, 0.25, 0.3753, 0.5, 0.5342, 0.5505, 0.7495]) {
+        for (const premium of [0.35, 2.0, 6.51, 9.07, 18.9, 21.74, 38.59, 52.48]) {
+          const r = stopPremiumRisk(200 - away, 200, d, premium);
+          if (!r) continue;
+          const saysTotal = stopLossIsTotalOnPrintedFigures(r);
+          const badgeSaysTotal = formatStopLossPct(r) === '100%';
+          const headline = formatStopLossHeadline(r);
+          const headlineSaysTotal = / \$0 left$/.test(headline);
+          if (saysTotal !== badgeSaysTotal || saysTotal !== headlineSaysTotal) {
+            contradictions.push(
+              `${away}/${d}/${premium}: tooltip=${saysTotal} badge=${badgeSaysTotal} headline="${headline}"`,
+            );
+          }
+        }
+      }
+    }
+    expect(contradictions).toEqual([]);
+  });
+
   it('never prints an "uncapped" figure below the capped one', () => {
     // $70.10 away × Δ0.5505 on a $38.59 premium read
     // "= $38.59 of $38.59 premium (uncapped $38.55)". `loss` is
@@ -516,7 +553,7 @@ describe('the printed equation reconciles', () => {
     const r = stopPremiumRisk(100.00, 170.10, 0.5505, 38.59)!;
     expect(r.capped).toBe(true);              // still true at full precision
     expect(formatStopPremiumRisk(r)).toBe(
-      '$70.10 away × Δ0.550 = $38.55 of $38.59 premium · delta-linear, priced today',
+      '$70.10 away × Δ0.550 = $38.56 of $38.59 premium · delta-linear, priced today',
     );
   });
 
@@ -599,8 +636,13 @@ describe('the printed equation reconciles', () => {
 
   it('the audit case itself: $8.01 away, Δ0.500, $6.51 premium', () => {
     const r = stopPremiumRisk(191.99, 200, 0.5, 6.51)!;
-    expect(formatStopLossHeadline(r)).toBe('$400 per contract — of the $651 premium, $251 left');
-    expect(formatStopPremiumRisk(r)).toContain('$8.01 away × Δ0.500 = $4.00 of $6.51 premium');
+    // 8.01 × 0.500 is exactly 4.005. Half-up gives $4.01, which is what a
+    // reader multiplying the two printed factors gets; `toFixed(2)` gave $4.00
+    // off the binary representation and this assertion used to pin THAT.
+    expect(formatStopLossHeadline(r)).toBe('$401 per contract — of the $651 premium, $250 left');
+    expect(formatStopPremiumRisk(r)).toContain('$8.01 away × Δ0.500 = $4.01 of $6.51 premium');
+    // Still reconciles: 401 + 250 = 651.
+    expect(401 + 250).toBe(651);
   });
 
   it('names its basis, so it cannot be confused with the Barrier Race figure', () => {

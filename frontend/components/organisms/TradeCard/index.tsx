@@ -12,7 +12,7 @@ import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
-import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk, formatStopLossHeadline, formatStopLossPct } from '@/lib/risk';
+import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk, formatStopLossHeadline, formatStopLossPct, stopLossIsTotalOnPrintedFigures } from '@/lib/risk';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -179,7 +179,13 @@ interface TradeCardProps {
   sendLabel?: string;
   sendDisabled?: boolean;
   contracts?: number;
-  onEditsChange?: (overlay: EditOverlay) => void;
+  /** `meta.premiumStopTouched` is TRUE only once the user has actually edited
+   *  the premium-stop field on this card. The parent must cache the dollar
+   *  amount only when it is set, because "untouched" cannot be recovered later
+   *  by comparing the cached value against the card's seed: the seed moves
+   *  under an untouched field whenever `mergePlan` lands, and a user is free to
+   *  type the seed's own value deliberately. See `premiumStopDollarToSend`. */
+  onEditsChange?: (overlay: EditOverlay, meta: { premiumStopTouched: boolean }) => void;
   /** Fired whenever the "Check structure" result changes for the current contract
    *  (including being reset to `undefined` on a contract switch, or `null` when no
    *  structural level was found) — lets the parent capture the level so it can be
@@ -1171,6 +1177,13 @@ export function TradeCard({
   // `mergePlan` swapping `data.exit` under an overridden card (see
   // premiumStopTouchedRef's own note). Identity-guarded, so a seed that did
   // not move costs nothing.
+  //
+  // Deliberately does NOT call `onEditsChange`: while the field is untouched
+  // the parent's cache holds `null` (it caches the dollar amount only when
+  // `meta.premiumStopTouched`), which already means "inherit the global" --
+  // the same thing following the seed means. Reporting the moved seed would
+  // put a number nobody chose back into the send path, which is the defect
+  // this early return exists to avoid.
   useEffect(() => {
     if (premiumStopTouchedRef.current) return;
     setOverlay((prev) =>
@@ -1202,7 +1215,7 @@ export function TradeCard({
       if (partial.premiumStop !== undefined) premiumStopTouchedRef.current = true;
       const next = { ...overlay, ...partial };
       setOverlay(next);
-      onEditsChange?.(next);
+      onEditsChange?.(next, { premiumStopTouched: premiumStopTouchedRef.current });
     },
     [overlay, onEditsChange],
   );
@@ -1619,7 +1632,7 @@ export function TradeCard({
                     tooltip={
                       stopRisk.status === 'PASS'
                         ? 'The contract still holds meaningful value if this stop is hit — the cheaper candidate to be wrong on.'
-                        : stopRisk.capped
+                        : stopLossIsTotalOnPrintedFigures(stopRisk)
                           ? 'At this stop the contract is a total loss, so the stop is not a risk control on it. A closer stop, or a higher-delta strike, would make it one. Not a reason to skip the trade — a reason to size it knowing that.'
                           : 'This stop costs most of the premium. Little is left to salvage if it is hit.'
                     }
