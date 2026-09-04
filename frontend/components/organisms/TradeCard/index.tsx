@@ -58,59 +58,15 @@ function defaultOverlay(data: TradeCardData): EditOverlay {
   };
 }
 
-// `initialContracts` is an explicit parameter (not a literal `1`) because the
-// TradeCard `contracts` prop is no longer always 1 once Feature 7's shared
-// per-symbol contracts map (and, later, Feature 3's "Apply" button) can seed
-// a non-default value — `overlay.contracts` initializes to THAT value on
-// mount (see defaultOverlay's caller), so comparing against a hardcoded `1`
-// would wrongly flag an untouched card as manually edited.
-function isDirty(overlay: EditOverlay, data: TradeCardData, initialContracts: number): boolean {
-  return (
-    overlay.entryLimit !== data.entry.limit ||
-    overlay.maxFill !== data.entry.maxFill ||
-    overlay.invalidation !== data.exit.invalidation ||
-    overlay.premiumStop !== data.exit.premiumStop ||
-    overlay.timeStopDays !== data.exit.timeStopDays ||
-    overlay.targets.some(
-      (t, i) => t !== (data.exit.targets[i]?.targetPrice ?? data.exit.targets[i]?.stockPrice),
-    ) ||
-    overlay.contracts !== initialContracts
-  );
-}
-
-function computeEditedRR(
-  overlay: EditOverlay,
-  data: TradeCardData,
-): { rr: number; model: string } {
-  const entryPrice = overlay.entryLimit;
-  const riskBasis = overlay.premiumStop;
-  if (entryPrice <= 0 || riskBasis <= 0) return { rr: 0, model: 'Edit (delta approx)' };
-  if (overlay.targets.length === 0) return { rr: data.rrRatio, model: data.rrModel };
-
-  const cd = data.contractDetails;
-  if (!cd) return { rr: data.rrRatio, model: data.rrModel };
-
-  const isCall = cd.right === 'C';
-  const strike = cd.strike;
-  const currentStockPrice = data.price;
-  const targetStockPrice = overlay.targets[0];
-  const delta =
-    (isCall && targetStockPrice > strike) || (!isCall && targetStockPrice < strike)
-      ? 0.5
-      : 0.3;
-  const priceMove = Math.abs(targetStockPrice - currentStockPrice);
-  const estOptionPrice = Math.max(0.01, entryPrice + delta * priceMove);
-  const reward = estOptionPrice - entryPrice;
-  // Risk basis is the planned dollar stop (premiumStop), not the full entry
-  // price — matches the backend's estimate_rr(): risk = current_premium *
-  // premium_stop_pct. Mirrors the backend's reward_risk.py M2 fix: a
-  // negative reward's sign/magnitude is preserved, not flattened to 0
-  // (entryPrice<=0 or riskBasis<=0 above are the only genuinely
-  // not-computable cases).
-  const rr = Math.round((reward / riskBasis) * 100) / 100;
-
-  return { rr, model: 'Edit (delta approx)' };
-}
+// isDirty() and computeEditedRR() were deleted here with the "Projected R/R
+// (+8% stock move)" readout in the Final Recommendation's Ladder-default
+// branch, which was the only thing that called either. computeEditedRR's
+// delta approximation (0.5 in the money / 0.3 out, applied to the typed
+// target) is not worth preserving for a future caller: it was a display
+// estimate for one line of copy, and anything that needs a repriced option
+// value now goes through the backend's reprice_horizon path like the rest of
+// the card. recomputeTargetEstOption below is a DIFFERENT function with a live
+// caller and stays.
 
 function recomputeTargetEstOption(
   targetStockPrice: number,
@@ -142,9 +98,10 @@ function rrContribution(
   // Mirrors the backend's reward_risk.py M2 fix: a negative reward's sign/
   // magnitude is preserved, not flattened to 0 — a target priced below entry
   // is a real loss the trader should see, not an indistinguishable "no data".
-  // Guards both operands (not just riskBasis) for symmetry with
-  // computeEditedRR's equivalent guard, even though today's UI already
-  // clamps entryLimit to a positive minimum before it can reach here.
+  // Guards both operands, not just riskBasis, even though today's UI already
+  // clamps entryLimit to a positive minimum before it can reach here. (The
+  // symmetry this used to cite was with computeEditedRR's equivalent guard;
+  // that function is gone, the guard's own reason is not.)
   if (riskBasis <= 0 || entryLimit <= 0) return 0;
   const reward = estOptionPrice - entryLimit;
   return Math.round((reward / riskBasis) * 10) / 10;
@@ -1222,12 +1179,12 @@ export function TradeCard({
     [onMaxLossOverrideChange],
   );
 
-  const dirty = useMemo(() => isDirty(overlay, data, initialContracts), [overlay, data, initialContracts]);
-
-  const editedRR = useMemo(() => {
-    if (!dirty) return { rr: data.rrRatio, model: data.rrModel };
-    return computeEditedRR(overlay, data);
-  }, [dirty, overlay, data]);
+  // `dirty` / `editedRR` and their helpers (isDirty, computeEditedRR) were
+  // deleted with the "Projected R/R (+8% stock move)" readout below: it was
+  // their only consumer, and an edit-tracking memo that feeds nothing is a
+  // recomputation on every overlay keystroke for no rendered output. The
+  // per-target R:R on the Sell-to-Close rows is a different function
+  // (rrContribution) and is unaffected.
 
   // Has either barrier the race was run against moved since? The race is then
   // CLEARED, not recomputed: its bars, medians and both risk legs were all
@@ -1974,8 +1931,12 @@ export function TradeCard({
                same number on every contract. The Barrier Race card's
                stock-stop R:R replaces it with one that actually discriminates.
                overlay.premiumStop itself is UNTOUCHED: it is still the live
-               risk denominator for computeEditedRR, rrContribution and isDirty,
-               and it is now also the race's third barrier. */}
+               risk denominator for rrContribution, and it is now also the
+               race's third barrier. (computeEditedRR and isDirty were named
+               here too until the Ladder-default copy of the "Projected R/R"
+               readout went as well — that readout was their only caller, so
+               both are gone. The field's two remaining reasons stand on their
+               own.) */}
         </CollapsibleSection>
 
         {/* 7. Final Recommendation — Feature 8: documentation, not
@@ -2032,10 +1993,33 @@ export function TradeCard({
                      the estimate above, so it is never a separately-timed
                      "most recent method" — when Monte Carlo is the most recent
                      one and a race came back with it, the race's numbers are
-                     what belong here. The standalone invalidation probability
-                     it replaces was the misleading one: it counts paths that
-                     touched the stock stop even when the premium stop had
-                     already fired days earlier. */}
+                     what belong here.
+
+                     There is deliberately NO else branch. The standalone
+                     invalidation probability that stood in one is REMOVED, not
+                     replaced: it counts paths that touched the stock stop even
+                     when the premium stop had already fired days earlier, and
+                     printed beside independently-measured target probabilities
+                     it invites a comparison that does not hold — the schematic's
+                     "Moved out: the Invalidation row", which had already been
+                     honoured on the Monte Carlo card itself and survived only
+                     here. The stop half of the picture belongs to the Barrier
+                     Race card, which counts every path once; when the race is
+                     not showable this summary prints its targets and stops,
+                     rather than a stop number that reads like the race's answer
+                     and is not.
+
+                     A MOVE, not a deletion: `firstPassage.invalidation` is
+                     untouched and still feeds BarrierRaceCard, and
+                     `data.exit.invalidation` still hard-blocks every send
+                     ("Invalidation stop required").
+
+                     This also retires round 9's mixed-vintage hazard by
+                     construction rather than by gate. That bug was stale race
+                     numbers printing here while SUPPRESSING a fresher
+                     invalidation fallback underneath them; with no fallback to
+                     suppress, the only thing `raceIsShowable` can now do is
+                     show or hide the race's own numbers. */}
                 {firstPassage.race && raceIsShowable ? (
                   <>
                     <div className={styles.scoreRow}>
@@ -2061,12 +2045,7 @@ export function TradeCard({
                       barrier is reached. See the Barrier Race card above for the full arithmetic.
                     </Text>
                   </>
-                ) : (
-                  <div className={styles.scoreRow}>
-                    <Text size={12} tone="secondary">Invalidation probability</Text>
-                    <Data size={13} tone="primary">{(firstPassage.invalidation.probability * 100).toFixed(0)}%</Data>
-                  </div>
-                )}
+                ) : null}
               </>
             )}
             {lastRunMethod === null && (
@@ -2080,16 +2059,26 @@ export function TradeCard({
                     <Data size={13} tone="primary">${(t.targetPrice ?? t.stockPrice).toFixed(2)}</Data>
                   </div>
                 ))}
-                <div className={styles.scoreRow}>
-                  <Text size={12} tone="secondary">Projected R/R (+8% stock move)</Text>
-                  <Data size={14} tone="primary">{editedRR.rr.toFixed(2)}x</Data>
-                </div>
-                <div className={styles.scoreRow}>
-                  <Text size={11} tone="dim">
-                    {editedRR.model}
-                    {dirty ? ' — edited' : ''}
-                  </Text>
-                </div>
+                {/* "Projected R/R (+8% stock move)" stood here and is GONE,
+                     together with the model/"— edited" attribution line whose
+                     only job was to caption it. It was the third R:R on one
+                     page and the least defensible of the three: reward from a
+                     hardcoded +8% stock move nobody chose, risk from a flat
+                     percentage of premium.
+
+                     Note WHERE this was, because it explains why it outlived
+                     its own removal. The Ladder's copy of this readout went in
+                     an earlier round (see the note in section 6) — but this
+                     branch is the Ladder DEFAULT, rendered by the Final
+                     Recommendation when no method has been run, and it carried
+                     its own copy. Deleting the readout in one place left it on
+                     screen in the state a trader sees first, before clicking
+                     anything.
+
+                     overlay.premiumStop is UNTOUCHED, for the reasons the
+                     section 6 note gives: it is still rrContribution's risk
+                     denominator and the barrier race's third barrier. Only the
+                     readouts went. */}
               </>
             )}
           </div>

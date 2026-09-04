@@ -396,9 +396,12 @@ describe('TradeCard', () => {
     // screen at all — deliberately, rather than being shown twice in two
     // places that count paths differently.
     expect(screen.queryByText('~4d')).not.toBeInTheDocument();
-    // Feature 8's Final Recommendation still shows the standalone
-    // probability when no race came back with the estimate.
-    expect(screen.getAllByText('30%').length).toBeGreaterThanOrEqual(1);
+    // ...and Feature 8's Final Recommendation does not reinstate it. That card
+    // carried the standalone probability as its no-race fallback until the
+    // readout was removed outright, so 30% is now on screen nowhere — while
+    // firstPassage.invalidation still holds it, still feeds BarrierRaceCard,
+    // and data.exit.invalidation still hard-blocks the send.
+    expect(screen.queryByText('30%')).not.toBeInTheDocument();
     // The round-7 caution note must NOT be here. It said the Fixed % Ladder
     // still back-solved at half the contract's life while "Stock price" above
     // used the resolved holding horizon. Both now call the same resolver
@@ -1326,8 +1329,10 @@ describe('TradeCard', () => {
     // risk leg is not proportional to premium.
     //
     // overlay.premiumStop is NOT display-only, so removing the readout must
-    // not touch the field: computeEditedRR, rrContribution and isDirty all
-    // still read it, and it is now the barrier race's third barrier too.
+    // not touch the field: rrContribution still reads it, and it is now the
+    // barrier race's third barrier too. (computeEditedRR and isDirty were named
+    // here as well until the Ladder-DEFAULT copy of the Projected R/R readout
+    // went too — that copy was their only caller.)
     render(<TradeCard data={mockTradeCard} />);
     expandLadder();
     expect(screen.queryByText('Risk / Reward')).not.toBeInTheDocument();
@@ -1379,10 +1384,19 @@ describe('TradeCard', () => {
     expect(screen.queryByText('Stock confidence')).not.toBeInTheDocument();
   });
 
-  it('shows projected RR label with method note', () => {
+  it('no longer shows the projected R/R readout anywhere on the card', () => {
+    // Removed per the schematic: third R:R on one page, reward from a
+    // hardcoded +8% stock move nobody chose, risk from a flat percentage of
+    // premium. The Ladder's own copy went earlier; this pins the last one,
+    // which lived in the Final Recommendation's Ladder-default branch — the
+    // state this render is in, before any method has been run.
     render(<TradeCard data={mockTradeCard} />);
-    expect(screen.getByText('Projected R/R (+8% stock move)')).toBeInTheDocument();
+    expect(screen.queryByText('Projected R/R (+8% stock move)')).not.toBeInTheDocument();
     expect(screen.queryByText('R:R ratio')).not.toBeInTheDocument();
+    // The field the readout divided by is untouched — it is a live risk
+    // denominator and the barrier race's third barrier, not a display.
+    expandLadder();
+    expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
   });
 
   describe('Arithmetic Profit Target (Feature 3) — additional coverage', () => {
@@ -1523,7 +1537,7 @@ describe('TradeCard', () => {
     });
   });
 
-  it('isDirty regression — a Contracts-only edit self-cancels once the shared per-symbol map round-trips initialContracts back to match (cosmetic-only gap; computeEditedRR never reads overlay.contracts, so R:R numbers are unaffected)', async () => {
+  it('a Contracts edit still reaches the page-level handler after the shared per-symbol map round-trips the value back down', async () => {
     const onEditsChange = jest.fn();
     const { rerender } = render(
       <TradeCard data={mockTradeCard} contracts={1} onEditsChange={onEditsChange} />,
@@ -1551,22 +1565,28 @@ describe('TradeCard', () => {
       rerender(<TradeCard data={mockTradeCard} contracts={5} onEditsChange={onEditsChange} />);
     });
 
-    // isDirty's contracts check (overlay.contracts !== initialContracts) is
-    // now comparing 5 against 5 — it self-cancels. No "edited" indicator
-    // appears for this Contracts-only edit, unlike every other overlay field.
-    // This is a known, accepted cosmetic gap (confirmed not to affect any
-    // rendered number — computeEditedRR never reads overlay.contracts).
+    // What this test was originally about — isDirty comparing 5 against 5 after
+    // the round-trip, so the "edited" flag self-cancelled for a Contracts-only
+    // edit — is moot: isDirty and the flag are gone with the Projected R/R
+    // readout that was their only consumer. The round-trip itself is real
+    // behaviour and is what the assertions above now pin. The line below stays
+    // as the removal guard: nothing on this card raises a card-level "edited"
+    // flag any more, in this sequence or any other.
     expect(screen.queryAllByText(/edited/).length).toBe(0);
   });
 
   describe('Final Recommendation (Feature 8)', () => {
-    it('empty state — before any method is run, falls back to the Fixed % Ladder Plan\'s live T1/T2/T3 targets AND R:R, explicitly labeled as a default', () => {
+    it('empty state — before any method is run, falls back to the Fixed % Ladder Plan\'s live T1/T2/T3 targets, explicitly labeled as a default', () => {
       render(<TradeCard data={mockTradeCard} />);
       expect(screen.getByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).toBeInTheDocument();
       // mockTradeCard's single target: stockPrice/targetPrice 200.02.
       expect(screen.getByText('$200.02')).toBeInTheDocument();
-      expect(screen.getByText('Projected R/R (+8% stock move)')).toBeInTheDocument();
-      expect(screen.getByText('2.50x')).toBeInTheDocument();
+      // The targets, and ONLY the targets. This branch used to carry the
+      // Ladder's "Projected R/R (+8% stock move)" as well — the copy that
+      // survived the readout's removal from the Ladder section itself, and the
+      // one a trader met first, since this is the state the card opens in.
+      expect(screen.queryByText('Projected R/R (+8% stock move)')).not.toBeInTheDocument();
+      expect(screen.queryByText('2.50x')).not.toBeInTheDocument();
       // Neither method's own content shows.
       expect(screen.queryByText(/computed via:/)).not.toBeInTheDocument();
     });
@@ -1715,9 +1735,15 @@ describe('TradeCard', () => {
       expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('$2.50');
     });
 
-    it('updates R:R section to show edited model when entry limit changes', async () => {
+    it('prints no R:R model or "edited" caption when the entry limit changes — both went with the readout they captioned', async () => {
+      // This test used to assert the opposite: "Heston repriced" before the
+      // edit, "Edit (delta approx)" after. Both strings came from
+      // computeEditedRR, whose only consumer was the Projected R/R readout, so
+      // removing that readout removed the caption and the function behind it.
+      // Kept as a removal guard rather than deleted: reinstating either string
+      // means the readout came back with it.
       render(<TradeCard data={mockTradeCard} />);
-      expect(screen.getAllByText('Heston repriced').length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByText('Heston repriced')).not.toBeInTheDocument();
       const limitTrigger = screen.getByLabelText('Edit Limit');
       await act(async () => {
         fireEvent.click(limitTrigger);
@@ -1727,7 +1753,9 @@ describe('TradeCard', () => {
         fireEvent.change(input, { target: { value: '5.0' } });
         fireEvent.keyDown(input, { key: 'Enter' });
       });
-      expect(screen.getAllByText(/Edit \(delta approx\)/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByText(/Edit \(delta approx\)/)).not.toBeInTheDocument();
+      // The edit itself still lands — only its caption is gone.
+      expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('$5.00');
     });
 
     it('shows edited badge in target row when stock price is changed', async () => {
@@ -1804,44 +1832,52 @@ describe('TradeCard', () => {
       );
     });
 
-    it('shows edited indicator in R:R sections when values differ from original', async () => {
-      render(<TradeCard data={mockTradeCard} />);
-      const limitTrigger = screen.getByLabelText('Edit Limit');
+    // WHAT WENT, AND WHAT DID NOT. Three tests stood here covering the
+    // card-level "edited" flag: it appeared for any overlay field, it did NOT
+    // appear when the `contracts` prop merely seeded a non-default value
+    // (Feature 7's isDirty fix), and it DID appear once contracts was
+    // hand-edited away from that seed. All three asserted the same string, and
+    // that string was rendered in exactly one place — appended to the R:R model
+    // caption inside the Projected R/R readout. isDirty existed only to decide
+    // whether to append it. Removing the readout removed the flag, the memo and
+    // the function together; there is no card-level edited indicator left to
+    // test, so the three are replaced by the two guards below.
+    //
+    // NOT a blanket loss of edit feedback: the Sell-to-Close ladder rows keep
+    // their OWN per-row "edited" badge, which never went through isDirty
+    // ('shows edited badge in target row when stock price is changed' above
+    // still passes). What no longer surfaces anywhere is an edit to Entry
+    // limit, Max fill, Contracts, Premium stop, Time stop or Invalidation.
+    // That is a consequence of the approved removal, not a separate decision,
+    // and it is recorded in PROJECT_STATE.json as a question for Kenneth.
+    it('shows no card-level "edited" flag for a non-target field, in either isDirty case', async () => {
+      // Case 1: the field that used to raise it — Entry limit.
+      const { unmount } = render(<TradeCard data={mockTradeCard} />);
       await act(async () => {
-        fireEvent.click(limitTrigger);
+        fireEvent.click(screen.getByLabelText('Edit Limit'));
       });
-      const input = screen.getByDisplayValue('2.5');
+      const limitInput = screen.getByDisplayValue('2.5');
       await act(async () => {
-        fireEvent.change(input, { target: { value: '3.50' } });
-        fireEvent.keyDown(input, { key: 'Enter' });
+        fireEvent.change(limitInput, { target: { value: '3.50' } });
+        fireEvent.keyDown(limitInput, { key: 'Enter' });
       });
-      const editedLabels = screen.getAllByText(/edited/);
-      expect(editedLabels.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('does not show an "edited" indicator when the contracts prop seeds a non-default value (Feature 7 isDirty fix)', () => {
-      // Regression test: isDirty used to compare overlay.contracts against a
-      // hardcoded 1, not the initialContracts prop that seeds overlay.contracts
-      // on mount. Once a shared per-symbol contracts map (Feature 7) can pass a
-      // non-1 `contracts` prop, the untouched card must NOT be flagged dirty —
-      // the R:R sections must show the plain (non-"edited") ratio.
-      render(<TradeCard data={mockTradeCard} contracts={4} />);
-      expect(screen.getByLabelText('Edit Contracts')).toHaveTextContent('4');
+      expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('$3.50');
       expect(screen.queryAllByText(/edited/).length).toBe(0);
-    });
+      unmount();
 
-    it('DOES show an "edited" indicator when contracts is hand-edited away from a non-default initial value', async () => {
+      // Case 2: the Feature 7 seed case, which used to be the interesting half
+      // of the pair — a hand-edit away from a non-default `contracts` prop.
       render(<TradeCard data={mockTradeCard} contracts={4} />);
-      const contractsTrigger = screen.getByLabelText('Edit Contracts');
       await act(async () => {
-        fireEvent.click(contractsTrigger);
+        fireEvent.click(screen.getByLabelText('Edit Contracts'));
       });
-      const input = screen.getByDisplayValue('4');
+      const contractsInput = screen.getByDisplayValue('4');
       await act(async () => {
-        fireEvent.change(input, { target: { value: '6' } });
-        fireEvent.keyDown(input, { key: 'Enter' });
+        fireEvent.change(contractsInput, { target: { value: '6' } });
+        fireEvent.keyDown(contractsInput, { key: 'Enter' });
       });
-      expect(screen.getAllByText(/edited/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByLabelText('Edit Contracts')).toHaveTextContent('6');
+      expect(screen.queryAllByText(/edited/).length).toBe(0);
     });
   });
 });
@@ -2265,8 +2301,13 @@ describe('the barrier race, through the card that owns it', () => {
     expect(screen.queryAllByTestId('segment-Target first')).toHaveLength(0);
     expect(screen.queryByText(/Armed stop/)).not.toBeInTheDocument();
     expect(screen.queryByText(/T20% edge/)).not.toBeInTheDocument();
-    // ...and the honest fallback it was suppressing is back.
-    expect(screen.getByText('Invalidation probability')).toBeInTheDocument();
+    // ...and NOTHING replaces them. The fallback this bug used to suppress —
+    // the standalone invalidation probability — has since been removed
+    // outright, so the summary shows its targets and stops. That is the
+    // stronger version of the same guarantee: round 9 fixed a stale reading
+    // that hid a fresh one, and with no fallback underneath, a stale race can
+    // no longer hide anything at all.
+    expect(screen.queryByText('Invalidation probability')).not.toBeInTheDocument();
   });
 });
 
@@ -2662,7 +2703,11 @@ describe('the race gates, mutation-pinned', () => {
     });
 
     expect(screen.queryByText(/Armed stop/)).not.toBeInTheDocument();
-    expect(screen.getByText('Invalidation probability')).toBeInTheDocument();
+    // The gate's whole job now: show the race's numbers or show none. It no
+    // longer swaps in a standalone invalidation probability, which counted
+    // paths that touched the stock stop even where the premium stop had
+    // already fired days earlier.
+    expect(screen.queryByText('Invalidation probability')).not.toBeInTheDocument();
   });
 
   it('credits the default, not the field, when the field could not set the barrier', async () => {
