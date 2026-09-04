@@ -305,8 +305,10 @@ class PortfolioPosition(BaseModel):
     contracts: Optional[int] = None
     source: Optional[Literal['broker', 'manual']] = None
     orderedAt: Optional[str] = None
-    # Piece 4 — per-position premium stop. None = inherit the global.
-    premiumStopPct: Optional[float] = Field(default=None, gt=0, lt=1)
+    # NOTE: no premium_stop_pct here, deliberately. This model is the MOCK
+    # FIXTURE shape (app/fixtures/portfolio.py is its only referent) -- it is
+    # not a request or response model on any route. Piece 4's field lives on
+    # PortfolioPositionCreate / Update / Schema below, which are the live ones.
 
 
 # ── Alerts ───────────────────────────────────────────────────────────────────

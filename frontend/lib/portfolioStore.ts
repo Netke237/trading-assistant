@@ -204,7 +204,10 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
 }
 
 type SaveOutcome =
-  | { kind: 'ok'; adjustedQty?: number }
+  // `premiumStopPct` is the fraction the SERVER derived for this create (piece
+  // 4) — the client sends dollars, so this is the only place the stored
+  // fraction is known before the next full sync.
+  | { kind: 'ok'; adjustedQty?: number; premiumStopPct?: number | null }
   | { kind: 'rejected'; detail: string }   // backend 4xx (except 409) — do not keep the row
   | { kind: 'duplicate' }                  // 409 — backend already has this contract
   | { kind: 'network' };                   // unreachable — keep the row pending
@@ -219,7 +222,20 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
       const adjustedQty = (body as { adjustedQty?: number }).adjustedQty;
-      return typeof adjustedQty === 'number' ? { kind: 'ok', adjustedQty } : { kind: 'ok' };
+      // Piece 4 — the SERVER derives premiumStopPct (from premiumStopDollar,
+      // against the entry price it actually persisted), so the created row is
+      // the only place that fraction exists. Discarding it left the optimistic
+      // local row at `premiumStopPct: undefined` until the next 30s
+      // syncFromBackend, and in that window the frontend alert engine resolved
+      // the position to the GLOBAL while the backend used the derived value —
+      // the two engines disagreeing, which is the one thing lib/premiumStop.ts
+      // says must not happen.
+      const premiumStopPct = (body as { premiumStopPct?: number | null }).premiumStopPct ?? null;
+      return {
+        kind: 'ok',
+        ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
+        premiumStopPct,
+      };
     }
     if (res.status === 409) return { kind: 'duplicate' };
     const body = await res.json().catch(() => ({}));
@@ -247,7 +263,7 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
 export async function persistPosition(
   p: PortfolioPosition,
   portfolioValue = accountValue(),
-): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number }> {
+): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number; premiumStopPct?: number | null }> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
@@ -257,7 +273,16 @@ export async function persistPosition(
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
       const adjustedQty = (body as { adjustedQty?: number }).adjustedQty;
-      return typeof adjustedQty === 'number' ? { ok: true, adjustedQty } : { ok: true };
+      // Same reason as postPosition's: the server derives premiumStopPct from
+      // the dollar stop against the entry price it persisted, so this response
+      // is the only place that fraction exists before the next full sync.
+      // `applyPersistedPosition` folds it onto the row it hands to addPosition.
+      const premiumStopPct = (body as { premiumStopPct?: number | null }).premiumStopPct ?? null;
+      return {
+        ok: true,
+        ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
+        premiumStopPct,
+      };
     }
     const body = await res.json().catch(() => ({}));
     return { ok: false, detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
@@ -299,7 +324,12 @@ export function applyPersistedPosition(
     return { rejected: true, detail: saved.detail };
   }
   if (saved.adjustedQty != null) onAdjusted?.(saved.adjustedQty);
-  void addPosition(pos, { skipPost: true });
+  // Piece 4 — carry the server's derived premium-stop fraction onto the row
+  // that goes into local state. `skipPost: true` means nothing else will fetch
+  // it until the next 30s syncFromBackend, and until then the frontend alert
+  // engine would resolve this position to the GLOBAL while the backend used
+  // the derived value.
+  void addPosition({ ...pos, premiumStopPct: saved.premiumStopPct ?? null }, { skipPost: true });
   return { rejected: false };
 }
 
@@ -674,6 +704,16 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                     // untouched, same as before this fix, to be corrected by the next
                     // authoritative sync.
                     ...(adjustedQty != null && !didMerge ? { contracts: adjustedQty } : {}),
+                    // Piece 4 — adopt the server's derived fraction now rather
+                    // than waiting for the next syncFromBackend, so the local
+                    // alert engine and the backend generator resolve this
+                    // position to the same percentage from the first scan.
+                    // Skipped on a MERGE for the same reason as `contracts`:
+                    // the POST described the incoming increment, not the row
+                    // that already existed.
+                    ...(!didMerge && outcome.kind === 'ok'
+                      ? { premiumStopPct: outcome.premiumStopPct ?? null }
+                      : {}),
                   }
                 : x,
             ),

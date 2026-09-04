@@ -894,6 +894,12 @@ export default function Step7Page() {
               sendDisabled={basketEmpty || basketPlansPending}
               contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
               onEditsChange={(overlay) => handleEditsChange(effectiveCard.symbol, contractKey, overlay)}
+              // Piece 4 — round-tripped like `contracts` above. The card's
+              // reset on a contract change does not call `onEditsChange`, so
+              // without this the field fell back to its seed while this cache
+              // kept the user's edit, and the two send paths posted a number
+              // the card was no longer showing.
+              initialPremiumStop={contractKey ? premiumStopByContract[contractKey] ?? null : null}
               onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(effectiveCard.symbol, stop, stockPrice)}
               onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
               onExitPlanChange={(plan) => handleExitPlanChange(contractKey, plan)}

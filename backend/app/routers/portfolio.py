@@ -280,10 +280,34 @@ async def add_position(
     resolved_premium_stop_pct = body.premiumStopPct
     if body.premiumStopDollar is not None and entry_price > 0:
         ratio = body.premiumStopDollar / entry_price
-        # A stop at or above the whole premium is a total loss, which is
-        # unreachable-by-definition rather than a stop. Store NULL (inherit the
-        # global) rather than a value the schema would reject anyway.
-        resolved_premium_stop_pct = ratio if 0 < ratio < 1 else None
+        if 0 < ratio < 1:
+            resolved_premium_stop_pct = ratio
+        else:
+            # A stop at or above the whole premium is a total loss, which is
+            # unreachable-by-definition rather than a stop, and there is no
+            # representation for it: the column's contract is (0, 1). The card's
+            # field has min=0.01 and NO max, and `entry_price` may have just
+            # been replaced with a live quote a few lines up, so this is
+            # reachable two ways -- typing $6.00 on a $5.20 mid, or typing $4.50
+            # and filling at $4.20.
+            #
+            # LOGGED, like the sibling stop paths above (which warn when a
+            # live-price re-anchor pushes a structural stop non-positive).
+            # Falling back silently is worse here than there: the position
+            # inherits the 60% global, which is a TIGHTER stop than the one
+            # asked for, so PREMIUM_STOP fires earlier than intended and
+            # nothing on screen says why.
+            _log.warning(
+                "add_position: premiumStopDollar %.2f is %.0f%% of the persisted entry %.2f for %s "
+                "-- at or beyond a total loss, so no per-position stop is stored; "
+                "this position inherits the global",
+                body.premiumStopDollar, ratio * 100, entry_price, body.contract,
+            )
+            # Falls back to whatever fraction the client sent, not to None: the
+            # dollar amount winning is about PREFERENCE between two ways of
+            # saying the same thing, and an unusable dollar is no reason to
+            # discard a fraction that is independently valid.
+            resolved_premium_stop_pct = body.premiumStopPct
 
     position = PortfolioPositionModel(
         rec_id=body.recId,

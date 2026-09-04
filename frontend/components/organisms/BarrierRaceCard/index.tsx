@@ -39,14 +39,14 @@ export interface BarrierRaceCardProps {
    *  standalone invalidation probability below is a property of that stop, so
    *  it survives a moved PREMIUM stop and must not survive this one. */
   stockStopMoved?: boolean;
+  /** Whether the Arithmetic card's "Max loss if the stop is hit" readout is on
+   *  screen. Gates the cross-reference below — see its comment. */
+  stopCostShown?: boolean;
   /** The stock stop's STANDALONE measure — "did any path ever reach it",
    *  ignoring whether the premium stop fired first. It moved here from the
    *  Monte Carlo card because this is where the comparison is legible: shown
    *  next to the attribution, the gap between the two IS the thing this card
    *  exists to expose. */
-  /** Whether the Arithmetic card's "Max loss if the stop is hit" readout is on
-   *  screen. Gates the cross-reference below — see its comment. */
-  stopCostShown?: boolean;
   invalidation?: { probability: number; expectedDays: number | null } | null;
 }
 

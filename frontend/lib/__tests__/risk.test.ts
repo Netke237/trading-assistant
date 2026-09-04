@@ -12,6 +12,7 @@ import {
   stopPremiumRisk,
   formatStopPremiumRisk,
   formatStopLossHeadline,
+  formatStopLossPct,
 } from '@/lib/risk';
 import type { PortfolioPosition, RiskLimits, TradeCardData, ExitPlan } from '@/types/domain';
 
@@ -472,7 +473,7 @@ describe('the printed equation reconciles', () => {
       for (const delta of [0.05, 0.2508, 0.3333, 0.4567, 0.5, 0.5347, 0.789, 0.9999]) {
         for (const premium of [0.35, 2.0, 6.51, 18.9]) {
           const r = stopPremiumRisk(200 - move, 200, delta, premium);
-          if (!r || r.capped) continue;
+          if (!r) continue;
           const printed = formatStopPremiumRisk(r);
           const m = printed.match(/\$([\d.]+) away × Δ([\d.]+) = \$([\d.]+) of \$([\d.]+)/)!;
           const [away, d, loss, premiumShown] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
@@ -480,11 +481,89 @@ describe('the printed equation reconciles', () => {
           // multiplied and rounded to the cent, which is what a hand-check
           // produces. An epsilon of half a cent passes 0.13 × 0.500 = 0.065
           // against a printed $0.07 either way and would hide a real drift.
-          // The one legitimate exception is the clamp: a product that rounds a
-          // cent ABOVE the premium prints the premium, because "$6.52 of $6.51
-          // premium" would be worse than the rounding it fixes.
-          const expected = Math.min(Number((away * d).toFixed(2)), premiumShown);
+          const product = Number((away * d).toFixed(2));
+          const expected = Math.min(product, premiumShown);
           if (loss !== expected) failures.push(`${printed} (expected $${expected})`);
+          // CAPPED ROWS ARE CHECKED TOO. This used to `continue` past them, and
+          // that skip hid a whole class: `r.capped` is decided at full
+          // precision while the line is printed at 3dp on the delta, so the two
+          // disagreed in both directions -- an "(uncapped)" figure BELOW the
+          // capped one, and a clamp with no tail at all. The clamp is no longer
+          // "the one legitimate exception"; the tail is what the reader is owed
+          // whenever the product and the printed loss differ, and it is
+          // present exactly then.
+          const tail = printed.match(/\(uncapped \$([\d.]+)\)/);
+          if (product > premiumShown) {
+            if (!tail) failures.push(`clamped with no tail: ${printed}`);
+            else if (Number(tail[1]) !== product) {
+              failures.push(`tail is not the printed product: ${printed}`);
+            }
+          } else if (tail) {
+            failures.push(`tail on a row that multiplies out: ${printed}`);
+          }
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('never prints an "uncapped" figure below the capped one', () => {
+    // $70.10 away × Δ0.5505 on a $38.59 premium read
+    // "= $38.59 of $38.59 premium (uncapped $38.55)". `loss` is
+    // min(rawLoss, premium) by construction, so an uncapped estimate BELOW it
+    // cannot happen -- unless the two figures come from two precisions, which
+    // is what `r.capped` (full) against `product` (printed) was doing.
+    const r = stopPremiumRisk(100.00, 170.10, 0.5505, 38.59)!;
+    expect(r.capped).toBe(true);              // still true at full precision
+    expect(formatStopPremiumRisk(r)).toBe(
+      '$70.10 away × Δ0.550 = $38.55 of $38.59 premium · delta-linear, priced today',
+    );
+  });
+
+  it('carries the tail when the printed product clears the premium', () => {
+    // The mirror image: `r.capped` is FALSE (rawLoss 52.47999 < 52.48) but the
+    // printed factors give $52.52. It printed "= $52.48 of $52.48 premium" with
+    // nothing to explain the 4c, above a headline claiming "$0 left" for a stop
+    // the code itself did not classify as a total loss.
+    const r = stopPremiumRisk(100.00, 170.02, 0.7495, 52.48)!;
+    expect(r.capped).toBe(false);
+    expect(formatStopPremiumRisk(r)).toBe(
+      '$70.02 away × Δ0.750 = $52.48 of $52.48 premium (uncapped $52.52) · delta-linear, priced today',
+    );
+  });
+
+  it('the badge percentage never contradicts the money beside it', () => {
+    // The badge read `(r.fraction * 100).toFixed(0)` -- full precision -- while
+    // the headline scaled from the printed pair, so the two disagreed by a
+    // point on ~1.4% of inputs and flatly contradicted each other at the top of
+    // the range: "100% OF PREMIUM" printed beside "$8 left".
+    const r = stopPremiumRisk(164.76, 200, 0.5342, 18.90)!;
+    expect(formatStopLossHeadline(r)).toBe(
+      '$1,882 per contract — of the $1,890 premium, $8 left',
+    );
+    expect(formatStopLossPct(r)).toBe('99%');
+
+    const failures: string[] = [];
+    for (let move = 0.11; move <= 42; move += 0.03) {
+      for (const delta of [0.05, 0.2508, 0.5, 0.5342, 0.5347, 0.789, 0.9999]) {
+        for (const premium of [0.35, 2.0, 6.51, 18.9]) {
+          const x = stopPremiumRisk(200 - move, 200, delta, premium);
+          if (!x) continue;
+          const head = formatStopLossHeadline(x);
+          const h = head.match(/\$([\d,]+) per contract — of the \$([\d,]+) premium, \$(-?[\d,]+) left/)!;
+          const num = (v: string) => Number(v.replace(/,/g, ''));
+          const [perContract, premiumTotal, left] = [num(h[1]), num(h[2]), num(h[3])];
+          const badge = formatStopLossPct(x);
+          // 100% is reserved for an actual total loss on the printed figures.
+          if (badge === '100%' && left !== 0) failures.push(`${badge} beside ${head}`);
+          if (left === 0 && perContract > 0 && badge !== '100%') {
+            failures.push(`${badge} beside a total loss: ${head}`);
+          }
+          // And it stays within a point of the ratio the reader can compute.
+          const implied = Math.round((perContract / premiumTotal) * 100);
+          if (Math.abs(Number(badge.replace('%', '')) - implied) > 1) {
+            failures.push(`${badge} vs computed ${implied}%: ${head}`);
+          }
         }
       }
     }
@@ -493,7 +572,7 @@ describe('the printed equation reconciles', () => {
 
   it('the headline sums, and agrees with the per-share line beneath it', () => {
     // $8.01 away × Δ0.500 on a $6.51 premium printed "$401 per contract — of
-    // the $651 you paid, $251 left" (401 + 251 = 652) two lines above
+    // the $651 premium, $251 left" (401 + 251 = 652) two lines above
     // "= $4.00", whose hundred is $400. Three figures rounded independently
     // from full precision; they are now all scaled from one rounded pair.
     const failures: string[] = [];
@@ -503,7 +582,7 @@ describe('the printed equation reconciles', () => {
           const r = stopPremiumRisk(200 - move, 200, delta, premium);
           if (!r) continue;
           const head = formatStopLossHeadline(r);
-          const h = head.match(/\$([\d,]+) per contract — of the \$([\d,]+) you paid, \$(-?[\d,]+) left/)!;
+          const h = head.match(/\$([\d,]+) per contract — of the \$([\d,]+) premium, \$(-?[\d,]+) left/)!;
           const num = (x: string) => Number(x.replace(/,/g, ''));
           const [perContract, premiumTotal, left] = [num(h[1]), num(h[2]), num(h[3])];
           if (perContract + left !== premiumTotal) failures.push(`sum: ${head}`);
@@ -520,7 +599,7 @@ describe('the printed equation reconciles', () => {
 
   it('the audit case itself: $8.01 away, Δ0.500, $6.51 premium', () => {
     const r = stopPremiumRisk(191.99, 200, 0.5, 6.51)!;
-    expect(formatStopLossHeadline(r)).toBe('$400 per contract — of the $651 you paid, $251 left');
+    expect(formatStopLossHeadline(r)).toBe('$400 per contract — of the $651 premium, $251 left');
     expect(formatStopPremiumRisk(r)).toContain('$8.01 away × Δ0.500 = $4.00 of $6.51 premium');
   });
 
@@ -538,7 +617,7 @@ describe('formatStopLossHeadline', () => {
     const r = stopPremiumRisk(312.80, 328.21, 0.5347, 18.90, { pass_max_fraction: 0.80 })!;
     // 8.24/share -> $824 of the $1,890 paid, $1,066 left.
     expect(formatStopLossHeadline(r)).toBe(
-      '$824 per contract — of the $1,890 you paid, $1,066 left',
+      '$824 per contract — of the $1,890 premium, $1,066 left',
     );
   });
 

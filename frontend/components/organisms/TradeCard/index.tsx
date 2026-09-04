@@ -12,7 +12,7 @@ import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
-import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk, formatStopLossHeadline } from '@/lib/risk';
+import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk, formatStopLossHeadline, formatStopLossPct } from '@/lib/risk';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -220,6 +220,18 @@ interface TradeCardProps {
    *  `exitPlanByContract`). `null`/absent means "inherit the global
    *  `maxLossPerTradePct` default". */
   initialMaxLossOverride?: MaxLossOverride | null;
+  /** Piece 4 — the card's editable "Premium stop" DOLLAR field, seeded from
+   *  the page-level `premiumStopByContract` cache (keyed by CONTRACT, since a
+   *  dollar stop is meaningful only against the premium it was typed on).
+   *  `null`/absent means "this contract has never been edited", and the field
+   *  falls back to `data.exit.premiumStop`.
+   *
+   *  It has to round-trip, exactly as `contracts` does. Without it the reset
+   *  on a contract change (which deliberately does NOT call `onEditsChange`)
+   *  put the SEED back in the field while the parent's cache kept the user's
+   *  edit: Prev to another candidate and back and the card displayed $3.12
+   *  while both send paths posted the $2.00 still sitting in the cache. */
+  initialPremiumStop?: number | null;
   /** Fired whenever the override changes (Apply/Clear inside the Arithmetic
    *  card's max-loss override editor) — direct call inside the setter, the
    *  same pattern `onEditsChange` already uses. Not the ref-synced-effect
@@ -310,6 +322,7 @@ export function TradeCard({
   onFirstPassageChange,
   onExitPlanChange,
   initialMaxLossOverride = null,
+  initialPremiumStop = null,
   onMaxLossOverrideChange,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
@@ -317,7 +330,26 @@ export function TradeCard({
   const [overlay, setOverlay] = useState<EditOverlay>(() => ({
     ...defaultOverlay(data),
     contracts: initialContracts,
+    premiumStop: initialPremiumStop ?? data.exit.premiumStop,
   }));
+  /** Has the user typed in the "Premium stop" field for the contract currently
+   *  on screen? Distinguishes "$3.12 because that is what I chose" from "$3.12
+   *  because that is `round(mid x global, 2)` and nobody has touched it",
+   *  which `overlay.premiumStop` alone cannot: the two are the same number
+   *  until the seed moves underneath it.
+   *
+   *  And it does move. A Step 6 contract override changes `data.contract`
+   *  immediately (`applyPickedContract`) but leaves `exit` as the AUTO-PICK's,
+   *  so the reset below re-seeds the old $3.12; `mergePlan` then replaces
+   *  `exit` wholesale a network round-trip later, WITHOUT touching
+   *  `data.contract`, so nothing re-ran and the field kept $3.12 against a
+   *  recomputed seed of $2.40. One unrelated `patch()` after that (clicking
+   *  Apply on the recommended contract size is enough) cached $3.12 under the
+   *  NEW contract's key, `premiumStopDollarToSend` saw 3.12 !== 2.40 and let
+   *  it through, and the router derived 3.12 / 4.00 = a 78% premium stop
+   *  nobody chose. That is verbatim the failure `premiumStop.ts` documents,
+   *  reached by a second route. The re-seed effect below closes it. */
+  const premiumStopTouchedRef = useRef(initialPremiumStop != null);
   // Feature 5 — pre-trade max-loss override, seeded from the page-level cache
   // (keyed by symbol there; this local state just mirrors whatever the parent
   // resolved for the CURRENT candidate). Reset alongside overlay/structuralStop/
@@ -474,7 +506,12 @@ export function TradeCard({
       structuralRequestRef.current?.abort();
       firstPassageRequestRef.current?.abort();
       exitPlanRequestRef.current?.abort();
-      setOverlay({ ...defaultOverlay(data), contracts: initialContracts });
+      premiumStopTouchedRef.current = initialPremiumStop != null;
+      setOverlay({
+        ...defaultOverlay(data),
+        contracts: initialContracts,
+        premiumStop: initialPremiumStop ?? data.exit.premiumStop,
+      });
       // Every one of these five reads data.exit — for a candidate nothing has
       // been run on they are all absent and this is still a full reset (the
       // pre-existing behaviour). When the parent has a cached result for the
@@ -510,7 +547,7 @@ export function TradeCard({
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
     }
-  }, [data.symbol, data.contract, initialContracts, defaultTargetPct, initialMaxLossOverride]);
+  }, [data.symbol, data.contract, initialContracts, defaultTargetPct, initialMaxLossOverride, initialPremiumStop]);
 
   // Cancel any outstanding requests on unmount.
   useEffect(() => () => structuralRequestRef.current?.abort(), []);
@@ -1127,6 +1164,22 @@ export function TradeCard({
     setOverlay((prev) => ({ ...prev, contracts: initialContracts }));
   }, [initialContracts]);
 
+  // Follow the seed while the field is untouched. Declared AFTER the reset
+  // effect above so it runs after it within the same commit — on a contract
+  // change the reset has already decided `premiumStopTouchedRef`, and this is
+  // then a no-op. Its real job is the case with no contract change at all:
+  // `mergePlan` swapping `data.exit` under an overridden card (see
+  // premiumStopTouchedRef's own note). Identity-guarded, so a seed that did
+  // not move costs nothing.
+  useEffect(() => {
+    if (premiumStopTouchedRef.current) return;
+    setOverlay((prev) =>
+      prev.premiumStop === data.exit.premiumStop
+        ? prev
+        : { ...prev, premiumStop: data.exit.premiumStop },
+    );
+  }, [data.exit.premiumStop]);
+
 
   // Direct-call pattern (see `onEditsChange`'s own doc comment) — same shape
   // as `applyMaxLossOverride` below: setOverlay and onEditsChange are two
@@ -1142,6 +1195,11 @@ export function TradeCard({
   // tick against a stale closure.
   const patch = useCallback(
     (partial: Partial<EditOverlay>) => {
+      // Only a real edit counts. `patch` carries the WHOLE overlay to the
+      // parent on every call, so an untouched premium stop rides along with a
+      // Contracts bump — recording that as "the user chose this" is precisely
+      // how the seeded default came to be posted as a deliberate stop.
+      if (partial.premiumStop !== undefined) premiumStopTouchedRef.current = true;
       const next = { ...overlay, ...partial };
       setOverlay(next);
       onEditsChange?.(next);
@@ -1557,7 +1615,7 @@ export function TradeCard({
                   <Text size={10} tone="dim">MAX LOSS IF THE STOP IS HIT</Text>
                   <StatusBadge
                     status={stopRisk.status}
-                    label={`${(stopRisk.fraction * 100).toFixed(0)}% OF PREMIUM`}
+                    label={`${formatStopLossPct(stopRisk)} OF PREMIUM`}
                     tooltip={
                       stopRisk.status === 'PASS'
                         ? 'The contract still holds meaningful value if this stop is hit — the cheaper candidate to be wrong on.'
@@ -1960,7 +2018,9 @@ export function TradeCard({
              Arithmetic/Monte Carlo/Fixed % Ladder — their bases aren't on the
              same axis. Shows whichever of Arithmetic/Monte Carlo ran most
              recently (lastRunMethod), falling back to the Ladder's live
-             T1/T2/T3 + R:R when neither has been explicitly run. Stands
+             T1/T2/T3 -- targets only -- when neither has been explicitly run.
+             (It printed "+ R:R" until the Projected R/R readout was removed
+             from that branch; see the note where it stood.) Stands
              alone — NOT inside the Fixed % Ladder Plan collapsible group. */}
         <section className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
           <div className={styles.scoreCardHeader}>

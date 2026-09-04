@@ -1012,7 +1012,10 @@ describe('portfolioStore', () => {
       const result = applyPersistedPosition({ ok: true }, pos, addPosition, onAdjusted);
 
       expect(result.rejected).toBe(false);
-      expect(addPosition).toHaveBeenCalledWith(pos, { skipPost: true });
+      // `premiumStopPct: null` is carried onto the row (piece 4) — the server
+      // derives it from the dollar stop and a response without one means
+      // "inherit the global".
+      expect(addPosition).toHaveBeenCalledWith({ ...pos, premiumStopPct: null }, { skipPost: true });
       expect(onAdjusted).not.toHaveBeenCalled();
     });
 
@@ -1024,7 +1027,23 @@ describe('portfolioStore', () => {
       applyPersistedPosition({ ok: true, adjustedQty: 3 }, pos, addPosition, onAdjusted);
 
       expect(onAdjusted).toHaveBeenCalledWith(3);
-      expect(addPosition).toHaveBeenCalledWith(pos, { skipPost: true });
+      expect(addPosition).toHaveBeenCalledWith({ ...pos, premiumStopPct: null }, { skipPost: true });
+    });
+
+    it('carries the server-derived premium stop onto the row it adds locally', () => {
+      // The client posts DOLLARS; only the server knows the fraction, because
+      // only the server knows the entry price it persisted. Dropping it left
+      // the local row inheriting the global until the next 30s sync, so the
+      // in-app alert engine and the backend generator armed the same position
+      // at two different percentages.
+      const pos = makePosition({ recId: 'REC-PS' });
+      const addPosition = jest.fn();
+
+      applyPersistedPosition({ ok: true, premiumStopPct: 0.78 }, pos, addPosition);
+
+      expect(addPosition).toHaveBeenCalledWith(
+        { ...pos, premiumStopPct: 0.78 }, { skipPost: true },
+      );
     });
 
     it('regression guard: a naive "skip addPosition whenever saved.ok would be truthy" bug would fail this — offline must never take the skipPost path', () => {

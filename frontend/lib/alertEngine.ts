@@ -43,8 +43,9 @@ export interface AlertReason {
   alertType: AlertType;
   reason: string;
   // Structured fields for position_alert_history — populated where the data
-  // is actually available client-side; left undefined otherwise (e.g.
-  // PREMIUM_STOP has no dollar price/threshold in scope here, only pnlPct).
+  // is actually available client-side; left undefined otherwise. (PREMIUM_STOP
+  // was the example here while it compared `pnlPct` and had no dollar figures
+  // in scope; it resolves a threshold price now and populates both.)
   price?: number;
   referenceValue?: number;
   direction?: Direction;
@@ -240,17 +241,41 @@ export function scanPortfolio(
     // for an alert the backend had no record of. Piece 4 made that MORE
     // likely, not less — a derived per-position fraction like 0.7554 puts the
     // threshold on non-round cents far more often than a flat 0.60 did.
-    // `entryPrice > 0` mirrors the backend's own guard; nothing further is
-    // added, because any extra condition here is a new disagreement.
+    // BOTH of the backend's guards, not one. `alert_generator.py` tests
+    // `opt_price is not None and pos.entry_price > 0`, and the frontend has no
+    // `None` to test: `portfolioStore.fromBackend` coerces a missing quote to
+    // `currentPrice: p.currentPrice ?? 0`, and the backend itself writes
+    // `quote.get("price") or 0.0` when the fetch came back empty. So a failed
+    // option-quote fetch — market closed, broker down, an OCC symbol the
+    // provider does not know — reaches here as a price of 0, and `0 <= entry x
+    // (1 - pct)` is TRUE FOR EVERY POSITION.
+    //
+    // That is a regression this comparison introduced, not a pre-existing
+    // hazard: the `pnlPct <= -(pct * 100)` test it replaced read `0 <= -60` on
+    // the same input and stayed silent. Unguarded, every position with a dead
+    // quote raised a Critical toast on each 30s cycle, reading "down 0.0%",
+    // with no backend alert behind it — the exact divergence this change was
+    // made to close. `> 0` is the frontend spelling of `is not None`: a long
+    // option quoted at zero is not a live quote either.
     const resolvedPremiumStopPct = resolvePremiumStopPct(p.premiumStopPct, globalPremiumStopPct);
     const premiumStopPrice = premiumStopThresholdPrice(p.entryPrice, resolvedPremiumStopPct);
-    if (p.entryPrice > 0 && p.currentPrice <= premiumStopPrice && enabled('PREMIUM_STOP')) {
+    if (
+      p.entryPrice > 0 && p.currentPrice > 0
+      && p.currentPrice <= premiumStopPrice && enabled('PREMIUM_STOP')
+    ) {
       out.push({
         recId: p.recId,
         kind: 'Critical',
         symbol: p.symbol,
         alertType: 'PREMIUM_STOP',
         reason: `Premium stop — ${p.symbol} down ${p.pnlPct.toFixed(1)}%`,
+        // Both now in scope, and both are what the backend records for the
+        // same alert (`alert_generator.py`: `price=opt_price,
+        // reference_value=threshold_price`). Leaving them undefined gave
+        // position_alert_history rows two different shapes for one alert type
+        // depending on which engine wrote them.
+        price: p.currentPrice,
+        referenceValue: premiumStopPrice,
         direction: p.direction,
         contract: p.contract,
       });

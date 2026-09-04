@@ -98,6 +98,34 @@ describe('scanPortfolio', () => {
     expect(results.some(r => r.alertType === 'PREMIUM_STOP')).toBe(false);
   });
 
+  it('does NOT fire PREMIUM_STOP when the quote fetch failed', () => {
+    // A missing quote reaches the engine as a PRICE OF ZERO, not as null:
+    // portfolio.py writes `quote.get("price") or 0.0` and portfolioStore's
+    // fromBackend does `p.currentPrice ?? 0`. `0 <= entry * (1 - pct)` is true
+    // for every position, so an unguarded comparison raised a Critical toast
+    // for the whole portfolio on every 30s cycle whenever the market was shut
+    // or the broker was down — reading "down 0.0%", with no backend alert
+    // behind it, because alert_generator.py guards on `opt_price is not None`.
+    //
+    // Not a hazard this comparison inherited: the `pnlPct <= -60` test it
+    // replaced read `0 <= -60` on the same input and stayed silent.
+    const dead = makePosition({ entryPrice: 5, currentPrice: 0, pnlPct: 0 });
+    const results = scanPortfolio([dead], { premiumStopPct: 0.60 });
+    expect(results.some(r => r.alertType === 'PREMIUM_STOP')).toBe(false);
+  });
+
+  it('records the price and the threshold it fired against', () => {
+    // The backend logs both for this alert type (`price=opt_price,
+    // reference_value=threshold_price`). Leaving them undefined gave
+    // position_alert_history two different row shapes for one alert type
+    // depending on which engine wrote it.
+    const position = makePosition({ entryPrice: 5, currentPrice: 1.75 });
+    const hit = scanPortfolio([position], { premiumStopPct: 0.60 })
+      .find(r => r.alertType === 'PREMIUM_STOP')!;
+    expect(hit.price).toBe(1.75);
+    expect(hit.referenceValue).toBeCloseTo(2.00, 10);
+  });
+
   it('fires STOP_REACHED for a Bearish position when price rises above stop, not below', () => {
     const short = makePosition({ direction: 'Bearish', stop: 95, currentPrice: 100 });
     const out = scanPortfolio([short]);

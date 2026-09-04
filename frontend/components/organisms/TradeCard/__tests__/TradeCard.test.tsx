@@ -153,6 +153,70 @@ describe('TradeCard', () => {
     expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
   });
 
+  // ── Piece 4 — the premium stop the card SHOWS is the one it reports ──────
+  //
+  // The field's value and the value the parent posts are two different pieces
+  // of state (the overlay here, `premiumStopByContract` there), and `patch()`
+  // reports the WHOLE overlay on every call. Both bugs below came from those
+  // two drifting apart with nothing pinning them together.
+
+  it('restores an edited premium stop when the same contract comes back', () => {
+    // The reset on a contract change deliberately does not call onEditsChange,
+    // so the parent's cache keeps the edit. Without seeding the field from that
+    // cache the card displayed its SEED while both send paths posted the cached
+    // edit: Prev to another candidate and back, and $1.50 was on screen while
+    // $0.90 went to the broker.
+    const { rerender } = render(<TradeCard data={mockTradeCard} initialPremiumStop={0.9} />);
+    expandLadder();
+    // EditableKV renders a click-to-edit span until it is focused, so the
+    // displayed dollar amount is its text, not an input value.
+    const shown = () => screen.getByLabelText('Edit Premium stop').textContent;
+    expect(shown()).toBe('$0.90');
+
+    // Away to another candidate and back — the actual path.
+    const other = { ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT|400|2026-05-16|C' };
+    rerender(<TradeCard data={other} initialPremiumStop={null} />);
+    expect(shown()).toBe(`$${mockTradeCard.exit.premiumStop.toFixed(2)}`);   // its own seed
+    rerender(<TradeCard data={mockTradeCard} initialPremiumStop={0.9} />);
+    expect(shown()).toBe('$0.90');
+  });
+
+  it('follows a seed that moves under an untouched field, and stops following once edited', () => {
+    // A Step 6 contract override changes `contract` immediately but leaves
+    // `exit` as the auto-pick's; `mergePlan` swaps `exit` in a round-trip later
+    // WITHOUT touching `contract`, so nothing re-ran and the field kept the old
+    // seed. One unrelated patch() then cached it under the new contract's key,
+    // `premiumStopDollarToSend` saw it differ from the new seed and let it
+    // through, and the router derived a premium stop nobody chose.
+    const onEditsChange = jest.fn();
+    const { rerender } = render(
+      <TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />,
+    );
+    expandLadder();
+    const shown = () => screen.getByLabelText('Edit Premium stop').textContent;
+    const typeInto = (label: string, v: string) => {
+      fireEvent.click(screen.getByLabelText(`Edit ${label}`));
+      const input = screen.getByLabelText(`Edit ${label}`) as HTMLInputElement;
+      fireEvent.change(input, { target: { value: v } });
+      fireEvent.blur(input);
+    };
+
+    // mergePlan: same contract, recomputed exit.
+    const merged = { ...mockTradeCard, exit: { ...mockTradeCard.exit, premiumStop: 0.8 } };
+    rerender(<TradeCard data={merged} onEditsChange={onEditsChange} />);
+    expect(shown()).toBe('$0.80');
+
+    // An unrelated edit now reports the CURRENT seed, not the stale one.
+    typeInto('Contracts', '3');
+    expect(onEditsChange.mock.calls.at(-1)![0].premiumStop).toBe(0.8);
+
+    // Once the user types in the field, the seed stops overriding them.
+    typeInto('Premium stop', '0.5');
+    const moved = { ...merged, exit: { ...merged.exit, premiumStop: 0.65 } };
+    rerender(<TradeCard data={moved} onEditsChange={onEditsChange} />);
+    expect(shown()).toBe('$0.50');
+  });
+
   it('renders exit plan section (inside the collapsed Fixed % Ladder Plan group)', () => {
     render(<TradeCard data={mockTradeCard} />);
     expandLadder();

@@ -359,6 +359,21 @@ class AutoTradeService:
         """Raise RuntimeError if today's premium-at-risk exceeds the daily loss limit."""
         risk_cfg = AutoTradeService._risk_config()
         max_pct  = float(risk_cfg.get("max_daily_loss_pct", 0.02))
+        # NOTE, and it is a real one: since piece 4 this denominator can come
+        # from the ARM REQUEST rather than from risk_rules.yaml. A tighter
+        # declared stop shrinks `this_risk` and so lets more trades through the
+        # daily-loss gate, and nothing here enforces the declared stop -- the
+        # auto-trader places no protective order, so the true exposure is the
+        # whole premium either way. That was already true when this read the
+        # global; what changed is that the optimism is now client-settable
+        # (bounded to (0, 1) by ArmRequest, so it cannot be zeroed).
+        #
+        # Deliberately NOT clamped here. Threading the per-trade stop is what
+        # piece 4 was approved to do, and clamping it to the global would make
+        # a genuinely tighter stop book MORE risk than it takes. Sizing the
+        # gate on the full premium instead is the honest fix and a change to
+        # risk behaviour Kenneth has not agreed to -- recorded as an open
+        # question in PROJECT_STATE.json rather than made here.
         stop_pct = resolve_premium_stop_pct(
             strategy.premium_stop_pct,
             float(risk_cfg.get("premium_stop_pct", 0.60)),

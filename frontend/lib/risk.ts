@@ -128,21 +128,44 @@ export function stopPremiumRisk(
  *  delta narrowed that and could never close it: the move and the loss are
  *  rounded too, so no amount of delta precision makes the three agree.
  *
- *  The verdict is unaffected — `fraction` and `status` still come from full
- *  precision on the object, because they are a comparison rather than an
- *  equation on screen. */
+ *  `status` is unaffected — it still comes from full precision on the object,
+ *  because the verdict is a comparison rather than an equation on screen. The
+ *  badge's PERCENTAGE is not in that category: it is printed, so it comes from
+ *  here too (see formatStopLossPct). */
 function printedShare(r: StopPremiumRisk) {
   const move = Number(r.stockMove.toFixed(2));
   const delta = Number(r.delta.toFixed(3));
   const premium = Number(r.premium.toFixed(2));
   const product = Number((move * delta).toFixed(2));
-  // The cap is a fact about the contract, not a rounding artifact, so it wins:
-  // when the stop costs the whole premium the equation prints the premium and
-  // the "(uncapped …)" tail carries the product. Clamped in the uncapped case
-  // too, for the sliver where rawLoss sits within half a cent below premium and
-  // would otherwise print "$6.52 of $6.51 premium".
-  const loss = r.capped ? premium : Math.min(product, premium);
-  return { move, delta, premium, product, loss };
+  // WHETHER THE CAP BINDS IS DECIDED ON THE PRINTED PRODUCT, not on
+  // `r.capped`. `r.capped` is `rawLoss >= premium` at full precision, and
+  // rounding the delta to 3dp moves the product to the other side of the
+  // premium in both directions:
+  //
+  //   `r.capped` true, product below premium — $70.10 away × Δ0.5505 on a
+  //   $38.59 premium printed "= $38.59 of $38.59 premium (uncapped $38.55)",
+  //   an "uncapped" figure BELOW the capped one, which cannot happen by
+  //   construction (loss = min(rawLoss, premium)) and answers nothing.
+  //
+  //   `r.capped` false, product above premium — $70.02 away × Δ0.7495 on a
+  //   $52.48 premium printed "= $52.48 of $52.48 premium" with no tail, while
+  //   the printed factors give $52.52. The hand-check fails by 4c with nothing
+  //   on screen to explain it, and the headline above it reads "$0 left" for a
+  //   stop the code itself classifies as not a total loss.
+  //
+  // Both are the same defect: two different precisions deciding one printed
+  // line. Deciding it on `product` makes the line self-consistent either way —
+  // it multiplies out exactly when the cap does not bind, and carries the
+  // "(uncapped …)" tail that explains the difference when it does. Rare
+  // (~0.005% of inputs overall) but ~0.4% of the near-total-loss cards this
+  // gate exists to surface.
+  // Strictly greater: at product === premium the equation multiplies out to
+  // the printed loss exactly, so a "(uncapped $6.51)" tail repeating "$6.51 of
+  // $6.51 premium" would answer a question nobody asked. The tail exists only
+  // where the two figures genuinely differ.
+  const printedCapped = product > premium;
+  const loss = Math.min(product, premium);
+  return { move, delta, premium, product, loss, printedCapped };
 }
 
 /** The gate's inputs on one line, so the verdict is auditable at a glance:
@@ -160,9 +183,31 @@ export function formatStopPremiumRisk(r: StopPremiumRisk): string {
     `$${p.move.toFixed(2)} away × Δ${p.delta.toFixed(3)} = ` +
     `$${p.loss.toFixed(2)} of $${p.premium.toFixed(2)} premium`;
   const basis = ' · delta-linear, priced today';
-  return r.capped
+  return p.printedCapped
     ? `${base} (uncapped $${p.product.toFixed(2)})${basis}`
     : `${base}${basis}`;
+}
+
+/** The badge's percentage, from the SAME rounded pair the headline prints.
+ *
+ *  It used to be `(r.fraction * 100).toFixed(0)` in the badge's own JSX —
+ *  full precision, while the headline two rows down was scaled from the
+ *  printed pair. On ~1.4% of ordinary inputs the two disagreed by a point,
+ *  and at the top of the range the disagreement was a flat contradiction:
+ *  $35.24 away × Δ0.5342 on an $18.90 premium put "100% OF PREMIUM" beside
+ *  "of the $1,890 premium, $8 left".
+ *
+ *  100% is therefore reserved for an actual total loss on the printed
+ *  figures. Anything with a dollar left over reads at most 99%, so the badge
+ *  and the money beside it cannot contradict each other. The PASS/CAUTION
+ *  verdict is untouched: it is `status`, computed from full precision. */
+export function formatStopLossPct(r: StopPremiumRisk): string {
+  const p = printedShare(r);
+  const perContract = Math.round(p.loss * 100);
+  const premiumTotal = Math.round(p.premium * 100);
+  if (premiumTotal <= 0) return '0%';
+  if (perContract >= premiumTotal) return '100%';
+  return `${Math.min(99, Math.round((perContract / premiumTotal) * 100))}%`;
 }
 
 /** The headline the badge's percentage is a summary OF: what one contract
@@ -170,10 +215,19 @@ export function formatStopPremiumRisk(r: StopPremiumRisk): string {
  *
  *  Dollars per CONTRACT, not per share, because that is the number being
  *  risked -- the arithmetic line below it stays per-share so it reconciles
- *  with the premium and delta printed there. `$824 of the $1,890 you paid,
+ *  with the premium and delta printed there. `$824 of the $1,890 premium,
  *  $1,066 left`. The dollars-left half is deliberate: the schematic argues it
  *  is more actionable than a percentage when deciding whether to overrule the
- *  verdict. */
+ *  verdict.
+ *
+ *  "of the $1,890 PREMIUM", never "you paid". `r.premium` is
+ *  `contractDetails.mid`, the scan-time snapshot, and two figures on this very
+ *  card disagree with "paid": the order strip's Limit is freely editable (set
+ *  it to $22.00 on an $18.90 mid and nothing here moves), and CaR three rows
+ *  up is `mid × contracts × 100`, so at Contracts=3 it reads $5,670 against
+ *  this line's $1,890. Both halves of this sentence are per contract and at
+ *  the mid; saying so is the difference between a figure that reconciles with
+ *  CaR by division and one that looks like a contradiction. */
 export function formatStopLossHeadline(r: StopPremiumRisk): string {
   // Scaled from the SAME rounded per-share figures the line beneath prints, and
   // `left` is subtracted from the already-rounded pair rather than rounded on
@@ -189,7 +243,7 @@ export function formatStopLossHeadline(r: StopPremiumRisk): string {
   const premiumTotal = Math.round(p.premium * 100);
   const left = premiumTotal - perContract;
   const usd = (n: number) => `$${n.toLocaleString('en-US')}`;
-  return `${usd(perContract)} per contract — of the ${usd(premiumTotal)} you paid, ${usd(left)} left`;
+  return `${usd(perContract)} per contract — of the ${usd(premiumTotal)} premium, ${usd(left)} left`;
 }
 
 export function checkInvalidation(invalidation: number | undefined): boolean {

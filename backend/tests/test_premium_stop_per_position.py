@@ -14,11 +14,18 @@ from __future__ import annotations
 
 import uuid
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
+import pytest_asyncio
+from fastapi import FastAPI
+from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.database import Base
+import app.models  # noqa: F401  (registers all tables on Base.metadata)
+from app.database import Base, get_db
 from app.models.portfolio import PortfolioPositionModel
+from app.routers.portfolio import router as portfolio_router
 from app.services.alert_generator import generate_alerts
 from app.services.premium_stop import (
     PREMIUM_STOP_PCT_FALLBACK,
@@ -465,3 +472,137 @@ def test_create_schema_rejects_a_non_positive_dollar_stop(bad):
             recId="r", symbol="A", contract="c", direction="Bullish",
             entryPrice=5.20, entryDate="2026-01-01", premiumStopDollar=bad,
         )
+
+
+# ── The ROUTER, not the arithmetic beside it ─────────────────────────────────
+#
+# Everything above this line exercises helpers. `add_position`'s derivation
+# block and `update_position`'s write are the code that actually decides what
+# lands in the column, and neither had a test: the "resolved against the
+# persisted entry" case divided two floats itself, and the update case asserted
+# only that the schema's exclude_unset produced the right dict. Both now go
+# through the endpoint.
+
+@pytest_asyncio.fixture
+async def api_client():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:",
+                                 connect_args={"check_same_thread": False})
+    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async def _get_db():
+        async with Session() as s:
+            yield s
+
+    test_app = FastAPI()
+    test_app.include_router(portfolio_router)
+    test_app.dependency_overrides[get_db] = _get_db
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://t") as c:
+        yield c
+    await engine.dispose()
+
+
+async def _create(client, *, live_price=None, rec="REC-PS", **extra):
+    """POST /api/portfolio with the live quote pinned.
+
+    `live_price=None` means the fetch found nothing and the router keeps the
+    submitted entryPrice; a number means the router REPLACES it, which is the
+    whole reason the fraction is derived server-side.
+    """
+    body = {
+        "recId": rec, "symbol": "AAPL", "contract": "AAPL|190|2026-05-16|C",
+        "direction": "Bullish", "entryPrice": 5.20, "qty": 1,
+        "entryDate": "2026-05-01", "targets": [], "dteTotal": 30,
+        "portfolioValue": 1_000_000,
+    }
+    body.update(extra)
+    quote = None if live_price is None else {"price": live_price}
+    with patch("app.routers.portfolio.fetch_contract_quote_async",
+               new=AsyncMock(return_value=quote)):
+        r = await client.post("/api/portfolio", json=body)
+    return r
+
+
+@pytest.mark.asyncio
+async def test_router_derives_the_fraction_against_the_persisted_entry(api_client):
+    # $3.12 typed on a $5.20 card, filled at $4.00. The DOLLAR is what the user
+    # chose, so the stored fraction has to be the one that reproduces it against
+    # the entry the row actually carries -- 0.78, not the 0.60 it would have
+    # been against the card's mid.
+    r = await _create(api_client, live_price=4.00, premiumStopDollar=3.12)
+    assert r.status_code == 201, r.text
+    row = r.json()
+    assert row["entryPrice"] == 4.00
+    assert row["premiumStopPct"] == pytest.approx(0.78)
+    # And the alert threshold that fraction produces is the typed dollar back.
+    assert premium_stop_threshold_price(
+        row["entryPrice"], row["premiumStopPct"]
+    ) == pytest.approx(4.00 - 3.12)
+
+
+@pytest.mark.asyncio
+async def test_router_prefers_the_dollar_over_a_client_sent_fraction(api_client):
+    r = await _create(api_client, live_price=4.00,
+                      premiumStopDollar=2.00, premiumStopPct=0.60)
+    assert r.status_code == 201, r.text
+    assert r.json()["premiumStopPct"] == pytest.approx(0.50)   # 2.00 / 4.00
+
+
+@pytest.mark.asyncio
+async def test_router_stores_a_client_fraction_when_no_dollar_is_sent(api_client):
+    r = await _create(api_client, live_price=4.00, premiumStopPct=0.45)
+    assert r.status_code == 201, r.text
+    assert r.json()["premiumStopPct"] == pytest.approx(0.45)
+
+
+@pytest.mark.asyncio
+async def test_router_stores_none_when_neither_is_sent(api_client):
+    r = await _create(api_client, live_price=4.00)
+    assert r.status_code == 201, r.text
+    assert r.json()["premiumStopPct"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_dollar_stop_beyond_the_premium_falls_back_rather_than_storing_it(api_client):
+    # $6.00 typed on a card whose entry persists at $4.00: the ratio is 1.5, a
+    # "stop" past a total loss, which the column's (0, 1) contract cannot hold.
+    # It must not be stored, and it must not 422 the create either.
+    r = await _create(api_client, live_price=4.00, premiumStopDollar=6.00)
+    assert r.status_code == 201, r.text
+    assert r.json()["premiumStopPct"] is None
+
+
+@pytest.mark.asyncio
+async def test_an_unusable_dollar_does_not_discard_a_valid_fraction(api_client):
+    # The dollar WINS over the fraction, but losing both is a different thing
+    # from preferring one: an out-of-range dollar used to overwrite a perfectly
+    # valid client-sent fraction with None, silently handing the position back
+    # to the global.
+    r = await _create(api_client, live_price=4.00,
+                      premiumStopDollar=6.00, premiumStopPct=0.45)
+    assert r.status_code == 201, r.text
+    assert r.json()["premiumStopPct"] == pytest.approx(0.45)
+
+
+@pytest.mark.asyncio
+async def test_patch_writes_the_column_and_an_explicit_null_clears_it(api_client):
+    created = await _create(api_client, live_price=4.00, premiumStopDollar=2.00,
+                            rec="REC-PATCH")
+    assert created.status_code == 201, created.text
+    rec = created.json()["recId"]
+
+    patched = await api_client.patch(f"/api/portfolio/{rec}",
+                                     json={"premiumStopPct": 0.30})
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["premiumStopPct"] == pytest.approx(0.30)
+
+    # An omitted key leaves it alone...
+    untouched = await api_client.patch(f"/api/portfolio/{rec}", json={"stop": 140.0})
+    assert untouched.json()["premiumStopPct"] == pytest.approx(0.30)
+
+    # ...and an explicit null returns the position to inheriting the global.
+    cleared = await api_client.patch(f"/api/portfolio/{rec}",
+                                     json={"premiumStopPct": None})
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["premiumStopPct"] is None

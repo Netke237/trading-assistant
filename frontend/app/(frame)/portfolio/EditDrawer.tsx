@@ -821,6 +821,42 @@ function PremiumStopEditor({
   const isStock = position.contract.endsWith('|STOCK');
   const own = position.premiumStopPct;
   const inherited = !hasOwnPremiumStopPct(own);
+  const stored = own != null ? String(Math.round(own * 100)) : '';
+
+  // DRAFT-THEN-COMMIT, unlike the EditField siblings above, which persist on
+  // every keystroke. Those hold a stop PRICE, where an intermediate value is
+  // merely a level that has not been reached. This holds a stop PERCENTAGE,
+  // and the intermediate values are live risk settings: typing "45" persists
+  // 4% first, and a 4% premium stop is below the noise on essentially any
+  // contract, so the 30s alert scan in between fires a Critical PREMIUM_STOP
+  // for a threshold that existed for one keystroke.
+  const [draft, setDraft] = useState(stored);
+  // Follow the stored value when it changes from outside (a different position
+  // in the drawer, a sync) but never while the user is mid-edit on this one.
+  const lastStoredRef = useRef(stored);
+  if (lastStoredRef.current !== stored) {
+    lastStoredRef.current = stored;
+    if (draft !== stored) setDraft(stored);
+  }
+
+  const commit = () => {
+    const raw = draft.trim();
+    // Empty is the documented way back to inheriting, and the only way: see
+    // the hint below.
+    if (raw === '') { setDraft(''); onChange({ premiumStopPct: null }); return; }
+    const pct = Number(raw);
+    // Out of range REVERTS, it does not clear. It used to clear, so typing
+    // 100 -- the natural way to ask for "hold it to zero" -- silently dropped
+    // the override and handed the position back to the global, i.e. a TIGHTER
+    // stop than the one asked for, with the typed digits gone and no message.
+    // The backend bounds this at (0, 1) exclusive, so 100 has no
+    // representation; showing the previous value back is the honest answer.
+    if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) { setDraft(stored); return; }
+    const next = Math.round(pct) / 100;
+    setDraft(String(Math.round(pct)));
+    if (next !== own) onChange({ premiumStopPct: next });
+  };
+
   return (
     <label className={styles.editField}>
       <Text size={11} tone="secondary">
@@ -834,22 +870,14 @@ function PremiumStopEditor({
         max={99}
         placeholder={`${Math.round(globalPremiumStopPct * 100)} (global)`}
         aria-label="Premium stop percent"
-        value={own != null ? Math.round(own * 100) : ''}
-        onChange={(e) => {
-          const raw = e.target.value.trim();
-          if (raw === '') { onChange({ premiumStopPct: null }); return; }
-          const pct = Number(raw);
-          if (!Number.isFinite(pct)) return;
-          // The backend bounds this at (0, 1) exclusive and 422s outside it.
-          // Clearing on a non-positive entry keeps the drawer's only way to
-          // reach "inherit again" obvious, rather than posting a value the
-          // API will reject.
-          onChange({ premiumStopPct: pct > 0 && pct < 100 ? pct / 100 : null });
-        }}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
       />
       <Text size={10} tone="dim">
         {inherited
-          ? `Inheriting the global — this position moves whenever the global does. Enter a percent to pin it${isStock ? '' : ' for this contract only'}.`
+          ? `Inheriting the global — this position moves whenever the global does. Enter a percent (1–99) and press Enter to pin it${isStock ? '' : ' for this contract only'}.`
           : `Set for this position only. Clear the field to go back to inheriting the global (${Math.round(globalPremiumStopPct * 100)}%).`}
       </Text>
     </label>
