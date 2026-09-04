@@ -224,11 +224,19 @@
     },
     {
       "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-12.md",
-      "role": "Handoff #12 — reconstruction, the A-G plan, Piece 4."
+      "role": "Handoff #12 — the reconstruction, the plan, and Piece 4."
     },
     {
       "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-13.md",
       "role": "LATEST handoff — live Barrier Race verification, state tracking, stop-cost notation."
+    },
+    {
+      "path": "docs/superpowers/STATE_TRACKING.md",
+      "role": "How state is tracked and why. Read before updating PROJECT_STATE.json."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-13.md",
+      "role": "LATEST handoff — live verification, state tracking, stop-cost notation."
     },
     {
       "path": "docs/superpowers/STATE_TRACKING.md",
