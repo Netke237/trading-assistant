@@ -1,9 +1,13 @@
 # Session handoff #12 — development-state reconstruction, the remaining-pieces plan, and Piece 4
 
 **Date:** 2026-09-04 (work done 2026-09-03)
-**Branch:** `claude/dev-state-reconstruction-hzmzbi` — HEAD `dd18ec09`, pushed.
+**Branch:** `claude/dev-state-reconstruction-hzmzbi` — HEAD `fa5adf03`, pushed.
 **`main`:** `dc051a58`. **Untouched this session.** No PR opened, none asked for.
-**Tests:** backend 1947 → **1977 passed, 1 skipped**. Frontend 1089 → **1107 passed**. `npm run typecheck` clean.
+**Tests:** backend 1947 → **1983 passed, 1 skipped**. Frontend 1089 → **1105 passed**. `npm run typecheck` clean.
+
+> **Status note:** §4.1 below was written while the defect it describes was still open. It was
+> **fixed in `846fc792`** after Kenneth said "fix now" — see §4.2 and the Addendum. The description
+> is kept because the failure mode is worth understanding, not because it is still live.
 
 Read handoff #11 first for the Barrier Race state. This session did three things: reconstructed
 what actually happened to the project, wrote the plan for everything still unbuilt, and built
@@ -99,7 +103,7 @@ alert generator reporting the **resolved** percentage rather than the global; se
 (avoiding the `active_tp_method` update-only trap); both send paths carrying it; auto-trader
 threaded; `PremiumStopEditor` in the drawer with `"60% (global)"` vs `"45%"`.
 
-### 4.1 The known defect — NOT FIXED
+### 4.1 The defect as originally found (FIXED in `846fc792` — see §4.2)
 
 **`backend/app/routers/portfolio.py:231-232` overwrites `entry_price` with the live quote when one
 exists.** The frontend derives `premiumStopPct = dollarStop / mid` against the *card's* mid, but
@@ -113,6 +117,22 @@ Worse: `frontend/lib/__tests__/premiumStop.test.ts` contains a test
 (`'tracks the live fill price when one is supplied, because entryPrice does too'`) asserting this
 drift is **correct**. It encodes the rationale rather than checking the wiring — the two sides do
 not agree on which price. **That test must be revisited, not trusted.**
+
+### 4.2 How it was fixed — `846fc792`
+
+The derivation moved **server-side**, to the only place both the dollar amount and the persisted
+entry price are known. The send paths now carry `premiumStopDollar` (what the user typed); the
+router derives the fraction against the `entry_price` it actually stores, immediately after the
+live-quote replacement. A stop at or above the whole premium still stores NULL rather than a
+fraction the schema would reject.
+
+The invariant that now holds: **the dollar stop survives whatever the fill.** $3.12 typed on a
+$5.20 card, filled at $4.00, stores `3.12/4.00 = 0.78` and fires at `4.00 × 0.22 = $0.88` — a
+$3.12 loss, as asked.
+
+The frontend test that blessed the drift is replaced with one asserting that invariant across three
+different fill prices, and two backend tests pin the router-level behaviour and the new schema
+field. Backend 1977 → **1983**, frontend **1105**, typecheck clean.
 
 **Recommended fix:** send the **dollar** amount on the create path and let the backend derive the
 percentage against the `entry_price` it actually persists — the only place that value is known. The
@@ -204,8 +224,7 @@ Phase A (`iv` field), B (gate basis Q3/Q7), C (piece 3 scan-time `finalStop`), E
 
 ## 8. Recommended next steps, in order
 
-1. **Fix the Piece 4 `entry_price` defect (§4.1)** and revisit the test that blesses it. It is the
-   only known-broken thing shipped this session.
+1. ~~Fix the Piece 4 `entry_price` defect~~ — **DONE**, `846fc792` (§4.2).
 2. **Finish the two audit loops (§6)** — Piece 4 has had *zero* completed rounds, and Amendment B
    is unaudited. Do not build on either until a round comes back clean.
 3. **Settle whether the gate moves server-side** before any Phase A/B work. If it stays in
