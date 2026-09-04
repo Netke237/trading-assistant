@@ -232,15 +232,28 @@
    "q": "Remove the Invalidation row readout and the Projected R/R (+8%) readout, per the schematic's 'flagged for removal' table?",
    "a": "APPROVED and SHIPPED. Readouts only -- every stored field stays.",
    "by": "Kenneth"
+  },
+  {
+   "id": "EDITED-FLAG-2026-09-04",
+   "q": "The card-level 'edited' flag was deleted with the Projected R/R readout that was its only render site. Accept the loss, or rebuild it?",
+   "a": "REBUILD AS NEW UI. Not a revert of the removal -- the readout stays gone. A card-level indicator that any overlay field differs from the scan's plan (Entry limit, Max fill, Contracts, Premium stop, Time stop, Invalidation), independent of the deleted readout and of computeEditedRR's delta approximation. The Sell-to-Close per-row 'edited' badge is unrelated and stays. NOT YET BUILT.",
+   "by": "Kenneth"
+  },
+  {
+   "id": "TARGET-VINTAGE-2026-09-04",
+   "q": "firstPassage.targets in the Final Recommendation's monte_carlo branch is ungated vintage. Gate it or not?",
+   "a": "GATE ON FRESHNESS. Same rule the Barrier Race already applies: the rows render only when the estimate on screen was fetched this mount. The branch may then render nothing until Estimate is clicked, which is accepted -- consistency with how the rest of the card treats stale numbers wins. Pre-existing behaviour, but with the invalidation fallback removed those rows are the only numbers left in the branch. NOT YET BUILT.",
+   "by": "Kenneth"
   }
  ],
- "pending_kenneth": [],
+ "pending_kenneth": [
+  "BUILD: card-level 'edited' indicator (decision EDITED-FLAG-2026-09-04) -- approved, not started.",
+  "BUILD: gate firstPassage.targets on freshness (decision TARGET-VINTAGE-2026-09-04) -- approved, not started."
+ ],
  "open_questions": [
   "Do the Q7 thresholds (0.80/0.70/0.60) hold on a real universe? Round 5 records them as taken as proposed, never measured.",
   "Is Tradier's per-contract IV good enough in production to displace a solver for Phase A?",
   "ivRank is conflated: market.py:1277 writes raw IV x100 into a field named for a percentile, 1291/1308 conditionally overwrite it with a genuine rank, and scan.py:610-616 broadcasts an ATM value across every strike. It is compared against iv_rank_pass_max: 34 and hard_reject.max_iv_rank: 70 -- a LIVE scoring/hard-reject defect, not a tidy-up.",
-  "Is losing the card-level 'edited' flag acceptable? It was rendered in ONE place -- appended to the R:R model caption inside the Projected R/R readout -- and isDirty existed only to decide whether to append it, so it could not survive the approved removal. The Sell-to-Close ladder rows keep their own per-row 'edited' badge; what no longer surfaces is an edit to Entry limit, Max fill, Contracts, Premium stop, Time stop or Invalidation. Restoring one would be new UI, not a revert.",
-  "firstPassage.targets in the Final Recommendation's monte_carlo branch is ungated vintage: `firstPassage` is restored from the parent's per-contract cache on mount and `lastRunMethod` is derived from `computedAt` alone, so a restored estimate reinstates that branch at whatever vintage it was cached at. PRE-EXISTING, not introduced by the removals -- but with the invalidation fallback gone those rows are the only numbers left in the branch, so the blast radius went up. Gating them on raceIsFresh would change what the card shows and was not approved; raised by adversarial round 1.",
   "Should the auto-trader's daily-loss gate size on the full premium instead of the premium stop? Since piece 4 the denominator can come from the ARM REQUEST (ArmRequest.premium_stop_pct, bounded (0,1)), so a tighter declared stop shrinks premium_at_risk and lets more trades through the gate -- and nothing enforces the declared stop, because the auto-trader places no protective order. The optimism predates piece 4 (it read the global before); what changed is that it is now client-settable. Deliberately NOT clamped: threading the per-trade stop is what piece 4 was approved to do, and clamping to the global would make a genuinely tighter stop book MORE risk than it takes. Raised by adversarial round 2."
  ],
  "authoritative_documents": [
