@@ -458,6 +458,72 @@ describe('the printed equation reconciles', () => {
     expect(Math.abs(away * delta - loss)).toBeLessThan(0.005);
   });
 
+  it('multiplies out ACROSS A RANGE, not just on the one triple that was hand-picked', () => {
+    // The test above passed on a single input the whole time the equation was
+    // still wrong for about 6% of inputs -- 15.41 × 0.5347 happens to land
+    // inside tolerance. Three factors are rounded independently (move to
+    // cents, delta to 3dp, loss to cents), so no amount of delta precision
+    // could close it; the printed product is now computed FROM the printed
+    // factors. Only the uncapped rows are checked: when the cap binds, the
+    // equation prints the premium and the "(uncapped $…)" tail carries the
+    // product, which is the one place the two legitimately differ.
+    const failures: string[] = [];
+    for (let move = 0.13; move <= 42; move += 0.07) {
+      for (const delta of [0.05, 0.2508, 0.3333, 0.4567, 0.5, 0.5347, 0.789, 0.9999]) {
+        for (const premium of [0.35, 2.0, 6.51, 18.9]) {
+          const r = stopPremiumRisk(200 - move, 200, delta, premium);
+          if (!r || r.capped) continue;
+          const printed = formatStopPremiumRisk(r);
+          const m = printed.match(/\$([\d.]+) away × Δ([\d.]+) = \$([\d.]+) of \$([\d.]+)/)!;
+          const [away, d, loss, premiumShown] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+          // EXACT, not an epsilon: the printed loss must be the printed factors
+          // multiplied and rounded to the cent, which is what a hand-check
+          // produces. An epsilon of half a cent passes 0.13 × 0.500 = 0.065
+          // against a printed $0.07 either way and would hide a real drift.
+          // The one legitimate exception is the clamp: a product that rounds a
+          // cent ABOVE the premium prints the premium, because "$6.52 of $6.51
+          // premium" would be worse than the rounding it fixes.
+          const expected = Math.min(Number((away * d).toFixed(2)), premiumShown);
+          if (loss !== expected) failures.push(`${printed} (expected $${expected})`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('the headline sums, and agrees with the per-share line beneath it', () => {
+    // $8.01 away × Δ0.500 on a $6.51 premium printed "$401 per contract — of
+    // the $651 you paid, $251 left" (401 + 251 = 652) two lines above
+    // "= $4.00", whose hundred is $400. Three figures rounded independently
+    // from full precision; they are now all scaled from one rounded pair.
+    const failures: string[] = [];
+    for (let move = 0.11; move <= 42; move += 0.07) {
+      for (const delta of [0.05, 0.2508, 0.5, 0.5347, 0.789, 0.9999]) {
+        for (const premium of [0.35, 2.0, 6.51, 18.9]) {
+          const r = stopPremiumRisk(200 - move, 200, delta, premium);
+          if (!r) continue;
+          const head = formatStopLossHeadline(r);
+          const h = head.match(/\$([\d,]+) per contract — of the \$([\d,]+) you paid, \$(-?[\d,]+) left/)!;
+          const num = (x: string) => Number(x.replace(/,/g, ''));
+          const [perContract, premiumTotal, left] = [num(h[1]), num(h[2]), num(h[3])];
+          if (perContract + left !== premiumTotal) failures.push(`sum: ${head}`);
+          const line = formatStopPremiumRisk(r);
+          const lossPerShare = Number(line.match(/= \$([\d.]+) of/)![1]);
+          if (Math.abs(lossPerShare * 100 - perContract) > 0.5) {
+            failures.push(`headline vs line: ${head} || ${line}`);
+          }
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('the audit case itself: $8.01 away, Δ0.500, $6.51 premium', () => {
+    const r = stopPremiumRisk(191.99, 200, 0.5, 6.51)!;
+    expect(formatStopLossHeadline(r)).toBe('$400 per contract — of the $651 you paid, $251 left');
+    expect(formatStopPremiumRisk(r)).toContain('$8.01 away × Δ0.500 = $4.00 of $6.51 premium');
+  });
+
   it('names its basis, so it cannot be confused with the Barrier Race figure', () => {
     // Two cards print a stop loss for the same stop and they legitimately
     // differ -- this one is priced today, the race's at the median day to the

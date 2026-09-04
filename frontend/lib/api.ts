@@ -554,6 +554,13 @@ export const api = {
     order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;
     entry_premium?: number;
     portfolio_value?: number;
+    /** Piece 4 — the per-trade premium stop as a FRACTION of `entry_premium`.
+     *  Omitted inherits `auto_trade.premium_stop_pct`. Declared here because
+     *  the backend has accepted it since the field was added, but no caller
+     *  could pass it: the type did not have it, so every armed strategy sized
+     *  off the global while the router, the schema bound and both
+     *  `resolve_premium_stop_pct` call sites in auto_trader.py sat unreachable. */
+    premium_stop_pct?: number;
   }) => post<{ armed: boolean }>('/auto-trade/arm', req),
 
   disarmAutoTrade: () => del('/auto-trade/arm'),

@@ -10,6 +10,7 @@ import {
   resolvePremiumStopPct,
   hasOwnPremiumStopPct,
   premiumStopThresholdPrice,
+  premiumStopDollarToSend,
   formatPremiumStopPct,
   PREMIUM_STOP_PCT_FALLBACK,
 } from '../premiumStop';
@@ -81,6 +82,11 @@ describe('formatPremiumStopPct', () => {
 
 // ── The alert engine resolves PER POSITION, not once per scan ───────────────
 
+// currentPrice/entryPrice are what PREMIUM_STOP compares — `pnlPct` is carried
+// only because AlertPosition requires it and no longer drives this alert. Both
+// engines now test `opt_price <= entry * (1 - pct)`; the frontend used to test
+// a pnlPct the backend had already rounded to 2dp, and the two disagreed on the
+// cent at the boundary. $3.40 against a $5.00 entry is a 32% loss.
 function position(overrides: Partial<AlertPosition> = {}): AlertPosition {
   return {
     recId: 'r1', symbol: 'AAPL', contract: 'AAPL|190|2026-05-16|C',
@@ -106,7 +112,9 @@ describe('scanPortfolio premium stop resolution', () => {
   });
 
   it('suppresses a fire the global would have made when the position has more room', () => {
-    const loss = position({ pnlPct: -65 });
+    // $1.75 on a $5.00 entry — a 65% loss, past the global's 60% stop ($2.00)
+    // but not past this position's own 70% one ($1.50).
+    const loss = position({ currentPrice: 1.75, pnlPct: -65 });
     expect(premiumStopAlerts([{ ...loss, premiumStopPct: null }], 0.60)).toHaveLength(1);
     expect(premiumStopAlerts([{ ...loss, premiumStopPct: 0.70 }], 0.60)).toHaveLength(0);
   });
@@ -123,7 +131,65 @@ describe('scanPortfolio premium stop resolution', () => {
   });
 });
 
-// ── Both send paths derive the same fraction ────────────────────────────────
+// ── What the send paths actually post ───────────────────────────────────────
+
+describe('premiumStopDollarToSend — the value both send paths post', () => {
+  // This block replaces one that CLAIMED to mirror the two send paths and did
+  // not: it exercised premiumStopPctFromDollars and premiumStopThresholdPrice,
+  // two pure helpers that are on neither path any more (the derivation moved
+  // server-side). The paths agreed only because they read the same map on
+  // adjacent lines, and nothing pinned that — which is why a symbol-keyed
+  // cache carrying the previous contract's dollar went unnoticed.
+  //
+  // buildPaperPosition and positionFromOrder now both call this one function,
+  // so "the two paths agree" is a property of the code rather than of a test.
+  // What is left to pin is what the function decides.
+  const SEEDED = 3.12;   // round(5.20 mid x 0.60 global, 2) — nobody chose this
+  const TYPED  = 2.00;   // what a user actually typed on the card
+
+  it('sends nothing when the field still holds the card\'s seeded default', () => {
+    // THE BUG THIS EXISTS FOR. exit.premiumStop is the GLOBAL percentage
+    // rendered in dollars, and the card reports its whole overlay on every
+    // patch — so bumping Contracts cached $3.12 and posted it. The server then
+    // divided it by an entry price it had just replaced with the live fill:
+    // a $4.00 fill stored 0.78, arming a position at a threshold nobody chose,
+    // reachable only by editing an unrelated field.
+    expect(premiumStopDollarToSend(SEEDED, SEEDED)).toBeNull();
+  });
+
+  it('sends the value once it differs from the seed', () => {
+    expect(premiumStopDollarToSend(TYPED, SEEDED)).toBe(TYPED);
+  });
+
+  it('sends nothing when the card was never touched at all', () => {
+    expect(premiumStopDollarToSend(null, SEEDED)).toBeNull();
+    expect(premiumStopDollarToSend(undefined, SEEDED)).toBeNull();
+  });
+
+  it('sends nothing for a zero or negative stop, which the schema rejects with gt=0', () => {
+    // round(premium x 0.60, 2) is 0.00 for a premium under about $0.0084, and
+    // a `?? null` posted that 0 and 422'd the whole create with an opaque
+    // Pydantic error instead of falling back to inherit-the-global.
+    expect(premiumStopDollarToSend(0, 0)).toBeNull();
+    expect(premiumStopDollarToSend(0, SEEDED)).toBeNull();
+    expect(premiumStopDollarToSend(-1, SEEDED)).toBeNull();
+    expect(premiumStopDollarToSend(NaN, SEEDED)).toBeNull();
+  });
+
+  it('still sends a typed value when the card carries no seed to compare against', () => {
+    expect(premiumStopDollarToSend(TYPED, null)).toBe(TYPED);
+    expect(premiumStopDollarToSend(TYPED, undefined)).toBe(TYPED);
+  });
+
+  it('a contract switch cannot carry the previous contract\'s dollar into the new one', () => {
+    // The map is keyed by contract, so the new contract's key is absent rather
+    // than holding the old contract's $3.12. Belt and braces: even if a value
+    // DID survive, it is compared against the new card's own seed.
+    const cacheKeyedByContract: Record<string, number> = { 'AAPL|190|2026-05-16|C': 2.00 };
+    const newContractKey = 'AAPL|200|2026-05-16|C';
+    expect(premiumStopDollarToSend(cacheKeyedByContract[newContractKey], 2.40)).toBeNull();
+  });
+});
 
 describe('send-path derivation', () => {
   // The card's "Premium stop" field holds a DOLLAR loss. Both send paths now

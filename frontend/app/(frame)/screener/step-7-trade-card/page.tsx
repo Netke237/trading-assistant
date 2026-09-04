@@ -26,6 +26,7 @@ import type {
 import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
+import { premiumStopDollarToSend } from '@/lib/premiumStop';
 import { api }               from '@/lib/api';
 import {
   applyPickedContract, contractKeyFor, horizonFieldsFrom, mergePlan, resolveBasketCards,
@@ -183,21 +184,44 @@ export default function Step7Page() {
   // (`Record<symbol, OptionContract[]>` — the picked-contract-per-symbol map,
   // an unrelated concept that happens to share a plausible name).
   const [orderContractsBySymbol, setOrderContractsBySymbol] = useState<Record<string, number>>({});
-  // Piece 4 — the card's editable "Premium stop" DOLLAR field, cached by
-  // symbol off the overlay channel that already carries `contracts`. Both send
-  // paths read it and convert to a fraction; TradeCard itself converts the
-  // same field the same way for the barrier race's third barrier, so the
-  // barrier the race simulated and the threshold the alert later fires on are
-  // the same number by construction.
-  const [premiumStopBySymbol, setPremiumStopBySymbol] = useState<Record<string, number>>({});
-  const handleEditsChange = (symbol: string, overlay: EditOverlay) => {
+  // Piece 4 — the card's editable "Premium stop" DOLLAR field, cached off the
+  // overlay channel that already carries `contracts`.
+  //
+  // Keyed by CONTRACT, not by symbol, unlike `orderContractsBySymbol` beside
+  // it. A contracts count is genuinely a decision about the underlying; a
+  // dollar premium stop is meaningful only against the premium of the one
+  // contract it was typed on. TradeCard resets its overlay on a contract
+  // change with a bare `setOverlay` that does not call `onEditsChange`, so a
+  // symbol-keyed map kept the PREVIOUS contract's dollar: edit the AAPL 190C
+  // ($5.20 mid, $3.12 stop), switch to the 200C ($4.00 mid), send, and the
+  // 200C was armed at 78% — or, on a cheaper contract, at a ratio above 1,
+  // which the router stores as NULL so the user's choice vanished silently.
+  // Same keying as `exitPlanByContract`/`estimatesByContract`, for the same
+  // reason.
+  const [premiumStopByContract, setPremiumStopByContract] = useState<Record<string, number>>({});
+  const handleEditsChange = (symbol: string, cardContractKey: string | null, overlay: EditOverlay) => {
     setOrderContractsBySymbol((prev) =>
       prev[symbol] === overlay.contracts ? prev : { ...prev, [symbol]: overlay.contracts },
     );
+    if (!cardContractKey) return;
     // Same identity-preserving guard as above: an unchanged write must return
     // `prev` untouched or every TradeCard render re-triggers this cascade.
-    setPremiumStopBySymbol((prev) =>
-      prev[symbol] === overlay.premiumStop ? prev : { ...prev, [symbol]: overlay.premiumStop },
+    setPremiumStopByContract((prev) =>
+      prev[cardContractKey] === overlay.premiumStop
+        ? prev
+        : { ...prev, [cardContractKey]: overlay.premiumStop },
+    );
+  };
+  // The ONE place either send path decides what to post. Reading the map is
+  // not enough on its own: the overlay is seeded with `exit.premiumStop`, which
+  // is the global percentage rendered in dollars rather than anything the user
+  // chose, and the card reports its whole overlay on every patch. See
+  // `premiumStopDollarToSend`.
+  const premiumStopDollarFor = (card: TradeCardData): number | null => {
+    const key = contractKeyFor(card);
+    return premiumStopDollarToSend(
+      key ? premiumStopByContract[key] : null,
+      card.exit.premiumStop,
     );
   };
   // Feature 5 — the shared pre-trade max-loss override cache, keyed by SYMBOL
@@ -649,11 +673,9 @@ export default function Step7Page() {
       structuralStop: structuralBySymbol[card.symbol]?.stop?.price ?? null,
       exitPlan:      cardContractKey ? exitPlanByContract[cardContractKey]?.plan ?? null : null,
       maxLossOverride: maxLossOverrideBySymbol[card.symbol] ?? null,
-      // Piece 4 — MUST match what positionFromOrder produces for the same card.
-      // These two send paths already disagree about stop re-anchoring; a second
-      // field they disagree on would mean the premium stop a position is armed
-      // at depends on which button was pressed.
-      premiumStopDollar: premiumStopBySymbol[card.symbol] ?? null,
+      // Piece 4 — MUST match what positionFromOrder produces for the same card,
+      // which is now true by construction: both call premiumStopDollarFor.
+      premiumStopDollar: premiumStopDollarFor(card),
       targets:       card.exit.targets,
       status:        card.finalStatus,
       ivRank:        cd?.ivRank,
@@ -767,7 +789,7 @@ export default function Step7Page() {
       const orderContractKey = contractKeyFor(o.card);
       const orderExitPlan = orderContractKey ? exitPlanByContract[orderContractKey]?.plan ?? null : null;
       const orderMaxLossOverride = maxLossOverrideBySymbol[o.card.symbol] ?? null;
-      const res = await addPosition({ ...positionFromOrder(o, structuralStop, orderExitPlan, orderMaxLossOverride, premiumStopBySymbol[o.card.symbol] ?? null), recId });
+      const res = await addPosition({ ...positionFromOrder(o, structuralStop, orderExitPlan, orderMaxLossOverride, premiumStopDollarFor(o.card)), recId });
 
       if (res.status === 'rejected') {
         // Backend refused it and the optimistic row was dropped — a real failure.
@@ -871,7 +893,7 @@ export default function Step7Page() {
               sendLabel={sendLabel}
               sendDisabled={basketEmpty || basketPlansPending}
               contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
-              onEditsChange={(overlay) => handleEditsChange(effectiveCard.symbol, overlay)}
+              onEditsChange={(overlay) => handleEditsChange(effectiveCard.symbol, contractKey, overlay)}
               onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(effectiveCard.symbol, stop, stockPrice)}
               onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
               onExitPlanChange={(plan) => handleExitPlanChange(contractKey, plan)}
@@ -941,6 +963,10 @@ export default function Step7Page() {
                   card={effectiveCard}
                   broker={selectedBroker}
                   contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
+                  // Piece 4 — the same resolution both send paths use, so a
+                  // trade that is armed and a trade that is sent cannot end up
+                  // at two different premium stops.
+                  premiumStopDollar={premiumStopDollarFor(effectiveCard)}
                 />
               )}
             </>

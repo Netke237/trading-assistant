@@ -61,6 +61,46 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
     expect(payload.portfolio_value).toBe(73_000);
   });
 
+  // Piece 4 — the field existed on ArmRequest, on ArmedStrategy, on the schema
+  // bound and at both resolve_premium_stop_pct call sites in auto_trader.py,
+  // and NOTHING could set it: api.armAutoTrade's request type did not declare
+  // it, so every armed strategy sized off the auto_trade global. The backend
+  // test covered the plumbing and never that anything fills the pipe.
+  it('posts the card\'s premium stop as a fraction of the entry_premium it books', async () => {
+    // $1.00 of a $2.50 mid = 0.40. Derived against entry_premium specifically:
+    // anchoring it to any other premium is the bug piece 4's router fix exists
+    // to prevent.
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.entry_premium).toBe(2.5);
+    expect(payload.premium_stop_pct).toBeCloseTo(0.40, 6);
+  });
+
+  it('omits the premium stop entirely when the card carries none, so the auto-trader inherits the global', async () => {
+    // undefined, not null: ArmRequest.premium_stop_pct is Optional with a None
+    // default, and omitting is what "inherit" means on that endpoint.
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.premium_stop_pct).toBeUndefined();
+  });
+
+  it('omits a stop at or above the whole premium rather than sending a fraction the schema rejects', async () => {
+    // A total loss is unreachable-by-definition rather than a stop, and the
+    // endpoint's bound is lt=1 — sending 1.0 would 422 the arm.
+    render(<AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={2.5} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.premium_stop_pct).toBeUndefined();
+  });
+
   it('reflects an already-armed backend state after reload', async () => {
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce({ armed: true });
     render(<AutoTradeArm card={mockCard} broker="ibkr_paper" />);

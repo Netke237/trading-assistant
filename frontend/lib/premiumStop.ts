@@ -59,6 +59,42 @@ export function premiumStopThresholdPrice(entryPrice: number, pct: number): numb
   return entryPrice * (1 - pct);
 }
 
+/** What a send path should post as `premiumStopDollar` for one card.
+ *
+ *  Both send paths (`buildPaperPosition` and `positionFromOrder` in
+ *  step-7-trade-card/page.tsx) call THIS, so the premium stop a position is
+ *  armed at cannot depend on which button was pressed.
+ *
+ *  `cachedDollar` is what the card's overlay last reported for this CONTRACT;
+ *  `seededDollar` is that card's own `exit.premiumStop`, the value the overlay
+ *  was seeded with.
+ *
+ *  THE SEEDED VALUE MUST NOT BE SENT, and this is the whole reason the
+ *  function exists. `exit.premiumStop` is not a dollar amount anybody chose --
+ *  the backend computes it as `round(premium * premium_stop_pct, 2)`, i.e. the
+ *  GLOBAL PERCENTAGE rendered in dollars against the card's mid. The card
+ *  reports its overlay on every `patch()`, so editing Contracts or a target
+ *  cached that untouched default, and the server then divided it by the
+ *  entry price it had just replaced with the live fill. A $5.20 mid showing a
+ *  $3.12 stop, filled at $4.00, was stored as 78% -- a threshold nobody chose,
+ *  reached only by editing an unrelated field. Sending null instead means
+ *  "inherit the global", which is exactly what an untouched default means, and
+ *  keeps the position tracking the Settings value the way the model docstring
+ *  promises.
+ *
+ *  Non-positive and non-finite values are null for the same reason the schema
+ *  rejects them (`gt=0`): `round(premium * 0.60, 2)` is `0.00` for a premium
+ *  under about $0.0084, and a `?? null` would post that 0 and 422 the whole
+ *  create rather than falling back. */
+export function premiumStopDollarToSend(
+  cachedDollar: number | null | undefined,
+  seededDollar: number | null | undefined,
+): number | null {
+  if (cachedDollar == null || !Number.isFinite(cachedDollar) || cachedDollar <= 0) return null;
+  if (seededDollar != null && cachedDollar === seededDollar) return null;
+  return cachedDollar;
+}
+
 /** How the resolved percentage reads in the UI: `"45%"` when the position sets
  *  its own, `"60% (global)"` when it inherits. */
 export function formatPremiumStopPct(

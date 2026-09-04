@@ -187,7 +187,14 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     // Piece 4 — the DOLLAR amount, not a fraction. The backend derives the
     // fraction against the entry price it persists; sending a client-derived
     // fraction re-anchors the user's stop to a price the server replaced.
-    premiumStopDollar: p.premiumStopDollar ?? null,
+    //
+    // `?? null` is not enough: the schema is `gt=0`, and the card's SEEDED
+    // premium stop is `round(premium * pct, 2)`, which is 0.00 for a premium
+    // under about $0.0084. A posted 0 fails validation and 422s the whole
+    // create with an opaque Pydantic error instead of falling back to
+    // inherit-the-global. Same `??`-does-not-catch-0 guard this file already
+    // applies to floorStop and resolvedTpPrice.
+    premiumStopDollar: (p.premiumStopDollar ?? 0) > 0 ? p.premiumStopDollar : null,
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,

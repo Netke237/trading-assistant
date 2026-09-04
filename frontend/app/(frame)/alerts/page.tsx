@@ -12,6 +12,7 @@ import { useChartAlertStore } from '@/lib/chartAlertStore';
 import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
 import { api, type CompositeWatch } from '@/lib/api';
 import { compositeWatchSummary } from '@/lib/compositeWatchSummary';
+import { resolvePremiumStopPct } from '@/lib/premiumStop';
 import type { AlertType, ToastItem } from '@/types/domain';
 import type { AlertRule, Condition } from '@/types/alerts';
 import styles from './page.module.css';
@@ -55,6 +56,14 @@ const ALERT_TYPE_LABELS: Record<AlertType, string> = {
 
 // PREMIUM_STOP's percentage is user-configurable (settingsStore.premiumStopPct) — never
 // hardcode it in the static label map above, or it will drift out of sync with the real value.
+//
+// Since piece 4 the global is not the whole answer either: a position can carry
+// its own premium_stop_pct, and this label is the ONLY percentage on screen for
+// a fired alert — neither `reason` string carries a threshold
+// (alertEngine.ts, alert_generator.py). A row printing "Premium stop (–60%)"
+// for a position pinned at 30% is the drift this comment warns about, one level
+// down. Callers pass the RESOLVED percentage for the position that fired;
+// the settings list below passes the global, because that row IS the global.
 function alertTypeLabel(type: AlertType, premiumStopPct: number): string {
   if (type === 'PREMIUM_STOP') return `Premium stop (–${Math.round(premiumStopPct * 100)}%)`;
   return ALERT_TYPE_LABELS[type] ?? type;
@@ -64,7 +73,13 @@ function alertTypeLabel(type: AlertType, premiumStopPct: number): string {
 
 function AlertRow({ toast }: { toast: ToastItem }) {
   const { acknowledgeAlert, deleteAlert } = useAlertStore();
-  const premiumStopPct = useSettingsStore((s) => s.premiumStopPct);
+  const globalPremiumStopPct = useSettingsStore((s) => s.premiumStopPct);
+  // Resolved for THIS position, through the same helper the alert engine and
+  // the backend generator use. A position that no longer exists (closed, or
+  // an alert older than the portfolio) resolves to the global, which is what
+  // it would have inherited anyway.
+  const position = usePortfolioStore((s) => s.positions.find((p) => p.recId === toast.recId));
+  const premiumStopPct = resolvePremiumStopPct(position?.premiumStopPct, globalPremiumStopPct);
   return (
     <div className={[styles.alertRow, toast.acknowledged ? styles.alertRowAck : ''].join(' ')}>
       <div className={styles.alertMeta}>

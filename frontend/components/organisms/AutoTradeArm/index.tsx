@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
+import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 import type { TradeCardData } from '@/types/domain';
 import styles from './AutoTradeArm.module.css';
 
@@ -20,6 +21,16 @@ interface AutoTradeArmProps {
    *  edit will NOT retroactively change what "Fire now" submits once armed —
    *  this is auto-trade's own existing design, out of scope to change here. */
   contracts?: number;
+  /** Piece 4 — the card's premium stop as a DOLLAR loss per share, sourced at
+   *  the call site from the same `premiumStopDollarFor` both send paths use, so
+   *  arming and sending cannot arm a position at two different stops. Null (the
+   *  default) means the card's stop was never edited off its seeded value, and
+   *  the auto-trader inherits `auto_trade.premium_stop_pct`.
+   *
+   *  Converted to a fraction HERE rather than at the call site so it is divided
+   *  by the very `entry_premium` this component sends. Anchoring it to any
+   *  other premium is the bug piece 4's own router fix exists to prevent. */
+  premiumStopDollar?: number | null;
 }
 
 const MODE_LABELS: Record<AutoTradeMode, string> = {
@@ -28,7 +39,7 @@ const MODE_LABELS: Record<AutoTradeMode, string> = {
   armed:     'Armed — fire on next qualifying condition',
 };
 
-export function AutoTradeArm({ card, broker, contracts = 1 }: AutoTradeArmProps) {
+export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null }: AutoTradeArmProps) {
   const { autoMode, setAutoMode, armed, setArmed, lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -48,6 +59,10 @@ export function AutoTradeArm({ card, broker, contracts = 1 }: AutoTradeArmProps)
       active = false;
     };
   }, [setArmed, setAutoMode]);
+
+  // ONE premium, read once: it is both what the arm request books as the
+  // entry and the denominator the premium-stop fraction is derived against.
+  const entryPremium = card.contractDetails?.mid ?? card.entry.limit;
 
   const contractId = card.contract;
   // NOTE: option_symbol should be OCC format for real broker APIs; card.contract is
@@ -71,7 +86,14 @@ export function AutoTradeArm({ card, broker, contracts = 1 }: AutoTradeArmProps)
         quantity:        Math.max(1, contracts),
         order_type:      'LMT',
         limit_price:     card.entry.limit,
-        entry_premium:   card.contractDetails?.mid ?? card.entry.limit,
+        entry_premium:   entryPremium,
+        // Piece 4 — undefined (omitted) rather than null when the card carries
+        // no edited stop: `ArmRequest.premium_stop_pct` is Optional with a None
+        // default, and omitting is what "inherit the global" means on that
+        // endpoint. premiumStopPctFromDollars already returns undefined for a
+        // stop at or above the whole premium, which is a total loss rather
+        // than a stop and would fail the schema's `lt=1` bound.
+        premium_stop_pct: premiumStopPctFromDollars(premiumStopDollar, entryPremium),
         // Must match the value the frontend's own checkTrade/computeMetrics use, or the
         // frontend and backend exposure/daily-loss gates silently disagree on the same
         // armed trade (see commit 003040c for the same bug in portfolioStore.ts).

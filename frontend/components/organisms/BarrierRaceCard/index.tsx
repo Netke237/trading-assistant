@@ -44,6 +44,9 @@ export interface BarrierRaceCardProps {
    *  Monte Carlo card because this is where the comparison is legible: shown
    *  next to the attribution, the gap between the two IS the thing this card
    *  exists to expose. */
+  /** Whether the Arithmetic card's "Max loss if the stop is hit" readout is on
+   *  screen. Gates the cross-reference below — see its comment. */
+  stopCostShown?: boolean;
   invalidation?: { probability: number; expectedDays: number | null } | null;
 }
 
@@ -90,6 +93,7 @@ export default function BarrierRaceCard({
   isFresh,
   barriersChanged = false,
   stockStopMoved = false,
+  stopCostShown = false,
   invalidation = null,
 }: BarrierRaceCardProps) {
   if (race === null) {
@@ -308,11 +312,23 @@ export default function BarrierRaceCard({
             day to the barrier, the Arithmetic card's prices at today with no
             decay. Both are right; without saying so they read as a
             contradiction, which is exactly how they read to Kenneth. */}
+        {/* Only when that readout is actually on screen. The race falls back to
+            data.exit.invalidation for its stock stop, so it renders in states
+            the Arithmetic card's gate does not — a failed structural sub-fetch
+            leaves this card pointing a reader at a row that is nowhere on the
+            page. */}
         <Text size={10} tone="dim">
-          Priced at each barrier&apos;s own median day, so time decay is included. For the
-          immediate figure — what this stop costs if it is hit right now — see
-          &ldquo;Max loss if the stop is hit&rdquo; on the Arithmetic Profit Target card. The two
-          differ by the decay, and both are correct.
+          Priced at each barrier&apos;s own median day, so time decay is included.
+          {stopCostShown ? (
+            <>
+              {' '}For the immediate figure — what this stop costs if it is hit right now —
+              see &ldquo;Max loss if the stop is hit&rdquo; on the Arithmetic Profit Target
+              card. The two differ by time decay AND by pricing model: that one is a
+              delta-linear estimate at today&apos;s price, capped at the premium, while these
+              are repriced by the simulation. Both are correct; naming only the decay sent a
+              hand-checker looking for a difference decay alone cannot account for.
+            </>
+          ) : null}
         </Text>
         {race.outcomes.map((o) => (
           <div key={o.targetPct} className={styles.chainGroup}>

@@ -114,8 +114,39 @@ export function stopPremiumRisk(
   return { stockMove, delta: usedDelta, rawLoss, loss, premium, fraction, capped, status };
 }
 
+/** The figures EXACTLY as the card prints them, so every consumer scales from
+ *  one rounded set instead of rounding full precision independently.
+ *
+ *  THE PRODUCT IS COMPUTED FROM THE PRINTED FACTORS, deliberately. Kenneth
+ *  checks this line by multiplying the two numbers he can see, so the only
+ *  version that survives a hand-check is the one those two numbers actually
+ *  produce. Rounding the move to cents, the delta to 3dp and the loss to cents
+ *  independently stacks three errors of up to half a unit each: over an
+ *  ordinary sweep of stops and deltas about 6% of inputs printed a product a
+ *  cent away from its own factors (e.g. `$0.58 away × Δ0.457 = $0.26`, where
+ *  0.58 × 0.457 is 0.2651 and reads as $0.27). Moving from 2dp to 3dp on the
+ *  delta narrowed that and could never close it: the move and the loss are
+ *  rounded too, so no amount of delta precision makes the three agree.
+ *
+ *  The verdict is unaffected — `fraction` and `status` still come from full
+ *  precision on the object, because they are a comparison rather than an
+ *  equation on screen. */
+function printedShare(r: StopPremiumRisk) {
+  const move = Number(r.stockMove.toFixed(2));
+  const delta = Number(r.delta.toFixed(3));
+  const premium = Number(r.premium.toFixed(2));
+  const product = Number((move * delta).toFixed(2));
+  // The cap is a fact about the contract, not a rounding artifact, so it wins:
+  // when the stop costs the whole premium the equation prints the premium and
+  // the "(uncapped …)" tail carries the product. Clamped in the uncapped case
+  // too, for the sliver where rawLoss sits within half a cent below premium and
+  // would otherwise print "$6.52 of $6.51 premium".
+  const loss = r.capped ? premium : Math.min(product, premium);
+  return { move, delta, premium, product, loss };
+}
+
 /** The gate's inputs on one line, so the verdict is auditable at a glance:
- *  "$11.50 away × Δ0.45 = $2.50 of $2.50 premium (uncapped $5.18)".
+ *  "$11.50 away × Δ0.450 = $2.50 of $2.50 premium (uncapped $5.18)".
  *
  *  A formatter rather than inline JSX because interpolating this many values
  *  into markup splits it across text nodes — unreadable in the DOM and
@@ -124,12 +155,13 @@ export function stopPremiumRisk(
  *  cap actually bound, where it answers "how far past a total loss is this?" —
  *  a question `loss` alone cannot, since it is pinned to `premium`. */
 export function formatStopPremiumRisk(r: StopPremiumRisk): string {
+  const p = printedShare(r);
   const base =
-    `$${r.stockMove.toFixed(2)} away × Δ${r.delta.toFixed(3)} = ` +
-    `$${r.loss.toFixed(2)} of $${r.premium.toFixed(2)} premium`;
+    `$${p.move.toFixed(2)} away × Δ${p.delta.toFixed(3)} = ` +
+    `$${p.loss.toFixed(2)} of $${p.premium.toFixed(2)} premium`;
   const basis = ' · delta-linear, priced today';
   return r.capped
-    ? `${base} (uncapped $${r.rawLoss.toFixed(2)})${basis}`
+    ? `${base} (uncapped $${p.product.toFixed(2)})${basis}`
     : `${base}${basis}`;
 }
 
@@ -143,10 +175,20 @@ export function formatStopPremiumRisk(r: StopPremiumRisk): string {
  *  is more actionable than a percentage when deciding whether to overrule the
  *  verdict. */
 export function formatStopLossHeadline(r: StopPremiumRisk): string {
-  const perContract = r.loss * 100;
-  const premiumTotal = r.premium * 100;
+  // Scaled from the SAME rounded per-share figures the line beneath prints, and
+  // `left` is subtracted from the already-rounded pair rather than rounded on
+  // its own. Rounding all three independently from full precision let the
+  // headline contradict itself and the line below it, two lines apart, on a
+  // card whose entire premise is arithmetic a non-coder can check by hand: at
+  // $8.01 away × Δ0.500 on a $6.51 premium it read "$401 per contract — of the
+  // $651 you paid, $251 left" (401 + 251 = 652) directly above "= $4.00", whose
+  // hundred is $400. This is the class of bug the notation rework was written
+  // to remove, so re-introducing it here was worse than leaving it alone.
+  const p = printedShare(r);
+  const perContract = Math.round(p.loss * 100);
+  const premiumTotal = Math.round(p.premium * 100);
   const left = premiumTotal - perContract;
-  const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
+  const usd = (n: number) => `$${n.toLocaleString('en-US')}`;
   return `${usd(perContract)} per contract — of the ${usd(premiumTotal)} you paid, ${usd(left)} left`;
 }
 

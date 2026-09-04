@@ -69,14 +69,31 @@ describe('scanPortfolio', () => {
     expect(alert?.kind).toBe('Critical');
   });
 
-  it('fires PREMIUM_STOP when pnlPct crosses the 60% stop threshold', () => {
-    const position = makePosition({ pnlPct: -65 });  // beyond -60% threshold
+  // These three drive PREMIUM_STOP through the OPTION PRICE, not through
+  // `pnlPct`, because that is what both engines now compare. Driving it through
+  // pnlPct is how the two came to disagree: portfolio.py rounds pnlPct to 2dp,
+  // so a position the backend had not stopped out could still cross a rounded
+  // −60.00 here and raise an in-app toast with no backend alert behind it.
+  // entryPrice 5 at 60% => the stop fires at $2.00.
+  it('fires PREMIUM_STOP when the option price reaches entry x (1 - pct)', () => {
+    const position = makePosition({ entryPrice: 5, currentPrice: 1.75 });
     const results = scanPortfolio([position], { premiumStopPct: 0.60 });
     expect(results.some(r => r.alertType === 'PREMIUM_STOP')).toBe(true);
   });
 
+  it('fires exactly AT the threshold, and not a cent above it — the boundary the two engines used to disagree on', () => {
+    // The backend's comparison is `opt_price <= entry * (1 - pct)`. At entry
+    // $5.00 and pct 0.30 that is $3.50. A quote of $3.5001 is NOT a stop-out
+    // there — but its pnlPct is −29.998, which rounds to −30.00 and used to
+    // fire here.
+    const at = scanPortfolio([makePosition({ entryPrice: 5, currentPrice: 3.50, pnlPct: -30 })], { premiumStopPct: 0.30 });
+    expect(at.some(r => r.alertType === 'PREMIUM_STOP')).toBe(true);
+    const justAbove = scanPortfolio([makePosition({ entryPrice: 5, currentPrice: 3.5001, pnlPct: -30 })], { premiumStopPct: 0.30 });
+    expect(justAbove.some(r => r.alertType === 'PREMIUM_STOP')).toBe(false);
+  });
+
   it('does NOT fire PREMIUM_STOP when loss is below threshold', () => {
-    const position = makePosition({ pnlPct: -50 });  // not yet at -60%
+    const position = makePosition({ entryPrice: 5, currentPrice: 2.50 });
     const results = scanPortfolio([position], { premiumStopPct: 0.60 });
     expect(results.some(r => r.alertType === 'PREMIUM_STOP')).toBe(false);
   });
@@ -487,7 +504,11 @@ describe('scanPortfolio — per-position alert overrides', () => {
 
   it('covers every position-scoped type', () => {
     const position = makePosition({
-      currentPrice: 160,
+      // currentPrice is the OPTION price (what PREMIUM_STOP compares); the
+      // stock-price-driven alerts read currentStockPrice, which is why these
+      // two are now deliberately different numbers. entryPrice 5 at 60% => the
+      // premium stop fires at $2.00.
+      currentPrice: 1.0,
       currentStockPrice: 160,
       stop: 165,
       structuralStop: 165,

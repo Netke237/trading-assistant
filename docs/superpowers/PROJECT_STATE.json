@@ -1,7 +1,7 @@
 {
   "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree.",
   "updated": "2026-09-04",
-  "updated_by": "session_01Rg4ZBTUexLsDZTwZV8CgW7 (removals + state.py already_shipped walk)",
+  "updated_by": "session_01Rg4ZBTUexLsDZTwZV8CgW7 (adversarial round 1 fixed)",
   "main": "dc051a58",
   "working_branch": "claude/dev-state-reconstruction-hzmzbi",
   "audit_rule": "NOTHING counts as done until an adversarial round comes back clean. audit_rounds counts rounds RUN; audit_clean is true only when a round found nothing. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is.",
@@ -62,14 +62,14 @@
       "id": "D",
       "name": "Piece 4 -- per-position premium stop",
       "status": "shipped_unaudited",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "commits": [
         "26c44bde",
         "2d7a3601",
         "846fc792"
       ],
-      "note": "Built and green (backend 1983, frontend 1105, typecheck clean). One defect found and fixed (846fc792): the dollar amount is now derived server-side so a live fill cannot move it. HAS NEVER SURVIVED AN ADVERSARIAL ROUND -- two audit agents were launched and neither reported.",
+      "note": "Built and green. Round 1 of the adversarial loop RAN and found 8 defects in this phase, all fixed: the seeded premium stop was posted and re-anchored to the live fill (the 846fc792 fix was right for a TYPED dollar and wrong for the default, which is the global percentage rendered in dollars); the cache was keyed by symbol while holding a contract-denominated dollar; a 0 stop 422'd the whole create; ArmRequest.premium_stop_pct was unreachable dead plumbing; the two alert engines disagreed at the threshold cent; the Alerts page labelled every fired alert with the global; and the test claiming to mirror both send paths touched neither. NOT YET CLEAN -- round 2 pending.",
       "verify": {
         "kind": "present",
         "pattern": "premium_stop_pct",
@@ -168,8 +168,8 @@
     {
       "name": "Stop-cost notation rework",
       "audit_clean": false,
-      "note": "Frontend copy only, no logic change. Fixed a real reconciliation bug: delta printed at 2dp while the loss used full precision, so $15.41 x 0.54 read 8.32 against a printed 8.24. UNAUDITED.",
-      "audit_rounds": 0,
+      "note": "Frontend copy only, no logic change. Fixed a real reconciliation bug: delta printed at 2dp while the loss used full precision, so $15.41 x 0.54 read 8.32 against a printed 8.24. UNAUDITED. ROUND 1 found the rework re-introduced the class of bug it was written to remove: the headline's three figures were each rounded independently from full precision, so the halves did not sum ($401 + $251 against $651) and disagreed with the line two rows beneath it ($4.00 x 100 = $400); and the printed equation failed to multiply out for ~6% of inputs because move, delta and loss are all rounded separately. Both fixed by computing every printed figure from one rounded set. NOT YET CLEAN.",
+      "audit_rounds": 1,
       "verify": {
         "kind": "present",
         "pattern": "formatStopLossHeadline",
@@ -179,8 +179,8 @@
     {
       "name": "Schematic removals -- Invalidation readout + Projected R/R",
       "audit_clean": false,
-      "audit_rounds": 0,
-      "note": "Both approved by Kenneth. (1) The Final Recommendation's standalone invalidation probability -- its no-race fallback -- is gone; the Monte Carlo card's own copy had already moved to the Barrier Race. firstPassage.invalidation and data.exit.invalidation are untouched, so the send gate still fires. (2) The Projected R/R (+8%) readout is gone from the Final Recommendation's Ladder-DEFAULT branch -- the copy that survived its removal from the Ladder section itself, and the one seen first since it is the card's opening state. overlay.premiumStop stays. KNOCK-ON: computeEditedRR, isDirty and the `dirty` memo were deleted as dead, which removes the card-level 'edited' flag (see open question). UNAUDITED.",
+      "audit_rounds": 1,
+      "note": "Both approved by Kenneth. (1) The Final Recommendation's standalone invalidation probability -- its no-race fallback -- is gone; the Monte Carlo card's own copy had already moved to the Barrier Race. firstPassage.invalidation and data.exit.invalidation are untouched, so the send gate still fires. (2) The Projected R/R (+8%) readout is gone from the Final Recommendation's Ladder-DEFAULT branch -- the copy that survived its removal from the Ladder section itself, and the one seen first since it is the card's opening state. overlay.premiumStop stays. KNOCK-ON: computeEditedRR, isDirty and the `dirty` memo were deleted as dead, which removes the card-level 'edited' flag (see open question). UNAUDITED. ROUND 1 confirmed every stated invariant of the removals holds, and found two comment defects: one promised a stop the branch does not print, one implied a freshness guarantee scoped only to the race. Both corrected. NOT YET CLEAN.",
       "verify": {
         "kind": "defect_marker",
         "pattern": ">(Projected R/R|Invalidation probability)",
@@ -237,7 +237,8 @@
     "Do the Q7 thresholds (0.80/0.70/0.60) hold on a real universe? Round 5 records them as taken as proposed, never measured.",
     "Is Tradier's per-contract IV good enough in production to displace a solver for Phase A?",
     "ivRank is conflated: market.py:1277 writes raw IV x100 into a field named for a percentile, 1291/1308 conditionally overwrite it with a genuine rank, and scan.py:610-616 broadcasts an ATM value across every strike. It is compared against iv_rank_pass_max: 34 and hard_reject.max_iv_rank: 70 -- a LIVE scoring/hard-reject defect, not a tidy-up.",
-    "Is losing the card-level 'edited' flag acceptable? It was rendered in ONE place -- appended to the R:R model caption inside the Projected R/R readout -- and isDirty existed only to decide whether to append it, so it could not survive the approved removal. The Sell-to-Close ladder rows keep their own per-row 'edited' badge; what no longer surfaces is an edit to Entry limit, Max fill, Contracts, Premium stop, Time stop or Invalidation. Restoring one would be new UI, not a revert."
+    "Is losing the card-level 'edited' flag acceptable? It was rendered in ONE place -- appended to the R:R model caption inside the Projected R/R readout -- and isDirty existed only to decide whether to append it, so it could not survive the approved removal. The Sell-to-Close ladder rows keep their own per-row 'edited' badge; what no longer surfaces is an edit to Entry limit, Max fill, Contracts, Premium stop, Time stop or Invalidation. Restoring one would be new UI, not a revert.",
+    "firstPassage.targets in the Final Recommendation's monte_carlo branch is ungated vintage: `firstPassage` is restored from the parent's per-contract cache on mount and `lastRunMethod` is derived from `computedAt` alone, so a restored estimate reinstates that branch at whatever vintage it was cached at. PRE-EXISTING, not introduced by the removals -- but with the invalidation fallback gone those rows are the only numbers left in the branch, so the blast radius went up. Gating them on raceIsFresh would change what the card shows and was not approved; raised by adversarial round 1."
   ],
   "authoritative_documents": [
     {

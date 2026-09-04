@@ -994,6 +994,16 @@ export function TradeCard({
   // nowhere else on this card, because the verdict is a coarse band (is this
   // stop ~a total loss?) that a few cents cannot move across a threshold, and a
   // gate that only speaks after two round-trips is not a gate.
+  // Whether the "Max loss if the stop is hit" readout is actually ON SCREEN.
+  // Named because the Barrier Race card cross-references that readout by name,
+  // and the race can render when this cannot: the race falls back to
+  // `data.exit.invalidation` for its stock stop, while the gate needs a
+  // resolved `sharedStop` and a structural fetch that neither failed nor is in
+  // flight. An Estimate whose structural sub-fetch failed therefore printed
+  // "see 'Max loss if the stop is hit' on the Arithmetic Profit Target card"
+  // pointing at nothing on the page.
+  const stopCostShown = !structuralError && !structuralLoading;
+
   const stopRisk = useMemo(() => {
     if (!sharedStop) return null;
     const cd = data.contractDetails;
@@ -1541,7 +1551,7 @@ export function TradeCard({
                 />
               </dl>
             )}
-            {!structuralError && !structuralLoading && stopRisk && (
+            {stopCostShown && stopRisk && (
               <div className={styles.stopRiskGate}>
                 <div className={styles.stopRiskHead}>
                   <Text size={10} tone="dim">MAX LOSS IF THE STOP IS HIT</Text>
@@ -1564,10 +1574,13 @@ export function TradeCard({
                     actually at risk, and the percentage on the badge is a
                     summary of it. The arithmetic line stays per-share so it
                     reconciles against the premium and delta it prints. Delta
-                    is printed to 3dp because at 2dp the equation did not
-                    compute -- 15.41 x 0.54 reads 8.32 against a printed 8.24,
-                    and this card's whole premise is showing arithmetic a
-                    non-coder can check by hand. */}
+                    is printed to 3dp, and the product is computed FROM the
+                    printed factors rather than from full precision -- see
+                    printedShare() in lib/risk.ts. More delta precision alone
+                    could never close the gap, because the move and the loss are
+                    rounded too; this card's whole premise is showing arithmetic
+                    a non-coder can check by hand, so the only version that
+                    survives is the one the visible numbers produce. */}
                 <Data size={12} tone="primary">{formatStopLossHeadline(stopRisk)}</Data>
                 <Data size={11} tone="secondary">{formatStopPremiumRisk(stopRisk)}</Data>
               </div>
@@ -1834,6 +1847,9 @@ export function TradeCard({
           // BARRIER, but it does depend on which contract is on screen.
           race={raceIsFresh ? firstPassage?.race : undefined}
           invalidation={firstPassage?.invalidation ?? null}
+          // See stopCostShown's declaration: the race must not name a readout
+          // the page is not showing.
+          stopCostShown={stopCostShown && stopRisk != null}
           premiumStopFromField={raceBarriers?.fromField ?? false}
           premiumStopField={overlay.premiumStop ?? null}
           // raceIsShowable, not the inline expression this used to carry. The
@@ -2004,22 +2020,37 @@ export function TradeCard({
                      "Moved out: the Invalidation row", which had already been
                      honoured on the Monte Carlo card itself and survived only
                      here. The stop half of the picture belongs to the Barrier
-                     Race card, which counts every path once; when the race is
-                     not showable this summary prints its targets and stops,
-                     rather than a stop number that reads like the race's answer
-                     and is not.
+                     Race card, which counts every path once. When the race is
+                     not showable this summary prints its target rows and
+                     NOTHING ELSE — no stop of any kind, deliberately, rather
+                     than a stop number that reads like the race's answer and is
+                     not. (An earlier draft of this comment said it "prints its
+                     targets and stops", which reads as two nouns and promises a
+                     stop that is not there.)
 
                      A MOVE, not a deletion: `firstPassage.invalidation` is
                      untouched and still feeds BarrierRaceCard, and
                      `data.exit.invalidation` still hard-blocks every send
                      ("Invalidation stop required").
 
-                     This also retires round 9's mixed-vintage hazard by
-                     construction rather than by gate. That bug was stale race
-                     numbers printing here while SUPPRESSING a fresher
-                     invalidation fallback underneath them; with no fallback to
-                     suppress, the only thing `raceIsShowable` can now do is
-                     show or hide the race's own numbers. */}
+                     This retires round 9's mixed-vintage hazard by construction
+                     rather than by gate. That bug was stale race numbers
+                     printing here while SUPPRESSING a fresher invalidation
+                     fallback underneath them; with no fallback to suppress, the
+                     only thing `raceIsShowable` can now do is show or hide the
+                     race's own numbers.
+
+                     SCOPED TO THE RACE NUMBERS, deliberately. It says nothing
+                     about the `firstPassage.targets` rows above, which are NOT
+                     behind `raceIsShowable` and never were: `firstPassage` is
+                     restored from the parent's per-contract cache on mount and
+                     `lastRunMethod` is derived from `computedAt` alone, so a
+                     restored estimate reinstates this whole branch at whatever
+                     vintage it was cached at. That is pre-existing and is not
+                     changed here — but with the fallback gone those rows are
+                     the only numbers left in the branch, so the question is
+                     recorded in PROJECT_STATE.json rather than left implied by
+                     a comment that sounds like it covers them. */}
                 {firstPassage.race && raceIsShowable ? (
                   <>
                     <div className={styles.scoreRow}>

@@ -1,5 +1,5 @@
 import type { AlertKind, AlertType, TargetLevel, Direction, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
-import { resolvePremiumStopPct, PREMIUM_STOP_PCT_FALLBACK } from './premiumStop';
+import { resolvePremiumStopPct, premiumStopThresholdPrice, PREMIUM_STOP_PCT_FALLBACK } from './premiumStop';
 
 export interface AlertPosition {
   recId: string;
@@ -229,13 +229,22 @@ export function scanPortfolio(
       });
     }
 
-    // PREMIUM_STOP — option lost premiumStopPct of its value. No dollar price/
-    // threshold is available in this scope (only pnlPct), so price/referenceValue
-    // are left undefined rather than mislabeled.
-    const premiumStopThreshold = -(
-      resolvePremiumStopPct(p.premiumStopPct, globalPremiumStopPct) * 100
-    );  // e.g. -60 for 0.60
-    if (p.pnlPct <= premiumStopThreshold && enabled('PREMIUM_STOP')) {
+    // PREMIUM_STOP — option lost premiumStopPct of its value.
+    //
+    // THE SAME COMPARISON THE BACKEND MAKES, on the same two numbers:
+    // `opt_price <= entry * (1 - pct)` (alert_generator.py, via the shared
+    // premiumStopThresholdPrice). This used to test the rounded `pnlPct`
+    // against `-(pct * 100)`, and the two engines disagreed at the boundary:
+    // portfolio.py rounds pnlPct to 2dp, so entry $5.00 at pct 0.30 with a
+    // quote of $3.5001 gave pnlPct −29.998 → −30.00, firing an in-app toast
+    // for an alert the backend had no record of. Piece 4 made that MORE
+    // likely, not less — a derived per-position fraction like 0.7554 puts the
+    // threshold on non-round cents far more often than a flat 0.60 did.
+    // `entryPrice > 0` mirrors the backend's own guard; nothing further is
+    // added, because any extra condition here is a new disagreement.
+    const resolvedPremiumStopPct = resolvePremiumStopPct(p.premiumStopPct, globalPremiumStopPct);
+    const premiumStopPrice = premiumStopThresholdPrice(p.entryPrice, resolvedPremiumStopPct);
+    if (p.entryPrice > 0 && p.currentPrice <= premiumStopPrice && enabled('PREMIUM_STOP')) {
       out.push({
         recId: p.recId,
         kind: 'Critical',
