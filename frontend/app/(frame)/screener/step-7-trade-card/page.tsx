@@ -33,7 +33,6 @@ import {
   cacheStructural, cacheFirstPassage, cacheExitPlan,
   type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '@/lib/tradeCardOverride';
-import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
@@ -110,7 +109,9 @@ function positionFromOrder(
     structuralStop,
     exitPlan,
     maxLossOverride,
-    premiumStopPct: premiumStopPctFromDollars(premiumStopDollar, mid) ?? null,
+    // Sent as DOLLARS; the backend derives the fraction against the entry
+    // price it persists (which may be a live quote, not this `mid`).
+    premiumStopDollar,
     targets:       c.exit.targets,
     status:        c.finalStatus,
     ivRank:        cd?.ivRank,
@@ -652,7 +653,7 @@ export default function Step7Page() {
       // These two send paths already disagree about stop re-anchoring; a second
       // field they disagree on would mean the premium stop a position is armed
       // at depends on which button was pressed.
-      premiumStopPct: premiumStopPctFromDollars(premiumStopBySymbol[card.symbol], mid) ?? null,
+      premiumStopDollar: premiumStopBySymbol[card.symbol] ?? null,
       targets:       card.exit.targets,
       status:        card.finalStatus,
       ivRank:        cd?.ivRank,

@@ -184,7 +184,10 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     // schema and router are wired, so the trade silently falls back to the
     // global on its first alert while the optimistic local state shows the
     // value the user chose.
-    premiumStopPct: p.premiumStopPct ?? null,
+    // Piece 4 — the DOLLAR amount, not a fraction. The backend derives the
+    // fraction against the entry price it persists; sending a client-derived
+    // fraction re-anchors the user's stop to a price the server replaced.
+    premiumStopDollar: p.premiumStopDollar ?? null,
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,

@@ -268,6 +268,23 @@ async def add_position(
             detail=" ".join(risk.reasons),
         )
 
+    # Piece 4 — derive the premium-stop FRACTION here, not on the client.
+    # `entry_price` above may have just been replaced with the live quote, and
+    # the alert compares `opt_price <= entry_price * (1 - pct)` against exactly
+    # that stored value. A fraction computed against the card's mid would mean
+    # a $3.12 stop on a $5.20 premium quietly becoming a $2.40 stop after a
+    # fill at $4.00. Deriving here is the only place both numbers are known.
+    #
+    # The dollar amount wins when both are sent: it is what the user typed on
+    # the card, while a client-sent fraction is at best a stale estimate of it.
+    resolved_premium_stop_pct = body.premiumStopPct
+    if body.premiumStopDollar is not None and entry_price > 0:
+        ratio = body.premiumStopDollar / entry_price
+        # A stop at or above the whole premium is a total loss, which is
+        # unreachable-by-definition rather than a stop. Store NULL (inherit the
+        # global) rather than a value the schema would reject anyway.
+        resolved_premium_stop_pct = ratio if 0 < ratio < 1 else None
+
     position = PortfolioPositionModel(
         rec_id=body.recId,
         symbol=body.symbol,
@@ -288,7 +305,7 @@ async def add_position(
         # Piece 4 — per-position premium stop, set at creation so a trade sent
         # from the card carries the stop the user chose on it. None persists as
         # NULL, meaning "inherit the global".
-        premium_stop_pct=body.premiumStopPct,
+        premium_stop_pct=resolved_premium_stop_pct,
     )
     db.add(position)
     try:

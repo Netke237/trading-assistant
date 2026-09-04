@@ -650,6 +650,16 @@ class PortfolioPositionCreate(BaseModel):
     # here would mean a trade sent from the card silently falls back to the
     # global on its very first alert. None = inherit the global.
     premiumStopPct: Optional[float] = Field(alias="premium_stop_pct", default=None, gt=0, lt=1)
+    # Piece 4 — the DOLLAR premium stop as typed on the trade card. Preferred
+    # over premiumStopPct on this path, and the reason it exists: the router
+    # REPLACES entry_price with the live quote when there is one, so a fraction
+    # derived client-side against the card's mid would be re-anchored to a
+    # different price and silently change the dollar stop the user chose. The
+    # fraction is therefore derived server-side, against the entry_price that
+    # is actually persisted. Bounded only as positive here; the ratio it
+    # produces is validated against (0, 1) at the point of derivation, because
+    # whether a given dollar amount is a valid stop depends on that entry.
+    premiumStopDollar: Optional[float] = Field(alias="premium_stop_dollar", default=None, gt=0)
 
     def __init__(self, **data):
         # Support both camelCase and snake_case field names
@@ -666,6 +676,7 @@ class PortfolioPositionCreate(BaseModel):
             "trade_card_snapshot": "tradeCardSnapshot",
             "max_loss_override": "maxLossOverride",
             "premium_stop_pct": "premiumStopPct",
+            "premium_stop_dollar": "premiumStopDollar",
         }
         for k, v in data.items():
             mapped[aliases.get(k, k)] = v

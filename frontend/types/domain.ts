@@ -397,6 +397,12 @@ export interface PortfolioPosition {
    *  number. Always read through `resolvePremiumStopPct` in lib/premiumStop.ts;
    *  never compare it directly. */
   premiumStopPct?: number | null;
+  /** The DOLLAR premium stop as typed on the trade card, carried on the create
+   *  path only. The backend derives `premiumStopPct` from it against the
+   *  entry price it actually persists — which it may replace with a live quote
+   *  — so the fraction is never computed client-side against a price the
+   *  server is about to change. */
+  premiumStopDollar?: number | null;
   /** Which TP computation drives this position's TP_HIT alert (Feature D).
    *  Absent = 'ladder', matching the backend column's server-side default —
    *  every position predating this field keeps today's behavior. */

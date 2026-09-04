@@ -418,3 +418,50 @@ def test_new_column_is_nullable_with_no_backfill():
     assert col.nullable is True
     assert col.server_default is None
     assert col.default is None or col.default.arg is None
+
+
+# ── The dollar amount survives a live-quote re-anchor ───────────────────────
+
+def test_dollar_stop_is_resolved_against_the_persisted_entry_not_the_card_mid():
+    """The defect this replaced: `portfolio.py` overwrites `entry_price` with
+    the live quote, while the client derived the fraction against the card's
+    mid. A $3.12 stop on a $5.20 premium filling at $4.00 became a $2.40 stop.
+
+    The fraction is now derived server-side against the entry actually stored,
+    so the DOLLAR amount the user typed is what survives.
+    """
+    dollar_stop, card_mid = 3.12, 5.20
+    for persisted_entry in (card_mid, 4.00, 6.10):
+        pct = dollar_stop / persisted_entry
+        threshold = premium_stop_threshold_price(persisted_entry, pct)
+        assert threshold == pytest.approx(persisted_entry - dollar_stop)
+
+    # The old client-side derivation, for contrast: the fraction is pinned to
+    # the card's mid, so a different fill silently moves the dollar stop.
+    stale_pct = dollar_stop / card_mid
+    assert premium_stop_threshold_price(4.00, stale_pct) == pytest.approx(1.60)
+    assert 4.00 - 1.60 == pytest.approx(2.40)     # not the $3.12 that was typed
+
+
+def test_create_schema_accepts_the_dollar_field_in_both_conventions():
+    from app.schemas import PortfolioPositionCreate
+    camel = PortfolioPositionCreate(
+        recId="r", symbol="A", contract="c", direction="Bullish",
+        entryPrice=5.20, entryDate="2026-01-01", premiumStopDollar=3.12,
+    )
+    snake = PortfolioPositionCreate(
+        rec_id="r", symbol="A", contract="c", direction="Bullish",
+        entry_price=5.20, entry_date="2026-01-01", premium_stop_dollar=3.12,
+    )
+    assert camel.premiumStopDollar == snake.premiumStopDollar == 3.12
+
+
+@pytest.mark.parametrize("bad", [0, -1.0])
+def test_create_schema_rejects_a_non_positive_dollar_stop(bad):
+    from pydantic import ValidationError
+    from app.schemas import PortfolioPositionCreate
+    with pytest.raises(ValidationError):
+        PortfolioPositionCreate(
+            recId="r", symbol="A", contract="c", direction="Bullish",
+            entryPrice=5.20, entryDate="2026-01-01", premiumStopDollar=bad,
+        )

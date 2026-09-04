@@ -126,37 +126,34 @@ describe('scanPortfolio premium stop resolution', () => {
 // ── Both send paths derive the same fraction ────────────────────────────────
 
 describe('send-path derivation', () => {
-  // `positionFromOrder` and `buildPaperPosition` are module-private to the
-  // Step 7 page, so what is asserted here is the rule they BOTH apply: one
-  // shared converter, against each path's own resolved entry price. These two
-  // paths already disagree about stop re-anchoring; a second field they
-  // disagree on would mean the premium stop a position is armed at depends on
-  // which button was pressed.
+  // The card's "Premium stop" field holds a DOLLAR loss. Both send paths now
+  // carry that dollar amount straight through; the FRACTION is derived
+  // server-side, in the one place the persisted entry price is known.
+  //
+  // Why it moved: `portfolio.py` replaces `entry_price` with the live quote
+  // when there is one, and the alert compares `opt_price <= entry_price *
+  // (1 - pct)` against exactly that stored value. A fraction derived here
+  // against the card's mid would be re-anchored to a price the server
+  // replaced -- a $3.12 stop on a $5.20 premium filling at $4.00 silently
+  // becomes a $2.40 stop. An earlier version of this file asserted that drift
+  // was correct; it was not, it just matched how the client happened to
+  // compute it.
   const dollarStop = 3.12;
   const cardMid = 5.20;
 
-  it('produces one fraction for the same card in both paths', () => {
-    // buildPaperPosition: livePrice ?? cd.mid ?? entry.limit  (no live price)
-    // positionFromOrder:  cd.mid ?? entry.limit
-    // Same inputs, same resolved mid, therefore the same fraction.
-    const fromPaper = premiumStopPctFromDollars(dollarStop, cardMid);
-    const fromOrder = premiumStopPctFromDollars(dollarStop, cardMid);
-    expect(fromPaper).toBeCloseTo(0.60);
-    expect(fromOrder).toBe(fromPaper);
+  it('keeps the dollar amount the user typed, whatever the fill', () => {
+    // The property that matters: the stop is $3.12 of premium at risk, and it
+    // stays $3.12 regardless of which price the position is finally booked at.
+    // The fraction is whatever reproduces that against the real entry.
+    for (const entry of [cardMid, 4.00, 6.10]) {
+      const pct = dollarStop / entry;
+      expect(premiumStopThresholdPrice(entry, pct)).toBeCloseTo(entry - dollarStop);
+    }
   });
 
-  it('tracks the live fill price when one is supplied, because entryPrice does too', () => {
-    // Not a disagreement: the stored fraction must be relative to the
-    // entryPrice actually persisted, since the alert compares
-    // `opt_price <= entry_price * (1 - pct)`. A fill at 4.00 with the same
-    // $3.12 dollar stop is a deeper fraction of that smaller premium.
-    expect(premiumStopPctFromDollars(dollarStop, 4.00)).toBeCloseTo(0.78);
-  });
-
-  it('refuses a dollar stop at or above the whole premium', () => {
-    // A total loss is unreachable-by-definition rather than a stop, and the
-    // backend bounds the fraction at (0, 1) — refuse here rather than post a
-    // value the API will 422.
+  it('still refuses a dollar stop at or above the whole premium', () => {
+    // A total loss is unreachable-by-definition rather than a stop. The
+    // backend stores NULL (inherit the global) rather than a fraction >= 1.
     expect(premiumStopPctFromDollars(5.20, cardMid)).toBeUndefined();
     expect(premiumStopPctFromDollars(6.00, cardMid)).toBeUndefined();
   });
@@ -166,12 +163,5 @@ describe('send-path derivation', () => {
     expect(premiumStopPctFromDollars(undefined, cardMid)).toBeUndefined();
     expect(premiumStopPctFromDollars(0, cardMid)).toBeUndefined();
     expect(premiumStopPctFromDollars(-1, cardMid)).toBeUndefined();
-  });
-
-  it('round-trips against the threshold the alert will compare', () => {
-    // The closing of the loop: the dollar stop the user typed on the card, the
-    // fraction persisted, and the price the backend fires at are one decision.
-    const pct = premiumStopPctFromDollars(dollarStop, cardMid)!;
-    expect(premiumStopThresholdPrice(cardMid, pct)).toBeCloseTo(cardMid - dollarStop);
   });
 });
