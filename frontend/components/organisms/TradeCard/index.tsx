@@ -46,6 +46,26 @@ interface EditOverlay {
   contracts: number;
 }
 
+/** Which overlay fields the user has actually EDITED, as opposed to fields
+ *  still carrying the seed `defaultOverlay` put there.
+ *
+ *  `patch` reports the whole overlay on every call, so the parent cannot tell
+ *  the two apart by looking at values: the seed moves under an untouched field
+ *  whenever `mergePlan` lands, and a user is free to type the seed's own value
+ *  deliberately. Only this card knows which happened, so it says.
+ *
+ *  Covers exactly the three fields a send path reads. `maxFill` and
+ *  `timeStopDays` are deliberately absent: nothing anywhere consumes either one
+ *  -- TIME_STOP fires on a hardcoded `dteRemaining <= 3` (alertEngine.ts) and
+ *  `maxFill` has no reader outside its own input -- so there is nothing to
+ *  report touched-ness TO. Threading those two is a build (a new persisted
+ *  field, a backend column and an alert change), not a wiring fix. */
+interface TouchedFields {
+  entryLimit: boolean;
+  invalidation: boolean;
+  premiumStop: boolean;
+}
+
 function defaultOverlay(data: TradeCardData): EditOverlay {
   return {
     entryLimit: data.entry.limit,
@@ -179,13 +199,13 @@ interface TradeCardProps {
   sendLabel?: string;
   sendDisabled?: boolean;
   contracts?: number;
-  /** `meta.premiumStopTouched` is TRUE only once the user has actually edited
-   *  the premium-stop field on this card. The parent must cache the dollar
-   *  amount only when it is set, because "untouched" cannot be recovered later
-   *  by comparing the cached value against the card's seed: the seed moves
-   *  under an untouched field whenever `mergePlan` lands, and a user is free to
-   *  type the seed's own value deliberately. See `premiumStopDollarToSend`. */
-  onEditsChange?: (overlay: EditOverlay, meta: { premiumStopTouched: boolean }) => void;
+  /** A flag in `meta.touched` is TRUE only once the user has actually edited
+   *  that field on this card. The parent must cache a value only when its flag
+   *  is set, because "untouched" cannot be recovered later by comparing the
+   *  cached value against the card's seed: the seed moves under an untouched
+   *  field whenever `mergePlan` lands, and a user is free to type the seed's own
+   *  value deliberately. See `premiumStopDollarToSend` and `TouchedFields`. */
+  onEditsChange?: (overlay: EditOverlay, meta: { touched: TouchedFields }) => void;
   /** Fired whenever the "Check structure" result changes for the current contract
    *  (including being reset to `undefined` on a contract switch, or `null` when no
    *  structural level was found) — lets the parent capture the level so it can be
@@ -367,7 +387,14 @@ export function TradeCard({
    *  is local to this file, and the cost of being wrong is a silently
    *  mis-anchored stop -- but do not build on the claim that the window is
    *  live. On every path found so far, it is not. */
-  const premiumStopTouchedRef = useRef(initialPremiumStop != null);
+  const touchedRef = useRef<TouchedFields>({
+    entryLimit: false,
+    invalidation: false,
+    // A cached dollar arriving from the parent IS a previous edit on this
+    // contract, restored -- see initialPremiumStop's own doc. The other two
+    // have no such cache yet, so they always start clean.
+    premiumStop: initialPremiumStop != null,
+  });
   // Feature 5 — pre-trade max-loss override, seeded from the page-level cache
   // (keyed by symbol there; this local state just mirrors whatever the parent
   // resolved for the CURRENT candidate). Reset alongside overlay/structuralStop/
@@ -524,7 +551,11 @@ export function TradeCard({
       structuralRequestRef.current?.abort();
       firstPassageRequestRef.current?.abort();
       exitPlanRequestRef.current?.abort();
-      premiumStopTouchedRef.current = initialPremiumStop != null;
+      touchedRef.current = {
+        entryLimit: false,
+        invalidation: false,
+        premiumStop: initialPremiumStop != null,
+      };
       setOverlay({
         ...defaultOverlay(data),
         contracts: initialContracts,
@@ -1184,10 +1215,10 @@ export function TradeCard({
 
   // Follow the seed while the field is untouched. Declared AFTER the reset
   // effect above so it runs after it within the same commit — on a contract
-  // change the reset has already decided `premiumStopTouchedRef`, and this is
+  // change the reset has already decided `touchedRef.premiumStop`, and this is
   // then a no-op. Its real job is the case with no contract change at all:
   // `mergePlan` swapping `data.exit` under an overridden card (see
-  // premiumStopTouchedRef's own note). Identity-guarded, so a seed that did
+  // touchedRef.premiumStop's own note). Identity-guarded, so a seed that did
   // not move costs nothing.
   //
   // Deliberately does NOT call `onEditsChange`: while the field is untouched
@@ -1197,7 +1228,7 @@ export function TradeCard({
   // put a number nobody chose back into the send path, which is the defect
   // this early return exists to avoid.
   useEffect(() => {
-    if (premiumStopTouchedRef.current) return;
+    if (touchedRef.current.premiumStop) return;
     setOverlay((prev) =>
       prev.premiumStop === data.exit.premiumStop
         ? prev
@@ -1220,23 +1251,22 @@ export function TradeCard({
   // tick against a stale closure.
   const patch = useCallback(
     (partial: Partial<EditOverlay>) => {
-      // Only a real edit counts. `patch` carries the WHOLE overlay to the
-      // parent on every call, so an untouched premium stop rides along with a
-      // Contracts bump — recording that as "the user chose this" is precisely
-      // how the seeded default came to be posted as a deliberate stop.
       // Only a CHANGE counts, not merely a key being present. `patch` carries
-      // the whole overlay to the parent on every call, and any caller may
-      // re-send an unchanged premiumStop (EditableKV's save-on-blur did);
-      // recording that as "the user chose this" is how the seeded default came
-      // to be posted as a deliberate stop. Belt-and-braces with the no-op guard
-      // in EditableKV.save -- either alone fixes the blur, and neither depends
-      // on the other's caller behaving.
-      if (partial.premiumStop !== undefined && partial.premiumStop !== overlay.premiumStop) {
-        premiumStopTouchedRef.current = true;
+      // the whole overlay to the parent on every call, so an untouched field
+      // rides along with a Contracts bump, and any caller may re-send an
+      // unchanged value (EditableKV's save-on-blur did); recording either as
+      // "the user chose this" is how the seeded default came to be posted as a
+      // deliberate premium stop. Belt-and-braces with the no-op guard in
+      // EditableKV.save -- either alone fixes the blur, and neither depends on
+      // the other's caller behaving.
+      for (const k of ['entryLimit', 'invalidation', 'premiumStop'] as const) {
+        if (partial[k] !== undefined && partial[k] !== overlay[k]) {
+          touchedRef.current = { ...touchedRef.current, [k]: true };
+        }
       }
       const next = { ...overlay, ...partial };
       setOverlay(next);
-      onEditsChange?.(next, { premiumStopTouched: premiumStopTouchedRef.current });
+      onEditsChange?.(next, { touched: touchedRef.current });
     },
     [overlay, onEditsChange],
   );
@@ -2809,5 +2839,5 @@ function MaxLossOverrideEditor({
   );
 }
 
-export type { EditOverlay };
+export type { EditOverlay, TouchedFields };
 export { triggerDetailText, pullbackDetailText, trendDetailText, eventDetailText, volDetailText };

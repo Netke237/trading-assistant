@@ -245,7 +245,7 @@ describe('TradeCard', () => {
     const contracts = screen.getByLabelText('Edit Contracts') as HTMLInputElement;
     fireEvent.change(contracts, { target: { value: '3' } });
     fireEvent.blur(contracts);
-    expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({ premiumStopTouched: false });
+    expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({ touched: { entryLimit: false, invalidation: false, premiumStop: false } });
   });
 
   it('still clamps a value the user actually types past the bound', () => {
@@ -260,7 +260,64 @@ describe('TradeCard', () => {
     fireEvent.blur(input);
     // mid 2.50 -> max = round(2.50 x 0.99, 2) = 2.48
     expect(onEditsChange.mock.calls.at(-1)![0].premiumStop).toBe(2.48);
-    expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({ premiumStopTouched: true });
+    expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({ touched: { entryLimit: false, invalidation: false, premiumStop: true } });
+  });
+
+  it('tracks touched-ness per FIELD, so one field\'s edit does not vouch for another', async () => {
+    // The three flags are independent by construction. `patch` reports the
+    // whole overlay on every call, so without per-field tracking a Contracts
+    // bump would carry an untouched Invalidation and Entry limit down to the
+    // page as though the user had chosen them -- the exact shape of the bug
+    // that made the seeded premium stop a deliberate 78% stop.
+    const onEditsChange = jest.fn();
+    render(<TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />);
+
+    fireEvent.click(screen.getByLabelText('Edit Limit'));
+    const limit = screen.getByLabelText('Edit Limit') as HTMLInputElement;
+    fireEvent.change(limit, { target: { value: '9.99' } });
+    fireEvent.blur(limit);
+
+    expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({
+      touched: { entryLimit: true, invalidation: false, premiumStop: false },
+    });
+
+    expandLadder();
+    fireEvent.click(screen.getByLabelText('Edit Invalidation'));
+    const inval = screen.getByLabelText('Edit Invalidation') as HTMLInputElement;
+    fireEvent.change(inval, { target: { value: '123.45' } });
+    fireEvent.blur(inval);
+
+    const last = onEditsChange.mock.calls.at(-1)!;
+    expect(last[1]).toEqual({
+      touched: { entryLimit: true, invalidation: true, premiumStop: false },
+    });
+    expect(last[0].entryLimit).toBe(9.99);
+    expect(last[0].invalidation).toBe(123.45);
+  });
+
+  it('a click into the Invalidation or Limit field and back out is NOT an edit', async () => {
+    // Same no-op guard as the Premium stop below, now load-bearing for two
+    // more fields: an untouched Invalidation must keep deferring to
+    // `data.exit.invalidation`, which `mergePlan` is free to move.
+    const onEditsChange = jest.fn();
+    render(<TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />);
+    expandLadder();
+
+    for (const label of ['Limit', 'Invalidation']) {
+      fireEvent.click(screen.getByLabelText(`Edit ${label}`));
+      fireEvent.blur(screen.getByLabelText(`Edit ${label}`) as HTMLInputElement);
+    }
+
+    // Nothing changed, so nothing is reported at all; and if a later unrelated
+    // edit reports the overlay, neither field is marked touched.
+    fireEvent.click(screen.getByLabelText('Edit Contracts'));
+    const contracts = screen.getByLabelText('Edit Contracts') as HTMLInputElement;
+    fireEvent.change(contracts, { target: { value: '3' } });
+    fireEvent.blur(contracts);
+
+    expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({
+      touched: { entryLimit: false, invalidation: false, premiumStop: false },
+    });
   });
 
   it('a click into the Premium stop field and back out is NOT an edit', async () => {
@@ -288,8 +345,8 @@ describe('TradeCard', () => {
     fireEvent.change(contracts, { target: { value: '3' } });
     fireEvent.blur(contracts);
     const last = onEditsChange.mock.calls.at(-1)!;
-    expect(last[1]).toEqual({ premiumStopTouched: false });
-    expect(premiumStopDollarToSend(last[1].premiumStopTouched ? last[0].premiumStop : null))
+    expect(last[1]).toEqual({ touched: { entryLimit: false, invalidation: false, premiumStop: false } });
+    expect(premiumStopDollarToSend(last[1].touched.premiumStop ? last[0].premiumStop : null))
       .toBeNull();
   });
 
@@ -305,7 +362,7 @@ describe('TradeCard', () => {
     // to the server and armed the position at 1.5/entry.
     //
     // What makes it safe is not the value but the flag: an untouched field
-    // reports `premiumStopTouched: false` no matter which seed it happens to
+    // reports `touched.premiumStop: false` no matter which seed it happens to
     // hold, and the page caches null for it.
     const onEditsChange = jest.fn();
     const seeded = { ...mockTradeCard, exit: { ...mockTradeCard.exit, premiumStop: 1.5 } };
@@ -322,9 +379,9 @@ describe('TradeCard', () => {
     fireEvent.blur(contracts);
     const afterEdit = onEditsChange.mock.calls.at(-1)!;
     expect(afterEdit[0].premiumStop).toBe(1.5);
-    expect(afterEdit[1]).toEqual({ premiumStopTouched: false });
+    expect(afterEdit[1]).toEqual({ touched: { entryLimit: false, invalidation: false, premiumStop: false } });
     // The page caches null for an untouched field, so nothing is posted.
-    expect(premiumStopDollarToSend(afterEdit[1].premiumStopTouched ? afterEdit[0].premiumStop : null))
+    expect(premiumStopDollarToSend(afterEdit[1].touched.premiumStop ? afterEdit[0].premiumStop : null))
       .toBeNull();
 
     // 2. mergePlan now moves the seed under the untouched field.
@@ -335,7 +392,7 @@ describe('TradeCard', () => {
     // 3. Still untouched, so still nothing posted — displayed and posted agree.
     //    Under the old value-comparison this posted 1.50 against a $0.80 card.
     const last = onEditsChange.mock.calls.at(-1)!;
-    expect(last[1].premiumStopTouched).toBe(false);
+    expect(last[1].touched.premiumStop).toBe(false);
 
     // 4. Only a real edit arms it, and then the typed value is what is posted.
     fireEvent.click(screen.getByLabelText('Edit Premium stop'));
@@ -343,8 +400,8 @@ describe('TradeCard', () => {
     fireEvent.change(stop, { target: { value: '0.5' } });
     fireEvent.blur(stop);
     const armed = onEditsChange.mock.calls.at(-1)!;
-    expect(armed[1]).toEqual({ premiumStopTouched: true });
-    expect(premiumStopDollarToSend(armed[1].premiumStopTouched ? armed[0].premiumStop : null))
+    expect(armed[1]).toEqual({ touched: { entryLimit: false, invalidation: false, premiumStop: true } });
+    expect(premiumStopDollarToSend(armed[1].touched.premiumStop ? armed[0].premiumStop : null))
       .toBe(0.5);
   });
 
@@ -1753,7 +1810,7 @@ describe('TradeCard', () => {
     // the shared per-symbol contracts map.
     expect(onEditsChange).toHaveBeenCalledWith(
       expect.objectContaining({ contracts: 5 }),
-      expect.objectContaining({ premiumStopTouched: expect.any(Boolean) }),
+      expect.objectContaining({ touched: expect.objectContaining({ premiumStop: expect.any(Boolean) }) }),
     );
 
     // Simulate that page-level round-trip: the shared map updates, and the
@@ -2027,7 +2084,7 @@ describe('TradeCard', () => {
       });
       expect(onEditsChange).toHaveBeenCalledWith(
         expect.objectContaining({ entryLimit: 3.0 }),
-        expect.objectContaining({ premiumStopTouched: expect.any(Boolean) }),
+        expect.objectContaining({ touched: expect.objectContaining({ premiumStop: expect.any(Boolean) }) }),
       );
     });
 

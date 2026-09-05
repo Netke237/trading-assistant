@@ -41,6 +41,21 @@ interface AutoTradeArmProps {
    *  by the very `entry_premium` this component sends. Anchoring it to any
    *  other premium is the bug piece 4's own router fix exists to prevent. */
   premiumStopDollar?: number | null;
+  /** The card's editable Entry limit, sourced at the call site from the same
+   *  `entryLimitFor` every send path uses. Null (the default) means the field
+   *  was never edited and `card.entry.limit` stands.
+   *
+   *  Feeds BOTH the posted `limit_price` and `entryPremium` -- the latter only
+   *  as the fallback when `contractDetails.mid` is absent, but that fallback is
+   *  the premium-stop denominator, so an edited limit that reached one and not
+   *  the other would arm the trade at a fraction derived against a price the
+   *  order was never placed at.
+   *
+   *  There is no invalidation counterpart because the arm request carries no
+   *  stop level: `/auto-trade/arm` books entry, size and premium stop only, and
+   *  the auto-trader places no protective order (see the daily-loss-gate note
+   *  in PROJECT_STATE.json's open questions). */
+  entryLimit?: number | null;
 }
 
 const MODE_LABELS: Record<AutoTradeMode, string> = {
@@ -49,7 +64,7 @@ const MODE_LABELS: Record<AutoTradeMode, string> = {
   armed:     'Armed — fire on next qualifying condition',
 };
 
-export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null }: AutoTradeArmProps) {
+export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null }: AutoTradeArmProps) {
   const { autoMode, setAutoMode, armed, setArmed, lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -72,7 +87,7 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
 
   // ONE premium, read once: it is both what the arm request books as the
   // entry and the denominator the premium-stop fraction is derived against.
-  const entryPremium = card.contractDetails?.mid ?? card.entry.limit;
+  const entryPremium = card.contractDetails?.mid ?? entryLimit ?? card.entry.limit;
 
   const contractId = card.contract;
   // NOTE: option_symbol should be OCC format for real broker APIs; card.contract is
@@ -95,7 +110,7 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // where it came from.
         quantity:        Math.max(1, contracts),
         order_type:      'LMT',
-        limit_price:     card.entry.limit,
+        limit_price:     entryLimit ?? card.entry.limit,
         entry_premium:   entryPremium,
         // Piece 4 — undefined (omitted) rather than null when the card carries
         // no edited stop: `ArmRequest.premium_stop_pct` is Optional with a None

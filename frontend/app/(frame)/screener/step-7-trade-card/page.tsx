@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text } from '@/components/primitives';
-import { TradeCard, type EditOverlay } from '@/components/organisms/TradeCard';
+import { TradeCard, type EditOverlay, type TouchedFields } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/lib/portfolioStore';
@@ -89,10 +89,20 @@ function positionFromOrder(
   // always relative to the entryPrice actually persisted — which is exactly
   // what the alert compares (`opt_price <= entry_price * (1 - pct)`).
   premiumStopDollar: number | null = null,
+  // The card's editable Invalidation, resolved by the caller through
+  // `invalidationFor` (module-level function, no closure access to component
+  // state -- same shape as maxLossOverride above). Defaults to the card's own
+  // value so an untouched card behaves exactly as before.
+  invalidation: number | null = null,
+  // The card's editable Entry limit, resolved through `entryLimitFor`. Only
+  // reached as a fallback for `mid` below, but it must be the SAME value the
+  // broker order was placed at or the position's entry price disagrees with
+  // the order that created it.
+  entryLimit: number | null = null,
 ): PortfolioPosition {
   const c   = order.card;
   const cd  = c.contractDetails;
-  const mid = cd?.mid ?? c.entry.limit;
+  const mid = cd?.mid ?? entryLimit ?? c.entry.limit;
   const dte = cd?.dte ?? 24;
   return {
     symbol:        c.symbol,
@@ -106,7 +116,7 @@ function positionFromOrder(
     currentPrice:  mid,
     pnlDollar:     0,
     pnlPct:        0,
-    stop:          c.exit.invalidation,
+    stop:          invalidation ?? c.exit.invalidation,
     structuralStop,
     exitPlan,
     maxLossOverride,
@@ -206,23 +216,50 @@ export default function Step7Page() {
   // field when `mergePlan` lands. Only the card knows which it is, so it tells
   // us -- see `onEditsChange`'s `meta.premiumStopTouched`.
   const [premiumStopByContract, setPremiumStopByContract] = useState<Record<string, number | null>>({});
+  // The card's editable INVALIDATION -- the underlying stock level that becomes
+  // `PortfolioPosition.stop` and drives STOP_REACHED. Keyed by SYMBOL, like
+  // `structuralBySymbol` and `maxLossOverrideBySymbol` beside it and unlike
+  // `premiumStopByContract`: an invalidation is a price level on the
+  // UNDERLYING, so it is the same thesis whichever strike expresses it, while a
+  // dollar premium stop is meaningful only against one contract's premium.
+  //
+  // NULL means "untouched, use the card's own `exit.invalidation`" -- the same
+  // distinct state `premiumStopByContract` carries, for the same reason: the
+  // seed moves under an untouched field when `mergePlan` lands, so a cached
+  // seed would pin the stop to a level the plan has since replaced.
+  const [invalidationBySymbol, setInvalidationBySymbol] = useState<Record<string, number | null>>({});
+  // The card's editable ENTRY LIMIT -- the option premium posted as the broker
+  // order's `limit_price`. Contract-keyed for the same reason the premium stop
+  // is: it is a price for one contract, meaningless against another.
+  const [entryLimitByContract, setEntryLimitByContract] = useState<Record<string, number | null>>({});
   const handleEditsChange = (
     symbol: string,
     cardContractKey: string | null,
     overlay: EditOverlay,
-    meta: { premiumStopTouched: boolean },
+    meta: { touched: TouchedFields },
   ) => {
     setOrderContractsBySymbol((prev) =>
       prev[symbol] === overlay.contracts ? prev : { ...prev, [symbol]: overlay.contracts },
     );
+    // Same identity-preserving guard as above, on every cache: an unchanged
+    // write must return `prev` untouched or every TradeCard render re-triggers
+    // this cascade.
+    const invalidation = meta.touched.invalidation ? overlay.invalidation : null;
+    setInvalidationBySymbol((prev) =>
+      prev[symbol] === invalidation ? prev : { ...prev, [symbol]: invalidation },
+    );
     if (!cardContractKey) return;
-    // Same identity-preserving guard as above: an unchanged write must return
-    // `prev` untouched or every TradeCard render re-triggers this cascade.
-    const touched = meta.premiumStopTouched ? overlay.premiumStop : null;
+    const premiumStop = meta.touched.premiumStop ? overlay.premiumStop : null;
     setPremiumStopByContract((prev) =>
-      prev[cardContractKey] === touched
+      prev[cardContractKey] === premiumStop
         ? prev
-        : { ...prev, [cardContractKey]: touched },
+        : { ...prev, [cardContractKey]: premiumStop },
+    );
+    const entryLimit = meta.touched.entryLimit ? overlay.entryLimit : null;
+    setEntryLimitByContract((prev) =>
+      prev[cardContractKey] === entryLimit
+        ? prev
+        : { ...prev, [cardContractKey]: entryLimit },
     );
   };
   // The ONE place either send path decides what to post. Reading the map is
@@ -233,6 +270,20 @@ export default function Step7Page() {
   const premiumStopDollarFor = (card: TradeCardData): number | null => {
     const key = contractKeyFor(card);
     return premiumStopDollarToSend(key ? premiumStopByContract[key] : null);
+  };
+  // The ONE place every send path resolves the invalidation stop, so a position
+  // cannot be stored at a level different from the one the card was showing.
+  // Falls back to the card's own value, which is what an untouched field means
+  // -- and which stays live as `mergePlan` updates it, precisely because an
+  // untouched field caches `null` rather than a snapshot of the seed.
+  const invalidationFor = (card: TradeCardData): number =>
+    invalidationBySymbol[card.symbol] ?? card.exit.invalidation;
+  // Likewise for the limit price every order path posts, and for the button
+  // label that promises it. A label showing one price while the order carries
+  // another is the same defect wearing a different hat.
+  const entryLimitFor = (card: TradeCardData): number => {
+    const key = contractKeyFor(card);
+    return (key ? entryLimitByContract[key] : null) ?? card.entry.limit;
   };
   // Feature 5 — the shared pre-trade max-loss override cache, keyed by SYMBOL
   // (a risk decision about the underlying, same keying as structuralBySymbol,
@@ -659,7 +710,7 @@ export default function Step7Page() {
    *  until the next portfolio sync. */
   function buildPaperPosition(card: TradeCardData, orderType: 'LMT' | 'MKT', broker: string, orderId: string, livePrice?: number, contracts = 1): PortfolioPosition {
     const cd  = card.contractDetails;
-    const mid = livePrice ?? cd?.mid ?? card.entry.limit;
+    const mid = livePrice ?? cd?.mid ?? entryLimitFor(card);
     const dte = cd?.dte ?? 24;
     const brokerLabel =
       broker === 'tradier_paper' ? 'Tradier Paper' :
@@ -679,7 +730,12 @@ export default function Step7Page() {
       currentPrice:  mid,
       pnlDollar:     0,
       pnlPct:        0,
-      stop:          card.exit.invalidation,
+      // The EDITED invalidation, not the card's original. This drives
+      // STOP_REACHED, so storing the original meant an edit from $195.80 to
+      // $193.00 sent the position out with a stop the user had replaced --
+      // and the alert then fired $2.80 early, at a level nothing on screen
+      // still showed.
+      stop:          invalidationFor(card),
       structuralStop: structuralBySymbol[card.symbol]?.stop?.price ?? null,
       exitPlan:      cardContractKey ? exitPlanByContract[cardContractKey]?.plan ?? null : null,
       maxLossOverride: maxLossOverrideBySymbol[card.symbol] ?? null,
@@ -721,7 +777,7 @@ export default function Step7Page() {
         effect:        'OPEN',
         quantity:      contracts,
         order_type:    'LMT',
-        limit_price:   card.entry.limit,
+        limit_price:   entryLimitFor(card),
         tif:           'DAY',
       });
       const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id, liveQuote?.price, contracts);
@@ -799,7 +855,13 @@ export default function Step7Page() {
       const orderContractKey = contractKeyFor(o.card);
       const orderExitPlan = orderContractKey ? exitPlanByContract[orderContractKey]?.plan ?? null : null;
       const orderMaxLossOverride = maxLossOverrideBySymbol[o.card.symbol] ?? null;
-      const res = await addPosition({ ...positionFromOrder(o, structuralStop, orderExitPlan, orderMaxLossOverride, premiumStopDollarFor(o.card)), recId });
+      const res = await addPosition({
+        ...positionFromOrder(
+          o, structuralStop, orderExitPlan, orderMaxLossOverride,
+          premiumStopDollarFor(o.card), invalidationFor(o.card), entryLimitFor(o.card),
+        ),
+        recId,
+      });
 
       if (res.status === 'rejected') {
         // Backend refused it and the optimistic row was dropped — a real failure.
@@ -955,7 +1017,7 @@ export default function Step7Page() {
                   onClick={placeLimitPaper}
                   disabled={limitPlacing || marketPlacing || !planReady}
                 >
-                  {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${effectiveCard.entry.limit}` : 'Place Limit'}
+                  {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${entryLimitFor(effectiveCard)}` : 'Place Limit'}
                 </button>
                 <button
                   type="button"
@@ -983,6 +1045,11 @@ export default function Step7Page() {
                   // trade that is armed and a trade that is sent cannot end up
                   // at two different premium stops.
                   premiumStopDollar={premiumStopDollarFor(effectiveCard)}
+                  // Same resolution as every other send path, for the same
+                  // reason: an armed trade and a sent trade must not go out at
+                  // two different limit prices. No invalidation counterpart --
+                  // the arm request carries no stop level at all.
+                  entryLimit={entryLimitFor(effectiveCard)}
                 />
               )}
             </>
