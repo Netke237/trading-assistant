@@ -994,7 +994,21 @@ export function TradeCard({
       // Computed once, so the value SENT and the value the card later reports
       // as "from the editable field above" are the same decision, taken against
       // the same premium.
-      const sentPremiumStopPct = premiumStopPctFromDollars(overlay.premiumStop, premium);
+      //
+      // GATED ON TOUCHED-NESS, like every other consumer of this overlay.
+      // `overlay.premiumStop` is SEEDED with `round(scan_mid x global, 2)`, so
+      // on an untouched card it is the global wearing a dollar sign -- and
+      // dividing that scan-time dollar by the freshly fetched `premium` gives a
+      // third number that is neither. With a $5.20 scan mid, a 0.60 global and
+      // a live premium of $4.00 the race was simulated at 78% and the row read
+      // "stops out after losing ~78% of premium, from the editable field
+      // above", for a field nobody had edited and a position that will be
+      // armed at the 60% global. Untouched now yields undefined, which is what
+      // makes the documented fallback to risk_rules.yaml reachable at all --
+      // before this it was dead except on a degenerate seed.
+      const sentPremiumStopPct = touchedRef.current.premiumStop
+        ? premiumStopPctFromDollars(overlay.premiumStop, premium)
+        : undefined;
 
       // Last-resort fallback is `overlay.invalidation`, NOT
       // `data.exit.invalidation`. Once the Invalidation field became
@@ -1293,7 +1307,7 @@ export function TradeCard({
   //
   // Deliberately does NOT call `onEditsChange`: while the field is untouched
   // the parent's cache holds `null` (it caches the dollar amount only when
-  // `meta.premiumStopTouched`), which already means "inherit the global" --
+  // `meta.touched.premiumStop`), which already means "inherit the global" --
   // the same thing following the seed means. Reporting the moved seed would
   // put a number nobody chose back into the send path, which is the defect
   // this early return exists to avoid.
@@ -1422,28 +1436,15 @@ export function TradeCard({
     return recommendedContractSize(riskBudget, riskPerContract);
   }, [exitPlan, data.contractDetails?.mid, limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride]);
 
-  /** Bounds for the per-position premium-stop DOLLAR field.
-   *
-   *  The field used to be `min={0.01}` with no max, and 0.01 is not a bound so
-   *  much as an invitation: `parseFloat("0")` is 0, not NaN, so typing 0 -- the
-   *  natural way to say "no override, use the global" -- clamped to $0.01,
-   *  differed from the seed, and therefore counted as a deliberate edit. On a
-   *  $5.20 mid the server stored 0.01/5.20 = 0.19%, putting the PREMIUM_STOP
-   *  threshold at $5.19 and raising a Critical alert on the first cent of
-   *  adverse move. The same keystroke shrinks the auto-trader's daily-loss
-   *  denominator by ~3000x (`entry_premium * qty * 100 * stop_pct`), so a field
-   *  labelled only "Premium stop" could all but switch that gate off.
-   *
-   *  10%-99% OF THE MID, because that is the range the app already considers a
-   *  stop: the GLOBAL premium stop is bounded `ge=0.10, le=1.0`
-   *  (routers/risk_settings.py), and the server rejects a per-position ratio at
-   *  or above 1. Deriving the dollar bounds from the mid keeps the card and
-   *  those two rules from disagreeing, instead of hard-coding a second opinion.
-   *
-   *  This does NOT restore a way back to inheriting -- clearing the override is
-   *  the Portfolio drawer's empty-field path, and the card has no equivalent.
-   *  It bounds the damage a stray keystroke can do; the inherit affordance is
-   *  the separate approved EDITED-FLAG build. */
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  /** LIVE first, scan-time second. Both anchors below used to read straight off
+   *  `data`, which comes from `scanResult` -- and scanStore persists that to
+   *  localStorage, so after a reload they can be days stale while the page
+   *  shows "Live stock:" and "Live mid:" a few rows up. See the props' notes. */
+  const anchorStockPrice = liveStockPrice ?? arithmeticLiveStockPrice ?? data.price;
+  const anchorMid = liveMid ?? data.contractDetails?.mid ?? 0;
+
   /** Bounds for the Invalidation field, which is now load-bearing: it is what
    *  `buildPaperPosition` stores as `PortfolioPosition.stop`, and
    *  `alertEngine` compares that directly against the live UNDERLYING price.
@@ -1468,18 +1469,17 @@ export function TradeCard({
    *  window is deliberately wide (a 50% adverse move) so it rejects mistyped
    *  digits, not merely wide stops.
    *
-   *  Clamps rather than rejects, matching the Premium stop field. Note the
-   *  clamp is visible: the field re-renders with the clamped number, so a
-   *  fat-fingered 1400 shows as $143.55 rather than being accepted. */
-  const round2 = (n: number) => Math.round(n * 100) / 100;
-
-  /** LIVE first, scan-time second. Both anchors below used to read straight off
-   *  `data`, which comes from `scanResult` -- and scanStore persists that to
-   *  localStorage, so after a reload they can be days stale while the page
-   *  shows "Live stock:" and "Live mid:" a few rows up. See the props' notes. */
-  const anchorStockPrice = liveStockPrice ?? arithmeticLiveStockPrice ?? data.price;
-  const anchorMid = liveMid ?? data.contractDetails?.mid ?? 0;
-
+   *  REJECTS rather than clamps, matching the Premium stop field and the
+   *  Portfolio drawer. Round 8 reversed round 5's clamp choice for both: a
+   *  clamp does not refuse a fat-finger, it renames it -- "1400" became
+   *  $143.55, 1% below spot, stored as the position's stop and firing Critical
+   *  on the first ordinary wiggle while the user believed the stop was 7%
+   *  away. Out of range, the field shows the previous value back.
+   *
+   *  ROUND 9 -- this doc block and the premium-stop one below it were both
+   *  ORPHANED, stacked above each other and attached to `round2`, which is why
+   *  both drifted into asserting the opposite of their code without anything
+   *  pointing at them. Reattached; keep them on the const they describe. */
   const invalidationBounds = useMemo(() => {
     // NO ANCHOR, NO DIRECTIONAL CHECK -- and that residual is stated rather
     // than hidden. With no usable stock price there is nothing to compare a
@@ -1495,6 +1495,30 @@ export function TradeCard({
       : { min: Math.max(0.01, round2(anchorStockPrice * 0.50)), max: Math.max(0.01, round2(anchorStockPrice * 0.99)) };
   }, [anchorStockPrice, data.direction]);
 
+  /** Bounds for the per-position premium-stop DOLLAR field.
+   *
+   *  The field used to be `min={0.01}` with no max, and 0.01 is not a bound so
+   *  much as an invitation: `parseFloat("0")` is 0, not NaN, so typing 0 -- the
+   *  natural way to say "no override, use the global" -- clamped to $0.01,
+   *  differed from the seed, and therefore counted as a deliberate edit. On a
+   *  $5.20 mid the server stored 0.01/5.20 = 0.19%, putting the PREMIUM_STOP
+   *  threshold at $5.19 and raising a Critical alert on the first cent of
+   *  adverse move. The same keystroke shrinks the auto-trader's daily-loss
+   *  denominator by ~3000x (`entry_premium * qty * 100 * stop_pct`), so a field
+   *  labelled only "Premium stop" could all but switch that gate off.
+   *
+   *  10%-99% OF THE MID, because that is the range the app already considers a
+   *  stop: the GLOBAL premium stop is bounded `ge=0.10, le=1.0`
+   *  (routers/risk_settings.py), and the server rejects a per-position ratio at
+   *  or above 1. Deriving the dollar bounds from the mid keeps the card and
+   *  those two rules from disagreeing, instead of hard-coding a second opinion.
+   *
+   *  There IS a way back to inheriting: round 7 added `revert()`, reached by
+   *  clearing the input, with a tooltip on the field saying so -- the same
+   *  gesture the Portfolio drawer uses. This block used to deny that ("the
+   *  card has no equivalent"), which was true when it was written and false
+   *  from round 7 on. A card-level indicator of WHICH fields are pinned is
+   *  still the separate approved EDITED-FLAG build. */
   const premiumStopBounds = useMemo(() => {
     if (!(anchorMid > 0)) return { min: 0.01, max: undefined as number | undefined };
     return {
@@ -1513,9 +1537,12 @@ export function TradeCard({
    *  and no max. On a $2.50 mid, "25.0" typed for "2.50" put
    *  `limit_price: 25.0` on a BUY/OPEN order with nothing between it and the
    *  broker: `checkTradeRisk` and the capital-at-risk row both size off
-   *  `contractDetails.mid`, not off the limit, and the backend's
-   *  `limit_price: Optional[float]` has no bound either. On a wide options book
-   *  a marketable buy limit an order of magnitude above the ask is a real fill.
+   *  `contractDetails.mid`, not off the limit. On a wide options book a
+   *  marketable buy limit an order of magnitude above the ask is a real fill.
+   *  (Round 8 also noted the backend's `limit_price` was an unvalidated
+   *  `Optional[float]`; round 9 bounded it `gt=0` on all three order schemas,
+   *  so a non-positive limit is now refused server-side too. Magnitude is
+   *  still only checked here, where the live mid is known.)
    *
    *  Wider than the other two, deliberately: paying up through the ask is a
    *  legitimate thing to do with a limit order, so this has to admit real
@@ -2694,9 +2721,18 @@ function EditableKV({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
+  // ROUND 9 finding 17 -- the out-of-range REJECT used to be entirely silent:
+  // `setEditing(false)` and the field showed the old number again, so a user
+  // who typed 1400 and looked away could not tell a refusal from an
+  // acceptance, and nothing hinted that a legitimately wider value was
+  // available inside the range. A safety gate nobody can perceive teaches
+  // nothing. Announced politely (aria-live) rather than as an alert: the value
+  // on screen is correct throughout, it is the typed one that was dropped.
+  const [rejected, setRejected] = useState<string | null>(null);
 
   const startEdit = useCallback(() => {
     setDraft(String(value));
+    setRejected(null);
     setEditing(true);
   }, [value]);
 
@@ -2757,6 +2793,12 @@ function EditableKV({
     // when the SEED itself sat outside [min,max]. With no clamp there is
     // nothing to differ.
     if (parsed < minVal || parsed > maxVal) {
+      setRejected(
+        maxVal === Infinity
+          ? `Must be at least ${prefix}${minVal.toFixed(decimals)}${suffix} — kept the previous value.`
+          : `Must be between ${prefix}${minVal.toFixed(decimals)}${suffix} and `
+            + `${prefix}${maxVal.toFixed(decimals)}${suffix} — kept the previous value.`,
+      );
       setEditing(false);
       return;
     }
@@ -2793,9 +2835,10 @@ function EditableKV({
       setEditing(false);
       return;
     }
+    setRejected(null);
     onChange(next);
     setEditing(false);
-  }, [draft, min, max, onChange, onRevert, decimals, value]);
+  }, [draft, min, max, onChange, onRevert, decimals, value, prefix, suffix]);
 
   const handleKey = useCallback(
     (e: React.KeyboardEvent) => {
@@ -2861,6 +2904,13 @@ function EditableKV({
           {mono
             ? <Data size={13} weight={500} tone={tone}>{displayValue}</Data>
             : <Text size={13} weight={500}>{displayValue}</Text>}
+        </span>
+      )}
+      {/* The refusal, announced. `aria-live="polite"` rather than an alert
+          role: nothing on screen is wrong, a typed value was declined. */}
+      {rejected && (
+        <span className={styles.editRejected} aria-live="polite">
+          <Text size={11} tone="caution">{rejected}</Text>
         </span>
       )}
     </div>

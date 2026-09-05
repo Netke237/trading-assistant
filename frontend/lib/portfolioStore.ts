@@ -91,6 +91,13 @@ interface PortfolioStoreState {
   positions: PortfolioPosition[];
   /** Last backend rejection of a save, for the UI to surface. Null when clean. */
   lastSyncError: { symbol: string; contract: string; detail: string; at: number } | null;
+  /** ROUND 9 -- the OFFLINE RETRY's version of the "premium stop could not be
+   *  applied" notice. That path re-POSTs a queued row from a background sync
+   *  with no UI callback in scope, so it could not use the two the order paths
+   *  do, and folded `premiumStopPct ?? null` onto the row saying nothing. The
+   *  row inherits the global, which is a TIGHTER stop than the one asked for.
+   *  The portfolio page renders this the same way it renders lastSyncError. */
+  lastPremiumStopDropped: { symbol: string; contract: string; requestedDollar: number; at: number } | null;
   clearSyncError: () => void;
   hydrate:        (positions: PortfolioPosition[]) => void;
   /** status: 'ok' saved; 'rejected' backend refused (dropped); 'pending' network
@@ -106,7 +113,12 @@ interface PortfolioStoreState {
    *  (see `persistPosition`'s `offline` field) — only on a genuine confirmed
    *  success, or a network hiccup would get marked `synced` despite never
    *  reaching the backend. */
-  addPosition:    (p: PortfolioPosition, opts?: { skipPost?: boolean }) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number }>;
+  /** `premiumStopDropped` carries the per-share dollar stop the caller ASKED
+   *  for when the server could not apply it and the row inherited the global
+   *  instead (a TIGHTER stop than requested). Undefined means nothing was
+   *  dropped. Without it the basket path could not report the fallback at all
+   *  -- see the note in step-7-trade-card's handleSubmit. */
+  addPosition:    (p: PortfolioPosition, opts?: { skipPost?: boolean }) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number; premiumStopDropped?: number }>;
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   closePosition:  (contract: string) => void;
   closePositionRemote: (
@@ -728,7 +740,8 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     (set) => ({
       positions: [],
       lastSyncError: null,
-      clearSyncError: () => set({ lastSyncError: null }),
+      lastPremiumStopDropped: null,
+      clearSyncError: () => set({ lastSyncError: null, lastPremiumStopDropped: null }),
       hydrate: (positions) =>
         set({
           positions: positions.map((p) => ({
@@ -859,7 +872,20 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                 : x,
             ),
           }));
-          return { ok: true, status: 'ok' as const, adjustedQty };
+          // ROUND 9 -- report a premium stop the server could not apply, the
+          // same signal applyPersistedPosition gives its two callers. The
+          // router logs a warning and the row silently inherits the global,
+          // which is TIGHTER than what was asked for, and the router's own
+          // comment concedes "nothing on screen says why". Reachable through
+          // an ordinary fill: a $4.50 stop typed against a $5.20 mid, filled
+          // at $4.20.
+          const premiumStopDropped =
+            p.premiumStopDollar != null
+            && outcome.kind === 'ok'
+            && (outcome.premiumStopPct == null)
+              ? p.premiumStopDollar
+              : undefined;
+          return { ok: true, status: 'ok' as const, adjustedQty, premiumStopDropped };
         }
         if (outcome.kind === 'rejected' || scaleInRefused) {
           const detail = outcome.kind === 'rejected'
@@ -1083,6 +1109,21 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                   // consistent rather than argued away.
                   const { premiumStopDollar: _createOnly, ...rest } = p;
                   void _createOnly;
+                  // Say so when the server could not apply the stop this row
+                  // asked for -- the fourth and last create path to get the
+                  // notice the other three now have.
+                  if (
+                    _createOnly != null
+                    && outcome.kind === 'ok'
+                    && outcome.premiumStopPct == null
+                  ) {
+                    set({
+                      lastPremiumStopDropped: {
+                        symbol: p.symbol, contract: p.contract,
+                        requestedDollar: _createOnly, at: Date.now(),
+                      },
+                    });
+                  }
                   keep.push({
                     ...rest,
                     premiumStopPct:

@@ -122,6 +122,17 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  /* wrap so the out-of-range message (.editRejected) drops to its own line
+     instead of becoming a third column and squeezing the label/value pair. */
+  flex-wrap: wrap;
+}
+
+/* Round 9 — the refusal message under an out-of-range edit. Full width so it
+   reads as a note about the row rather than a value in it. */
+.editRejected {
+  flex-basis: 100%;
+  margin-top: var(--space-1);
+  text-align: right;
 }
 
 .structuralStop {

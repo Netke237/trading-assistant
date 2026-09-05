@@ -21,13 +21,21 @@ here instead.
 
 ## The enforcer
 
-**`scripts/state.py`** renders the file as a table **and verifies it against the
-code.** Every phase carries a `verify` probe — a pattern whose presence or
-absence in a real source file proves the declared status:
+**`scripts/state.py`** renders the file as a table **and checks it against the
+code.** Every phase carries a `verify` probe — a regex whose presence or absence
+in a real source file is checked against the declared status.
+
+**A probe pins that a symbol still EXISTS, never that it still BEHAVES as
+described.** It is a presence test, so it catches a phase marked shipped whose
+code was deleted, and it cannot catch code that drifted away from what the state
+file says it does. Round 7 found the schematic asserting the opposite of shipped
+`formatStopLossBadge` output under a green "No drift", and round 9 found two doc
+blocks doing the same; a passing `state.py` is evidence the symbols are there,
+not that the descriptions are true. Read the code for that.
 
 ```
-python3 scripts/state.py           # render + verify, exit 1 on drift
-python3 scripts/state.py --quiet   # verify only, silent when clean
+python3 scripts/state.py           # render + check, exit 1 on drift
+python3 scripts/state.py --quiet   # check only, silent when clean
 ```
 
 Three probe kinds:

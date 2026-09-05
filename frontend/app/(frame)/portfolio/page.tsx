@@ -76,6 +76,9 @@ function downloadCsv(filename: string, text: string): void {
 export default function PortfolioPage() {
   const positions      = usePortfolioStore((s) => s.positions);
   const lastSyncError  = usePortfolioStore((s) => s.lastSyncError);
+  // ROUND 9 — the offline retry's channel for the "stop could not be applied"
+  // notice; the three foreground create paths report it at the point of sale.
+  const lastPremiumStopDropped = usePortfolioStore((s) => s.lastPremiumStopDropped);
   const clearSyncError = usePortfolioStore((s) => s.clearSyncError);
   const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
   const updatePosition = usePortfolioStore((s) => s.updatePosition);
@@ -170,6 +173,19 @@ export default function PortfolioPage() {
         <div role="alert" className={styles.syncErrorBanner}>
           <Text size={13} tone="reject">
             {lastSyncError.symbol} was not saved: {rejectionMessage(lastSyncError.detail)}
+          </Text>
+          <button type="button" className={styles.syncErrorDismiss} onClick={clearSyncError} aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      )}
+
+      {lastPremiumStopDropped && (
+        <div role="alert" className={styles.syncErrorBanner}>
+          <Text size={13} tone="caution">
+            {lastPremiumStopDropped.symbol}: premium stop of $
+            {lastPremiumStopDropped.requestedDollar.toFixed(2)}/share could not be applied at the
+            saved premium — this position inherits the global stop.
           </Text>
           <button type="button" className={styles.syncErrorDismiss} onClick={clearSyncError} aria-label="Dismiss">
             ×

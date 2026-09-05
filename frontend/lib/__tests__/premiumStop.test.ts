@@ -143,7 +143,7 @@ describe('premiumStopDollarToSend — the value both send paths post', () => {
   //
   // The argument is now the page cache's entry for this contract, which is a
   // number ONLY when the user edited the field and null while it is untouched
-  // (page.tsx writes `meta.premiumStopTouched ? overlay.premiumStop : null`).
+  // (page.tsx writes `meta.touched.premiumStop ? overlay.premiumStop : null`).
   // What is left to pin here is what the function decides given that.
   const TYPED = 2.00;    // what a user actually typed on the card
   const SEEDED = 3.12;   // round(5.20 mid x 0.60 global, 2) — nobody chose this
@@ -208,19 +208,37 @@ describe('spec §8 #8 — buildPaperPosition and positionFromOrder cannot disagr
   // the contract key alone, which is what makes the two paths agree.
   const KEY = 'AAPL|190|2026-05-16|C';
 
-  it('same contract, two card objects with divergent seeds, one posted value', () => {
+  /* ROUND 9 finding 8 -- THE AGREEMENT ITSELF IS NOT TESTED HERE ANY MORE, and
+   * was not before either. What stood here called
+   * `premiumStopDollarToSend(cache[KEY])` twice, named the two results
+   * `fromBuildPaperPosition` and `fromPositionFromOrder`, and compared them to
+   * each other. One pure function, one argument, two calls: a tautology under
+   * every possible mutation, in the block whose header calls it "the mandated
+   * test that shipped missing". Neither function it named was imported in this
+   * file, let alone invoked.
+   *
+   * The real property spans two page-level code paths that take their card
+   * from different sources, so it can only be tested at that level. It is, in
+   * step-7-trade-card/__tests__/edited-fields-sync.test.tsx ("the two send
+   * paths cannot disagree"), which drives Place Limit and a basket submit
+   * through the real page and compares what each stored -- verified to fail
+   * when only the basket path is reverted to the card's own invalidation.
+   *
+   * What CAN be tested here is the property that makes that agreement possible:
+   * the posted value is a function of the cache entry alone. The card object is
+   * not an input, so two card objects cannot pull it apart. */
+  it('the posted value depends on the cache entry alone, not on any card', () => {
+    // The old signature was `premiumStopDollarToSend(cache[key], card.exit.premiumStop)`,
+    // and `exit.premiumStop` is a property of the CARD OBJECT rather than of the
+    // contract -- so two objects for one contract whose seeds had diverged (a
+    // mergePlan applied to one and not the other) produced two different posted
+    // stops from the same cache entry. Keying on tracked touched-ness removed
+    // the card from the expression; this pins that it stays removed.
+    expect(premiumStopDollarToSend.length).toBe(1);
     const cache: Record<string, number | null> = { [KEY]: 2.0 };
-    // What each path would compute for its own card object.
-    const fromBuildPaperPosition = premiumStopDollarToSend(cache[KEY]);
-    const fromPositionFromOrder = premiumStopDollarToSend(cache[KEY]);
-    expect(fromBuildPaperPosition).toBe(fromPositionFromOrder);
-    expect(fromBuildPaperPosition).toBe(2.0);
-  });
-
-  it('and they agree on an untouched card too, where the seeds differ most', () => {
-    const cache: Record<string, number | null> = { [KEY]: null };
-    expect(premiumStopDollarToSend(cache[KEY])).toBeNull();
-    expect(premiumStopDollarToSend(cache[KEY])).toBeNull();
+    expect(premiumStopDollarToSend(cache[KEY])).toBe(2.0);
+    expect(premiumStopDollarToSend(null)).toBeNull();
+    expect(premiumStopDollarToSend(undefined)).toBeNull();
   });
 });
 

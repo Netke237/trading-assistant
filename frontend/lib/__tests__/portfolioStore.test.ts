@@ -1199,6 +1199,50 @@ describe('portfolioStore', () => {
       );
     });
 
+    it('addPosition reports a dropped premium stop, so the basket path can say so too', async () => {
+      // ROUND 9 finding 7. The notice covered 2 of the 4 create paths: it was
+      // wired on placeLimitPaper and placeMarketPaper, while the BASKET path
+      // calls addPosition, whose result carried no premium-stop outcome at all
+      // -- so it could not report the fallback even in principle. The row
+      // inherits the 60% global, which is TIGHTER than the stop asked for.
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: true, json: async () => ({ premiumStopPct: null, entryPrice: 4.2 }),
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+
+      const { result } = renderHook(() => usePortfolioStore());
+      act(() => { usePortfolioStore.setState({ positions: [] }); });
+
+      let res!: Awaited<ReturnType<typeof result.current.addPosition>>;
+      await act(async () => {
+        res = await result.current.addPosition(
+          makePosition({ recId: 'REC-BASKET-DROP', premiumStopDollar: 4.5 }),
+        );
+      });
+
+      expect(res.status).toBe('ok');
+      expect(res.premiumStopDropped).toBe(4.5);
+    });
+
+    it('addPosition reports NO drop when the server applied the stop', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: true, json: async () => ({ premiumStopPct: 0.6, entryPrice: 4.2 }),
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+
+      const { result } = renderHook(() => usePortfolioStore());
+      act(() => { usePortfolioStore.setState({ positions: [] }); });
+
+      let res!: Awaited<ReturnType<typeof result.current.addPosition>>;
+      await act(async () => {
+        res = await result.current.addPosition(
+          makePosition({ recId: 'REC-BASKET-OK', premiumStopDollar: 2.0 }),
+        );
+      });
+
+      expect(res.premiumStopDropped).toBeUndefined();
+    });
+
     it('leaves the entry alone when the server did not report one', () => {
       // A response without a usable entry must not blank the row's own.
       const pos = makePosition({ recId: 'REC-NO-ENTRY', entryPrice: 5.20 });

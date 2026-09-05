@@ -871,6 +871,35 @@ describe('TradeCard', () => {
     expect(api.getFirstPassageEstimate).not.toHaveBeenCalled();
   });
 
+  it('sends the premium-stop barrier ONLY once the field has been edited', async () => {
+    // ROUND 9 finding 13, the other direction. A TOUCHED field is a real
+    // choice and must reach the race -- converted against the fresh premium,
+    // which is the point of computing it at send time. $0.90 typed on a card
+    // whose live premium is $2.75 is a 32.7% barrier.
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
+      price: 2.75, delta: 0.42, theta: -0.08, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce({
+      targets: [], invalidation: { probability: 0.30, expectedDays: 4 },
+    });
+    render(<TradeCard data={mockTradeCard} />);
+    expandLadder();
+
+    fireEvent.click(screen.getByLabelText('Edit Premium stop'));
+    const input = screen.getByLabelText('Edit Premium stop') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '0.90' } });
+    fireEvent.blur(input);
+
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+
+    await waitFor(() => expect(api.getFirstPassageEstimate).toHaveBeenCalled());
+    const sent = (api.getFirstPassageEstimate as jest.Mock).mock.calls.at(-1)![0];
+    expect(sent.premium_stop_pct).toBeCloseTo(0.9 / 2.75, 10);
+    // And specifically NOT the seed-over-fresh-premium conflation.
+    expect(sent.premium_stop_pct).not.toBeCloseTo(1.5 / 2.75, 10);
+  });
+
   it('fetches and displays the first-passage estimate on button click, using fresh quotes', async () => {
     (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 186.1 });
     (api.getContractQuote as jest.Mock).mockResolvedValueOnce({
@@ -902,10 +931,18 @@ describe('TradeCard', () => {
           t1_pct: 0.20,
           t2_pct: 0.35,
           t3_pct: 0.50,
-          // The barrier race's third barrier. The card's "Premium stop" field
-          // holds a DOLLAR amount ($1.50 in this fixture); the barrier is a
-          // FRACTION of the fresh premium ($2.75), so 1.50 / 2.75.
-          premium_stop_pct: 1.5 / 2.75,
+          // ROUND 9 finding 13. The barrier race's third barrier is sent ONLY
+          // when the user has edited the Premium stop field. Untouched, as
+          // here, `overlay.premiumStop` is just the seed
+          // `round(scan_mid x global, 2)` -- the global wearing a dollar sign
+          // -- and dividing that scan-time dollar by the FRESHLY FETCHED
+          // premium ($2.75 here, against a $2.50 scan mid) produced a third
+          // number that is neither: the race simulated 1.50/2.75 = 54.5% and
+          // the row read "from the editable field above" for a field nobody
+          // touched. `undefined` is what makes the documented fallback to
+          // risk_rules.yaml's premium_stop_pct reachable; before this it was
+          // dead except on a degenerate seed.
+          premium_stop_pct: undefined,
           // No scan context in this test, so the backend's own Swing default
           // applies rather than a guessed preset.
           horizon_preset: undefined,

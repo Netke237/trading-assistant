@@ -8,7 +8,7 @@
  * Successful submits surface a bottom-right toast with a Portfolio link.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text } from '@/components/primitives';
 import { TradeCard, type EditOverlay, type TouchedFields } from '@/components/organisms/TradeCard';
@@ -217,7 +217,7 @@ export default function Step7Page() {
   // `exit.premiumStop` (the global percentage in dollars), the card reports its
   // whole overlay on every patch, and the seed itself moves under an untouched
   // field when `mergePlan` lands. Only the card knows which it is, so it tells
-  // us -- see `onEditsChange`'s `meta.premiumStopTouched`.
+  // us -- see `onEditsChange`'s `meta.touched.premiumStop`.
   const [premiumStopByContract, setPremiumStopByContract] = useState<Record<string, number | null>>({});
   // The card's editable INVALIDATION -- the underlying stock level that becomes
   // `PortfolioPosition.stop` and drives STOP_REACHED. Keyed by SYMBOL, like
@@ -381,7 +381,22 @@ export default function Step7Page() {
   const [marketPlacing,  setMarketPlacing]    = useState(false);
   const [paperOrderId,   setPaperOrderId]     = useState<string | null>(null);
   const [orderError,     setOrderError]       = useState<string | null>(null);
-  const [sizeAdjustedNote, setSizeAdjustedNote] = useState<string | null>(null);
+  // A LIST, not one slot. Both writers below used to call `setSizeAdjustedNote`
+  // on the same string state, so an order that was BOTH size-reduced and had
+  // its premium stop dropped showed whichever landed second and silently lost
+  // the other -- two independent things the user needs to know about the same
+  // fill. Appending keeps both.
+  const [saveNotes, setSaveNotes] = useState<string[]>([]);
+  const addSaveNote = useCallback((note: string) => {
+    setSaveNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
+  }, []);
+  const sizeNote = (adjustedQty: number) =>
+    `Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`;
+  // The one place the card can tell the user their premium stop did not survive
+  // the save-time re-anchor. The router logs it server-side and the position
+  // quietly inherits the global -- a TIGHTER stop than the one asked for.
+  const droppedStopNote = (requested: number) =>
+    `Premium stop of $${requested.toFixed(2)}/share could not be applied at the filled premium — this position inherits the global stop.`;
   const [liveQuote,      setLiveQuote]        = useState<{ price: number; delta: number; theta: number; ivRank: number; spread: number; volume: number } | null>(null);
   const [liveStockPrice, setLiveStockPrice]   = useState<number | null>(null);
   const [fetchingQuote,  setFetchingQuote]    = useState(false);
@@ -454,7 +469,7 @@ export default function Step7Page() {
   }, [active, setSelectedSymbol]);
 
   // Clear paper order feedback when the user navigates to a different candidate.
-  useEffect(() => { setPaperOrderId(null); setOrderError(null); setSizeAdjustedNote(null); }, [active]);
+  useEffect(() => { setPaperOrderId(null); setOrderError(null); setSaveNotes([]); }, [active]);
 
   const addPosition = usePortfolioStore((s) => s.addPosition);
   const incrementDaily = useRiskStore((s) => s.incrementDaily);
@@ -844,14 +859,11 @@ export default function Step7Page() {
       });
       const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id, liveQuote?.price, contracts);
       const saved = await persistPosition(pos);
-      const { rejected, detail } = applyPersistedPosition(saved, pos, addPosition, (adjustedQty) => {
-        setSizeAdjustedNote(`Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
-      }, (requested) => {
-        // The one place the card can tell the user their premium stop did not
-        // survive the save-time re-anchor — until now the router logged it
-        // server-side and the position quietly inherited the global.
-        setSizeAdjustedNote(`Premium stop of $${requested.toFixed(2)}/share could not be applied at the filled premium — this position inherits the global stop.`);
-      });
+      const { rejected, detail } = applyPersistedPosition(
+        saved, pos, addPosition,
+        (adjustedQty) => addSaveNote(sizeNote(adjustedQty)),
+        (requested) => addSaveNote(droppedStopNote(requested)),
+      );
       if (rejected) {
         setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${detail}`);
         return;
@@ -884,14 +896,11 @@ export default function Step7Page() {
       });
       const pos = buildPaperPosition(card, 'MKT', selectedBroker, res.order_id, liveQuote?.price, contracts);
       const saved = await persistPosition(pos);
-      const { rejected, detail } = applyPersistedPosition(saved, pos, addPosition, (adjustedQty) => {
-        setSizeAdjustedNote(`Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
-      }, (requested) => {
-        // The one place the card can tell the user their premium stop did not
-        // survive the save-time re-anchor — until now the router logged it
-        // server-side and the position quietly inherited the global.
-        setSizeAdjustedNote(`Premium stop of $${requested.toFixed(2)}/share could not be applied at the filled premium — this position inherits the global stop.`);
-      });
+      const { rejected, detail } = applyPersistedPosition(
+        saved, pos, addPosition,
+        (adjustedQty) => addSaveNote(sizeNote(adjustedQty)),
+        (requested) => addSaveNote(droppedStopNote(requested)),
+      );
       if (rejected) {
         setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${detail}`);
         return;
@@ -939,6 +948,14 @@ export default function Step7Page() {
         // Backend refused it and the optimistic row was dropped — a real failure.
         failures.push(`${o.card.symbol}: ${res.detail ?? 'not saved'}`);
         continue;
+      }
+      // ROUND 9 — the basket path could not report a dropped premium stop at
+      // all: `addPosition`'s result carried no premium-stop outcome, so the
+      // only two paths that told the user were placeLimitPaper and
+      // placeMarketNow. Same fallback, same silence, one of four create paths
+      // away. Symbol-qualified because a basket submits several at once.
+      if (res.premiumStopDropped != null) {
+        addSaveNote(`${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped)}`);
       }
       if (res.status === 'pending') {
         // Optimistically added but not yet confirmed by the backend. Don't count it
@@ -1128,7 +1145,9 @@ export default function Step7Page() {
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">Order placed — ID: {paperOrderId}</Text>}
-              {sizeAdjustedNote && <Text size={12} tone="caution">{sizeAdjustedNote}</Text>}
+              {saveNotes.map((n) => (
+                <Text key={n} size={12} tone="caution">{n}</Text>
+              ))}
               {orderError   && <Text size={12} tone="reject">{orderError}</Text>}
               {planReady && (
                 <AutoTradeArm

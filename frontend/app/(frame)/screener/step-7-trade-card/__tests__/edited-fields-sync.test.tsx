@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 import Step7TradeCardPage from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
@@ -347,6 +347,42 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     expect(usePortfolioStore.getState().positions[0].stop).toBe(CARD_INVALIDATION);
   });
 
+  it('SAYS SO when it rejects, instead of silently showing the old number back', async () => {
+    // ROUND 9 finding 17. Round 8's reject-don't-clamp policy is right -- a
+    // clamp renames a fat-finger rather than refusing it -- but it shipped
+    // with no feedback of any kind: `setEditing(false)` and the field showed
+    // the previous value again. A user who typed 1400 and looked away could
+    // not tell a refusal from an acceptance, and nothing pointed at the range
+    // a legitimately wide stop would have to sit in.
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    expandLadder();
+
+    editField('Invalidation', String(CARD_INVALIDATION), '1400');
+
+    const note = await screen.findByText(/kept the previous value/i);
+    expect(note).toBeInTheDocument();
+    // It names the range, so the user learns what WOULD be accepted.
+    expect(note.textContent).toMatch(/between \$\d/);
+    // ...and the field genuinely kept the plan's value.
+    expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent(String(CARD_INVALIDATION));
+  });
+
+  it('retires the rejection note once a value inside the bound is accepted', async () => {
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    expandLadder();
+
+    editField('Invalidation', String(CARD_INVALIDATION), '1400');
+    await screen.findByText(/kept the previous value/i);
+
+    editField('Invalidation', String(CARD_INVALIDATION), '132');
+    await waitFor(() =>
+      expect(screen.queryByText(/kept the previous value/i)).not.toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('132');
+  });
+
   it('accepts an invalidation inside the bound', async () => {
     // The control for the test above: the rejection must not swallow a stop the
     // user legitimately moved. Price 150 bullish -> [75.00, 148.50].
@@ -360,5 +396,108 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     await placeLimit();
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     expect(usePortfolioStore.getState().positions[0].stop).toBe(132);
+  });
+});
+
+describe('spec §8 #8 — the two send paths cannot disagree', () => {
+  /* ROUND 9 finding 8. This property had a test in premiumStop.test.ts that
+   * could not fail: it called `premiumStopDollarToSend(cache[KEY])` twice,
+   * assigned the results to names suggesting two different code paths, and
+   * compared them to each other. One pure function, one argument, two calls --
+   * a tautology under every possible mutation, in the block whose own header
+   * called it "the mandated test that shipped missing". Neither
+   * `buildPaperPosition` nor `positionFromOrder` was imported there.
+   *
+   * The two paths take their card from DIFFERENT sources -- `effectiveCard` on
+   * the direct path, `o.card` out of `resolveBasketCards` on the basket path --
+   * which is exactly why "they read the same map on adjacent lines" was never
+   * enough. This drives BOTH through the real page and compares what each
+   * actually stored.
+   */
+  const originalFetch2 = global.fetch;
+  beforeEach(() => {
+    localStorage.clear();
+    act(() => {
+      useScanStore.setState({
+        scanResult: { candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        pickedContracts: {}, contractsBySymbol: {}, scanOverrides: {},
+      } as any);
+      usePortfolioStore.setState({ positions: [], lastSyncError: null });
+      useSettingsStore.setState((s) => ({
+        ibkrPaper: { ...s.ibkrPaper, accountId: 'ACC', baseUrl: 'https://localhost:7499/v1/api' },
+      }) as any);
+      useAutoTradeStore.setState({ selectedBroker: null, autoMode: 'manual', armed: false, lastOrderId: null });
+    });
+    jest.clearAllMocks();
+    (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+    (api.getContractQuote as jest.Mock).mockResolvedValue({
+      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    });
+    (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as unknown as typeof fetch;
+  });
+  afterEach(() => { global.fetch = originalFetch2; });
+
+  function expandLadder() {
+    if (screen.queryByLabelText('Edit Invalidation')) return;
+    fireEvent.click(screen.getByRole('button', { name: /fixed % ladder plan/i }));
+  }
+  /** Click the field open and commit a value. Addresses the input by its own
+   *  label rather than by its current display text, so it does not depend on
+   *  how each field happens to render its seed. */
+  function editField(label: string, to: string) {
+    fireEvent.click(screen.getByLabelText(`Edit ${label}`));
+    const input = screen.getByLabelText(`Edit ${label}`) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: to } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+  }
+
+  /** Edit all three threaded fields on AAA, identically in both runs. */
+  async function editAllThree() {
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    expandLadder();
+    editField('Invalidation', '132');
+    editField('Premium stop', '0.90');
+    editField('Limit', '2.71');
+    await waitFor(() => expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('132'));
+  }
+
+  it('the direct order path and the basket path store the SAME edited values', async () => {
+    // ── Path 1: Place Limit, straight from the active card.
+    await editAllThree();
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    fireEvent.click(limitBtn);
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    const direct = usePortfolioStore.getState().positions[0]!;
+
+    cleanup();
+    act(() => { usePortfolioStore.setState({ positions: [] }); });
+
+    // ── Path 2: pin AAA to the basket and submit, which goes through
+    //    resolveBasketCards -> positionFromOrder, a different card object.
+    await editAllThree();
+    fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
+    const submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    const basket = usePortfolioStore.getState().positions[0]!;
+
+    // The three threaded fields agree across the two paths...
+    expect(basket.stop).toBe(direct.stop);
+    expect(basket.premiumStopDollar).toBe(direct.premiumStopDollar);
+    expect(basket.entryPrice).toBe(direct.entryPrice);
+    // ...and they are the EDITED values, not the card's originals. Without
+    // this the assertions above would pass on two identically-wrong rows.
+    expect(direct.stop).toBe(132);
+    expect(direct.premiumStopDollar).toBe(0.9);
+    expect(basket.stop).toBe(132);
+    expect(basket.premiumStopDollar).toBe(0.9);
+    expect(basket.stop).not.toBe(CARD_INVALIDATION);
   });
 });
