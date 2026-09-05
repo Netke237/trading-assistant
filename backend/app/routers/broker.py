@@ -127,7 +127,16 @@ class StockOrderRequest(BaseModel):
     effect: Literal["OPEN", "CLOSE"]
     quantity: int = Field(..., ge=1)
     order_type: Literal["MKT", "LMT"] = "LMT"
-    limit_price: Optional[float] = None
+    # gt=0 -- ROUND 9. A limit price is the one field on this request whose
+    # fat-finger is an EXECUTION error rather than an alerting one, and it was
+    # an unvalidated Optional[float]: nothing between the request and the
+    # broker rejected 0, a negative, or a mistyped magnitude. Round 8 bounded
+    # the React input that feeds it and named this schema in the same breath as
+    # the reason that finding was CRITICAL, then left it open -- and the card
+    # is not this endpoint's only client. A non-positive limit is never a
+    # price, on any client; magnitude stays the caller's judgement, since only
+    # the caller knows the live quote.
+    limit_price: Optional[float] = Field(default=None, gt=0)
     tif: Literal["DAY", "GTC"] = "DAY"
 
 
@@ -139,7 +148,16 @@ class OptionOrderRequest(BaseModel):
     effect: Literal["OPEN", "CLOSE"]
     quantity: int = Field(..., ge=1)
     order_type: Literal["MKT", "LMT"] = "LMT"
-    limit_price: Optional[float] = None
+    # gt=0 -- ROUND 9. A limit price is the one field on this request whose
+    # fat-finger is an EXECUTION error rather than an alerting one, and it was
+    # an unvalidated Optional[float]: nothing between the request and the
+    # broker rejected 0, a negative, or a mistyped magnitude. Round 8 bounded
+    # the React input that feeds it and named this schema in the same breath as
+    # the reason that finding was CRITICAL, then left it open -- and the card
+    # is not this endpoint's only client. A non-positive limit is never a
+    # price, on any client; magnitude stays the caller's judgement, since only
+    # the caller knows the live quote.
+    limit_price: Optional[float] = Field(default=None, gt=0)
     tif: Literal["DAY", "GTC"] = "DAY"
     conid: Optional[int] = None
 

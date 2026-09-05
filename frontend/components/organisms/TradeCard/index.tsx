@@ -2701,6 +2701,30 @@ function EditableKV({
   }, [value]);
 
   const save = useCallback(() => {
+    // A COMPLETE decimal literal, or nothing. `parseFloat` is happy to
+    // TRUNCATE: it reads "2." as 2 and "2.7abc" as 2.7, and nothing downstream
+    // can tell a finished number from an interrupted one.
+    //
+    // Round 8 moved this input to type="text" so a half-typed "2." would stop
+    // being sanitized to "" and misread as the clear-to-inherit gesture. That
+    // was right, and it left the other half open: the string now survives all
+    // the way to `parseFloat`, which quietly commits 2. A user with a
+    // committed $2.71 who reopened the field to type $2.40, got as far as "2."
+    // and tabbed away, ended up with $2.00 shown, `touched` set, and
+    // `limit_price: 2.00` on a live BUY/OPEN order -- round 8 traded "reverts
+    // to a value the user didn't choose" for "commits a value the user didn't
+    // choose", and only the second one reaches a broker.
+    //
+    // A trailing point is the interrupted case; ".5" is a complete way to
+    // write 0.5 and stays accepted. Anything incomplete is a no-op, showing
+    // the previous value back -- the same honest answer the out-of-range
+    // policy below gives.
+    const trimmed = draft.trim();
+    const isCompleteNumber = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(trimmed);
+    if (trimmed !== '' && !isCompleteNumber) {
+      setEditing(false);
+      return;
+    }
     const parsed = parseFloat(draft);
     if (isNaN(parsed)) {
       // An EMPTY field is a deliberate gesture, not a typo: on a field that can

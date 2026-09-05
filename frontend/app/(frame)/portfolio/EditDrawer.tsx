@@ -884,6 +884,20 @@ function PremiumStopEditor({
       dirtyRef.current = false;
       return;
     }
+    // A COMPLETE decimal literal, or a no-op. Same round-9 finding as the trade
+    // card's EditableKV, reached through a different parser: `Number("48.")` is
+    // 48, so a user part-way through typing 48.5 who tabbed away PATCHed a live
+    // per-position alert threshold to 0.48. Round 8 moved this input to
+    // type="text" precisely so half-typed literals would stop being sanitized
+    // to "" and misread as the clear-to-inherit gesture -- which is exactly
+    // what lets an interrupted literal reach `Number` intact.
+    //
+    // ".5" is a complete way to write 0.5 and stays accepted; a trailing point
+    // is the interrupted case. Reverting to `stored` is the same honest answer
+    // the two bounds checks below give.
+    if (!/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw.trim())) {
+      setDraft(stored); dirtyRef.current = false; return;
+    }
     const pct = Number(raw);
     // Out of range REVERTS, it does not clear. It used to clear, so typing
     // 100 -- the natural way to ask for "hold it to zero" -- silently dropped
@@ -898,6 +912,10 @@ function PremiumStopEditor({
     // a still-true dirtyRef, and a rounded value that does not equal the
     // unrounded stored fraction, and PATCHes a live risk setting nobody
     // touched.
+    // Still load-bearing, and now REACHABLE -- the guard above rejects a
+    // non-numeric draft first, but this one is what stops any future edit to
+    // that regex from letting a NaN through to the bounds checks (where
+    // `!(NaN > 0 && NaN < 1)` happens to revert, by luck rather than design).
     if (!Number.isFinite(pct)) { setDraft(stored); dirtyRef.current = false; return; }
     // 4dp on the fraction == 2dp on the percent, the precision `stored` renders.
     const next = Number((pct / 100).toFixed(4));

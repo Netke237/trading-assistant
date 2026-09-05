@@ -239,6 +239,35 @@ async def add_position(
         ]
         entry_stock_price = live_price
 
+    # ROUND 9 -- a USER-TYPED stop on the wrong side of the underlying is
+    # refused here, not just in the React input that usually produces it.
+    #
+    # The card bounds this field directionally against the live quote, and
+    # round 8 recorded why the two failure modes are asymmetric: a bullish stop
+    # ABOVE spot fires STOP_REACHED Critical on the first scan (loud, and
+    # wrong), while one far BELOW never fires at all (silent, and worse). The
+    # card was the sole guard for both -- the schema had no bound and no
+    # direction check, so `stop: 1400` on a $145 stock was accepted and stored
+    # by any other client, a replayed request, or a future call site.
+    #
+    # Only the DIRECTION is checked, never the magnitude: how wide a stop
+    # should be is the caller's judgement, and only the caller knows what it is
+    # trading around. Only user-set stops are checked, because a plan-derived
+    # one is re-anchored above and is the plan's business, not this guard's.
+    if body.stopIsUserSet and adjusted_stop is not None and live_price and live_price > 0:
+        wrong_side = (
+            adjusted_stop >= live_price if body.direction == "Bullish"
+            else adjusted_stop <= live_price
+        )
+        if wrong_side:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"A {body.direction.lower()} stop of {adjusted_stop:.2f} is on the wrong "
+                    f"side of the underlying at {live_price:.2f}; it would fire immediately."
+                ),
+            )
+
     live_entry = (live_quote or {}).get("price") if isinstance(live_quote, dict) else None
     # ROUND FIRST, THEN TEST. `float(live_entry) > 0` on the raw quote let a
     # sub-cent live price (0.004) pass the guard and then round to 0.0, which

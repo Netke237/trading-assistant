@@ -101,6 +101,41 @@ describe('AutoTradeArm — backend payload portfolio_value', () => {
     expect(payload.premium_stop_pct).toBeUndefined();
   });
 
+  it('books the LIVE mid as entry_premium, not the scan-time snapshot', async () => {
+    // ROUND 9 finding 5. `card.contractDetails.mid` comes off a scanResult that
+    // scanStore persists to localStorage, so after a reload it can be days old
+    // -- the staleness round 8 fixed for the card's own bounds and did not
+    // carry here. It is booked as the entry, it is the denominator the stop
+    // fraction is derived against, and the backend's _check_daily_loss sizes
+    // `entry_premium * quantity * 100 * stop_pct` off it.
+    //
+    // Scanned at $2.50, reopened at $6.00, with a $1.00 dollar stop:
+    //   stale -> entry 2.50, pct 0.400  (gate books 2.4x too little risk)
+    //   live  -> entry 6.00, pct 0.1667
+    render(
+      <AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={6.0} />,
+    );
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const payload = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(payload.entry_premium).toBe(6.0);
+    expect(payload.entry_premium).not.toBe(2.5);
+    expect(payload.premium_stop_pct).toBeCloseTo(1.0 / 6.0, 6);
+  });
+
+  it('falls back to the scan-time mid when no live quote has been fetched', async () => {
+    // The prop is additive: a page that has not fetched a quote yet behaves
+    // exactly as it did before.
+    render(
+      <AutoTradeArm card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={null} />,
+    );
+    fireEvent.click(screen.getByText(/^Arm —/));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    expect((api.armAutoTrade as jest.Mock).mock.calls[0][0].entry_premium).toBe(2.5);
+  });
+
   it('reflects an already-armed backend state after reload', async () => {
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValueOnce({ armed: true });
     render(<AutoTradeArm card={mockCard} broker="ibkr_paper" />);

@@ -345,6 +345,9 @@ describe('TradeCard', () => {
     // $2.50, the touched flag cleared, and the order posted 2.50. The two
     // cases are the same string, so no check on the draft can separate them --
     // the input is type="text" now, which is what this pins.
+    //
+    // ROUND 9 corrected the other half: surviving to `parseFloat` is not the
+    // same as being a number. See the assertions at the bottom.
     const onEditsChange = jest.fn();
     render(<TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />);
     const limit = () => screen.getByLabelText('Edit Limit').textContent;
@@ -361,10 +364,17 @@ describe('TradeCard', () => {
     fireEvent.change(input, { target: { value: '2.' } });
     fireEvent.blur(input);
 
-    // parseFloat('2.') is 2, which is inside [0.63, 7.50] -- so this commits 2,
-    // it does NOT revert to the seed. Either way the seed must not come back.
+    // ROUND 9 finding 4. It must not revert to the seed (round 8's point) AND
+    // it must not commit the truncation either. `parseFloat('2.')` is 2, which
+    // sits inside [0.63, 7.50], so the value went straight through as a
+    // deliberate $2.00 -- shown on the card, marked touched, and posted as
+    // `limit_price` on a live BUY/OPEN order. An interrupted literal is a
+    // no-op: the previously committed edit stands.
+    expect(limit()).toBe('$2.71');
+    expect(limit()).not.toBe('$2.00');
     expect(limit()).not.toBe(`$${mockTradeCard.entry.limit.toFixed(2)}`);
     expect(onEditsChange.mock.calls.at(-1)![1].touched.entryLimit).toBe(true);
+    expect(onEditsChange.mock.calls.at(-1)![0].entryLimit).toBe(2.71);
   });
 
   it('bounds the invalidation on the BEARISH side too', () => {

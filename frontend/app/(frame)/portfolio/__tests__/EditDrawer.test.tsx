@@ -947,12 +947,32 @@ describe('PremiumStopEditor', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  // The other early return in `commit`, `!Number.isFinite(pct)`, is not
-  // reachable through this UI and so is not tested here: the field is
-  // `type="number"`, and a browser (and jsdom) reports a non-numeric entry as
-  // an EMPTY value, which takes the documented clear-to-inherit branch above
-  // rather than the non-finite one. It clears dirtyRef regardless, so the two
-  // revert paths cannot diverge if that ever changes.
+  // ROUND 9 finding 11. This comment used to say the `!Number.isFinite(pct)`
+  // branch was unreachable "because the field is `type=\"number\"`, and a
+  // browser reports a non-numeric entry as an EMPTY value". Round 8 changed
+  // the input to `type="text" inputMode="decimal"` -- in the same commit --
+  // so the premise was false about the shipped input from the moment it was
+  // written, and it was arguing for skipping a branch that a user reaches by
+  // typing any non-numeric character. Tested now, along with the half-typed
+  // literal that reaches the same revert through the round-9 guard.
+
+  it.each([
+    ['abc',   'a non-numeric entry'],
+    ['1.2.3', 'a malformed number'],
+    ['48.',   'a literal the user was still typing'],
+  ])('reverts on %s (%s) rather than PATCHing a truncation', (typed) => {
+    // `Number("48.")` is 48, so before round 9 the last case silently PATCHed
+    // a live per-position alert threshold to 0.48 for a user on their way to
+    // 48.5. The other two took the non-finite branch the comment above claimed
+    // could not be reached.
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 0.45 }), onChange);
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: typed } });
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input.value).toBe('45');   // the stored value, shown back
+  });
 
   it('a real edit still PATCHes after a reverted one', () => {
     // The guard must not be so eager that it swallows a genuine edit made
@@ -1050,5 +1070,48 @@ describe('the drawer preview, the alert engine and the backend fire at one price
       { premiumStopPct: 0.60 } as Parameters<typeof scanPortfolio>[1],
     ).filter((a) => a.alertType === 'PREMIUM_STOP');
     expect(alerts).toHaveLength(1);
+  });
+
+  it('the PRINTED price is one that actually fires, when floor and round differ', () => {
+    // ROUND 9 finding 9. Round 6's fix was to FLOOR this preview, because both
+    // engines compare `currentPrice <= threshold` at full precision and a
+    // rounded-up price advertises a level that fires nothing. The fix shipped
+    // with no coverage: the two cases above both land on thresholds where
+    // floor and round agree (4.20 x 0.55 = 2.31, 4.20 x 0.40 = 1.68), and step
+    // (3) feeds `scanPortfolio` the UNFLOORED `expected` rather than the string
+    // it just asserted -- so mutating `Math.floor` to `Math.round` in
+    // EditDrawer.tsx left all 69 tests green.
+    //
+    // 5.20 at 0.4855 gives 2.6754: floor 2.67, round 2.68. Only 2.67 fires.
+    useSettingsStore.setState({ premiumStopPct: 0.60 });
+    const position = makeOptionPosition({ premiumStopPct: 0.4855, entryPrice: 5.20 });
+    const exact = premiumStopThresholdPrice(5.20, 0.4855);
+    expect(exact).toBeGreaterThan(2.67);
+    expect(exact).toBeLessThan(2.68);   // the two candidates genuinely differ
+
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByText(/premium \$2\.67/)).toBeInTheDocument();
+    expect(screen.queryByText(/premium \$2\.68/)).not.toBeInTheDocument();
+
+    // Read the price back OFF THE SCREEN and check the engine fires at it --
+    // the property the preview actually promises. Feeding the unrounded
+    // threshold here, as the cases above do, cannot catch a rounding defect.
+    const printed = Number(
+      /premium \$(\d+\.\d{2})/.exec(
+        screen.getByText(/premium \$\d+\.\d{2}/).textContent ?? '',
+      )![1],
+    );
+    const firesAtPrinted = scanPortfolio(
+      [{ ...position, currentPrice: printed }],
+      { premiumStopPct: 0.60 } as Parameters<typeof scanPortfolio>[1],
+    ).filter((a) => a.alertType === 'PREMIUM_STOP');
+    expect(firesAtPrinted).toHaveLength(1);
+
+    // And the rounded-up price it must NOT print would have fired nothing.
+    const firesAtRounded = scanPortfolio(
+      [{ ...position, currentPrice: 2.68 }],
+      { premiumStopPct: 0.60 } as Parameters<typeof scanPortfolio>[1],
+    ).filter((a) => a.alertType === 'PREMIUM_STOP');
+    expect(firesAtRounded).toHaveLength(0);
   });
 });

@@ -19,7 +19,10 @@ class ArmRequest(BaseModel):
     action:          Literal["BUY", "SELL"]
     quantity:        int = Field(..., ge=1)
     order_type:      Literal["MKT", "LMT"] = "LMT"
-    limit_price:     Optional[float] = None
+    # gt=0 -- ROUND 9, same reasoning as broker.py's two order schemas: a
+    # non-positive limit is never a price, and this endpoint reaches a broker
+    # without passing through either of them.
+    limit_price:     Optional[float] = Field(default=None, gt=0)
     conid:           Optional[int] = None
     entry_premium:   float = 0.0   # set to actual option mid; exposure check is skipped if 0
     portfolio_value: float = 50_000.0

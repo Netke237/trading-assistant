@@ -56,6 +56,23 @@ interface AutoTradeArmProps {
    *  the auto-trader places no protective order (see the daily-loss-gate note
    *  in PROJECT_STATE.json's open questions). */
   entryLimit?: number | null;
+  /** The live option mid, fetched by the page (`liveQuote?.price`) -- the same
+   *  number it already hands TradeCard as `liveMid` and prints as "Live mid".
+   *
+   *  ROUND 9. `card.contractDetails.mid` is a SCAN-TIME snapshot off a
+   *  `scanResult` that `scanStore` persists to localStorage, so after a reload
+   *  it can be days old -- the exact staleness round 8 fixed for the card's
+   *  own bounds and did not carry to this path. It matters three times over
+   *  here: it is booked as `entry_premium`, it is the denominator
+   *  `premiumStopPctFromDollars` divides the dollar stop by, and the backend's
+   *  `_check_daily_loss` sizes `entry_premium * quantity * 100 * stop_pct` off
+   *  it. Scanned at $2.50 and reopened at $6.00, the daily-loss gate booked
+   *  2.4x less risk than the trade carries and a $1.00 stop armed at 40%
+   *  instead of 17%, with "Live mid: $6.00" on screen a few rows below.
+   *
+   *  Null/undefined falls back to the scan-time mid, which is all that was
+   *  ever available before. */
+  liveMid?: number | null;
 }
 
 const MODE_LABELS: Record<AutoTradeMode, string> = {
@@ -64,7 +81,7 @@ const MODE_LABELS: Record<AutoTradeMode, string> = {
   armed:     'Armed — fire on next qualifying condition',
 };
 
-export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null }: AutoTradeArmProps) {
+export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = null, entryLimit = null, liveMid = null }: AutoTradeArmProps) {
   const { autoMode, setAutoMode, armed, setArmed, lastOrderId, setLastOrderId } = useAutoTradeStore();
   const [working, setWorking] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -87,7 +104,11 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
 
   // ONE premium, read once: it is both what the arm request books as the
   // entry and the denominator the premium-stop fraction is derived against.
-  const entryPremium = card.contractDetails?.mid ?? entryLimit ?? card.entry.limit;
+  // LIVE FIRST -- see the `liveMid` prop doc. The scan-time mid stays as the
+  // fallback for when no quote has been fetched.
+  const entryPremium =
+    (liveMid != null && liveMid > 0 ? liveMid : null)
+    ?? card.contractDetails?.mid ?? entryLimit ?? card.entry.limit;
 
   const contractId = card.contract;
   // NOTE: option_symbol should be OCC format for real broker APIs; card.contract is

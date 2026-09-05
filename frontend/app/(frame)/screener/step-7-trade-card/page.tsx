@@ -1132,6 +1132,11 @@ export default function Step7Page() {
               {orderError   && <Text size={12} tone="reject">{orderError}</Text>}
               {planReady && (
                 <AutoTradeArm
+                  // The same live quote TradeCard gets as `liveMid` and the
+                  // page prints as "Live mid" -- it was in scope here all
+                  // along and simply never handed down, leaving the arm path
+                  // (and the daily-loss gate behind it) on the scan-time mid.
+                  liveMid={liveQuote?.price ?? null}
                   card={effectiveCard}
                   broker={selectedBroker}
                   contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}

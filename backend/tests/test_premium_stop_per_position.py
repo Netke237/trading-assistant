@@ -719,14 +719,14 @@ async def test_a_sub_cent_live_quote_still_derives_a_usable_stop(api_client):
 # (today - scan day). `stopIsUserSet` is what tells the two apart.
 
 
-async def _create_reanchor(client, *, scan_price, live_stock, stop, **extra):
+async def _create_reanchor(client, *, scan_price, live_stock, stop, rec_override=None, **extra):
     """POST with BOTH quote fetches pinned, so the re-anchor branch is live.
 
     `_create` above patches only the contract quote; `need_reanchor` on a
     non-stock contract also awaits `fetch_price_async` for the underlying.
     """
     body = {
-        "recId": "REC-RE", "symbol": "AAPL", "contract": "AAPL|190|2026-05-16|C",
+        "recId": rec_override or "REC-RE", "symbol": "AAPL", "contract": "AAPL|190|2026-05-16|C",
         "direction": "Bullish", "entryPrice": 5.20, "qty": 1,
         "entryDate": "2026-05-01", "targets": [], "dteTotal": 30,
         "portfolioValue": 1_000_000,
@@ -790,3 +790,83 @@ async def test_the_flag_exempts_only_the_stop_not_the_structural_stop(api_client
     row = r.json()
     assert row["stop"] == pytest.approx(147.0)
     assert row["structuralStop"] == pytest.approx(147.0)   # 145 + 2, re-anchored
+
+
+@pytest.mark.asyncio
+async def test_a_user_set_stop_on_the_wrong_side_is_refused(api_client):
+    # ROUND 9 finding 6. The card bounds this directionally; the schema did not,
+    # so any other client could store a bullish stop ABOVE spot -- which fires
+    # STOP_REACHED Critical on the first scan -- or one far below, which never
+    # fires at all. Checked server-side now, for user-set stops.
+    r = await _create_reanchor(api_client, scan_price=145.0, live_stock=145.0,
+                               stop=1400.0, stopIsUserSet=True)
+    assert r.status_code == 422, r.text
+    assert "wrong side" in r.text
+
+
+@pytest.mark.asyncio
+async def test_the_bearish_side_is_refused_independently(api_client):
+    # A bearish stop sits ABOVE spot, so the comparison inverts. A swap here
+    # would accept exactly the stops it exists to refuse, on both sides.
+    r = await _create_reanchor(api_client, scan_price=145.0, live_stock=145.0,
+                               stop=100.0, stopIsUserSet=True,
+                               direction="Bearish")
+    assert r.status_code == 422, r.text
+
+    ok = await _create_reanchor(api_client, scan_price=145.0, live_stock=145.0,
+                                stop=160.0, stopIsUserSet=True,
+                                direction="Bearish", rec_override="REC-BEAR-OK")
+    assert ok.status_code == 201, ok.text
+
+
+@pytest.mark.asyncio
+async def test_magnitude_is_not_second_guessed_only_direction(api_client):
+    # A deliberately WIDE stop is a legitimate choice and must go through. Only
+    # the wrong-side case is refused.
+    r = await _create_reanchor(api_client, scan_price=145.0, live_stock=145.0,
+                               stop=20.0, stopIsUserSet=True)
+    assert r.status_code == 201, r.text
+    assert r.json()["stop"] == pytest.approx(20.0)
+
+
+@pytest.mark.asyncio
+async def test_a_plan_derived_stop_is_not_direction_checked(api_client):
+    # The plan re-anchors and is the plan's business; this guard is about a
+    # number a person typed.
+    r = await _create_reanchor(api_client, scan_price=145.0, live_stock=145.0,
+                               stop=1400.0)
+    assert r.status_code == 201, r.text
+
+
+@pytest.mark.parametrize("bad", [0, -1.5])
+def test_order_schemas_reject_a_non_positive_limit_price(bad):
+    # ROUND 9 finding 6. Round 8 bounded the React input and named these
+    # schemas as why that finding was CRITICAL, then left them unvalidated.
+    from app.routers.broker import StockOrderRequest, OptionOrderRequest
+    from app.routers.auto_trade import ArmRequest
+    from pydantic import ValidationError
+
+    for model, extra in (
+        (StockOrderRequest, {}),
+        (OptionOrderRequest, {"option_symbol": "AAPL|190|2026-05-16|C"}),
+        (ArmRequest, {"option_symbol": "AAPL|190|2026-05-16|C"}),
+    ):
+        base = {
+            "broker": "tradier_paper", "symbol": "AAPL", "action": "BUY",
+            "effect": "OPEN", "quantity": 1, "limit_price": bad, **extra,
+        }
+        with pytest.raises(ValidationError):
+            model(**base)
+
+
+def test_order_schemas_still_accept_a_real_limit_and_an_omitted_one():
+    from app.routers.broker import StockOrderRequest
+    assert StockOrderRequest(
+        broker="tradier_paper", symbol="AAPL", action="BUY", effect="OPEN",
+        quantity=1, limit_price=2.71,
+    ).limit_price == 2.71
+    # Omitted stays valid -- a MKT order carries no limit.
+    assert StockOrderRequest(
+        broker="tradier_paper", symbol="AAPL", action="BUY", effect="OPEN",
+        quantity=1, order_type="MKT",
+    ).limit_price is None
