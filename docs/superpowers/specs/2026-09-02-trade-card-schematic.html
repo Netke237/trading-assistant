@@ -241,8 +241,8 @@ a{color:var(--accent)}
           <div class="f"><span class="k">Order block</span><span class="v">$187.40 (7.2% away)</span></div>
         </div>
         <div class="blockhead">
-          <span class="blocktitle">Stop cost</span>
-          <span class="badge caution">Caution · 71% of premium · $1.49 left</span>
+          <span class="blocktitle">Max loss if the stop is hit</span>
+          <span class="badge caution">Caution · 71% of premium</span>
         </div>
         <div class="fields">
           <div class="f struck"><span class="k">Old basis · Δ-linear</span><span class="v">$15.99 × Δ0.34 = $5.20 of $5.20 · 100% — pinned</span></div>
@@ -254,8 +254,21 @@ a{color:var(--accent)}
         $3.71: 71% of premium, $1.49 still on the table. The verdict is still CAUTION at the Swing 70% line;
         what changed is that 71% can be compared to the strike next door and 100% could not.</p>
         <p class="expl">Tooltips unchanged. On PASS: <em>"The contract still holds meaningful value if this
-        stop is hit — the cheaper candidate to be wrong on."</em> New on the badge: the dollars left at the
-        stop ($1.49), which is more actionable than a percent when you are deciding whether to overrule it.</p>
+        stop is hit — the cheaper candidate to be wrong on."</em></p>
+        <p class="expl"><b>Amended 2026-09-05 to match what shipped</b> (decisions HEADER-2026-09-05 and
+        BADGE-LAYOUT-2026-09-05, both Kenneth's). Two departures from this card as originally drawn, both
+        deliberate and both now the spec:</p>
+        <ul class="expl">
+          <li>The section is headed <b>"MAX LOSS IF THE STOP IS HIT"</b>, not "Stop cost" — approved as
+          NOTATION-2026-09-04. Every other field and line of explanation on this card stands as drawn.</li>
+          <li>The badge stays <b>percent-only</b>. The dollars left at the stop are printed on the line
+          beneath it instead, <b>per contract</b> rather than per share: <span class="mono">"$401 per
+          contract — of the $651 premium, $251 left"</span> (<span class="mono">formatStopLossHeadline</span>).
+          The rule applied: both figures are on screen and only their position differs, so the layout was
+          left alone. The contract total is the sum actually being risked, while the arithmetic line beneath
+          stays per share so it reconciles with the premium and delta printed there. What is NOT printed is
+          the per-share "left" ($1.49 here) — it is the difference of two numbers that are.</li>
+        </ul>
       </div>
 
       <div class="block">

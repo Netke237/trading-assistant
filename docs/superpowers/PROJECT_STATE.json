@@ -256,19 +256,42 @@
    "q": "Round 6 verified that the card's edited Invalidation, Max fill and Time stop never reach a send path. Fix inside this branch, or record it and build later?",
    "a": "FIX NOW, INSIDE THIS BRANCH. Threaded the two fields that have consumers: Invalidation (becomes PortfolioPosition.stop, drives STOP_REACHED against the live underlying price) and Entry limit (posted as the broker order's limit_price on the quick Place Limit path and in AutoTradeArm, and shown in the button label). TradeCard's premiumStopTouchedRef generalised to a per-field TouchedFields map, so an untouched field caches null and keeps deferring to the live card value as mergePlan moves it -- the same rule piece 4 established for the premium stop. Max fill and Time stop NOT threaded: they have no consumer to thread them to, so it is a build, not a fix (see open questions).",
    "by": "Kenneth"
+  },
+  {
+   "id": "BADGE-LAYOUT-2026-09-05",
+   "q": "The schematic (card 03) puts the dollars-left ON the badge and per SHARE ('Caution . 71% of premium . $1.49 left'). Shipped keeps the badge percent-only with per-CONTRACT dollars on the line beneath. Change it or keep it?",
+   "a": "KEEP AS SHIPPED -- Kenneth's rule: if both values are available and only their POSITION differs, do not touch it. Verified both are on screen: the badge prints the verdict word plus 'N% OF PREMIUM' (formatStopLossBadge/formatStopLossPct) and the line beneath prints '$401 per contract -- of the $651 premium, $251 left' (formatStopLossHeadline). NOTE the one real difference, recorded so it is revisited deliberately rather than rediscovered: the dollars-left is PER CONTRACT, where the schematic's $1.49 is PER SHARE. The per-share loss and premium are both printed on the arithmetic line, but the per-share 'left' is not printed -- it is their difference. Amend the schematic to match what shipped.",
+   "by": "Kenneth"
+  },
+  {
+   "id": "HEADER-2026-09-05",
+   "q": "Card 03 heads the section 'Stop cost' and says every other line stays as it reads today; shipped reads 'MAX LOSS IF THE STOP IS HIT' (approved as NOTATION-2026-09-04 but never recorded as a departure). Amend the schematic, or revert the header?",
+   "a": "AMEND THE SCHEMATIC. The shipped header stands.",
+   "by": "Kenneth"
+  },
+  {
+   "id": "ALERT-THRESHOLD-STAMP-2026-09-05",
+   "q": "Should a PREMIUM_STOP alert stamp the threshold it fired at, rather than the Alerts page resolving it live from the position (so editing a position silently relabels its historical alert rows with a threshold those alerts never used)?",
+   "a": "YES -- the alert should show the threshold it actually fired at. APPROVED, NOT STARTED. Cross-cutting: a field on the toast, a persisted alertStore migration, and the same field from the backend generator's websocket path. Raised by round 5; the lossy Math.round on that label was already fixed there.",
+   "by": "Kenneth"
+  },
+  {
+   "id": "MAXFILL-TIMESTOP-2026-09-05",
+   "q": "Thread the card's Max fill and Time stop through to a send path as well?",
+   "a": "DEFERRED, confirmed by Kenneth. Neither has a consumer today, so it is a build (new persisted field, backend column, alert change), not the wiring fix Invalidation and Entry limit were. Stays an open question rather than being half-done inside an audit branch.",
+   "by": "Kenneth"
   }
  ],
  "pending_kenneth": [
   "BUILD: card-level 'edited' indicator (decision EDITED-FLAG-2026-09-04) -- approved, not started.",
-  "BUILD: gate firstPassage.targets on freshness (decision TARGET-VINTAGE-2026-09-04) -- approved, not started."
+  "BUILD: gate firstPassage.targets on freshness (decision TARGET-VINTAGE-2026-09-04) -- approved, not started.",
+  "BUILD: stamp the fired threshold on a PREMIUM_STOP alert (decision ALERT-THRESHOLD-STAMP-2026-09-05) -- approved, not started."
  ],
  "open_questions": [
   "Do the Q7 thresholds (0.80/0.70/0.60) hold on a real universe? Round 5 records them as taken as proposed, never measured.",
   "Is Tradier's per-contract IV good enough in production to displace a solver for Phase A?",
   "ivRank is conflated: market.py:1277 writes raw IV x100 into a field named for a percentile, 1291/1308 conditionally overwrite it with a genuine rank, and scan.py:610-616 broadcasts an ATM value across every strike. It is compared against iv_rank_pass_max: 34 and hard_reject.max_iv_rank: 70 -- a LIVE scoring/hard-reject defect, not a tidy-up.",
   "Should the auto-trader's daily-loss gate size on the full premium instead of the premium stop? Since piece 4 the denominator can come from ArmRequest.premium_stop_pct, so a tighter declared stop shrinks premium_at_risk and lets more trades through -- and nothing enforces the declared stop, because the auto-trader places no protective order. Deliberately not clamped. ROUND 5 UPDATE: the reachability was far worse than this text implied -- the card's stop field was min=0.01 with no max, so one keystroke cut the denominator ~3000x via a field whose label says nothing about auto-trade sizing. That field is now bounded to 10-99% of the mid, so the remaining exposure is a deliberate 6x (a 10% stop against the 0.60 default), not a fat-finger. The underlying question -- full premium or declared stop -- stands.",
-  "Should a PREMIUM_STOP alert stamp the threshold it fired at? Raised by round 5. The Alerts page resolves the percentage LIVE from the position, so editing a position's stop silently relabels its historical alert rows with a threshold those alerts never used. Stamping at fire time needs a field on the toast, a persisted alertStore migration, and the same field from the backend generator's websocket path -- cross-cutting enough to decide rather than half-do. The lossy Math.round on that label was fixed in round 5; only the vintage question is open.",
-  "Record-keeping, not a defect: the schematic's card 03 heads this section 'Stop cost' and states that every other field and line of explanation stays as it reads today. Shipped is 'MAX LOSS IF THE STOP IS HIT', approved as NOTATION-2026-09-04 but never recorded as a departure from the artifact. Confirm the schematic should be amended rather than the header reverted.",
   "Thread the card's Max fill and Time stop through to a send path? Deferred, and NOT a wiring fix: neither field has a consumer anywhere today. TIME_STOP fires on a hardcoded `dteRemaining <= 3` (alertEngine.ts:298) and PortfolioPosition carries no time-stop field at all; maxFill has no reader outside its own input. Threading either means a new persisted field, a backend column and an alert change -- a build. Invalidation and Entry limit, which DID have consumers, were threaded on 2026-09-05 (decision THREAD-EDITS-2026-09-05)."
  ],
  "authoritative_documents": [
