@@ -258,6 +258,21 @@ interface TradeCardProps {
    *  edit: Prev to another candidate and back and the card displayed $3.12
    *  while both send paths posted the $2.00 still sitting in the cache. */
   initialPremiumStop?: number | null;
+  /** The page-level caches for the two fields threaded on 2026-09-05, restored
+   *  the same way `initialPremiumStop` is and for exactly the reason its doc
+   *  above describes: the reset on a contract change deliberately does NOT call
+   *  `onEditsChange`, so without a round trip the card puts the SEED back in the
+   *  field while the parent's cache keeps the edit -- Prev to another candidate
+   *  and back, and the card showed $2.50 / $140.00 while the button promised
+   *  $2.71, the order posted 2.71 and the position stored a stop of 132.
+   *
+   *  `initialEntryLimit` comes from `entryLimitByContract` (keyed by CONTRACT --
+   *  a premium for one contract); `initialInvalidation` from
+   *  `invalidationBySymbol` (keyed by SYMBOL -- a level on the underlying).
+   *  `null`/absent means "never edited", and the field falls back to the card's
+   *  own value, which is what lets an untouched field keep following `mergePlan`. */
+  initialEntryLimit?: number | null;
+  initialInvalidation?: number | null;
   /** Fired whenever the override changes (Apply/Clear inside the Arithmetic
    *  card's max-loss override editor) — direct call inside the setter, the
    *  same pattern `onEditsChange` already uses. Not the ref-synced-effect
@@ -349,6 +364,8 @@ export function TradeCard({
   onExitPlanChange,
   initialMaxLossOverride = null,
   initialPremiumStop = null,
+  initialEntryLimit = null,
+  initialInvalidation = null,
   onMaxLossOverrideChange,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
@@ -357,6 +374,8 @@ export function TradeCard({
     ...defaultOverlay(data),
     contracts: initialContracts,
     premiumStop: initialPremiumStop ?? data.exit.premiumStop,
+    entryLimit: initialEntryLimit ?? data.entry.limit,
+    invalidation: initialInvalidation ?? data.exit.invalidation,
   }));
   /** Has the user typed in the "Premium stop" field for the contract currently
    *  on screen? Distinguishes "$3.12 because that is what I chose" from "$3.12
@@ -387,12 +406,13 @@ export function TradeCard({
    *  is local to this file, and the cost of being wrong is a silently
    *  mis-anchored stop -- but do not build on the claim that the window is
    *  live. On every path found so far, it is not. */
+  // A cached value arriving from the parent IS a previous edit on this card,
+  // restored -- see the props' own docs. Marking it touched is what keeps it
+  // from being overwritten by the follow-the-seed effects below, and what makes
+  // the card report it back on the next patch.
   const touchedRef = useRef<TouchedFields>({
-    entryLimit: false,
-    invalidation: false,
-    // A cached dollar arriving from the parent IS a previous edit on this
-    // contract, restored -- see initialPremiumStop's own doc. The other two
-    // have no such cache yet, so they always start clean.
+    entryLimit: initialEntryLimit != null,
+    invalidation: initialInvalidation != null,
     premiumStop: initialPremiumStop != null,
   });
   // Feature 5 — pre-trade max-loss override, seeded from the page-level cache
@@ -552,14 +572,16 @@ export function TradeCard({
       firstPassageRequestRef.current?.abort();
       exitPlanRequestRef.current?.abort();
       touchedRef.current = {
-        entryLimit: false,
-        invalidation: false,
+        entryLimit: initialEntryLimit != null,
+        invalidation: initialInvalidation != null,
         premiumStop: initialPremiumStop != null,
       };
       setOverlay({
         ...defaultOverlay(data),
         contracts: initialContracts,
         premiumStop: initialPremiumStop ?? data.exit.premiumStop,
+        entryLimit: initialEntryLimit ?? data.entry.limit,
+        invalidation: initialInvalidation ?? data.exit.invalidation,
       });
       // Every one of these five reads data.exit — for a candidate nothing has
       // been run on they are all absent and this is still a full reset (the
@@ -596,7 +618,8 @@ export function TradeCard({
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
     }
-  }, [data.symbol, data.contract, initialContracts, defaultTargetPct, initialMaxLossOverride, initialPremiumStop]);
+  }, [data.symbol, data.contract, initialContracts, defaultTargetPct, initialMaxLossOverride,
+      initialPremiumStop, initialEntryLimit, initialInvalidation]);
 
   // Cancel any outstanding requests on unmount.
   useEffect(() => () => structuralRequestRef.current?.abort(), []);
@@ -1235,6 +1258,29 @@ export function TradeCard({
         : { ...prev, premiumStop: data.exit.premiumStop },
     );
   }, [data.exit.premiumStop]);
+
+  // The same rule for the other two threaded fields, and it matters in the
+  // opposite direction: an untouched field caches `null` at the page level, so
+  // `invalidationFor`/`entryLimitFor` already resolve to the card's CURRENT
+  // value. If the overlay kept a stale seed after `mergePlan` swapped
+  // `data.exit`, the card would DISPLAY the old level while the order used the
+  // new one -- the same display-vs-send disagreement as the round-trip defect,
+  // just with the two sides swapped.
+  useEffect(() => {
+    if (touchedRef.current.entryLimit) return;
+    setOverlay((prev) =>
+      prev.entryLimit === data.entry.limit ? prev : { ...prev, entryLimit: data.entry.limit },
+    );
+  }, [data.entry.limit]);
+
+  useEffect(() => {
+    if (touchedRef.current.invalidation) return;
+    setOverlay((prev) =>
+      prev.invalidation === data.exit.invalidation
+        ? prev
+        : { ...prev, invalidation: data.exit.invalidation },
+    );
+  }, [data.exit.invalidation]);
 
 
   // Direct-call pattern (see `onEditsChange`'s own doc comment) — same shape

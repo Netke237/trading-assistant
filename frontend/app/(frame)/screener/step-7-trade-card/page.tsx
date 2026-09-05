@@ -972,6 +972,13 @@ export default function Step7Page() {
               // kept the user's edit, and the two send paths posted a number
               // the card was no longer showing.
               initialPremiumStop={contractKey ? premiumStopByContract[contractKey] ?? null : null}
+              // These two round-trip for the same reason the premium stop does:
+              // the card's reset on a candidate change would otherwise put the
+              // seed back on screen while these caches kept the edit, so the
+              // card showed $2.50 / $140.00 while the order went out at $2.71
+              // with a stop of 132.
+              initialEntryLimit={contractKey ? entryLimitByContract[contractKey] ?? null : null}
+              initialInvalidation={invalidationBySymbol[effectiveCard.symbol] ?? null}
               onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(effectiveCard.symbol, stop, stockPrice)}
               onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
               onExitPlanChange={(plan) => handleExitPlanChange(contractKey, plan)}

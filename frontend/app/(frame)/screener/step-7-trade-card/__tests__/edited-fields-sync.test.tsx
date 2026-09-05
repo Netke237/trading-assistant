@@ -78,7 +78,7 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
   beforeEach(() => {
     act(() => {
       useScanStore.setState({
-        scanResult: { candidates: [makeCard('AAA')] } as any,
+        scanResult: { candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
         pickedContracts: {},
         contractsBySymbol: {},
         scanOverrides: {},
@@ -106,6 +106,9 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
   /** The Invalidation / Premium stop / Time stop fields live inside the
    *  collapsed ladder section. */
   function expandLadder() {
+    // Idempotent: the section's own toggle collapses it again, and whether it
+    // starts open varies with what else has re-rendered the card.
+    if (screen.queryByLabelText('Edit Invalidation')) return;
     fireEvent.click(screen.getByRole('button', { name: /fixed % ladder plan/i }));
   }
 
@@ -170,6 +173,49 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledWith(
       expect.objectContaining({ limit_price: 2.71, order_type: 'LMT' }),
     ));
+  });
+
+  it('keeps the card, the button and the order agreeing after navigating away and back', async () => {
+    // THE ROUND-TRIP DEFECT, found by round 7's scratch probe. TradeCard resets
+    // its overlay AND its touched flags on a candidate change and deliberately
+    // does not call onEditsChange, so the page-level caches kept the edit while
+    // the card put the seed back on screen. Prev/Next and back gave:
+    //   card $2.50, button "Place Limit @ $2.71", order limit_price 2.71
+    //   invalidation field $140.00, stored stop 132
+    // The user saw one trade and got another. `initialPremiumStop` already
+    // round-tripped for exactly this reason; the two fields threaded on
+    // 2026-09-05 were added without the matching props.
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+
+    editField('Limit', String(CARD_LIMIT), '2.71');
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('2.71'));
+    expandLadder();
+    editField('Invalidation', String(CARD_INVALIDATION), '132');
+    await waitFor(() => expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('132'));
+
+    fireEvent.click(screen.getByLabelText('Next candidate'));
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText('Previous candidate'));
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+
+    // The card still SHOWS the edits...
+    expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('2.71');
+    expandLadder();
+    expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('132');
+
+    // ...the button PROMISES them...
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await screen.findByRole('button', { name: /place limit @ \$2\.71/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    fireEvent.click(limitBtn);
+
+    // ...and the order and the position USE them.
+    await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ limit_price: 2.71 }),
+    ));
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    expect(usePortfolioStore.getState().positions[0].stop).toBe(132);
   });
 
   it('arms auto-trade at the EDITED entry limit', async () => {
