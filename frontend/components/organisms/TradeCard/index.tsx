@@ -2758,6 +2758,12 @@ function EditableKV({
     const trimmed = draft.trim();
     const isCompleteNumber = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(trimmed);
     if (trimmed !== '' && !isCompleteNumber) {
+      // ROUND 10 finding 9 -- SAY SO HERE TOO. Round 9 added this guard four
+      // lines above the fix for "the reject gave no feedback whatsoever", and
+      // gave it exactly that property: a user who typed "2." and tabbed away
+      // saw the old value return with nothing to explain it. Same defect, same
+      // commit, different branch.
+      setRejected(`That is not a complete number — kept the previous value.`);
       setEditing(false);
       return;
     }
@@ -2853,7 +2859,7 @@ function EditableKV({
     : `${prefix}${value.toFixed(decimals)}${suffix}`;
 
   return (
-    <div className={styles.kvRow}>
+    <div className={`${styles.kvRow} ${styles.kvRowEditable}`}>
       <Text size={12} tone="secondary">{label}</Text>
       {editing ? (
         <input
@@ -2907,12 +2913,22 @@ function EditableKV({
         </span>
       )}
       {/* The refusal, announced. `aria-live="polite"` rather than an alert
-          role: nothing on screen is wrong, a typed value was declined. */}
-      {rejected && (
-        <span className={styles.editRejected} aria-live="polite">
-          <Text size={11} tone="caution">{rejected}</Text>
-        </span>
-      )}
+          role: nothing on screen is wrong, a typed value was declined.
+    *
+          ROUND 10 finding 10 -- THE REGION IS ALWAYS MOUNTED, only its text
+          changes. Round 9 rendered the region and its content together under
+          `{rejected && …}`, which is the canonical way to get no announcement
+          at all: a live region has to be in the DOM before its contents change
+          for assistive tech to observe the mutation. The round-9 test used
+          `findByText`, which passes either way and so could not tell
+          "announced" from "rendered". Kept out of the layout when empty via
+          the empty-string child rather than by unmounting. */}
+      <span
+        className={rejected ? styles.editRejected : styles.editRejectedEmpty}
+        aria-live="polite"
+      >
+        {rejected ? <Text size={11} tone="caution">{rejected}</Text> : ''}
+      </span>
     </div>
   );
 }

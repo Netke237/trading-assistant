@@ -79,6 +79,9 @@ export default function PortfolioPage() {
   // ROUND 9 — the offline retry's channel for the "stop could not be applied"
   // notice; the three foreground create paths report it at the point of sale.
   const lastPremiumStopDropped = usePortfolioStore((s) => s.lastPremiumStopDropped);
+  // ROUND 10 finding 14 — its OWN dismiss. Sharing `clearSyncError` meant
+  // closing this informational notice also wiped the rejection banner above it.
+  const clearPremiumStopDropped = usePortfolioStore((s) => s.clearPremiumStopDropped);
   const clearSyncError = usePortfolioStore((s) => s.clearSyncError);
   const syncFromBackend = usePortfolioStore((s) => s.syncFromBackend);
   const updatePosition = usePortfolioStore((s) => s.updatePosition);
@@ -187,7 +190,7 @@ export default function PortfolioPage() {
             {lastPremiumStopDropped.requestedDollar.toFixed(2)}/share could not be applied at the
             saved premium — this position inherits the global stop.
           </Text>
-          <button type="button" className={styles.syncErrorDismiss} onClick={clearSyncError} aria-label="Dismiss">
+          <button type="button" className={styles.syncErrorDismiss} onClick={clearPremiumStopDropped} aria-label="Dismiss">
             ×
           </button>
         </div>

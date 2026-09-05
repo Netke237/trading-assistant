@@ -249,14 +249,31 @@ export function premiumStopSourceNote(
   if (fromField) {
     return `${applied}, from the editable field above`;
   }
+  // ROUND 10 finding 5 -- THE TOTAL-LOSS BRANCH NOW CHECKS THAT IT IS ONE.
+  //
+  // Until round 9, `fromField` was false only when premiumStopPctFromDollars
+  // returned undefined, which happened only when the dollar stop was at or
+  // above the premium -- so "your stop is at or above the premium" followed
+  // from the branch being reached at all. Round 9 gated the barrier on
+  // TOUCHED-NESS (correctly: an untouched field holds the seeded global, not a
+  // choice), which made `fromField` false for perfectly ordinary cards too --
+  // and this branch then told users their $3.12 stop was "at or above the
+  // $4.00 premium", which is simply false, on every untouched estimate.
+  //
+  // The condition it always relied on is now stated instead of assumed.
   if (dollarStop != null && Number.isFinite(dollarStop) && dollarStop > 0
-      && Number.isFinite(premium) && premium > 0) {
+      && Number.isFinite(premium) && premium > 0 && dollarStop >= premium) {
     return (
       `${applied} — the default. Your ${money(dollarStop)} stop is at or above the `
       + `${money(premium)} premium this estimate used, which is a total loss rather than a stop.`
     );
   }
-  return `${applied} — the default, because no premium stop is set above`;
+  // Untouched: the field above is showing the inherited global rendered in
+  // dollars, not a per-trade stop anyone chose, so the race used the
+  // configured default. Reachable again -- before round 9 this line was dead
+  // except on a degenerate seed, and after it, it was dead outright because
+  // the seed is never null.
+  return `${applied} — the default, because no per-trade premium stop is set above`;
 }
 
 /**

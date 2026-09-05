@@ -265,7 +265,28 @@ describe('premiumStopSourceNote', () => {
 
   it('says the default was used when no premium stop is set at all', () => {
     expect(premiumStopSourceNote(0.60, false, null, 5.20))
-      .toContain('because no premium stop is set above');
+      .toContain('because no per-trade premium stop is set above');
+  });
+
+  it('does NOT call an ordinary untouched seed a total loss', () => {
+    // ROUND 10 finding 5, a regression from round 9's own fix. Until round 9,
+    // `fromField` was false ONLY when the dollar stop was at or above the
+    // premium, so "your stop is at or above the premium" followed from
+    // reaching the branch. Round 9 gated the barrier on touched-ness -- right
+    // in itself -- which made `fromField` false for perfectly ordinary cards,
+    // and this note then told users on EVERY untouched estimate that their
+    // $3.12 stop was at or above a $4.00 premium.
+    const s = premiumStopSourceNote(0.60, false, 3.12, 4.00);
+    expect(s).not.toContain('total loss');
+    expect(s).not.toContain('at or above');
+    expect(s).toContain('the default');
+    expect(s).toContain('no per-trade premium stop is set above');
+  });
+
+  it('still calls a genuine total loss what it is', () => {
+    // The branch is not gone, just conditioned on the thing it always assumed.
+    const s = premiumStopSourceNote(0.60, false, 3.00, 2.50);
+    expect(s).toContain('total loss rather than a stop');
   });
 });
 

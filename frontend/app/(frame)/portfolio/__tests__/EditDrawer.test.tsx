@@ -1043,6 +1043,63 @@ describe('PremiumStopEditor', () => {
 
 // ── Spec §8 test #6: the three premium-stop paths agree ─────────────────────
 
+describe('the Stop field bounds a mistyped digit', () => {
+  const noop = () => {};
+
+  it.each([
+    ['a missing decimal point', 1400],
+    ['a dropped digit',           14],
+  ])('rejects %s on the Stop field and says so', (_label, typed) => {
+    // ROUND 10 finding 3. The drawer is the only editor a user reaches for an
+    // already-open position and its Stop field had no bound at all, so this
+    // PATCHed straight through -- after which alert_generator's
+    // `price <= pos.stop` is permanently true for a bullish position and every
+    // backend scan raises a Critical STOP_REACHED.
+    const onChange = jest.fn();
+    render(
+      <EditDrawer
+        position={makeOptionPosition({ currentStockPrice: 145, stop: 140 })}
+        onClose={noop} onChange={onChange} onRemove={noop}
+      />,
+    );
+    const stop = screen.getByDisplayValue('140') as HTMLInputElement;
+    fireEvent.change(stop, { target: { value: String(typed) } });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/kept the previous value/i)).toBeInTheDocument();
+  });
+
+  it('MAGNITUDE only — a stop the price has already moved through still commits', () => {
+    // The important difference from the create endpoint's guard. On an OPEN
+    // position a stop the underlying has moved through is a stop CORRECTLY
+    // about to fire, and tightening onto the current price is ordinary. A
+    // directional check here would refuse exactly those legitimate states.
+    const onChange = jest.fn();
+    render(
+      <EditDrawer
+        position={makeOptionPosition({ currentStockPrice: 145, stop: 140, direction: 'Bullish' })}
+        onClose={noop} onChange={onChange} onRemove={noop}
+      />,
+    );
+    const stop = screen.getByDisplayValue('140') as HTMLInputElement;
+    fireEvent.change(stop, { target: { value: '150' } });   // ABOVE spot, bullish
+    expect(onChange).toHaveBeenCalledWith({ stop: 150 });
+  });
+
+  it('tells a BEARISH position its stop fires on a RISE', () => {
+    // The hint said "drops below" unconditionally, which is the wrong
+    // instruction for every bearish position.
+    render(
+      <EditDrawer
+        position={makeOptionPosition({ direction: 'Bearish' })}
+        onClose={noop} onChange={jest.fn()} onRemove={noop}
+      />,
+    );
+    expect(screen.getByText(/rises above this price/i)).toBeInTheDocument();
+    expect(screen.queryByText(/drops below this price/i)).not.toBeInTheDocument();
+  });
+});
+
 describe('the drawer preview, the alert engine and the backend fire at one price', () => {
   const noop = () => {};
 

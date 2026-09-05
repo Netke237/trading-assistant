@@ -171,6 +171,20 @@ async def add_position(
     entry_price = body.entryPrice
 
     need_reanchor = bool(body.scanStockPrice and body.scanStockPrice > 0)
+    # ROUND 10 -- the underlying price is ALSO needed to direction-check a
+    # user-set stop, and that check must not depend on whether the caller
+    # happened to send `scanStockPrice`.
+    #
+    # Round 9 added the wrong-side guard below and gated it on `live_price`,
+    # which was only ever fetched when `need_reanchor` was true. Since
+    # `scanStockPrice` is Optional and defaults to None, omitting one field
+    # skipped the guard entirely -- `{"stop": 1400, "stopIsUserSet": true}` on
+    # a $145 stock returned 201 and stored 1400. Round 9's own justification
+    # for the guard was "any other client, a replayed request, or a future call
+    # site", every one of which controls that field; and the project's OWN
+    # basket path is already such a client, because `positionFromOrder` never
+    # sets `scanStockPrice`. The guard had therefore never run on it.
+    need_live_price = need_reanchor or bool(body.stopIsUserSet)
     # For a stock position (SYMBOL|STOCK), fetch_contract_quote_async's quote
     # price IS the underlying price — fetching it separately via
     # fetch_price_async as well would just duplicate the same call.
@@ -178,14 +192,14 @@ async def add_position(
     try:
         async with httpx.AsyncClient(timeout=8) as _cl:
             _quote_task = fetch_contract_quote_async(_cl, body.contract)
-            if need_reanchor and not is_stock:
+            if need_live_price and not is_stock:
                 live_quote, live_price = await asyncio.gather(
                     _quote_task, fetch_price_async(_cl, body.symbol),
                 )
             else:
                 live_quote = await _quote_task
                 live_price = (
-                    (live_quote or {}).get("price") if need_reanchor and is_stock and isinstance(live_quote, dict)
+                    (live_quote or {}).get("price") if need_live_price and is_stock and isinstance(live_quote, dict)
                     else None
                 )
     except Exception:

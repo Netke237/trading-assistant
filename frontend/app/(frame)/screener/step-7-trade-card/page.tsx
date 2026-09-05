@@ -99,10 +99,21 @@ function positionFromOrder(
   // broker order was placed at or the position's entry price disagrees with
   // the order that created it.
   entryLimit: number | null = null,
+  /** ROUND 10 finding 7 — the LIVE option mid, when the caller has one.
+   *
+   *  `buildPaperPosition` takes `livePrice` and prefers it; this path did not,
+   *  so the two send paths stored different `entryPrice` values for the same
+   *  card whenever a quote had been fetched — the denominator the premium stop
+   *  is derived against, and the threshold both alert engines compare. The
+   *  round-9 "two send paths cannot disagree" test could not see it: its
+   *  fixture set the contract-quote mock to exactly `contractDetails.mid`, so
+   *  live and scan were the same number. */
+  livePrice: number | null = null,
 ): PortfolioPosition {
   const c   = order.card;
   const cd  = c.contractDetails;
-  const mid = cd?.mid ?? entryLimit ?? c.entry.limit;
+  const mid = (livePrice != null && livePrice > 0 ? livePrice : null)
+    ?? cd?.mid ?? entryLimit ?? c.entry.limit;
   const dte = cd?.dte ?? 24;
   return {
     symbol:        c.symbol,
@@ -317,6 +328,19 @@ export default function Step7Page() {
   // first backend scan for a stop the user believed was 10% away.
   const invalidationIsUserSetFor = (card: TradeCardData): boolean =>
     invalidationBySymbol[card.symbol] != null;
+  /** The RAW cache entry -- null while the field is untouched.
+   *
+   *  ROUND 10 finding 6. The basket path passed `invalidationFor(o.card)`,
+   *  which falls back to `card.exit.invalidation` and is therefore NEVER null,
+   *  so `positionFromOrder`'s `stopIsUserSet: invalidation != null` was true
+   *  for every basket position including ones nobody had edited. Two send
+   *  paths reported two different values of a flag whose entire job is to tell
+   *  the server whether a human typed the number -- and a `true` there tells
+   *  the router to skip re-anchoring a stop that IS plan-derived. Passing the
+   *  raw entry is also what `positionFromOrder` was written for: it applies
+   *  `invalidation ?? c.exit.invalidation` internally. */
+  const invalidationRawFor = (card: TradeCardData): number | null =>
+    invalidationBySymbol[card.symbol] ?? null;
   // Likewise for the limit price every order path posts, and for the button
   // label that promises it. A label showing one price while the order carries
   // another is the same defect wearing a different hat.
@@ -397,8 +421,24 @@ export default function Step7Page() {
   // quietly inherits the global -- a TIGHTER stop than the one asked for.
   const droppedStopNote = (requested: number) =>
     `Premium stop of $${requested.toFixed(2)}/share could not be applied at the filled premium — this position inherits the global stop.`;
-  const [liveQuote,      setLiveQuote]        = useState<{ price: number; delta: number; theta: number; ivRank: number; spread: number; volume: number } | null>(null);
-  const [liveStockPrice, setLiveStockPrice]   = useState<number | null>(null);
+  /* ROUND 10 finding 1 — the quote CARRIES THE CONTRACT IT IS FOR.
+   *
+   * These used to be bare values, cleared at the top of the fetch effect. The
+   * effect has an early return ABOVE that clear (the override-already-claimed
+   * dedup gate), so on Next-then-Prev back to a candidate whose contract was
+   * user-picked in step 6, the effect re-ran, returned early, and left the
+   * OTHER candidate's quote standing. The AAA card then printed BBB's mid,
+   * `buildPaperPosition` stored it as AAA's entryPrice, and round 9's own
+   * `liveMid` prop carried it into the auto-trade arm request and into the
+   * card's premium-stop bounds -- so a $2.22 contract accepted a $7.00
+   * "premium stop" and the daily-loss gate booked the wrong premium entirely.
+   *
+   * Clearing before the early return would fix that one path. Keying fixes
+   * every path, including the next early return someone adds: a quote whose
+   * key does not match the card on screen is not this card's quote, and
+   * `liveQuoteForCard` below is the only thing any consumer may read. */
+  const [liveQuote,      setLiveQuote]        = useState<{ key: string; price: number; delta: number; theta: number; ivRank: number; spread: number; volume: number } | null>(null);
+  const [liveStockPrice, setLiveStockPrice]   = useState<{ symbol: string; price: number } | null>(null);
   const [fetchingQuote,  setFetchingQuote]    = useState(false);
   // Recomputed Entry/Exit/RR/targets, per SYMBOL, for every overridden contract —
   // the active card AND every overridden basket item share this one cache so a
@@ -646,8 +686,8 @@ export default function Step7Page() {
     ])
       .then(([q, sq]) => {
         if (!controller.signal.aborted) {
-          setLiveQuote(q);
-          if (sq) setLiveStockPrice(sq.price);
+          setLiveQuote(q ? { ...q, key: keyAtRequest } : null);
+          if (sq) setLiveStockPrice({ symbol, price: sq.price });
         }
         return [q, sq] as const;
       })
@@ -838,7 +878,13 @@ export default function Step7Page() {
   async function placeLimitPaper() {
     const card = effectiveCard;
     if (!card || !selectedBroker) return;
-    setLimitPlacing(true); setOrderError(null);
+    // ROUND 10 finding 11 -- CLEAR THE NOTES PER ORDER. They are facts about
+    // ONE save, and were only reset when the active candidate changed, so a
+    // "Size reduced to 1 contract" from a previous fill sat under the next,
+    // un-reduced order. Round 9's accumulate-don't-overwrite change made that
+    // strictly worse: the stale note now sits BESIDE any new one instead of
+    // being replaced by it.
+    setLimitPlacing(true); setOrderError(null); setSaveNotes([]);
     try {
       // Floored defensively: the shared map is a plausible target for a
       // future write path to drop a sub-1 value into (e.g. Feature 3's Apply
@@ -857,7 +903,7 @@ export default function Step7Page() {
         limit_price:   entryLimitFor(card),
         tif:           'DAY',
       });
-      const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id, liveQuote?.price, contracts);
+      const pos = buildPaperPosition(card, 'LMT', selectedBroker, res.order_id, liveQuoteForCard?.price, contracts);
       const saved = await persistPosition(pos);
       const { rejected, detail } = applyPersistedPosition(
         saved, pos, addPosition,
@@ -879,7 +925,8 @@ export default function Step7Page() {
   async function placeMarketNow() {
     const card = effectiveCard;
     if (!card || !selectedBroker) return;
-    setMarketPlacing(true); setOrderError(null);
+    // See placeLimitPaper — notes describe this save only.
+    setMarketPlacing(true); setOrderError(null); setSaveNotes([]);
     try {
       // Floored defensively — see placeLimitPaper's identical comment above.
       const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
@@ -894,7 +941,7 @@ export default function Step7Page() {
         limit_price:   null,
         tif:           'DAY',
       });
-      const pos = buildPaperPosition(card, 'MKT', selectedBroker, res.order_id, liveQuote?.price, contracts);
+      const pos = buildPaperPosition(card, 'MKT', selectedBroker, res.order_id, liveQuoteForCard?.price, contracts);
       const saved = await persistPosition(pos);
       const { rejected, detail } = applyPersistedPosition(
         saved, pos, addPosition,
@@ -913,6 +960,15 @@ export default function Step7Page() {
     }
   }
 
+  /* The keyed reads. Anything that wants "the live quote for the card on
+   * screen" goes through these; the raw state is never read directly, so a
+   * quote left standing for a different contract can only ever be ignored. */
+  const liveQuoteForCard = liveQuote && liveQuote.key === contractKey ? liveQuote : null;
+  const liveStockPriceForCard =
+    liveStockPrice && liveStockPrice.symbol === effectiveCard?.symbol
+      ? liveStockPrice.price
+      : null;
+
   const idx = symbols.indexOf(active);
 
   const goPrev = () => { if (idx > 0) setActive(symbols[idx - 1]!); };
@@ -924,6 +980,9 @@ export default function Step7Page() {
 
   const handleSubmit = async (orders: DraftOrder[], _riskOverridden: boolean) => {
     usePortfolioStore.getState().clearSyncError();
+    // Same reason as the two order paths: this submit's notes, not the last
+    // one's. Basket notes are symbol-qualified because several land at once.
+    setSaveNotes([]);
     let auto = 0, manual = 0, queued = 0;
     const failures: string[] = [];
     const adjusted: string[] = [];
@@ -939,9 +998,21 @@ export default function Step7Page() {
       const res = await addPosition({
         ...positionFromOrder(
           o, structuralStop, orderExitPlan, orderMaxLossOverride,
-          premiumStopDollarFor(o.card), invalidationFor(o.card), entryLimitFor(o.card),
+          premiumStopDollarFor(o.card), invalidationRawFor(o.card), entryLimitFor(o.card),
+          // ROUND 10 finding 7 -- the LIVE mid, for the active symbol. The
+          // direct path uses `liveQuoteForCard?.price` and this path used the
+          // scan-time `contractDetails.mid`, so the two stored different
+          // entryPrices for the same card -- the denominator the premium stop
+          // is derived against and the threshold both alert engines compare.
+          // Only the active card has a fetched quote; the rest legitimately
+          // fall back to their scan mid.
+          o.card.symbol === effectiveCard?.symbol ? liveQuoteForCard?.price ?? null : null,
         ),
         recId,
+        // ROUND 10 finding 2 -- WITHOUT this the router never fetches the
+        // underlying, so neither the re-anchor nor the wrong-side guard runs
+        // on anything the basket sends.
+        scanStockPrice: o.card.price,
       });
 
       if (res.status === 'rejected') {
@@ -1080,8 +1151,8 @@ export default function Step7Page() {
               // persists, so after a reload they can be days old; these two are
               // the same numbers the "Live stock:" / "Live mid:" lines below
               // are rendered from.
-              liveStockPrice={liveStockPrice}
-              liveMid={liveQuote?.price ?? null}
+              liveStockPrice={liveStockPriceForCard}
+              liveMid={liveQuoteForCard?.price ?? null}
               resetKey={scanEpoch}
               onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(effectiveCard.symbol, stop, stockPrice)}
               onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
@@ -1106,11 +1177,11 @@ export default function Step7Page() {
           {fetchingQuote && (
             <Text size={11} tone="dim">Fetching live price…</Text>
           )}
-          {liveQuote && !fetchingQuote && (
-            <Text size={11} tone="secondary">Live mid: ${liveQuote.price.toFixed(2)}</Text>
+          {liveQuoteForCard && !fetchingQuote && (
+            <Text size={11} tone="secondary">Live mid: ${liveQuoteForCard.price.toFixed(2)}</Text>
           )}
-          {liveStockPrice != null && !fetchingQuote && (
-            <Text size={11} tone="secondary">Live stock: ${liveStockPrice.toFixed(2)}</Text>
+          {liveStockPriceForCard != null && !fetchingQuote && (
+            <Text size={11} tone="secondary">Live stock: ${liveStockPriceForCard.toFixed(2)}</Text>
           )}
         </>
       )}
@@ -1155,7 +1226,7 @@ export default function Step7Page() {
                   // page prints as "Live mid" -- it was in scope here all
                   // along and simply never handed down, leaving the arm path
                   // (and the daily-loss gate behind it) on the scan-time mid.
-                  liveMid={liveQuote?.price ?? null}
+                  liveMid={liveQuoteForCard?.price ?? null}
                   card={effectiveCard}
                   broker={selectedBroker}
                   contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}

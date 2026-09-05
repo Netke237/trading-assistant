@@ -98,6 +98,7 @@ interface PortfolioStoreState {
    *  row inherits the global, which is a TIGHTER stop than the one asked for.
    *  The portfolio page renders this the same way it renders lastSyncError. */
   lastPremiumStopDropped: { symbol: string; contract: string; requestedDollar: number; at: number } | null;
+  clearPremiumStopDropped: () => void;
   clearSyncError: () => void;
   hydrate:        (positions: PortfolioPosition[]) => void;
   /** status: 'ok' saved; 'rejected' backend refused (dropped); 'pending' network
@@ -440,8 +441,14 @@ export function applyPersistedPosition(
   // engine would resolve this position to the GLOBAL while the backend used
   // the derived value.
   //
-  // Round 9 — and carry the ENTRY PRICE it was derived against, for the same
-  // reason and in the same breath. `premiumStopPct` is meaningless on its own:
+  // Round 9 — and carry the ENTRY PRICE it was derived against, whenever the
+  // response reports one. ROUND 10 finding 15 corrects how this was stated:
+  // the pct is adopted unconditionally and the entry only when present, so
+  // "the pair or neither" was never what the code did. The router guarantees a
+  // positive `entryPrice` in a 201 body, so the two do arrive together on
+  // every live path; the fallback keeps the row's own entry rather than
+  // blanking it, which is why the asymmetry is safe rather than merely
+  // tolerated. `premiumStopPct` is meaningless on its own:
   // both engines compare `price <= entry * (1 - pct)`, so adopting the
   // server's fraction while keeping the client's mid puts them on different
   // thresholds. Card mid $5.20, typed stop $3.12, filled at $4.00 -> the
@@ -718,6 +725,17 @@ export function migratePortfolioPersist(state: unknown, _version: number): unkno
       // the position and that nothing reads back.
       if (floored.premiumStopPct === undefined) floored.premiumStopPct = null;
       if (floored.syncStatus === 'synced') delete floored.premiumStopDollar;
+      // v3 -> v4, ROUND 10 finding 16. `stopIsUserSet` was added to
+      // PortfolioPosition (a persisted shape) with no version bump, which is
+      // the same omission PROJECT_STATE records round 3 catching on this very
+      // store -- and CLAUDE.md's rule was written after that.
+      //
+      // Benign, and stated rather than left to be re-derived: a v3 row has no
+      // such key, `toBackendPayload` sends `?? false`, and false is exactly
+      // what an existing row means -- its stop came from a plan, so the server
+      // SHOULD keep re-anchoring it. Normalising here rather than relying on
+      // the `??` keeps the persisted shape honest about itself.
+      if (floored.stopIsUserSet === undefined) floored.stopIsUserSet = false;
       return floored;
     }),
   };
@@ -741,7 +759,11 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
       positions: [],
       lastSyncError: null,
       lastPremiumStopDropped: null,
-      clearSyncError: () => set({ lastSyncError: null, lastPremiumStopDropped: null }),
+      // ROUND 10 finding 14 -- these clear SEPARATELY. One action wiping both
+      // meant dismissing the (informational) premium-stop notice also silently
+      // dropped the (rejection) sync error the user may not have read yet.
+      clearSyncError: () => set({ lastSyncError: null }),
+      clearPremiumStopDropped: () => set({ lastPremiumStopDropped: null }),
       hydrate: (positions) =>
         set({
           positions: positions.map((p) => ({
@@ -859,10 +881,12 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                     ...(!didMerge && outcome.kind === 'ok'
                       ? {
                           premiumStopPct: outcome.premiumStopPct ?? null,
-                          // The entry that fraction is relative to, adopted in
-                          // the same breath. Adopting one without the other is
-                          // what makes the two engines fire at different
-                          // prices -- see applyPersistedPosition.
+                          // The entry that fraction is relative to. Adopting
+                          // one without the other is what makes the two
+                          // engines fire at different prices -- see
+                          // applyPersistedPosition, and round 10's note there
+                          // on why this is "when reported" rather than
+                          // "or neither".
                           ...(outcome.entryPrice != null
                             ? { entryPrice: outcome.entryPrice }
                             : {}),
@@ -1117,22 +1141,33 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                     && outcome.kind === 'ok'
                     && outcome.premiumStopPct == null
                   ) {
-                    set({
-                      lastPremiumStopDropped: {
-                        symbol: p.symbol, contract: p.contract,
-                        requestedDollar: _createOnly, at: Date.now(),
-                      },
-                    });
+                    // FIRST wins, not last. This runs inside a for-loop over
+                    // every queued row, and an unconditional set() meant that
+                    // when two rows both dropped their stop only the last was
+                    // ever shown -- the earlier one was overwritten before it
+                    // reached a render. One banner can only name one position,
+                    // so keeping the first at least reports a real one
+                    // consistently rather than whichever the loop ended on.
+                    if (usePortfolioStore.getState().lastPremiumStopDropped == null) {
+                      set({
+                        lastPremiumStopDropped: {
+                          symbol: p.symbol, contract: p.contract,
+                          requestedDollar: _createOnly, at: Date.now(),
+                        },
+                      });
+                    }
                   }
                   keep.push({
                     ...rest,
                     premiumStopPct:
                       outcome.kind === 'ok' ? outcome.premiumStopPct ?? null : p.premiumStopPct,
                     // ...and the entry it was derived against, the third and
-                    // last site that adopts the server's fraction. All three
-                    // must take the pair or neither: `premiumStopPct` alone,
-                    // over the client's own mid, is a DIFFERENT dollar stop
-                    // from the one the user typed.
+                    // last site that adopts the server's fraction.
+                    // `premiumStopPct` alone, over the client's own mid, is a
+                    // DIFFERENT dollar stop from the one the user typed -- so
+                    // all three sites take the entry whenever the response
+                    // reports one, and keep the row's existing entry when it
+                    // does not.
                     ...(outcome.kind === 'ok' && outcome.entryPrice != null
                       ? { entryPrice: outcome.entryPrice }
                       : {}),
@@ -1203,7 +1238,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     }),
     {
       name: 'bamendjou-portfolio-v1',
-      version: 3,
+      version: 4,
       skipHydration: true,
       migrate: migratePortfolioPersist,
       partialize: (state) => ({ positions: state.positions }),

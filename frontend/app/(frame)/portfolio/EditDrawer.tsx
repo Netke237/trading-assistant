@@ -26,7 +26,7 @@ import { api } from '@/lib/api';
 import { POSITION_ALERT_TYPES } from '@/types/domain';
 import type { PortfolioPosition, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
 import styles from './page.module.css';
-import { resolvePremiumStopPct, hasOwnPremiumStopPct, premiumStopThresholdPrice, formatPremiumStopPct } from '@/lib/premiumStop';
+import { resolvePremiumStopPct, hasOwnPremiumStopPct, premiumStopThresholdPrice, formatPremiumStopPct, premiumStopPctLabel } from '@/lib/premiumStop';
 
 /** `position.contract` for an option position is a backend-generated,
  *  pipe-delimited machine ID — "SYMBOL|STRIKE|EXPIRY|C/P" (see
@@ -316,6 +316,23 @@ export function EditDrawer({
   // the user touched anything.
   const mcPriceStale = mcResult != null && priceEditedSinceEstimate;
 
+  /* The magnitude sanity range for the two UNDERLYING-price fields (Stop and
+   * Structural stop). Anchored on the LIVE underlying where the row has one,
+   * falling back to the stock price captured when the position was opened.
+   * Note the option `currentPrice` beside them is a premium, not a stock
+   * level, and is not a candidate anchor.
+   *
+   * Deliberately wide ([0.2x, 3x]): it exists to catch a misplaced decimal
+   * point ("1400" for "140", "14" for "140"), not to have an opinion about how
+   * far a stop should sit from the price. `null` when the position carries
+   * neither anchor, which leaves those fields exactly as unbounded as they
+   * were rather than inventing a reference. */
+  const stockAnchor =
+    (position.currentStockPrice && position.currentStockPrice > 0 ? position.currentStockPrice : null)
+    ?? (position.scanStockPrice && position.scanStockPrice > 0 ? position.scanStockPrice : null);
+  const stockLevelRange =
+    stockAnchor != null ? { min: stockAnchor * 0.2, max: stockAnchor * 3 } : null;
+
   return (
     <div className={styles.editDrawer}>
       <div className={styles.editHeader}>
@@ -326,14 +343,23 @@ export function EditDrawer({
       <div className={styles.editGrid}>
         <EditField
           label="Stop"
-          hint="Exit if the underlying stock drops below this price (invalidates the trade thesis)."
+          // DIRECTION-AWARE. The old copy said "drops below" unconditionally,
+          // which is the wrong instruction for every Bearish position -- a
+          // bearish stop sits ABOVE the price and fires on a RISE.
+          hint={
+            position.direction === 'Bearish'
+              ? 'Exit if the underlying stock rises above this price (invalidates the trade thesis).'
+              : 'Exit if the underlying stock drops below this price (invalidates the trade thesis).'
+          }
           value={position.stop ?? 0}
+          range={stockLevelRange}
           onChange={(n) => onChange({ stop: n > 0 ? n : null })}
         />
         <EditField
           label="Structural stop"
           hint="Tighter, chart-based stop (order block / swing level) from Check structure. Optional — 0 means none was captured."
           value={position.structuralStop ?? 0}
+          range={stockLevelRange}
           onChange={(n) => onChange({ structuralStop: n > 0 ? n : null })}
         />
         <PremiumStopEditor
@@ -771,13 +797,32 @@ function EditField({
   value,
   step = 0.05,
   onChange,
+  /** ROUND 10 finding 3 — an optional MAGNITUDE sanity range.
+   *
+   *  The drawer is the only editor a user reaches for an already-open
+   *  position, and its Stop field had no bound of any kind: "1400" typed for
+   *  "140" on a $145 stock PATCHed straight through, after which
+   *  alert_generator's `price <= pos.stop` is permanently true and every
+   *  backend scan raises a Critical STOP_REACHED with Gmail and Telegram
+   *  behind it.
+   *
+   *  MAGNITUDE, not direction — and the difference matters. On a NEW position
+   *  a wrong-side stop can only be a typo, which is why the create endpoint
+   *  refuses one. On an OPEN position a stop the underlying has already moved
+   *  through is a stop that is CORRECTLY about to fire, and tightening a stop
+   *  onto the current price is an ordinary thing to do. A directional check
+   *  here would reject exactly those legitimate states, so the range is wide
+   *  and only catches a misplaced decimal point. */
+  range,
 }: {
   label: string;
   hint?: string;
   value: number;
   step?: number;
   onChange: (n: number) => void;
+  range?: { min: number; max: number } | null;
 }) {
+  const [rejected, setRejected] = useState<string | null>(null);
   return (
     <label className={styles.editField}>
       <Text size={11} tone="secondary">{label}</Text>
@@ -788,10 +833,26 @@ function EditField({
         value={value}
         onChange={(e) => {
           const n = Number(e.target.value);
-          if (Number.isFinite(n)) onChange(n);
+          if (!Number.isFinite(n)) return;
+          // 0 is the documented "none" for these fields and always passes;
+          // the range only judges a number the user meant as a level.
+          if (range && n !== 0 && (n < range.min || n > range.max)) {
+            setRejected(
+              `Must be between ${range.min.toFixed(2)} and ${range.max.toFixed(2)} `
+              + `— kept the previous value.`,
+            );
+            return;
+          }
+          setRejected(null);
+          onChange(n);
         }}
       />
       {hint && <Text size={10} tone="dim">{hint}</Text>}
+      {rejected && (
+        <span aria-live="polite">
+          <Text size={10} tone="caution">{rejected}</Text>
+        </span>
+      )}
     </label>
   );
 }
@@ -969,7 +1030,12 @@ function PremiumStopEditor({
         type="text"
         inputMode="decimal"
         className={styles.editInput}
-        placeholder={`${Math.round(globalPremiumStopPct * 100)} (global)`}
+        // ROUND 10 finding 17 -- through the shared helper, not Math.round.
+        // A global of 0.605 rendered "60.5% (global)" in the label two lines
+        // up and "61" here, the exact 0%/100% lossiness `premiumStopPctLabel`
+        // was extracted to remove (round 5 fixed it on the Alerts page and
+        // left the component the helper came from).
+        placeholder={`${premiumStopPctLabel(globalPremiumStopPct)} (global)`}
         aria-label="Premium stop percent"
         value={draft}
         onChange={(e) => { dirtyRef.current = true; setDraft(e.target.value); }}
@@ -979,7 +1045,7 @@ function PremiumStopEditor({
       <Text size={10} tone="dim">
         {inherited
           ? `Inheriting the global — this position moves whenever the global does. Enter a percent (0.01–99.99) and press Enter to pin it${isStock ? '' : ' for this contract only'}.`
-          : `Set for this position only. Clear the field to go back to inheriting the global (${Math.round(globalPremiumStopPct * 100)}%).`}
+          : `Set for this position only. Clear the field to go back to inheriting the global (${premiumStopPctLabel(globalPremiumStopPct)}).`}
       </Text>
     </label>
   );

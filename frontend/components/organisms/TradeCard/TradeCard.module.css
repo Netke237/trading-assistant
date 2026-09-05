@@ -122,8 +122,16 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  /* wrap so the out-of-range message (.editRejected) drops to its own line
-     instead of becoming a third column and squeezing the label/value pair. */
+}
+
+/* ROUND 10 finding 13 -- the wrap belongs to the EDITABLE row only.
+   Round 9 put `flex-wrap: wrap` on `.kvRow` itself, which is the shared class
+   behind every key/value readout on the card (the generic KV component
+   included). With `justify-content: space-between`, any row whose label and
+   value stop fitting on one line then drops the value to a second line
+   LEFT-aligned -- a lone flex item ignores space-between -- instead of
+   compressing. Only EditableKV can render the message that needed the wrap. */
+.kvRowEditable {
   flex-wrap: wrap;
 }
 
@@ -133,6 +141,18 @@
   flex-basis: 100%;
   margin-top: var(--space-1);
   text-align: right;
+}
+
+/* The same live region while it has nothing to say. It stays MOUNTED — a live
+   region only announces changes to content that was already there (round 10) —
+   so it must take no space WITHOUT leaving the accessibility tree.
+   `display: none` would do the first and undo the second, which is the very
+   failure this class exists to avoid: a hidden-by-display region announces
+   nothing. Zero basis on an empty span occupies nothing and stays observable. */
+.editRejectedEmpty {
+  flex-basis: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .structuralStop {

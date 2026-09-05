@@ -430,8 +430,13 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     });
     jest.clearAllMocks();
     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+    // ROUND 10 finding 7 -- the LIVE mid must DIFFER from
+    // `contractDetails.mid` (2.5), or `expect(basket.entryPrice).toBe(
+    // direct.entryPrice)` cannot fail: the direct path takes the live quote
+    // and the basket path took the scan mid, and with both set to 2.5 the two
+    // were trivially equal. 4.0 makes the divergence visible.
     (api.getContractQuote as jest.Mock).mockResolvedValue({
-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      price: 4.0, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     });
     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
@@ -464,6 +469,86 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     await waitFor(() => expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('132'));
   }
 
+  it('never shows or stores another contract\'s live quote after Next-then-Prev', async () => {
+    // ROUND 10 finding 1. The quote effect has an early return (the
+    // override-already-claimed dedup gate) ABOVE its `setLiveQuote(null)`, so
+    // returning to a candidate whose contract was user-picked in step 6 left
+    // the OTHER candidate's quote standing. The card printed the wrong mid,
+    // buildPaperPosition stored it as this contract's entryPrice, and round
+    // 9's own `liveMid` prop carried it into the arm request and into the
+    // premium-stop bounds. The quote is keyed to its contract now.
+    act(() => {
+      useScanStore.setState({
+        scanResult: { candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
+        // Both contracts USER-PICKED, which is what arms the dedup gate.
+        // `pickedContracts` maps symbol -> contract ID and is resolved against
+        // `contractsBySymbol`; the id must DIFFER from `card.contract` or
+        // applyPickedContract returns the card untouched and `_userOverride`
+        // is never set -- in which case the gate never arms and this test
+        // silently exercises nothing.
+        pickedContracts: { AAA: 'AAA|160|2026-05-15|C', BBB: 'BBB|170|2026-05-15|C' },
+        contractsBySymbol: {
+          AAA: [{ id: 'AAA|160|2026-05-15|C', strike: 160, expiry: '2026-05-15', right: 'C',
+                  price: 2.4, delta: 0.42, theta: -0.08, ivRank: 44, ivPercentile: 40, dte: 24,
+                  score: 70, contractConfidence: 'PASS' }],
+          BBB: [{ id: 'BBB|170|2026-05-15|C', strike: 170, expiry: '2026-05-15', right: 'C',
+                  price: 3.4, delta: 0.41, theta: -0.08, ivRank: 44, ivPercentile: 40, dte: 24,
+                  score: 70, contractConfidence: 'PASS' }],
+        },
+        scanOverrides: {},
+      } as any);
+    });
+    // The dedup gate only stays armed if the recompute SETTLES -- the effect's
+    // cleanup deletes an unsettled claim. A bare jest.fn() returning undefined
+    // therefore disarms the very gate this test exists to exercise.
+    (api.recomputePlan as jest.Mock).mockResolvedValue({
+      entry: { limit: 2.5, maxFill: 2.63, orderType: 'Limit' },
+      exit: { invalidation: CARD_INVALIDATION, premiumStop: 1.5, timeStopDays: 10, target: 160, targets: [] },
+      rrRatio: 2.0, rrModel: 'Heston repriced',
+    });
+    // Distinct live mids, so a leak is unmistakable.
+    (api.getContractQuote as jest.Mock).mockImplementation((sym: string) =>
+      Promise.resolve({
+        price: sym === 'BBB' ? 7.77 : 2.22,
+        delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      }),
+    );
+
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Live mid: \$2\.22/)).toBeInTheDocument());
+    // The claim only SURVIVES cleanup once the recompute has settled, and only
+    // a surviving claim arms the gate on the way back.
+    await waitFor(() => expect((api.recomputePlan as jest.Mock).mock.calls.length).toBeGreaterThan(0));
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+
+    // Next to BBB...
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    await waitFor(() => expect(screen.getByText(/Live mid: \$7\.77/)).toBeInTheDocument());
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+
+    // ...and back to AAA. The gate fires and no re-fetch happens, so an
+    // unkeyed quote would still be BBB's.
+    fireEvent.click(screen.getByRole('button', { name: /prev/i }));
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    await act(async () => { await new Promise((r) => setTimeout(r, 80)); });
+    expect(screen.queryByText(/Live mid: \$7\.77/)).not.toBeInTheDocument();
+    // The gate really did fire -- otherwise a re-fetch would mask the defect
+    // and this test would pass for the wrong reason.
+    expect((api.getContractQuote as jest.Mock).mock.calls.map((c) => c[0]))
+      .toEqual(['AAA', 'BBB']);
+
+    // And the order path stores AAA's own premium, never BBB's.
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    fireEvent.click(limitBtn);
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    const [pos] = usePortfolioStore.getState().positions;
+    expect(pos.symbol).toBe('AAA');
+    expect(pos.entryPrice).not.toBe(7.77);
+  });
+
   it('the direct order path and the basket path store the SAME edited values', async () => {
     // ── Path 1: Place Limit, straight from the active card.
     await editAllThree();
@@ -491,7 +576,18 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     // The three threaded fields agree across the two paths...
     expect(basket.stop).toBe(direct.stop);
     expect(basket.premiumStopDollar).toBe(direct.premiumStopDollar);
+    // ...including the entry price, which is the denominator the premium stop
+    // is derived against. The live mid (4.0) differs from the scan mid (2.5),
+    // so this assertion has something to catch.
     expect(basket.entryPrice).toBe(direct.entryPrice);
+    expect(direct.entryPrice).toBe(4.0);
+    // ...and the two fields that tell the SERVER how to treat the stop. Round
+    // 10 found these diverging silently: the basket path stamped
+    // stopIsUserSet:true on untouched positions and omitted scanStockPrice
+    // entirely, so neither the re-anchor nor the wrong-side guard ever ran on
+    // anything it sent.
+    expect(basket.stopIsUserSet).toBe(direct.stopIsUserSet);
+    expect(basket.scanStockPrice).toBe(direct.scanStockPrice);
     // ...and they are the EDITED values, not the card's originals. Without
     // this the assertions above would pass on two identically-wrong rows.
     expect(direct.stop).toBe(132);
@@ -499,5 +595,29 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     expect(basket.stop).toBe(132);
     expect(basket.premiumStopDollar).toBe(0.9);
     expect(basket.stop).not.toBe(CARD_INVALIDATION);
+  });
+
+  it('does NOT claim an UNTOUCHED basket stop was user-set', async () => {
+    // ROUND 10 finding 6. `invalidationFor` falls back to the card's own value
+    // and is never null, so `stopIsUserSet: invalidation != null` was true for
+    // every basket position -- telling the router to skip re-anchoring a stop
+    // that is entirely plan-derived. The direct path used the correct
+    // `invalidationIsUserSetFor` all along, so the two disagreed.
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
+    const submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    const [pos] = usePortfolioStore.getState().positions;
+    expect(pos.stopIsUserSet).toBe(false);
+    // ...and it still carries the plan's own stop, plus the anchor the router
+    // needs to re-anchor it and to run the wrong-side guard.
+    expect(pos.stop).toBe(CARD_INVALIDATION);
+    expect(pos.scanStockPrice).toBe(150);
   });
 });
