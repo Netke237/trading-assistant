@@ -307,6 +307,8 @@
   "An earlier migration alters a foreign-key constraint, which SQLite cannot do without batch mode. The chain cannot replay from empty -- stamp one revision back and run only the step under test.",
   "The Barrier Race card renders NOTHING until Run Monte Carlo Estimate is clicked (BarrierRaceCard/index.tsx:119). An invisible card reads as an unshipped one.",
   "Do not trust an audit finding without a file:line you have checked yourself. Session 12 accepted a round-1 finding uncritically and committed its errors; round 2 found four of nine corrections did not survive contact with the code.",
-  "A bs_iv test written against the reference contract (215C) alone passes and hides the entire defect."
+  "A bs_iv test written against the reference contract (215C) alone passes and hides the entire defect.",
+  "Run the backend suite as plain `pytest`, with NO DATABASE_URL set. tests/conftest.py:54 does `os.environ.setdefault(\"DATABASE_URL\", <isolated test db>)`, so it already isolates the run -- and because it is setdefault, an env var YOU export wins and defeats it. Exporting DATABASE_URL=sqlite+aiosqlite:///:memory: (advice inherited from the alembic trap above, which applies only to alembic tests) makes tests/test_db_isolation.py fail: 1 failed / 1992 passed with it, all green without it. Round 5 chased that failure to ground -- do not read it as a real regression.",
+  "The backend venv is at backend/.venv, not backend/venv, and nothing outside it has pytest or pydantic. Round 5's audit subagent concluded 'pytest and pydantic are not installed in this container' and reported every backend finding as inspection-only. Both backend findings it raised that way turned out real, but tell an auditor the interpreter path (backend/.venv/bin/python) so it can verify rather than guess."
  ]
 }
