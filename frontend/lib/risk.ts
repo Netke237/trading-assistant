@@ -76,6 +76,16 @@ export function stopPremiumRisk(
 ): StopPremiumRisk | null {
   if (![stopPrice, stockPrice, delta, premium].every(Number.isFinite)) return null;
   if (premium <= 0) return null;
+  // A premium that does not round to a whole cent has no printable card. Every
+  // figure in this gate is rendered from the pair rounded to cents, so a
+  // premium of $0.004 printed a badge of "0%" beside a tooltip calling the
+  // contract a total loss, above "$0 per contract — of the $0 premium, $0
+  // left" and "$10.00 away × Δ0.500 = $0.00 of $0.00 premium (uncapped
+  // $5.00)". Returning null puts it through the same "N/A" path the card
+  // already has for a stop sitting at the price, instead of printing four
+  // mutually contradictory zeroes. Guarding here rather than in each formatter
+  // keeps one definition of "there is no meaningful answer".
+  if (Number(premium.toFixed(2)) <= 0) return null;
 
   // A caller passing a non-finite or out-of-range threshold gets the default
   // rather than a gate that silently passes everything. The per-run override in
@@ -109,7 +119,21 @@ export function stopPremiumRisk(
   // stop costs 85% of premium and one whose stop is twice the premium both read
   // CAUTION; the percentage in the badge and the "(uncapped $X)" tail carry the
   // magnitude, so nothing is hidden by collapsing the verdict.
-  const status: Status = fraction < passMax ? 'PASS' : 'CAUTION';
+  // THE VERDICT IS DECIDED ON THE PRINTED PAIR, for the same reason the
+  // percentage beside it is (see formatStopLossPct). Deciding the colour at
+  // full precision and the number at printed precision let them straddle the
+  // threshold in opposite directions: $1.77 away × Δ0.789 on a $2.00 premium
+  // is 0.69827 at full precision — PASS — while the printed pair is exactly
+  // $1.40 of $2.00, so the badge read "70% OF PREMIUM" in PASS green, under
+  // the PASS tooltip ("still holds meaningful value"), directly above an
+  // equation a reader resolves by hand to the CAUTION line. ~0.18% of ordinary
+  // inputs at the Swing 0.70 line, and more at 0.80. Two contracts showing the
+  // identical percentage could carry different verdicts.
+  //
+  // `fraction` on the object stays full precision: it is the underlying
+  // quantity, and nothing on screen is scaled from it.
+  const printed = printedFrom(stockMove, usedDelta, premium);
+  const status: Status = printed.loss / printed.premium < passMax ? 'PASS' : 'CAUTION';
 
   return { stockMove, delta: usedDelta, rawLoss, loss, premium, fraction, capped, status };
 }
@@ -151,9 +175,18 @@ function roundCents(n: number): number {
 }
 
 function printedShare(r: StopPremiumRisk) {
-  const move = Number(r.stockMove.toFixed(2));
-  const delta = Number(r.delta.toFixed(3));
-  const premium = Number(r.premium.toFixed(2));
+  return printedFrom(r.stockMove, r.delta, r.premium);
+}
+
+/** The single implementation of "what the card prints", shared by
+ *  `printedShare` (which reads it off a finished object) and `stopPremiumRisk`
+ *  (which needs it BEFORE the object exists, to decide the verdict on the same
+ *  figures the badge will show). Two copies of this rounding is exactly the
+ *  kind of drift the printed set was introduced to remove, so there is one. */
+function printedFrom(rawMove: number, rawDelta: number, rawPremium: number) {
+  const move = Number(rawMove.toFixed(2));
+  const delta = Number(rawDelta.toFixed(3));
+  const premium = Number(rawPremium.toFixed(2));
   const product = roundCents(move * delta);
   // WHETHER THE CAP BINDS IS DECIDED ON THE PRINTED PRODUCT, not on
   // `r.capped`. `r.capped` is `rawLoss >= premium` at full precision, and
@@ -232,6 +265,44 @@ export function formatStopPremiumRisk(r: StopPremiumRisk): string {
 export function stopLossIsTotalOnPrintedFigures(r: StopPremiumRisk): boolean {
   const p = printedShare(r);
   return p.loss >= p.premium;
+}
+
+/** The badge label: the percentage AND what survives the stop, per share.
+ *
+ *  Decision BADGE-SPEC-2026-09-05 (Kenneth). The schematic's card 03 puts the
+ *  dollars-left on the badge itself and per SHARE — "Caution · 71% of premium
+ *  · $1.49 left" — and what shipped through rounds 1-4 kept the badge
+ *  percent-only with per-contract dollars on the headline below. Put to
+ *  Kenneth as a spec deviation; he chose the schematic. The reason it matters
+ *  beyond this card: the badge is what the ranking view will reuse, and there
+ *  it would travel with only a percentage, which is the half that does not
+ *  tell you whether being wrong costs $8 or $800.
+ *
+ *  UNITS ARE NAMED ON BOTH LINES, deliberately. This card now shows the same
+ *  quantity twice a foot apart in two units — $1.49 per share here, $149 per
+ *  contract on the headline. That is the schematic's layout, not an accident,
+ *  so each string says which it is ("a share" / "per contract") rather than
+ *  leaving a reader to conclude the card contradicts itself by a factor of a
+ *  hundred. "/share" rather than "a share" because StatusBadge uppercases its
+ *  label and is `white-space: nowrap` -- "$1.49/SHARE LEFT" sits in the space
+ *  the badge has, "$1.49 A SHARE LEFT" does not. The schematic renders the
+ *  badge in mixed case; the uppercase is StatusBadge's house style applied to
+ *  every badge in the app, so the CONTENT follows the schematic and the
+ *  casing follows the design system.
+ *
+ *  Scaled from the SAME rounded cents pair as `formatStopLossPct` and
+ *  `formatStopLossHeadline`, and the dollars-left is subtracted in whole cents
+ *  rather than computed in floats, so the badge cannot round to "$0.00 left"
+ *  while the percentage beside it still reads 99%, and cannot read "$0.01
+ *  left" under a 100%. */
+export function formatStopLossBadge(r: StopPremiumRisk): string {
+  const p = printedShare(r);
+  const lossCents = Math.round(p.loss * 100);
+  const premiumCents = Math.round(p.premium * 100);
+  const leftCents = premiumCents - lossCents;
+  const pct = formatStopLossPct(r);
+  if (premiumCents <= 0) return `${pct} of premium`;
+  return `${pct} of premium · $${(leftCents / 100).toFixed(2)}/share left`;
 }
 
 export function formatStopLossPct(r: StopPremiumRisk): string {

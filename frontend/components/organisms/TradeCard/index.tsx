@@ -12,7 +12,7 @@ import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
-import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk, formatStopLossHeadline, formatStopLossPct, stopLossIsTotalOnPrintedFigures } from '@/lib/risk';
+import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk, formatStopLossHeadline, formatStopLossBadge, stopLossIsTotalOnPrintedFigures } from '@/lib/risk';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -1252,6 +1252,37 @@ export function TradeCard({
     return recommendedContractSize(riskBudget, riskPerContract);
   }, [exitPlan, data.contractDetails?.mid, limits.portfolioValue, limits.maxLossPerTradePct, maxLossOverride]);
 
+  /** Bounds for the per-position premium-stop DOLLAR field.
+   *
+   *  The field used to be `min={0.01}` with no max, and 0.01 is not a bound so
+   *  much as an invitation: `parseFloat("0")` is 0, not NaN, so typing 0 -- the
+   *  natural way to say "no override, use the global" -- clamped to $0.01,
+   *  differed from the seed, and therefore counted as a deliberate edit. On a
+   *  $5.20 mid the server stored 0.01/5.20 = 0.19%, putting the PREMIUM_STOP
+   *  threshold at $5.19 and raising a Critical alert on the first cent of
+   *  adverse move. The same keystroke shrinks the auto-trader's daily-loss
+   *  denominator by ~3000x (`entry_premium * qty * 100 * stop_pct`), so a field
+   *  labelled only "Premium stop" could all but switch that gate off.
+   *
+   *  10%-99% OF THE MID, because that is the range the app already considers a
+   *  stop: the GLOBAL premium stop is bounded `ge=0.10, le=1.0`
+   *  (routers/risk_settings.py), and the server rejects a per-position ratio at
+   *  or above 1. Deriving the dollar bounds from the mid keeps the card and
+   *  those two rules from disagreeing, instead of hard-coding a second opinion.
+   *
+   *  This does NOT restore a way back to inheriting -- clearing the override is
+   *  the Portfolio drawer's empty-field path, and the card has no equivalent.
+   *  It bounds the damage a stray keystroke can do; the inherit affordance is
+   *  the separate approved EDITED-FLAG build. */
+  const premiumStopBounds = useMemo(() => {
+    const mid = data.contractDetails?.mid ?? 0;
+    if (!(mid > 0)) return { min: 0.01, max: undefined as number | undefined };
+    return {
+      min: Math.max(0.01, Math.round(mid * 0.10 * 100) / 100),
+      max: Math.max(0.01, Math.round(mid * 0.99 * 100) / 100),
+    };
+  }, [data.contractDetails?.mid]);
+
   // Feature 5 — the $ figure the override editor displays as the "basis",
   // always shown (not silently used) whether or not an override is active.
   const maxLossLimitDollar = useMemo(
@@ -1637,7 +1668,7 @@ export function TradeCard({
                   <Text size={10} tone="dim">MAX LOSS IF THE STOP IS HIT</Text>
                   <StatusBadge
                     status={stopRisk.status}
-                    label={`${formatStopLossPct(stopRisk)} OF PREMIUM`}
+                    label={formatStopLossBadge(stopRisk)}
                     tooltip={
                       stopRisk.status === 'PASS'
                         ? 'The contract still holds meaningful value if this stop is hit — the cheaper candidate to be wrong on.'
@@ -1973,7 +2004,8 @@ export function TradeCard({
                 value={overlay.premiumStop}
                 onChange={(v) => patch({ premiumStop: v })}
                 prefix="$"
-                min={0.01}
+                min={premiumStopBounds.min}
+                max={premiumStopBounds.max}
                 step={0.01}
                 mono
               />

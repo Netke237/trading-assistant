@@ -666,3 +666,40 @@ async def test_patch_writes_the_column_and_an_explicit_null_clears_it(api_client
                                      json={"premiumStopPct": None})
     assert cleared.status_code == 200, cleared.text
     assert cleared.json()["premiumStopPct"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_sub_cent_live_quote_does_not_store_a_zero_entry(api_client):
+    """ROUND 5. `entryPrice` carries `gt=0` precisely because a 0 entry is the
+    denominator of the per-position stop -- but that bound validates what the
+    CLIENT sent, and the router then OVERWRITES it with the live quote. The
+    guard on that overwrite tested the raw quote (`float(live_entry) > 0`) and
+    only rounded afterwards, so a sub-cent price sailed through and was stored
+    as 0.0.
+
+    A stored 0.0 entry is a silently unprotected position: alert_generator gates
+    PREMIUM_STOP on `pos.entry_price > 0`, so the row can never raise a stop
+    alert at all, no matter what stop it carries.
+    """
+    r = await _create(api_client, live_price=0.004, rec="REC-SUBCENT")
+    assert r.status_code == 201, r.text
+    row = r.json()
+    # The sub-cent quote is not a usable entry, so the submitted price stands.
+    assert row["entryPrice"] == 5.20
+    assert row["entryPrice"] > 0
+
+
+@pytest.mark.asyncio
+async def test_a_sub_cent_live_quote_still_derives_a_usable_stop(api_client):
+    """The consequence the zero-entry bug hid: with the entry preserved, a typed
+    dollar stop still derives against a real denominator instead of being
+    dropped (or dividing by zero)."""
+    r = await _create(api_client, live_price=0.004, rec="REC-SUBCENT-2",
+                      premiumStopDollar=3.12)
+    assert r.status_code == 201, r.text
+    row = r.json()
+    assert row["entryPrice"] == 5.20
+    assert row["premiumStopPct"] == pytest.approx(0.60)
+    assert premium_stop_threshold_price(
+        row["entryPrice"], row["premiumStopPct"]
+    ) == pytest.approx(2.08)

@@ -718,6 +718,59 @@ describe('portfolioStore', () => {
       expect(usePortfolioStore.getState().lastSyncError?.detail).toBe('single_trade_exposure_too_high');
     });
 
+    it('renders a Pydantic validation 422 as text instead of storing a list', async () => {
+      // ROUND 5. FastAPI's `detail` is a STRING for a risk rejection but a LIST
+      // of error objects for a validation failure, and every parse site cast it
+      // to string. The list went into `lastSyncError.detail`, and the Portfolio
+      // page's `rejectionMessage` does `detail.split(' ')` inside JSX --
+      // `TypeError: detail.split is not a function`, which takes the whole page
+      // down. The position vanished AND the screen that would say why went with
+      // it. Newly reachable because piece 4 added `entryPrice: Field(gt=0)`,
+      // and a $0 mid on an illiquid or deep-OTM quote is a state this codebase
+      // handles explicitly elsewhere.
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({
+          ok: false,
+          status: 422,
+          json: async () => ({
+            detail: [
+              { type: 'greater_than', loc: ['body', 'entry_price'], msg: 'Input should be greater than 0', input: 0 },
+            ],
+          }),
+        });
+      const res = await usePortfolioStore.getState().addPosition(abt);
+      expect(res.status).toBe('rejected');
+      expect(typeof res.detail).toBe('string');
+      expect(res.detail).toBe('Input should be greater than 0');
+      const stored = usePortfolioStore.getState().lastSyncError?.detail;
+      expect(typeof stored).toBe('string');
+      // The page formatter must survive it -- that is the actual crash.
+      expect(() => (stored as string).split(' ')).not.toThrow();
+    });
+
+    it('joins multiple validation errors rather than dropping all but one', async () => {
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({
+          ok: false,
+          status: 422,
+          json: async () => ({
+            detail: [
+              { msg: 'Input should be greater than 0' },
+              { msg: 'Input should be less than 1' },
+            ],
+          }),
+        });
+      const res = await usePortfolioStore.getState().addPosition(abt);
+      expect(res.detail).toBe('Input should be greater than 0; Input should be less than 1');
+    });
+
+    it('falls back to the status code when the error body carries no usable text', async () => {
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn()
+        .mockResolvedValue({ ok: false, status: 422, json: async () => ({ detail: [{ loc: ['body'] }] }) });
+      const res = await usePortfolioStore.getState().addPosition(abt);
+      expect(res.detail).toBe('HTTP 422');
+    });
+
     it('keeps the row pending (status=pending) when the backend is unreachable', async () => {
       (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockRejectedValue(new Error('network'));
       const res = await usePortfolioStore.getState().addPosition(abt);

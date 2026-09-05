@@ -920,6 +920,55 @@ describe('PremiumStopEditor', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('a REVERTED entry does not leave the field armed to rewrite itself on the next blur', () => {
+    // ROUND 5. The two revert paths returned early without clearing dirtyRef,
+    // so the flag that means "the user typed something" survived a rejected
+    // edit. The value used here is the one the file's own comment is about:
+    // 2.00 / 4.13 = 0.48426150121065376, which no fixed decimal count
+    // round-trips, so the second commit's `next !== own` comparison is true and
+    // the PATCH fires.
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 2.0 / 4.13 }), onChange);
+    expect(input.value).toBe('48.43');
+
+    // 1) Type an out-of-range value and blur. It reverts, correctly, and must
+    //    not PATCH.
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '100' } });
+    fireEvent.blur(input);
+    expect(input.value).toBe('48.43');
+    expect(onChange).not.toHaveBeenCalled();
+
+    // 2) Now merely click into the field to read it, and click away. Nothing
+    //    was typed, so nothing may be written -- this used to PATCH 0.4843 over
+    //    a stored 0.484261..., rewriting a live risk setting by looking at it.
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // The other early return in `commit`, `!Number.isFinite(pct)`, is not
+  // reachable through this UI and so is not tested here: the field is
+  // `type="number"`, and a browser (and jsdom) reports a non-numeric entry as
+  // an EMPTY value, which takes the documented clear-to-inherit branch above
+  // rather than the non-finite one. It clears dirtyRef regardless, so the two
+  // revert paths cannot diverge if that ever changes.
+
+  it('a real edit still PATCHes after a reverted one', () => {
+    // The guard must not be so eager that it swallows a genuine edit made
+    // straight after a rejected one.
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 2.0 / 4.13 }), onChange);
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '100' } });
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '35' } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ premiumStopPct: 0.35 });
+  });
+
   it('round-trips a sub-1% stop instead of showing an unre-committable 0', () => {
     // The card's premium-stop field has min={0.01}, so a $0.01 stop on a $5.20
     // premium derives 0.0019. That rendered "0" — which `commit` itself

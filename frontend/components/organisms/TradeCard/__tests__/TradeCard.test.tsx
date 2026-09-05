@@ -2060,7 +2060,7 @@ describe('TradeCard — stop-vs-premium gate', () => {
     render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0)} />);
 
     expect(screen.getByText('MAX LOSS IF THE STOP IS HIT')).toBeInTheDocument();
-    expect(screen.getByText('100% OF PREMIUM')).toBeInTheDocument();
+    expect(screen.getByText('100% of premium · $0.00/share left')).toBeInTheDocument();
     // Inputs are on screen, not just the verdict — the complaint that produced
     // this gate was a ratio whose inputs were invisible.
     expect(screen.getByText(/\$11\.50 away × Δ0\.450 = \$2\.50 of \$2\.50 premium/)).toBeInTheDocument();
@@ -2082,7 +2082,7 @@ describe('TradeCard — stop-vs-premium gate', () => {
     // Same $11.50 move and delta, but a $20 premium: $5.175 / $20 = 26%.
     render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0, { mid: 20 })} />);
 
-    expect(screen.getByText('26% OF PREMIUM')).toBeInTheDocument();
+    expect(screen.getByText('26% of premium · $14.82/share left')).toBeInTheDocument();
     expect(screen.getByText(/\$11\.50 away × Δ0\.450 = \$5.18 of \$20.00 premium/)).toBeInTheDocument();
     expect(screen.queryByText(/uncapped/)).not.toBeInTheDocument();
   });
@@ -2152,7 +2152,7 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     // Before any Arithmetic Plan exists, the gate reads the raw structural
     // pair: |178.50 - 182.00| = 3.50 away x delta 0.45 = $1.575 of $2.50
     // premium = 63%. Sanity-checks the pre-fix baseline before it changes.
-    expect(screen.getByText('63% OF PREMIUM')).toBeInTheDocument();
+    expect(screen.getByText('63% of premium · $0.92/share left')).toBeInTheDocument();
 
     // 2) Compute Arithmetic Plan — exit-plan stop at $170.00, a DIFFERENT
     // fresh stock price ($190.00) than Check structure captured.
@@ -2179,9 +2179,9 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     // |170.00 - 190.00| = 20.00 away x delta 0.45 = $9.00 (uncapped) against a
     // $2.50 premium -> capped at 100%. If it had stayed on the raw pair this
     // would still read 63%.
-    expect(screen.getByText('100% OF PREMIUM')).toBeInTheDocument();
+    expect(screen.getByText('100% of premium · $0.00/share left')).toBeInTheDocument();
     expect(screen.getByText(/\$20\.00 away × Δ0\.450 = \$2\.50 of \$2\.50 premium \(uncapped \$9\.00\)/)).toBeInTheDocument();
-    expect(screen.queryByText('63% OF PREMIUM')).not.toBeInTheDocument();
+    expect(screen.queryByText('63% of premium · $0.92/share left')).not.toBeInTheDocument();
 
     // 3) Run Monte Carlo Estimate — fresh premium/delta for firstPassageContext.
     // structuralIsFreshRef is already true from step 1, so this does NOT
@@ -2287,7 +2287,7 @@ describe('TradeCard — piece 1/2 gap: cache-restored exit plan with no fresh cl
     // stopRisk: |178.50 - 182.00| = 3.50 away x delta 0.45 = $1.575 of $2.50
     // premium = 63%. If the gate had instead picked up the restored exit-plan
     // stop (185.87) it would read a different percentage here.
-    expect(screen.getByText('63% OF PREMIUM')).toBeInTheDocument();
+    expect(screen.getByText('63% of premium · $0.92/share left')).toBeInTheDocument();
   });
 });
 

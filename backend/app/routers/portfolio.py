@@ -228,8 +228,17 @@ async def add_position(
         entry_stock_price = live_price
 
     live_entry = (live_quote or {}).get("price") if isinstance(live_quote, dict) else None
-    if live_entry and float(live_entry) > 0:
-        entry_price = round(float(live_entry), 2)
+    # ROUND FIRST, THEN TEST. `float(live_entry) > 0` on the raw quote let a
+    # sub-cent live price (0.004) pass the guard and then round to 0.0, which
+    # is the one value `entryPrice`'s own `gt=0` bound exists to keep out --
+    # the bound validates what the CLIENT sent, and this line overwrites it
+    # afterwards, so the bound never sees this value. A stored 0.0 entry is
+    # silently unprotected: alert_generator gates PREMIUM_STOP on
+    # `pos.entry_price > 0`, so the position can never raise a stop alert at
+    # all, and the derived per-position stop below divides by it.
+    live_entry_rounded = round(float(live_entry), 2) if live_entry is not None else None
+    if live_entry_rounded and live_entry_rounded > 0:
+        entry_price = live_entry_rounded
     else:
         # %s (not %.2f) — entryPrice is a required float, but keep %s here
         # since this just logs whatever the frontend sent verbatim.

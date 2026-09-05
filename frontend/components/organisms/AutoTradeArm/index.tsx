@@ -23,9 +23,19 @@ interface AutoTradeArmProps {
   contracts?: number;
   /** Piece 4 — the card's premium stop as a DOLLAR loss per share, sourced at
    *  the call site from the same `premiumStopDollarFor` both send paths use, so
-   *  arming and sending cannot arm a position at two different stops. Null (the
-   *  default) means the card's stop was never edited off its seeded value, and
-   *  the auto-trader inherits `auto_trade.premium_stop_pct`.
+   *  arming and sending agree on THE DOLLAR AMOUNT. Null (the default) means
+   *  the card's stop was never edited off its seeded value, and the
+   *  auto-trader inherits `auto_trade.premium_stop_pct`.
+   *
+   *  They do NOT necessarily agree on the resulting FRACTION, and this comment
+   *  used to claim they did ("cannot arm a position at two different stops").
+   *  The two paths anchor the same dollars to different premiums by design:
+   *  arming divides by `card.contractDetails.mid` below, while sending posts
+   *  dollars and lets `add_position` divide by the persisted entry, which the
+   *  router may have replaced with a live quote. $3.12 on a $5.20 mid arms at
+   *  0.60 and, on a $4.00 fill, creates the position at 0.78. That
+   *  re-anchoring is the point of sending dollars rather than a fraction --
+   *  the guarantee is a shared dollar stop, not a shared percentage.
    *
    *  Converted to a fraction HERE rather than at the call site so it is divided
    *  by the very `entry_premium` this component sends. Anchoring it to any

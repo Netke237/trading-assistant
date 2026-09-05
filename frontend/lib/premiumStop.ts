@@ -120,6 +120,21 @@ export function formatPremiumStopPct(
   globalPct: number | null | undefined,
 ): string {
   const resolved = resolvePremiumStopPct(positionPct, globalPct);
-  const label = `${Number((resolved * 100).toFixed(2))}%`;
+  const label = premiumStopPctLabel(resolved);
   return hasOwnPremiumStopPct(positionPct) ? label : `${label} (global)`;
+}
+
+/** The bare trimmed percentage, for callers that need it inside their own
+ *  sentence rather than with the `(global)` suffix -- the Alerts page prints
+ *  it as `Premium stop (-45%)`.
+ *
+ *  Exported so that the two-decimal rule above has ONE implementation. It was
+ *  learned here and then not applied at the other render site of the same
+ *  number: the Alerts page rendered the resolved stop through
+ *  `Math.round(pct * 100)`, so a position pinned at 0.19% printed
+ *  "Premium stop (-0%)" and one at 99.7% printed "Premium stop (-100%)", the
+ *  label for a total loss, for stops that are neither -- the exact lossiness
+ *  this function's own comment documents as fixed. */
+export function premiumStopPctLabel(resolved: number): string {
+  return `${Number((resolved * 100).toFixed(2))}%`;
 }

@@ -12,6 +12,7 @@ import {
   stopPremiumRisk,
   formatStopPremiumRisk,
   formatStopLossHeadline,
+  formatStopLossBadge,
   stopLossIsTotalOnPrintedFigures,
   formatStopLossPct,
 } from '@/lib/risk';
@@ -723,5 +724,103 @@ describe('stopPremiumRisk — configurable thresholds', () => {
     // ...and omitting it entirely still gates, at the Swing default.
     expect(stopPremiumRisk(...at70)!.status).toBe('PASS');
     expect(stopPremiumRisk(...at85)!.status).toBe('CAUTION');
+  });
+});
+
+describe('the badge, the verdict and the money beside them agree', () => {
+  // Round 5. The badge percentage moved to the printed pair while `status` --
+  // the badge's COLOUR and tooltip -- was still decided at full precision, so
+  // the two straddled the threshold in opposite directions.
+  it('does not print a CAUTION-line percentage in PASS green', () => {
+    // $1.77 away x 0.789 = 1.39653 -> fraction 0.69827, under a 0.70 pass line
+    // at full precision. The printed pair is exactly $1.40 of $2.00 = 70%,
+    // which IS the caution line. The badge used to read "70% OF PREMIUM" in
+    // PASS green under the PASS tooltip ("still holds meaningful value"),
+    // directly above an equation a reader resolves by hand to 70%.
+    const r = stopPremiumRisk(198.23, 200, 0.789, 2.0, { pass_max_fraction: 0.7 })!;
+    expect(r).not.toBeNull();
+    expect(formatStopLossBadge(r)).toContain('70% of premium');
+    expect(r.status).toBe('CAUTION');
+  });
+
+  it('agrees across a sweep of ordinary inputs, at both pass lines', () => {
+    // The invariant is the verdict against the EXACT printed pair -- the same
+    // $X of $Y the equation line beneath the badge prints -- not against the
+    // badge's rounded integer. The integer is a summary and rounds to the
+    // nearest point, so at a 0.70 line a printed 69.5% legitimately reads "70%"
+    // in PASS green: a reader hand-checking the equation gets 69.5%, under the
+    // line. What must never happen again is the two being computed at
+    // DIFFERENT PRECISIONS, which is what let 0.69827 wear PASS while the
+    // printed pair was exactly 70.0%.
+    const roundCents = (n: number) => Math.round(n * 100 + Number.EPSILON) / 100;
+    for (const passMax of [0.7, 0.8]) {
+      for (let move = 0.25; move <= 40; move += 0.37) {
+        for (let delta = 0.05; delta <= 0.95; delta += 0.07) {
+          for (let premium = 0.35; premium <= 25; premium += 1.13) {
+            const r = stopPremiumRisk(200 - move, 200, delta, premium, { pass_max_fraction: passMax });
+            if (!r) continue;
+            const pMove = Number(Math.abs(move).toFixed(2));
+            const pDelta = Number(Math.max(delta, 0.05).toFixed(3));
+            const pPremium = Number(premium.toFixed(2));
+            const printedFraction = Math.min(roundCents(pMove * pDelta), pPremium) / pPremium;
+            expect({ move, delta, premium, passMax, status: r.status }).toMatchObject({
+              status: printedFraction < passMax ? 'PASS' : 'CAUTION',
+            });
+            // ...and the badge's integer is a faithful rounding of that same
+            // fraction, so the number and the colour come from one quantity.
+            const pct = parseInt(formatStopLossBadge(r), 10);
+            if (pct !== 99 && pct !== 100) {
+              // 0.005 + a float epsilon: a fraction sitting exactly on the
+              // rounding boundary computes as 0.005000000000000001 in IEEE754.
+              expect(Math.abs(pct / 100 - printedFraction)).toBeLessThanOrEqual(0.00500001);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('badge dollars-left reconciles with the headline, in the other unit', () => {
+    const r = stopPremiumRisk(188.5, 200, 0.45, 20, { pass_max_fraction: 0.8 })!;
+    const badge = formatStopLossBadge(r);        // per SHARE
+    const headline = formatStopLossHeadline(r);  // per CONTRACT
+    const perShareLeft = Number(badge.match(/\$([\d.]+)\/share left/)![1]);
+    const perContractLeft = Number(headline.match(/\$([\d,]+) left/)![1].replace(/,/g, ''));
+    // The same quantity in two units, a foot apart on the card. They must be
+    // exactly a factor of 100 apart or the card contradicts itself.
+    expect(Math.round(perShareLeft * 100)).toBe(perContractLeft);
+  });
+
+  it('never prints a dollar left over under a 100% badge, or $0.00 left under 99%', () => {
+    for (let move = 0.25; move <= 60; move += 0.29) {
+      for (let delta = 0.05; delta <= 0.95; delta += 0.05) {
+        for (let premium = 0.35; premium <= 30; premium += 0.91) {
+          const r = stopPremiumRisk(200 - move, 200, delta, premium);
+          if (!r) continue;
+          const badge = formatStopLossBadge(r);
+          const left = Number(badge.match(/\$([\d.]+)\/share left/)![1]);
+          if (badge.startsWith('100%')) expect(left).toBe(0);
+          else expect(left).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+});
+
+describe('a premium too small to print', () => {
+  // Round 5. `stopPremiumRisk` guarded `premium <= 0`, but every figure on the
+  // card is rendered from the pair rounded to CENTS, so a sub-cent premium
+  // produced a card of mutually contradictory zeroes: a "0%" badge beside a
+  // tooltip calling the contract a total loss, above "$0 per contract -- of the
+  // $0 premium, $0 left".
+  it('returns null rather than a card of contradictory zeroes', () => {
+    expect(stopPremiumRisk(190, 200, 0.5, 0.004)).toBeNull();
+    expect(stopPremiumRisk(190, 200, 0.5, 0.0049)).toBeNull();
+  });
+
+  it('still answers at exactly one cent', () => {
+    const r = stopPremiumRisk(190, 200, 0.5, 0.005);
+    expect(r).not.toBeNull();
+    expect(formatStopLossBadge(r!)).toBe('100% of premium · $0.00/share left');
   });
 });

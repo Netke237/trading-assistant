@@ -858,10 +858,18 @@ function PremiumStopEditor({
   const dirtyRef = useRef(false);
   // Follow the stored value when it changes from outside (a different position
   // in the drawer, a sync) but never while the user is mid-edit on this one.
+  //
+  // "never while the user is mid-edit" is enforced by consulting dirtyRef, not
+  // merely asserted: the drawer re-renders on the 30s syncFromBackend, so a
+  // sync (or a second client) landing a new value mid-typing would otherwise
+  // overwrite the characters in the field -- and leave dirtyRef set, feeding
+  // the spurious PATCH above. The stored value is still RECORDED so the next
+  // external change is detected against the current one; only the visible
+  // draft is left alone.
   const lastStoredRef = useRef(stored);
   if (lastStoredRef.current !== stored) {
     lastStoredRef.current = stored;
-    if (draft !== stored) setDraft(stored);
+    if (!dirtyRef.current && draft !== stored) setDraft(stored);
   }
 
   const commit = () => {
@@ -883,7 +891,14 @@ function PremiumStopEditor({
     // stop than the one asked for, with the typed digits gone and no message.
     // The backend bounds this at (0, 1) exclusive, so 100 has no
     // representation; showing the previous value back is the honest answer.
-    if (!Number.isFinite(pct)) { setDraft(stored); return; }
+    // dirtyRef is cleared on EVERY exit from commit, revert paths included.
+    // Leaving it set on a revert re-opened the exact defect it was added to
+    // close: type 100, blur (reverted, still "dirty"), then click into the
+    // field to read it and click away -- the second commit sees a clean draft,
+    // a still-true dirtyRef, and a rounded value that does not equal the
+    // unrounded stored fraction, and PATCHes a live risk setting nobody
+    // touched.
+    if (!Number.isFinite(pct)) { setDraft(stored); dirtyRef.current = false; return; }
     // 4dp on the fraction == 2dp on the percent, the precision `stored` renders.
     const next = Number((pct / 100).toFixed(4));
     // BOUNDED ON THE ROUNDED VALUE, not on the typed one. The column's contract
@@ -896,7 +911,7 @@ function PremiumStopEditor({
     // i.e. the entry itself, so EVERY position at or below entry raised a
     // Critical PREMIUM_STOP toast on every 30s scan with no backend alert
     // behind it.
-    if (!(next > 0 && next < 1)) { setDraft(stored); return; }
+    if (!(next > 0 && next < 1)) { setDraft(stored); dirtyRef.current = false; return; }
     setDraft(String(Number(pct.toFixed(2))));
     if (dirtyRef.current && next !== own) onChange({ premiumStopPct: next });
     dirtyRef.current = false;

@@ -203,6 +203,39 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
   };
 }
 
+/** FastAPI's `detail` is not always a string.
+ *
+ *  A risk rejection returns `detail: "code code"` (a string, space-joined), and
+ *  every call site here assumed that shape. A Pydantic VALIDATION failure
+ *  returns a LIST of error objects instead -- `[{type, loc, msg, input}, ...]`
+ *  -- and casting that to `string` and storing it in `lastSyncError.detail`
+ *  crashed the Portfolio page: `rejectionMessage` does `detail.split(' ')`,
+ *  which throws inside JSX and takes the whole page down. The position vanished
+ *  AND the screen that would explain why went with it.
+ *
+ *  Not hypothetical since piece 4 added `entryPrice: Field(gt=0)`: a $0 mid on
+ *  an illiquid or deep-OTM quote is a state this codebase already handles
+ *  explicitly elsewhere, and it now 422s here.
+ *
+ *  Normalises every shape to a string so no consumer has to. Validation errors
+ *  are rendered as their `msg` text, which is what a human can act on; the
+ *  field location is dropped because these are all single-position posts. */
+function errorDetail(body: unknown, status: number): string {
+  const d = (body as { detail?: unknown } | null | undefined)?.detail;
+  if (typeof d === 'string' && d.trim() !== '') return d;
+  if (Array.isArray(d)) {
+    const msgs = d
+      .map((e) => (e && typeof e === 'object' ? (e as { msg?: unknown }).msg : undefined))
+      .filter((m): m is string => typeof m === 'string' && m.trim() !== '');
+    if (msgs.length) return msgs.join('; ');
+  }
+  if (d && typeof d === 'object') {
+    const msg = (d as { msg?: unknown }).msg;
+    if (typeof msg === 'string' && msg.trim() !== '') return msg;
+  }
+  return `HTTP ${status}`;
+}
+
 type SaveOutcome =
   // `premiumStopPct` is the fraction the SERVER derived for this create (piece
   // 4) — the client sends dollars, so this is the only place the stored
@@ -239,7 +272,7 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
     }
     if (res.status === 409) return { kind: 'duplicate' };
     const body = await res.json().catch(() => ({}));
-    return { kind: 'rejected', detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
+    return { kind: 'rejected', detail: errorDetail(body, res.status) };
   } catch {
     return { kind: 'network' };
   }
@@ -285,7 +318,7 @@ export async function persistPosition(
       };
     }
     const body = await res.json().catch(() => ({}));
-    return { ok: false, detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
+    return { ok: false, detail: errorDetail(body, res.status) };
   } catch {
     // Backend unreachable. Do NOT report ok:true here — nothing was actually
     // persisted, and a caller that skips its own retry path on ok:true would
@@ -386,7 +419,7 @@ async function patchPosition(
       return typeof adjustedQty === 'number' ? { ok: true, adjustedQty } : { ok: true };
     }
     const body = await res.json().catch(() => ({}));
-    return { ok: false, detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
+    return { ok: false, detail: errorDetail(body, res.status) };
   } catch {
     return { ok: false, detail: 'Could not reach the backend — edit was not saved.' };
   }
@@ -863,7 +896,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
 
             if (!res.ok) {
               const body = await res.json().catch(() => ({}));
-              return { ok: false, detail: (body as { detail?: string }).detail ?? `HTTP ${res.status}` };
+              return { ok: false, detail: errorDetail(body, res.status) };
             }
 
             // Success: remove the acted-upon local row so a fully-closed position

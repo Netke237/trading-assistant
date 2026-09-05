@@ -12,7 +12,7 @@ import { useChartAlertStore } from '@/lib/chartAlertStore';
 import AlertRuleBuilder from '@/components/organisms/AlertRuleBuilder';
 import { api, type CompositeWatch } from '@/lib/api';
 import { compositeWatchSummary } from '@/lib/compositeWatchSummary';
-import { resolvePremiumStopPct } from '@/lib/premiumStop';
+import { resolvePremiumStopPct, premiumStopPctLabel } from '@/lib/premiumStop';
 import type { AlertType, ToastItem } from '@/types/domain';
 import type { AlertRule, Condition } from '@/types/alerts';
 import styles from './page.module.css';
@@ -62,10 +62,21 @@ const ALERT_TYPE_LABELS: Record<AlertType, string> = {
 // a fired alert — neither `reason` string carries a threshold
 // (alertEngine.ts, alert_generator.py). A row printing "Premium stop (–60%)"
 // for a position pinned at 30% is the drift this comment warns about, one level
-// down. Callers pass the RESOLVED percentage for the position that fired;
-// the settings list below passes the global, because that row IS the global.
+// down. Callers pass the percentage RESOLVED FOR THAT POSITION AS IT STANDS
+// NOW; the settings list below passes the global, because that row IS the
+// global.
+//
+// "as it stands now", precisely: the threshold is not stamped on the toast when
+// the alert fires, so editing a position's stop afterwards silently relabels
+// its historical rows with a threshold those alerts did not use. Stamping it at
+// fire time needs a field on the toast, a persisted-store migration and the
+// same field from the backend generator's websocket path, so it is recorded as
+// an open question rather than half-done here.
+//
+// Trimmed to two decimals via the shared helper, NOT Math.round -- see
+// premiumStopPctLabel.
 function alertTypeLabel(type: AlertType, premiumStopPct: number): string {
-  if (type === 'PREMIUM_STOP') return `Premium stop (–${Math.round(premiumStopPct * 100)}%)`;
+  if (type === 'PREMIUM_STOP') return `Premium stop (–${premiumStopPctLabel(premiumStopPct)})`;
   return ALERT_TYPE_LABELS[type] ?? type;
 }
 
