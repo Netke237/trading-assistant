@@ -356,6 +356,21 @@ export function applyPersistedPosition(
   pos: PortfolioPosition,
   addPosition: (p: PortfolioPosition, opts?: { skipPost?: boolean }) => unknown,
   onAdjusted?: (adjustedQty: number) => void,
+  /** Fired when the position asked for a per-share dollar premium stop and the
+   *  server could not apply it, so the row inherits the global instead.
+   *
+   *  The router derives `pct = premiumStopDollar / entry_price` against the
+   *  price it actually persists -- which is the save-time live quote, not the
+   *  card's mid -- and when that ratio reaches 1 (the stop is at or past a
+   *  total loss on the re-anchored premium) it logs a warning and falls back to
+   *  `body.premiumStopPct`, which the card never sends. Result: `NULL`, i.e.
+   *  the global. Reachable through an ordinary fill: a $4.50 stop typed against
+   *  a $5.20 mid, filled at $4.20.
+   *
+   *  The router's own comment says "nothing on screen says why". This is the
+   *  hook that lets a call site say it: the response already carries the
+   *  resolved `premiumStopPct`, so no extra request is needed. */
+  onPremiumStopDropped?: (requestedDollar: number) => void,
 ): { rejected: boolean; detail?: string } {
   if (saved.offline) {
     void addPosition(pos);
@@ -365,6 +380,9 @@ export function applyPersistedPosition(
     return { rejected: true, detail: saved.detail };
   }
   if (saved.adjustedQty != null) onAdjusted?.(saved.adjustedQty);
+  if (pos.premiumStopDollar != null && saved.premiumStopPct == null) {
+    onPremiumStopDropped?.(pos.premiumStopDollar);
+  }
   // Piece 4 — carry the server's derived premium-stop fraction onto the row
   // that goes into local state. `skipPost: true` means nothing else will fetch
   // it until the next 30s syncFromBackend, and until then the frontend alert

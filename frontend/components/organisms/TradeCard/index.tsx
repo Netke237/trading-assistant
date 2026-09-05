@@ -273,6 +273,33 @@ interface TradeCardProps {
    *  own value, which is what lets an untouched field keep following `mergePlan`. */
   initialEntryLimit?: number | null;
   initialInvalidation?: number | null;
+  /** The page's freshly-fetched underlying price and contract mid, used ONLY
+   *  to anchor the three fields' bounds.
+   *
+   *  Round 8: the bounds were anchored to `data.price` / `contractDetails.mid`,
+   *  which come off `scanResult` -- and `scanStore` persists that to
+   *  localStorage, so on a reload they can be days old. AAPL scanned Bullish at
+   *  $145, reopened with the stock at $200: the bounds were [72.50, 143.55] and
+   *  a perfectly sane $180 stop was rejected as out of range while the page
+   *  displayed "Live stock: $200.00" three rows away. The live values are
+   *  already fetched; they were simply never handed down.
+   *
+   *  Null falls back to the scan-time figures, which is the pre-fetch state and
+   *  the offline one -- bounds off a stale anchor still beat no bounds. */
+  liveStockPrice?: number | null;
+  liveMid?: number | null;
+  /** Bumped by the page whenever it clears its per-card edit caches (a new
+   *  scan result). Forces the same full reset a candidate change does.
+   *
+   *  Round 8: the page cleared `entryLimitByContract` and friends without any
+   *  way to tell the card, and the card's reset is gated on symbol/contract
+   *  identity -- which a new scan of the SAME contract does not change. So the
+   *  card kept `touchedRef.entryLimit` and displayed the user's $2.71 while
+   *  `entryLimitFor` fell back to the new plan's $6.00: card, button and order
+   *  disagreeing, which is the whole defect class this branch exists to close.
+   *  Clearing the parent's cache without this prop landed in the WORSE of the
+   *  two states, not the safer one. */
+  resetKey?: number;
   /** Fired whenever the override changes (Apply/Clear inside the Arithmetic
    *  card's max-loss override editor) — direct call inside the setter, the
    *  same pattern `onEditsChange` already uses. Not the ref-synced-effect
@@ -366,6 +393,9 @@ export function TradeCard({
   initialPremiumStop = null,
   initialEntryLimit = null,
   initialInvalidation = null,
+  liveStockPrice = null,
+  liveMid = null,
+  resetKey = 0,
   onMaxLossOverrideChange,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
@@ -559,6 +589,8 @@ export function TradeCard({
 
   const prevSymbolRef = useRef(data.symbol);
   const prevContractRef = useRef(data.contract);
+  // Third identity the reset watches — see the `resetKey` prop's own note.
+  const prevResetKeyRef = useRef(resetKey);
   // Single effect resetting BOTH structuralStop and firstPassage state on a
   // contract change — deliberately not two separate effects each comparing
   // against prevSymbolRef/prevContractRef: effects run in declaration order
@@ -567,7 +599,11 @@ export function TradeCard({
   // change" (the first effect already advanced the ref). Caught by the
   // first-passage stale-response regression test below.
   useEffect(() => {
-    if (data.symbol !== prevSymbolRef.current || data.contract !== prevContractRef.current) {
+    if (
+      data.symbol !== prevSymbolRef.current
+      || data.contract !== prevContractRef.current
+      || resetKey !== prevResetKeyRef.current
+    ) {
       structuralRequestRef.current?.abort();
       firstPassageRequestRef.current?.abort();
       exitPlanRequestRef.current?.abort();
@@ -617,8 +653,9 @@ export function TradeCard({
       setMaxLossOverride(initialMaxLossOverride);
       prevSymbolRef.current = data.symbol;
       prevContractRef.current = data.contract;
+      prevResetKeyRef.current = resetKey;
     }
-  }, [data.symbol, data.contract, initialContracts, defaultTargetPct, initialMaxLossOverride,
+  }, [data.symbol, data.contract, resetKey, initialContracts, defaultTargetPct, initialMaxLossOverride,
       initialPremiumStop, initialEntryLimit, initialInvalidation]);
 
   // Cancel any outstanding requests on unmount.
@@ -1434,23 +1471,64 @@ export function TradeCard({
    *  Clamps rather than rejects, matching the Premium stop field. Note the
    *  clamp is visible: the field re-renders with the clamped number, so a
    *  fat-fingered 1400 shows as $143.55 rather than being accepted. */
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  /** LIVE first, scan-time second. Both anchors below used to read straight off
+   *  `data`, which comes from `scanResult` -- and scanStore persists that to
+   *  localStorage, so after a reload they can be days stale while the page
+   *  shows "Live stock:" and "Live mid:" a few rows up. See the props' notes. */
+  const anchorStockPrice = liveStockPrice ?? arithmeticLiveStockPrice ?? data.price;
+  const anchorMid = liveMid ?? data.contractDetails?.mid ?? 0;
+
   const invalidationBounds = useMemo(() => {
-    const price = data.price;
-    if (!(price > 0)) return { min: 0.01, max: undefined as number | undefined };
-    const round2 = (n: number) => Math.round(n * 100) / 100;
+    // NO ANCHOR, NO DIRECTIONAL CHECK -- and that residual is stated rather
+    // than hidden. With no usable stock price there is nothing to compare a
+    // stop against, so this degrades to the old "must be positive". Round 8
+    // flagged the same fallback on `premiumStopBounds`; there the reject-rather-
+    // than-clamp policy closes the dangerous half of it (typing 0 to mean "no
+    // override" no longer commits $0.01 as a deliberate 0.19% stop), but a
+    // wrong-SIDE stop on an anchorless card is still accepted. A card with no
+    // price is not one an order should be placed from in the first place.
+    if (!(anchorStockPrice > 0)) return { min: 0.01, max: undefined as number | undefined };
     return data.direction === 'Bearish'
-      ? { min: Math.max(0.01, round2(price * 1.01)), max: round2(price * 1.50) }
-      : { min: Math.max(0.01, round2(price * 0.50)), max: Math.max(0.01, round2(price * 0.99)) };
-  }, [data.price, data.direction]);
+      ? { min: Math.max(0.01, round2(anchorStockPrice * 1.01)), max: round2(anchorStockPrice * 1.50) }
+      : { min: Math.max(0.01, round2(anchorStockPrice * 0.50)), max: Math.max(0.01, round2(anchorStockPrice * 0.99)) };
+  }, [anchorStockPrice, data.direction]);
 
   const premiumStopBounds = useMemo(() => {
-    const mid = data.contractDetails?.mid ?? 0;
-    if (!(mid > 0)) return { min: 0.01, max: undefined as number | undefined };
+    if (!(anchorMid > 0)) return { min: 0.01, max: undefined as number | undefined };
     return {
-      min: Math.max(0.01, Math.round(mid * 0.10 * 100) / 100),
-      max: Math.max(0.01, Math.round(mid * 0.99 * 100) / 100),
+      min: Math.max(0.01, round2(anchorMid * 0.10)),
+      max: Math.max(0.01, round2(anchorMid * 0.99)),
     };
-  }, [data.contractDetails?.mid]);
+  }, [anchorMid]);
+
+  /** Bounds for the Entry limit — the field this branch made into the order's
+   *  `limit_price`.
+   *
+   *  Round 8 called this the one CRITICAL of its round, and correctly: of the
+   *  three fields threaded here it is the only one whose fat-finger is an
+   *  EXECUTION error rather than an alerting one. Invalidation was bounded in
+   *  round 7 and Premium stop in round 5; this one shipped with `min={0.01}`
+   *  and no max. On a $2.50 mid, "25.0" typed for "2.50" put
+   *  `limit_price: 25.0` on a BUY/OPEN order with nothing between it and the
+   *  broker: `checkTradeRisk` and the capital-at-risk row both size off
+   *  `contractDetails.mid`, not off the limit, and the backend's
+   *  `limit_price: Optional[float]` has no bound either. On a wide options book
+   *  a marketable buy limit an order of magnitude above the ask is a real fill.
+   *
+   *  Wider than the other two, deliberately: paying up through the ask is a
+   *  legitimate thing to do with a limit order, so this has to admit real
+   *  intent while rejecting a misplaced decimal point. 3x catches the missing
+   *  decimal (10x) with room to spare; 0.25x catches it in the other
+   *  direction. */
+  const entryLimitBounds = useMemo(() => {
+    if (!(anchorMid > 0)) return { min: 0.01, max: undefined as number | undefined };
+    return {
+      min: Math.max(0.01, round2(anchorMid * 0.25)),
+      max: Math.max(0.02, round2(anchorMid * 3)),
+    };
+  }, [anchorMid]);
 
   // Feature 5 — the $ figure the override editor displays as the "basis",
   // always shown (not silently used) whether or not an override is active.
@@ -1715,11 +1793,12 @@ export function TradeCard({
              out of the old Entry Plan card; sits above the three profit-target
              method cards (Arithmetic / Monte Carlo / Fixed % Ladder) below.
              Rendered exactly once per TradeCard (this component itself is
-             rendered once per active/basket candidate on Step 7). Max fill's
-             DEFAULT is a global YAML formula (mid * (1 + slippage%)) but the
-             resulting dollar value has always been, and remains, freely
-             per-trade editable — this EditableKV is unchanged from the old
-             Entry Plan card's, just relocated. */}
+             rendered once per active/basket candidate on Step 7). Max fill
+             comes from a global YAML formula (mid * (1 + slippage%)) and is
+             DISPLAY ONLY — see the row's own note below. This comment used to
+             end "the resulting dollar value has always been, and remains,
+             freely per-trade editable"; that stopped being true six lines
+             lower down and the sentence outlived it by a commit. */}
         <div className={styles.orderStrip}>
           <div className={styles.orderStripItem}>
             <Text size={11} tone="secondary">Order type</Text>
@@ -1732,8 +1811,8 @@ export function TradeCard({
               onChange={(v) => patch({ entryLimit: v })}
               onRevert={() => revert('entryLimit')}
               prefix="$"
-              min={0.01}
-              step={0.01}
+              min={entryLimitBounds.min}
+              max={entryLimitBounds.max}
               mono
             />
           </div>
@@ -1757,7 +1836,6 @@ export function TradeCard({
               value={overlay.contracts}
               onChange={(v) => patch({ contracts: v })}
               min={1}
-              step={1}
               mono
               decimals={0}
             />
@@ -2025,7 +2103,6 @@ export function TradeCard({
                   className={styles.editInput}
                   min={1}
                   max={500}
-                  step={1}
                   aria-label={`${key.toUpperCase()} profit target %`}
                   value={Math.round(targetPct[key] * 100)}
                   onChange={(e) => {
@@ -2179,7 +2256,6 @@ export function TradeCard({
                 prefix="$"
                 min={invalidationBounds.min}
                 max={invalidationBounds.max}
-                step={0.01}
                 mono
               />
               <EditableKV
@@ -2190,7 +2266,6 @@ export function TradeCard({
                 prefix="$"
                 min={premiumStopBounds.min}
                 max={premiumStopBounds.max}
-                step={0.01}
                 mono
               />
               {/* READ-ONLY for the same reason as Max fill above — no reader
@@ -2541,7 +2616,6 @@ function EditableTargetRow({
                 className={styles.editTargetInput}
                 value={draft}
                 min={0.01}
-                step={0.01}
                 onChange={(e) => setDraft(e.target.value)}
                 onBlur={save}
                 onKeyDown={handleKey}
@@ -2597,7 +2671,6 @@ function EditableKV({
   onRevert,
   min,
   max,
-  step,
   mono,
   tone,
   prefix = '',
@@ -2613,7 +2686,6 @@ function EditableKV({
   onRevert?: () => void;
   min?: number;
   max?: number;
-  step?: number;
   mono?: boolean;
   tone?: 'pass' | 'caution' | 'reject';
   prefix?: string;
@@ -2640,8 +2712,31 @@ function EditableKV({
     }
     const minVal = min ?? -Infinity;
     const maxVal = max ?? Infinity;
-    const clamped = Math.min(maxVal, Math.max(minVal, parsed));
-    const next = decimals === 0 ? Math.round(clamped) : Math.round(clamped * 100) / 100;
+    // OUT OF RANGE REVERTS, IT DOES NOT CLAMP.
+    //
+    // Round 8: clamping turns a fat-finger into a plausible-looking WRONG
+    // number rather than rejecting it. On a $150 bullish card, "1400" typed for
+    // "140" clamped to $148.50 -- 1% below spot -- which `buildPaperPosition`
+    // stores as `PortfolioPosition.stop` and `alertEngine` fires STOP_REACHED
+    // on at the first ordinary intraday wiggle, Gmail and Telegram behind it,
+    // while the user believes their stop is 7% away. The mirror case "14"
+    // clamped to $75.00, a 50% stop, equally silently.
+    //
+    // The portfolio EditDrawer's premium-stop editor already took this
+    // position on the identical question ("Out of range REVERTS, it does not
+    // clear ... showing the previous value back is the honest answer"). Two
+    // editors in one branch with opposite policies, and the card had the unsafe
+    // one on the field that becomes the position's stop.
+    //
+    // Reverting also retires round 6's seed-outside-bounds hazard at the
+    // source: the clamp was what made `next !== value` on a bare focus-and-blur
+    // when the SEED itself sat outside [min,max]. With no clamp there is
+    // nothing to differ.
+    if (parsed < minVal || parsed > maxVal) {
+      setEditing(false);
+      return;
+    }
+    const next = decimals === 0 ? Math.round(parsed) : Math.round(parsed * 100) / 100;
     // A BLUR IS NOT AN EDIT. `save` runs on every blur, so clicking into a
     // field to read it and clicking away used to emit `onChange(sameValue)`.
     // That was invisible while the page inferred "did the user touch this?" by
@@ -2695,12 +2790,27 @@ function EditableKV({
       <Text size={12} tone="secondary">{label}</Text>
       {editing ? (
         <input
-          type="number"
+          // TEXT, not number, and this is load-bearing rather than cosmetic.
+          //
+          // `<input type="number">` applies value sanitization: `e.target.value`
+          // is the EMPTY STRING for anything that is not a valid floating-point
+          // literal, "132." and ".5" included. Round 8 found what that does now
+          // that an empty draft means "revert to inheriting": a user with a
+          // committed 132.00 who reopens the field to make it 132.50 types
+          // "132." and tabs away -- the browser hands us "", the field jumps
+          // back to the plan's $140.00, the touched flag clears, and the order
+          // goes out at 140. A `draft.trim() === ''` check cannot tell that
+          // apart from a real deletion, because they are the same string.
+          //
+          // With type="text" the draft is the literal keystrokes, so "132."
+          // stays "132." (parseFloat gives 132) and only an actually empty
+          // field reads as empty. `min`/`max`/`step` are dropped from the DOM
+          // with it -- browser-native range enforcement is not what guards this
+          // input anyway; `save` is, and it now reverts rather than clamps.
+          type="text"
+          inputMode="decimal"
           className={styles.editInput}
           value={draft}
-          min={min}
-          max={max}
-          step={step ?? (decimals === 0 ? 1 : 0.01)}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={save}
           onKeyDown={handleKey}

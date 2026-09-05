@@ -336,6 +336,106 @@ describe('TradeCard', () => {
     expect(invalidation()).toBe('$176.00');
   });
 
+  it('a HALF-TYPED number is not a clear, and does not throw away the committed edit', () => {
+    // ROUND 8, and a regression the clear-to-inherit gesture introduced.
+    // `<input type="number">` sanitizes its value: `e.target.value` is "" for
+    // "132." and ".5" as well as for an actually empty field. So a user with a
+    // committed 2.71 who reopened the field to make it 2.75, typed "2.7" then
+    // "2." on the way, and tabbed away, had the field jump back to the plan's
+    // $2.50, the touched flag cleared, and the order posted 2.50. The two
+    // cases are the same string, so no check on the draft can separate them --
+    // the input is type="text" now, which is what this pins.
+    const onEditsChange = jest.fn();
+    render(<TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />);
+    const limit = () => screen.getByLabelText('Edit Limit').textContent;
+
+    fireEvent.click(screen.getByLabelText('Edit Limit'));
+    let input = screen.getByLabelText('Edit Limit') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '2.71' } });
+    fireEvent.blur(input);
+    expect(limit()).toBe('$2.71');
+
+    // Reopen and leave a trailing decimal point in the field.
+    fireEvent.click(screen.getByLabelText('Edit Limit'));
+    input = screen.getByLabelText('Edit Limit') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '2.' } });
+    fireEvent.blur(input);
+
+    // parseFloat('2.') is 2, which is inside [0.63, 7.50] -- so this commits 2,
+    // it does NOT revert to the seed. Either way the seed must not come back.
+    expect(limit()).not.toBe(`$${mockTradeCard.entry.limit.toFixed(2)}`);
+    expect(onEditsChange.mock.calls.at(-1)![1].touched.entryLimit).toBe(true);
+  });
+
+  it('bounds the invalidation on the BEARISH side too', () => {
+    // ROUND 8 finding 12: only the bullish branch had a test, and the bearish
+    // branch inverts both bounds independently -- a swap there would clamp
+    // every bearish stop to the wrong side of spot, which is the silent
+    // never-fires failure the bounds exist to prevent.
+    const bearish = {
+      ...mockTradeCard,
+      direction: 'Bearish' as const,
+      // A bearish stop sits ABOVE spot; price 185.20 -> [187.05, 277.80].
+      exit: { ...mockTradeCard.exit, invalidation: 190 },
+    };
+    render(<TradeCard data={bearish} />);
+    expandLadder();
+    const shown = () => screen.getByLabelText('Edit Invalidation').textContent;
+    expect(shown()).toBe('$190.00');
+
+    // BELOW spot — the wrong side, and the one that can never fire. Rejected.
+    fireEvent.click(screen.getByLabelText('Edit Invalidation'));
+    let input = screen.getByLabelText('Edit Invalidation') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '180' } });
+    fireEvent.blur(input);
+    expect(shown()).toBe('$190.00');
+
+    // A real bearish stop inside the window still lands.
+    fireEvent.click(screen.getByLabelText('Edit Invalidation'));
+    input = screen.getByLabelText('Edit Invalidation') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '195' } });
+    fireEvent.blur(input);
+    expect(shown()).toBe('$195.00');
+  });
+
+  it('anchors the bounds on the LIVE price when the page supplies one', () => {
+    // ROUND 8 finding 3: `data.price` comes off a scanResult that scanStore
+    // persists to localStorage, so after a reload it can be days old. AAPL
+    // scanned at $185.20 and now trading at $260 had a bound of [92.60,
+    // 183.35] -- every sane stop below today's spot rejected, while the page
+    // rendered "Live stock: $260.00" three rows away.
+    render(<TradeCard data={mockTradeCard} liveStockPrice={260} />);
+    expandLadder();
+    const shown = () => screen.getByLabelText('Edit Invalidation').textContent;
+
+    fireEvent.click(screen.getByLabelText('Edit Invalidation'));
+    const input = screen.getByLabelText('Edit Invalidation') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '240' } });  // inside [130, 257.40], outside the stale one
+    fireEvent.blur(input);
+    expect(shown()).toBe('$240.00');
+  });
+
+  it('a resetKey bump resets a touched field, so the card cannot outlive the parent cache', () => {
+    // ROUND 8 finding 6. The page clears its three edit caches on a new scan;
+    // the card's own reset is gated on symbol/contract identity, which a new
+    // scan of the SAME contract does not change. Without this the card kept
+    // showing (and kept `touched`) the user's $2.71 while `entryLimitFor` fell
+    // back to the new plan's value -- card, button and order disagreeing.
+    const { rerender } = render(<TradeCard data={mockTradeCard} resetKey={0} />);
+    const limit = () => screen.getByLabelText('Edit Limit').textContent;
+
+    fireEvent.click(screen.getByLabelText('Edit Limit'));
+    const input = screen.getByLabelText('Edit Limit') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '2.71' } });
+    fireEvent.blur(input);
+    expect(limit()).toBe('$2.71');
+
+    // New scan: same symbol, same contract, new plan, caches cleared.
+    const rescanned = { ...mockTradeCard, entry: { ...mockTradeCard.entry, limit: 6 } };
+    rerender(<TradeCard data={rescanned} resetKey={1} initialEntryLimit={null} />);
+    expect(limit()).toBe('$6.00');
+  });
+
   it('CLEARING a threaded field puts it back to inheriting, flag included', () => {
     // Round 7 finding 6 -- `touchedRef` was a one-way latch, so a typed field
     // was pinned for the life of the page and mergePlan could no longer reach
@@ -398,18 +498,38 @@ describe('TradeCard', () => {
     expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({ touched: { entryLimit: false, invalidation: false, premiumStop: false } });
   });
 
-  it('still clamps a value the user actually types past the bound', () => {
-    // The guard must not swallow a real edit: typing above the max is a
-    // deliberate act and must land, clamped.
+  it('REJECTS a value typed past the bound instead of clamping it', () => {
+    // ROUND 8 reversed this. It used to assert the clamp ("typing above the max
+    // is a deliberate act and must land, clamped") -- but a clamp turns a
+    // fat-finger into a plausible-looking WRONG number rather than refusing it,
+    // and these three fields now drive an order and two alert thresholds. The
+    // portfolio EditDrawer already took the opposite position on the same
+    // question ("showing the previous value back is the honest answer"); the
+    // card had the unsafe one.
+    const onEditsChange = jest.fn();
+    render(<TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />);
+    expandLadder();
+    const before = onEditsChange.mock.calls.length;
+    fireEvent.click(screen.getByLabelText('Edit Premium stop'));
+    const input = screen.getByLabelText('Edit Premium stop') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '99' } });   // mid 2.50 -> max 2.48
+    fireEvent.blur(input);
+    // Nothing reported, nothing touched, and the field shows its old value back.
+    expect(onEditsChange.mock.calls.length).toBe(before);
+    expect(screen.getByLabelText('Edit Premium stop')).toHaveTextContent(
+      `$${mockTradeCard.exit.premiumStop.toFixed(2)}`,
+    );
+  });
+
+  it('accepts a value inside the bound, so the rejection is not swallowing real edits', () => {
     const onEditsChange = jest.fn();
     render(<TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />);
     expandLadder();
     fireEvent.click(screen.getByLabelText('Edit Premium stop'));
     const input = screen.getByLabelText('Edit Premium stop') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: '99' } });
+    fireEvent.change(input, { target: { value: '2.40' } });  // within [0.25, 2.48]
     fireEvent.blur(input);
-    // mid 2.50 -> max = round(2.50 x 0.99, 2) = 2.48
-    expect(onEditsChange.mock.calls.at(-1)![0].premiumStop).toBe(2.48);
+    expect(onEditsChange.mock.calls.at(-1)![0].premiumStop).toBe(2.4);
     expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({ touched: { entryLimit: false, invalidation: false, premiumStop: true } });
   });
 
@@ -424,7 +544,7 @@ describe('TradeCard', () => {
 
     fireEvent.click(screen.getByLabelText('Edit Limit'));
     const limit = screen.getByLabelText('Edit Limit') as HTMLInputElement;
-    fireEvent.change(limit, { target: { value: '9.99' } });
+    fireEvent.change(limit, { target: { value: '2.71' } });   // inside [0.63, 7.50]
     fireEvent.blur(limit);
 
     expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({
@@ -441,7 +561,7 @@ describe('TradeCard', () => {
     expect(last[1]).toEqual({
       touched: { entryLimit: true, invalidation: true, premiumStop: false },
     });
-    expect(last[0].entryLimit).toBe(9.99);
+    expect(last[0].entryLimit).toBe(2.71);
     expect(last[0].invalidation).toBe(123.45);
   });
 
@@ -2105,7 +2225,13 @@ describe('TradeCard', () => {
         fireEvent.click(limitTrigger);
       });
       expect(screen.getByDisplayValue('2.5')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('2.5')).toHaveAttribute('type', 'number');
+      // TEXT with inputMode="decimal", not type="number" -- ROUND 8. A number
+      // input sanitizes its value to "" for any half-typed literal ("2.7",
+      // ".5"), and an empty draft is now the gesture that reverts a field to
+      // inheriting, so a user mid-keystroke had their committed edit thrown
+      // away. The mobile keypad still comes up via inputMode.
+      expect(screen.getByDisplayValue('2.5')).toHaveAttribute('type', 'text');
+      expect(screen.getByDisplayValue('2.5')).toHaveAttribute('inputmode', 'decimal');
     });
 
     it('saves edited value on blur', async () => {
@@ -2202,7 +2328,11 @@ describe('TradeCard', () => {
       expect(screen.getByLabelText('Edit Contracts')).toHaveTextContent('5');
     });
 
-    it('clamps entry limit to minimum 0.01 on save', async () => {
+    it('rejects an entry limit below its bound, leaving the old value on screen', async () => {
+      // ROUND 8. This used to assert a clamp to $0.01 -- and $0.01 is not a
+      // bound on a $2.50 contract, it is a different order. The field is now
+      // bounded to [0.25x, 3x] of the mid and refuses anything outside it,
+      // because this value becomes the order's `limit_price`.
       render(<TradeCard data={mockTradeCard} />);
       const limitTrigger = screen.getByLabelText('Edit Limit');
       await act(async () => {
@@ -2213,10 +2343,32 @@ describe('TradeCard', () => {
         fireEvent.change(input, { target: { value: '0.001' } });
         fireEvent.blur(input);
       });
-      expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('$0.01');
+      expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('$2.50');
     });
 
-    it('clamps contracts to minimum 1 on save', async () => {
+    it('rejects an entry limit an order of magnitude above the mid', async () => {
+      // The CRITICAL of round 8: "25.0" typed for "2.50" posted
+      // `limit_price: 25.0` on a BUY/OPEN order, with no bound in the field, no
+      // bound in the backend schema, and both risk checks sizing off the mid
+      // rather than the limit.
+      render(<TradeCard data={mockTradeCard} />);
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Edit Limit'));
+      });
+      const input = screen.getByDisplayValue('2.5');
+      await act(async () => {
+        fireEvent.change(input, { target: { value: '25.0' } });   // max is 7.50
+        fireEvent.blur(input);
+      });
+      expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('$2.50');
+    });
+
+    it('refuses a contracts value below its minimum, leaving the previous count', async () => {
+      // Renamed in ROUND 8 with the clamp->reject change. The assertion is
+      // unchanged and passes either way here (the previous value IS 1), but
+      // the old name described a mechanism the field no longer uses, and a
+      // test name that lies about the rule is how the next reader learns the
+      // wrong one.
       render(<TradeCard data={mockTradeCard} />);
       const contractsTrigger = screen.getByLabelText('Edit Contracts');
       await act(async () => {

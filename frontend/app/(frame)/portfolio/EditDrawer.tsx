@@ -939,11 +939,18 @@ function PremiumStopEditor({
         Premium stop — {formatPremiumStopPct(own, globalPremiumStopPct)}
       </Text>
       <input
-        type="number"
+        // TEXT, not number. `<input type="number">` sanitizes its value, so
+        // `e.target.value` is "" for any half-typed literal -- "48." and ".5"
+        // included. On THIS field an empty draft means "clear the override and
+        // inherit the global", and `commit` PATCHes that to the server: a user
+        // with a 48.43% stop who reopens the field to make it 48.50, types
+        // "48." and tabs away had their per-position stop deleted. The two
+        // cases are the same string, so no check on `draft` can separate them;
+        // the input has to stop throwing the keystrokes away. Bounds are
+        // enforced in `commit` (which reverts, not clamps), not by the browser.
+        type="text"
+        inputMode="decimal"
         className={styles.editInput}
-        step="any"
-        min={0.01}
-        max={99.99}
         placeholder={`${Math.round(globalPremiumStopPct * 100)} (global)`}
         aria-label="Premium stop percent"
         value={draft}

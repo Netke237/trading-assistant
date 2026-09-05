@@ -506,9 +506,24 @@ describe('the printed equation reconciles', () => {
           // Done in integers instead, where there is no binary split to lose:
           // `away` is printed at 2dp and `d` at 3dp, so scaling them to whole
           // numbers is exact and the half-up decision is an integer comparison.
+          //
+          // ROUND 8: derived from the printed TEXT, in exact decimal
+          // arithmetic, with no float and no shared idiom. The previous
+          // version scaled to integers exactly as `roundCentsOfProduct` does,
+          // which made this a reimplementation of the code it checks -- any
+          // shared misconception (that half-up on pre-rounded factors is the
+          // rule at all, that `move` is always 2dp) would have been invisible
+          // to it. This version multiplies the digit strings the card actually
+          // printed, which is literally the hand-check being claimed.
           const product = (() => {
-            const scaled = Math.round(away * 100) * Math.round(d * 1000); // 1e-5 dollars
-            return Math.floor((scaled + 500) / 1000) / 100;
+            const exact = (text: string): bigint => {
+              const [whole, frac = ''] = text.split('.');
+              // Scale every factor to a fixed 6dp so their product is 12dp.
+              return BigInt(whole + frac.padEnd(6, '0').slice(0, 6));
+            };
+            const scaled = exact(m[1]) * exact(m[2]);          // 1e-12 dollars
+            // Half-up to cents: the split is at 5 x 1e-11.
+            return Number((scaled + 5_000_000_000n) / 10_000_000_000n) / 100;
           })();
           const expected = Math.min(product, premiumShown);
           if (loss !== expected) failures.push(`${printed} (expected $${expected})`);

@@ -232,6 +232,11 @@ export default function Step7Page() {
   // order's `limit_price`. Contract-keyed for the same reason the premium stop
   // is: it is a price for one contract, meaningless against another.
   const [entryLimitByContract, setEntryLimitByContract] = useState<Record<string, number | null>>({});
+  /** Bumped in lockstep with clearing the three edit caches below, and handed
+   *  to TradeCard as `resetKey`. Without it the parent dropped a cached edit
+   *  while the card kept showing (and keeping touched) the same value -- the
+   *  card said $2.71 and the order said $6.00. See the prop's own note. */
+  const [scanEpoch, setScanEpoch] = useState(0);
   const handleEditsChange = (
     symbol: string,
     cardContractKey: string | null,
@@ -421,6 +426,8 @@ export default function Step7Page() {
     setPremiumStopByContract({});
     setInvalidationBySymbol({});
     setEntryLimitByContract({});
+    // Same commit, same statement group: the card must reset with them.
+    setScanEpoch((n) => n + 1);
     if (scanResult?.candidates?.length) {
       setCards(scanResult.candidates);
       if (scanResult.candidates[0]) setActive(scanResult.candidates[0].symbol);
@@ -823,6 +830,11 @@ export default function Step7Page() {
       const saved = await persistPosition(pos);
       const { rejected, detail } = applyPersistedPosition(saved, pos, addPosition, (adjustedQty) => {
         setSizeAdjustedNote(`Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
+      }, (requested) => {
+        // The one place the card can tell the user their premium stop did not
+        // survive the save-time re-anchor — until now the router logged it
+        // server-side and the position quietly inherited the global.
+        setSizeAdjustedNote(`Premium stop of $${requested.toFixed(2)}/share could not be applied at the filled premium — this position inherits the global stop.`);
       });
       if (rejected) {
         setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${detail}`);
@@ -858,6 +870,11 @@ export default function Step7Page() {
       const saved = await persistPosition(pos);
       const { rejected, detail } = applyPersistedPosition(saved, pos, addPosition, (adjustedQty) => {
         setSizeAdjustedNote(`Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits.`);
+      }, (requested) => {
+        // The one place the card can tell the user their premium stop did not
+        // survive the save-time re-anchor — until now the router logged it
+        // server-side and the position quietly inherited the global.
+        setSizeAdjustedNote(`Premium stop of $${requested.toFixed(2)}/share could not be applied at the filled premium — this position inherits the global stop.`);
       });
       if (rejected) {
         setOrderError(`Order placed in Tradier but portfolio tracking rejected: ${detail}`);
@@ -1025,6 +1042,14 @@ export default function Step7Page() {
               // with a stop of 132.
               initialEntryLimit={editKey ? entryLimitByContract[editKey] ?? null : null}
               initialInvalidation={invalidationBySymbol[effectiveCard.symbol] ?? null}
+              // Anchors for the three fields' bounds. `data.price` and
+              // `contractDetails.mid` come off a scanResult that scanStore
+              // persists, so after a reload they can be days old; these two are
+              // the same numbers the "Live stock:" / "Live mid:" lines below
+              // are rendered from.
+              liveStockPrice={liveStockPrice}
+              liveMid={liveQuote?.price ?? null}
+              resetKey={scanEpoch}
               onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(effectiveCard.symbol, stop, stockPrice)}
               onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
               onExitPlanChange={(plan) => handleExitPlanChange(contractKey, plan)}

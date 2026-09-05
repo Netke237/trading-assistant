@@ -156,24 +156,6 @@ export function stopPremiumRisk(
   return { stockMove, delta: usedDelta, rawLoss, loss, premium, fraction, capped, status };
 }
 
-/** The figures EXACTLY as the card prints them, so every consumer scales from
- *  one rounded set instead of rounding full precision independently.
- *
- *  THE PRODUCT IS COMPUTED FROM THE PRINTED FACTORS, deliberately. Kenneth
- *  checks this line by multiplying the two numbers he can see, so the only
- *  version that survives a hand-check is the one those two numbers actually
- *  produce. Rounding the move to cents, the delta to 3dp and the loss to cents
- *  independently stacks three errors of up to half a unit each: over an
- *  ordinary sweep of stops and deltas about 6% of inputs printed a product a
- *  cent away from its own factors (e.g. `$0.58 away × Δ0.457 = $0.26`, where
- *  0.58 × 0.457 is 0.2651 and reads as $0.27). Moving from 2dp to 3dp on the
- *  delta narrowed that and could never close it: the move and the loss are
- *  rounded too, so no amount of delta precision makes the three agree.
- *
- *  `status` is unaffected — it still comes from full precision on the object,
- *  because the verdict is a comparison rather than an equation on screen. The
- *  badge's PERCENTAGE is not in that category: it is printed, so it comes from
- *  here too (see formatStopLossPct). */
 /** Half-up to cents on the EXACT product of the two printed factors.
  *
  *  `toFixed(2)` breaks a mathematical `x.xx5` according to the BINARY value,
@@ -203,8 +185,19 @@ export function stopPremiumRisk(
  *  integers: no double ever holds a value near the split.
  *
  *  Rounds half AWAY FROM ZERO rather than half-up-toward-positive, so a
- *  negative delta (a put quoted signed) rounds by magnitude the way the hand
- *  check does. */
+ *  negative delta (a put quoted signed) would round by magnitude the way the
+ *  hand check does. DEFENSIVE, not reachable from the one caller today:
+ *  `stopPremiumRisk` passes `usedDelta = Math.max(Math.abs(delta), 0.05)`, so
+ *  every delta arriving here is positive. Kept rather than asserted because
+ *  the alternative on an unexpected sign is a silently wrong cent.
+ *
+ *  PRECONDITION, and it belongs to the caller rather than to this function:
+ *  the integer scaling is exact only because `printedFrom` has already rounded
+ *  `move` to 2dp and `delta` to 3dp. A future second caller passing raw
+ *  full-precision values gets a DIFFERENT rule (its factors are silently
+ *  re-rounded by the `Math.round` scaling), not a wrong one — but not the same
+ *  one either. Hence the name: it rounds the product of two PRINTED factors,
+ *  and there is exactly one place those exist. */
 function roundCentsOfProduct(move: number, delta: number): number {
   // Exact: both factors arrive pre-rounded to 2dp / 3dp respectively, so
   // scaling them to integers cannot lose anything.
@@ -222,7 +215,32 @@ function printedShare(r: StopPremiumRisk) {
   return printedFrom(r.stockMove, r.delta, r.premium);
 }
 
-/** The single implementation of "what the card prints", shared by
+/** The figures EXACTLY as the card prints them, so every consumer scales from
+ *  one rounded set instead of rounding full precision independently.
+ *
+ *  THE PRODUCT IS COMPUTED FROM THE PRINTED FACTORS, deliberately. Kenneth
+ *  checks this line by multiplying the two numbers he can see, so the only
+ *  version that survives a hand-check is the one those two numbers actually
+ *  produce. Rounding the move to cents, the delta to 3dp and the loss to cents
+ *  independently stacks three errors of up to half a unit each: over an
+ *  ordinary sweep of stops and deltas about 6% of inputs printed a product a
+ *  cent away from its own factors (e.g. `$0.58 away × Δ0.457 = $0.26`, where
+ *  0.58 × 0.457 is 0.2651 and reads as $0.27). Moving from 2dp to 3dp on the
+ *  delta narrowed that and could never close it: the move and the loss are
+ *  rounded too, so no amount of delta precision makes the three agree.
+ *
+ *  THE VERDICT COMES FROM HERE TOO. This block used to end by claiming
+ *  "`status` is unaffected — it still comes from full precision on the object",
+ *  which had been false since the printed pair was introduced:
+ *  `stopPremiumRisk` computes `status` from `printed.loss / printed.premium`,
+ *  under a comment of its own shouting the opposite. The stale sentence
+ *  survived because this block was ORPHANED — it sat above
+ *  `roundCentsOfProduct`'s own doc rather than above the function it describes,
+ *  so it documented nothing and nothing pointed at it. Both are fixed here:
+ *  the block is attached to `printedFrom`, and the claim now matches the code.
+ *  `fraction` on the object is the one thing that does stay full precision.
+ *
+ *  The single implementation of "what the card prints", shared by
  *  `printedShare` (which reads it off a finished object) and `stopPremiumRisk`
  *  (which needs it BEFORE the object exists, to decide the verdict on the same
  *  figures the badge will show). Two copies of this rounding is exactly the
@@ -283,19 +301,6 @@ export function formatStopPremiumRisk(r: StopPremiumRisk): string {
     : `${base}${basis}`;
 }
 
-/** The badge's percentage, from the SAME rounded pair the headline prints.
- *
- *  It used to be `(r.fraction * 100).toFixed(0)` in the badge's own JSX —
- *  full precision, while the headline two rows down was scaled from the
- *  printed pair. On ~1.4% of ordinary inputs the two disagreed by a point,
- *  and at the top of the range the disagreement was a flat contradiction:
- *  $35.24 away × Δ0.5342 on an $18.90 premium put "100% OF PREMIUM" beside
- *  "of the $1,890 premium, $8 left".
- *
- *  100% is therefore reserved for an actual total loss on the printed
- *  figures. Anything with a dollar left over reads at most 99%, so the badge
- *  and the money beside it cannot contradict each other. The PASS/CAUTION
- *  verdict is untouched: it is `status`, computed from full precision. */
 /** Whether the stop is a TOTAL LOSS on the figures actually printed.
  *
  *  The badge's tooltip used `r.capped`, which is `rawLoss >= premium` at full
@@ -358,12 +363,51 @@ export function formatStopLossBadge(r: StopPremiumRisk): string {
   return `${verdict} · ${pct} of premium · $${(leftCents / 100).toFixed(2)}/share left`;
 }
 
+/** The badge's percentage, from the SAME rounded pair the headline prints.
+ *
+ *  MOVED HERE IN ROUND 8. This block described `formatStopLossPct` while
+ *  sitting several functions above it, stacked on top of another doc comment —
+ *  so it documented nothing, and a false sentence in it survived unnoticed for
+ *  that reason (the same orphaning defect as `printedFrom`'s block, and the
+ *  same one PROJECT_STATE records round 2 as having fixed elsewhere).
+ *
+ *  It used to be `(r.fraction * 100).toFixed(0)` in the badge's own JSX —
+ *  full precision, while the headline two rows down was scaled from the
+ *  printed pair. On ~1.4% of ordinary inputs the two disagreed by a point,
+ *  and at the top of the range the disagreement was a flat contradiction:
+ *  $35.24 away × Δ0.5342 on an $18.90 premium put "100% OF PREMIUM" beside
+ *  "of the $1,890 premium, $8 left".
+ *
+ *  100% is therefore reserved for an actual total loss on the printed
+ *  figures. Anything with a dollar left over reads at most 99%, so the badge
+ *  cannot assert something the money beside it contradicts. (0% is NOT
+ *  reserved in the same way — see the note on the return below for why the two
+ *  ends are different.)
+ *
+ *  THE VERDICT COMES FROM THE PRINTED PAIR TOO. This block used to end
+ *  "The PASS/CAUTION verdict is untouched: it is `status`, computed from full
+ *  precision." False since the printed pair was introduced: `stopPremiumRisk`
+ *  computes `status` from `printed.loss / printed.premium`. What stays at full
+ *  precision is `fraction` on the object, which nothing on screen scales
+ *  from. */
 export function formatStopLossPct(r: StopPremiumRisk): string {
   const p = printedShare(r);
   const perContract = Math.round(p.loss * 100);
   const premiumTotal = Math.round(p.premium * 100);
   if (premiumTotal <= 0) return '0%';
   if (perContract >= premiumTotal) return '100%';
+  // THE TOP IS RESERVED, THE BOTTOM IS NOT, and the asymmetry is deliberate.
+  //
+  // Round 8 read the missing bottom clamp as the mirror of the top one and
+  // asked for `Math.max(1, ...)`. Building it showed why it is not: it breaks
+  // the stronger property this file's sweep test pins, that the printed
+  // percentage is within half a point of the true fraction (a 0.38% loss
+  // forced up to "1%" is off by 0.62). The two ends are different kinds of
+  // claim. "100% of premium" beside "$1.49/share left" is IMPOSSIBLE -- 100%
+  // means nothing is left -- so the top has to be reserved for a real total
+  // loss. "0% of premium" beside "$9.99/share left" is merely a percentage
+  // rounded to the nearest whole point, which is what every other figure on
+  // the badge is too, and it does not assert anything false.
   return `${Math.min(99, Math.round((perContract / premiumTotal) * 100))}%`;
 }
 

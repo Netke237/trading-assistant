@@ -319,24 +319,46 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     ));
   });
 
-  it('clamps a fat-fingered invalidation instead of storing an unreachable stop', async () => {
-    // Round 7 finding 4. The field that became `PortfolioPosition.stop` had
-    // min={0.01}, no max and no directional check, so on a $150 bullish card
-    // "1400" (a single mistyped digit) stored a stop above the price, which
-    // STOP_REACHED fires on immediately, and "14" stored one the underlying
-    // will never reach -- silently unprotected.
+  it('REJECTS a fat-fingered invalidation instead of storing a wrong stop', async () => {
+    // Round 7 bounded this field; ROUND 8 changed the response from clamp to
+    // reject, and the difference is the whole point. On a $150 bullish card,
+    // "1400" typed for "140" clamped to $148.50 -- 1% below spot -- which
+    // `buildPaperPosition` stores as `PortfolioPosition.stop` and
+    // `alertEngine` fires STOP_REACHED Critical on at the first ordinary
+    // intraday wiggle, Gmail and Telegram behind it, while the user believes
+    // their stop is 7% away. "14" clamped to $75.00, a 50% stop, just as
+    // silently. A clamp does not refuse a fat-finger, it renames it.
     render(<Step7TradeCardPage />);
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     expandLadder();
 
     editField('Invalidation', String(CARD_INVALIDATION), '1400');
-    // Bullish, price 150 -> clamped to 99% of price, i.e. still BELOW it.
-    await waitFor(() => expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('148.50'));
+    // Unchanged -- the field shows the value it already had.
+    await waitFor(() => expect(screen.getByLabelText('Edit Invalidation'))
+      .toHaveTextContent(CARD_INVALIDATION.toFixed(2)));
+
+    // ...and the other direction.
+    editField('Invalidation', String(CARD_INVALIDATION), '14');
+    await waitFor(() => expect(screen.getByLabelText('Edit Invalidation'))
+      .toHaveTextContent(CARD_INVALIDATION.toFixed(2)));
 
     await placeLimit();
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
-    const [pos] = usePortfolioStore.getState().positions;
-    expect(pos.stop).toBe(148.5);
-    expect(pos.stop).toBeLessThan(150);
+    expect(usePortfolioStore.getState().positions[0].stop).toBe(CARD_INVALIDATION);
+  });
+
+  it('accepts an invalidation inside the bound', async () => {
+    // The control for the test above: the rejection must not swallow a stop the
+    // user legitimately moved. Price 150 bullish -> [75.00, 148.50].
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    expandLadder();
+
+    editField('Invalidation', String(CARD_INVALIDATION), '132');
+    await waitFor(() => expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('132'));
+
+    await placeLimit();
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    expect(usePortfolioStore.getState().positions[0].stop).toBe(132);
   });
 });

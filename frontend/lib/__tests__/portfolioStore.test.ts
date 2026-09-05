@@ -1128,6 +1128,44 @@ describe('portfolioStore', () => {
       expect(onAdjusted).not.toHaveBeenCalled();
     });
 
+    it('reports a premium stop the server could NOT apply, instead of silently inheriting the global', () => {
+      // ROUND 8 finding 9. `add_position` derives pct = premiumStopDollar /
+      // entry_price against the price it persists -- the save-time live quote,
+      // not the card's mid -- and when that ratio reaches 1 it logs a warning
+      // and falls back to `premiumStopPct`, which the card never sends. The row
+      // is created with NULL, i.e. the global, and the router's own comment
+      // concedes "nothing on screen says why". Reachable through an ordinary
+      // fill: $4.50 stop typed against a $5.20 mid, filled at $4.20.
+      const pos = makePosition({ recId: 'REC-DROPPED', premiumStopDollar: 4.5 });
+      const addPosition = jest.fn();
+      const onDropped = jest.fn();
+
+      const result = applyPersistedPosition(
+        { ok: true, premiumStopPct: null }, pos, addPosition, undefined, onDropped,
+      );
+
+      expect(result.rejected).toBe(false);
+      expect(onDropped).toHaveBeenCalledWith(4.5);
+    });
+
+    it('does NOT report a drop when the server applied the stop, or when none was asked for', () => {
+      const addPosition = jest.fn();
+      const onDropped = jest.fn();
+
+      applyPersistedPosition(
+        { ok: true, premiumStopPct: 0.6 },
+        makePosition({ recId: 'REC-APPLIED', premiumStopDollar: 3 }),
+        addPosition, undefined, onDropped,
+      );
+      applyPersistedPosition(
+        { ok: true, premiumStopPct: null },
+        makePosition({ recId: 'REC-INHERITS' }),   // no dollar stop requested
+        addPosition, undefined, onDropped,
+      );
+
+      expect(onDropped).not.toHaveBeenCalled();
+    });
+
     it('rejected: does NOT call addPosition at all, and surfaces the detail for the caller to show', () => {
       const pos = makePosition({ recId: 'REC-REJECTED' });
       const addPosition = jest.fn();
