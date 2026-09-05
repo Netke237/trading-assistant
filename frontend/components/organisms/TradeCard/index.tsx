@@ -1212,7 +1212,16 @@ export function TradeCard({
       // parent on every call, so an untouched premium stop rides along with a
       // Contracts bump — recording that as "the user chose this" is precisely
       // how the seeded default came to be posted as a deliberate stop.
-      if (partial.premiumStop !== undefined) premiumStopTouchedRef.current = true;
+      // Only a CHANGE counts, not merely a key being present. `patch` carries
+      // the whole overlay to the parent on every call, and any caller may
+      // re-send an unchanged premiumStop (EditableKV's save-on-blur did);
+      // recording that as "the user chose this" is how the seeded default came
+      // to be posted as a deliberate stop. Belt-and-braces with the no-op guard
+      // in EditableKV.save -- either alone fixes the blur, and neither depends
+      // on the other's caller behaving.
+      if (partial.premiumStop !== undefined && partial.premiumStop !== overlay.premiumStop) {
+        premiumStopTouchedRef.current = true;
+      }
       const next = { ...overlay, ...partial };
       setOverlay(next);
       onEditsChange?.(next, { premiumStopTouched: premiumStopTouchedRef.current });
@@ -2408,9 +2417,26 @@ function EditableKV({
     const minVal = min ?? -Infinity;
     const maxVal = max ?? Infinity;
     const clamped = Math.min(maxVal, Math.max(minVal, parsed));
-    onChange(decimals === 0 ? Math.round(clamped) : Math.round(clamped * 100) / 100);
+    const next = decimals === 0 ? Math.round(clamped) : Math.round(clamped * 100) / 100;
+    // A BLUR IS NOT AN EDIT. `save` runs on every blur, so clicking into a
+    // field to read it and clicking away used to emit `onChange(sameValue)`.
+    // That was invisible while the page inferred "did the user touch this?" by
+    // comparing the reported value against the card's seed -- a no-op write
+    // reported the seed, which compared equal and was discarded. Now that
+    // touched-ness is tracked rather than inferred, the same no-op write MARKS
+    // THE FIELD AS TOUCHED: a stray click on Premium stop posted the seeded
+    // default ($3.12 = round(5.20 mid x 0.60 global, 2)) as a deliberate stop,
+    // which the server re-anchored to the $4.00 live fill and stored as 78% --
+    // exactly the defect the tracked flag was introduced to remove, re-entered
+    // through the one path that does not go through a keystroke.
+    // Skipping the no-op is also just correct for every other field.
+    if (next === value) {
+      setEditing(false);
+      return;
+    }
+    onChange(next);
     setEditing(false);
-  }, [draft, min, max, onChange, decimals]);
+  }, [draft, min, max, onChange, decimals, value]);
 
   const handleKey = useCallback(
     (e: React.KeyboardEvent) => {

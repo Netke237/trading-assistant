@@ -218,6 +218,36 @@ describe('TradeCard', () => {
     expect(shown()).toBe('$0.50');
   });
 
+  it('a click into the Premium stop field and back out is NOT an edit', async () => {
+    // THE STRAY CLICK. EditableKV.save runs on every blur, so reading the field
+    // emitted onChange(sameValue) -> patch({premiumStop: seed}). While
+    // touched-ness was INFERRED by comparing against the seed that was
+    // harmless (the reported value equalled the seed and was discarded); once
+    // it was TRACKED, the same no-op write marked the field touched and the
+    // page posted the seeded default -- $3.12 on a $5.20 mid, re-anchored by
+    // the server to a $4.00 fill and stored as a 78% stop nobody chose, with
+    // no way back to inheriting the global.
+    const onEditsChange = jest.fn();
+    render(<TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />);
+    expandLadder();
+
+    const before = onEditsChange.mock.calls.length;
+    fireEvent.click(screen.getByLabelText('Edit Premium stop'));
+    fireEvent.blur(screen.getByLabelText('Edit Premium stop') as HTMLInputElement);
+
+    // Nothing changed, so nothing is reported at all...
+    expect(onEditsChange.mock.calls.length).toBe(before);
+    // ...and if a caller does report an unchanged value, it still is not touched.
+    fireEvent.click(screen.getByLabelText('Edit Contracts'));
+    const contracts = screen.getByLabelText('Edit Contracts') as HTMLInputElement;
+    fireEvent.change(contracts, { target: { value: '3' } });
+    fireEvent.blur(contracts);
+    const last = onEditsChange.mock.calls.at(-1)!;
+    expect(last[1]).toEqual({ premiumStopTouched: false });
+    expect(premiumStopDollarToSend(last[1].premiumStopTouched ? last[0].premiumStop : null))
+      .toBeNull();
+  });
+
   it('reports the premium stop as UNTOUCHED when an unrelated edit precedes the merge', async () => {
     // THE ORDERING THE TEST ABOVE DOES NOT COVER, and the one that actually
     // shipped broken. Above, the merge lands first, so the later patch() reports

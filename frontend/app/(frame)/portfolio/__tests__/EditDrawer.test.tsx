@@ -874,6 +874,38 @@ describe('PremiumStopEditor', () => {
     expect(screen.getByText('Premium stop — 45%')).toBeInTheDocument();
   });
 
+  it('refuses a value that ROUNDS to 0 or 1, which the (0,1) column contract forbids', () => {
+    // The guard used to run on the TYPED value and the rounding after it, so
+    // 0.004 passed `pct > 0` and committed 0.0000, and 99.996 passed
+    // `pct < 100` and committed 1.0000. Both 422 server-side, and
+    // updatePosition writes optimistically with no revert -- so the rejected
+    // value lived in local state for up to 30s. A stored 0 puts the threshold
+    // at `entry * (1 - 0)` = the entry itself, raising a Critical PREMIUM_STOP
+    // toast for EVERY position at or below entry, every 30s, with no backend
+    // alert behind it.
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 0.45 }), onChange);
+    for (const bad of ['0.004', '99.996']) {
+      fireEvent.change(input, { target: { value: bad } });
+      fireEvent.blur(input);
+      expect(onChange).not.toHaveBeenCalled();
+      expect(input.value).toBe('45');    // reverted, not cleared
+    }
+  });
+
+  it('does NOT rewrite a server-derived stop that no decimal count round-trips', () => {
+    // The stored fraction is premiumStopDollar / entry_price -- 2.00 / 4.13 =
+    // 0.48426150121065376. Rendering "48.43" and committing 0.4843 still
+    // differs from it, so comparing values could never make a bare
+    // focus-and-blur a no-op; only tracking whether the user typed can.
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 2.0 / 4.13 }), onChange);
+    expect(input.value).toBe('48.43');
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('does NOT rewrite a stored stop when the field is merely focused and blurred', () => {
     // THE DEFECT. `add_position` stores premiumStopDollar / entry_price, so a
     // server-derived stop is almost never a whole percent: 2.00 / 4.13 =

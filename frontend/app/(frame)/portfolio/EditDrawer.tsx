@@ -846,6 +846,16 @@ function PremiumStopEditor({
   // contract, so the 30s alert scan in between fires a Critical PREMIUM_STOP
   // for a threshold that existed for one keystroke.
   const [draft, setDraft] = useState(stored);
+  // A BLUR IS NOT AN EDIT. `commit` runs on every blur, so clicking into the
+  // field to read it and clicking away used to PATCH the server. Comparing the
+  // committed value against the stored one is not enough on its own: the
+  // stored fraction is `premiumStopDollar / entry_price`, e.g.
+  // `2.00 / 4.13 = 0.48426150121065376`, which no fixed number of decimals in
+  // the editor round-trips exactly -- rendering "48.43" and committing 0.4843
+  // still differs from 0.484261..., so a bare focus-and-blur rewrote the stop.
+  // Same lesson as TradeCard's premium-stop field: track whether the user
+  // actually typed, rather than inferring it from values.
+  const dirtyRef = useRef(false);
   // Follow the stored value when it changes from outside (a different position
   // in the drawer, a sync) but never while the user is mid-edit on this one.
   const lastStoredRef = useRef(stored);
@@ -858,7 +868,14 @@ function PremiumStopEditor({
     const raw = draft.trim();
     // Empty is the documented way back to inheriting, and the only way: see
     // the hint below.
-    if (raw === '') { setDraft(''); onChange({ premiumStopPct: null }); return; }
+    if (raw === '') {
+      setDraft('');
+      // Clearing is only an edit if the user did it; a blur on an already-empty
+      // (inheriting) field must not PATCH.
+      if (dirtyRef.current && own != null) onChange({ premiumStopPct: null });
+      dirtyRef.current = false;
+      return;
+    }
     const pct = Number(raw);
     // Out of range REVERTS, it does not clear. It used to clear, so typing
     // 100 -- the natural way to ask for "hold it to zero" -- silently dropped
@@ -866,13 +883,23 @@ function PremiumStopEditor({
     // stop than the one asked for, with the typed digits gone and no message.
     // The backend bounds this at (0, 1) exclusive, so 100 has no
     // representation; showing the previous value back is the honest answer.
-    if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) { setDraft(stored); return; }
-    // 4dp on the fraction == 2dp on the percent, the same precision `stored`
-    // renders, so a value that came from the store commits back identical to
-    // itself and an untouched blur is a no-op.
+    if (!Number.isFinite(pct)) { setDraft(stored); return; }
+    // 4dp on the fraction == 2dp on the percent, the precision `stored` renders.
     const next = Number((pct / 100).toFixed(4));
+    // BOUNDED ON THE ROUNDED VALUE, not on the typed one. The column's contract
+    // is the OPEN interval (0, 1) and the backend enforces `gt=0, lt=1`, but
+    // rounding happens after the check: 0.004 typed passed a `pct > 0` guard
+    // and then rounded to 0.0000, and 99.996 passed `pct < 100` and rounded to
+    // 1.0000. Both 422 server-side -- and `updatePosition` writes optimistically
+    // with no revert, so the rejected value sat in local state for up to 30s.
+    // A stored 0 is the dangerous one: the threshold becomes `entry * (1 - 0)`,
+    // i.e. the entry itself, so EVERY position at or below entry raised a
+    // Critical PREMIUM_STOP toast on every 30s scan with no backend alert
+    // behind it.
+    if (!(next > 0 && next < 1)) { setDraft(stored); return; }
     setDraft(String(Number(pct.toFixed(2))));
-    if (next !== own) onChange({ premiumStopPct: next });
+    if (dirtyRef.current && next !== own) onChange({ premiumStopPct: next });
+    dirtyRef.current = false;
   };
 
   return (
@@ -889,7 +916,7 @@ function PremiumStopEditor({
         placeholder={`${Math.round(globalPremiumStopPct * 100)} (global)`}
         aria-label="Premium stop percent"
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => { dirtyRef.current = true; setDraft(e.target.value); }}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
       />
