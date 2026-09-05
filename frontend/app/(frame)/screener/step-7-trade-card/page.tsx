@@ -262,13 +262,35 @@ export default function Step7Page() {
         : { ...prev, [cardContractKey]: entryLimit },
     );
   };
+  /** The cache key for the two CONTRACT-keyed edits (entry limit, premium
+   *  stop). `contractKeyFor` returns null whenever `contractDetails` is
+   *  missing a strike, an expiry or a right, and `handleEditsChange` used to
+   *  early-return on that null — so on such a card the user's typed entry
+   *  limit was displayed, then silently dropped: the card showed $2.71 while
+   *  `entryLimitFor` fell back to `card.entry.limit` and the button label AND
+   *  the posted `limit_price` were both $2.50. That is the display-vs-send
+   *  disagreement this whole branch exists to remove, re-entered through the
+   *  one code path that skipped the cache.
+   *
+   *  The fallback embeds `card.contract` (the display label the send path
+   *  already falls back to in `toOptionSymbol`), so it is still per-contract:
+   *  it cannot merge an edit made on one contract into another, which is the
+   *  property `contractKeyFor` exists to guarantee. Writer and both readers go
+   *  through this one function, so they cannot disagree about the key. */
+  const editKeyFor = (card: TradeCardData | undefined): string | null => {
+    const strict = contractKeyFor(card);
+    if (strict) return strict;
+    if (!card?.symbol || !card.contract) return null;
+    return `${card.symbol}|${card.contract}`;
+  };
+
   // The ONE place either send path decides what to post. Reading the map is
   // not enough on its own: the overlay is seeded with `exit.premiumStop`, which
   // is the global percentage rendered in dollars rather than anything the user
   // chose, and the card reports its whole overlay on every patch. See
   // `premiumStopDollarToSend`.
   const premiumStopDollarFor = (card: TradeCardData): number | null => {
-    const key = contractKeyFor(card);
+    const key = editKeyFor(card);
     return premiumStopDollarToSend(key ? premiumStopByContract[key] : null);
   };
   // The ONE place every send path resolves the invalidation stop, so a position
@@ -282,7 +304,7 @@ export default function Step7Page() {
   // label that promises it. A label showing one price while the order carries
   // another is the same defect wearing a different hat.
   const entryLimitFor = (card: TradeCardData): number => {
-    const key = contractKeyFor(card);
+    const key = editKeyFor(card);
     return (key ? entryLimitByContract[key] : null) ?? card.entry.limit;
   };
   // Feature 5 — the shared pre-trade max-loss override cache, keyed by SYMBOL
@@ -386,6 +408,19 @@ export default function Step7Page() {
     setEstimatesByContract({});
     setStructuralBySymbol({});
     setExitPlanByContract({});
+    // The three EDIT caches clear here too, for the reason the comment above
+    // gives for the estimate caches — and more urgently, because these two are
+    // keyed on things that RECUR across scans: `invalidationBySymbol` on the
+    // bare symbol, and `entryLimitByContract`/`premiumStopByContract` on
+    // `symbol|strike|expiry|right`, which is the same key when a new scan
+    // picks the same contract. An entry limit typed against yesterday's $2.50
+    // mid would otherwise survive onto a card whose new mid is $6.00, and the
+    // button would still promise $2.71. Leaving the newest three caches out of
+    // the same belt-and-suspenders the older three get was not a decision, it
+    // was an omission.
+    setPremiumStopByContract({});
+    setInvalidationBySymbol({});
+    setEntryLimitByContract({});
     if (scanResult?.candidates?.length) {
       setCards(scanResult.candidates);
       if (scanResult.candidates[0]) setActive(scanResult.candidates[0].symbol);
@@ -433,6 +468,9 @@ export default function Step7Page() {
 
   const liveQcd = pickedCard?.contractDetails;
   const contractKey = contractKeyFor(pickedCard);
+  // The looser key the three edit caches use — see editKeyFor. Declared from
+  // `effectiveCard` (not `pickedCard`) so it matches what the writer reports
+  // and what `entryLimitFor`/`premiumStopDollarFor` read on the send paths.
 
   // The recompute is only valid for the contract it was computed for. This
   // guards the 1–3 s window while navigating between two overridden contracts.
@@ -446,6 +484,7 @@ export default function Step7Page() {
 
   // Merge the recomputed Entry/Exit/RR into the overridden card once it arrives.
   const effectiveCard = pickedCard && planForThisContract ? mergePlan(pickedCard, planForThisContract) : pickedCard;
+  const editKey = editKeyFor(effectiveCard);
 
   // The card actually handed to <TradeCard>, with any cached "Estimate" /
   // "Check structure" result for this contract spliced into exit.* — the same
@@ -965,19 +1004,26 @@ export default function Step7Page() {
               sendLabel={sendLabel}
               sendDisabled={basketEmpty || basketPlansPending}
               contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
-              onEditsChange={(overlay, meta) => handleEditsChange(effectiveCard.symbol, contractKey, overlay, meta)}
+              // `editKeyFor(effectiveCard)`, not the strict `contractKey`:
+              // the readers key off the effective card too, and a null key
+              // used to drop the edit entirely (see editKeyFor).
+              onEditsChange={(overlay, meta) => handleEditsChange(effectiveCard.symbol, editKeyFor(effectiveCard), overlay, meta)}
               // Piece 4 — round-tripped like `contracts` above. The card's
               // reset on a contract change does not call `onEditsChange`, so
               // without this the field fell back to its seed while this cache
               // kept the user's edit, and the two send paths posted a number
               // the card was no longer showing.
-              initialPremiumStop={contractKey ? premiumStopByContract[contractKey] ?? null : null}
+              // `editKeyFor`, matching the writer and both send-path readers.
+              // Keyed off the strict `contractKey` these restored nothing on a
+              // card whose contractDetails lack a strike/expiry/right, which is
+              // exactly the card whose edits used to be dropped entirely.
+              initialPremiumStop={editKey ? premiumStopByContract[editKey] ?? null : null}
               // These two round-trip for the same reason the premium stop does:
               // the card's reset on a candidate change would otherwise put the
               // seed back on screen while these caches kept the edit, so the
               // card showed $2.50 / $140.00 while the order went out at $2.71
               // with a stop of 132.
-              initialEntryLimit={contractKey ? entryLimitByContract[contractKey] ?? null : null}
+              initialEntryLimit={editKey ? entryLimitByContract[editKey] ?? null : null}
               initialInvalidation={invalidationBySymbol[effectiveCard.symbol] ?? null}
               onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(effectiveCard.symbol, stop, stockPrice)}
               onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
@@ -1024,7 +1070,7 @@ export default function Step7Page() {
                   onClick={placeLimitPaper}
                   disabled={limitPlacing || marketPlacing || !planReady}
                 >
-                  {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${entryLimitFor(effectiveCard)}` : 'Place Limit'}
+                  {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${entryLimitFor(effectiveCard).toFixed(2)}` : 'Place Limit'}
                 </button>
                 <button
                   type="button"

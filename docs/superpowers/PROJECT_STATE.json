@@ -20,8 +20,7 @@
    "verify": {
     "kind": "absent",
     "pattern": "^    iv:",
-    "path": "backend/app/schemas/__init__.py",
-    "means_shipped_if_present": true
+    "path": "backend/app/schemas/__init__.py"
    }
   },
   {
@@ -37,8 +36,7 @@
    "verify": {
     "kind": "absent",
     "pattern": "StopCostOut",
-    "path": "backend/app/routers/contracts.py",
-    "means_shipped_if_present": true
+    "path": "backend/app/routers/contracts.py"
    }
   },
   {
@@ -54,15 +52,14 @@
    "verify": {
     "kind": "absent",
     "pattern": "compute_final_stop",
-    "path": "backend/app/routers/scan.py",
-    "means_shipped_if_present": true
+    "path": "backend/app/routers/scan.py"
    }
   },
   {
    "id": "D",
    "name": "Piece 4 -- per-position premium stop",
    "status": "shipped_unaudited",
-   "audit_rounds": 6,
+   "audit_rounds": 7,
    "audit_clean": false,
    "commits": [
     "26c44bde",
@@ -88,8 +85,7 @@
    "verify": {
     "kind": "absent",
     "pattern": "stocks/exit-plan",
-    "path": "backend/app/routers/stock_scan.py",
-    "means_shipped_if_present": true
+    "path": "backend/app/routers/stock_scan.py"
    }
   },
   {
@@ -121,8 +117,7 @@
    "verify": {
     "kind": "absent",
     "pattern": "TradeSelection",
-    "path": "frontend/types/domain.ts",
-    "means_shipped_if_present": true
+    "path": "frontend/types/domain.ts"
    }
   }
  ],
@@ -171,7 +166,7 @@
    "name": "Stop-cost notation rework",
    "audit_clean": false,
    "note": "Frontend copy only, no logic change. Round 1 fixed the headline's three independently-rounded figures. ROUND 2 found the equation STILL did not reconcile, in both directions, because `r.capped` is decided at full precision while the line prints a 3dp delta: capped with the product below the premium printed '(uncapped $38.55)' beside '$38.59 of $38.59' -- an uncapped figure BELOW the capped one, impossible by construction; uncapped with the product above printed '= $52.48 of $52.48' where the printed factors give $52.52, with no tail, above a headline claiming '$0 left' for a stop the code did not classify as a total loss. Round 1's own range test could not have caught either: it skipped every capped row and re-implemented the clamp as the expected value. Both now decided on the printed product. Round 2 also found the badge's percentage still came from full precision while the headline came from the printed pair ('100% OF PREMIUM' beside '$8 left'), and that 'of the $X you paid' names a scan-time mid that the editable Limit and the contracts-scaled CaR both contradict. THIRD TIME THIS ITEM HAS SHIPPED A NON-RECONCILING FIGURE. NOT YET CLEAN. || ROUND 3 (combined, all three items at once) found 14 more and every one was fixed; audit_clean stays FALSE until a round comes back clean. The badge TOOLTIP was the last consumer of full-precision `capped` while the label and headline beside it came from printedShare, so with ordinary 4dp deltas it called a contract a total loss above '99% OF PREMIUM' and '$1 left' ($55.92 x 0.1622 on a $9.07 premium). Now branches on stopLossIsTotalOnPrintedFigures and is pinned by a sweep that fails on the mutation. Separately, the printed product used toFixed(2), which breaks an exact half-cent on the BINARY value: 8.01 x 0.500 = 4.005 printed $4.00 where a hand-check gives $4.01 -- and that is this rework's OWN documented worked example, with three tests pinning the artefact. Rounding is now explicit half-up (roundCents) and the range sweep re-derives the rule independently rather than importing it. ROUND 5: the badge's percentage and its COLOUR were decided at two different precisions (see phase D note) -- fixed at the root so one printed pair drives the verdict, the percentage, the headline and the tooltip. Sub-cent premiums no longer render at all. AND the badge now carries the dollars left, per share, per decision BADGE-SPEC-2026-09-05. ROUND 6: the badge now LEADS WITH THE VERDICT WORD, as the schematic always had it -- round 5's label replaced it, and without it two cards printing the same rounded percentage on opposite sides of the pass line were distinguishable only by colour. The round-5 comment claiming the ambiguity was eliminated is corrected: the verdict agrees with the printed EQUATION always, but the whole-percent figure is rounded and the verdict is not, so the word is what separates them.",
-   "audit_rounds": 6,
+   "audit_rounds": 7,
    "verify": {
     "kind": "present",
     "pattern": "formatStopLossHeadline",
@@ -181,7 +176,7 @@
   {
    "name": "Schematic removals -- Invalidation readout + Projected R/R",
    "audit_clean": false,
-   "audit_rounds": 6,
+   "audit_rounds": 7,
    "note": "Both approved by Kenneth. (1) The Final Recommendation's standalone invalidation probability -- its no-race fallback -- is gone; the Monte Carlo card's own copy had already moved to the Barrier Race. firstPassage.invalidation and data.exit.invalidation are untouched, so the send gate still fires. (2) The Projected R/R (+8%) readout is gone from the Final Recommendation's Ladder-DEFAULT branch -- the copy that survived its removal from the Ladder section itself, and the one seen first since it is the card's opening state. overlay.premiumStop stays. KNOCK-ON: computeEditedRR, isDirty and the `dirty` memo were deleted as dead, which removes the card-level 'edited' flag (see open question). UNAUDITED. ROUND 1 confirmed every stated invariant of the removals holds, and found two comment defects: one promised a stop the branch does not print, one implied a freshness guarantee scoped only to the race. Both corrected.  ROUND 2 re-checked the orphan sweep independently and confirmed it: isDirty/computeEditedRR had no other callers, data.rrRatio/rrModel are still consumed by the context rail, firstPassage.invalidation still feeds BarrierRaceCard, data.exit.invalidation still hard-blocks the send, and the per-target 'edited' badge survives. Two more comment defects found and fixed: an orphaned JSDoc (the new stopCostShown prop was inserted between `invalidation`'s doc block and `invalidation`, so tooling attributed the standalone-invalidation description to it), and the section header still promising the Ladder-default branch prints 'T1/T2/T3 + R:R' when the R:R is exactly what was removed. NOT YET CLEAN. || ROUND 3 (combined, all three items at once) found 14 more and every one was fixed; audit_clean stays FALSE until a round comes back clean. Nothing new wrong with the removals themselves -- no orphaned data, props, types or CSS, and nothing still computed into nothing. Round 3's two observations here are both recorded rather than built: the lost card-level 'edited' flag is already decision EDITED-FLAG-2026-09-04 (REBUILD AS NEW UI, approved, in pending_kenneth), and the badge's departure from the schematic is now an open question below. What WAS missing was coverage: the rendered surface of the rework had none, so the header name the Barrier Race cross-refers to, the per-contract headline, and both directions of stopCostShown are now asserted. ROUND 5: no new defect in the removals themselves -- the auditor re-verified that isDirty/computeEditedRR/dirty/editedRR are gone with no orphans, that data.rrRatio/rrModel remain live via the context rail and tradeCardSnapshotOf, that firstPassage.invalidation still feeds BarrierRaceCard and data.exit.invalidation still hard-blocks send, and that stopCostShown gates the readout and its cross-reference from one expression. Rounds are counted together with the other two items. ROUND 6: no new defect in the removals themselves. But see the open question on discarded card edits -- deleting isDirty() removed the LAST reader of overlay.maxFill, overlay.invalidation and overlay.timeStopDays, so those are now pure orphaned state. The edits were already discarded by the send paths before this diff; the removals are what made it invisible.",
    "verify": {
     "kind": "defect_marker",
@@ -260,8 +255,8 @@
   {
    "id": "BADGE-LAYOUT-2026-09-05",
    "q": "The schematic (card 03) puts the dollars-left ON the badge and per SHARE ('Caution . 71% of premium . $1.49 left'). Shipped keeps the badge percent-only with per-CONTRACT dollars on the line beneath. Change it or keep it?",
-   "a": "KEEP AS SHIPPED -- Kenneth's rule: if both values are available and only their POSITION differs, do not touch it. Verified both are on screen: the badge prints the verdict word plus 'N% OF PREMIUM' (formatStopLossBadge/formatStopLossPct) and the line beneath prints '$401 per contract -- of the $651 premium, $251 left' (formatStopLossHeadline). NOTE the one real difference, recorded so it is revisited deliberately rather than rediscovered: the dollars-left is PER CONTRACT, where the schematic's $1.49 is PER SHARE. The per-share loss and premium are both printed on the arithmetic line, but the per-share 'left' is not printed -- it is their difference. Amend the schematic to match what shipped.",
-   "by": "Kenneth"
+   "a": "SUPERSEDED BY ITS OWN PREMISE BEING FALSE -- corrected in round 7, NOT by Kenneth; he needs to confirm or overrule this correction. The answer recorded here claimed 'Verified both are on screen: the badge prints the verdict word plus \"N% OF PREMIUM\"'. That verification was never true. formatStopLossBadge (lib/risk.ts) returns 'CAUTION - 71% of premium - $1.49/share left' -- the per-share dollars-left IS on the badge, so the premise ('shipped keeps the badge percent-only') described a code state that does not exist, and the follow-on note ('the per-share left is not printed') is false too. The question it re-asked had already been answered the other way by BADGE-SPEC-2026-09-05 ('MATCH THE SCHEMATIC ... BUILT'), which is what actually shipped and what round 6 then amended to lead with the verdict word. Two mutually exclusive decisions on one question, same date, and the later one edited the authoritative schematic to match a code state that never shipped. ACTION TAKEN IN ROUND 7: the schematic's card 03 has been put back to the badge the code produces and carries a CORRECTED note saying why; BADGE-SPEC-2026-09-05 stands as the live decision. No code changed -- the code was right throughout.",
+   "by": "round 7 correction (needs Kenneth's confirmation)"
   },
   {
    "id": "HEADER-2026-09-05",
@@ -280,6 +275,24 @@
    "q": "Thread the card's Max fill and Time stop through to a send path as well?",
    "a": "DEFERRED, confirmed by Kenneth. Neither has a consumer today, so it is a build (new persisted field, backend column, alert change), not the wiring fix Invalidation and Entry limit were. Stays an open question rather than being half-done inside an audit branch.",
    "by": "Kenneth"
+  },
+  {
+   "id": "MAXFILL-TIMESTOP-READONLY-2026-09-05",
+   "q": "Round 7 finding 3: Max fill and Time stop render with the SAME click-to-edit affordance as the three fields that now reach the broker, but nothing anywhere consumes either one. Thread them, signal them, or leave them?",
+   "a": "MADE READ-ONLY in round 7, pending Kenneth. Threading stays deferred (MAXFILL-TIMESTOP-2026-09-05 -- it is a build: a persisted field, a backend column and an alert change). But shipping two inert fields that look identical to three load-bearing ones was not part of that deferral, it was an omission: before this branch all five were inert and at least consistent. Both rows are now plain KV rows (the schematic draws them as plain fields, so this is not a spec deviation). REVERSIBLE in one line each if Kenneth would rather keep the affordance and add a marker instead.",
+   "by": "round 7 (needs Kenneth's confirmation)"
+  },
+  {
+   "id": "INVALIDATION-BOUNDS-2026-09-05",
+   "q": "Round 7 finding 4: the Invalidation field became PortfolioPosition.stop (compared against the live underlying by STOP_REACHED) while keeping min=0.01, no max and no directional check. Bound it?",
+   "a": "BOUNDED, directionally, in round 7. Bullish: [50%, 99%] of the card's stock price. Bearish: [101%, 150%]. Clamps rather than rejects, matching the Premium stop field Round 5 bounded for the same reason. Deliberately WIDE -- it is there to reject a mistyped digit, not a wide stop. The two failures it closes on a $145 stock: '1400' fires a Critical STOP_REACHED (plus Gmail and Telegram) on the first 30s scan; '14' is worse because it is silent -- the send gate only requires a positive number, so the trade goes out believing it is protected by a level the underlying will never reach.",
+   "by": "round 7 (needs Kenneth's confirmation)"
+  },
+  {
+   "id": "CLEAR-TO-INHERIT-2026-09-05",
+   "q": "Round 7 finding 6: touchedRef was a one-way latch -- once a field was typed it was pinned for the life of Step 7 and mergePlan could no longer reach it. Round 6's own note calls 'a card with no way back to inheriting' the bad outcome. Add a way back?",
+   "a": "YES -- clearing the input reverts the field to the plan's value and clears its touched flag, the same gesture the portfolio EditDrawer already uses to mean 'inherit the global'. Chosen over a revert button or a line of copy so it adds no control to a schematic-governed card and does not pre-empt EDITED-FLAG-2026-09-04, which is Kenneth's and still unbuilt. Surfaced only as an input tooltip, so it is undiscoverable until you hover -- the edited indicator is the right place to fix that properly.",
+   "by": "round 7 (needs Kenneth's confirmation)"
   }
  ],
  "pending_kenneth": [
@@ -292,7 +305,10 @@
   "Is Tradier's per-contract IV good enough in production to displace a solver for Phase A?",
   "ivRank is conflated: market.py:1277 writes raw IV x100 into a field named for a percentile, 1291/1308 conditionally overwrite it with a genuine rank, and scan.py:610-616 broadcasts an ATM value across every strike. It is compared against iv_rank_pass_max: 34 and hard_reject.max_iv_rank: 70 -- a LIVE scoring/hard-reject defect, not a tidy-up.",
   "Should the auto-trader's daily-loss gate size on the full premium instead of the premium stop? Since piece 4 the denominator can come from ArmRequest.premium_stop_pct, so a tighter declared stop shrinks premium_at_risk and lets more trades through -- and nothing enforces the declared stop, because the auto-trader places no protective order. Deliberately not clamped. ROUND 5 UPDATE: the reachability was far worse than this text implied -- the card's stop field was min=0.01 with no max, so one keystroke cut the denominator ~3000x via a field whose label says nothing about auto-trade sizing. That field is now bounded to 10-99% of the mid, so the remaining exposure is a deliberate 6x (a 10% stop against the 0.60 default), not a fat-finger. The underlying question -- full premium or declared stop -- stands.",
-  "Thread the card's Max fill and Time stop through to a send path? Deferred, and NOT a wiring fix: neither field has a consumer anywhere today. TIME_STOP fires on a hardcoded `dteRemaining <= 3` (alertEngine.ts:298) and PortfolioPosition carries no time-stop field at all; maxFill has no reader outside its own input. Threading either means a new persisted field, a backend column and an alert change -- a build. Invalidation and Entry limit, which DID have consumers, were threaded on 2026-09-05 (decision THREAD-EDITS-2026-09-05)."
+  "Thread the card's Max fill and Time stop through to a send path? Deferred, and NOT a wiring fix: neither field has a consumer anywhere today. TIME_STOP fires on a hardcoded `dteRemaining <= 3` (alertEngine.ts:298) and PortfolioPosition carries no time-stop field at all; maxFill has no reader outside its own input. Threading either means a new persisted field, a backend column and an alert change -- a build. Invalidation and Entry limit, which DID have consumers, were threaded on 2026-09-05 (decision THREAD-EDITS-2026-09-05).",
+  "Round 7 finding 3, second half: the card prints 'Time stop 18d' (data.exit.timeStopDays) while the alert bearing that name fires on a hardcoded dteRemaining <= 3 (frontend/lib/alertEngine.ts). A trader reads an 18-day exit off the card and gets a 3-DTE one. Making the alert honour the card needs a persisted per-position field -- i.e. the deferred build -- so round 7 only removed the edit affordance. Relabel the row, build the field, or accept the disagreement?",
+  "Round 7 rejected finding 8 (the entry-limit/entryPrice denominator) on arithmetic: the threshold is entry x (1 - dollar/entry) = entry - dollar, so the dollar loss is preserved whatever entry price is stored. The residual is real but pre-existing and unrelated to the threading: for a LIMIT order the position's entry_price is the backend's save-time live quote, not the fill, so P&L and both stops are measured from a price the order may not have filled at. Worth its own decision?",
+  "Standing, unasked since the round 6 handoff: the loop has now caught regressions introduced by its own prior rounds three times (round 5's bounds re-opened round 4's stray click; the threading opened the round-trip defect; the round-trip fix's caches were left out of the scan-result clear). Does that change how many CLEAN rounds this branch needs before merging?"
  ],
  "authoritative_documents": [
   {

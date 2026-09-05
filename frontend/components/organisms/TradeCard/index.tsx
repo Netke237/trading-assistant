@@ -959,9 +959,19 @@ export function TradeCard({
       // the same premium.
       const sentPremiumStopPct = premiumStopPctFromDollars(overlay.premiumStop, premium);
 
+      // Last-resort fallback is `overlay.invalidation`, NOT
+      // `data.exit.invalidation`. Once the Invalidation field became
+      // load-bearing (it is what `buildPaperPosition` stores as
+      // `PortfolioPosition.stop`, which STOP_REACHED compares against the live
+      // underlying), sending the seed here made the card quote the odds of a
+      // stop the trade will not use: with no structural stop and no Arithmetic
+      // plan — the DEFAULT state, since both are user-triggered buttons — an
+      // edit from $140 to $132 left the invalidation probability, the stock-
+      // stop risk leg and the dollar edge all measured at $140 while Place
+      // Limit stored 132.
       const resolvedStockStop = (exitPlan && arithmeticLiveStockPrice != null)
         ? exitPlan.stop.price
-        : (resolvedStructural?.price ?? data.exit.invalidation);
+        : (resolvedStructural?.price ?? overlay.invalidation);
 
       const res = await api.getFirstPassageEstimate({
         symbol: data.symbol,
@@ -1075,7 +1085,7 @@ export function TradeCard({
     // identity moved with them — an unstated coincidence that would break
     // silently the moment that memo is narrowed. `data.contract` is stamped
     // into raceBarriers for the freshness check.
-  }, [data.symbol, data.direction, data.price, data.contract, data.contractDetails, data.stockBreakdown.trend, data.exit.invalidation, structuralStop, exitPlan, arithmeticLiveStockPrice, targetPct, structuralLoading, overlay.premiumStop, horizonPreset, holdMin, holdMax]);
+  }, [data.symbol, data.direction, data.price, data.contract, data.contractDetails, data.stockBreakdown.trend, overlay.invalidation, structuralStop, exitPlan, arithmeticLiveStockPrice, targetPct, structuralLoading, overlay.premiumStop, horizonPreset, holdMin, holdMax]);
 
   // R:R using the structural stop (order block / swing level) as the risk
   // basis instead of the original fixed "premium * 60%" assumption — only
@@ -1317,6 +1327,41 @@ export function TradeCard({
     [overlay, onEditsChange],
   );
 
+  /** Put a threaded field back to INHERITING its seed — the counterpart to
+   *  `patch`, and the only way out of "touched" short of leaving the page.
+   *
+   *  Without this, `touchedRef` was a one-way latch: `patch` sets it true and
+   *  nothing ever set it false, so the moment the user typed, that field was
+   *  pinned for the life of Step 7 and `mergePlan` swapping `data.exit`
+   *  underneath it changed nothing. Round 6's own note names "a card with no
+   *  way back to inheriting" as the bad outcome it was fixing for the premium
+   *  stop; it was then the permanent state for all three fields.
+   *
+   *  Reached by CLEARING the input (the same gesture the portfolio
+   *  EditDrawer's premium-stop editor already uses to mean "inherit the
+   *  global"), so it adds no new control to a card whose layout is governed by
+   *  the schematic — and specifically does not pre-empt the still-unbuilt
+   *  card-level edited indicator (decision EDITED-FLAG-2026-09-04).
+   *
+   *  Reports to the parent, which is the point: `onEditsChange` re-derives its
+   *  caches from `meta.touched`, so an untouched field caches `null` and
+   *  `invalidationFor`/`entryLimitFor`/`premiumStopDollarFor` fall back to the
+   *  card's current value again. */
+  const revert = useCallback(
+    (key: 'entryLimit' | 'invalidation' | 'premiumStop') => {
+      const seed =
+        key === 'entryLimit' ? data.entry.limit
+        : key === 'invalidation' ? data.exit.invalidation
+        : data.exit.premiumStop;
+      if (!touchedRef.current[key] && overlay[key] === seed) return;
+      touchedRef.current = { ...touchedRef.current, [key]: false };
+      const next = { ...overlay, [key]: seed };
+      setOverlay(next);
+      onEditsChange?.(next, { touched: touchedRef.current });
+    },
+    [overlay, onEditsChange, data.entry.limit, data.exit.invalidation, data.exit.premiumStop],
+  );
+
   const displayRecId = useMemo(() => propRecId ?? generateRecId(), [propRecId]);
   const car = useMemo(
     () => capitalAtRisk(data.contractDetails?.mid ?? 0, overlay.contracts),
@@ -1362,6 +1407,42 @@ export function TradeCard({
    *  the Portfolio drawer's empty-field path, and the card has no equivalent.
    *  It bounds the damage a stray keystroke can do; the inherit affordance is
    *  the separate approved EDITED-FLAG build. */
+  /** Bounds for the Invalidation field, which is now load-bearing: it is what
+   *  `buildPaperPosition` stores as `PortfolioPosition.stop`, and
+   *  `alertEngine` compares that directly against the live UNDERLYING price.
+   *  Round 5 bounded the Premium stop field for exactly this reason and the
+   *  field that became the position's stop was left at `min={0.01}` with no
+   *  `max` and no directional check at all.
+   *
+   *  Two failures, both a single mistyped digit away on a $145 stock:
+   *
+   *    "1400" instead of "140" — `referencePrice <= stop` is true on the very
+   *    first 30s scan, so the position raises a Critical STOP_REACHED the
+   *    moment it is created, with Gmail and Telegram behind it.
+   *
+   *    "14" instead of "140" — worse, because it is SILENT: the send gate
+   *    (`checkInvalidation`) only requires a positive number, so the trade
+   *    goes out with a stop the underlying will never reach and the user
+   *    believes they are protected.
+   *
+   *  DIRECTIONAL, because "outside the bounds" is not symmetric: a bullish
+   *  stop sits below the price and a bearish stop above it, and a stop on the
+   *  wrong SIDE is the same silent failure as "14" — it can never fire. The
+   *  window is deliberately wide (a 50% adverse move) so it rejects mistyped
+   *  digits, not merely wide stops.
+   *
+   *  Clamps rather than rejects, matching the Premium stop field. Note the
+   *  clamp is visible: the field re-renders with the clamped number, so a
+   *  fat-fingered 1400 shows as $143.55 rather than being accepted. */
+  const invalidationBounds = useMemo(() => {
+    const price = data.price;
+    if (!(price > 0)) return { min: 0.01, max: undefined as number | undefined };
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    return data.direction === 'Bearish'
+      ? { min: Math.max(0.01, round2(price * 1.01)), max: round2(price * 1.50) }
+      : { min: Math.max(0.01, round2(price * 0.50)), max: Math.max(0.01, round2(price * 0.99)) };
+  }, [data.price, data.direction]);
+
   const premiumStopBounds = useMemo(() => {
     const mid = data.contractDetails?.mid ?? 0;
     if (!(mid > 0)) return { min: 0.01, max: undefined as number | undefined };
@@ -1408,8 +1489,16 @@ export function TradeCard({
   // measured against a level that is no longer on screen anywhere.
   const stockStopMoved = useMemo(() => {
     if (raceBarriers == null || firstPassage?.race == null) return false;
-    return (sharedStop?.price ?? data.exit.invalidation) !== raceBarriers.stockStop;
-  }, [raceBarriers, firstPassage, sharedStop, data.exit.invalidation]);
+    // `overlay.invalidation` for the same reason `resolvedStockStop` uses it:
+    // this is the guard that CLEARS a race whose barrier has moved, and it has
+    // to watch the same value the race was actually run against. Reading the
+    // seed here left one asymmetry with no defensible reason for it — editing
+    // the Premium stop cleared the race (via the `overlay.premiumStop`
+    // comparison in `raceBarriersMoved` below), editing the Invalidation did
+    // not, so the card went on printing bars, medians and both risk legs
+    // measured at a level no longer shown anywhere on it.
+    return (sharedStop?.price ?? overlay.invalidation) !== raceBarriers.stockStop;
+  }, [raceBarriers, firstPassage, sharedStop, overlay.invalidation]);
 
   const raceBarriersMoved = useMemo(() => {
     if (raceBarriers == null || firstPassage?.race == null) return false;
@@ -1641,6 +1730,7 @@ export function TradeCard({
               label="Limit"
               value={overlay.entryLimit}
               onChange={(v) => patch({ entryLimit: v })}
+              onRevert={() => revert('entryLimit')}
               prefix="$"
               min={0.01}
               step={0.01}
@@ -1648,15 +1738,18 @@ export function TradeCard({
             />
           </div>
           <div className={styles.orderStripItem}>
-            <EditableKV
-              label="Max fill"
-              value={overlay.maxFill}
-              onChange={(v) => patch({ maxFill: v })}
-              prefix="$"
-              min={0.01}
-              step={0.01}
-              mono
-            />
+            {/* READ-ONLY, deliberately. `maxFill` has exactly two readers in the
+                codebase — this row and `defaultOverlay` — so nothing downstream
+                has ever consumed it. That was internally consistent while all
+                five order/exit fields were inert; it stopped being consistent
+                the moment Limit, Invalidation and Premium stop became
+                load-bearing, because the five were rendered with an IDENTICAL
+                click-to-edit affordance and no way to tell which three reach
+                the broker. Threading it is a build, not a wiring fix (decision
+                MAXFILL-TIMESTOP-2026-09-05 defers it), so until then the card
+                shows the planned figure instead of inviting an edit it will
+                silently discard. */}
+            <KV label="Max fill" value={`$${data.entry.maxFill.toFixed(2)}`} mono />
           </div>
           <div className={styles.orderStripItem}>
             <EditableKV
@@ -2082,8 +2175,10 @@ export function TradeCard({
                 label="Invalidation"
                 value={overlay.invalidation}
                 onChange={(v) => patch({ invalidation: v })}
+                onRevert={() => revert('invalidation')}
                 prefix="$"
-                min={0.01}
+                min={invalidationBounds.min}
+                max={invalidationBounds.max}
                 step={0.01}
                 mono
               />
@@ -2091,22 +2186,22 @@ export function TradeCard({
                 label="Premium stop"
                 value={overlay.premiumStop}
                 onChange={(v) => patch({ premiumStop: v })}
+                onRevert={() => revert('premiumStop')}
                 prefix="$"
                 min={premiumStopBounds.min}
                 max={premiumStopBounds.max}
                 step={0.01}
                 mono
               />
-              <EditableKV
-                label="Time stop"
-                value={overlay.timeStopDays}
-                onChange={(v) => patch({ timeStopDays: v })}
-                min={1}
-                step={1}
-                suffix="d"
-                mono
-                decimals={0}
-              />
+              {/* READ-ONLY for the same reason as Max fill above — no reader
+                  outside its own input. Note this field ALSO disagrees with the
+                  alert that bears its name: TIME_STOP fires on a hardcoded
+                  `dteRemaining <= 3` (lib/alertEngine.ts), so a card reading
+                  "18d" produces a 3-DTE alert. Honouring the planned figure
+                  needs a persisted per-position field, which is the deferred
+                  build; making the row read-only at least stops the card
+                  offering to change a number nothing reads. */}
+              <KV label="Time stop" value={`${data.exit.timeStopDays}d`} mono />
             </dl>
             <Text size={10} tone="dim">
               Invalidation is a fixed-% stop, independent of the Arithmetic card&apos;s structural/ATR stop above.
@@ -2499,6 +2594,7 @@ function EditableKV({
   label,
   value,
   onChange,
+  onRevert,
   min,
   max,
   step,
@@ -2511,6 +2607,10 @@ function EditableKV({
   label: string;
   value: number;
   onChange: (v: number) => void;
+  /** Optional "clear the field to go back to inheriting the plan's value".
+   *  Only the three threaded fields pass it; for every other field an empty
+   *  input still means "I changed my mind", i.e. nothing happens. */
+  onRevert?: () => void;
   min?: number;
   max?: number;
   step?: number;
@@ -2531,6 +2631,10 @@ function EditableKV({
   const save = useCallback(() => {
     const parsed = parseFloat(draft);
     if (isNaN(parsed)) {
+      // An EMPTY field is a deliberate gesture, not a typo: on a field that can
+      // inherit, it means "stop pinning this, follow the plan again". Anything
+      // else unparseable ("abc", "1.2.3") keeps the old no-op behaviour.
+      if (onRevert && draft.trim() === '') onRevert();
       setEditing(false);
       return;
     }
@@ -2572,7 +2676,7 @@ function EditableKV({
     }
     onChange(next);
     setEditing(false);
-  }, [draft, min, max, onChange, decimals, value]);
+  }, [draft, min, max, onChange, onRevert, decimals, value]);
 
   const handleKey = useCallback(
     (e: React.KeyboardEvent) => {
@@ -2602,6 +2706,12 @@ function EditableKV({
           onKeyDown={handleKey}
           autoFocus
           aria-label={`Edit ${label}`}
+          // The only surfacing of the clear-to-inherit gesture. A tooltip
+          // rather than a line of copy or a revert button, because the card's
+          // layout is governed by the schematic and the card-level edited
+          // indicator is a separate, still-unbuilt decision
+          // (EDITED-FLAG-2026-09-04) that this must not pre-empt.
+          title={onRevert ? `Clear to go back to the plan's ${label.toLowerCase()}` : undefined}
         />
       ) : (
         <span

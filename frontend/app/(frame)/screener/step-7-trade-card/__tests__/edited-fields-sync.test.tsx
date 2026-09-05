@@ -48,8 +48,24 @@ jest.mock('@/lib/api', () => ({
 
 const CARD_INVALIDATION = 140;
 const CARD_LIMIT = 2.5;
+/* The SECOND candidate's values differ from the first's in every field the
+ * three caches key on or carry. Round 7 flagged that AAA and BBB were
+ * byte-identical apart from the symbol, which made the round-trip test blind
+ * to the failure it most needs to catch: if `entryLimitByContract` or
+ * `invalidationBySymbol` leaked AAA's edit onto BBB, every assertion still
+ * passed, because AAA's edited 2.71/132 and BBB's inherited values were being
+ * compared against the same numbers. Distinct strikes matter too -- a shared
+ * strike means a shared contract key, so a leak could not be told apart from a
+ * legitimate cache hit. */
+const BBB_INVALIDATION = 120;
+const BBB_LIMIT = 3.3;
+const BBB_STRIKE = 155;
 
 function makeCard(symbol: string): TradeCardData {
+  const isSecond = symbol === 'BBB';
+  const limit = isSecond ? BBB_LIMIT : CARD_LIMIT;
+  const invalidation = isSecond ? BBB_INVALIDATION : CARD_INVALIDATION;
+  const strike = isSecond ? BBB_STRIKE : 150;
   return {
     symbol,
     company: `${symbol} Inc.`,
@@ -59,13 +75,13 @@ function makeCard(symbol: string): TradeCardData {
     stockScore: 80,
     stockConfidence: 'PASS',
     stockBreakdown: { trend: 80, pullback: 80, trigger: 80, event: 80, volatility: 80 },
-    contract: `${symbol} 150C 05/15`,
+    contract: `${symbol} ${strike}C 05/15`,
     contractScore: 70,
     contractConfidence: 'PASS',
     contractBreakdown: { dteFit: 80, delta: 65, ivAttractiveness: 55, liquidity: 75, spread: 60 },
-    contractDetails: { strike: 150, expiry: '2026-05-15', right: 'C', mid: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, dte: 24 },
-    entry: { limit: CARD_LIMIT, maxFill: 2.63, orderType: 'Limit' },
-    exit: { invalidation: CARD_INVALIDATION, premiumStop: 1.5, timeStopDays: 10, target: 160, targets: [] },
+    contractDetails: { strike, expiry: '2026-05-15', right: 'C', mid: limit, delta: 0.45, theta: -0.09, ivRank: 45, dte: 24 },
+    entry: { limit, maxFill: 2.63, orderType: 'Limit' },
+    exit: { invalidation, premiumStop: 1.5, timeStopDays: 10, target: 160, targets: [] },
     rrRatio: 2.0,
     rrModel: 'Heston repriced',
     finalStatus: 'PASS',
@@ -76,6 +92,11 @@ const originalFetch = global.fetch;
 
 describe('step-7-trade-card — edited card fields reach the order', () => {
   beforeEach(() => {
+    // CollapsibleSection persists `bamendjou:tradecard-ladder-collapsed`, and
+    // jest.setup.ts never clears storage, so whether the ladder starts open
+    // depended on which earlier test had clicked the toggle. `expandLadder`'s
+    // idempotence guard made the suite pass over that rather than removing it.
+    localStorage.clear();
     act(() => {
       useScanStore.setState({
         scanResult: { candidates: [makeCard('AAA'), makeCard('BBB')] } as any,
@@ -196,6 +217,14 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
 
     fireEvent.click(screen.getByLabelText('Next candidate'));
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+
+    // BBB shows ITS OWN untouched values, not AAA's edits. This is the half the
+    // round-trip test was missing: with identical fixtures a leak of 2.71/132
+    // onto the second candidate was indistinguishable from a correct restore.
+    expect(screen.getByLabelText('Edit Limit')).toHaveTextContent(BBB_LIMIT.toFixed(2));
+    expandLadder();
+    expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent(BBB_INVALIDATION.toFixed(2));
+
     fireEvent.click(screen.getByLabelText('Previous candidate'));
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
 
@@ -232,5 +261,82 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalledWith(
       expect.objectContaining({ limit_price: 2.71 }),
     ));
+  });
+
+  it('does not leak an edit from one candidate onto the other', async () => {
+    // The leak direction the round-trip test cannot cover on its own: edit AAA,
+    // then place the order on BBB. BBB must post its OWN limit and store its
+    // OWN stop.
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+
+    editField('Limit', String(CARD_LIMIT), '2.71');
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('2.71'));
+    expandLadder();
+    editField('Invalidation', String(CARD_INVALIDATION), '132');
+    await waitFor(() => expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('132'));
+
+    fireEvent.click(screen.getByLabelText('Next candidate'));
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await screen.findByRole('button', { name: new RegExp(`place limit @ \\$${BBB_LIMIT.toFixed(2)}`, 'i') });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    fireEvent.click(limitBtn);
+
+    await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ limit_price: BBB_LIMIT }),
+    ));
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    expect(usePortfolioStore.getState().positions[0].stop).toBe(BBB_INVALIDATION);
+  });
+
+  it('CLEARING a field goes back to inheriting the plan, and the order follows', async () => {
+    // Round 7 finding 6: `touchedRef` was a one-way latch. Once typed, a field
+    // was pinned for the life of the page with no way back to inheriting --
+    // the outcome round 6's own note calls the bad one.
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+
+    editField('Limit', String(CARD_LIMIT), '2.71');
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('2.71'));
+
+    // Clear it.
+    fireEvent.click(screen.getByLabelText('Edit Limit'));
+    const input = screen.getByDisplayValue('2.71');
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toHaveTextContent(CARD_LIMIT.toFixed(2)));
+
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await screen.findByRole('button', { name: /place limit @ \$2\.50/i });
+    await waitFor(() => expect(limitBtn).toBeEnabled());
+    fireEvent.click(limitBtn);
+
+    await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ limit_price: CARD_LIMIT }),
+    ));
+  });
+
+  it('clamps a fat-fingered invalidation instead of storing an unreachable stop', async () => {
+    // Round 7 finding 4. The field that became `PortfolioPosition.stop` had
+    // min={0.01}, no max and no directional check, so on a $150 bullish card
+    // "1400" (a single mistyped digit) stored a stop above the price, which
+    // STOP_REACHED fires on immediately, and "14" stored one the underlying
+    // will never reach -- silently unprotected.
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    expandLadder();
+
+    editField('Invalidation', String(CARD_INVALIDATION), '1400');
+    // Bullish, price 150 -> clamped to 99% of price, i.e. still BELOW it.
+    await waitFor(() => expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('148.50'));
+
+    await placeLimit();
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    const [pos] = usePortfolioStore.getState().positions;
+    expect(pos.stop).toBe(148.5);
+    expect(pos.stop).toBeLessThan(150);
   });
 });

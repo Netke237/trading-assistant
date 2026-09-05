@@ -10,6 +10,15 @@ So every phase in PROJECT_STATE.json carries a `verify` probe: a pattern whose
 presence or absence in the real code proves the declared status. This script
 runs all of them and exits non-zero when a claim and the codebase disagree.
 
+WHAT IT CANNOT CATCH, stated so nobody reads a green "No drift" as more than it
+is: every probe is a regex PRESENCE test. It answers "does this symbol still
+exist?", never "does it still do what the document says". Round 7 found the
+worked example: the badge probe is `present:"formatStopLossHeadline"`, which
+passes no matter what that function returns -- and the schematic had meanwhile
+been amended to describe a badge string the code does not produce. Drift in
+BEHAVIOUR is what the adversarial rounds are for; this script only pins
+existence.
+
 Usage:
     python3 scripts/state.py           # render + verify (exit 1 on drift)
     python3 scripts/state.py --quiet   # verify only, print nothing when clean
@@ -59,7 +68,13 @@ def probe(v: dict) -> tuple[bool, str]:
         # about whether the calibration was fixed; the hardcoded `[0.04]`
         # literal is what says it was not.
         return (not found), ("defect still present: " if found else "defect gone: ") + where
-    # kind == "absent": the pattern appearing means the thing got built.
+    # kind == "absent": the SAME presence test as "present", with wording tuned
+    # for a phase that has not shipped yet ("absent X" reads better than
+    # "MISSING X" when absence is the expected state). The distinction is
+    # cosmetic and nothing downstream branches on it -- said plainly here
+    # because it previously looked load-bearing: main() carried an
+    # `if kind == "absent" and means_shipped_if_present:` whose two branches
+    # were character-for-character identical.
     return found, ("found " if found else "absent ") + where
 
 
@@ -79,10 +94,10 @@ def main() -> int:
         declared_shipped = ph["status"] in SHIPPED
         code_shipped, detail = probe(ph["verify"])
 
-        if ph["verify"]["kind"] == "absent" and ph["verify"].get("means_shipped_if_present"):
-            actual_shipped = code_shipped
-        else:
-            actual_shipped = code_shipped
+        # `probe` already returns "does the code say this shipped?" for every
+        # kind, "absent" and "defect_marker" included. There is nothing left to
+        # branch on here.
+        actual_shipped = code_shipped
 
         if declared_shipped != actual_shipped:
             drift.append(

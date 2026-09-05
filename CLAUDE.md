@@ -5,7 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > **Start every session with the project state.** `python3 scripts/state.py`
 > renders `docs/superpowers/PROJECT_STATE.json` — the single source of truth for
 > stop-model phase status, audit status, decisions and open questions — and
-> verifies each claim against the real code. It exits non-zero on drift. The
+> checks each claim against the real code (a regex PRESENCE probe per phase —
+> it pins that a symbol still exists, never that it still behaves as described).
+> It exits non-zero on drift. The
 > SessionStart hook runs it automatically. See `docs/superpowers/STATE_TRACKING.md`.
 > **The rule: nothing is done until an adversarial round comes back clean.**
 

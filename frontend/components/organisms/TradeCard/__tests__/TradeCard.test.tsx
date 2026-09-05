@@ -98,10 +98,22 @@ const mockTradeCard: TradeCardData = {
 // Sell-to-Close Plan + Risk-Reward) defaults to collapsed; any test touching
 // content inside it must expand it first.
 function expandLadder() {
+  // IDEMPOTENT. The section's toggle collapses it again, and its collapsed
+  // state persists to localStorage, so a bare click is only "expand" if you
+  // know what every earlier call in the file did. Round 7 finding 17 is the
+  // same hazard in the page-level suite.
+  if (screen.queryByLabelText('Edit Invalidation')) return;
   fireEvent.click(screen.getByRole('button', { name: /fixed % ladder plan/i }));
 }
 
 describe('TradeCard', () => {
+  beforeEach(() => {
+    // CollapsibleSection persists `bamendjou:tradecard-ladder-collapsed`, and
+    // jest.setup.ts never clears storage between tests, so without this the
+    // ladder's starting state depends on test ORDER.
+    localStorage.clear();
+  });
+
   it('shows a negative per-target R:R instead of hiding the row (M2 parity)', () => {
     // Mirrors the backend's reward_risk.py M2 fix: a target priced below
     // entry (estimatedOptionPrice=1.0 < entry.limit=2.5, reward=-1.5,
@@ -150,7 +162,12 @@ describe('TradeCard', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Order type')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument();
-    expect(screen.getByLabelText('Edit Max fill')).toBeInTheDocument();
+    // Max fill is READ-ONLY (round 7 finding 3): nothing outside its own input
+    // ever consumed it, and rendering it with the same click-to-edit affordance
+    // as the three fields that DO reach the broker made the two
+    // indistinguishable. See the row's own comment in TradeCard.
+    expect(screen.queryByLabelText('Edit Max fill')).not.toBeInTheDocument();
+    expect(screen.getByText('Max fill')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
   });
 
@@ -216,6 +233,139 @@ describe('TradeCard', () => {
     const moved = { ...merged, exit: { ...merged.exit, premiumStop: 0.65 } };
     rerender(<TradeCard data={moved} onEditsChange={onEditsChange} />);
     expect(shown()).toBe('$0.50');
+  });
+
+  // ── The same two properties for the OTHER two threaded fields ────────────
+  //
+  // Round 7 finding 10: `initialEntryLimit` and `initialInvalidation` and their
+  // two follow-the-seed effects shipped with zero unit coverage --
+  // `grep -c "initialEntryLimit\|initialInvalidation"` over this file returned
+  // 0 -- while the premium stop they were modelled on had both a restore test
+  // and a seed-following one. The page-level integration test exercised the
+  // restore direction only.
+
+  it('restores an edited entry limit and invalidation when the same contract comes back', () => {
+    const { rerender } = render(
+      <TradeCard data={mockTradeCard} initialEntryLimit={2.71} initialInvalidation={175.5} />,
+    );
+    const limit = () => screen.getByLabelText('Edit Limit').textContent;
+    const invalidation = () => screen.getByLabelText('Edit Invalidation').textContent;
+    expandLadder();
+    expect(limit()).toBe('$2.71');
+    expect(invalidation()).toBe('$175.50');
+
+    // Away to another candidate — it shows ITS OWN seeds, not the cached edits.
+    const other = { ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT|400|2026-05-16|C' };
+    rerender(<TradeCard data={other} initialEntryLimit={null} initialInvalidation={null} />);
+    expect(limit()).toBe(`$${mockTradeCard.entry.limit.toFixed(2)}`);
+    expandLadder();
+    expect(invalidation()).toBe(`$${mockTradeCard.exit.invalidation.toFixed(2)}`);
+
+    // ...and back.
+    rerender(<TradeCard data={mockTradeCard} initialEntryLimit={2.71} initialInvalidation={175.5} />);
+    expect(limit()).toBe('$2.71');
+    expandLadder();
+    expect(invalidation()).toBe('$175.50');
+  });
+
+  it('restoring an edit also restores its TOUCHED flag, so the page keeps caching it', () => {
+    // The half a display assertion cannot see. If the flag came back false, the
+    // next patch() would report `touched: false` and the page would drop the
+    // cached edit to null -- the card would show 2.71 and the order would post
+    // the seed, which is the round-trip defect wearing a different hat.
+    const onEditsChange = jest.fn();
+    render(
+      <TradeCard
+        data={mockTradeCard}
+        initialEntryLimit={2.71}
+        initialInvalidation={175.5}
+        onEditsChange={onEditsChange}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('Edit Contracts'));
+    const input = screen.getByLabelText('Edit Contracts') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '3' } });
+    fireEvent.blur(input);
+
+    const last = onEditsChange.mock.calls.at(-1)!;
+    expect(last[1]).toEqual({ touched: { entryLimit: true, invalidation: true, premiumStop: false } });
+    expect(last[0].entryLimit).toBe(2.71);
+    expect(last[0].invalidation).toBe(175.5);
+  });
+
+  it('an UNTOUCHED entry limit and invalidation follow a seed that mergePlan moves', () => {
+    // The opposite direction, and the one the two effects added on 2026-09-05
+    // exist for: an untouched field caches `null` at the page level, so the
+    // send path already resolves to the card's CURRENT value. A stale seed left
+    // on screen means the card DISPLAYS the old level while the order uses the
+    // new one.
+    const onEditsChange = jest.fn();
+    const { rerender } = render(
+      <TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />,
+    );
+    const limit = () => screen.getByLabelText('Edit Limit').textContent;
+    const invalidation = () => screen.getByLabelText('Edit Invalidation').textContent;
+
+    // Same contract, recomputed entry/exit — mergePlan's exact shape.
+    const merged = {
+      ...mockTradeCard,
+      entry: { ...mockTradeCard.entry, limit: 2.9 },
+      exit: { ...mockTradeCard.exit, invalidation: 181.2 },
+    };
+    rerender(<TradeCard data={merged} onEditsChange={onEditsChange} />);
+    expect(limit()).toBe('$2.90');
+    expandLadder();
+    expect(invalidation()).toBe('$181.20');
+
+    // Once typed, the seed stops overriding the user.
+    const typeInto = (label: string, v: string) => {
+      fireEvent.click(screen.getByLabelText(`Edit ${label}`));
+      const input = screen.getByLabelText(`Edit ${label}`) as HTMLInputElement;
+      fireEvent.change(input, { target: { value: v } });
+      fireEvent.blur(input);
+    };
+    typeInto('Limit', '3.10');
+    typeInto('Invalidation', '176.00');
+    const movedAgain = {
+      ...merged,
+      entry: { ...merged.entry, limit: 3.4 },
+      exit: { ...merged.exit, invalidation: 182.9 },
+    };
+    rerender(<TradeCard data={movedAgain} onEditsChange={onEditsChange} />);
+    expect(limit()).toBe('$3.10');
+    expect(invalidation()).toBe('$176.00');
+  });
+
+  it('CLEARING a threaded field puts it back to inheriting, flag included', () => {
+    // Round 7 finding 6 -- `touchedRef` was a one-way latch, so a typed field
+    // was pinned for the life of the page and mergePlan could no longer reach
+    // it. Clearing the input is the way back (the same gesture the portfolio
+    // EditDrawer already uses to mean "inherit the global").
+    const onEditsChange = jest.fn();
+    const { rerender } = render(
+      <TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />,
+    );
+    const limit = () => screen.getByLabelText('Edit Limit').textContent;
+
+    fireEvent.click(screen.getByLabelText('Edit Limit'));
+    let input = screen.getByLabelText('Edit Limit') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '3.10' } });
+    fireEvent.blur(input);
+    expect(limit()).toBe('$3.10');
+    expect(onEditsChange.mock.calls.at(-1)![1].touched.entryLimit).toBe(true);
+
+    fireEvent.click(screen.getByLabelText('Edit Limit'));
+    input = screen.getByLabelText('Edit Limit') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.blur(input);
+
+    expect(limit()).toBe(`$${mockTradeCard.entry.limit.toFixed(2)}`);
+    expect(onEditsChange.mock.calls.at(-1)![1].touched.entryLimit).toBe(false);
+
+    // And it inherits again: a moved seed now reaches the field.
+    const merged = { ...mockTradeCard, entry: { ...mockTradeCard.entry, limit: 2.95 } };
+    rerender(<TradeCard data={merged} onEditsChange={onEditsChange} />);
+    expect(limit()).toBe('$2.95');
   });
 
   it('a click into a Premium stop seeded OUTSIDE the field bounds is still NOT an edit', async () => {
@@ -411,7 +561,12 @@ describe('TradeCard', () => {
     expect(screen.getByText('Exit Plan')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
-    expect(screen.getByLabelText('Edit Time stop')).toBeInTheDocument();
+    // READ-ONLY, same reason as Max fill — and Time stop additionally
+    // disagrees with the alert that bears its name (TIME_STOP fires on a
+    // hardcoded `dteRemaining <= 3`), so offering to edit it promised twice
+    // over.
+    expect(screen.queryByLabelText('Edit Time stop')).not.toBeInTheDocument();
+    expect(screen.getByText('Time stop')).toBeInTheDocument();
   });
 
   beforeEach(() => {
@@ -1931,11 +2086,16 @@ describe('TradeCard', () => {
       render(<TradeCard data={mockTradeCard} />);
       expandLadder();
       expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument();
-      expect(screen.getByLabelText('Edit Max fill')).toBeInTheDocument();
+      // Max fill is READ-ONLY (round 7 finding 3): nothing outside its own input
+    // ever consumed it, and rendering it with the same click-to-edit affordance
+    // as the three fields that DO reach the broker made the two
+    // indistinguishable. See the row's own comment in TradeCard.
+    expect(screen.queryByLabelText('Edit Max fill')).not.toBeInTheDocument();
+    expect(screen.getByText('Max fill')).toBeInTheDocument();
       expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
       expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
       expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
-      expect(screen.getByLabelText('Edit Time stop')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Edit Time stop')).not.toBeInTheDocument();
     });
 
     it('opens inline input when clicking editable limit field', async () => {

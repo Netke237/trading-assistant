@@ -242,7 +242,7 @@ a{color:var(--accent)}
         </div>
         <div class="blockhead">
           <span class="blocktitle">Max loss if the stop is hit</span>
-          <span class="badge caution">Caution · 71% of premium</span>
+          <span class="badge caution">Caution · 71% of premium · $1.49/share left</span>
         </div>
         <div class="fields">
           <div class="f struck"><span class="k">Old basis · Δ-linear</span><span class="v">$15.99 × Δ0.34 = $5.20 of $5.20 · 100% — pinned</span></div>
@@ -261,13 +261,22 @@ a{color:var(--accent)}
         <ul class="expl">
           <li>The section is headed <b>"MAX LOSS IF THE STOP IS HIT"</b>, not "Stop cost" — approved as
           NOTATION-2026-09-04. Every other field and line of explanation on this card stands as drawn.</li>
-          <li>The badge stays <b>percent-only</b>. The dollars left at the stop are printed on the line
-          beneath it instead, <b>per contract</b> rather than per share: <span class="mono">"$401 per
-          contract — of the $651 premium, $251 left"</span> (<span class="mono">formatStopLossHeadline</span>).
-          The rule applied: both figures are on screen and only their position differs, so the layout was
-          left alone. The contract total is the sum actually being risked, while the arithmetic line beneath
-          stays per share so it reconciles with the premium and delta printed there. What is NOT printed is
-          the per-share "left" ($1.49 here) — it is the difference of two numbers that are.</li>
+          <li><b>CORRECTED 2026-09-05 (round 7).</b> An earlier amendment on this same date claimed the
+          badge "stays percent-only" and that the per-share "left" is not printed. Both statements were
+          false about the code they described: <span class="mono">formatStopLossBadge</span> returns
+          <span class="mono">"CAUTION · 71% of premium · $1.49/share left"</span> — the per-share left IS on
+          the badge, exactly as this card was originally drawn. The badge above has been put back to what
+          ships. This is also what decision BADGE-SPEC-2026-09-05 ("MATCH THE SCHEMATIC ... BUILT")
+          resolved and what round 6 then amended to lead with the verdict word; the later amendment
+          re-asked the same question and answered it the other way on a verification that was never true,
+          which is how the authoritative artefact came to contradict both the code and the earlier
+          decision. Two real differences from the original drawing remain, and they stand: the badge leads
+          with the <b>verdict word</b> (StatusBadge renders <span class="mono">label ?? STATUS_LABEL[status]</span>,
+          so a supplied label replaces the word, and colour alone cannot separate two badges printing the
+          same rounded percentage either side of the pass line), and it says <b>"/share"</b> rather than a
+          bare "$1.49 left" because the same quantity also appears per CONTRACT on the headline beneath
+          (<span class="mono">"$401 per contract — of the $651 premium, $251 left"</span>,
+          <span class="mono">formatStopLossHeadline</span>), so both strings name their unit.</li>
         </ul>
       </div>
 

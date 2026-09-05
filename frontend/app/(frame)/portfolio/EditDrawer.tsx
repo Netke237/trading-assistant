@@ -912,8 +912,24 @@ function PremiumStopEditor({
     // Critical PREMIUM_STOP toast on every 30s scan with no backend alert
     // behind it.
     if (!(next > 0 && next < 1)) { setDraft(stored); dirtyRef.current = false; return; }
-    setDraft(String(Number(pct.toFixed(2))));
-    if (dirtyRef.current && next !== own) onChange({ premiumStopPct: next });
+    // COMPARED AT THE EDITOR'S OWN PRECISION, not against the raw stored
+    // fraction. `stored` renders `own` at 2dp of a percent, and `next` is
+    // re-derived from the typed text at 4dp of a fraction, so for any `own`
+    // that is not exactly representable at 2dp the two never agree -- and the
+    // stored fraction is `premiumStopDollar / entry_price` (e.g.
+    // `2.00 / 4.13 = 0.48426150121065376`), so it usually is not. dirtyRef
+    // alone does not save this: it only asks "did the user type", and typing a
+    // character and deleting it back to the value already on screen is
+    // typing. That path PATCHed 0.4843 over 0.484261..., silently moving a
+    // live alert threshold on a field the user restored by hand.
+    //
+    // 2dp of a percent is all this editor can express, so a draft that renders
+    // identically to `stored` IS the stored value as far as it is concerned.
+    // `next !== own` is kept as well: it still catches the case where the
+    // rendered text differs but the derived fraction does not.
+    const rendered = String(Number(pct.toFixed(2)));
+    setDraft(rendered);
+    if (dirtyRef.current && rendered !== stored && next !== own) onChange({ premiumStopPct: next });
     dirtyRef.current = false;
   };
 

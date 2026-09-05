@@ -174,22 +174,48 @@ export function stopPremiumRisk(
  *  because the verdict is a comparison rather than an equation on screen. The
  *  badge's PERCENTAGE is not in that category: it is printed, so it comes from
  *  here too (see formatStopLossPct). */
-/** Half-up to cents, explicitly.
+/** Half-up to cents on the EXACT product of the two printed factors.
  *
  *  `toFixed(2)` breaks a mathematical `x.xx5` according to the BINARY value,
  *  so the direction is effectively arbitrary — and the case this rework's own
  *  doc comment uses as its worked example is one of the losers: 8.01 x 0.500
  *  is exactly 4.005, whose double is 4.00499999..., so `toFixed(2)` gives
  *  "4.00" where a reader multiplying the two printed factors by hand gets
- *  $4.01. Only ~0.02% of ordinary inputs, but the entire premise of this line
- *  is that Kenneth can check it by hand, and a rule that disagrees with the
- *  hand-check on its own documented example is not a rule worth keeping.
+ *  $4.01.
  *
- *  Half-up matches what a person does on paper. The EPSILON nudge keeps a
- *  product that is mathematically x.xx5 but a hair under it in binary (which
- *  is most of them) on the up side of the split. */
-function roundCents(n: number): number {
-  return Math.round(n * 100 + Number.EPSILON) / 100;
+ *  Half-up matches what a person does on paper — but it has to be half-up on
+ *  the value Kenneth's calculator shows, not on the double. The previous
+ *  version was `Math.round(move * delta * 100 + Number.EPSILON) / 100`, and
+ *  the EPSILON nudge in it was arithmetically inert wherever it mattered:
+ *  EPSILON is 2.22e-16, while one ULP at a product of 994.5 (`$11.70 away x
+ *  0.850` in cents) is 1.14e-13 — five hundred times larger. Adding EPSILON
+ *  cannot move a double that is one ULP below the .5 split. Swept against a
+ *  decimal-exact half-up over 4,995,000 ordinary pairs (move <= $50.00 by 1c,
+ *  delta 0.001-0.999), that version disagreed on 2999 of them (0.060%) —
+ *  three times the 0.02% error rate the rework was written to remove, and it
+ *  moves the VERDICT too, since `status` is computed from
+ *  `printed.loss / printed.premium`.
+ *
+ *  So do the multiplication in integers, where there is no binary split to
+ *  lose. `move` is already rounded to 2dp and `delta` to 3dp by the caller, so
+ *  `move x 100` and `delta x 1000` are exact integers, and their product is an
+ *  exact integer count of 1e-5 dollars. Half-up on that is a comparison of
+ *  integers: no double ever holds a value near the split.
+ *
+ *  Rounds half AWAY FROM ZERO rather than half-up-toward-positive, so a
+ *  negative delta (a put quoted signed) rounds by magnitude the way the hand
+ *  check does. */
+function roundCentsOfProduct(move: number, delta: number): number {
+  // Exact: both factors arrive pre-rounded to 2dp / 3dp respectively, so
+  // scaling them to integers cannot lose anything.
+  const moveCents = Math.round(move * 100);
+  const deltaMilli = Math.round(delta * 1000);
+  // Units of 1e-5 dollars. Well inside Number.MAX_SAFE_INTEGER for any real
+  // stop distance: $50,000 away at delta 1.000 is 5e6 x 1e3 = 5e9.
+  const scaled = moveCents * deltaMilli;
+  const sign = scaled < 0 ? -1 : 1;
+  const cents = Math.floor((Math.abs(scaled) + 500) / 1000);
+  return (sign * cents) / 100;
 }
 
 function printedShare(r: StopPremiumRisk) {
@@ -205,7 +231,7 @@ function printedFrom(rawMove: number, rawDelta: number, rawPremium: number) {
   const move = Number(rawMove.toFixed(2));
   const delta = Number(rawDelta.toFixed(3));
   const premium = Number(rawPremium.toFixed(2));
-  const product = roundCents(move * delta);
+  const product = roundCentsOfProduct(move, delta);
   // WHETHER THE CAP BINDS IS DECIDED ON THE PRINTED PRODUCT, not on
   // `r.capped`. `r.capped` is `rawLoss >= premium` at full precision, and
   // rounding the delta to 3dp moves the product to the other side of the

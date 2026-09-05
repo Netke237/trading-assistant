@@ -985,8 +985,21 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                   // two-engines-disagree window piece 4 exists to close. It
                   // self-healed only on the next GET.
                   // `duplicate` carries no body, so keep what the row has.
+                  // `premiumStopDollar` is dropped on the way to 'synced',
+                  // matching migratePortfolioPersist's rule for the same
+                  // transition ("a CREATE-ONLY transport field ... keeping it
+                  // on a synced row persists a number that no longer describes
+                  // the position"). This retry is the one path that reached
+                  // 'synced' without going through the migration, and since
+                  // `version` is already 3 the migration never runs again to
+                  // clean it up -- so the rule was broken by the same commit
+                  // that wrote it. Inert today (nothing reads it back off a
+                  // synced row), which is exactly why it has to be kept
+                  // consistent rather than argued away.
+                  const { premiumStopDollar: _createOnly, ...rest } = p;
+                  void _createOnly;
                   keep.push({
-                    ...p,
+                    ...rest,
                     premiumStopPct:
                       outcome.kind === 'ok' ? outcome.premiumStopPct ?? null : p.premiumStopPct,
                     syncStatus: 'synced',

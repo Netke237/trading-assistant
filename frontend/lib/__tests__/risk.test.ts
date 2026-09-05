@@ -489,10 +489,27 @@ describe('the printed equation reconciles', () => {
           // the line makes. `toFixed(2)` used to stand in for it and silently
           // disagreed on exact half-cents (8.01 × 0.500 = 4.005 printed $4.00),
           // because it breaks the tie on the binary value. Importing
-          // `roundCents` would make this assert that the code agrees with
-          // itself; spelling the rule out keeps it asserting that the code
+          // `roundCentsOfProduct` would make this assert that the code agrees
+          // with itself; spelling the rule out keeps it asserting that the code
           // agrees with the hand-check.
-          const product = Math.round(away * d * 100 + Number.EPSILON) / 100;
+          //
+          // ROUND 7: this line USED to be
+          // `Math.round(away * d * 100 + Number.EPSILON) / 100`, which is the
+          // same broken idiom the implementation carried -- EPSILON is 2.22e-16
+          // and one ULP at a product of 2036.5 is ~4.5e-13, so the nudge cannot
+          // move a double sitting one ULP below the .5 split. It marked the
+          // CORRECT value wrong: 40.73 × 0.500 is exactly 20.365, a hand-check
+          // gives $20.37, and this line expected $20.36. A test that re-derives
+          // the rule using the implementation's own bug is not an independent
+          // check of it.
+          //
+          // Done in integers instead, where there is no binary split to lose:
+          // `away` is printed at 2dp and `d` at 3dp, so scaling them to whole
+          // numbers is exact and the half-up decision is an integer comparison.
+          const product = (() => {
+            const scaled = Math.round(away * 100) * Math.round(d * 1000); // 1e-5 dollars
+            return Math.floor((scaled + 500) / 1000) / 100;
+          })();
           const expected = Math.min(product, premiumShown);
           if (loss !== expected) failures.push(`${printed} (expected $${expected})`);
           // CAPPED ROWS ARE CHECKED TOO. This used to `continue` past them, and

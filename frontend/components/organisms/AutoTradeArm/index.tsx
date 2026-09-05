@@ -197,6 +197,26 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         </div>
       )}
 
+      {(autoMode === 'armed' || autoMode === 'post_scan') && (
+        // Round 7 finding 16. An auto-trade FIRE places the broker order and
+        // appends a history row -- it creates no PortfolioPosition
+        // (auto_trader.fire), so nothing on that path carries a `stop` or a
+        // `premium_stop_pct` into the alert engines: no STOP_REACHED, no
+        // PREMIUM_STOP, no TIME_STOP. The armed request does send the premium
+        // stop, but only as the `premium_at_risk` history figure and the
+        // daily-loss-gate denominator.
+        //
+        // Said on screen because this control sits directly beside Place
+        // Limit, which DOES thread all of it, and nothing distinguished them.
+        // Both halves were already recorded (this file's own prop docs, the
+        // open questions in PROJECT_STATE) -- recorded is not the same as
+        // visible to the person pressing the button.
+        <Text size={11} tone="caution">
+          An auto-trade fill is not tracked as a position: the invalidation and premium stops on the card
+          above arm no alerts on this path. Place Limit does thread both.
+        </Text>
+      )}
+
       {autoMode === 'post_scan' && (
         <Text size={11} tone="secondary">
           The system will automatically place this trade when the next scan completes with a PASS candidate.
