@@ -74,3 +74,13 @@ frontend/test-results/
 frontend/e2e/screenshots/
 frontend/playwright-report/
 llm-contexts/e2e-output.log
+
+# Adversarial-audit scratch tests. Each round's auditor writes throwaway probe
+# suites to verify a finding (a brute-force sweep, a multi-symbol round-trip);
+# they are not coverage and must not land on a branch. Round 2's sweep did get
+# committed and had to be removed again in 2d77017c. Name them `zz-scratch-*`
+# and they stay out of the tree on their own.
+zz-scratch-*.test.ts
+zz-scratch-*.test.tsx
+zzz_*.test.ts
+zzz_*.test.tsx
