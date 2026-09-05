@@ -2,6 +2,7 @@ import { renderHook, act } from '@testing-library/react';
 import { usePortfolioStore, persistPosition, migratePortfolioPersist, applyPersistedPosition } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
 import type { PortfolioPosition } from '@/types/domain';
+import { premiumStopThresholdPrice } from '@/lib/premiumStop';
 
 const makeBackendPosition = () => ({
   id: 'p1',
@@ -1164,6 +1165,48 @@ describe('portfolioStore', () => {
       );
 
       expect(onDropped).not.toHaveBeenCalled();
+    });
+
+    it('adopts the server ENTRY alongside the server fraction, so both engines fire at one price', () => {
+      // ROUND 9 finding 2. The router replaces the submitted entry with its
+      // save-time quote and derives pct against THAT. Adopting the fraction
+      // while keeping the client's mid put the two engines on different
+      // thresholds: card mid $5.20, typed stop $3.12, filled at $4.00 ->
+      // server stores 0.78 and fires at $0.88, while a local row still
+      // carrying 5.20 fires at 5.20 x 0.22 = $1.144. At a $1.00 quote the
+      // frontend raises a PREMIUM_STOP toast that the backend does not.
+      //
+      // Round 7 rejected the sibling entry-limit finding on the identity
+      // entry x (1 - dollar/entry) = entry - dollar. That holds only when ONE
+      // entry is used for the derivation AND the threshold; here they differed,
+      // and the implied dollar stop became $4.06 rather than the $3.12 typed.
+      const pos = makePosition({ recId: 'REC-ENTRY-PAIR', entryPrice: 5.20, premiumStopDollar: 3.12 });
+      const addPosition = jest.fn();
+
+      applyPersistedPosition(
+        { ok: true, premiumStopPct: 0.78, entryPrice: 4.00 }, pos, addPosition,
+      );
+
+      const row = addPosition.mock.calls[0][0] as typeof pos;
+      expect(row.premiumStopPct).toBeCloseTo(0.78, 10);
+      expect(row.entryPrice).toBeCloseTo(4.00, 10);
+      // The pair reproduces the DOLLAR the user actually typed...
+      expect(premiumStopThresholdPrice(row.entryPrice, row.premiumStopPct!))
+        .toBeCloseTo(4.00 - 3.12, 10);
+      // ...and matches what the backend computes off its own stored row.
+      expect(premiumStopThresholdPrice(4.00, 0.78)).toBeCloseTo(
+        premiumStopThresholdPrice(row.entryPrice, row.premiumStopPct!), 10,
+      );
+    });
+
+    it('leaves the entry alone when the server did not report one', () => {
+      // A response without a usable entry must not blank the row's own.
+      const pos = makePosition({ recId: 'REC-NO-ENTRY', entryPrice: 5.20 });
+      const addPosition = jest.fn();
+
+      applyPersistedPosition({ ok: true, premiumStopPct: 0.6 }, pos, addPosition);
+
+      expect((addPosition.mock.calls[0][0] as typeof pos).entryPrice).toBeCloseTo(5.20, 10);
     });
 
     it('rejected: does NOT call addPosition at all, and surfaces the detail for the caller to show', () => {

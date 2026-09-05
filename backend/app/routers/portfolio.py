@@ -197,7 +197,19 @@ async def add_position(
 
     if need_reanchor and live_price and live_price > 0:
         delta = live_price - body.scanStockPrice
-        if adjusted_stop is not None:
+        # A USER-TYPED stop is an absolute price against today's quote, not a
+        # plan level that scales with the underlying, so it must be stored as
+        # sent. Re-anchoring it added (live - scan) to a number the user chose
+        # while looking at `live`: a $180 stop typed on a $200 stock scanned at
+        # $145 became $235, ABOVE spot, and alert_generator's bullish
+        # `price <= pos.stop` then raised a Critical STOP_REACHED (with Gmail
+        # and Telegram behind it) on the first backend scan. The everyday
+        # non-stale case is the same defect smaller: scanned 150, saved at 152,
+        # typed 147 -> stored 149.
+        #
+        # structuralStop and the targets below are NOT exempted -- those are
+        # still plan-derived and still have to move with the underlying.
+        if adjusted_stop is not None and not body.stopIsUserSet:
             adjusted_stop = round(adjusted_stop + delta, 2)
             if body.stop and body.stop > 0 and adjusted_stop <= 0:
                 # _floor_stop below will silently store this as None (a stock

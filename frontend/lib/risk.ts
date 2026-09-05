@@ -151,7 +151,30 @@ export function stopPremiumRisk(
   // `fraction` on the object stays full precision: it is the underlying
   // quantity, and nothing on screen is scaled from it.
   const printed = printedFrom(stockMove, usedDelta, premium);
-  const status: Status = printed.loss / printed.premium < passMax ? 'PASS' : 'CAUTION';
+  // COMPARED IN INTEGER CENTS, not by dividing the two dollar doubles.
+  // `printed.loss / printed.premium` is a float quotient, and at the exact
+  // threshold it lands a hair BELOW it: 0.16 / 0.20 is 0.7999999999999999,
+  // while 16 / 20 is 0.8. So a card whose own printed equation reads
+  // "$0.16 of $0.20 premium" -- exactly the 0.80 pass line, i.e. CAUTION --
+  // was rendering PASS green under the PASS tooltip ("still holds meaningful
+  // value if this stop is hit"). 412 exact-boundary cent pairs do this at the
+  // 0.80 line, 161 at 0.75, 21 at 0.85, 3 at 0.70, and they include entirely
+  // ordinary premiums ($0.05, $0.10, $0.20, $0.40, $0.50).
+  //
+  // This is round 5's own finding surviving at the boundary: that round moved
+  // the verdict onto the printed pair, which was right, and then compared the
+  // pair with the one operation that reintroduces float error. Cross-multiply
+  // instead -- the same integer discipline `roundCentsOfProduct` two functions
+  // down already uses, and the reason it exists.
+  //
+  // Both operands are exact to the cent by construction (printedFrom rounds
+  // them), and `passMax` is a config fraction, so scaling by 1e6 keeps every
+  // product an exact integer far inside Number.MAX_SAFE_INTEGER.
+  const lossCents = Math.round(printed.loss * 100);
+  const premiumCents = Math.round(printed.premium * 100);
+  const passMaxScaled = Math.round(passMax * 1e6);
+  const status: Status =
+    lossCents * 1e6 < passMaxScaled * premiumCents ? 'PASS' : 'CAUTION';
 
   return { stockMove, delta: usedDelta, rawLoss, loss, premium, fraction, capped, status };
 }

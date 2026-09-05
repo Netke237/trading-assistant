@@ -707,3 +707,86 @@ async def test_a_sub_cent_live_quote_still_derives_a_usable_stop(api_client):
     assert premium_stop_threshold_price(
         row["entryPrice"], row["premiumStopPct"]
     ) == pytest.approx(2.08)
+
+
+# ── Round 9 — a TYPED stop is an absolute price, not a plan level ────────────
+#
+# The router re-anchors `stop` by (live price - scanStockPrice) so a level the
+# PLAN derived at scan time still sits the same distance from the underlying
+# when it is finally saved. This branch made the card's Invalidation an
+# editable absolute price, and round 8 bounded that field against the LIVE
+# quote -- so a stop typed while looking at today's price was then displaced by
+# (today - scan day). `stopIsUserSet` is what tells the two apart.
+
+
+async def _create_reanchor(client, *, scan_price, live_stock, stop, **extra):
+    """POST with BOTH quote fetches pinned, so the re-anchor branch is live.
+
+    `_create` above patches only the contract quote; `need_reanchor` on a
+    non-stock contract also awaits `fetch_price_async` for the underlying.
+    """
+    body = {
+        "recId": "REC-RE", "symbol": "AAPL", "contract": "AAPL|190|2026-05-16|C",
+        "direction": "Bullish", "entryPrice": 5.20, "qty": 1,
+        "entryDate": "2026-05-01", "targets": [], "dteTotal": 30,
+        "portfolioValue": 1_000_000,
+        "scanStockPrice": scan_price, "stop": stop,
+    }
+    body.update(extra)
+    with patch("app.routers.portfolio.fetch_contract_quote_async",
+               new=AsyncMock(return_value={"price": 4.00})), \
+         patch("app.routers.portfolio.fetch_price_async",
+               new=AsyncMock(return_value=live_stock)):
+        return await client.post("/api/portfolio", json=body)
+
+
+@pytest.mark.asyncio
+async def test_a_user_typed_stop_is_stored_as_sent_not_reanchored(api_client):
+    # Scanned at $145, reopened and saved at $200 -- the persisted-scanResult
+    # staleness the card's own bounds fix documents. $180 is a legitimate stop
+    # against today's $200. Re-anchoring made it 180 + 55 = $235, ABOVE spot.
+    r = await _create_reanchor(api_client, scan_price=145.0, live_stock=200.0,
+                               stop=180.0, stopIsUserSet=True)
+    assert r.status_code == 201, r.text
+    stored = r.json()["stop"]
+    assert stored == pytest.approx(180.0), (
+        f"a typed stop must be stored as sent; got {stored}"
+    )
+    # The point of the fix: this must NOT be a stop the live price already sits
+    # at or below, or alert_generator's bullish `price <= pos.stop` raises a
+    # Critical STOP_REACHED on the first backend scan.
+    assert 200.0 > stored, "stored stop is at or above spot -- fires immediately"
+
+
+@pytest.mark.asyncio
+async def test_the_everyday_small_move_does_not_shift_a_typed_stop(api_client):
+    # The same defect without any staleness: scanned 150, saved at 152, typed
+    # 147 -> stored 149. Small, silent, and wrong in the dangerous direction.
+    r = await _create_reanchor(api_client, scan_price=150.0, live_stock=152.0,
+                               stop=147.0, stopIsUserSet=True)
+    assert r.status_code == 201, r.text
+    assert r.json()["stop"] == pytest.approx(147.0)
+
+
+@pytest.mark.asyncio
+async def test_a_plan_derived_stop_still_reanchors(api_client):
+    # The flag is opt-in and narrow. Without it -- every legacy client, and
+    # every untouched card -- the re-anchor is still exactly right, because the
+    # level was computed against `scanStockPrice` in the first place.
+    r = await _create_reanchor(api_client, scan_price=150.0, live_stock=152.0,
+                               stop=147.0)
+    assert r.status_code == 201, r.text
+    assert r.json()["stop"] == pytest.approx(149.0)
+
+
+@pytest.mark.asyncio
+async def test_the_flag_exempts_only_the_stop_not_the_structural_stop(api_client):
+    # structuralStop and the targets stay plan-derived and must keep moving
+    # with the underlying even when the user typed the invalidation.
+    r = await _create_reanchor(api_client, scan_price=150.0, live_stock=152.0,
+                               stop=147.0, stopIsUserSet=True,
+                               structuralStop=145.0)
+    assert r.status_code == 201, r.text
+    row = r.json()
+    assert row["stop"] == pytest.approx(147.0)
+    assert row["structuralStop"] == pytest.approx(147.0)   # 145 + 2, re-anchored

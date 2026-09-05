@@ -437,6 +437,14 @@ export interface PortfolioPosition {
   recId:         string;
   /** Underlying stock price at scan time — used to re-anchor stop/targets to fill price. */
   scanStockPrice?: number;
+  /** True when `stop` is a level the USER TYPED on the trade card, as an
+   *  absolute price against today's quote, rather than one the plan derived.
+   *  Sent to the backend, which re-anchors a plan-derived stop by
+   *  (live price − `scanStockPrice`) and must leave a typed one alone: the
+   *  user chose that number while looking at the live price, so shifting it
+   *  stores a stop they never picked. Absent/false keeps the re-anchor, which
+   *  is right for every plan-derived stop and for legacy rows. */
+  stopIsUserSet?: boolean;
   /** Full trade-card/score-breakdown snapshot at buy time — sent once on create
    *  so the backend can permanently attach it (audit_events via log_approval)
    *  answering "why was this bought". Stored on the position object itself

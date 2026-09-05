@@ -179,11 +179,6 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     // `if ('maxLossOverride' in patch) body.maxLossOverride = ...` handling
     // for the post-trade PATCH path.
     maxLossOverride: p.maxLossOverride ?? null,
-    // Piece 4 — same reasoning as maxLossOverride directly above: omit this
-    // key and the row is created with premium_stop_pct=NULL no matter how the
-    // schema and router are wired, so the trade silently falls back to the
-    // global on its first alert while the optimistic local state shows the
-    // value the user chose.
     // Piece 4 — the DOLLAR amount, not a fraction. The backend derives the
     // fraction against the entry price it persists; sending a client-derived
     // fraction re-anchors the user's stop to a price the server replaced.
@@ -195,10 +190,39 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     // inherit-the-global. Same `??`-does-not-catch-0 guard this file already
     // applies to floorStop and resolvedTpPrice.
     premiumStopDollar: (p.premiumStopDollar ?? 0) > 0 ? p.premiumStopDollar : null,
+    // Piece 4 — same reasoning as maxLossOverride above: omit this key and the
+    // row is created with premium_stop_pct=NULL no matter how the schema and
+    // router are wired, so the trade silently falls back to the global on its
+    // first alert while the optimistic local state shows the value the user
+    // chose.
+    //
+    // This is NOT redundant with premiumStopDollar beside it. That field is
+    // create-only transport and is DELETED from a row on its way to 'synced'
+    // (see the `syncStatus === 'synced'` branch below and the retry path in
+    // syncFromBackend), leaving a synced row carrying the server-derived
+    // FRACTION alone. Any path that re-POSTs such a row -- syncToBackend, from
+    // dashboard/page.tsx -- was therefore sending neither field, recreating
+    // the position with no per-position stop at all and silently reverting it
+    // to the global. The router prefers premiumStopDollar when both are
+    // present, so sending both is safe on the first create and correct on a
+    // re-POST.
+    //
+    // Guarded the same way: the column's contract is the open interval (0, 1),
+    // so a stray 0 or 1 must become null rather than 422 the whole create.
+    premiumStopPct: (p.premiumStopPct ?? 0) > 0 && (p.premiumStopPct as number) < 1
+      ? p.premiumStopPct
+      : null,
     targets:        p.targets ?? [],
     dteTotal:       p.dteTotal ?? null,
     portfolioValue,
     scanStockPrice: p.scanStockPrice ?? null,
+    // Round 9 — tells the router NOT to re-anchor `stop` by
+    // (live price - scanStockPrice). A stop the user typed on the trade card
+    // is an absolute price against today's quote; the plan-derived levels
+    // beside it still scale with the underlying. Without this a $180 stop
+    // typed on a $200 stock scanned at $145 was stored as $235 -- above spot,
+    // firing a Critical STOP_REACHED on the first backend scan.
+    stopIsUserSet: p.stopIsUserSet ?? false,
     tradeCardSnapshot: p.tradeCardSnapshot ?? null,
   };
 }
@@ -248,7 +272,10 @@ type SaveOutcome =
   // `premiumStopPct` is the fraction the SERVER derived for this create (piece
   // 4) — the client sends dollars, so this is the only place the stored
   // fraction is known before the next full sync.
-  | { kind: 'ok'; adjustedQty?: number; premiumStopPct?: number | null }
+  // `entryPrice` rides WITH it and is not optional cosmetics: both engines
+  // compare `price <= entry * (1 - pct)`, so a fraction adopted without the
+  // entry it was derived against puts them on different thresholds.
+  | { kind: 'ok'; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null }
   | { kind: 'rejected'; detail: string }   // backend 4xx (except 409) — do not keep the row
   | { kind: 'duplicate' }                  // 409 — backend already has this contract
   | { kind: 'network' };                   // unreachable — keep the row pending
@@ -272,10 +299,14 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
       // the two engines disagreeing, which is the one thing lib/premiumStop.ts
       // says must not happen.
       const premiumStopPct = (body as { premiumStopPct?: number | null }).premiumStopPct ?? null;
+      // The entry the router actually persisted -- it replaces the submitted
+      // one with its save-time quote. See SaveOutcome.entryPrice.
+      const serverEntry = (body as { entryPrice?: number | null }).entryPrice;
       return {
         kind: 'ok',
         ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
         premiumStopPct,
+        entryPrice: typeof serverEntry === 'number' && serverEntry > 0 ? serverEntry : null,
       };
     }
     if (res.status === 409) return { kind: 'duplicate' };
@@ -304,7 +335,7 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
 export async function persistPosition(
   p: PortfolioPosition,
   portfolioValue = accountValue(),
-): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number; premiumStopPct?: number | null }> {
+): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null }> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
@@ -319,10 +350,18 @@ export async function persistPosition(
       // is the only place that fraction exists before the next full sync.
       // `applyPersistedPosition` folds it onto the row it hands to addPosition.
       const premiumStopPct = (body as { premiumStopPct?: number | null }).premiumStopPct ?? null;
+      // ...and the ENTRY PRICE that fraction was derived against. The router
+      // replaces the submitted entry with its own save-time quote, so keeping
+      // the client's mid beside the server's fraction makes the two engines
+      // fire at different prices: a $3.12 stop on a $5.20 card filled at $4.00
+      // stores pct 0.78, which against the local 5.20 is a $4.06 stop, not the
+      // $3.12 typed. Both halves of the pair or neither.
+      const serverEntry = (body as { entryPrice?: number | null }).entryPrice;
       return {
         ok: true,
         ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
         premiumStopPct,
+        entryPrice: typeof serverEntry === 'number' && serverEntry > 0 ? serverEntry : null,
       };
     }
     const body = await res.json().catch(() => ({}));
@@ -388,7 +427,26 @@ export function applyPersistedPosition(
   // it until the next 30s syncFromBackend, and until then the frontend alert
   // engine would resolve this position to the GLOBAL while the backend used
   // the derived value.
-  void addPosition({ ...pos, premiumStopPct: saved.premiumStopPct ?? null }, { skipPost: true });
+  //
+  // Round 9 — and carry the ENTRY PRICE it was derived against, for the same
+  // reason and in the same breath. `premiumStopPct` is meaningless on its own:
+  // both engines compare `price <= entry * (1 - pct)`, so adopting the
+  // server's fraction while keeping the client's mid puts them on different
+  // thresholds. Card mid $5.20, typed stop $3.12, filled at $4.00 -> the
+  // server stores 0.78 and fires at $0.88; the local row kept 5.20 and fired
+  // at $1.14, raising a PREMIUM_STOP toast at a quote where the backend raises
+  // nothing. The dashboard rescans the moment the row lands, so the window is
+  // not theoretical -- it is immediate, and lasts until the next 30s sync.
+  //
+  // This is also why round 7's rejection of the entry-limit finding does not
+  // cover this case. That argument -- entry x (1 - dollar/entry) = entry -
+  // dollar, so the dollar loss survives any entry -- holds only when ONE entry
+  // is used for both the derivation and the threshold. Here they differed.
+  void addPosition({
+    ...pos,
+    premiumStopPct: saved.premiumStopPct ?? null,
+    ...(saved.entryPrice != null ? { entryPrice: saved.entryPrice } : {}),
+  }, { skipPost: true });
   return { rejected: false };
 }
 
@@ -786,7 +844,16 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                     // the POST described the incoming increment, not the row
                     // that already existed.
                     ...(!didMerge && outcome.kind === 'ok'
-                      ? { premiumStopPct: outcome.premiumStopPct ?? null }
+                      ? {
+                          premiumStopPct: outcome.premiumStopPct ?? null,
+                          // The entry that fraction is relative to, adopted in
+                          // the same breath. Adopting one without the other is
+                          // what makes the two engines fire at different
+                          // prices -- see applyPersistedPosition.
+                          ...(outcome.entryPrice != null
+                            ? { entryPrice: outcome.entryPrice }
+                            : {}),
+                        }
                       : {}),
                   }
                 : x,
@@ -1020,6 +1087,14 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                     ...rest,
                     premiumStopPct:
                       outcome.kind === 'ok' ? outcome.premiumStopPct ?? null : p.premiumStopPct,
+                    // ...and the entry it was derived against, the third and
+                    // last site that adopts the server's fraction. All three
+                    // must take the pair or neither: `premiumStopPct` alone,
+                    // over the client's own mid, is a DIFFERENT dollar stop
+                    // from the one the user typed.
+                    ...(outcome.kind === 'ok' && outcome.entryPrice != null
+                      ? { entryPrice: outcome.entryPrice }
+                      : {}),
                     syncStatus: 'synced',
                     syncedAt: Date.now(),
                     syncPendingSince: undefined,

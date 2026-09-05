@@ -904,3 +904,63 @@ describe('a premium too small to print', () => {
     expect(formatStopLossBadge(r!)).toBe('CAUTION · 100% of premium · $0.00/share left');
   });
 });
+
+describe('the verdict at the exact pass line', () => {
+  // ROUND 9 finding 3. Round 5 moved the verdict onto the printed pair, which
+  // was right, and then compared that pair with `printed.loss / printed.premium`
+  // -- the one operation that puts float error back. At the exact threshold the
+  // quotient lands a hair below it (0.16 / 0.20 === 0.7999999999999999, while
+  // 16 / 20 === 0.8), so a card printing exactly the pass line rendered PASS.
+  //
+  // These cases are chosen so the printed equation is EXACTLY passMax, which is
+  // the CAUTION side: the line is `< passMax`, not `<=`.
+
+  it('a card printing exactly 80% of premium is CAUTION, not PASS', () => {
+    // $0.32 away x d0.500 = $0.16 of a $0.20 premium.
+    const r = stopPremiumRisk(99.68, 100, 0.5, 0.20, { pass_max_fraction: 0.80 });
+    expect(r).not.toBeNull();
+    // The equation a reader hand-checks:
+    expect(r!.loss).toBeCloseTo(0.16, 10);
+    expect(r!.premium).toBeCloseTo(0.20, 10);
+    // 16/20 is exactly the pass line, so the verdict must be CAUTION.
+    expect(r!.status).toBe('CAUTION');
+    // And the float quotient this replaced would have said otherwise --
+    // asserted so the test names the actual mechanism rather than a symptom.
+    expect(r!.loss / r!.premium).toBeLessThan(0.80);
+  });
+
+  it('one cent below the line is still PASS', () => {
+    // $0.30 away x d0.500 = $0.15 of $0.20 -- 75%, genuinely under 80%.
+    const r = stopPremiumRisk(99.70, 100, 0.5, 0.20, { pass_max_fraction: 0.80 });
+    expect(r!.loss).toBeCloseTo(0.15, 10);
+    expect(r!.status).toBe('PASS');
+  });
+
+  it('no exact-boundary cent pair reads PASS, at any configured pass line', () => {
+    // The general property, swept rather than sampled: whenever the printed
+    // loss over the printed premium is EXACTLY the pass line, the verdict is
+    // CAUTION. The auditor counted 412 such pairs at 0.80 alone.
+    let boundaryCases = 0;
+    for (const passMax of [0.70, 0.75, 0.80, 0.85]) {
+      for (let premiumCents = 1; premiumCents <= 400; premiumCents++) {
+        const lossCents = passMax * premiumCents;
+        if (!Number.isInteger(lossCents)) continue;   // not an exact boundary
+        if (lossCents < 1) continue;
+        const premium = premiumCents / 100;
+        // Pick a move that multiplies out to exactly `lossCents` at d0.500.
+        const move = (lossCents / 100) / 0.5;
+        const r = stopPremiumRisk(100 - move, 100, 0.5, premium, { pass_max_fraction: passMax });
+        if (r == null) continue;
+        if (Math.round(r.loss * 100) !== lossCents) continue;      // cap bound, skip
+        if (Math.round(r.premium * 100) !== premiumCents) continue;
+        boundaryCases++;
+        expect(r.status).toBe('CAUTION');
+      }
+    }
+    // The sweep must actually have found the cases it claims to pin. 233 with
+    // the delta held at 0.500; the auditor counted 412 at the 0.80 line alone
+    // by varying the delta too. The floor is what makes this a sweep rather
+    // than a loop that quietly matched nothing.
+    expect(boundaryCases).toBeGreaterThan(200);
+  });
+});

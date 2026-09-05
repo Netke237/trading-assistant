@@ -667,6 +667,24 @@ class PortfolioPositionCreate(BaseModel):
     # produces is validated against (0, 1) at the point of derivation, because
     # whether a given dollar amount is a valid stop depends on that entry.
     premiumStopDollar: Optional[float] = Field(alias="premium_stop_dollar", default=None, gt=0)
+    # Round 9 -- does `stop` carry a level the USER TYPED, as an absolute price
+    # against today's quote, rather than a plan-derived level?
+    #
+    # The router re-anchors `stop` by (live_price - scanStockPrice) so a plan
+    # computed at scan time still sits the same distance from the underlying
+    # when it is finally saved. That is right for a level the PLAN derived --
+    # and wrong for one the user typed, for exactly the reason stated above for
+    # premiumStopDollar: the client's number is anchored to a price the router
+    # then replaces. Since this branch made the card's Invalidation an editable
+    # absolute price (and round 8 bounded it against the LIVE quote), a typed
+    # $180 on a stock that was scanned at $145 and now trades at $200 was being
+    # stored as $235 -- above spot, so alert_generator's bullish
+    # `price <= pos.stop` raises a Critical STOP_REACHED on the first scan.
+    #
+    # True = store `stop` as sent. None/False keeps the re-anchor, so every
+    # existing client is unaffected. Only `stop` is exempted: structuralStop and
+    # targets remain plan-derived and still move with the underlying.
+    stopIsUserSet: Optional[bool] = Field(alias="stop_is_user_set", default=None)
 
     def __init__(self, **data):
         # Support both camelCase and snake_case field names
@@ -684,6 +702,7 @@ class PortfolioPositionCreate(BaseModel):
             "max_loss_override": "maxLossOverride",
             "premium_stop_pct": "premiumStopPct",
             "premium_stop_dollar": "premiumStopDollar",
+            "stop_is_user_set": "stopIsUserSet",
         }
         for k, v in data.items():
             mapped[aliases.get(k, k)] = v

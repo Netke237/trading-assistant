@@ -117,6 +117,9 @@ function positionFromOrder(
     pnlDollar:     0,
     pnlPct:        0,
     stop:          invalidation ?? c.exit.invalidation,
+    // Non-null here means the caller resolved a TOUCHED field, so the stop is
+    // an absolute price the user typed and the backend must not re-anchor it.
+    stopIsUserSet: invalidation != null,
     structuralStop,
     exitPlan,
     maxLossOverride,
@@ -305,6 +308,15 @@ export default function Step7Page() {
   // untouched field caches `null` rather than a snapshot of the seed.
   const invalidationFor = (card: TradeCardData): number =>
     invalidationBySymbol[card.symbol] ?? card.exit.invalidation;
+  // Whether the value `invalidationFor` just returned was TYPED or inherited.
+  // The cache holds null for an untouched field precisely so these two can be
+  // told apart. The backend re-anchors a plan-derived stop by
+  // (live price - scanStockPrice) and must be told to skip that for a typed
+  // one: a $180 stop typed against a $200 quote on a stock scanned at $145
+  // was stored as $235, above spot, raising a Critical STOP_REACHED on the
+  // first backend scan for a stop the user believed was 10% away.
+  const invalidationIsUserSetFor = (card: TradeCardData): boolean =>
+    invalidationBySymbol[card.symbol] != null;
   // Likewise for the limit price every order path posts, and for the button
   // label that promises it. A label showing one price while the order carries
   // another is the same defect wearing a different hat.
@@ -782,6 +794,10 @@ export default function Step7Page() {
       // and the alert then fired $2.80 early, at a level nothing on screen
       // still showed.
       stop:          invalidationFor(card),
+      // See invalidationIsUserSetFor: this path DOES send scanStockPrice, so
+      // without the flag the router shifted the typed stop by
+      // (live - scan) and stored a level the user never chose.
+      stopIsUserSet: invalidationIsUserSetFor(card),
       structuralStop: structuralBySymbol[card.symbol]?.stop?.price ?? null,
       exitPlan:      cardContractKey ? exitPlanByContract[cardContractKey]?.plan ?? null : null,
       maxLossOverride: maxLossOverrideBySymbol[card.symbol] ?? null,
