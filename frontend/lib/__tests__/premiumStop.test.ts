@@ -10,6 +10,7 @@ import {
   resolvePremiumStopPct,
   hasOwnPremiumStopPct,
   premiumStopThresholdPrice,
+  premiumStopFiringPrice,
   premiumStopDollarToSend,
   formatPremiumStopPct,
   PREMIUM_STOP_PCT_FALLBACK,
@@ -55,6 +56,47 @@ describe('premiumStopThresholdPrice', () => {
   it('is entry x (1 - pct)', () => {
     expect(premiumStopThresholdPrice(5.0, 0.60)).toBeCloseTo(2.0);
     expect(premiumStopThresholdPrice(5.0, 0.30)).toBeCloseTo(3.5);
+  });
+});
+
+describe('premiumStopFiringPrice', () => {
+  it('never names a price above the threshold, across the whole ordinary range', () => {
+    // ROUND 12's GATE finding was a preview that printed a price the alert
+    // would not fire at, and the test guarding it pinned ONE pair that
+    // happened to work. A single hand-picked pair cannot establish this
+    // property: the failure depends on whether `t * 100` lands on its integer,
+    // which varies pair by pair. So sweep it.
+    let trapsHit = 0;
+    for (let entryCents = 100; entryCents <= 1400; entryCents += 7) {
+      const entry = entryCents / 100;
+      for (let pctBp = 1; pctBp <= 99; pctBp += 1) {
+        const pct = pctBp / 100;
+        const threshold = premiumStopThresholdPrice(entry, pct);
+        const printed = premiumStopFiringPrice(entry, pct);
+
+        // THE PROPERTY: what we print is a price the engines actually fire at.
+        expect(printed).toBeLessThanOrEqual(threshold);
+        // ...and it is the LARGEST such 2dp price, so the preview is not
+        // needlessly pessimistic — a cent more would miss.
+        expect(Number((printed + 0.01).toFixed(2))).toBeGreaterThan(threshold);
+
+        // Count how often the naive expression would have been wrong, so this
+        // test fails loudly if someone "simplifies" the helper back to it.
+        if (Math.floor(threshold * 100) / 100 > threshold) trapsHit++;
+      }
+    }
+    // The trap is real and common — if this ever reads 0, the sweep has stopped
+    // covering the case it exists for.
+    expect(trapsHit).toBeGreaterThan(0);
+  });
+
+  it('agrees with scanPortfolio on the exact reported case', () => {
+    // entry $4.00 at 7%: threshold 3.7199999999999998, naive floor prints 3.72.
+    expect(premiumStopFiringPrice(4.00, 0.07)).toBe(3.71);
+    const at = (currentPrice: number) =>
+      premiumStopAlerts([position({ entryPrice: 4.00, currentPrice, premiumStopPct: 0.07 })], 0.60).length;
+    expect(at(3.71)).toBe(1);
+    expect(at(3.72)).toBe(0);
   });
 });
 

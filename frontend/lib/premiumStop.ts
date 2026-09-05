@@ -59,6 +59,48 @@ export function premiumStopThresholdPrice(entryPrice: number, pct: number): numb
   return entryPrice * (1 - pct);
 }
 
+/** The largest 2-decimal price that ACTUALLY FIRES this position's premium
+ *  stop -- i.e. the greatest `x` with 2dp such that `x <= entry * (1 - pct)`,
+ *  which is the comparison both alert engines make at full precision.
+ *
+ *  Naively flooring to cents is not enough, and that is the whole reason this
+ *  function exists rather than the expression it replaces. `Math.floor(t * 100)
+ *  / 100` performs a SECOND floating-point operation on `t`, and `t * 100`
+ *  routinely rounds UP onto the exact integer even when `t` is a hair below
+ *  that cent. When it does, the floored result is strictly GREATER than `t` and
+ *  fires nothing:
+ *
+ *      entry $4.00 at 7%  ->  t = 3.7199999999999998
+ *                             t * 100 = 372 exactly, floor 372
+ *                             printed "$3.72", and 3.72 <= t is FALSE
+ *                             the alert actually arms at $3.71
+ *
+ *  Measured across every (entry, whole-cent dollar stop) pair from $1 to $14,
+ *  about 3% of positions land on that case -- and a server-derived stop is
+ *  `premiumStopDollar / entry_price`, so the threshold almost never lands on a
+ *  whole cent to begin with. The failure is in the dangerous direction: it
+ *  tells the user the stop arms one cent EARLIER than it does.
+ *
+ *  Preview-only, so it has no counterpart in `premium_stop.py` -- the backend
+ *  renders nothing. It exists here, beside the resolver, so every preview
+ *  inherits one rule: a preview that disagrees with the alert that later fires
+ *  is worse than no preview. */
+export function premiumStopFiringPrice(entryPrice: number, pct: number): number {
+  const threshold = premiumStopThresholdPrice(entryPrice, pct);
+  // ROUND to the nearest cent first, then step back only if that cent is
+  // genuinely above the threshold. Flooring is wrong in BOTH directions,
+  // which the sweep in premiumStop.test.ts found the moment it stopped
+  // pinning single pairs: `t * 100` lands above its integer for some inputs
+  // (entry $4.00 at 7% -> 372 exactly, printing $3.72 where the alert arms at
+  // $3.71) and BELOW it for others (a threshold of exactly $0.57 whose
+  // product is 56.99999999999999, flooring to $0.56 and naming a stop a cent
+  // tighter than the real one). Rounding cannot be off by more than half a
+  // cent, so one conditional step-down is always enough.
+  let cents = Math.round(threshold * 100);
+  if (cents / 100 > threshold) cents -= 1;
+  return cents / 100;
+}
+
 /** What a send path should post as `premiumStopDollar` for one card.
  *
  *  Both send paths (`buildPaperPosition` and `positionFromOrder` in

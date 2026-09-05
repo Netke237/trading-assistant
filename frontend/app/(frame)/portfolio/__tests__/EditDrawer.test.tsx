@@ -1282,4 +1282,36 @@ describe('the drawer preview, the alert engine and the backend fire at one price
     ).filter((a) => a.alertType === 'PREMIUM_STOP');
     expect(firesAtRounded).toHaveLength(0);
   });
+
+  it('prints a firing price even when the cent product rounds UP onto the integer', () => {
+    // ROUND 12's one GATE finding, and the reason the test above was not
+    // enough: it has exactly the right shape but pins ONE hand-picked pair,
+    // and 5.20/0.4855 happens to be a pair where a bare floor works.
+    //
+    // `Math.floor(t * 100) / 100` does a SECOND float operation on t, and
+    // t * 100 routinely lands exactly on the integer even when t is a hair
+    // below that cent. Entry $4.00 at 7% gives t = 3.7199999999999998, whose
+    // t * 100 is exactly 372 -- so the old expression printed "$3.72", which
+    // is ABOVE the threshold and fires nothing. The alert arms at $3.71.
+    // Measured at roughly 3% of ordinary positions, and wrong in the dangerous
+    // direction: it claims the stop arms a cent earlier than it does.
+    //
+    // Reachable in two keystrokes (type 7 in this very drawer) or from a $0.28
+    // dollar stop on a $4.00 fill.
+    useSettingsStore.setState({ premiumStopPct: 0.60 });
+    const position = makeOptionPosition({ premiumStopPct: 0.07, entryPrice: 4.00 });
+    const exact = premiumStopThresholdPrice(4.00, 0.07);
+    expect(Math.floor(exact * 100) / 100).toBeGreaterThan(exact);   // the trap itself
+
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByText(/premium \$3\.71/)).toBeInTheDocument();
+    expect(screen.queryByText(/premium \$3\.72/)).not.toBeInTheDocument();
+
+    const fires = (currentPrice: number) => scanPortfolio(
+      [{ ...position, currentPrice }],
+      { premiumStopPct: 0.60 } as Parameters<typeof scanPortfolio>[1],
+    ).filter((a) => a.alertType === 'PREMIUM_STOP').length;
+    expect(fires(3.71)).toBe(1);
+    expect(fires(3.72)).toBe(0);
+  });
 });

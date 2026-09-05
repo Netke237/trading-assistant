@@ -26,7 +26,7 @@ import { api } from '@/lib/api';
 import { POSITION_ALERT_TYPES } from '@/types/domain';
 import type { PortfolioPosition, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
 import styles from './page.module.css';
-import { resolvePremiumStopPct, hasOwnPremiumStopPct, premiumStopThresholdPrice, formatPremiumStopPct, premiumStopPctLabel } from '@/lib/premiumStop';
+import { resolvePremiumStopPct, hasOwnPremiumStopPct, premiumStopFiringPrice, formatPremiumStopPct, premiumStopPctLabel } from '@/lib/premiumStop';
 
 /** `position.contract` for an option position is a backend-generated,
  *  pipe-delimited machine ID — "SYMBOL|STRIKE|EXPIRY|C/P" (see
@@ -1265,21 +1265,23 @@ function alertFiresAgainst(
       // option case it originated from). Labeling that threshold "premium"
       // for a stock position misattributes a stock-price level as an option
       // concept the position doesn't even have.
-      // FLOORED to cents, not rounded. Both engines compare
-      // `currentPrice <= threshold` at FULL precision, and a server-derived
-      // stop is `premiumStopDollar / entry_price`, so the threshold almost
-      // never lands on a whole cent: entry $5.20 at 0.4855 gives 2.6754, which
-      // `toFixed(2)` advertised as "Fires at premium $2.68" -- a price that is
-      // ABOVE the threshold and fires nothing. Roughly half of all derived
-      // stops rounded up like that. Flooring names a price that actually
-      // fires, which is the whole contract of a preview (see premiumStop.ts:
-      // "a preview that disagrees with the alert that later fires is worse
-      // than no preview").
+      // Resolved through `premiumStopFiringPrice`, NOT rounded and not floored
+      // inline. Both engines compare `currentPrice <= threshold` at FULL
+      // precision, and a server-derived stop is `premiumStopDollar /
+      // entry_price`, so the threshold almost never lands on a whole cent:
+      // entry $5.20 at 0.4855 gives 2.6754, which `toFixed(2)` advertised as
+      // "Fires at premium $2.68" -- above the threshold, firing nothing.
+      //
+      // Flooring fixed that case and not the general one: `Math.floor(t * 100)
+      // / 100` rounds `t * 100` up onto the exact integer on about 3% of
+      // ordinary positions, printing a price still ABOVE the threshold. Entry
+      // $4.00 at 7% printed "$3.72" where the alert arms at $3.71. The helper
+      // steps back a cent when that happens; see its own doc.
       return position.entryPrice > 0
-        ? `${isStock ? 'stock' : 'premium'} $${(Math.floor(premiumStopThresholdPrice(
+        ? `${isStock ? 'stock' : 'premium'} $${premiumStopFiringPrice(
             position.entryPrice,
             resolvePremiumStopPct(position.premiumStopPct, globalPremiumStopPct),
-          ) * 100) / 100).toFixed(2)}`
+          ).toFixed(2)}`
         : null;
     case 'TIME_STOP':
       // Stock positions carry no expiry and (per alertEngine.ts's isStock
