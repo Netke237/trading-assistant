@@ -387,7 +387,6 @@ export function EditDrawer({
           label="Contracts"
           hint="Number of option contracts held."
           value={position.contracts ?? 1}
-          step={1}
           onChange={(n) => onChange({ contracts: Math.max(1, Math.round(n)) })}
         />
         <EditField
@@ -795,7 +794,6 @@ function EditField({
   label,
   hint,
   value,
-  step = 0.05,
   onChange,
   /** ROUND 10 finding 3 — an optional MAGNITUDE sanity range.
    *
@@ -818,41 +816,117 @@ function EditField({
   label: string;
   hint?: string;
   value: number;
-  step?: number;
   onChange: (n: number) => void;
   range?: { min: number; max: number } | null;
 }) {
+  // DRAFT-THEN-COMMIT, and TEXT rather than number. Round 11 findings 1 and 2.
+  //
+  // This field used to be a fully controlled `<input type="number">` with no
+  // draft, committing on every keystroke. Round 10 then added the magnitude
+  // `range` above, which `return`s without calling `onChange` for an
+  // out-of-range value. Those two together make ordinary typing impossible,
+  // and the failure mode is not "nothing happens" -- it is "the stop is
+  // deleted", because `Number("") === 0`, the range check exempts 0, and both
+  // Stop call sites map 0 to `null`:
+  //
+  //   Stop $140 on a $145 underlying (range [29.00, 435.00]), retyped as 130:
+  //     clear the field  -> ""   -> 0   -> exempt -> onChange(0)  -> stop: NULL
+  //     type "1"         -> "01" -> 1   -> below 29, rejected, React restores
+  //     type "3"         -> "03" -> 3   -> below 29, rejected, restored
+  //     type "0"         -> "00" -> 0   -> exempt -> onChange(0)  -> stop: NULL
+  //
+  // 130 is unreachable because every prefix of it (1, 13) is below the floor,
+  // so the field cannot pass through the intermediate states that lead to a
+  // legal one. Before round 10 those prefixes committed harmlessly and the
+  // final keystroke landed 130; the range is what turned a transient null into
+  // a permanent one.
+  //
+  // It is silent and it is money: `stop: null` PATCHes through, and BOTH alert
+  // engines gate on the stop existing (alertEngine.ts's `stop != null`,
+  // alert_generator.py's `pos.stop is not None`), so the position can never
+  // raise STOP_REACHED again while the user believes they just set one. The
+  // same wiring on Structural stop does it to STRUCTURAL_STOP_BREACHED.
+  //
+  // `type="number"` was the second half: the browser sanitizes any half-typed
+  // literal to "", so merely typing the "." of 132.50 produced the same empty
+  // string and the same deleted stop. That is round 8's finding, fixed then in
+  // TradeCard's EditableKV and in PremiumStopEditor below, and never carried to
+  // the two fields on this drawer that hold PortfolioPosition.stop itself.
+  //
+  // So: keystrokes only move a local draft, the range is judged once on commit,
+  // and an empty draft REVERTS rather than clearing. Typing an explicit 0 is
+  // still the way to clear -- it is what the hints already document, and it is
+  // the one gesture that cannot be confused with a half-finished number.
+  const stored = String(value);
+  const [draft, setDraft] = useState(stored);
   const [rejected, setRejected] = useState<string | null>(null);
+  // A BLUR IS NOT AN EDIT -- the same lesson as PremiumStopEditor below, which
+  // learned it across rounds 4 and 5. Clicking into a field to read it and
+  // clicking away must not write.
+  const dirtyRef = useRef(false);
+  // Follow the stored value when it changes from outside (a different position,
+  // the 30s sync) but never while the user is mid-edit on this one.
+  const lastStoredRef = useRef(stored);
+  if (lastStoredRef.current !== stored) {
+    lastStoredRef.current = stored;
+    if (!dirtyRef.current && draft !== stored) setDraft(stored);
+  }
+
+  const revert = (msg: string | null) => {
+    setDraft(stored);
+    setRejected(msg);
+    dirtyRef.current = false;
+  };
+
+  const commit = () => {
+    if (!dirtyRef.current) { setDraft(stored); return; }
+    const raw = draft.trim();
+    if (raw === '') {
+      revert('Enter 0 to clear this level — an empty field keeps the previous value.');
+      return;
+    }
+    // A COMPLETE decimal literal, or a no-op. `Number("132.")` is 132, so
+    // without this a user interrupted part-way through 132.50 commits 132 --
+    // round 9's finding, reached here through the same parser. ".5" is a
+    // complete way to write 0.5 and stays accepted; a trailing point is the
+    // interrupted case. Negative is not a price and is refused with it.
+    if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw)) {
+      revert('Not a complete number — kept the previous value.');
+      return;
+    }
+    const n = Number(raw);
+    if (!Number.isFinite(n)) { revert('Not a complete number — kept the previous value.'); return; }
+    // 0 is the documented "none" for these fields and always passes; the range
+    // only judges a number the user meant as a level.
+    if (range && n !== 0 && (n < range.min || n > range.max)) {
+      revert(
+        `Must be between ${range.min.toFixed(2)} and ${range.max.toFixed(2)} `
+        + `— kept the previous value.`,
+      );
+      return;
+    }
+    setRejected(null);
+    dirtyRef.current = false;
+    setDraft(String(n));
+    if (n !== value) onChange(n);
+  };
+
   return (
     <label className={styles.editField}>
       <Text size={11} tone="secondary">{label}</Text>
       <input
-        type="number"
+        type="text"
+        inputMode="decimal"
         className={styles.editInput}
-        step={step}
-        value={value}
-        onChange={(e) => {
-          const n = Number(e.target.value);
-          if (!Number.isFinite(n)) return;
-          // 0 is the documented "none" for these fields and always passes;
-          // the range only judges a number the user meant as a level.
-          if (range && n !== 0 && (n < range.min || n > range.max)) {
-            setRejected(
-              `Must be between ${range.min.toFixed(2)} and ${range.max.toFixed(2)} `
-              + `— kept the previous value.`,
-            );
-            return;
-          }
-          setRejected(null);
-          onChange(n);
-        }}
+        value={draft}
+        onChange={(e) => { dirtyRef.current = true; setDraft(e.target.value); }}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
       />
       {hint && <Text size={10} tone="dim">{hint}</Text>}
-      {rejected && (
-        <span aria-live="polite">
-          <Text size={10} tone="caution">{rejected}</Text>
-        </span>
-      )}
+      <span aria-live="polite">
+        {rejected && <Text size={10} tone="caution">{rejected}</Text>}
+      </span>
     </label>
   );
 }
@@ -899,13 +973,19 @@ function PremiumStopEditor({
   // Keeping the precision the store holds makes focus-blur a true round-trip.
   const stored = own != null ? String(Number((own * 100).toFixed(2))) : '';
 
-  // DRAFT-THEN-COMMIT, unlike the EditField siblings above, which persist on
-  // every keystroke. Those hold a stop PRICE, where an intermediate value is
-  // merely a level that has not been reached. This holds a stop PERCENTAGE,
-  // and the intermediate values are live risk settings: typing "45" persists
-  // 4% first, and a 4% premium stop is below the noise on essentially any
-  // contract, so the 30s alert scan in between fires a Critical PREMIUM_STOP
-  // for a threshold that existed for one keystroke.
+  // DRAFT-THEN-COMMIT. This editor reached the pattern first, across rounds 4
+  // and 5: it holds a stop PERCENTAGE, whose intermediate values are live risk
+  // settings, so typing "45" used to persist 4% first -- below the noise on
+  // essentially any contract -- and the 30s alert scan in between fired a
+  // Critical PREMIUM_STOP for a threshold that existed for one keystroke.
+  //
+  // The EditField siblings above once persisted on every keystroke instead, on
+  // the argument that they hold a stop PRICE, where an intermediate value is
+  // merely a level not yet reached. Round 10's magnitude range broke that
+  // argument (an intermediate value is now REJECTED, so the field cannot reach
+  // the number being typed) and round 11 found what it cost: a deleted stop and
+  // a position that can no longer raise STOP_REACHED. They use this same
+  // pattern now -- see the round 11 note on EditField.
   const [draft, setDraft] = useState(stored);
   // A BLUR IS NOT AN EDIT. `commit` runs on every blur, so clicking into the
   // field to read it and clicking away used to PATCH the server. Comparing the

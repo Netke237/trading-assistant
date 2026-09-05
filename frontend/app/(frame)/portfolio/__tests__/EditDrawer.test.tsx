@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { EditDrawer, tpMethodPatch } from '../EditDrawer';
 import { api } from '@/lib/api';
@@ -300,7 +301,10 @@ describe('EditDrawer Monte Carlo estimate', () => {
     // action, and a value-comparison approach was tried and reverted
     // specifically because it fired "stale" on that routine tick too (see
     // priceEditedSinceEstimate's declaration in page.tsx for the full story).
+    // COMMIT ON BLUR. EditField became draft-then-commit in round 11; a
+    // change alone only moves the local draft.
     fireEvent.change(screen.getByLabelText(/Current price/), { target: { value: '210' } });
+    fireEvent.blur(screen.getByLabelText(/Current price/));
 
     expect(await screen.findByText('Price has changed since this estimate was computed.')).toBeInTheDocument();
     // The existing numbers must still be visible — additive warning, not a
@@ -342,6 +346,7 @@ describe('EditDrawer Monte Carlo estimate', () => {
     expect(screen.queryByText('Price has changed since this estimate was computed.')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/Current price/), { target: { value: '5.0' } });
+    fireEvent.blur(screen.getByLabelText(/Current price/));
 
     expect(await screen.findByText('Price has changed since this estimate was computed.')).toBeInTheDocument();
     expect(screen.getByText('60%')).toBeInTheDocument();
@@ -1064,9 +1069,114 @@ describe('the Stop field bounds a mistyped digit', () => {
     );
     const stop = screen.getByDisplayValue('140') as HTMLInputElement;
     fireEvent.change(stop, { target: { value: String(typed) } });
+    fireEvent.blur(stop);
 
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByText(/kept the previous value/i)).toBeInTheDocument();
+  });
+
+  /* ROUND 11 findings 1 and 2. The three tests above fire ONE change carrying
+   * the complete final string -- the paste gesture, and the only one the
+   * per-keystroke range did not break. Typing was never simulated, which is how
+   * a field that deletes the stop on the way to any new value shipped green.
+   *
+   * These drive a LIVE parent that merges the patch, the way portfolio/page.tsx
+   * does, so the controlled `value` follows every commit and a transient null
+   * is visible in the final state rather than being papered over by a fixed
+   * prop. All three fail against the round-10 EditField. */
+  function LiveDrawer({ initial, onPatch }: {
+    initial: PortfolioPosition;
+    onPatch: (p: Partial<PortfolioPosition>) => void;
+  }) {
+    const [pos, setPos] = useState(initial);
+    return (
+      <EditDrawer
+        position={pos}
+        onClose={noop}
+        onRemove={noop}
+        onChange={(patch) => { onPatch(patch); setPos((c) => ({ ...c, ...patch })); }}
+      />
+    );
+  }
+
+  it('TYPED digit by digit, a retyped stop lands on the number typed and never on null', () => {
+    // Stop 140 on a $145 underlying -> range [29.00, 435.00]. Every prefix of
+    // 130 (1, then 13) sits BELOW the floor, so a field that judges each
+    // keystroke can never reach 130; and the empty string it passes through
+    // reads as 0, which the Stop call site maps to null.
+    const onPatch = jest.fn();
+    render(
+      <LiveDrawer
+        initial={makeOptionPosition({ currentStockPrice: 145, stop: 140, scanStockPrice: undefined })}
+        onPatch={onPatch}
+      />,
+    );
+    const stop = screen.getByDisplayValue('140') as HTMLInputElement;
+
+    fireEvent.change(stop, { target: { value: '' } });     // select-all, delete
+    fireEvent.change(stop, { target: { value: '1' } });
+    fireEvent.change(stop, { target: { value: '13' } });
+    fireEvent.change(stop, { target: { value: '130' } });
+    fireEvent.blur(stop);
+
+    expect(onPatch).toHaveBeenCalledTimes(1);
+    expect(onPatch).toHaveBeenCalledWith({ stop: 130 });
+    // The point of the finding: no intermediate keystroke may delete the stop.
+    expect(onPatch).not.toHaveBeenCalledWith({ stop: null });
+    expect((screen.getByDisplayValue('130') as HTMLInputElement).value).toBe('130');
+  });
+
+  it('typing the decimal POINT of 132.50 does not delete the stop', () => {
+    // `<input type="number">` sanitizes "132." to "", which is the same string
+    // as a deliberate clear -- round 8's finding, fixed then on three other
+    // editors and never carried to the two fields holding PortfolioPosition
+    // .stop itself. On type="text" the draft survives intact to a commit that
+    // requires a COMPLETE literal, so a trailing point is a no-op.
+    const onPatch = jest.fn();
+    render(
+      <LiveDrawer
+        initial={makeOptionPosition({ currentStockPrice: 145, stop: 132, scanStockPrice: undefined })}
+        onPatch={onPatch}
+      />,
+    );
+    const stop = screen.getByDisplayValue('132') as HTMLInputElement;
+
+    fireEvent.change(stop, { target: { value: '132.' } });
+    fireEvent.blur(stop);
+    expect(onPatch).not.toHaveBeenCalled();
+    expect((screen.getByDisplayValue('132') as HTMLInputElement).value).toBe('132');
+
+    // ...and finishing the number commits it.
+    fireEvent.change(stop, { target: { value: '132.50' } });
+    fireEvent.blur(stop);
+    expect(onPatch).toHaveBeenCalledWith({ stop: 132.5 });
+  });
+
+  it('an explicit 0 still clears the level, and a bare focus-and-blur writes nothing', () => {
+    // 0 is what both hints document as "none", and it is the one gesture that
+    // cannot be confused with a half-finished number. An EMPTY field is the
+    // ambiguous one and now reverts, saying so.
+    const onPatch = jest.fn();
+    render(
+      <LiveDrawer
+        initial={makeOptionPosition({ currentStockPrice: 145, stop: 140, scanStockPrice: undefined })}
+        onPatch={onPatch}
+      />,
+    );
+    const stop = screen.getByDisplayValue('140') as HTMLInputElement;
+
+    fireEvent.focus(stop);
+    fireEvent.blur(stop);
+    expect(onPatch).not.toHaveBeenCalled();
+
+    fireEvent.change(stop, { target: { value: '' } });
+    fireEvent.blur(stop);
+    expect(onPatch).not.toHaveBeenCalled();
+    expect(screen.getByText(/Enter 0 to clear this level/i)).toBeInTheDocument();
+
+    fireEvent.change(stop, { target: { value: '0' } });
+    fireEvent.blur(stop);
+    expect(onPatch).toHaveBeenCalledWith({ stop: null });
   });
 
   it('MAGNITUDE only — a stop the price has already moved through still commits', () => {
@@ -1083,6 +1193,7 @@ describe('the Stop field bounds a mistyped digit', () => {
     );
     const stop = screen.getByDisplayValue('140') as HTMLInputElement;
     fireEvent.change(stop, { target: { value: '150' } });   // ABOVE spot, bullish
+    fireEvent.blur(stop);
     expect(onChange).toHaveBeenCalledWith({ stop: 150 });
   });
 
