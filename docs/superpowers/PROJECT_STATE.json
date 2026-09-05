@@ -4,7 +4,7 @@
  "updated_by": "session_01Rg4ZBTUexLsDZTwZV8CgW7 (adversarial round 9 fixed; rounds 7-8 backfilled)",
  "main": "dc051a58",
  "working_branch": "claude/dev-state-reconstruction-hzmzbi",
- "audit_rule": "NOTHING counts as done until an adversarial round comes back clean. audit_rounds counts rounds RUN; audit_clean is true only when a round found nothing. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is.",
+ "audit_rule": "NOTHING counts as done until an adversarial round comes back clean AT THE AGREED SEVERITY GATE. As of AUDIT-EXIT-CRITERION-2026-09-05 that gate is: no finding that can put a wrong number in front of a user or on a broker order, and no finding that corrupts persisted data. MEDIUM and below are logged as follow-ups against main, NOT fixed in-branch -- fixing them inside the audit target is what made ten rounds unable to converge. audit_rounds counts rounds RUN; audit_clean is true only when a round clears that gate. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is.",
  "phases": [
   {
    "id": "A",
@@ -315,6 +315,12 @@
    "q": "Round 8 finding 3: the field bounds were anchored to data.price / contractDetails.mid, which come off scanResult -- and scanStore persists that to localStorage, so after a reload they can be days old.",
    "a": "ANCHORED ON THE LIVE QUOTE, falling back to the scan-time figures. The page already fetches both and renders them as 'Live stock:' and 'Live mid:' a few rows from the fields; they were simply never handed down. Without this, AAPL scanned at $145 and reopened at $200 rejected every sane stop below today's spot.",
    "by": "round 8 (needs Kenneth's confirmation)"
+  },
+  {
+   "id": "AUDIT-EXIT-CRITERION-2026-09-05",
+   "q": "Standing since the round 6 handoff, asked three times: the loop has caught regressions from its own prior rounds four times and ten rounds have produced no clean result. Does that change how many clean rounds this branch needs, or does the exit criterion itself need to change?",
+   "a": "THE CRITERION CHANGES. Two measurements settled it. (1) Findings per round are FLAT -- 11, 13, 14, ~4, 11, 11, 17, 13, 17, 14 -- while lines added per fix round are also flat at ~500 (474, 648, 713, 125, 480, 230, 642, 550, 1156, 496). Each round audits a diff whose newest commit has never been reviewed; rounds 8 and 9 say so in their own commit messages. A round cannot come back clean while the previous round's fix sits inside the audit target. That is arithmetic, not bad luck. (2) The count is flat but SEVERITY has collapsed. Rounds 1-9 produced three CRITICALs that all reached money (a card posting a stop it was not showing; limit_price 25.0 on a $2.50 contract; a typed stop re-anchored ABOVE spot, firing Critical STOP_REACHED with Gmail and Telegram behind it). Round 10's headline finding is a backend guard the frontend already blocks -- defense-in-depth, unreachable by any user of this app -- and of its fourteen findings exactly one (the missing v3->v4 bump) could damage real data. NEW PROCEDURE: freeze HEAD; run a REPORT-ONLY round that is forbidden to write code; triage the findings as a batch; fix only what clears the gate above; log the rest as issues against main. Merge when one round clears the gate. Also noted, not chosen: the scope grew mid-loop -- THREAD-EDITS-2026-09-05 added three editable fields, three page-level caches, a backend flag and a migration at round 6, so rounds 7-10 were the FIRST audit of a new feature, not a re-audit of Phase D.",
+   "by": "Kenneth, 2026-09-05"
   }
  ],
  "pending_kenneth": [
@@ -330,7 +336,6 @@
   "Thread the card's Max fill and Time stop through to a send path? Deferred, and NOT a wiring fix: neither field has a consumer anywhere today. TIME_STOP fires on a hardcoded `dteRemaining <= 3` (alertEngine.ts:298) and PortfolioPosition carries no time-stop field at all; maxFill has no reader outside its own input. Threading either means a new persisted field, a backend column and an alert change -- a build. Invalidation and Entry limit, which DID have consumers, were threaded on 2026-09-05 (decision THREAD-EDITS-2026-09-05).",
   "Round 7 finding 3, second half: the card prints 'Time stop 18d' (data.exit.timeStopDays) while the alert bearing that name fires on a hardcoded dteRemaining <= 3 (frontend/lib/alertEngine.ts). A trader reads an 18-day exit off the card and gets a 3-DTE one. Making the alert honour the card needs a persisted per-position field -- i.e. the deferred build -- so round 7 only removed the edit affordance. Relabel the row, build the field, or accept the disagreement?",
   "Round 7 rejected finding 8 (the entry-limit/entryPrice denominator) on arithmetic: the threshold is entry x (1 - dollar/entry) = entry - dollar, so the dollar loss is preserved whatever entry price is stored. The residual is real but pre-existing and unrelated to the threading: for a LIMIT order the position's entry_price is the backend's save-time live quote, not the fill, so P&L and both stops are measured from a price the order may not have filled at. Worth its own decision?",
-  "Standing, unasked since the round 6 handoff: the loop has now caught regressions introduced by its own prior rounds three times (round 5's bounds re-opened round 4's stray click; the threading opened the round-trip defect; the round-trip fix's caches were left out of the scan-result clear). Does that change how many CLEAN rounds this branch needs before merging?",
   "Round 8 finding 4 was a regression the round-7 clear-to-inherit gesture introduced: <input type='number'> sanitizes its value to '' for any half-typed literal ('132.', '.5'), which is the same string as a deliberate clear, so a user mid-keystroke had a committed edit thrown away (and in the portfolio EditDrawer, a live per-position stop PATCHed to null). Fixed by moving both inputs to type='text' inputMode='decimal'. Worth checking whether any OTHER number input in the app treats an empty value as a meaningful gesture.",
   "Round 10 finding 2 established that round 9's wrong-side stop guard had NEVER run on the project's own basket path -- positionFromOrder does not send scanStockPrice, and the guard was gated on the live price that field triggers. Worth a sweep for other backend validations gated on an Optional request field that the app's own callers omit?"
  ],
@@ -361,11 +366,11 @@
   },
   {
    "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-12.md",
-   "role": "Handoff #12 — the reconstruction, the plan, and Piece 4."
+   "role": "Handoff #12 \u2014 the reconstruction, the plan, and Piece 4."
   },
   {
    "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-13.md",
-   "role": "LATEST handoff — live Barrier Race verification, state tracking, stop-cost notation."
+   "role": "LATEST handoff \u2014 live Barrier Race verification, state tracking, stop-cost notation."
   },
   {
    "path": "docs/superpowers/STATE_TRACKING.md",
