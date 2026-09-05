@@ -288,13 +288,16 @@ async def add_position(
     # the card, while a client-sent fraction is at best a stale estimate of it.
     resolved_premium_stop_pct = body.premiumStopPct
     if body.premiumStopDollar is not None and entry_price <= 0:
-        # `entryPrice` is gt=0 on the create schema, so a non-positive value
-        # here means the LIVE re-anchor above produced one -- a sub-cent quote
-        # rounded to 0.00. Logged rather than skipped in silence, for the same
-        # reason as the out-of-range branch below: the user typed a dollar stop
-        # and the position is about to inherit the global instead, which is a
-        # different threshold from the one they asked for and nothing on screen
-        # would say so.
+        # DEFENCE IN DEPTH, not a live path. `entryPrice` is gt=0 on the create
+        # schema and the live re-anchor above now rounds BEFORE testing, so
+        # `entry_price` is positive by here on every route currently known. The
+        # branch stays because it is the last thing between a future
+        # non-positive entry and a division, and because falling back silently
+        # is the failure this endpoint is least able to explain: the user typed
+        # a dollar stop and the position would inherit the global instead, a
+        # different threshold from the one they asked for with nothing on
+        # screen to say so. Do not read its presence as evidence that a
+        # zero-entry path exists.
         _log.warning(
             "add_position: cannot derive a premium stop from premiumStopDollar %.2f for %s "
             "-- the persisted entry price is %.2f; this position inherits the global",
@@ -307,11 +310,13 @@ async def add_position(
         else:
             # A stop at or above the whole premium is a total loss, which is
             # unreachable-by-definition rather than a stop, and there is no
-            # representation for it: the column's contract is (0, 1). The card's
-            # field has min=0.01 and NO max, and `entry_price` may have just
-            # been replaced with a live quote a few lines up, so this is
-            # reachable two ways -- typing $6.00 on a $5.20 mid, or typing $4.50
-            # and filling at $4.20.
+            # representation for it: the column's contract is (0, 1).
+            # `entry_price` may have just been replaced with a live quote a few
+            # lines up, so this stays reachable through the FILL: typing $4.50
+            # and filling at $4.20. (Typing $6.00 on a $5.20 mid no longer
+            # reaches it -- round 6 bounded the card's field to 10-99% of the
+            # mid -- but the card is not this endpoint's only client, and the
+            # fill path does not go through that field at all.)
             #
             # LOGGED, like the sibling stop paths above (which warn when a
             # live-price re-anchor pushes a structural stop non-positive).

@@ -1078,11 +1078,21 @@ function alertFiresAgainst(
       // option case it originated from). Labeling that threshold "premium"
       // for a stock position misattributes a stock-price level as an option
       // concept the position doesn't even have.
+      // FLOORED to cents, not rounded. Both engines compare
+      // `currentPrice <= threshold` at FULL precision, and a server-derived
+      // stop is `premiumStopDollar / entry_price`, so the threshold almost
+      // never lands on a whole cent: entry $5.20 at 0.4855 gives 2.6754, which
+      // `toFixed(2)` advertised as "Fires at premium $2.68" -- a price that is
+      // ABOVE the threshold and fires nothing. Roughly half of all derived
+      // stops rounded up like that. Flooring names a price that actually
+      // fires, which is the whole contract of a preview (see premiumStop.ts:
+      // "a preview that disagrees with the alert that later fires is worse
+      // than no preview").
       return position.entryPrice > 0
-        ? `${isStock ? 'stock' : 'premium'} $${premiumStopThresholdPrice(
+        ? `${isStock ? 'stock' : 'premium'} $${(Math.floor(premiumStopThresholdPrice(
             position.entryPrice,
             resolvePremiumStopPct(position.premiumStopPct, globalPremiumStopPct),
-          ).toFixed(2)}`
+          ) * 100) / 100).toFixed(2)}`
         : null;
     case 'TIME_STOP':
       // Stock positions carry no expiry and (per alertEngine.ts's isStock

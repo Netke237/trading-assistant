@@ -506,8 +506,12 @@ def test_dollar_stop_is_resolved_against_the_persisted_entry_not_the_card_mid():
     # The old client-side derivation, for contrast: the fraction is pinned to
     # the card's mid, so a different fill silently moves the dollar stop.
     stale_pct = dollar_stop / card_mid
-    assert premium_stop_threshold_price(4.00, stale_pct) == pytest.approx(1.60)
-    assert 4.00 - 1.60 == pytest.approx(2.40)     # not the $3.12 that was typed
+    stale_threshold = premium_stop_threshold_price(4.00, stale_pct)
+    assert stale_threshold == pytest.approx(1.60)
+    # The loss that stale fraction actually implies -- derived from the value
+    # under test, not from two literals. `assert 4.00 - 1.60 == approx(2.40)`
+    # compared constants and could not have failed if the helper changed.
+    assert 4.00 - stale_threshold == pytest.approx(2.40)   # not the $3.12 typed
 
 
 def test_create_schema_accepts_the_dollar_field_in_both_conventions():

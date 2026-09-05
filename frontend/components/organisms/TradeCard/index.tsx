@@ -354,7 +354,19 @@ export function TradeCard({
    *  NEW contract's key, `premiumStopDollarToSend` saw 3.12 !== 2.40 and let
    *  it through, and the router derived 3.12 / 4.00 = a 78% premium stop
    *  nobody chose. That is verbatim the failure `premiumStop.ts` documents,
-   *  reached by a second route. The re-seed effect below closes it. */
+   *  reached by a second route. The re-seed effect below closes it.
+   *
+   *  ROUND 6 CORRECTION -- that scenario appears FORECLOSED upstream, so this
+   *  is belt-and-braces rather than the only thing between the user and a 78%
+   *  stop. Step 7's page renders "Preparing the plan for your selected
+   *  contract..." in place of the card while `isOverride && !planReady`, so the
+   *  card is UNMOUNTED across the whole pre-merge window and remounts with
+   *  `exit` already merged; and the recompute is claimed once per contract key
+   *  (`requestedPlanKeysRef`), so it cannot re-fire while the card is visible.
+   *  Both the flag and the effect are still worth keeping -- neither guarantee
+   *  is local to this file, and the cost of being wrong is a silently
+   *  mis-anchored stop -- but do not build on the claim that the window is
+   *  live. On every path found so far, it is not. */
   const premiumStopTouchedRef = useRef(initialPremiumStop != null);
   // Feature 5 — pre-trade max-loss override, seeded from the page-level cache
   // (keyed by symbol there; this local state just mirrors whatever the parent
@@ -2462,6 +2474,22 @@ function EditableKV({
     // exactly the defect the tracked flag was introduced to remove, re-entered
     // through the one path that does not go through a keystroke.
     // Skipping the no-op is also just correct for every other field.
+    //
+    // COMPARED BEFORE CLAMPING TOO. `startEdit` seeds the draft from `value`,
+    // so when `value` itself sits outside [min,max] the clamp alone changes it
+    // and the post-clamp guard below cannot see that nothing was typed --
+    // a bare focus-and-blur then reports a deliberate edit. Round 5 added
+    // 10-99%-of-mid bounds to the Premium stop field and re-opened exactly the
+    // defect this guard exists to close: the seed is `round(mid x global, 2)`
+    // (trade_plan.py), and the global is allowed up to 1.0 (risk_settings.py
+    // `le=1.0`), at which point the seed IS the mid and the max is 99% of it --
+    // 1951 of 2000 mids from $0.01 to $20.00 seed above the bound. Clicking the
+    // field to read it and clicking away would pin a per-position stop nobody
+    // chose, on a card with no way back to inheriting.
+    if (parsed === value) {
+      setEditing(false);
+      return;
+    }
     if (next === value) {
       setEditing(false);
       return;

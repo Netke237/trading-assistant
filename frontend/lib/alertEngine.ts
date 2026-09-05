@@ -275,7 +275,12 @@ export function scanPortfolio(
         // position_alert_history rows two different shapes for one alert type
         // depending on which engine wrote them.
         price: p.currentPrice,
-        referenceValue: premiumStopPrice,
+        // Rounded to 4dp because that is literally what the backend stores
+        // (`reference_value=round(threshold_price, 4)`). Writing the unrounded
+        // float here gave one alert type two shapes in position_alert_history
+        // -- 2.6816 from the backend, 2.68164 from here -- decided by nothing
+        // more than which engine happened to fire first.
+        referenceValue: Math.round(premiumStopPrice * 10000) / 10000,
         direction: p.direction,
         contract: p.contract,
       });

@@ -213,9 +213,17 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
  *  which throws inside JSX and takes the whole page down. The position vanished
  *  AND the screen that would explain why went with it.
  *
- *  Not hypothetical since piece 4 added `entryPrice: Field(gt=0)`: a $0 mid on
- *  an illiquid or deep-OTM quote is a state this codebase already handles
- *  explicitly elsewhere, and it now 422s here.
+ *  Piece 4's `entryPrice: Field(gt=0)` is what made a VALIDATION 422 newly
+ *  possible on this endpoint at all, which is why the crash surfaced now. A
+ *  round-6 audit could not find a producer of a literal $0 mid: `cd.mid` is
+ *  `round(premium, 2)` off the chain, and `market.py` skips any row with no
+ *  positive ask and no positive last, so the known paths do not emit one
+ *  today. The normalisation stays regardless -- it costs nothing, it is
+ *  correct for EVERY validation 422 on any field (not just entryPrice), and
+ *  the failure it prevents is the whole Portfolio page going white. What is
+ *  genuinely unguarded is the `livePrice ?? cd?.mid ?? card.entry.limit`
+ *  chains that feed this: `??` does not catch 0, the same rule this file
+ *  already applies to `floorStop` and `premiumStopDollar`.
  *
  *  Normalises every shape to a string so no consumer has to. Validation errors
  *  are rendered as their `msg` text, which is what a human can act on; the

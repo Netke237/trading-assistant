@@ -642,8 +642,13 @@ describe('the printed equation reconciles', () => {
     // off the binary representation and this assertion used to pin THAT.
     expect(formatStopLossHeadline(r)).toBe('$401 per contract — of the $651 premium, $250 left');
     expect(formatStopPremiumRisk(r)).toContain('$8.01 away × Δ0.500 = $4.01 of $6.51 premium');
-    // Still reconciles: 401 + 250 = 651.
-    expect(401 + 250).toBe(651);
+    // Still reconciles -- parsed back OUT of the rendered string, so this
+    // actually exercises the formatter. `expect(401 + 250).toBe(651)` compared
+    // two literals and could not have failed if the headline changed.
+    const [, per, prem, left] = formatStopLossHeadline(r)
+      .match(/\$([\d,]+) per contract — of the \$([\d,]+) premium, \$([\d,]+) left/)!
+      .map((v) => Number(String(v).replace(/,/g, '')));
+    expect(per + left).toBe(prem);
   });
 
   it('names its basis, so it cannot be confused with the Barrier Race figure', () => {
@@ -739,7 +744,7 @@ describe('the badge, the verdict and the money beside them agree', () => {
     // directly above an equation a reader resolves by hand to 70%.
     const r = stopPremiumRisk(198.23, 200, 0.789, 2.0, { pass_max_fraction: 0.7 })!;
     expect(r).not.toBeNull();
-    expect(formatStopLossBadge(r)).toContain('70% of premium');
+    expect(formatStopLossBadge(r)).toContain('CAUTION · 70% of premium');
     expect(r.status).toBe('CAUTION');
   });
 
@@ -768,7 +773,7 @@ describe('the badge, the verdict and the money beside them agree', () => {
             });
             // ...and the badge's integer is a faithful rounding of that same
             // fraction, so the number and the colour come from one quantity.
-            const pct = parseInt(formatStopLossBadge(r), 10);
+            const pct = parseInt(formatStopLossBadge(r).split('·')[1].trim(), 10);
             if (pct !== 99 && pct !== 100) {
               // 0.005 + a float epsilon: a fraction sitting exactly on the
               // rounding boundary computes as 0.005000000000000001 in IEEE754.
@@ -799,8 +804,42 @@ describe('the badge, the verdict and the money beside them agree', () => {
           if (!r) continue;
           const badge = formatStopLossBadge(r);
           const left = Number(badge.match(/\$([\d.]+)\/share left/)![1]);
-          if (badge.startsWith('100%')) expect(left).toBe(0);
+          if (badge.includes('· 100% of premium')) expect(left).toBe(0);
           else expect(left).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+});
+
+describe('the badge is not ambiguous near the pass line', () => {
+  // ROUND 6. The percentage is rounded to a whole point; the verdict is not.
+  // So two cards can legitimately print the same percentage with opposite
+  // verdicts, and a badge carrying ONLY the percentage leaves colour as the
+  // single distinguishing mark. StatusBadge renders `label ?? STATUS_LABEL`,
+  // so supplying a label REPLACES the verdict word -- which is why the
+  // schematic leads the badge with it.
+  it('leads with the verdict word, so two 70% cards are distinguishable', () => {
+    const pass = stopPremiumRisk(197.22, 200, 0.5, 2.0, { pass_max_fraction: 0.7 })!;
+    const caution = stopPremiumRisk(197.2, 200, 0.5, 2.0, { pass_max_fraction: 0.7 })!;
+    expect(pass.status).toBe('PASS');
+    expect(caution.status).toBe('CAUTION');
+    // Same rounded percentage...
+    expect(formatStopLossBadge(pass)).toContain('70% of premium');
+    expect(formatStopLossBadge(caution)).toContain('70% of premium');
+    // ...but not the same badge.
+    expect(formatStopLossBadge(pass)).not.toBe(formatStopLossBadge(caution));
+    expect(formatStopLossBadge(pass)).toBe('PASS · 70% of premium · $0.61/share left');
+    expect(formatStopLossBadge(caution)).toBe('CAUTION · 70% of premium · $0.60/share left');
+  });
+
+  it('never renders a badge whose verdict word disagrees with its status', () => {
+    for (let move = 0.25; move <= 40; move += 0.53) {
+      for (let delta = 0.05; delta <= 0.95; delta += 0.11) {
+        for (let premium = 0.35; premium <= 25; premium += 1.7) {
+          const r = stopPremiumRisk(200 - move, 200, delta, premium);
+          if (!r) continue;
+          expect(formatStopLossBadge(r).startsWith(`${r.status} · `)).toBe(true);
         }
       }
     }
@@ -818,9 +857,18 @@ describe('a premium too small to print', () => {
     expect(stopPremiumRisk(190, 200, 0.5, 0.0049)).toBeNull();
   });
 
+  it('rejects half a cent, which used to slip through and print a 2x contradiction', () => {
+    // The guard was `<= 0` on the rounded premium, so $0.005 survived and the
+    // card printed "$1 per contract -- of the $1 premium" for a contract whose
+    // CaR row read $0.50. The test that pinned this was titled "at exactly one
+    // cent" while passing 0.005, which is half of one.
+    expect(stopPremiumRisk(190, 200, 0.5, 0.005)).toBeNull();
+    expect(stopPremiumRisk(190, 200, 0.5, 0.0099)).toBeNull();
+  });
+
   it('still answers at exactly one cent', () => {
-    const r = stopPremiumRisk(190, 200, 0.5, 0.005);
+    const r = stopPremiumRisk(190, 200, 0.5, 0.01);
     expect(r).not.toBeNull();
-    expect(formatStopLossBadge(r!)).toBe('100% of premium · $0.00/share left');
+    expect(formatStopLossBadge(r!)).toBe('CAUTION · 100% of premium · $0.00/share left');
   });
 });

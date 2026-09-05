@@ -11,7 +11,7 @@ import type {
   MaxLossOverride,
 } from '@/types/domain';
 import type { Status } from '@/lib/status';
-import { worstStatus } from '@/lib/status';
+import { worstStatus, STATUS_LABEL } from '@/lib/status';
 
 export function capitalAtRisk(mid: number, contracts: number): number {
   return mid * contracts * 100;
@@ -85,7 +85,17 @@ export function stopPremiumRisk(
   // already has for a stop sitting at the price, instead of printing four
   // mutually contradictory zeroes. Guarding here rather than in each formatter
   // keeps one definition of "there is no meaningful answer".
-  if (Number(premium.toFixed(2)) <= 0) return null;
+  //
+  // BELOW ONE CENT, not below half a cent. `Number(premium.toFixed(2)) <= 0`
+  // only caught premiums under $0.005, so a $0.005 premium still rendered:
+  // "$1 per contract -- of the $1 premium, $0 left" for a contract that cost
+  // 50c, contradicting the CaR row three lines above it (mid x contracts x
+  // 100 = $0.50) by a factor of two -- the very reconciliation
+  // formatStopLossHeadline's doc comment promises.
+  // Tested on the RAW premium, not the rounded one: (0.005).toFixed(2) rounds
+  // UP to "0.01", so a guard on the rounded value never rejected the very case
+  // it was written for.
+  if (premium < 0.01) return null;
 
   // A caller passing a non-finite or out-of-range threshold gets the default
   // rather than a gate that silently passes everything. The per-run override in
@@ -127,8 +137,16 @@ export function stopPremiumRisk(
   // $1.40 of $2.00, so the badge read "70% OF PREMIUM" in PASS green, under
   // the PASS tooltip ("still holds meaningful value"), directly above an
   // equation a reader resolves by hand to the CAUTION line. ~0.18% of ordinary
-  // inputs at the Swing 0.70 line, and more at 0.80. Two contracts showing the
-  // identical percentage could carry different verdicts.
+  // inputs at the Swing 0.70 line, and more at 0.80.
+  //
+  // What this does and does NOT buy: the verdict now agrees with the EQUATION
+  // printed beneath it, always -- both are the printed pair. It does not make
+  // the badge's whole-percent figure unambiguous, because that figure is
+  // rounded and the verdict is not: $1.39 and $1.40 of a $2.00 premium both
+  // print "70%" at a 0.70 line and are legitimately PASS and CAUTION. That is
+  // why the badge leads with the VERDICT WORD (formatStopLossBadge) rather
+  // than the percentage alone -- the word, not the number, is what separates
+  // those two cards.
   //
   // `fraction` on the object stays full precision: it is the underlying
   // quantity, and nothing on screen is scaled from it.
@@ -300,9 +318,18 @@ export function formatStopLossBadge(r: StopPremiumRisk): string {
   const lossCents = Math.round(p.loss * 100);
   const premiumCents = Math.round(p.premium * 100);
   const leftCents = premiumCents - lossCents;
+  // The VERDICT WORD leads, as the schematic has it. StatusBadge renders
+  // `label ?? STATUS_LABEL[status]`, so supplying a label REPLACES the word --
+  // and dropping it left colour as the only thing separating two badges that
+  // print the same percentage: at a 0.70 pass line, $2.78 away x 0.500 on a
+  // $2.00 premium ($1.39, PASS) and $2.80 away x 0.500 on the same premium
+  // ($1.40, CAUTION) both read "70% of premium". The percentage is rounded to
+  // a whole point and the verdict is not, so a badge that carries only the
+  // percentage is genuinely ambiguous near the line; the word is what settles
+  // it, which is presumably why the schematic put it there.
+  const verdict = STATUS_LABEL[r.status];
   const pct = formatStopLossPct(r);
-  if (premiumCents <= 0) return `${pct} of premium`;
-  return `${pct} of premium · $${(leftCents / 100).toFixed(2)}/share left`;
+  return `${verdict} · ${pct} of premium · $${(leftCents / 100).toFixed(2)}/share left`;
 }
 
 export function formatStopLossPct(r: StopPremiumRisk): string {

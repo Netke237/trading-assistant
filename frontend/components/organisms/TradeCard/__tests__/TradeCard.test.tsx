@@ -218,6 +218,51 @@ describe('TradeCard', () => {
     expect(shown()).toBe('$0.50');
   });
 
+  it('a click into a Premium stop seeded OUTSIDE the field bounds is still NOT an edit', async () => {
+    // ROUND 6. Round 5 bounded this field to 10-99% of the mid, and
+    // EditableKV.save clamps BEFORE its no-op guard -- so when the seed itself
+    // sits outside the bounds, the clamp alone made `next !== value` and a bare
+    // focus-and-blur reported a deliberate edit. That is the stray-click defect
+    // of the test below, re-entered through the bounds meant to contain it.
+    //
+    // Reachable at the top of the allowed range: the seed is
+    // `round(mid x global, 2)` and Settings accepts a global of 1.0
+    // (risk_settings.py `le=1.0`), so the seed IS the mid ($2.50 here) while
+    // the max is 99% of it ($2.48). 1951 of 2000 mids from $0.01 to $20.00 seed
+    // above the bound at that setting.
+    const atGlobalOne = { ...mockTradeCard, exit: { ...mockTradeCard.exit, premiumStop: 2.5 } };
+    const onEditsChange = jest.fn();
+    render(<TradeCard data={atGlobalOne} onEditsChange={onEditsChange} />);
+    expandLadder();
+
+    const before = onEditsChange.mock.calls.length;
+    fireEvent.click(screen.getByLabelText('Edit Premium stop'));
+    fireEvent.blur(screen.getByLabelText('Edit Premium stop') as HTMLInputElement);
+    expect(onEditsChange.mock.calls.length).toBe(before);
+
+    // And the field is still reported as untouched, so nothing is posted.
+    fireEvent.click(screen.getByLabelText('Edit Contracts'));
+    const contracts = screen.getByLabelText('Edit Contracts') as HTMLInputElement;
+    fireEvent.change(contracts, { target: { value: '3' } });
+    fireEvent.blur(contracts);
+    expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({ premiumStopTouched: false });
+  });
+
+  it('still clamps a value the user actually types past the bound', () => {
+    // The guard must not swallow a real edit: typing above the max is a
+    // deliberate act and must land, clamped.
+    const onEditsChange = jest.fn();
+    render(<TradeCard data={mockTradeCard} onEditsChange={onEditsChange} />);
+    expandLadder();
+    fireEvent.click(screen.getByLabelText('Edit Premium stop'));
+    const input = screen.getByLabelText('Edit Premium stop') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '99' } });
+    fireEvent.blur(input);
+    // mid 2.50 -> max = round(2.50 x 0.99, 2) = 2.48
+    expect(onEditsChange.mock.calls.at(-1)![0].premiumStop).toBe(2.48);
+    expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({ premiumStopTouched: true });
+  });
+
   it('a click into the Premium stop field and back out is NOT an edit', async () => {
     // THE STRAY CLICK. EditableKV.save runs on every blur, so reading the field
     // emitted onChange(sameValue) -> patch({premiumStop: seed}). While
@@ -2060,7 +2105,7 @@ describe('TradeCard — stop-vs-premium gate', () => {
     render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0)} />);
 
     expect(screen.getByText('MAX LOSS IF THE STOP IS HIT')).toBeInTheDocument();
-    expect(screen.getByText('100% of premium · $0.00/share left')).toBeInTheDocument();
+    expect(screen.getByText('CAUTION · 100% of premium · $0.00/share left')).toBeInTheDocument();
     // Inputs are on screen, not just the verdict — the complaint that produced
     // this gate was a ratio whose inputs were invisible.
     expect(screen.getByText(/\$11\.50 away × Δ0\.450 = \$2\.50 of \$2\.50 premium/)).toBeInTheDocument();
@@ -2082,7 +2127,7 @@ describe('TradeCard — stop-vs-premium gate', () => {
     // Same $11.50 move and delta, but a $20 premium: $5.175 / $20 = 26%.
     render(<TradeCard data={cardWithStop(ORDER_BLOCK, 190.0, { mid: 20 })} />);
 
-    expect(screen.getByText('26% of premium · $14.82/share left')).toBeInTheDocument();
+    expect(screen.getByText('PASS · 26% of premium · $14.82/share left')).toBeInTheDocument();
     expect(screen.getByText(/\$11\.50 away × Δ0\.450 = \$5.18 of \$20.00 premium/)).toBeInTheDocument();
     expect(screen.queryByText(/uncapped/)).not.toBeInTheDocument();
   });
@@ -2152,7 +2197,7 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     // Before any Arithmetic Plan exists, the gate reads the raw structural
     // pair: |178.50 - 182.00| = 3.50 away x delta 0.45 = $1.575 of $2.50
     // premium = 63%. Sanity-checks the pre-fix baseline before it changes.
-    expect(screen.getByText('63% of premium · $0.92/share left')).toBeInTheDocument();
+    expect(screen.getByText('PASS · 63% of premium · $0.92/share left')).toBeInTheDocument();
 
     // 2) Compute Arithmetic Plan — exit-plan stop at $170.00, a DIFFERENT
     // fresh stock price ($190.00) than Check structure captured.
@@ -2179,9 +2224,9 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     // |170.00 - 190.00| = 20.00 away x delta 0.45 = $9.00 (uncapped) against a
     // $2.50 premium -> capped at 100%. If it had stayed on the raw pair this
     // would still read 63%.
-    expect(screen.getByText('100% of premium · $0.00/share left')).toBeInTheDocument();
+    expect(screen.getByText('CAUTION · 100% of premium · $0.00/share left')).toBeInTheDocument();
     expect(screen.getByText(/\$20\.00 away × Δ0\.450 = \$2\.50 of \$2\.50 premium \(uncapped \$9\.00\)/)).toBeInTheDocument();
-    expect(screen.queryByText('63% of premium · $0.92/share left')).not.toBeInTheDocument();
+    expect(screen.queryByText('PASS · 63% of premium · $0.92/share left')).not.toBeInTheDocument();
 
     // 3) Run Monte Carlo Estimate — fresh premium/delta for firstPassageContext.
     // structuralIsFreshRef is already true from step 1, so this does NOT
@@ -2287,7 +2332,7 @@ describe('TradeCard — piece 1/2 gap: cache-restored exit plan with no fresh cl
     // stopRisk: |178.50 - 182.00| = 3.50 away x delta 0.45 = $1.575 of $2.50
     // premium = 63%. If the gate had instead picked up the restored exit-plan
     // stop (185.87) it would read a different percentage here.
-    expect(screen.getByText('63% of premium · $0.92/share left')).toBeInTheDocument();
+    expect(screen.getByText('PASS · 63% of premium · $0.92/share left')).toBeInTheDocument();
   });
 });
 
