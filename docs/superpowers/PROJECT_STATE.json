@@ -1,7 +1,7 @@
 {
  "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree.",
- "updated": "2026-09-04",
- "updated_by": "session_01Rg4ZBTUexLsDZTwZV8CgW7 (adversarial round 3 fixed)",
+ "updated": "2026-09-05",
+ "updated_by": "session_01Rg4ZBTUexLsDZTwZV8CgW7 (adversarial round 4 fixed)",
  "main": "dc051a58",
  "working_branch": "claude/dev-state-reconstruction-hzmzbi",
  "audit_rule": "NOTHING counts as done until an adversarial round comes back clean. audit_rounds counts rounds RUN; audit_clean is true only when a round found nothing. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is.",
@@ -62,7 +62,7 @@
    "id": "D",
    "name": "Piece 4 -- per-position premium stop",
    "status": "shipped_unaudited",
-   "audit_rounds": 3,
+   "audit_rounds": 4,
    "audit_clean": false,
    "commits": [
     "26c44bde",
@@ -171,7 +171,7 @@
    "name": "Stop-cost notation rework",
    "audit_clean": false,
    "note": "Frontend copy only, no logic change. Round 1 fixed the headline's three independently-rounded figures. ROUND 2 found the equation STILL did not reconcile, in both directions, because `r.capped` is decided at full precision while the line prints a 3dp delta: capped with the product below the premium printed '(uncapped $38.55)' beside '$38.59 of $38.59' -- an uncapped figure BELOW the capped one, impossible by construction; uncapped with the product above printed '= $52.48 of $52.48' where the printed factors give $52.52, with no tail, above a headline claiming '$0 left' for a stop the code did not classify as a total loss. Round 1's own range test could not have caught either: it skipped every capped row and re-implemented the clamp as the expected value. Both now decided on the printed product. Round 2 also found the badge's percentage still came from full precision while the headline came from the printed pair ('100% OF PREMIUM' beside '$8 left'), and that 'of the $X you paid' names a scan-time mid that the editable Limit and the contracts-scaled CaR both contradict. THIRD TIME THIS ITEM HAS SHIPPED A NON-RECONCILING FIGURE. NOT YET CLEAN. || ROUND 3 (combined, all three items at once) found 14 more and every one was fixed; audit_clean stays FALSE until a round comes back clean. The badge TOOLTIP was the last consumer of full-precision `capped` while the label and headline beside it came from printedShare, so with ordinary 4dp deltas it called a contract a total loss above '99% OF PREMIUM' and '$1 left' ($55.92 x 0.1622 on a $9.07 premium). Now branches on stopLossIsTotalOnPrintedFigures and is pinned by a sweep that fails on the mutation. Separately, the printed product used toFixed(2), which breaks an exact half-cent on the BINARY value: 8.01 x 0.500 = 4.005 printed $4.00 where a hand-check gives $4.01 -- and that is this rework's OWN documented worked example, with three tests pinning the artefact. Rounding is now explicit half-up (roundCents) and the range sweep re-derives the rule independently rather than importing it.",
-   "audit_rounds": 3,
+   "audit_rounds": 4,
    "verify": {
     "kind": "present",
     "pattern": "formatStopLossHeadline",
@@ -181,7 +181,7 @@
   {
    "name": "Schematic removals -- Invalidation readout + Projected R/R",
    "audit_clean": false,
-   "audit_rounds": 3,
+   "audit_rounds": 4,
    "note": "Both approved by Kenneth. (1) The Final Recommendation's standalone invalidation probability -- its no-race fallback -- is gone; the Monte Carlo card's own copy had already moved to the Barrier Race. firstPassage.invalidation and data.exit.invalidation are untouched, so the send gate still fires. (2) The Projected R/R (+8%) readout is gone from the Final Recommendation's Ladder-DEFAULT branch -- the copy that survived its removal from the Ladder section itself, and the one seen first since it is the card's opening state. overlay.premiumStop stays. KNOCK-ON: computeEditedRR, isDirty and the `dirty` memo were deleted as dead, which removes the card-level 'edited' flag (see open question). UNAUDITED. ROUND 1 confirmed every stated invariant of the removals holds, and found two comment defects: one promised a stop the branch does not print, one implied a freshness guarantee scoped only to the race. Both corrected.  ROUND 2 re-checked the orphan sweep independently and confirmed it: isDirty/computeEditedRR had no other callers, data.rrRatio/rrModel are still consumed by the context rail, firstPassage.invalidation still feeds BarrierRaceCard, data.exit.invalidation still hard-blocks the send, and the per-target 'edited' badge survives. Two more comment defects found and fixed: an orphaned JSDoc (the new stopCostShown prop was inserted between `invalidation`'s doc block and `invalidation`, so tooling attributed the standalone-invalidation description to it), and the section header still promising the Ladder-default branch prints 'T1/T2/T3 + R:R' when the R:R is exactly what was removed. NOT YET CLEAN. || ROUND 3 (combined, all three items at once) found 14 more and every one was fixed; audit_clean stays FALSE until a round comes back clean. Nothing new wrong with the removals themselves -- no orphaned data, props, types or CSS, and nothing still computed into nothing. Round 3's two observations here are both recorded rather than built: the lost card-level 'edited' flag is already decision EDITED-FLAG-2026-09-04 (REBUILD AS NEW UI, approved, in pending_kenneth), and the badge's departure from the schematic is now an open question below. What WAS missing was coverage: the rendered surface of the rework had none, so the header name the Barrier Race cross-refers to, the per-contract headline, and both directions of stopCostShown are now asserted.",
    "verify": {
     "kind": "defect_marker",
