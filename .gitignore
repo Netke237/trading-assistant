@@ -79,8 +79,13 @@ llm-contexts/e2e-output.log
 # suites to verify a finding (a brute-force sweep, a multi-symbol round-trip);
 # they are not coverage and must not land on a branch. Round 2's sweep did get
 # committed and had to be removed again in 2d77017c. Name them `zz-scratch-*`
-# and they stay out of the tree on their own.
-zz-scratch-*.test.ts
-zz-scratch-*.test.tsx
-zzz_*.test.ts
-zzz_*.test.tsx
+# or `zzz_*` and they stay out of the tree on their own.
+#
+# Both prefixes cover BOTH stacks. The first version of this block listed only
+# the four TypeScript spellings, so round 9's auditor -- told to name Python
+# probes `zzz_*.py`, the spelling this block appears to bless -- left
+# backend/tests/zzz_round9_probe.py untracked and tripped the stop hook. A
+# frontend-only rule under a comment promising they "stay out of the tree on
+# their own" is the comment-contradicts-code defect this project counts.
+zz-scratch-*
+zzz_*
