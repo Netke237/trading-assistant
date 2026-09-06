@@ -86,3 +86,50 @@ export function formatIv(r: ResolvedIv, symbol?: string): {
 export function ivSortValue(src: IvSource | null | undefined): number | null {
   return resolveIv(src).value;
 }
+
+/* ── Legacy-localStorage repair (PHASE-A-NULL-IVRANK-2026-09-06) ────────────
+ *
+ * Before the split, `ivRank` held EITHER a true percentile (when IBKR or
+ * tastytrade answered for the symbol) OR raw implied volatility × 100 (every
+ * other chain), with nothing on the record saying which. That conflation IS
+ * the defect Phase A removes — and a blob written to localStorage before the
+ * split still carries it. Rehydrating one hands `resolveIv` a number of
+ * UNKNOWN basis, and `resolveIv` reads any non-null `ivRank` as a percentile,
+ * so the trade card prints "IV rank 45" for what is most likely a 45%
+ * absolute IV: the exact defect, reintroduced on the card the user acts from.
+ *
+ * The basis is NOT recoverable from the stored record. The two quantities
+ * share a scale (0–100), and the only would-be discriminator — a pre-split
+ * `ivPercentile` of 0 meaning "no rank source answered" — exists on
+ * `contractDetails` but on neither `alternatives` entries nor portfolio rows,
+ * so it would have to be three different rules for one quantity. (Three
+ * editors each deriving the same figure their own way is this project's
+ * recurring regression class; see the note at the top of this file.)
+ *
+ * Guessing "absolute" would be right for most rows and silently wrong in the
+ * other direction for the rest — the same mislabel in a new coat. So an
+ * unattributable figure is DROPPED rather than relabelled: `resolveIv` then
+ * returns basis "none" and every display site prints "—" until fresh data
+ * arrives. Both stores refill within one ordinary action — scanStore on the
+ * next scan, portfolioStore on the next successful `syncFromBackend` — and a
+ * previous session's IV was stale market data regardless.
+ *
+ * `ivPercentile` is dropped with it: pre-split it defaulted to the literal 0
+ * that meant "no rank source answered", and post-split that state is null, so
+ * a surviving 0 would print as a genuine bottom-of-range percentile.
+ *
+ * Callers must run this from a VERSION-GATED migration branch only. It is not
+ * safe to apply on every rehydration — post-split records hold a genuine
+ * `ivRank`/`ivPercentile` pair that this would throw away.
+ */
+export function stripLegacyIvFields(record: unknown): unknown {
+  if (typeof record !== 'object' || record === null || Array.isArray(record)) return record;
+  const r = record as Record<string, unknown>;
+  // Leave a record that carries neither field untouched, so the migration is
+  // a no-op (same object identity) on the rows that never had a reading.
+  if (r.ivRank == null && r.ivPercentile == null) return record;
+  const out: Record<string, unknown> = { ...r };
+  if (r.ivRank != null) out.ivRank = null;
+  if (r.ivPercentile != null) out.ivPercentile = null;
+  return out;
+}

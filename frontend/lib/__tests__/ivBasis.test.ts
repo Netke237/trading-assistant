@@ -1,4 +1,4 @@
-import { resolveIv, formatIv, ivSortValue, IV_COLUMN_LABEL } from '@/lib/ivBasis';
+import { resolveIv, formatIv, ivSortValue, stripLegacyIvFields, IV_COLUMN_LABEL } from '@/lib/ivBasis';
 import { getIvPassMax, getIvCautionMax, FALLBACK } from '@/lib/ivThresholdsStore';
 
 describe('resolveIv', () => {
@@ -120,5 +120,56 @@ describe('threshold selection by basis', () => {
 describe('IV_COLUMN_LABEL', () => {
   it('does not promise a rank, since most rows carry an absolute level', () => {
     expect(IV_COLUMN_LABEL).toBe('IV');
+  });
+});
+
+describe('stripLegacyIvFields', () => {
+  // ROUND 1 findings (a) and (b). A blob written before the split carries ONE
+  // number of unknown basis under the percentile's name; resolveIv reads any
+  // non-null ivRank as a percentile, so rehydrating it reintroduces the exact
+  // mislabel Phase A removes — on the trade card and the portfolio table, the
+  // two surfaces the user acts from.
+
+  it('drops an unattributable legacy figure rather than guessing its basis', () => {
+    const out = stripLegacyIvFields({ symbol: 'AAPL', ivRank: 45 }) as Record<string, unknown>;
+    expect(out.ivRank).toBeNull();
+    // And the point of dropping it: the display sites now say "no data"
+    // instead of printing "IV rank 45" for what is most likely 45% IV.
+    expect(resolveIv(out as { ivRank: number | null })).toEqual({ value: null, basis: 'none' });
+  });
+
+  it('drops a legacy ivPercentile of 0, which meant "no rank source answered"', () => {
+    // Pre-split the field defaulted to the literal 0; post-split that state is
+    // null. A surviving 0 renders as a genuine bottom-of-range percentile.
+    const out = stripLegacyIvFields({ ivRank: 45, ivPercentile: 0 }) as Record<string, unknown>;
+    expect(out.ivPercentile).toBeNull();
+  });
+
+  it('leaves every other field on the record untouched', () => {
+    const out = stripLegacyIvFields({
+      symbol: 'AAPL', strike: 185, iv: 45, ivRank: 62,
+    }) as Record<string, unknown>;
+    expect(out).toEqual({ symbol: 'AAPL', strike: 185, iv: 45, ivRank: null });
+  });
+
+  it('is a no-op on a record that never carried a reading', () => {
+    const row = { symbol: 'AAPL', ivRank: null };
+    expect(stripLegacyIvFields(row)).toBe(row);
+    const bare = { symbol: 'AAPL' };
+    expect(stripLegacyIvFields(bare)).toBe(bare);
+  });
+
+  it('passes non-records through, since persisted JSON is unvalidated', () => {
+    expect(stripLegacyIvFields(null)).toBeNull();
+    expect(stripLegacyIvFields(undefined)).toBeUndefined();
+    expect(stripLegacyIvFields('AAPL')).toBe('AAPL');
+    const arr = [{ ivRank: 45 }];
+    expect(stripLegacyIvFields(arr)).toBe(arr);
+  });
+
+  it('does not mutate the input', () => {
+    const row = { ivRank: 45, ivPercentile: 0 };
+    stripLegacyIvFields(row);
+    expect(row).toEqual({ ivRank: 45, ivPercentile: 0 });
   });
 });

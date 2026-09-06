@@ -1033,7 +1033,19 @@ def score_stock(
             elif key == "atr_caution_max":         cfg["pullback"]["atr_caution_max"]        = float(val)
             elif key == "event_reject_days":       cfg["event"]["reject_days"]               = int(val)
             elif key == "event_caution_days":      cfg["event"]["caution_days"]              = int(val)
+            # Two thresholds, two quantities -- `_rule_vol` picks between them
+            # by `iv_basis`, so an override that names only one of them can
+            # only ever reach the basis it names
+            # (PHASE-A-NULL-IVRANK-2026-09-06). Until this second handler
+            # existed, `iv_rank_pass_max` was the sole knob and it wrote the
+            # PERCENTILE key, which `_rule_vol` reads only when a rank source
+            # answered -- so on the default path (no IBKR, no tastytrade, an
+            # ABSOLUTE IV) the user's ceiling was silently inert: set it to 20
+            # and a 30% absolute IV still returned PASS. Same shape as the
+            # `max_iv_abs` handler added alongside `max_iv_rank` in
+            # contract_validator.validate_contract.
             elif key == "iv_rank_pass_max":        cfg["vol"]["iv_rank_pass_max"]            = None if val is None else float(val)
+            elif key == "iv_abs_pass_max":         cfg["vol"]["iv_abs_pass_max"]             = None if val is None else float(val)
             elif key == "volume_lookback_bars":    cfg["trigger"]["volume_lookback_bars"]    = int(val)
             elif key == "volume_multiplier":       cfg["trigger"]["volume_multiplier"]       = float(val)
 

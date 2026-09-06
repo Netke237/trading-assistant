@@ -9,7 +9,8 @@ import type { ConfidenceGate } from '@/lib/settingsStore';
 import { atrMultForHorizon } from '@/lib/settingsStore';
 
 // Keys from scanStore.scanOverrides that stock_scorer.py reads via the overrides dict.
-// Options-only params (max_delta, min_dte, etc.) and iv_rank_pass_max are excluded.
+// Options-only params (max_delta, min_dte, etc.) and the two IV ceilings
+// (iv_abs_pass_max, iv_rank_pass_max) are excluded.
 const STOCKS_SCORER_KEYS = new Set([
   'weight_trend', 'weight_pullback', 'weight_trigger', 'weight_event', 'weight_vol',
   'trend_method', 'ma_type', 'fast_ema', 'slow_ema',

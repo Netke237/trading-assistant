@@ -8,6 +8,7 @@ import type { Direction, OptionContract, TradeCardData, DteWindow } from '@/type
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 import type { HorizonKey } from './horizonPresets';
 import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsHorizon } from './horizonPresets';
+import { stripLegacyIvFields } from './ivBasis';
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
@@ -78,6 +79,34 @@ function normalizeLegacyPricingMethod(value: unknown): unknown {
   if (value === 'delta-approx') return 'BS repriced (IV-derived)';
   if (value === 'manual') return 'Unavailable';
   return value;
+}
+
+/** v12 -> v13. Strips the pre-split `ivRank`/`ivPercentile` off a persisted
+ *  scan result — see stripLegacyIvFields in lib/ivBasis.ts for why an
+ *  unattributable figure is dropped rather than relabelled
+ *  (PHASE-A-NULL-IVRANK-2026-09-06).
+ *
+ *  Two places inside a persisted candidate carry the pair: `contractDetails`
+ *  (the block the Step 7 trade card renders and the user acts from) and each
+ *  `alternatives` entry. `pickedContracts` is a Record<string, string> of
+ *  contract IDs and carries no volatility figure at all; `contractsBySymbol`,
+ *  which does, is deliberately not persisted (see `partialize`). */
+function stripLegacyIvFromScanResult(value: unknown): unknown {
+  if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
+  return {
+    ...value,
+    candidates: value.candidates.map((candidate) => {
+      if (!isRecord(candidate)) return candidate;
+      const out: Record<string, unknown> = { ...candidate };
+      if (isRecord(candidate.contractDetails)) {
+        out.contractDetails = stripLegacyIvFields(candidate.contractDetails);
+      }
+      if (Array.isArray(candidate.alternatives)) {
+        out.alternatives = candidate.alternatives.map(stripLegacyIvFields);
+      }
+      return out;
+    }),
+  };
 }
 
 function normalizePersistedScanResult(value: unknown): unknown {
@@ -307,7 +336,7 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-       version: 12,
+       version: 13,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -355,6 +384,19 @@ export const useScanStore = create<ScanStoreState>()(
             ...s,
             scanResult: normalizePersistedScanResult(s.scanResult),
             previousRun: normalizePersistedScanResult(s.previousRun),
+          };
+        }
+        if (version < 13) {
+          // Phase A split `ivRank` (a true percentile) from `iv` (the absolute
+          // level). A blob stored before that carries one number of unknown
+          // basis under the percentile's name, and rehydrating it prints
+          // "IV rank 45" for a 45% absolute IV on the card the user acts from
+          // — the very defect Phase A removes. Dropped, not guessed; the next
+          // scan refills it. See lib/ivBasis.ts.
+          s = {
+            ...s,
+            scanResult: stripLegacyIvFromScanResult(s.scanResult),
+            previousRun: stripLegacyIvFromScanResult(s.previousRun),
           };
         }
         return s;

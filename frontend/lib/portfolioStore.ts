@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverride, AlertOverrides, TpMethod } from '@/types/domain';
 import { useRiskStore } from '@/lib/riskStore';
+import { stripLegacyIvFields } from '@/lib/ivBasis';
 
 type BackendPosition = {
   id: string;
@@ -699,7 +700,7 @@ function validatePositions(positions: unknown): PortfolioPosition[] {
  *  no syncStatus. Tag them synced with syncedAt=0 so the authoritative reconcile
  *  drops them if the backend does not have them (clears old phantom rows), while
  *  a row the backend DOES have is simply confirmed on the next sync. */
-export function migratePortfolioPersist(state: unknown, _version: number): unknown {
+export function migratePortfolioPersist(state: unknown, version: number): unknown {
   const s = state as { positions?: unknown } | undefined;
   if (!s || !Array.isArray(s.positions)) return state;
   return {
@@ -741,7 +742,22 @@ export function migratePortfolioPersist(state: unknown, _version: number): unkno
       // SHOULD keep re-anchoring it. Normalising here rather than relying on
       // the `??` keeps the persisted shape honest about itself.
       if (floored.stopIsUserSet === undefined) floored.stopIsUserSet = false;
-      return floored;
+      // v4 -> v5, ROUND 1 finding (b). Phase A split `ivRank` (a true
+      // percentile) from `iv` (the absolute level); a row persisted before
+      // that carries ONE number of unknown basis under the percentile's name,
+      // so the portfolio table would print "IV rank 45" for what is most
+      // likely a 45% absolute IV. Dropped rather than guessed -- see
+      // stripLegacyIvFields in lib/ivBasis.ts for why.
+      //
+      // NOTE this is the only branch here that is NOT idempotent, hence the
+      // version gate: run unconditionally it would throw away the genuine
+      // `ivRank` a post-split row does carry, on every single load.
+      //
+      // Worse here than in scanStore: `syncFromBackend` overwrites these
+      // fields only on rows the reconcile confirms against the backend, so on
+      // a row it keeps as pending/offline the stale figure would never be
+      // replaced and the mislabel would be permanent.
+      return version < 5 ? (stripLegacyIvFields(floored) as Record<string, unknown>) : floored;
     }),
   };
 }
@@ -1243,7 +1259,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     }),
     {
       name: 'bamendjou-portfolio-v1',
-      version: 4,
+      version: 5,
       skipHydration: true,
       migrate: migratePortfolioPersist,
       partialize: (state) => ({ positions: state.positions }),
