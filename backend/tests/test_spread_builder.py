@@ -48,8 +48,20 @@ def test_bear_call_is_a_credit_with_capped_risk():
 
 from app.scoring.spread_builder import choose_primary
 
+# The figure now arrives with a stated basis, and each basis has its own
+# threshold — 70% IV and the 70th percentile are different claims
+# (PHASE-A-SPREAD-BASIS-2026-09-06). Both bases are asserted here because the
+# rich-vol-sells-premium rule itself is the same on either; which THRESHOLD
+# applies is what changed. See tests/test_spread_basis.py for the split.
+
 def test_high_iv_prefers_credit_spread():
-    assert choose_primary(iv_rank=70, threshold=50) == "bear_call"
+    for basis in ("rank", "absolute"):
+        assert choose_primary(
+            iv=70, iv_basis=basis, rank_threshold=50, abs_threshold=50
+        ) == "bear_call"
 
 def test_low_iv_prefers_debit_spread():
-    assert choose_primary(iv_rank=30, threshold=50) == "bear_put"
+    for basis in ("rank", "absolute"):
+        assert choose_primary(
+            iv=30, iv_basis=basis, rank_threshold=50, abs_threshold=50
+        ) == "bear_put"

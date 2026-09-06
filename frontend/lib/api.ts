@@ -509,6 +509,7 @@ export const api = {
       spread_width?: number;
       short_leg_delta?: number;
       iv_rank_threshold?: number;
+      iv_abs_threshold?: number;
       min_credit?: number;
       max_debit_pct?: number;
     },

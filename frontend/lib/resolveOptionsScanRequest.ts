@@ -75,6 +75,7 @@ export interface OptionsScanRequestBody {
   spread_width?: number;
   short_leg_delta?: number;
   iv_rank_threshold?: number;
+  iv_abs_threshold: number;
   min_credit?: number;
   max_debit_pct?: number;
 }
@@ -146,6 +147,7 @@ export function buildOptionsScanRequestBody(ctx: ResolvedScanContext): OptionsSc
     spread_width: ctx.spreads.widthPoints,
     short_leg_delta: ctx.spreads.shortLegDelta,
     iv_rank_threshold: ctx.spreads.ivRankThreshold,
+    iv_abs_threshold: ctx.spreads.ivAbsThreshold,
     min_credit: ctx.spreads.minCredit,
     max_debit_pct: ctx.spreads.maxDebitPctOfWidth,
   };

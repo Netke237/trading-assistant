@@ -569,7 +569,12 @@ class ScanRequest(BaseModel):
     # Bearish spread construction params (used by Pass 2 for bearish candidates)
     spread_width:        float = 5.0
     short_leg_delta:     float = 0.30
-    iv_rank_threshold:   float = 50.0
+    iv_rank_threshold:   float = 50.0   # applies when a TRUE PERCENTILE is in hand
+    # Applies when only an ABSOLUTE IV is in hand, which is most chains. Defaulted
+    # to the same 50 so behaviour is unchanged on the day this shipped; it is a
+    # separate knob because 50% IV and the 50th percentile are different claims.
+    # UNMEASURED, like the percentile seeds and Q7.
+    iv_abs_threshold:    float = 50.0
     min_credit:          float = 0.50
     max_debit_pct:       float = 40.0
 

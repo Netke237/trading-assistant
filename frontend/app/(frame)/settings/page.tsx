@@ -949,6 +949,7 @@ function SpreadsSection() {
   const [deltaText,    setDeltaText]    = useState(String(spreads.shortLegDelta));
   const [widthText,    setWidthText]    = useState(String(spreads.widthPoints));
   const [ivRankText,   setIvRankText]   = useState(String(spreads.ivRankThreshold));
+  const [ivAbsText,    setIvAbsText]    = useState(String(spreads.ivAbsThreshold));
   const [creditText,   setCreditText]   = useState(String(spreads.minCredit));
   const [debitText,    setDebitText]    = useState(String(spreads.maxDebitPctOfWidth));
 
@@ -956,6 +957,7 @@ function SpreadsSection() {
   useEffect(() => { setDeltaText(String(spreads.shortLegDelta));      }, [spreads.shortLegDelta]);
   useEffect(() => { setWidthText(String(spreads.widthPoints));         }, [spreads.widthPoints]);
   useEffect(() => { setIvRankText(String(spreads.ivRankThreshold));    }, [spreads.ivRankThreshold]);
+  useEffect(() => { setIvAbsText(String(spreads.ivAbsThreshold));      }, [spreads.ivAbsThreshold]);
   useEffect(() => { setCreditText(String(spreads.minCredit));          }, [spreads.minCredit]);
   useEffect(() => { setDebitText(String(spreads.maxDebitPctOfWidth));  }, [spreads.maxDebitPctOfWidth]);
 
@@ -1006,8 +1008,8 @@ function SpreadsSection() {
         <Text size={12} tone="secondary">pts</Text>
       </Row>
       <Row
-        label="IV rank threshold"
-        hint="Minimum IV rank % required to enter a spread"
+        label="IV rank threshold (percentile)"
+        hint="At or above this IV RANK — where today's IV sits in the name's own 52-week range — a bearish spread is presented as a credit (bear call) rather than a debit (bear put). Applies only when IBKR or tastytrade supplied a real rank."
         defaultValue="50"
       >
         <input
@@ -1021,6 +1023,26 @@ function SpreadsSection() {
             const clamped = isNaN(val) ? 50 : Math.max(0, Math.min(100, val));
             setIvRankText(String(clamped));
             setSpreads({ ivRankThreshold: clamped });
+          }}
+        />
+        <Text size={12} tone="secondary">%</Text>
+      </Row>
+      <Row
+        label="IV threshold (absolute)"
+        hint="Same choice, judged on ABSOLUTE implied volatility — which is what most chains carry, since a true rank needs IBKR or tastytrade to answer. Separate from the rank threshold because 50% IV and the 50th percentile are different claims."
+        defaultValue="50"
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          className={styles.numInput}
+          value={ivAbsText}
+          onChange={(e) => setIvAbsText(e.target.value)}
+          onBlur={() => {
+            const val = parseFloat(ivAbsText);
+            const clamped = isNaN(val) ? 50 : Math.max(0, Math.min(100, val));
+            setIvAbsText(String(clamped));
+            setSpreads({ ivAbsThreshold: clamped });
           }}
         />
         <Text size={12} tone="secondary">%</Text>

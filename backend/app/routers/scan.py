@@ -355,6 +355,8 @@ async def _build_spreads(
     spread_width: float = 5.0,
     short_leg_delta: float = 0.30,
     iv_rank_threshold: float = 50.0,
+    iv_abs_threshold: float = 50.0,
+    iv_basis: str = "none",
     min_credit: float = 0.50,
     max_debit_pct: float = 40.0,
 ):
@@ -365,7 +367,10 @@ async def _build_spreads(
     if direction != "Bearish":
         return None, None
 
-    _primary_type = choose_primary(iv_rank=iv_rank or 0.0, threshold=iv_rank_threshold)
+    _primary_type = choose_primary(
+        iv=iv_rank, iv_basis=iv_basis,
+        rank_threshold=iv_rank_threshold, abs_threshold=iv_abs_threshold,
+    )
     try:
         async with sem:
             _puts_chain, _calls_chain = await asyncio.gather(
@@ -454,6 +459,7 @@ async def _process_symbol(
     spread_width: float = 5.0,
     short_leg_delta: float = 0.30,
     iv_rank_threshold: float = 50.0,
+    iv_abs_threshold: float = 50.0,
     min_credit: float = 0.50,
     max_debit_pct: float = 40.0,
 ) -> TradeCardData | RejectedCandidate:
@@ -917,6 +923,8 @@ async def _process_symbol(
         spread_width=spread_width,
         short_leg_delta=short_leg_delta,
         iv_rank_threshold=iv_rank_threshold,
+        iv_abs_threshold=iv_abs_threshold,
+        iv_basis=iv_basis,
         min_credit=min_credit,
         max_debit_pct=max_debit_pct,
     )
@@ -1269,6 +1277,7 @@ async def _execute_scan_core(
                 spread_width=req.spread_width,
                 short_leg_delta=req.short_leg_delta,
                 iv_rank_threshold=req.iv_rank_threshold,
+                iv_abs_threshold=req.iv_abs_threshold,
                 min_credit=req.min_credit,
                 max_debit_pct=req.max_debit_pct,
             )
