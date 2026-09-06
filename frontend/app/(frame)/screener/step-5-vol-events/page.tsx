@@ -90,7 +90,7 @@ export default function Step5Page() {
     return [...seen];
   }, [watchlist, candidateMap]);
 
-  const gateSentence = basesPresent
+  const thresholdSentences = basesPresent
     .map((b) => {
       const passMax = getIvPassMax(horizonKey, ivThresholds, b);
       if (passMax === null) return null;
@@ -101,13 +101,33 @@ export default function Step5Page() {
     .filter((x): x is string => x !== null)
     .join(' ');
 
+  // Whether this horizon gates on IV at all is a property of the HORIZON, so it
+  // has to be asked of the thresholds directly. Deriving it from an empty
+  // `basesPresent` — as this line did when the sentence became row-derived in the
+  // Phase A split — made the page announce "IV gate disabled for this horizon"
+  // on Swing and Position whenever no candidate carried a reading, the empty
+  // page included. The gate is not disabled there; it has nothing in front of
+  // it yet, which is a different statement and the one the user needs.
+  const gateDisabled =
+    getIvPassMax(horizonKey, ivThresholds, 'absolute') === null &&
+    getIvPassMax(horizonKey, ivThresholds, 'rank') === null;
+
+  const gateSentence =
+    gateDisabled                ? 'IV gate disabled for this horizon.'
+    : candidates.length === 0   ? 'Run a scan to see the volatility and event gates.'
+    : thresholdSentences !== '' ? thresholdSentences
+    // Candidates are on screen but not one of them carries a volatility
+    // reading. Stated as the plain fact only: what an absent reading then does
+    // to the gate is decided per row below, and differs by horizon.
+    :                             'No volatility reading for these candidates.';
+
   return (
     <div className={styles.main}>
       <div className={styles.stepHeader}>
         <Text size={11} tone="dim" weight={500}>STEP 5 OF 7</Text>
         <Title as="h1" size={24}>Volatility + Events</Title>
         <Text size={13} tone="secondary">
-          {gateSentence !== '' ? gateSentence : 'IV gate disabled for this horizon.'}
+          {gateSentence}
           {' '}Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
           Gate = worst of IV and event proximity.
         </Text>

@@ -113,9 +113,14 @@ export class ScreenerPage {
     return this.page.getByRole('table');
   }
 
-  // Step 5
+  // Step 5.
+  // These specs navigate straight to the step with NO scan seeded, so this is
+  // the empty state. It used to be matched on /iv rank/, which the page printed
+  // unconditionally because the sentence came from the horizon alone; since the
+  // Phase A basis split the sentence comes from the rows on screen and there are
+  // none here (PHASE-A-NULL-IVRANK-2026-09-06).
   get ivSection(): Locator {
-    return this.page.getByText(/iv rank|implied volatility/i).first();
+    return this.page.getByText(/run a scan to see the volatility and event gates/i).first();
   }
 
   // Step 6

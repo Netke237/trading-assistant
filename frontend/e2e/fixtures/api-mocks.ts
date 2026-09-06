@@ -13,6 +13,152 @@ function loadCandles(symbol: string): unknown[] {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }
 
+/**
+ * The mocked AAPL option chain, shared by the `/api/contracts` route below and
+ * by any spec that seeds the scan store directly. Exported so there is exactly
+ * ONE definition of this shape: a spec that retyped it would drift from the
+ * route the moment either changed, and a fixture that silently disagrees with
+ * itself is worse than no fixture.
+ *
+ * Post-split wire shape (PHASE-A-NULL-IVRANK-2026-09-06). `ivRank` and `iv`
+ * are two different quantities and the backend sends them RAW and unresolved
+ * (routers/contracts.py): `ivRank` is only ever a TRUE PERCENTILE and is null
+ * unless IBKR or tastytrade answered; `iv` is only ever an ABSOLUTE 0-100
+ * level for that one strike.
+ *
+ * This chain is on the ABSOLUTE basis, the DEFAULT PRODUCTION CASE: no rank
+ * source answers on most chains, so `ivRank` is null and the UI must fall back
+ * to `iv` and label it as an absolute level. Until this change the fixture
+ * carried `ivRank: 42` with no `iv` — the PRE-split shape — so the mocks fed
+ * only the rank branch and would have gone on passing had the split broken.
+ *
+ * The rank is per SYMBOL (market.py broadcasts one reading over every strike)
+ * while `iv` is per STRIKE, so the strikes below carry DIFFERENT absolute
+ * values. That is what makes a wrong-field read visible: under the old fixture
+ * every strike held the same 42 and reading either field looked identical.
+ */
+export const MOCK_OPTION_CHAIN = [
+  {
+    id: 'AAPL|185|2025-05-16|C',
+    symbol: 'AAPL',
+    strike: 185,
+    expiry: '2025-05-16',
+    right: 'C',
+    dte: 45,
+    dteTotal: 45,
+    price: 2.15,
+    delta: 0.52,
+    theta: -0.05,
+    ivRank: null,
+    ivPercentile: null,
+    iv: 42,
+    spread: 0.02,
+    volume: 1250,
+    score: 78,
+    contractConfidence: 'PASS',
+  },
+  {
+    id: 'AAPL|190|2025-05-16|C',
+    symbol: 'AAPL',
+    strike: 190,
+    expiry: '2025-05-16',
+    right: 'C',
+    dte: 45,
+    dteTotal: 45,
+    price: 1.35,
+    delta: 0.38,
+    theta: -0.04,
+    // No reading for this strike: Tradier returned none and the yfinance
+    // backfill did not cover it. A state the pre-split shape could not
+    // express, and the one the step-6 sort comparator guards against by
+    // sorting nulls last in BOTH directions.
+    ivRank: null,
+    ivPercentile: null,
+    iv: null,
+    spread: 0.03,
+    volume: 890,
+    score: 72,
+    contractConfidence: 'PASS',
+  },
+  {
+    id: 'AAPL|180|2025-05-16|C',
+    symbol: 'AAPL',
+    strike: 180,
+    expiry: '2025-05-16',
+    right: 'C',
+    dte: 45,
+    dteTotal: 45,
+    price: 3.45,
+    delta: 0.65,
+    theta: -0.06,
+    ivRank: null,
+    ivPercentile: null,
+    iv: 43.1,
+    spread: 0.02,
+    volume: 2100,
+    score: 75,
+    contractConfidence: 'PASS',
+  }
+];
+
+/** The single AAPL candidate the `/api/scan` route returns. Its
+ *  `contractDetails` IS the 185 strike of MOCK_OPTION_CHAIN above, so the two
+ *  must agree on basis and on number. */
+export const MOCK_SCAN_CANDIDATE = {
+  symbol: 'AAPL',
+  company: 'Apple Inc.',
+  price: 185.2,
+  direction: 'Bullish',
+  status: 'PASS',
+  stockScore: 82,
+  stockConfidence: 'PASS',
+  stockBreakdown: {
+    trend: 85,
+    pullback: 78,
+    trigger: 80,
+    event: 90,
+    volatility: 75,
+  },
+  contract: 'AAPL|185|2025-05-16|C',
+  contractScore: 78,
+  contractConfidence: 'PASS',
+  contractBreakdown: {
+    dteFit: 80,
+    delta: 75,
+    ivAttractiveness: 70,
+    liquidity: 85,
+    spread: 80,
+  },
+  contractDetails: {
+    strike: 185,
+    expiry: '2025-05-16',
+    right: 'C',
+    mid: 2.15,
+    delta: 0.52,
+    theta: -0.05,
+    // Same strike as the chain row above, so the same basis and the same
+    // number: this block IS AAPL 185C, and a candidate whose gate disagreed
+    // with its own contract row would be a fixture bug, not a test case.
+    ivRank: null,
+    ivPercentile: null,
+    iv: 42,
+    dte: 45,
+  },
+  entry: { limit: 2.1, maxFill: 2.2, orderType: 'Limit' },
+  exit: {
+    invalidation: 180,
+    premiumStop: 1.0,
+    timeStopDays: 30,
+    targets: [
+      { id: 'tp1', stockPrice: 194.25, estimatedOptionPrice: 3.5, pricingMethod: 'BS repriced (IV-derived)', contractsToSell: 1, status: 'PENDING' },
+      { id: 'tp2', stockPrice: 195, estimatedOptionPrice: 4.2, pricingMethod: 'BS repriced (IV-derived)', contractsToSell: 1, status: 'PENDING' },
+    ],
+  },
+  rrRatio: 2.5,
+  rrModel: 'BS repriced (IV-derived)',
+  finalStatus: 'PASS',
+};
+
 export async function setupApiMocks(page: Page): Promise<void> {
   // Candles - serve from pinned fixtures
   const symbols = ['AAPL', 'MSFT', 'NVDA', 'SPY'];
@@ -175,67 +321,13 @@ export async function setupApiMocks(page: Page): Promise<void> {
     });
   });
 
-  // Contracts
+  // Contracts — see MOCK_OPTION_CHAIN for the shape and why it is on the
+  // absolute basis.
   await page.route('**/api/contracts**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify([
-        {
-          id: 'AAPL|185|2025-05-16|C',
-          symbol: 'AAPL',
-          strike: 185,
-          expiry: '2025-05-16',
-          right: 'C',
-          dte: 45,
-          dteTotal: 45,
-          price: 2.15,
-          delta: 0.52,
-          theta: -0.05,
-          ivRank: 42,
-          ivPercentile: 38,
-          spread: 0.02,
-          volume: 1250,
-          score: 78,
-          contractConfidence: 'PASS',
-        },
-        {
-          id: 'AAPL|190|2025-05-16|C',
-          symbol: 'AAPL',
-          strike: 190,
-          expiry: '2025-05-16',
-          right: 'C',
-          dte: 45,
-          dteTotal: 45,
-          price: 1.35,
-          delta: 0.38,
-          theta: -0.04,
-          ivRank: 42,
-          ivPercentile: 38,
-          spread: 0.03,
-          volume: 890,
-          score: 72,
-          contractConfidence: 'PASS',
-        },
-        {
-          id: 'AAPL|180|2025-05-16|C',
-          symbol: 'AAPL',
-          strike: 180,
-          expiry: '2025-05-16',
-          right: 'C',
-          dte: 45,
-          dteTotal: 45,
-          price: 3.45,
-          delta: 0.65,
-          theta: -0.06,
-          ivRank: 42,
-          ivPercentile: 38,
-          spread: 0.02,
-          volume: 2100,
-          score: 75,
-          contractConfidence: 'PASS',
-        },
-      ]),
+      body: JSON.stringify(MOCK_OPTION_CHAIN),
     });
   });
 
@@ -251,57 +343,7 @@ export async function setupApiMocks(page: Page): Promise<void> {
       body: JSON.stringify({
         scan_id: 'test-scan-001',
         timestamp: new Date().toISOString(),
-        candidates: [
-          {
-            symbol: 'AAPL',
-            company: 'Apple Inc.',
-            price: 185.2,
-            direction: 'Bullish',
-            status: 'PASS',
-            stockScore: 82,
-            stockConfidence: 'PASS',
-            stockBreakdown: {
-              trend: 85,
-              pullback: 78,
-              trigger: 80,
-              event: 90,
-              volatility: 75,
-            },
-            contract: 'AAPL|185|2025-05-16|C',
-            contractScore: 78,
-            contractConfidence: 'PASS',
-            contractBreakdown: {
-              dteFit: 80,
-              delta: 75,
-              ivAttractiveness: 70,
-              liquidity: 85,
-              spread: 80,
-            },
-            contractDetails: {
-              strike: 185,
-              expiry: '2025-05-16',
-              right: 'C',
-              mid: 2.15,
-              delta: 0.52,
-              theta: -0.05,
-              ivRank: 42,
-              dte: 45,
-            },
-            entry: { limit: 2.1, maxFill: 2.2, orderType: 'Limit' },
-            exit: {
-              invalidation: 180,
-              premiumStop: 1.0,
-              timeStopDays: 30,
-              targets: [
-                { id: 'tp1', stockPrice: 194.25, estimatedOptionPrice: 3.5, pricingMethod: 'BS repriced (IV-derived)', contractsToSell: 1, status: 'PENDING' },
-                { id: 'tp2', stockPrice: 195, estimatedOptionPrice: 4.2, pricingMethod: 'BS repriced (IV-derived)', contractsToSell: 1, status: 'PENDING' },
-              ],
-            },
-            rrRatio: 2.5,
-            rrModel: 'BS repriced (IV-derived)',
-            finalStatus: 'PASS',
-          },
-        ],
+        candidates: [MOCK_SCAN_CANDIDATE],
         rejected: [],
       }),
     });
