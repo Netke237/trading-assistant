@@ -2,8 +2,8 @@
  "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree.",
  "updated": "2026-09-06",
  "updated_by": "session_01Rg4ZBTUexLsDZTwZV8CgW7 (round-12 user-visible batch, audit rounds 1-2)",
- "main": "f523e170",
- "working_branch": "claude/dev-state-reconstruction-hzmzbi (restarted off main a38627f7) -- the three USER-VISIBLE round-12 follow-ups, capped at two rounds",
+ "main": "3ecf2a91",
+ "working_branch": "claude/dev-state-reconstruction-hzmzbi (restarted off main 3ecf2a91) -- Phase A. Reuse this branch NAME every time: it is the designated push target for this project. Restart it off main after each merge rather than inventing a new name. The old ref still exists on origin; the remote refuses ref deletions and it is fully merged, so it is harmless.",
  "audit_rule": "NOTHING counts as done until an adversarial round comes back clean AT THE AGREED SEVERITY GATE. As of AUDIT-EXIT-CRITERION-2026-09-05 that gate is: no finding that can put a wrong number in front of a user or on a broker order, and no finding that corrupts persisted data. MEDIUM and below are logged as follow-ups against main, NOT fixed in-branch -- fixing them inside the audit target is what made ten rounds unable to converge. audit_rounds counts rounds RUN; audit_clean is true only when a round clears that gate. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is.",
  "phases": [
   {
@@ -344,13 +344,25 @@
   {
    "id": "BATCH-AUDIT-ROUND-2-2026-09-06",
    "decision": "Adversarial round 2, on c8152847 (the round-1 FIX commit, frozen): 0 GATE, 15 FOLLOW-UP. Both rounds of the cap are now spent. Round 2's central result is that the criterion's own prediction landed on the first attempt: c8152847 introduced TWO user-visible regressions in the arithmetic it added. (a) `premiumStopDollarBounds` did `Math.ceil(mid * 0.10 * 100)` in binary floats, so on every dime-multiple mid -- exactly where 10% IS expressible at 2dp -- it climbed a whole cent: a $3.00 mid demanded $0.31 = 10.33% where the drawer accepts $0.30. 172 mids between $0.02 and $50. (b) Rounding the minimum UP put the card's SEED (round(mid x global, 2), round-to-nearest) below the card's own minimum, and `EditableKV.save` ran its range check ABOVE its no-op guard -- so a bare focus-and-blur printed 'Must be between $0.53 and $5.18' for a value nobody typed. At a global of 0.10 that went from 3 of 4999 cent-mids to 2184. That is the exact defect round 1 fixed in PremiumStopEditor, recreated in the sibling editor of the same number by the commit that fixed it. Both are fixed here (integer-cent arithmetic; the no-op guard hoisted above the range check), along with round 2's F10 (EditField's early return did not retire its message, so the two editors in one drawer had different rules for the same caution) and its false records. Round 2's F12 second half did NOT reproduce -- `next` quantises to 0.0001 of a fraction, which is exactly the 0.01 of a percent the renderer shows, so the two derivations cannot disagree. The code change stands as a defensive single-derivation and the comment says so rather than claiming a fix. NO ROUND 3. The cap is spent and both rounds cleared the gate; HEAD is now one commit beyond the last audited one and `audited_through` records that."
+  },
+  {
+   "id": "MERGE-FOLLOWUP-BATCH-2026-09-06",
+   "q": "The three-user-visible-follow-up batch is 3 commits ahead of main, both capped rounds returned 0 GATE, suite green. Merge, or spend a third round? Round 2's own fix commit is unaudited and round 2 did find that round 1's fix had introduced two user-visible regressions.",
+   "a": "MERGE. Kenneth chose it over a third round. The reasoning that decided it: the two-round cap exists precisely to stop at a defined point, and breaking it the first time it binds would mean it was never a cap. The same 'but the newest commit is unaudited' argument is true after every round -- that is the treadmill that cost rounds 7-11. Merged to main at 3ecf2a91.",
+   "by": "Kenneth"
+  },
+  {
+   "id": "PHASE-A-IV-SOURCE-2026-09-06",
+   "q": "Where should a contract's implied volatility come from for Phase A? Only Tradier returns per-contract implied_volatility; IBKR and Tastytrade return symbol-level IV RANK, a different quantity. A bracketed Black-Scholes solver already exists at market.py:928 (_compute_iv_bs) and is already wired into scan.py:603.",
+   "a": "TRADIER FIRST, SOLVER AS FALLBACK. Use Tradier's per-contract IV where present; fall back to the existing _compute_iv_bs rather than building anything new (two earlier sessions proposed building a bracketed solver that already exists -- do not repeat that). SPLIT `iv` (per-strike implied volatility) from `ivRank` (a true percentile, NULL when genuinely unavailable) in the same change, which is what fixes the live scoring defect: market.py:1277 writes raw IV x100 into a field named for a percentile, 1291/1308 conditionally overwrite it with a real rank, and scan.py:610-616 broadcasts an ATM value across every strike -- all then compared against iv_rank_pass_max: 34 and hard_reject.max_iv_rank: 70.",
+   "by": "Kenneth"
   }
  ],
  "pending_kenneth": [
   "BUILD: card-level 'edited' indicator (decision EDITED-FLAG-2026-09-04) -- approved, not started.",
   "BUILD: gate firstPassage.targets on freshness (decision TARGET-VINTAGE-2026-09-04) -- approved, not started.",
   "BUILD: stamp the fired threshold on a PREMIUM_STOP alert (decision ALERT-THRESHOLD-STAMP-2026-09-05) -- approved, not started.",
-  "RATIFY OR REJECT the narrower in-branch-fix rule this batch ran on: AUDIT-EXIT-CRITERION-2026-09-05 says fix only GATE findings in-branch and log the rest, and both rounds returned 0 GATE -- yet rounds 1 and 2 fixed 8 and 4 non-gate findings respectively, on the argument that a defect the batch ITSELF introduced is finishing the fix rather than widening it. Round 2 showed the cost of that argument empirically (the round-1 fix commit introduced two fresh user-visible regressions) and also the cost of NOT doing it (both were regressions against pre-batch behaviour, i.e. shipping them to main was the alternative). The rule was asserted in a commit message; every other rule change on this project was a decision Kenneth signed off. Round 2 finding 15."
+  "The narrower in-branch-fix rule (AUDIT-EXIT-CRITERION-2026-09-05) was ratified IN SUBSTANCE by MERGE-FOLLOWUP-BATCH-2026-09-06 -- Kenneth merged on the strength of it, over a third round. He has not separately ratified it as a standing rule for all future work, so treat it as the working default with one batch of precedent behind it, not as settled policy."
  ],
  "open_questions": [
   "Do the Q7 thresholds (0.80/0.70/0.60) hold on a real universe? Round 5 records them as taken as proposed, never measured.",
@@ -396,11 +408,11 @@
   },
   {
    "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-12.md",
-   "role": "Handoff #12 \u2014 the reconstruction, the plan, and Piece 4."
+   "role": "Handoff #12 — the reconstruction, the plan, and Piece 4."
   },
   {
    "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-13.md",
-   "role": "LATEST handoff \u2014 live Barrier Race verification, state tracking, stop-cost notation."
+   "role": "LATEST handoff — live Barrier Race verification, state tracking, stop-cost notation."
   },
   {
    "path": "docs/superpowers/STATE_TRACKING.md",
