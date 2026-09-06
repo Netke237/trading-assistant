@@ -945,7 +945,12 @@ function EditField({
   });
 
   const commit = () => {
-    if (!dirtyRef.current) { setDraft(stored); return; }
+    // Clears `rejected` as well, matching PremiumStopEditor below. Without it
+    // a message outlives the gesture that produced it: type "abc" into Stop,
+    // blur (message shown), then click in and out without typing -- the
+    // caution stays, now describing nothing, while the identical gesture on
+    // Premium stop retires it.
+    if (!dirtyRef.current) { setDraft(stored); setRejected(null); return; }
     const raw = draft.trim();
     if (raw === '') {
       revert(
@@ -1127,9 +1132,11 @@ function PremiumStopEditor({
     if (raw === '') {
       setDraft('');
       setRejected(null);
-      // Clearing is only an edit if the user did it; a blur on an already-empty
-      // (inheriting) field must not PATCH.
-      if (dirtyRef.current && own != null) onChange({ premiumStopPct: null });
+      // Clearing is only an edit if the user did it -- and the guard at the top
+      // of `commit` is now what establishes that, so this asks only whether
+      // there is an override to clear. (It used to re-test `dirtyRef` here,
+      // which after that guard can no longer be false.)
+      if (own != null) onChange({ premiumStopPct: null });
       dirtyRef.current = false;
       return;
     }
@@ -1216,10 +1223,22 @@ function PremiumStopEditor({
     // identically to `stored` IS the stored value as far as it is concerned.
     // `next !== own` is kept as well: it still catches the case where the
     // rendered text differs but the derived fraction does not.
-    const rendered = String(Number(pct.toFixed(2)));
+    // DERIVED FROM `next`, NOT FROM THE TYPED `pct` -- defensively, not as a
+    // bug fix. Round 2 of the follow-up audit argued the two could disagree
+    // (typing 10.005 storing 0.1 while showing "10.01"); they cannot, because
+    // `next` quantises to 0.0001 of a fraction, which is exactly the 0.01 of a
+    // percent this line renders, so double-rounding has nothing left to lose.
+    // The change is that the visible text and the stored value are now derived
+    // from ONE expression -- the same one `stored` uses -- rather than two
+    // that happen to agree. A future edit to either quantisation would
+    // otherwise separate them silently.
+    const rendered = String(Number((next * 100).toFixed(2)));
     setDraft(rendered);
     setRejected(null);
-    if (dirtyRef.current && rendered !== stored && next !== own) onChange({ premiumStopPct: next });
+    // `dirtyRef` is guaranteed true by the guard at the top of `commit`; what
+    // is left is the two value comparisons, which is what this line was always
+    // really asking.
+    if (rendered !== stored && next !== own) onChange({ premiumStopPct: next });
     dirtyRef.current = false;
   };
 

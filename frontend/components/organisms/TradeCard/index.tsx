@@ -2798,10 +2798,29 @@ function EditableKV({
     // editors in one branch with opposite policies, and the card had the unsafe
     // one on the field that becomes the position's stop.
     //
-    // Reverting also retires round 6's seed-outside-bounds hazard at the
-    // source: the clamp was what made `next !== value` on a bare focus-and-blur
-    // when the SEED itself sat outside [min,max]. With no clamp there is
-    // nothing to differ.
+    // Reverting retired round 6's seed-outside-bounds WRITE at the source: the
+    // clamp was what made `next !== value` on a bare focus-and-blur when the
+    // SEED itself sat outside [min,max]. With no clamp there is nothing to
+    // differ, so nothing is written.
+    //
+    // It did not retire the MESSAGE, and round 2 of the follow-up audit found
+    // that half still live: this check sat ABOVE the no-op guard, so a seed
+    // outside the bounds printed "Must be between $X and $Y — kept the
+    // previous value." for a value the user never typed, merely for clicking
+    // the field to read it. The no-op guard is therefore hoisted above this
+    // one. Nothing typed is nothing judged -- the same rule PremiumStopEditor's
+    // `if (!dirtyRef.current)` guard applies in the drawer.
+    //
+    // Reachable, and this branch widened it: `premiumStopDollarBounds` rounds
+    // the minimum UP (it must, or the card's own boundary falls below the band
+    // the drawer enforces) while the seed is `round(mid x global, 2)`
+    // (trade_plan.py). At a global of 0.10 -- the minimum Settings offers --
+    // those two disagree by a cent on 2184 of 4999 cent-mids from $0.02 to
+    // $50, against 3 before.
+    if (parsed === value) {
+      setEditing(false);
+      return;
+    }
     if (parsed < minVal || parsed > maxVal) {
       setRejected(
         maxVal === Infinity
@@ -2826,10 +2845,12 @@ function EditableKV({
     // through the one path that does not go through a keystroke.
     // Skipping the no-op is also just correct for every other field.
     //
-    // COMPARED BEFORE CLAMPING TOO. `startEdit` seeds the draft from `value`,
-    // so when `value` itself sits outside [min,max] the clamp alone changes it
-    // and the post-clamp guard below cannot see that nothing was typed --
-    // a bare focus-and-blur then reports a deliberate edit. Round 5 added
+    // COMPARED BEFORE CLAMPING, AND NOW BEFORE BOUNDING. `startEdit` seeds the
+    // draft from `value`, so when `value` itself sits outside [min,max] the
+    // clamp alone changed it and the post-clamp guard below could not see that
+    // nothing was typed -- a bare focus-and-blur then reported a deliberate
+    // edit. That comparison lives above the range check now, for the same
+    // reason one step further out. Round 5 added
     // 10-99%-of-mid bounds to the Premium stop field and re-opened exactly the
     // defect this guard exists to close: the seed is `round(mid x global, 2)`
     // (trade_plan.py), and the global is allowed up to 1.0 (risk_settings.py
@@ -2837,10 +2858,6 @@ function EditableKV({
     // 1951 of 2000 mids from $0.01 to $20.00 seed above the bound. Clicking the
     // field to read it and clicking away would pin a per-position stop nobody
     // chose, on a card with no way back to inheriting.
-    if (parsed === value) {
-      setEditing(false);
-      return;
-    }
     if (next === value) {
       setEditing(false);
       return;

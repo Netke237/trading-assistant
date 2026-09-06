@@ -71,13 +71,34 @@ export const PREMIUM_STOP_MAX_PCT = 0.99;
  *
  *  So the rounding goes OUTWARD-TO-INWARD: ceil the floor, floor the ceiling.
  *  Both ends land inside the band at 2dp, which is the precision the card's
- *  editor commits at. The two `Math.max` calls handle the degenerate end of
- *  the scale, where 2dp cannot express the band at all: at a $0.01 mid the
- *  floor and the ceiling collapse onto the same penny, and one legal value is
- *  the honest answer for a contract quoted at a cent. */
+ *  editor commits at.
+ *
+ *  IN INTEGER CENTS, and that is not tidiness. `Math.ceil(mid * 0.10 * 100)`
+ *  is evaluated in binary floats, and on exactly the mids where 10% IS
+ *  expressible at 2dp -- every multiple of a dime -- the product lands a few
+ *  ulps above the integer and `ceil` climbs a whole cent: a $3.00 mid gave
+ *  $0.31 (10.33%) where $0.30 is exactly 10% and the drawer accepts it. Round
+ *  2 of the follow-up audit measured 172 such mids between $0.02 and $50, and
+ *  they are precisely the round numbers a user is most likely to be looking
+ *  at. A card refusing a stop the drawer accepts is the disagreement this
+ *  helper exists to end, so it cannot be reintroduced by the arithmetic that
+ *  ends it.
+ *
+ *  `Math.max(0.01, ...)` on the floor covers a SUB-PENNY mid, where the cent
+ *  count is 0 and the ceiling of nothing is nothing; `Math.max(min, ...)` on
+ *  the ceiling covers the degenerate top of that range, where 2dp cannot
+ *  express the band at all -- at a $0.01 mid the floor and the ceiling
+ *  collapse onto the same penny. That single value is 100% of the mid, which
+ *  the backend refuses to store (`0 < ratio < 1`) and which
+ *  `barrierRace.premiumStopPctFromDollars` returns undefined for, so at a
+ *  $0.01 mid the field offers exactly one dollar and that dollar produces no
+ *  stop. Logged rather than fixed -- no caller disables the field there yet,
+ *  and the send path does disclose the drop. See round_2_batch_followups
+ *  R2-6. */
 export function premiumStopDollarBounds(mid: number): { min: number; max: number } {
-  const min = Math.max(0.01, Math.ceil(mid * PREMIUM_STOP_MIN_PCT * 100) / 100);
-  const max = Math.max(min, Math.floor(mid * PREMIUM_STOP_MAX_PCT * 100) / 100);
+  const cents = Math.round(mid * 100);
+  const min = Math.max(0.01, Math.ceil(cents * PREMIUM_STOP_MIN_PCT) / 100);
+  const max = Math.max(min, Math.floor(cents * PREMIUM_STOP_MAX_PCT) / 100);
   return { min, max };
 }
 

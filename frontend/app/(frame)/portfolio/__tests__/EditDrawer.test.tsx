@@ -1297,6 +1297,31 @@ describe('the Stop field bounds a mistyped digit', () => {
     expect(onPatch).toHaveBeenCalledWith({ stop: null });
   });
 
+  it('a re-blur with nothing typed retires the message, as it does on Premium stop', () => {
+    // Round 2 finding 10. `EditField.commit`'s early return did not clear
+    // `rejected`, so a caution outlived the gesture that produced it: type
+    // "abc", blur (message), then click in and out without typing and it is
+    // still there, now describing nothing. PremiumStopEditor's new guard
+    // clears it; the two editors in one drawer had different rules for the
+    // same kind of message.
+    const onChange = jest.fn();
+    render(
+      <EditDrawer
+        position={makeOptionPosition({ currentStockPrice: 145, stop: 140 })}
+        onClose={noop} onChange={onChange} onRemove={noop}
+      />,
+    );
+    const stop = screen.getByDisplayValue('140') as HTMLInputElement;
+    fireEvent.change(stop, { target: { value: 'abc' } });
+    fireEvent.blur(stop);
+    expect(screen.getByText(/Not a complete number/i)).toBeInTheDocument();
+
+    fireEvent.focus(stop);
+    fireEvent.blur(stop);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Not a complete number/i)).not.toBeInTheDocument();
+  });
+
   it('MAGNITUDE only — a stop the price has already moved through still commits', () => {
     // The important difference from the create endpoint's guard. On an OPEN
     // position a stop the underlying has moved through is a stop CORRECTLY

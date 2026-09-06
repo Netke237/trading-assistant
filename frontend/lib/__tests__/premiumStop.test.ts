@@ -340,42 +340,59 @@ describe('premiumStopDollarBounds', () => {
    *
    * A SWEEP, not a pair. The lesson from round 12: the mirror case of a
    * rounding trap is reached by different inputs than the case that exposed
-   * it, so a hand-picked example proves nothing about the other direction.
-   * $5.24 (min 9.92%) and $1.01 (max 99.01%) are both inside this range. */
-  it('never derives a percentage outside the band, at any cent mid from $0.02 to $50', () => {
-    const EPS = 1e-9;
+   * it, so a hand-picked example proves nothing about the other direction. */
+  it('returns the TIGHTEST 2dp bounds inside the band, at every cent mid from $0.02 to $50', () => {
+    /* EXACT CENTS, not "somewhere inside the band". Round 2 of the audit
+     * showed the inside-the-band form had no teeth: a stub returning 60% of
+     * the mid for both ends -- a helper that refuses every stop between 10%
+     * and 60% -- passed it clean. Asserting the exact integer keeps only one
+     * implementation, and it is the integer-cent arithmetic that catches the
+     * float defect below. */
     const offenders: string[] = [];
     for (let cents = 2; cents <= 5000; cents++) {
-      const mid = cents / 100;
-      const { min, max } = premiumStopDollarBounds(mid);
-      if (min / mid < PREMIUM_STOP_MIN_PCT - EPS) offenders.push(`min ${min} on mid ${mid}`);
-      if (max / mid > PREMIUM_STOP_MAX_PCT + EPS) offenders.push(`max ${max} on mid ${mid}`);
-      if (min > max) offenders.push(`min ${min} > max ${max} on mid ${mid}`);
-      // 2dp is the precision the card's editor commits at; a bound it cannot
-      // express is a bound it cannot enforce. Compared with a tolerance
-      // because `0.07 * 100` is 7.000000000000001 -- the bound IS two
-      // decimals, the multiplication is what is not exact.
-      if (Math.abs(Math.round(min * 100) - min * 100) > EPS) offenders.push(`min ${min} is not 2dp`);
-      if (Math.abs(Math.round(max * 100) - max * 100) > EPS) offenders.push(`max ${max} is not 2dp`);
+      const { min, max } = premiumStopDollarBounds(cents / 100);
+      const wantMin = Math.max(1, Math.ceil(cents * PREMIUM_STOP_MIN_PCT));
+      const wantMax = Math.max(wantMin, Math.floor(cents * PREMIUM_STOP_MAX_PCT));
+      if (Math.round(min * 100) !== wantMin) offenders.push(`min ${min} on ${cents}c, want ${wantMin}c`);
+      if (Math.round(max * 100) !== wantMax) offenders.push(`max ${max} on ${cents}c, want ${wantMax}c`);
     }
     expect(offenders.slice(0, 10)).toEqual([]);
   });
 
-  it('is the OLD rounding that fails that sweep, on real mids', () => {
-    // Without this the sweep above could pass on any implementation, including
-    // one that returns a constant. These are the exact values the audit found.
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-    expect(round2(5.24 * PREMIUM_STOP_MIN_PCT) / 5.24).toBeLessThan(PREMIUM_STOP_MIN_PCT);
-    expect(round2(1.01 * PREMIUM_STOP_MAX_PCT) / 1.01).toBeGreaterThan(PREMIUM_STOP_MAX_PCT);
-    // ...and the shipped helper does not.
+  it('does not climb a cent on the round mids where the band is exactly expressible', () => {
+    /* Round 2 finding 1, the defect the first version of this helper shipped
+     * with. `Math.ceil(3.00 * 0.10 * 100)` is `Math.ceil(30.000000000000004)`
+     * = 31, so a $3.00 mid demanded $0.31 -- 10.33% -- where $0.30 is exactly
+     * 10% and PremiumStopEditor accepts it without complaint. It bit every
+     * multiple of a dime: 172 mids between $0.02 and $50, i.e. precisely the
+     * round numbers a user is most likely to be looking at. */
+    expect(premiumStopDollarBounds(3.00).min).toBe(0.30);
+    expect(premiumStopDollarBounds(0.30).min).toBe(0.03);
+    expect(premiumStopDollarBounds(17.00).max).toBe(16.83);
+    // The float form, restated so the regression is legible rather than
+    // asserted about a helper that no longer contains it.
+    expect(Math.ceil(3.00 * PREMIUM_STOP_MIN_PCT * 100)).toBe(31);
+    expect(Math.ceil(Math.round(3.00 * 100) * PREMIUM_STOP_MIN_PCT)).toBe(30);
+  });
+
+  it('rounds INWARD, so the card cannot offer a dollar the drawer refuses', () => {
+    // The two mids round 1 found. Round-to-nearest gave min 9.92% on $5.24 and
+    // max 99.01% on $1.01 -- both outside the band the drawer enforces.
+    expect(premiumStopDollarBounds(5.24).min).toBe(0.53);
+    // floor(101 x 0.99) = 99 cents. Round-to-nearest gave $1.00 -- the whole
+    // mid, as a "stop".
+    expect(premiumStopDollarBounds(1.01).max).toBe(0.99);
+    expect(Math.round(1.01 * PREMIUM_STOP_MAX_PCT * 100) / 100).toBe(1.00);
     expect(premiumStopDollarBounds(5.24).min / 5.24).toBeGreaterThanOrEqual(PREMIUM_STOP_MIN_PCT);
     expect(premiumStopDollarBounds(1.01).max / 1.01).toBeLessThanOrEqual(PREMIUM_STOP_MAX_PCT);
   });
 
   it('collapses to a single legal penny at a $0.01 mid, rather than inverting', () => {
     // The one mid where 2dp cannot express the band at all. `min > max` would
-    // make the field impossible to satisfy; one legal value is the honest
-    // answer for a contract quoted at a cent.
+    // make the field impossible to satisfy. NOTE: this matches the pre-helper
+    // arithmetic exactly -- it pins the degenerate case rather than changing
+    // it, and that one dollar is 100% of the mid, which produces no stop at
+    // all (round_2_batch_followups R2-6).
     const { min, max } = premiumStopDollarBounds(0.01);
     expect(min).toBe(0.01);
     expect(max).toBe(0.01);

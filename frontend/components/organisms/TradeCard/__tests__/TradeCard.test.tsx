@@ -500,12 +500,54 @@ describe('TradeCard', () => {
     fireEvent.blur(screen.getByLabelText('Edit Premium stop') as HTMLInputElement);
     expect(onEditsChange.mock.calls.length).toBe(before);
 
+    // ...and it does not ACCUSE the user either. Round 6 moved the write; the
+    // rejection message stayed above the no-op guard, so the same stray click
+    // printed "Must be between $0.25 and $2.47 — kept the previous value." for
+    // a value nobody typed. Round 2 of the follow-up audit found that half
+    // still live.
+    expect(screen.queryByText(/kept the previous value/i)).not.toBeInTheDocument();
+
     // And the field is still reported as untouched, so nothing is posted.
     fireEvent.click(screen.getByLabelText('Edit Contracts'));
     const contracts = screen.getByLabelText('Edit Contracts') as HTMLInputElement;
     fireEvent.change(contracts, { target: { value: '3' } });
     fireEvent.blur(contracts);
     expect(onEditsChange.mock.calls.at(-1)![1]).toEqual({ touched: { entryLimit: false, invalidation: false, premiumStop: false } });
+  });
+
+  it('a click into a Premium stop seeded BELOW the field minimum is not an edit either', () => {
+    /* The other side of the same hazard, and this branch WIDENED it.
+     * `premiumStopDollarBounds` has to round the minimum UP, or the card's own
+     * boundary dollar falls below the 10% floor the Portfolio drawer enforces
+     * -- but the seed is `round(mid x global, 2)` (trade_plan.py), rounded to
+     * NEAREST. At a global of 0.10, the minimum Settings offers, those two
+     * disagree by a cent on 2184 of 4999 cent-mids, against 3 before.
+     *
+     * $5.24 mid: seed round(0.524, 2) = $0.52, field minimum ceil(524 x 0.10)
+     * = $0.53. Clicking the field to read it and clicking away used to print
+     * "Must be between $0.53 and $5.18 — kept the previous value." */
+    const belowMin = {
+      ...mockTradeCard,
+      contractDetails: { ...mockTradeCard.contractDetails!, mid: 5.24 },
+      exit: { ...mockTradeCard.exit, premiumStop: 0.52 },
+    };
+    const onEditsChange = jest.fn();
+    render(<TradeCard data={belowMin} onEditsChange={onEditsChange} />);
+    expandLadder();
+
+    const before = onEditsChange.mock.calls.length;
+    fireEvent.click(screen.getByLabelText('Edit Premium stop'));
+    fireEvent.blur(screen.getByLabelText('Edit Premium stop') as HTMLInputElement);
+    expect(onEditsChange.mock.calls.length).toBe(before);
+    expect(screen.queryByText(/kept the previous value/i)).not.toBeInTheDocument();
+
+    // A value the user DOES type outside the bound is still refused -- the
+    // hoisted guard skips the check for a no-op, not for everyone.
+    fireEvent.click(screen.getByLabelText('Edit Premium stop'));
+    const input = screen.getByLabelText('Edit Premium stop') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '0.10' } });
+    fireEvent.blur(input);
+    expect(screen.getByText(/Must be between \$0\.53 and \$5\.18/)).toBeInTheDocument();
   });
 
   it('REJECTS a value typed past the bound instead of clamping it', () => {
