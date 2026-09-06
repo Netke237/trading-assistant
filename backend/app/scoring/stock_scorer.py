@@ -858,6 +858,11 @@ def _rule_vol(
     iv_rank: float | None,
     cfg: dict,
     *,
+    # Which quantity iv_rank holds: "rank" (a true percentile),
+    # "absolute" (IV 0-100), or "none". Defaults to "absolute" because that is
+    # what every pre-2026-09-06 caller was in fact passing -- raw IV x 100
+    # written into a field named for a percentile.
+    iv_basis: str = "absolute",
     volumes: list[float] | None = None,
     scoring_mode: str = "options",
 ) -> RuleResult:
@@ -876,18 +881,33 @@ def _rule_vol(
             return RuleResult("vol", "CAUTION", 45, detail)
         return RuleResult("vol", "CAUTION", 20, detail)
 
-    # ── Options mode: IV rank (unchanged) ────────────────────────────────────
+    # ── Options mode: volatility ─────────────────────────────────────────────
+    # `iv_basis` says WHICH QUANTITY `iv_rank` holds, and therefore which
+    # thresholds may judge it (PHASE-A-NULL-IVRANK-2026-09-06):
+    #   "rank"     -- a true percentile from IBKR/tastytrade -> iv_rank_* keys
+    #   "absolute" -- absolute IV 0-100 from Tradier or the BS inversion
+    #                 -> iv_abs_* keys, which carry the numbers this rule has
+    #                    actually been applying all along
+    # Judging an absolute level against percentile thresholds is the defect
+    # this basis exists to prevent: a name at 45% IV is not at its own 45th
+    # percentile, and one at 75% is not automatically expensive.
     vc = cfg["vol"]
-    if vc["iv_rank_pass_max"] is None:
-        # iv_rank_pass_max is None → skip vol scoring
+    _rank = iv_basis == "rank"
+    pass_key = "iv_rank_pass_max" if _rank else "iv_abs_pass_max"
+    caution_key = "iv_rank_caution_max" if _rank else "iv_abs_caution_max"
+    compressed_key = (
+        "iv_rank_compressed_caution" if _rank else "iv_abs_compressed_caution"
+    )
+    if vc.get(pass_key) is None:
+        # Threshold unset → skip vol scoring.
         # (Intraday always; Swing/Position in stock-scan path where no IV data is available)
         return RuleResult("vol", "PASS", 90, {"iv_rank": iv_rank, "scored": False})
     if iv_rank is None:
         return RuleResult("vol", "CAUTION", 50, {"reason": "no_iv_data"})
-    compressed = vc["iv_rank_compressed_caution"]
-    pass_max = vc["iv_rank_pass_max"]
-    caution_max = vc["iv_rank_caution_max"]
-    detail = {"iv_rank": round(iv_rank, 1)}
+    compressed = vc.get(compressed_key)
+    pass_max = vc[pass_key]
+    caution_max = vc[caution_key]
+    detail = {"iv_rank": round(iv_rank, 1), "iv_basis": iv_basis}
     if compressed is not None and iv_rank < compressed:
         return RuleResult("vol", "CAUTION", 50, {**detail, "reason": "compressed_vol"})
     if iv_rank <= pass_max:
@@ -937,6 +957,7 @@ def score_stock(
     earnings_date: date | None = None,
     dividend_date: date | None = None,
     iv_rank: float | None = None,
+    iv_basis: str = "absolute",
     overrides: dict | None = None,
     benchmark_candles: list[dict] | None = None,
     confidence: int | None = None,
@@ -958,7 +979,10 @@ def score_stock(
         bars:              List of OHLCV dicts from fetch_candles()
         earnings_date:     Next earnings date (None if unknown)
         dividend_date:     Next ex-dividend date (None if unknown)
-        iv_rank:           Current IV rank 0–100 (None if unavailable)
+        iv_rank:           The volatility figure, 0–100 (None if unavailable)
+        iv_basis:          Which quantity iv_rank holds — "rank" (a true
+                           percentile) or "absolute" (IV level). Decides
+                           which threshold set judges it.
         overrides:         Optional dict of parameter overrides
         benchmark_candles: Optional OHLCV dicts for RS benchmark (e.g. NDX)
 
@@ -1027,6 +1051,7 @@ def score_stock(
     event_result            = _rule_event(earnings_date, dividend_date, cfg, scoring_mode=scoring_mode)
     vol_result              = _rule_vol(
         iv_rank, cfg,
+        iv_basis=iv_basis,
         volumes=volumes,
         scoring_mode=scoring_mode,
     )

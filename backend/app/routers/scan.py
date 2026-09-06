@@ -593,13 +593,30 @@ async def _process_symbol(
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
         return RejectedCandidate(symbol=symbol, reason="no option chain")
 
-    # ── Final score with IV rank from chain ───────────────────────────────────
+    # ── Final score with the volatility figure from the chain ────────────────
+    # TWO DIFFERENT QUANTITIES, and which one we have decides which thresholds
+    # judge it (PHASE-A-NULL-IVRANK-2026-09-06):
+    #   ivRank -- a TRUE PERCENTILE, present only when IBKR or tastytrade
+    #             answered. Judged against the percentile thresholds.
+    #   iv     -- ABSOLUTE implied volatility, 0-100, from Tradier per strike
+    #             (or the Black-Scholes inversion below). Judged against the
+    #             absolute thresholds, which is what the 34/55/70 numbers have
+    #             actually been judging all along.
+    # Prefer the rank: a percentile says where this vol sits for THIS name,
+    # which an absolute level cannot.
     atm = sorted(chain, key=lambda c: abs(float(c.get("strike", 0)) - price))
-    iv_rank: float | None = float(atm[0]["ivRank"]) if atm else None
+    c0 = atm[0] if atm else None
+    iv_rank: float | None = None
+    iv_basis: str = "none"
+    if c0 is not None and c0.get("ivRank") is not None:
+        iv_rank, iv_basis = float(c0["ivRank"]), "rank"
+    elif c0 is not None and c0.get("iv"):
+        iv_rank, iv_basis = float(c0["iv"]), "absolute"
 
-    # Tradier returns implied_volatility=0 when no data — compute via Black-Scholes inversion
-    if (iv_rank is None or iv_rank == 0) and atm:
-        c0 = atm[0]
+    # No vendor IV at all — invert Black-Scholes for the ATM contract. This
+    # yields an ABSOLUTE volatility, never a percentile, so it can only ever
+    # feed the absolute path.
+    if iv_rank is None and c0 is not None:
         iv_bs = _compute_iv_bs(
             mid=float(c0.get("price", 0)),
             S=price,
@@ -608,10 +625,15 @@ async def _process_symbol(
             is_call=(option_type == "C"),
         )
         if iv_bs is not None:
-            iv_rank = round(iv_bs * 100, 1)
+            iv_rank, iv_basis = round(iv_bs * 100, 1), "absolute"
+            # Fill only strikes that have NO absolute IV of their own. The ATM
+            # figure is a stand-in for a missing number, not a correction to a
+            # present one -- broadcasting it over every strike (which this loop
+            # used to do into `ivRank`) flattened the smile and told the UI that
+            # a 20-delta wing carried the ATM's volatility.
             for c in chain:
-                if c.get("ivRank") is None or c.get("ivRank") == 0:
-                    c["ivRank"] = int(iv_rank)
+                if not c.get("iv"):
+                    c["iv"] = round(iv_bs * 100, 1)
                     c["implied_volatility"] = round(iv_bs, 4)
 
     # ── Signal confidence (cached; computed in a thread to avoid blocking loop) ─
@@ -637,6 +659,7 @@ async def _process_symbol(
         earnings_date=earnings_date,
         dividend_date=dividend_date,
         iv_rank=iv_rank,
+        iv_basis=iv_basis,
         overrides=overrides,
         confidence=_conf,
         confidence_gate=gate,

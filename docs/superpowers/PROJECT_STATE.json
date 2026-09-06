@@ -9,14 +9,14 @@
   {
    "id": "A",
    "name": "Contract iv field",
-   "status": "not_started",
+   "status": "in_progress",
    "audit_rounds": 0,
    "audit_clean": false,
    "blocks": [
     "B",
     "C"
    ],
-   "note": "Source iv from the provider on the ASYNC chain path (market.py:1260/1277/1291/1308). Do NOT patch the sync fetch_option_chain -- it has no production callers.",
+   "note": "BACKEND HALF ONLY -- NOT MERGEABLE. market.py's async chain now emits `iv` (absolute, per strike) and leaves `ivRank` None unless IBKR/tastytrade answered; scan.py resolves (value, basis) preferring the rank; _rule_vol picks iv_abs_* vs iv_rank_* by basis; scoring_rules.yaml carries both sets on all three horizons. Backend suite 2004 passed. THE FRONTEND HALF IS OUTSTANDING: types/domain.ts still declares `ivRank: number` non-nullable in four places and carries no `iv` field, so the wire now sends null where the UI expects a number -- step-6-contracts:218 renders {c.ivRank} bare and would show a blank IV RANK column. Shipping the backend alone is a user-visible regression, i.e. GATE by the project's own severity rule. ~16 files reference ivRank; the real display sites are step-5-vol-events (already null-tolerant) and step-6-contracts (not).",
    "verify": {
     "kind": "absent",
     "pattern": "^    iv:",
@@ -356,6 +356,12 @@
    "q": "Where should a contract's implied volatility come from for Phase A? Only Tradier returns per-contract implied_volatility; IBKR and Tastytrade return symbol-level IV RANK, a different quantity. A bracketed Black-Scholes solver already exists at market.py:928 (_compute_iv_bs) and is already wired into scan.py:603.",
    "a": "TRADIER FIRST, SOLVER AS FALLBACK. Use Tradier's per-contract IV where present; fall back to the existing _compute_iv_bs rather than building anything new (two earlier sessions proposed building a bracketed solver that already exists -- do not repeat that). SPLIT `iv` (per-strike implied volatility) from `ivRank` (a true percentile, NULL when genuinely unavailable) in the same change, which is what fixes the live scoring defect: market.py:1277 writes raw IV x100 into a field named for a percentile, 1291/1308 conditionally overwrite it with a real rank, and scan.py:610-616 broadcasts an ATM value across every strike -- all then compared against iv_rank_pass_max: 34 and hard_reject.max_iv_rank: 70.",
    "by": "Kenneth"
+  },
+  {
+   "id": "PHASE-A-NULL-IVRANK-2026-09-06",
+   "q": "When no genuine IV-rank source answers (Tradier-only, i.e. most symbols), what should the IV rule score against? Today market.py:1277 writes raw IV x100 into a field named ivRank, IBKR/Tastytrade conditionally overwrite it with a real percentile, and scan.py:598 feeds the ATM contract's value -- whichever quantity it happens to be -- into iv_rank_pass_max: 34 / iv_rank_caution_max: 55 / hard_reject max_iv_rank: 70.",
+   "a": "TWO NAMED FIELDS, TWO THRESHOLD SETS. Carry `iv` (absolute implied volatility, per strike, 0-100 scale) and `ivRank` (a true percentile, NULL unless IBKR or Tastytrade answered) as separate fields. Score against whichever is present, PREFERRING the rank. The existing 34/55/70 numbers move to the ABSOLUTE-IV threshold set, because raw IV is what they have actually been judging all along -- so today's behaviour is preserved rather than silently changed, and the >70 hard reject keeps firing. A separate PERCENTILE threshold set is added for the rank path, defaulted to the same 34/55/70 and RECORDED AS UNMEASURED alongside Q7. Rejected alternatives and why: renormalising the weights on null, and scoring a neutral 50 on null, both silently retire the >70 hard reject for most symbols, so a genuinely expensive option would get no penalty and no rejection at all; renaming to `iv` with one threshold set leaves the rank path conflated, just less visibly.",
+   "by": "Kenneth"
   }
  ],
  "pending_kenneth": [
@@ -379,7 +385,8 @@
   "Basket dropped-stop notices die on the next keystroke: step-7's `[active]` effect clears saveNotes, so Prev/Next after a basket submit destroys the 'premium stop could not be applied' disclosure for every symbol in it. Same shape as the round-11 stop-cost readout: is 'shown, then destroyed before it can be read' a disclosure? (round_1_batch_followups R1-5)",
   "Should Current price accept 0? The 2026-09-06 batch refuses it because the field advertised 0 as a CLEAR and a typed 0 writes pnlPct: -100. But 0 is what a long option that expired worthless IS, and fromBackend writes exactly that when the backend has no quote -- so a worthless position can now only be marked $0.01. Allow 0 here, or route 'mark worthless' through Close? (R1-8)",
   "The GLOBAL premium stop is selectable at 100% (Settings step 0.05, risk_settings.py le=1.0), at which every inheriting position previews 'Fires at premium $0.00' and alertEngine can never fire PREMIUM_STOP (it needs currentPrice > 0). Bound the global at PREMIUM_STOP_MAX_PCT too? (R1-10, and the live half of F2)",
-  "The editors' 10%-99% band cannot be an invariant on STORED values: the backend derives the ratio against the FILL, not the mid the card bounded the dollar against, so an in-band typed dollar stores out-of-band routinely. Clamp the ratio server-side and log it, or accept that the band governs editors only (as premiumStop.ts now documents)? (R1-3)"
+  "The editors' 10%-99% band cannot be an invariant on STORED values: the backend derives the ratio against the FILL, not the mid the card bounded the dollar against, so an in-band typed dollar stores out-of-band routinely. Clamp the ratio server-side and log it, or accept that the band governs editors only (as premiumStop.ts now documents)? (R1-3)",
+  "Phase A percentile thresholds are UNMEASURED: iv_rank_pass_max/caution_max were seeded from the absolute set (34/55 swing, 44/65 position) because nobody has checked whether a percentile deserves the same cut-offs as an IV level. The absolute numbers are evidence-backed only in the sense that they are what the rule was already applying. Same standing as Q7."
  ],
  "authoritative_documents": [
   {
