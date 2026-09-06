@@ -620,4 +620,57 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     expect(pos.stop).toBe(CARD_INVALIDATION);
     expect(pos.scanStockPrice).toBe(150);
   });
+
+  /* ROUND 12 finding 2 — the basket path's two messages were WRITTEN and never
+   * SHOWN. Both `saveNotes` and `orderError` rendered inside the
+   * `{selectedBroker && ...}` block of the paper-execution section, and the
+   * basket never touches BrokerPicker: it is pinned on the card and submitted
+   * through SendToBrokerDialog. So a user who sent a basket without also
+   * selecting a paper broker got no dropped-stop disclosure and no rejection
+   * banner.
+   *
+   * `selectedBroker` is null in this block's beforeEach and neither test below
+   * clicks a broker, which is the whole point — click one and both pass on the
+   * old code too. */
+  it('shows the dropped-stop disclosure for a BASKET order with no broker selected', async () => {
+    // The mocked POST answers `{}`, i.e. no premiumStopPct, which is exactly
+    // what the router returns when the save-time re-anchor could not apply the
+    // requested dollar stop and the row silently inherited the global.
+    await editAllThree();
+    expect(screen.queryByRole('button', { name: /place limit @/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
+    const submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    // The dollar in the note is the one the user typed on the card ($0.90),
+    // not the global it fell back to.
+    expect(
+      await screen.findByText(/AAA: Premium stop of \$0\.90\/share could not be applied/),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the rejection banner for a BASKET order with no broker selected', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({ detail: 'single_trade_exposure_too_high' }),
+    }) as unknown as typeof fetch;
+
+    render(<Step7TradeCardPage />);
+    await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
+    const submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    // The row is rolled back, so the ONLY evidence the user has that nothing
+    // was saved is this banner.
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(0));
+    expect(await screen.findByText(/Some orders were not saved — AAA:/)).toBeInTheDocument();
+  });
 });

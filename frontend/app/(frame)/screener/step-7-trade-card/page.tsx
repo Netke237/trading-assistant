@@ -1216,10 +1216,6 @@ export default function Step7Page() {
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">Order placed — ID: {paperOrderId}</Text>}
-              {saveNotes.map((n) => (
-                <Text key={n} size={12} tone="caution">{n}</Text>
-              ))}
-              {orderError   && <Text size={12} tone="reject">{orderError}</Text>}
               {planReady && (
                 <AutoTradeArm
                   // The same live quote TradeCard gets as `liveMid` and the
@@ -1243,6 +1239,26 @@ export default function Step7Page() {
               )}
             </>
           )}
+          {/* OUTSIDE the `selectedBroker` gate, deliberately.
+            *
+            * ROUND 12 finding 2 -- these two lines are the ONLY channel for
+            * two things the basket path produces: the "premium stop could not
+            * be applied" disclosure (`droppedStopNote`, written by
+            * `handleSubmit` for every order the backend re-anchored) and the
+            * hard-rejection banner (`setOrderError` on a failed save). The
+            * basket reaches `handleSubmit` through TradeCard's Send button,
+            * which never touches BrokerPicker -- so a user who pins a basket
+            * and sends it without selecting a paper broker got neither
+            * message. A required disclosure that renders only when an
+            * unrelated control happens to be set is a disclosure that does not
+            * exist.
+            *
+            * `paperOrderId` stays inside the gate above: only the two direct
+            * paths set it, and both require a selected broker. */}
+          {saveNotes.map((n) => (
+            <Text key={n} size={12} tone="caution">{n}</Text>
+          ))}
+          {orderError && <Text size={12} tone="reject">{orderError}</Text>}
         </div>
       )}
 

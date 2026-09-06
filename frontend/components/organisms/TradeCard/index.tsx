@@ -20,6 +20,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { useStopPremiumThresholdsStore, getStopPremiumThresholds } from '@/lib/stopPremiumThresholdsStore';
 import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
 import { premiumStopPctFromDollars, money } from '@/lib/barrierRace';
+import { PREMIUM_STOP_MIN_PCT, PREMIUM_STOP_MAX_PCT } from '@/lib/premiumStop';
 import { horizonFieldsFrom } from '@/lib/tradeCardOverride';
 import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride } from '@/types/domain';
 import {
@@ -1512,6 +1513,9 @@ export function TradeCard({
    *  (routers/risk_settings.py), and the server rejects a per-position ratio at
    *  or above 1. Deriving the dollar bounds from the mid keeps the card and
    *  those two rules from disagreeing, instead of hard-coding a second opinion.
+   *  The two numbers themselves now live in `premiumStop.ts`, because the
+   *  Portfolio drawer edits the same quantity as a PERCENT and used to accept
+   *  a band this field refuses (round 12 finding 13).
    *
    *  There IS a way back to inheriting: round 7 added `revert()`, reached by
    *  clearing the input, with a tooltip on the field saying so -- the same
@@ -1522,8 +1526,8 @@ export function TradeCard({
   const premiumStopBounds = useMemo(() => {
     if (!(anchorMid > 0)) return { min: 0.01, max: undefined as number | undefined };
     return {
-      min: Math.max(0.01, round2(anchorMid * 0.10)),
-      max: Math.max(0.01, round2(anchorMid * 0.99)),
+      min: Math.max(0.01, round2(anchorMid * PREMIUM_STOP_MIN_PCT)),
+      max: Math.max(0.01, round2(anchorMid * PREMIUM_STOP_MAX_PCT)),
     };
   }, [anchorMid]);
 

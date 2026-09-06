@@ -888,6 +888,10 @@ describe('PremiumStopEditor', () => {
     // at `entry * (1 - 0)` = the entry itself, raising a Critical PREMIUM_STOP
     // toast for EVERY position at or below entry, every 30s, with no backend
     // alert behind it.
+    //
+    // Both are still refused after round 12 finding 13 narrowed the accepted
+    // band to premiumStop.ts's 10%-99%; the rounding is what this test is
+    // about, so it keeps values the OLD (0, 1) bound also had to catch.
     const onChange = jest.fn();
     const input = openStop(makeOptionPosition({ premiumStopPct: 0.45 }), onChange);
     for (const bad of ['0.004', '99.996']) {
@@ -995,10 +999,12 @@ describe('PremiumStopEditor', () => {
   });
 
   it('round-trips a sub-1% stop instead of showing an unre-committable 0', () => {
-    // The card's premium-stop field has min={0.01}, so a $0.01 stop on a $5.20
-    // premium derives 0.0019. That rendered "0" — which `commit` itself
-    // rejects (it bounds at 0 < pct < 100) — so the field sat showing a value
-    // it would not accept back.
+    // The card's premium-stop field had min={0.01} before round 5, so a $0.01
+    // stop on a $5.20 premium derives 0.0019. That rendered "0" — which
+    // `commit` itself rejects — so the field sat showing a value it would not
+    // accept back. Rendering it honestly is what lets the user SEE a legacy
+    // sub-floor stop; it is below the 10% floor the field now accepts, which
+    // is why this asserts a blur writes nothing rather than a re-commit.
     const onChange = jest.fn();
     const input = openStop(makeOptionPosition({ premiumStopPct: 0.0019 }), onChange);
     expect(input.value).toBe('0.19');
@@ -1043,6 +1049,66 @@ describe('PremiumStopEditor', () => {
     fireEvent.blur(input);
     expect(onChange).not.toHaveBeenCalled();
     expect(input.value).toBe('45');
+  });
+
+  /* ROUND 12 finding 13 — one quantity, two editors, two different answers to
+   * "what counts as a stop". TradeCard refuses a dollar stop below 10% of the
+   * mid (round 5: a 0.19% stop raises a Critical PREMIUM_STOP on the first
+   * cent of adverse move and shrinks the auto-trader's daily-loss denominator
+   * ~3000x). This field edits the SAME `premiumStopPct` on the SAME position
+   * and accepted 0.01 through 99.99 -- so every value the card refuses to
+   * create could be typed onto the position here ten seconds later. Both now
+   * derive from premiumStop.ts's band. */
+  it.each([
+    ['below the floor', '5',    /Must be between 10% and 99%/i],
+    ['above the ceiling', '99.9', /Must be between 10% and 99%/i],
+  ])('refuses a percent %s that TradeCard would not create, and says why', (_label, typed, msg) => {
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 0.45 }), onChange);
+    fireEvent.change(input, { target: { value: typed } });
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input.value).toBe('45');
+    // Reverting SILENTLY reads as a field that ignores you. Every rejecting
+    // path in this editor said nothing before.
+    expect(screen.getByText(msg)).toBeInTheDocument();
+  });
+
+  it.each([['the floor', '10', 0.10], ['the ceiling', '99', 0.99]])(
+    'accepts %s itself — the band is inclusive',
+    (_label, typed, expected) => {
+      const onChange = jest.fn();
+      const input = openStop(makeOptionPosition({ premiumStopPct: 0.45 }), onChange);
+      fireEvent.change(input, { target: { value: typed } });
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledWith({ premiumStopPct: expected });
+    },
+  );
+
+  it('lets a legacy sub-floor stop be RAISED into the band, and keeps showing it until then', () => {
+    // The backend's own bound stays (0, 1), so rows created before the band
+    // existed still load. The field must not strand them: it renders the
+    // stored value and accepts an edit upward.
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 0.0019 }), onChange);
+    expect(input.value).toBe('0.19');
+
+    fireEvent.change(input, { target: { value: '45' } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ premiumStopPct: 0.45 });
+  });
+
+  it('retires the rejection message once an accepted value replaces it', () => {
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 0.45 }), onChange);
+    fireEvent.change(input, { target: { value: '5' } });
+    fireEvent.blur(input);
+    expect(screen.getByText(/Must be between 10% and 99%/i)).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: '30' } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ premiumStopPct: 0.30 });
+    expect(screen.queryByText(/Must be between 10% and 99%/i)).not.toBeInTheDocument();
   });
 });
 
@@ -1208,6 +1274,112 @@ describe('the Stop field bounds a mistyped digit', () => {
     );
     expect(screen.getByText(/rises above this price/i)).toBeInTheDocument();
     expect(screen.queryByText(/drops below this price/i)).not.toBeInTheDocument();
+  });
+});
+
+/* ROUND 12 finding 5 — "Enter 0 to clear this level" was printed by EVERY
+ * EditField, including the two where 0 clears nothing. */
+describe('a field where 0 is not the clear gesture', () => {
+  const noop = () => {};
+
+  /** Merges the patch the way portfolio/page.tsx's `updatePosition` does, so
+   *  the controlled `value` follows each commit and a field left showing
+   *  something the position does not hold is visible in the DOM. */
+  function LiveDrawer({ initial, onPatch }: {
+    initial: PortfolioPosition;
+    onPatch: (p: Partial<PortfolioPosition>) => void;
+  }) {
+    const [pos, setPos] = useState(initial);
+    return (
+      <EditDrawer
+        position={pos}
+        onClose={noop}
+        onRemove={noop}
+        onChange={(patch) => { onPatch(patch); setPos((c) => ({ ...c, ...patch })); }}
+      />
+    );
+  }
+
+  it('refuses a 0 on Contracts instead of showing a quantity the position does not hold', () => {
+    // `Math.max(1, Math.round(n))` stored 1 while `setDraft(String(n))` left
+    // "0" on screen -- and the follow-the-stored-value sync only fires when
+    // `stored` CHANGES, which on a position already holding 1 it does not.
+    const onPatch = jest.fn();
+    render(<LiveDrawer initial={makeOptionPosition({ contracts: 1 })} onPatch={onPatch} />);
+    const contracts = screen.getByLabelText(/Contracts/) as HTMLInputElement;
+
+    fireEvent.change(contracts, { target: { value: '0' } });
+    fireEvent.blur(contracts);
+    expect(onPatch).not.toHaveBeenCalled();
+    expect(contracts.value).toBe('1');
+    expect(screen.getByText(/Must be greater than 0/i)).toBeInTheDocument();
+    // ...and it must not be the invitation that produced the 0 in the first
+    // place. Closing a position is the row's own Close button.
+    expect(screen.queryByText(/Enter 0 to clear this level/i)).not.toBeInTheDocument();
+  });
+
+  it('shows what the position holds after a value the call site normalises', () => {
+    // The same display-vs-store split by another route: 0.4 rounds to 0, is
+    // floored to 1, and the position was ALREADY 1 -- so `stored` is unchanged
+    // and only the post-commit resync puts "1" back in the box.
+    const onPatch = jest.fn();
+    render(<LiveDrawer initial={makeOptionPosition({ contracts: 1 })} onPatch={onPatch} />);
+    const contracts = screen.getByLabelText(/Contracts/) as HTMLInputElement;
+
+    fireEvent.change(contracts, { target: { value: '0.4' } });
+    fireEvent.blur(contracts);
+    expect(onPatch).toHaveBeenCalledWith({ contracts: 1 });
+    expect(contracts.value).toBe('1');
+  });
+
+  it('refuses a 0 on Current price instead of writing a -100% P&L', () => {
+    // 0 is a price, not a clear: it stored `currentPrice: 0` and derived
+    // `pnlPct = ((0 - entry) / entry) * 100`, i.e. -100% on the row, on a
+    // gesture the field's own message invited. Nothing here restores the
+    // broker's value.
+    const onPatch = jest.fn();
+    render(<LiveDrawer initial={makeOptionPosition()} onPatch={onPatch} />);
+    const price = screen.getByLabelText(/Current price/) as HTMLInputElement;
+
+    fireEvent.change(price, { target: { value: '0' } });
+    fireEvent.blur(price);
+    expect(onPatch).not.toHaveBeenCalled();
+    expect(price.value).toBe('4.5');
+    expect(screen.getByText(/Must be greater than 0/i)).toBeInTheDocument();
+  });
+
+  it('still says "empty keeps the previous value", without offering 0', () => {
+    const onPatch = jest.fn();
+    render(<LiveDrawer initial={makeOptionPosition()} onPatch={onPatch} />);
+    const price = screen.getByLabelText(/Current price/) as HTMLInputElement;
+
+    fireEvent.change(price, { target: { value: '' } });
+    fireEvent.blur(price);
+    expect(onPatch).not.toHaveBeenCalled();
+    expect(price.value).toBe('4.5');
+    expect(screen.getByText(/Empty is not a value/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Enter 0 to clear this level/i)).not.toBeInTheDocument();
+  });
+
+  it('leaves a real edit alone on both fields', () => {
+    // The bound is on 0, not on editing: the two fields still commit.
+    const onPatch = jest.fn();
+    render(<LiveDrawer initial={makeOptionPosition({ contracts: 1 })} onPatch={onPatch} />);
+
+    const contracts = screen.getByLabelText(/Contracts/) as HTMLInputElement;
+    fireEvent.change(contracts, { target: { value: '3' } });
+    fireEvent.blur(contracts);
+    expect(onPatch).toHaveBeenCalledWith({ contracts: 3 });
+    expect(contracts.value).toBe('3');
+
+    const price = screen.getByLabelText(/Current price/) as HTMLInputElement;
+    fireEvent.change(price, { target: { value: '5.10' } });
+    fireEvent.blur(price);
+    // entry 4.2, 3 contracts, x100 -> (5.10 - 4.2) * 100 * 3 = 270
+    expect(onPatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ currentPrice: 5.1 }),
+    );
+    expect(price.value).toBe('5.1');
   });
 });
 

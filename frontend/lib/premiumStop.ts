@@ -19,6 +19,33 @@
  *  `settingsStore.premiumStopPct`, both of which ship as 0.60. */
 export const PREMIUM_STOP_PCT_FALLBACK = 0.60;
 
+/** THE BAND BOTH EDITORS OF A PER-POSITION PREMIUM STOP ACCEPT.
+ *
+ *  ROUND 12 finding 13 — one quantity had two editors and they disagreed on
+ *  what counts as a stop at all. TradeCard bounded the DOLLAR field at
+ *  10%–99% of the mid (round 5, after a typed 0 clamped to $0.01 and armed a
+ *  0.19% stop that alerts on the first cent of adverse move and shrinks the
+ *  auto-trader's daily-loss denominator ~3000x). The Portfolio drawer, editing
+ *  the same `premiumStopPct` on the same position, went on accepting anything
+ *  the backend schema does — `gt=0, lt=1`, advertised in its own hint as
+ *  0.01–99.99 — so the number the card refuses to create could still be typed
+ *  onto the position ten seconds later.
+ *
+ *  10% because that is the floor the app already applies to the GLOBAL premium
+ *  stop (`routers/risk_settings.py`, `ge=0.10, le=1.0`); 99% because the
+ *  backend rejects a per-position ratio at or above 1 and 100% is not a stop
+ *  but a total loss. Deriving both editors from these two numbers is what
+ *  keeps them from drifting again.
+ *
+ *  The backend's own `(0, 1)` stays as it is, deliberately: it is the outer
+ *  bound and rows created before this band exists still have to load and be
+ *  editable upward.
+ *
+ *  Fractions, matching `premiumStopPct` itself — multiply by 100 for the
+ *  percent an editor shows. */
+export const PREMIUM_STOP_MIN_PCT = 0.10;
+export const PREMIUM_STOP_MAX_PCT = 0.99;
+
 /** The premium-stop fraction that applies to one position.
  *
  *  `positionPct` is `PortfolioPosition.premiumStopPct`. **Null or undefined

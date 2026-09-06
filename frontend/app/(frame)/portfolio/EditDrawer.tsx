@@ -26,7 +26,7 @@ import { api } from '@/lib/api';
 import { POSITION_ALERT_TYPES } from '@/types/domain';
 import type { PortfolioPosition, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
 import styles from './page.module.css';
-import { resolvePremiumStopPct, hasOwnPremiumStopPct, premiumStopFiringPrice, formatPremiumStopPct, premiumStopPctLabel } from '@/lib/premiumStop';
+import { resolvePremiumStopPct, hasOwnPremiumStopPct, premiumStopFiringPrice, formatPremiumStopPct, premiumStopPctLabel, PREMIUM_STOP_MIN_PCT, PREMIUM_STOP_MAX_PCT } from '@/lib/premiumStop';
 
 /** `position.contract` for an option position is a backend-generated,
  *  pipe-delimited machine ID — "SYMBOL|STRIKE|EXPIRY|C/P" (see
@@ -387,12 +387,20 @@ export function EditDrawer({
           label="Contracts"
           hint="Number of option contracts held."
           value={position.contracts ?? 1}
+          // A quantity, not a level: 0 contracts is not "no override", it is a
+          // position that does not exist. Closing one is the row's Close
+          // button, not a 0 typed here.
+          zeroClears={false}
           onChange={(n) => onChange({ contracts: Math.max(1, Math.round(n)) })}
         />
         <EditField
           label="Current price"
           hint="Manual override — will refresh from broker in live mode."
           value={position.currentPrice}
+          // 0 is a price, not a clear: it writes `currentPrice: 0` and a -100%
+          // P&L onto the row. Nothing here restores the broker's value, so the
+          // field must not invite the gesture.
+          zeroClears={false}
           onChange={(n) => {
             const mult = position.contract.endsWith('|STOCK') ? 1 : 100;
             const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
@@ -812,12 +820,32 @@ function EditField({
    *  here would reject exactly those legitimate states, so the range is wide
    *  and only catches a misplaced decimal point. */
   range,
+  /** ROUND 12 finding 5 — does 0 MEAN anything on this field?
+   *
+   *  `commit`'s empty-draft message reads "Enter 0 to clear this level", and on
+   *  Stop / Structural stop that is exactly true: both call sites map 0 to
+   *  `null` and the hints document it. It was printed unconditionally, so the
+   *  two fields where 0 clears nothing said it too:
+   *
+   *    - Contracts (`Math.max(1, Math.round(n))`) — typing 0 stores 1 while
+   *      `setDraft(String(n))` leaves "0" on screen, because `stored` never
+   *      changed and the follow-the-stored-value sync only runs when it does.
+   *      The field then shows a quantity the position does not hold.
+   *    - Current price — 0 is a real write, not a clear: it stores
+   *      `currentPrice: 0` and derives `pnlPct = ((0 - entry) / entry) * 100`,
+   *      i.e. a -100% P&L on the row, on a gesture the field itself invited.
+   *
+   *  So the prompt to type 0 is now opt-in, and where it is off, a committed 0
+   *  is REVERTED rather than written — the same honest answer the range check
+   *  gives, and it puts `stored` back in the box. */
+  zeroClears = true,
 }: {
   label: string;
   hint?: string;
   value: number;
   onChange: (n: number) => void;
   range?: { min: number; max: number } | null;
+  zeroClears?: boolean;
 }) {
   // DRAFT-THEN-COMMIT, and TEXT rather than number. Round 11 findings 1 and 2.
   //
@@ -878,11 +906,36 @@ function EditField({
     dirtyRef.current = false;
   };
 
+  // A COMMITTED VALUE THE CALL SITE NORMALISED must not stay on screen.
+  //
+  // The follow-the-stored-value sync above only fires when `stored` CHANGES,
+  // so a commit the parent normalises back to the value it already holds
+  // leaves the typed text sitting in the box: Contracts is
+  // `Math.max(1, Math.round(n))`, so on a position holding 1 both "0" and
+  // "0.4" store 1 -- unchanged -- while `setDraft(String(n))` below has
+  // already put the typed digits on screen. The field then shows a quantity
+  // the position does not hold, which is the display-vs-store split this
+  // work exists to remove.
+  //
+  // `onChange` reaches a Zustand `set` synchronously (page.tsx hands it
+  // `updatePosition`), so the render immediately after a commit already
+  // carries the parent's answer -- this reads it and puts it back.
+  const committedRef = useRef(false);
+  useEffect(() => {
+    if (!committedRef.current) return;
+    committedRef.current = false;
+    if (!dirtyRef.current && draft !== stored) setDraft(stored);
+  });
+
   const commit = () => {
     if (!dirtyRef.current) { setDraft(stored); return; }
     const raw = draft.trim();
     if (raw === '') {
-      revert('Enter 0 to clear this level — an empty field keeps the previous value.');
+      revert(
+        zeroClears
+          ? 'Enter 0 to clear this level — an empty field keeps the previous value.'
+          : 'Empty is not a value — kept the previous one.',
+      );
       return;
     }
     // A COMPLETE decimal literal, or a no-op. `Number("132.")` is 132, so
@@ -896,6 +949,13 @@ function EditField({
     }
     const n = Number(raw);
     if (!Number.isFinite(n)) { revert('Not a complete number — kept the previous value.'); return; }
+    // Where 0 is not the "none" gesture it is not a value either: see
+    // `zeroClears`. Refused BEFORE the range exemption below, which would
+    // otherwise wave it through.
+    if (n === 0 && !zeroClears) {
+      revert('Must be greater than 0 — kept the previous value.');
+      return;
+    }
     // 0 is the documented "none" for these fields and always passes; the range
     // only judges a number the user meant as a level.
     if (range && n !== 0 && (n < range.min || n > range.max)) {
@@ -907,6 +967,7 @@ function EditField({
     }
     setRejected(null);
     dirtyRef.current = false;
+    committedRef.current = true;
     setDraft(String(n));
     if (n !== value) onChange(n);
   };
@@ -987,6 +1048,12 @@ function PremiumStopEditor({
   // a position that can no longer raise STOP_REACHED. They use this same
   // pattern now -- see the round 11 note on EditField.
   const [draft, setDraft] = useState(stored);
+  // WHY A REVERT NOW SAYS SO. Every rejecting path below used to
+  // `setDraft(stored)` in silence: type 5, blur, and the field simply shows 45
+  // again with no reason given, which reads as a field that ignores you rather
+  // than one that refused a value. The EditField siblings above have said why
+  // since round 11; this one holds the tighter band, so it needs it more.
+  const [rejected, setRejected] = useState<string | null>(null);
   // A BLUR IS NOT AN EDIT. `commit` runs on every blur, so clicking into the
   // field to read it and clicking away used to PATCH the server. Comparing the
   // committed value against the stored one is not enough on its own: the
@@ -1013,12 +1080,22 @@ function PremiumStopEditor({
     if (!dirtyRef.current && draft !== stored) setDraft(stored);
   }
 
+  // Every exit that keeps the previous value goes through here, so none of
+  // them can forget to clear `dirtyRef` (the defect the round-5 note below
+  // describes) or to explain itself.
+  const revert = (msg: string | null) => {
+    setDraft(stored);
+    setRejected(msg);
+    dirtyRef.current = false;
+  };
+
   const commit = () => {
     const raw = draft.trim();
     // Empty is the documented way back to inheriting, and the only way: see
     // the hint below.
     if (raw === '') {
       setDraft('');
+      setRejected(null);
       // Clearing is only an edit if the user did it; a blur on an already-empty
       // (inheriting) field must not PATCH.
       if (dirtyRef.current && own != null) onChange({ premiumStopPct: null });
@@ -1037,7 +1114,8 @@ function PremiumStopEditor({
     // is the interrupted case. Reverting to `stored` is the same honest answer
     // the two bounds checks below give.
     if (!/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw.trim())) {
-      setDraft(stored); dirtyRef.current = false; return;
+      revert('Not a complete number — kept the previous value.');
+      return;
     }
     const pct = Number(raw);
     // Out of range REVERTS, it does not clear. It used to clear, so typing
@@ -1057,7 +1135,7 @@ function PremiumStopEditor({
     // non-numeric draft first, but this one is what stops any future edit to
     // that regex from letting a NaN through to the bounds checks (where
     // `!(NaN > 0 && NaN < 1)` happens to revert, by luck rather than design).
-    if (!Number.isFinite(pct)) { setDraft(stored); dirtyRef.current = false; return; }
+    if (!Number.isFinite(pct)) { revert('Not a complete number — kept the previous value.'); return; }
     // 4dp on the fraction == 2dp on the percent, the precision `stored` renders.
     const next = Number((pct / 100).toFixed(4));
     // BOUNDED ON THE ROUNDED VALUE, not on the typed one. The column's contract
@@ -1070,7 +1148,28 @@ function PremiumStopEditor({
     // i.e. the entry itself, so EVERY position at or below entry raised a
     // Critical PREMIUM_STOP toast on every 30s scan with no backend alert
     // behind it.
-    if (!(next > 0 && next < 1)) { setDraft(stored); dirtyRef.current = false; return; }
+    //
+    // ROUND 12 finding 13 — the band is now `premiumStop.ts`'s, the same one
+    // TradeCard's dollar field derives its bounds from. The two editors of
+    // this one number used to disagree about what a stop even is: the card
+    // refuses anything below 10% of the mid (a 0.19% stop raises a Critical
+    // PREMIUM_STOP on the first cent of adverse move and shrinks the
+    // auto-trader's daily-loss denominator ~3000x), while this field, editing
+    // the same `premiumStopPct` on the same position, accepted 0.01% — and
+    // advertised it in its own hint. Anything the card will not create could
+    // still be typed onto the position here.
+    //
+    // The old `(0, 1)` mirrored the BACKEND schema, which stays as it is: it
+    // is the outer bound, and a row created before this band existed still has
+    // to load and be editable upward. Below the floor is now a REVERT with a
+    // reason, not a 422 and not a silent snap-back.
+    if (!(next >= PREMIUM_STOP_MIN_PCT && next <= PREMIUM_STOP_MAX_PCT)) {
+      revert(
+        `Must be between ${premiumStopPctLabel(PREMIUM_STOP_MIN_PCT)} and `
+        + `${premiumStopPctLabel(PREMIUM_STOP_MAX_PCT)} — kept the previous value.`,
+      );
+      return;
+    }
     // COMPARED AT THE EDITOR'S OWN PRECISION, not against the raw stored
     // fraction. `stored` renders `own` at 2dp of a percent, and `next` is
     // re-derived from the typed text at 4dp of a fraction, so for any `own`
@@ -1088,6 +1187,7 @@ function PremiumStopEditor({
     // rendered text differs but the derived fraction does not.
     const rendered = String(Number(pct.toFixed(2)));
     setDraft(rendered);
+    setRejected(null);
     if (dirtyRef.current && rendered !== stored && next !== own) onChange({ premiumStopPct: next });
     dirtyRef.current = false;
   };
@@ -1124,9 +1224,12 @@ function PremiumStopEditor({
       />
       <Text size={10} tone="dim">
         {inherited
-          ? `Inheriting the global — this position moves whenever the global does. Enter a percent (0.01–99.99) and press Enter to pin it${isStock ? '' : ' for this contract only'}.`
+          ? `Inheriting the global — this position moves whenever the global does. Enter a percent (${premiumStopPctLabel(PREMIUM_STOP_MIN_PCT)}–${premiumStopPctLabel(PREMIUM_STOP_MAX_PCT)}) and press Enter to pin it${isStock ? '' : ' for this contract only'}.`
           : `Set for this position only. Clear the field to go back to inheriting the global (${premiumStopPctLabel(globalPremiumStopPct)}).`}
       </Text>
+      <span aria-live="polite">
+        {rejected && <Text size={10} tone="caution">{rejected}</Text>}
+      </span>
     </label>
   );
 }
