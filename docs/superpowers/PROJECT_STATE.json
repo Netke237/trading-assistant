@@ -2,8 +2,8 @@
  "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree.",
  "updated": "2026-09-06",
  "updated_by": "session_01Rg4ZBTUexLsDZTwZV8CgW7 (adversarial round 9 fixed; rounds 7-8 backfilled)",
- "main": "dc051a58",
- "working_branch": "claude/dev-state-reconstruction-hzmzbi",
+ "main": "f523e170",
+ "working_branch": "(none -- claude/dev-state-reconstruction-hzmzbi merged into main at f523e170 and closed after round 13 cleared the gate; start the next phase from a fresh branch off main)",
  "audit_rule": "NOTHING counts as done until an adversarial round comes back clean AT THE AGREED SEVERITY GATE. As of AUDIT-EXIT-CRITERION-2026-09-05 that gate is: no finding that can put a wrong number in front of a user or on a broker order, and no finding that corrupts persisted data. MEDIUM and below are logged as follow-ups against main, NOT fixed in-branch -- fixing them inside the audit target is what made ten rounds unable to converge. audit_rounds counts rounds RUN; audit_clean is true only when a round clears that gate. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is.",
  "phases": [
   {
