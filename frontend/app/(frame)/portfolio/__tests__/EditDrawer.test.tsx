@@ -1074,6 +1074,10 @@ describe('PremiumStopEditor', () => {
     expect(screen.getByText(msg)).toBeInTheDocument();
   });
 
+  /* These two do NOT discriminate against the old (0, 1) bound, which also
+   * accepted 10 and 99 -- they pin the band as INCLUSIVE, which is the part a
+   * future edit to the comparison operators would silently change. The tests
+   * with teeth against the old code are the two above. */
   it.each([['the floor', '10', 0.10], ['the ceiling', '99', 0.99]])(
     'accepts %s itself — the band is inclusive',
     (_label, typed, expected) => {
@@ -1096,6 +1100,54 @@ describe('PremiumStopEditor', () => {
     fireEvent.change(input, { target: { value: '45' } });
     fireEvent.blur(input);
     expect(onChange).toHaveBeenCalledWith({ premiumStopPct: 0.45 });
+  });
+
+  it('a bare focus-and-blur on a LEGACY out-of-band stop says nothing', () => {
+    // Round 1 of the follow-up audit. The band check ran on every commit, and
+    // `commit` ran on every blur, so a row stored below the floor -- a legacy
+    // stop, or one the backend derived against a fill far from the mid the
+    // card bounded the dollar against -- accused the user of a value they had
+    // never typed, just for reading it.
+    const onChange = jest.fn();
+    const input = openStop(makeOptionPosition({ premiumStopPct: 0.0019 }), onChange);
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input.value).toBe('0.19');
+    expect(screen.queryByText(/Must be between/i)).not.toBeInTheDocument();
+  });
+
+  it('retires a rejection message when the value changes from OUTSIDE', () => {
+    // The message describes what was on screen when it was refused. The 30s
+    // sync (or a second client) replaces that value; the caution used to stay,
+    // attached to a number nobody can see, under a live risk setting.
+    const onChange = jest.fn();
+    const { rerender } = render(
+      <EditDrawer position={makeOptionPosition({ premiumStopPct: 0.45 })}
+                  onClose={noop} onChange={onChange} onRemove={noop} />,
+    );
+    const input = screen.getByLabelText('Premium stop percent') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '5' } });
+    fireEvent.blur(input);
+    expect(screen.getByText(/Must be between 10% and 99%/i)).toBeInTheDocument();
+
+    rerender(
+      <EditDrawer position={makeOptionPosition({ premiumStopPct: 0.55 })}
+                  onClose={noop} onChange={onChange} onRemove={noop} />,
+    );
+    expect(input.value).toBe('55');
+    expect(screen.queryByText(/Must be between 10% and 99%/i)).not.toBeInTheDocument();
+  });
+
+  it('tells a position that ALREADY has its own stop what the band is', () => {
+    // The band was interpolated only into the inheriting branch -- so the
+    // position being edited when the bound is hit was the one not told about
+    // it until the rejection.
+    render(
+      <EditDrawer position={makeOptionPosition({ premiumStopPct: 0.45 })}
+                  onClose={noop} onChange={jest.fn()} onRemove={noop} />,
+    );
+    expect(screen.getByText(/Set for this position only \(10%–99%\)/)).toBeInTheDocument();
   });
 
   it('retires the rejection message once an accepted value replaces it', () => {
@@ -1375,10 +1427,19 @@ describe('a field where 0 is not the clear gesture', () => {
     const price = screen.getByLabelText(/Current price/) as HTMLInputElement;
     fireEvent.change(price, { target: { value: '5.10' } });
     fireEvent.blur(price);
-    // entry 4.2, 3 contracts, x100 -> (5.10 - 4.2) * 100 * 3 = 270
+    // entry 4.2, 3 contracts, x100 -> (5.10 - 4.2) * 100 * 3 = 270. Asserted,
+    // not merely stated in a comment: pnlDollar and pnlPct are the two values
+    // a wrongly-refused-or-accepted price actually puts on the row.
     expect(onPatch).toHaveBeenLastCalledWith(
       expect.objectContaining({ currentPrice: 5.1 }),
     );
+    // closeTo, not toBe: the drawer stores the raw float product
+    // (269.99999999999983), which every readout formats before showing. The
+    // point of the assertion is the magnitude and the SIGN -- a refused or
+    // mis-parsed price is what puts a -100% on the row.
+    const patch = onPatch.mock.calls.at(-1)![0];
+    expect(patch.pnlDollar).toBeCloseTo(270, 6);
+    expect(patch.pnlPct).toBeCloseTo(21.43, 2);
     expect(price.value).toBe('5.1');
   });
 });

@@ -398,8 +398,16 @@ export function EditDrawer({
           hint="Manual override — will refresh from broker in live mode."
           value={position.currentPrice}
           // 0 is a price, not a clear: it writes `currentPrice: 0` and a -100%
-          // P&L onto the row. Nothing here restores the broker's value, so the
-          // field must not invite the gesture.
+          // P&L onto the row, on a gesture the field's own message invited.
+          //
+          // How long that survives: this field is LOCAL-ONLY --
+          // `toUpdatePayload` deliberately omits currentPrice/pnlDollar/pnlPct
+          // (portfolioStore.ts) because the backend recomputes all three from a
+          // broker quote on every GET, and `fromBackend` rewrites them on the
+          // 30s sync. So a typed 0 is a transient, not a persisted corruption.
+          // The copy is wrong either way: 0 is not the clear this field
+          // advertised, and a -100% P&L on the row is a wrong number for as
+          // long as it is up.
           zeroClears={false}
           onChange={(n) => {
             const mult = position.contract.endsWith('|STOCK') ? 1 : 100;
@@ -898,6 +906,11 @@ function EditField({
   if (lastStoredRef.current !== stored) {
     lastStoredRef.current = stored;
     if (!dirtyRef.current && draft !== stored) setDraft(stored);
+    // The message describes the value that was on screen when it was refused.
+    // Once an external change (the 30s sync, a different position, a second
+    // client) replaces that value, the caution is attached to a number nobody
+    // can see -- under a live risk setting.
+    setRejected(null);
   }
 
   const revert = (msg: string | null) => {
@@ -911,11 +924,15 @@ function EditField({
   // The follow-the-stored-value sync above only fires when `stored` CHANGES,
   // so a commit the parent normalises back to the value it already holds
   // leaves the typed text sitting in the box: Contracts is
-  // `Math.max(1, Math.round(n))`, so on a position holding 1 both "0" and
-  // "0.4" store 1 -- unchanged -- while `setDraft(String(n))` below has
-  // already put the typed digits on screen. The field then shows a quantity
-  // the position does not hold, which is the display-vs-store split this
-  // work exists to remove.
+  // `Math.max(1, Math.round(n))`, so on a position holding 1 a typed "0.4"
+  // stores 1 -- unchanged -- while `setDraft(String(n))` below has already
+  // put "0.4" on screen. The field then shows a quantity the position does
+  // not hold, which is the display-vs-store split this work exists to remove.
+  //
+  // "0.4" and not "0": a literal 0 on Contracts is refused by `zeroClears`
+  // before it ever reaches here, and on the two fields where 0 IS the clear
+  // gesture the call sites map it to null, so `stored` becomes "0" and this
+  // has nothing to correct.
   //
   // `onChange` reaches a Zustand `set` synchronously (page.tsx hands it
   // `updatePosition`), so the render immediately after a commit already
@@ -1078,11 +1095,16 @@ function PremiumStopEditor({
   if (lastStoredRef.current !== stored) {
     lastStoredRef.current = stored;
     if (!dirtyRef.current && draft !== stored) setDraft(stored);
+    // Same reason as the EditField siblings above: a caution outlives the
+    // value it was about otherwise.
+    setRejected(null);
   }
 
-  // Every exit that keeps the previous value goes through here, so none of
-  // them can forget to clear `dirtyRef` (the defect the round-5 note below
-  // describes) or to explain itself.
+  // Every REJECTING exit goes through here, so none of them can forget to
+  // clear `dirtyRef` (the defect the round-5 note below describes) or to
+  // explain itself. Not every exit that keeps the previous value: the
+  // successful path below also keeps it whenever the committed value matches
+  // what is stored, and that is a no-op, not a refusal.
   const revert = (msg: string | null) => {
     setDraft(stored);
     setRejected(msg);
@@ -1090,6 +1112,15 @@ function PremiumStopEditor({
   };
 
   const commit = () => {
+    // A BLUR IS NOT AN EDIT -- and now that a rejection SAYS SO, the old
+    // "check dirtyRef at each write" shape was not enough. A row stored
+    // outside the new band (a legacy stop, or one the backend derived against
+    // a fill far from the mid the card bounded the dollar against) reached the
+    // band check on a bare focus-and-blur with nothing typed, and the new
+    // message accused the user of a value they never entered. `EditField` has
+    // had this guard since round 11; this editor tracked dirtiness but still
+    // ran the whole commit.
+    if (!dirtyRef.current) { setDraft(stored); setRejected(null); return; }
     const raw = draft.trim();
     // Empty is the documented way back to inheriting, and the only way: see
     // the hint below.
@@ -1225,7 +1256,11 @@ function PremiumStopEditor({
       <Text size={10} tone="dim">
         {inherited
           ? `Inheriting the global — this position moves whenever the global does. Enter a percent (${premiumStopPctLabel(PREMIUM_STOP_MIN_PCT)}–${premiumStopPctLabel(PREMIUM_STOP_MAX_PCT)}) and press Enter to pin it${isStock ? '' : ' for this contract only'}.`
-          : `Set for this position only. Clear the field to go back to inheriting the global (${premiumStopPctLabel(globalPremiumStopPct)}).`}
+          // The band belongs on THIS branch too, and arguably more: a position
+          // that already carries its own stop is the one being edited when the
+          // bound is hit, and it used to learn the field had a floor only from
+          // the rejection.
+          : `Set for this position only (${premiumStopPctLabel(PREMIUM_STOP_MIN_PCT)}–${premiumStopPctLabel(PREMIUM_STOP_MAX_PCT)}). Clear the field to go back to inheriting the global (${premiumStopPctLabel(globalPremiumStopPct)}).`}
       </Text>
       <span aria-live="polite">
         {rejected && <Text size={10} tone="caution">{rejected}</Text>}

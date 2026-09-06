@@ -14,6 +14,9 @@ import {
   premiumStopDollarToSend,
   formatPremiumStopPct,
   PREMIUM_STOP_PCT_FALLBACK,
+  PREMIUM_STOP_MIN_PCT,
+  PREMIUM_STOP_MAX_PCT,
+  premiumStopDollarBounds,
 } from '../premiumStop';
 import { premiumStopPctFromDollars } from '../barrierRace';
 import { scanPortfolio, type AlertPosition } from '../alertEngine';
@@ -322,5 +325,59 @@ describe('send-path derivation', () => {
     expect(premiumStopPctFromDollars(undefined, cardMid)).toBeUndefined();
     expect(premiumStopPctFromDollars(0, cardMid)).toBeUndefined();
     expect(premiumStopPctFromDollars(-1, cardMid)).toBeUndefined();
+  });
+});
+
+// ── The dollar bounds TradeCard derives from the band ───────────────────────
+
+describe('premiumStopDollarBounds', () => {
+  /* Round 1 of the follow-up audit. TradeCard converted the band to dollars
+   * with `Math.round(mid * pct * 100) / 100`, which shaves up to half a cent
+   * in EITHER direction -- so the card's own boundary values fell OUTSIDE the
+   * band the drawer enforces, and a stop created at the card's minimum was one
+   * the drawer refused. That is the disagreement the shared band exists to
+   * end, surviving at the boundary for most mids.
+   *
+   * A SWEEP, not a pair. The lesson from round 12: the mirror case of a
+   * rounding trap is reached by different inputs than the case that exposed
+   * it, so a hand-picked example proves nothing about the other direction.
+   * $5.24 (min 9.92%) and $1.01 (max 99.01%) are both inside this range. */
+  it('never derives a percentage outside the band, at any cent mid from $0.02 to $50', () => {
+    const EPS = 1e-9;
+    const offenders: string[] = [];
+    for (let cents = 2; cents <= 5000; cents++) {
+      const mid = cents / 100;
+      const { min, max } = premiumStopDollarBounds(mid);
+      if (min / mid < PREMIUM_STOP_MIN_PCT - EPS) offenders.push(`min ${min} on mid ${mid}`);
+      if (max / mid > PREMIUM_STOP_MAX_PCT + EPS) offenders.push(`max ${max} on mid ${mid}`);
+      if (min > max) offenders.push(`min ${min} > max ${max} on mid ${mid}`);
+      // 2dp is the precision the card's editor commits at; a bound it cannot
+      // express is a bound it cannot enforce. Compared with a tolerance
+      // because `0.07 * 100` is 7.000000000000001 -- the bound IS two
+      // decimals, the multiplication is what is not exact.
+      if (Math.abs(Math.round(min * 100) - min * 100) > EPS) offenders.push(`min ${min} is not 2dp`);
+      if (Math.abs(Math.round(max * 100) - max * 100) > EPS) offenders.push(`max ${max} is not 2dp`);
+    }
+    expect(offenders.slice(0, 10)).toEqual([]);
+  });
+
+  it('is the OLD rounding that fails that sweep, on real mids', () => {
+    // Without this the sweep above could pass on any implementation, including
+    // one that returns a constant. These are the exact values the audit found.
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    expect(round2(5.24 * PREMIUM_STOP_MIN_PCT) / 5.24).toBeLessThan(PREMIUM_STOP_MIN_PCT);
+    expect(round2(1.01 * PREMIUM_STOP_MAX_PCT) / 1.01).toBeGreaterThan(PREMIUM_STOP_MAX_PCT);
+    // ...and the shipped helper does not.
+    expect(premiumStopDollarBounds(5.24).min / 5.24).toBeGreaterThanOrEqual(PREMIUM_STOP_MIN_PCT);
+    expect(premiumStopDollarBounds(1.01).max / 1.01).toBeLessThanOrEqual(PREMIUM_STOP_MAX_PCT);
+  });
+
+  it('collapses to a single legal penny at a $0.01 mid, rather than inverting', () => {
+    // The one mid where 2dp cannot express the band at all. `min > max` would
+    // make the field impossible to satisfy; one legal value is the honest
+    // answer for a contract quoted at a cent.
+    const { min, max } = premiumStopDollarBounds(0.01);
+    expect(min).toBe(0.01);
+    expect(max).toBe(0.01);
   });
 });

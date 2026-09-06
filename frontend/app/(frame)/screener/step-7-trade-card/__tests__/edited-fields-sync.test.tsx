@@ -673,4 +673,40 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(0));
     expect(await screen.findByText(/Some orders were not saved — AAA:/)).toBeInTheDocument();
   });
+
+  it('does not leave the previous submit\'s banner over a successful one', async () => {
+    /* Round 1 of the follow-up audit. `handleSubmit` cleared `saveNotes` and
+     * not `orderError`, and the only other resets are the `[active]` effect
+     * and the two DIRECT paper paths -- neither of which a basket-only user
+     * goes through. Invisible while the banner was gated behind a selected
+     * broker; reachable the moment it was hoisted, which is this branch. */
+    {
+      // ── Submit 1: the backend refuses it.
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false, status: 422, json: async () => ({ detail: 'single_trade_exposure_too_high' }),
+      }) as unknown as typeof fetch;
+      render(<Step7TradeCardPage />);
+      await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
+      let submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+      await waitFor(() => expect(submit).toBeEnabled());
+      fireEvent.click(submit);
+      expect(await screen.findByText(/Some orders were not saved/)).toBeInTheDocument();
+
+      // ── Submit 2: the backend accepts it. Same page, same card, no
+      //    navigation -- so nothing else clears the banner.
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true, json: async () => ({}),
+      }) as unknown as typeof fetch;
+      fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /send basket \(1\)/i }));
+      submit = await screen.findByRole('button', { name: /^(Submit 1 order|Override & Submit)$/ });
+      await waitFor(() => expect(submit).toBeEnabled());
+      fireEvent.click(submit);
+
+      await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+      expect(screen.queryByText(/Some orders were not saved/)).not.toBeInTheDocument();
+    }
+  });
 });

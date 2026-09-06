@@ -980,9 +980,18 @@ export default function Step7Page() {
 
   const handleSubmit = async (orders: DraftOrder[], _riskOverridden: boolean) => {
     usePortfolioStore.getState().clearSyncError();
-    // Same reason as the two order paths: this submit's notes, not the last
+    // Same reason as the two order paths: this submit's outcome, not the last
     // one's. Basket notes are symbol-qualified because several land at once.
+    //
+    // All THREE, matching placeLimitPaper and placeMarketNow. Clearing only
+    // the notes left the red banner standing: a basket that partly failed set
+    // `orderError`, and a second basket that fully succeeded then rendered
+    // "Some orders were not saved" over a submit in which everything was.
+    // Invisible before this branch (the banner was gated behind a selected
+    // broker the basket never sets) and reachable the moment it was hoisted.
     setSaveNotes([]);
+    setOrderError(null);
+    setPaperOrderId(null);
     let auto = 0, manual = 0, queued = 0;
     const failures: string[] = [];
     const adjusted: string[] = [];

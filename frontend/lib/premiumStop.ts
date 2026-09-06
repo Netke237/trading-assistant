@@ -37,14 +37,49 @@ export const PREMIUM_STOP_PCT_FALLBACK = 0.60;
  *  but a total loss. Deriving both editors from these two numbers is what
  *  keeps them from drifting again.
  *
- *  The backend's own `(0, 1)` stays as it is, deliberately: it is the outer
- *  bound and rows created before this band exists still have to load and be
- *  editable upward.
+ *  THE BAND GOVERNS EDITORS, NOT STORED VALUES, and the distinction is not a
+ *  hedge — round 1 of the follow-up audit established two live routes to a
+ *  stored fraction outside it, so a reader that treated the band as an
+ *  invariant would be wrong:
+ *
+ *    - the backend derives the stored ratio as `premiumStopDollar /
+ *      entry_price` against the FILL, not the mid the card bounded the dollar
+ *      against (`routers/portfolio.py:285-296` then `:361-364`), so $0.60
+ *      typed on a $5.20 mid (11.5%, legal here) stores 7.5% on an $8.00 fill;
+ *    - rows created before this band existed.
+ *
+ *  So the backend's own `(0, 1)` stays as it is: it is the outer bound, and
+ *  both kinds of row still have to load and be editable upward. For the same
+ *  reason `barrierRace.premiumStopPctFromDollars` deliberately keeps `(0, 1)`
+ *  too — it reads a stored/derived fraction rather than accepting a typed one.
  *
  *  Fractions, matching `premiumStopPct` itself — multiply by 100 for the
  *  percent an editor shows. */
 export const PREMIUM_STOP_MIN_PCT = 0.10;
 export const PREMIUM_STOP_MAX_PCT = 0.99;
+
+/** The DOLLAR bounds for a per-position premium stop quoted against `mid`.
+ *
+ *  TradeCard edits the stop in dollars and the drawer edits it as a percent,
+ *  so the card has to convert — and it did that with `Math.round(n * 100) / 100`
+ *  on both ends, which shaves up to half a cent in EITHER direction. That put
+ *  the card's own boundary values OUTSIDE the band the drawer enforces: a
+ *  $5.24 mid gave a minimum of $0.52 = 9.92%, and a $1.01 mid gave a maximum
+ *  of $1.00 = 99.01%. A stop created at the card's own minimum was then one
+ *  the drawer refused — the exact disagreement the shared band exists to end,
+ *  surviving at the boundary for most mids.
+ *
+ *  So the rounding goes OUTWARD-TO-INWARD: ceil the floor, floor the ceiling.
+ *  Both ends land inside the band at 2dp, which is the precision the card's
+ *  editor commits at. The two `Math.max` calls handle the degenerate end of
+ *  the scale, where 2dp cannot express the band at all: at a $0.01 mid the
+ *  floor and the ceiling collapse onto the same penny, and one legal value is
+ *  the honest answer for a contract quoted at a cent. */
+export function premiumStopDollarBounds(mid: number): { min: number; max: number } {
+  const min = Math.max(0.01, Math.ceil(mid * PREMIUM_STOP_MIN_PCT * 100) / 100);
+  const max = Math.max(min, Math.floor(mid * PREMIUM_STOP_MAX_PCT * 100) / 100);
+  return { min, max };
+}
 
 /** The premium-stop fraction that applies to one position.
  *
