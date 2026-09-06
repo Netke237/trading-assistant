@@ -202,7 +202,17 @@ export default function Step5Page() {
                 )}
               </div>
 
-              <Data size={13} weight={500}>{pctl != null && pctl > 0 ? pctl : '—'}</Data>
+              {/* `!= null` only. A percentile of 0 is a REAL reading — the bottom of
+                  this name's own 52-week range, i.e. the cheapest premium it gets —
+                  and only an ABSOLUTE IV treats 0 as a missing-data sentinel
+                  (PHASE-A-NULL-IVRANK-2026-09-06; the asymmetry is stated in
+                  lib/ivBasis.ts and pinned in its tests). The old `&& pctl > 0`
+                  guard dated from when a pre-split ivPercentile DEFAULTED to the
+                  literal 0 that meant "no rank source answered"; market.py now
+                  writes null for that, so the guard had nothing left to catch and
+                  only destroyed information. step-6-contracts already gets this
+                  right, so the two pages disagreed about one field. */}
+              <Data size={13} weight={500}>{pctl != null ? pctl : '—'}</Data>
 
               {r.nextEventDays != null
                 ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />

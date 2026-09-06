@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { SearchProfile, SearchProfileSnapshot } from '@/types/searchProfile';
 import { api } from '@/lib/api';
+import { DEFAULT_SPREADS } from '@/lib/settingsStore';
 import { resolveProfileToScanRequest } from '@/lib/scanScheduleResolve';
 
 function genId(): string {
@@ -62,7 +63,60 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 1,
+      version: 2,
+      migrate: (persistedState, version) => {
+        const st = { ...((persistedState ?? {}) as Record<string, unknown>) };
+        if (version < 2) {
+          // PHASE-A-SPREAD-BASIS-2026-09-06 split the spread picker's single
+          // sell-premium cut-off into a percentile knob and an absolute one.
+          // settingsStore got a v23->v24 migration for the LIVE value; a profile
+          // carries its OWN frozen copy of the same block
+          // (searchProfileSnapshot.ts bakes in `spreads: { ...settings.spreads }`),
+          // and that copy was left at the pre-split shape.
+          //
+          // Applying it matters because the profile's copy is what
+          // resolveProfileToScanRequest re-resolves for a scheduled scan: with
+          // `ivAbsThreshold` undefined the key is omitted from the request body
+          // entirely, and on a Tradier-only chain that flips choose_primary from
+          // bear_put (debit, long premium) to bear_call (credit, short premium,
+          // assignment exposure). Round 1's finding (d), surviving in a store
+          // that was not migrated with the other two.
+          //
+          // Seeded from THAT PROFILE's own ivRankThreshold, not the constant and
+          // not the live setting, for the same reason settingsStore seeds from
+          // the user's own: whoever moved the old single knob meant it for the
+          // chains they actually see, which are the absolute ones. Reading the
+          // live setting here would let a later, unrelated change to Settings
+          // rewrite what a saved profile means.
+          const profiles = Array.isArray(st.profiles) ? st.profiles : [];
+          st.profiles = profiles.map((profile) => {
+            if (typeof profile !== 'object' || profile === null) return profile;
+            const p = profile as Record<string, unknown>;
+            const scanSettings = p.scanSettings;
+            if (typeof scanSettings !== 'object' || scanSettings === null) return profile;
+            const ss = scanSettings as Record<string, unknown>;
+            const spreads = ss.spreads;
+            // Stocks profiles carry no `spreads` block at all — leave them be
+            // rather than inventing one.
+            if (typeof spreads !== 'object' || spreads === null) return profile;
+            const sp = spreads as Record<string, unknown>;
+            if (sp.ivAbsThreshold !== undefined) return profile;
+            return {
+              ...p,
+              scanSettings: {
+                ...ss,
+                spreads: {
+                  ...sp,
+                  ivAbsThreshold: typeof sp.ivRankThreshold === 'number'
+                    ? sp.ivRankThreshold
+                    : DEFAULT_SPREADS.ivAbsThreshold,
+                },
+              },
+            };
+          });
+        }
+        return st as unknown as SearchProfilesState;
+      },
       partialize: (state) => ({ profiles: state.profiles }),
     },
   ),

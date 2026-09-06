@@ -570,11 +570,21 @@ class ScanRequest(BaseModel):
     spread_width:        float = 5.0
     short_leg_delta:     float = 0.30
     iv_rank_threshold:   float = 50.0   # applies when a TRUE PERCENTILE is in hand
-    # Applies when only an ABSOLUTE IV is in hand, which is most chains. Defaulted
-    # to the same 50 so behaviour is unchanged on the day this shipped; it is a
+    # Applies when only an ABSOLUTE IV is in hand, which is most chains. It is a
     # separate knob because 50% IV and the 50th percentile are different claims.
     # UNMEASURED, like the percentile seeds and Q7.
-    iv_abs_threshold:    float = 50.0
+    #
+    # None means ABSENT FROM THE REQUEST, not 50: a body built before
+    # PHASE-A-SPREAD-BASIS-2026-09-06 carries only `iv_rank_threshold`, and those
+    # bodies are still out there -- schedule entries persist a fully resolved
+    # request server-side (schemas/scan_schedule.py) and are only rewritten when
+    # the profile behind them is re-saved. Defaulting such a body to 50 would
+    # discard the user's own setting and, on a Tradier-only chain, flip
+    # choose_primary from bear_put (debit, long premium) to bear_call (credit,
+    # short premium, assignment exposure) -- round 1's finding (d) surviving in
+    # the one path that never re-resolves. `_seed_iv_abs_threshold` below applies
+    # exactly the rule settingsStore's v23->v24 migration applies client-side.
+    iv_abs_threshold:    Optional[float] = None
     min_credit:          float = 0.50
     max_debit_pct:       float = 40.0
 
@@ -585,6 +595,23 @@ class ScanRequest(BaseModel):
                 raise ValueError("hold_min_days and hold_max_days must be non-negative")
             if self.hold_max_days < self.hold_min_days:
                 raise ValueError("hold_max_days must be >= hold_min_days")
+        return self
+
+    @model_validator(mode="after")
+    def _seed_iv_abs_threshold(self) -> "ScanRequest":
+        """A pre-split request means its single knob for the chains it actually saw.
+
+        Before the split one threshold was applied to whichever figure was in
+        hand, and on most chains that figure is the ABSOLUTE one -- so a body
+        that names only `iv_rank_threshold` was, in practice, setting the
+        absolute cut-off. Seeding from it preserves that intent; falling back to
+        the class default would silently overrule a user who moved the knob.
+
+        Every current client sends the field explicitly, so this fires only for
+        request bodies persisted before the split.
+        """
+        if self.iv_abs_threshold is None:
+            self.iv_abs_threshold = self.iv_rank_threshold
         return self
 
 

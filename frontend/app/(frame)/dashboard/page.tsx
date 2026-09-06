@@ -347,12 +347,22 @@ export default function DashboardPage() {
                   <Text size={11} tone="secondary">{p.contract}</Text>
                   {/* A percentile when a rank source answered, otherwise the absolute
                       implied volatility — formatIv marks which
-                      (PHASE-A-NULL-IVRANK-2026-09-06). */}
-                  <span title={formatIv(resolveIv(p), p.symbol).title}>
-                    <Text size={10} tone="dim">
-                      IV {formatIv(resolveIv(p), p.symbol).text} · Θ {p.theta?.toFixed(2) ?? '—'}
-                    </Text>
-                  </span>
+                      (PHASE-A-NULL-IVRANK-2026-09-06). The `rank` SUFFIX has to be
+                      rendered, not just the text: without it a percentile reads as
+                      "IV 45" and is told apart from 45% absolute only by the absent
+                      `%`, which is exactly the one-character distinction formatIv's
+                      own docstring refuses to rest on. Every other converted site
+                      either renders the suffix or switches its own noun. */}
+                  {(() => {
+                    const shownIv = formatIv(resolveIv(p), p.symbol);
+                    return (
+                      <span title={shownIv.title}>
+                        <Text size={10} tone="dim">
+                          IV {shownIv.text}{shownIv.suffix !== '' ? ` ${shownIv.suffix}` : ''} · Θ {p.theta?.toFixed(2) ?? '—'}
+                        </Text>
+                      </span>
+                    );
+                  })()}
                 </div>
                 <Data size={12} className={styles.contractRight}>${p.currentPrice.toFixed(2)}</Data>
                 <Data size={12} weight={500} className={styles.contractRight} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
