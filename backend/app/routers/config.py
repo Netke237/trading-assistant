@@ -9,12 +9,32 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 
 @router.get("/iv-thresholds")
 def get_iv_thresholds() -> dict:
-    """Return per-horizon IV rank pass/caution thresholds from scoring_rules.yaml."""
+    """Return per-horizon IV pass/caution thresholds from scoring_rules.yaml.
+
+    BOTH threshold sets are served, under names that say which quantity each
+    one judges (PHASE-A-NULL-IVRANK-2026-09-06):
+
+      abs_*   judge ABSOLUTE implied volatility, 0-100. This is the set that
+              applies on any chain where neither IBKR nor tastytrade supplied
+              a percentile -- the default configuration -- and it carries the
+              34/55 and 44/65 numbers this gate has in fact been applying all
+              along.
+      rank_*  judge a TRUE PERCENTILE. UNMEASURED: seeded from the absolute
+              set, and nobody has checked whether a percentile deserves the
+              same cut-offs.
+
+    No unqualified `pass_max` is served on purpose. The client must pick a set
+    by the basis of the figure it is about to judge; a name that does not say
+    which quantity it measures is how an absolute IV came to be scored as a
+    percentile in the first place.
+    """
     horizons = load_scoring_cfg()["horizons"]
     return {
         label: {
-            "pass_max":    horizons[key]["vol"].get("iv_rank_pass_max"),
-            "caution_max": horizons[key]["vol"].get("iv_rank_caution_max"),
+            "abs_pass_max":     horizons[key]["vol"].get("iv_abs_pass_max"),
+            "abs_caution_max":  horizons[key]["vol"].get("iv_abs_caution_max"),
+            "rank_pass_max":    horizons[key]["vol"].get("iv_rank_pass_max"),
+            "rank_caution_max": horizons[key]["vol"].get("iv_rank_caution_max"),
         }
         for label, key in [
             ("Intraday", "intraday"),

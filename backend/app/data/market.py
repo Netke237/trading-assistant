@@ -612,6 +612,17 @@ def fetch_option_chain(
                 "price": mid,
                 "delta": round(delta, 4),
                 "theta": round(theta, 4),
+                # ⚠ SHAPE HAZARD — this is the DEAD sync twin of
+                # fetch_option_chain_async (nothing calls it; see Amendment A).
+                # It still writes RAW ABSOLUTE IV into `ivRank`, the pre-Phase-A
+                # shape. app/data/augment.py reads a non-null `ivRank` as a TRUE
+                # PERCENTILE, so reviving this function as-is would silently
+                # restore the exact defect Phase A removed: a name at 45% IV
+                # scored as though it sat at its own 45th percentile, and one at
+                # 75% hard-rejected by a percentile ceiling. Before reviving it,
+                # port the async twin's split (~line 1286): emit the absolute
+                # level as `iv` and leave `ivRank` None unless IBKR or
+                # tastytrade answered (PHASE-A-NULL-IVRANK-2026-09-06).
                 "ivRank": int(round(iv * 100)),
                 "ivPercentile": 0,
                 "spread": spread,

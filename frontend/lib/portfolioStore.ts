@@ -43,6 +43,7 @@ type BackendPosition = {
   delta?: number | null;
   theta?: number | null;
   ivRank?: number | null;
+  iv?: number | null;
 };
 
 function fromBackend(p: BackendPosition): PortfolioPosition {
@@ -81,7 +82,11 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     pnlPct:       p.pnlPct ?? 0,
     delta:        p.delta ?? undefined,
     theta:        p.theta ?? undefined,
+    // Two quantities, kept apart (PHASE-A-NULL-IVRANK-2026-09-06):
+    // `ivRank` is a percentile and is usually absent; `iv` is the absolute
+    // implied volatility. Resolve them via lib/ivBasis.ts at the display site.
     ivRank:       p.ivRank ?? undefined,
+    iv:           p.iv ?? undefined,
     syncStatus:   'synced',
     syncedAt:     Date.now(),
   };

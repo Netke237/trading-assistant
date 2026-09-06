@@ -19,6 +19,7 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { ContractStar } from '@/components/atoms/ContractStar';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { GENERIC_STATUS_TOOLTIP, contractScoreTooltip } from '@/lib/statusTooltips';
+import { resolveIv, formatIv, IV_COLUMN_LABEL } from '@/lib/ivBasis';
 import { api, type CompositeWatch } from '@/lib/api';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { contractLabel, type OptionContract } from '@/types/domain';
@@ -35,6 +36,19 @@ type ContractSortKey = 'score' | 'dte' | 'price';
 
 const COLUMNS          = '32px 28px 72px 1.4fr 90px 80px 80px 90px 80px 60px 90px';
 const CONTRACT_COLUMNS = '28px 72px 1.3fr 120px 80px 72px 80px 80px 100px';
+
+/** IV cell for the watchlist Contracts tab — percentile when one exists,
+ *  otherwise the absolute implied volatility, labelled as such
+ *  (PHASE-A-NULL-IVRANK-2026-09-06). */
+function IvContractCell({ contract }: { contract: OptionContract }) {
+  const shown = formatIv(resolveIv(contract), contract.symbol);
+  return (
+    <Data size={12} className={styles.right} title={shown.title}>
+      {shown.text}
+      {shown.suffix !== '' && <Text size={10} tone="dim">{` ${shown.suffix}`}</Text>}
+    </Data>
+  );
+}
 
 export default function WatchlistPage() {
   const [tab, setTab]         = useState<Tab>('stocks');
@@ -469,7 +483,7 @@ function ContractsTab({
         <SortBtn label="DTE"   active={sortKey === 'dte'}   dir={sortDir} onClick={() => onSort('dte')} />
         <SortBtn label="PRICE" active={sortKey === 'price'} dir={sortDir} onClick={() => onSort('price')} align="right" />
         <Text size={11} tone="dim" className={styles.right}>DELTA</Text>
-        <Text size={11} tone="dim" className={styles.right}>IV RANK</Text>
+        <Text size={11} tone="dim" className={styles.right}>{IV_COLUMN_LABEL}</Text>
         <Text size={11} tone="dim" className={styles.right}>Θ/DAY</Text>
         <SortBtn label="SCORE" active={sortKey === 'score'} dir={sortDir} onClick={() => onSort('score')} align="right" />
       </div>
@@ -485,7 +499,7 @@ function ContractsTab({
               <DTEProgressBar daysRemaining={c.dte} totalDays={c.dteTotal} />
               <Data size={12} className={styles.right}>${c.price.toFixed(2)}</Data>
               <Data size={12} className={styles.right}>{c.delta.toFixed(2)}</Data>
-              <Data size={12} className={styles.right}>{c.ivRank}</Data>
+              <IvContractCell contract={c} />
               <Data size={12} className={styles.right}>{c.theta.toFixed(2)}</Data>
               <div className={styles.scoreCell}>
                 <Data size={13} weight={500}>{c.score}</Data>

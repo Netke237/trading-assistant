@@ -367,7 +367,9 @@ export const api = {
   ),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards'),
   getContractQuote: (symbol: string, strike: number, expiry: string, right: 'C' | 'P', signal?: AbortSignal) =>
-    get<{ price: number; delta: number; theta: number; ivRank: number; spread: number; volume: number }>(
+    // `ivRank` is a percentile and is null unless IBKR/tastytrade answered;
+    // the absolute level rides in `iv`. Resolve via lib/ivBasis.ts.
+    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number }>(
       `/api/quote/option?symbol=${encodeURIComponent(symbol)}&strike=${strike}&expiry=${encodeURIComponent(expiry)}&right=${right}`,
       signal,
     ),
@@ -723,8 +725,13 @@ export const api = {
       `/api/regime/intraday-series?symbol=${encodeURIComponent(symbol)}${interval ? `&interval=${encodeURIComponent(interval)}` : ''}${limit != null ? `&limit=${limit}` : ''}`
     ),
 
+  // Two threshold sets, named for the quantity each judges — see
+  // lib/ivThresholdsStore.ts (PHASE-A-NULL-IVRANK-2026-09-06).
   getIvThresholds: () =>
-    get<Record<string, { pass_max: number | null; caution_max: number | null }>>(
+    get<Record<string, {
+      abs_pass_max: number | null; abs_caution_max: number | null;
+      rank_pass_max: number | null; rank_caution_max: number | null;
+    }>>(
       '/api/config/iv-thresholds'
     ),
 

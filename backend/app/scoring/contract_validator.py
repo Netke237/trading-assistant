@@ -95,7 +95,17 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
         reasons.append("dte_too_short")
     if dte > hr["max_dte"]:
         reasons.append("dte_too_long")
-    max_iv = hr.get("max_iv_rank")
+    # `iv_rank` holds EITHER a true percentile OR an absolute IV, and
+    # `iv_basis` (set in app/data/augment.py) says which -- so pick the ceiling
+    # that judges the quantity we actually have
+    # (PHASE-A-NULL-IVRANK-2026-09-06). Judging a 75% absolute IV against a
+    # percentile ceiling is what used to hard-reject names whose vol was in
+    # fact low FOR THEM. Basis "none" means no vol figure at all, and
+    # `iv_rank is None` already skips the gate.
+    _iv_key = "max_iv_rank" if contract.get("iv_basis") == "rank" else "max_iv_abs"
+    # Fall back to the percentile key rather than skipping the gate outright,
+    # so a hand-built cfg carrying only the old key still hard-rejects.
+    max_iv = hr.get(_iv_key, hr.get("max_iv_rank"))
     if max_iv is not None and iv_rank is not None and iv_rank > max_iv:
         reasons.append("iv_rank_too_high")
 
@@ -199,15 +209,36 @@ def _score_dte(contract: dict, cfg: dict) -> tuple[int, int, list[str]]:
     return score, dte, flags
 
 
-def _score_iv_rank(contract: dict, cfg: dict) -> tuple[int, list[str]]:
+def _preferred_iv_max(contract: dict, cfg: dict) -> float:
+    """The soft ceiling matching the quantity `iv_rank` actually holds.
+
+    `iv_basis` is set by app/data/augment.py and is "rank" only when IBKR or
+    tastytrade supplied a true percentile; every other chain carries an
+    absolute IV, which the `preferred_iv_abs_max` numbers have in fact been
+    judging all along (PHASE-A-NULL-IVRANK-2026-09-06).
+    """
     sr = cfg["soft_rank"]
+    key = (
+        "preferred_iv_rank_max"
+        if contract.get("iv_basis") == "rank"
+        else "preferred_iv_abs_max"
+    )
+    # Fall back to the percentile key so a caller passing a hand-built cfg
+    # (the unit tests do) keeps working without the absolute key present.
+    return float(sr[key] if key in sr else sr["preferred_iv_rank_max"])
+
+
+def _score_iv_rank(contract: dict, cfg: dict) -> tuple[int, list[str]]:
     iv_rank = contract.get("iv_rank")
     flags = []
 
     if iv_rank is None:
         return 50, ["no_iv_rank_data"]  # neutral
 
-    max_pref = sr["preferred_iv_rank_max"]
+    # Same basis split as the hard-reject ceiling above: score the absolute
+    # level against the absolute soft ceiling, a percentile against the
+    # percentile one (PHASE-A-NULL-IVRANK-2026-09-06).
+    max_pref = _preferred_iv_max(contract, cfg)
     if iv_rank <= max_pref:
         # Denominator guard: max_pref == 0 divides by zero when iv_rank <= 0
         # too. Upper-clamped to 100 since a very negative iv_rank would
@@ -261,6 +292,7 @@ def validate_contract(
             elif key == "min_dte":              hr["min_dte"]                = int(val)
             elif key == "max_dte":              hr["max_dte"]                = int(val)
             elif key == "max_iv_rank":          hr["max_iv_rank"]            = float(val)
+            elif key == "max_iv_abs":           hr["max_iv_abs"]             = float(val)
             elif key == "preferred_dte_min":    sr["preferred_dte_min"]      = int(val)
             elif key == "preferred_dte_max":    sr["preferred_dte_max"]      = int(val)
             elif key == "min_stock_score":      hr["min_stock_score"]        = int(val)
@@ -290,7 +322,16 @@ def validate_contract(
         },
         "iv_rank": {
             "iv_rank": contract.get("iv_rank"),
-            "preferred_max": sr["preferred_iv_rank_max"],
+            # Which quantity `iv_rank` holds, so the UI can label the number
+            # honestly instead of printing an absolute IV under "IV rank".
+            # Callers that predate the split (fixtures, hand-built dicts) set
+            # no basis; they were passing an absolute IV, so that is the
+            # default -- except when there is no figure at all.
+            "iv_basis": contract.get(
+                "iv_basis",
+                "none" if contract.get("iv_rank") is None else "absolute",
+            ),
+            "preferred_max": _preferred_iv_max(contract, cfg),
         },
         "liquidity": {
             "volume": contract.get("volume") or 0,

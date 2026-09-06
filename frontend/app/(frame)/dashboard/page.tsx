@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { toneForStatus } from '@/lib/status';
+import { resolveIv, formatIv } from '@/lib/ivBasis';
 import { SectionCard } from '@/components/molecules/SectionCard';
 import { TableRow } from '@/components/molecules/TableRow';
 import { AlertRow } from '@/components/molecules/AlertRow';
@@ -344,7 +345,14 @@ export default function DashboardPage() {
                 </div>
                 <div className={styles.contractCell}>
                   <Text size={11} tone="secondary">{p.contract}</Text>
-                  <Text size={10} tone="dim">IV {p.ivRank ?? '—'} · Θ {p.theta?.toFixed(2) ?? '—'}</Text>
+                  {/* A percentile when a rank source answered, otherwise the absolute
+                      implied volatility — formatIv marks which
+                      (PHASE-A-NULL-IVRANK-2026-09-06). */}
+                  <span title={formatIv(resolveIv(p), p.symbol).title}>
+                    <Text size={10} tone="dim">
+                      IV {formatIv(resolveIv(p), p.symbol).text} · Θ {p.theta?.toFixed(2) ?? '—'}
+                    </Text>
+                  </span>
                 </div>
                 <Data size={12} className={styles.contractRight}>${p.currentPrice.toFixed(2)}</Data>
                 <Data size={12} weight={500} className={styles.contractRight} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>

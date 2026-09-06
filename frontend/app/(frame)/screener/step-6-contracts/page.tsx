@@ -13,6 +13,7 @@ import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { contractLabel, type OptionContract, type TradeCardData } from '@/types/domain';
+import { resolveIv, formatIv, ivSortValue, IV_COLUMN_LABEL } from '@/lib/ivBasis';
 import styles from '../screener.module.css';
 import tbl from './contracts.module.css';
 
@@ -35,15 +36,47 @@ function sortContracts(
 ): OptionContract[] {
   const rows = [...contracts];
   const mul = dir === 'asc' ? 1 : -1;
+  // "No data" must never masquerade as a number. `ivRank` and `ivPercentile`
+  // are nullable since the Phase A split, and arithmetic on null silently
+  // coerces it to 0 — which would sort a contract with NO volatility reading
+  // to the top of an ascending "cheapest IV" sort
+  // (PHASE-A-NULL-IVRANK-2026-09-06). Nulls sort last in BOTH directions.
+  const byNullable = (av: number | null, bv: number | null): number => {
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return (av - bv) * mul;
+  };
   rows.sort((a, b) => {
     switch (key) {
       case 'contract':
         return contractLabel(a).localeCompare(contractLabel(b)) * mul;
+      case 'ivRank':
+        // Sort on the figure actually displayed — a percentile when one
+        // exists, otherwise the absolute IV.
+        return byNullable(ivSortValue(a), ivSortValue(b));
+      case 'ivPercentile':
+        return byNullable(a.ivPercentile, b.ivPercentile);
       default:
         return ((a[key] as number) - (b[key] as number)) * mul;
     }
   });
   return rows;
+}
+
+/** The IV cell. Shows a TRUE PERCENTILE when one exists and an ABSOLUTE
+ *  implied volatility otherwise, and says which — the two are different
+ *  quantities and printing one under the other's name is the defect Phase A
+ *  exists to fix (PHASE-A-NULL-IVRANK-2026-09-06). Most chains have no rank
+ *  source, so the absolute form is the common case. */
+function IvCell({ contract }: { contract: OptionContract }) {
+  const shown = formatIv(resolveIv(contract), contract.symbol);
+  return (
+    <Data size={12} className={tbl.right} title={shown.title}>
+      {shown.text}
+      {shown.suffix !== '' && <Text size={10} tone="dim">{` ${shown.suffix}`}</Text>}
+    </Data>
+  );
 }
 
 /** Returns the spread badge label for a candidate, or null if single-leg. */
@@ -215,7 +248,7 @@ export default function Step6Page() {
                   <DTEProgressBar daysRemaining={c.dte} totalDays={c.dteTotal} />
                   <Data size={12} className={tbl.right}>{c.delta.toFixed(2)}</Data>
                   <Data size={12} className={tbl.right}>${c.price.toFixed(2)}</Data>
-                  <Data size={12} className={tbl.right}>{c.ivRank}</Data>
+                  <IvCell contract={c} />
                   <Data size={12} className={tbl.right}>{c.ivPercentile != null ? c.ivPercentile : '—'}</Data>
                   <Data size={12} className={tbl.right}>{c.theta.toFixed(2)}</Data>
                   <Data size={12} className={tbl.right}>${c.spread.toFixed(2)}</Data>
@@ -292,7 +325,7 @@ export default function Step6Page() {
                       <SortBtn label="DTE"      k="dte"          sortKey={sortKey} dir={sortDir} onClick={toggleSort} />
                       <SortBtn label="DELTA"    k="delta"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
                       <SortBtn label="PRICE"    k="price"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
-                      <SortBtn label="IV RANK"  k="ivRank"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
+                      <SortBtn label={IV_COLUMN_LABEL} k="ivRank" sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
                       <SortBtn label="IV PCTL"  k="ivPercentile" sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
                       <SortBtn label="Θ/DAY"    k="theta"        sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />
                       <SortBtn label="SPREAD"   k="spread"       sortKey={sortKey} dir={sortDir} onClick={toggleSort} align="right" />

@@ -1074,12 +1074,18 @@ function SpreadsSection() {
 function IvThresholdsSection() {
   const { thresholds, setThresholds } = useIvThresholdsStore();
 
-  const [swingPassText,    setSwingPassText]    = useState(String(thresholds.Swing?.pass_max    ?? 34));
-  const [positionPassText, setPositionPassText] = useState(String(thresholds.Position?.pass_max ?? 44));
+  // These edit the ABSOLUTE ceiling (`abs_pass_max`), not the percentile one.
+  // On any chain where neither IBKR nor tastytrade supplied a rank -- the
+  // default configuration -- the absolute set is the one the gate actually
+  // applies, and 34/44 are the numbers it has been applying all along
+  // (PHASE-A-NULL-IVRANK-2026-09-06). Wiring this knob to the percentile set
+  // would give the trader a control that changes nothing they can see.
+  const [swingPassText,    setSwingPassText]    = useState(String(thresholds.Swing?.abs_pass_max    ?? 34));
+  const [positionPassText, setPositionPassText] = useState(String(thresholds.Position?.abs_pass_max ?? 44));
 
   // Sync text buffers when the store resets
-  useEffect(() => { setSwingPassText(String(thresholds.Swing?.pass_max    ?? 34));    }, [thresholds.Swing?.pass_max]);
-  useEffect(() => { setPositionPassText(String(thresholds.Position?.pass_max ?? 44)); }, [thresholds.Position?.pass_max]);
+  useEffect(() => { setSwingPassText(String(thresholds.Swing?.abs_pass_max    ?? 34));    }, [thresholds.Swing?.abs_pass_max]);
+  useEffect(() => { setPositionPassText(String(thresholds.Position?.abs_pass_max ?? 44)); }, [thresholds.Position?.abs_pass_max]);
 
   function handleSaveIvThresholds() {
     const swingVal = parseInt(swingPassText, 10);
@@ -1090,20 +1096,20 @@ function IvThresholdsSection() {
     setPositionPassText(String(positionPass));
     setThresholds({
       ...thresholds,
-      Swing:    { ...thresholds.Swing,    pass_max: swingPass    },
-      Position: { ...thresholds.Position, pass_max: positionPass },
+      Swing:    { ...thresholds.Swing,    abs_pass_max: swingPass    },
+      Position: { ...thresholds.Position, abs_pass_max: positionPass },
     });
   }
 
   return (
     <>
       <SectionIntro
-        title="IV rank thresholds"
-        blurb="Maximum IV rank that counts as PASS for each horizon. Intraday has no IV gate (disabled). These values are fetched from the backend on load and stored in session only — edit scoring_rules.yaml to persist permanently."
+        title="IV thresholds"
+        blurb="Maximum implied volatility that counts as PASS for each horizon. These edit the ABSOLUTE IV ceiling — the one that applies whenever no IV-rank source (IBKR or tastytrade) is connected, which is the usual case. Intraday has no IV gate (disabled). Values are fetched from the backend on load and stored in session only — edit scoring_rules.yaml to persist permanently."
       />
       <Row
         label="Swing — pass max"
-        hint="IV rank at or below this → PASS for Swing scans (1–100)"
+        hint="Absolute IV at or below this → PASS for Swing scans (1–100)"
         defaultValue="34"
       >
         <input
@@ -1117,7 +1123,7 @@ function IvThresholdsSection() {
       </Row>
       <Row
         label="Position — pass max"
-        hint="IV rank at or below this → PASS for Position scans (1–100)"
+        hint="Absolute IV at or below this → PASS for Position scans (1–100)"
         defaultValue="44"
       >
         <input

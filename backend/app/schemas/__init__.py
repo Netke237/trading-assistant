@@ -105,6 +105,11 @@ class DeltaDetail(BaseModel):
 
 class IvRankDetail(BaseModel):
     iv_rank: float | None = None
+    # Which quantity `iv_rank` holds: "rank" (a true percentile from IBKR or
+    # tastytrade), "absolute" (implied volatility 0-100), or "none". Lets the
+    # UI label the figure honestly rather than printing an absolute IV under
+    # the words "IV rank" (PHASE-A-NULL-IVRANK-2026-09-06).
+    iv_basis: Literal["rank", "absolute", "none"] = "absolute"
     preferred_max: float
 
 
@@ -182,8 +187,18 @@ class OptionContract(BaseModel):
     price: float
     delta: float
     theta: float
-    ivRank: int
-    ivPercentile: int
+    # TWO DIFFERENT QUANTITIES, either of which may be absent
+    # (PHASE-A-NULL-IVRANK-2026-09-06):
+    #   ivRank -- a TRUE PERCENTILE, where today's IV sits in this name's own
+    #             52-week range. Only IBKR and tastytrade supply one, so it is
+    #             None on most chains.
+    #   iv     -- ABSOLUTE implied volatility, 0-100, for THIS strike.
+    # Until 2026-09-06 the absolute figure was written into `ivRank`, so the UI
+    # printed a 45% IV as "IV rank 45". Consumers must prefer the rank, fall
+    # back to `iv`, and LABEL WHICH ONE they are showing.
+    ivRank: Optional[int] = None
+    iv: Optional[float] = None
+    ivPercentile: Optional[int] = None
     spread: float
     volume: int
     score: int
@@ -409,7 +424,10 @@ class ContractDetails(BaseModel):
     mid: float
     delta: float
     theta: float
-    ivRank: int
+    # See OptionContract above — a percentile when one exists, else None, with
+    # the absolute level in `iv` (PHASE-A-NULL-IVRANK-2026-09-06).
+    ivRank: Optional[int] = None
+    iv: Optional[float] = None
     ivPercentile: Optional[int] = None
     dte: int
 
@@ -450,7 +468,9 @@ class AlternativeContract(BaseModel):
     mid:                float
     delta:              float
     theta:              float
-    ivRank:             int
+    # See OptionContract above (PHASE-A-NULL-IVRANK-2026-09-06).
+    ivRank:             Optional[int] = None
+    iv:                 Optional[float] = None
     score:              int
     contractConfidence: Status
     contractBreakdown:  ContractScoreBreakdown
@@ -789,7 +809,13 @@ class PortfolioPositionSchema(BaseModel):
     dteRemaining: int = 0
     delta: Optional[float] = None
     theta: Optional[float] = None
+    # A TRUE PERCENTILE, or None when no rank source answered. Before
+    # 2026-09-06 this field carried the ABSOLUTE IV instead, so the portfolio
+    # table printed an absolute level under "IV RANK"; the absolute figure now
+    # rides in `iv` and the two are labelled apart
+    # (PHASE-A-NULL-IVRANK-2026-09-06).
     ivRank: Optional[int] = None
+    iv: Optional[float] = None
     # Exit-plan pipeline (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
     # — Phase 0 scaffolding, populated by later phases.
     exitPlan: Optional[dict] = None

@@ -64,6 +64,9 @@ export interface DeltaDetail {
 }
 export interface IvRankDetail {
   iv_rank:       number | null;
+  /** Which quantity `iv_rank` holds — see lib/ivBasis.ts. Absent on responses
+   *  predating the split, which were all carrying an absolute IV. */
+  iv_basis?:     'rank' | 'absolute' | 'none';
   preferred_max: number;
 }
 export interface LiquidityDetail {
@@ -422,7 +425,13 @@ export interface PortfolioPosition {
   targets:       TargetLevel[];
   status:        Status;
   // Options-specific fields surfaced in the portfolio table.
-  ivRank?:       number;       // 0–100, current IV vs 52-week range
+  /** A TRUE PERCENTILE (today's IV vs this name's own 52-week range), or
+   *  absent when no rank source answered — which is the common case. The
+   *  absolute level lives in `iv`. Resolve the two via lib/ivBasis.ts;
+   *  never print one under the other's label. */
+  ivRank?:       number | null;
+  /** ABSOLUTE implied volatility, 0–100, for this contract. */
+  iv?:           number | null;
   delta?:        number;       // option delta (–1..+1)
   theta?:        number;       // $/day time decay (negative for longs)
   vega?:         number;       // $/vol point
@@ -503,8 +512,11 @@ export interface TradeCardData {
     mid:    number;              // premium, $
     delta:  number;
     theta:  number;              // $/day
-    ivRank: number;              // 0–100
-    ivPercentile?: number;       // 0–100
+    /** TRUE PERCENTILE, or null when no rank source answered. See lib/ivBasis.ts. */
+    ivRank: number | null;
+    /** ABSOLUTE implied volatility 0–100, or null. See lib/ivBasis.ts. */
+    iv?:    number | null;
+    ivPercentile?: number | null;  // 0–100
     dte:    number;
   };
   entry:  { limit: number; maxFill: number; orderType: OrderType };
@@ -571,8 +583,12 @@ export interface OptionContract {
   price:        number;
   delta:        number;
   theta:        number;
-  ivRank:       number;
-  ivPercentile: number;
+  /** TRUE PERCENTILE, or null when no rank source answered — the common case.
+   *  The absolute level is in `iv`. Resolve via lib/ivBasis.ts. */
+  ivRank:       number | null;
+  /** ABSOLUTE implied volatility, 0–100, for this strike, or null. */
+  iv?:          number | null;
+  ivPercentile: number | null;
   spread:       number;
   volume:       number;
   score:        number;
@@ -605,7 +621,9 @@ export interface AlternativeContract {
   mid:          number;
   delta:        number;
   theta:        number;
-  ivRank:       number;
+  /** TRUE PERCENTILE or null; absolute level in `iv`. See lib/ivBasis.ts. */
+  ivRank:       number | null;
+  iv?:          number | null;
   score:        number;
   contractConfidence: Status;
   contractBreakdown:  ContractScoreBreakdown;

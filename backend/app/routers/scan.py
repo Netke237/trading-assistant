@@ -52,7 +52,7 @@ from app.data.market import (
     get_tradier_creds,
 )
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
-from app.data.augment import _augment
+from app.data.augment import _augment, opt_float, opt_int
 from app.scoring.stock_scorer import score_stock, StockScoreCard
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
@@ -874,8 +874,9 @@ async def _process_symbol(
             mid=round(premium, 2),
             delta=float(contract.get("delta", 0.45)),
             theta=float(contract.get("theta", -0.05)),
-            ivRank=int(contract.get("ivRank", 50)),
-            ivPercentile=int(contract.get("ivPercentile", 0) or 0),
+            ivRank=opt_int(contract.get("ivRank")),
+            iv=opt_float(contract.get("iv")),
+            ivPercentile=opt_int(contract.get("ivPercentile")),
             dte=int(contract.get("dte", 30)),
         ),
         entry=TradeEntry(
@@ -972,7 +973,8 @@ async def _process_symbol(
             mid=round(float(alt_c.get("price", 0)), 2),
             delta=round(float(alt_c.get("delta", 0.45)), 3),
             theta=round(float(alt_c.get("theta", -0.05)), 3),
-            ivRank=int(alt_c.get("ivRank", 50)),
+            ivRank=opt_int(alt_c.get("ivRank")),
+            iv=opt_float(alt_c.get("iv")),
             score=alt_card.score,
             contractConfidence=alt_card.status,
             contractBreakdown=ContractScoreBreakdown(
@@ -1008,7 +1010,8 @@ async def _process_symbol(
             mid=round(abs(_alt_sp.net_debit_credit), 2),
             delta=round(float(contract.get("delta", 0.30)), 3),
             theta=round(float(contract.get("theta", -0.05)), 3),
-            ivRank=int(contract.get("ivRank", 50)),
+            ivRank=opt_int(contract.get("ivRank")),
+            iv=opt_float(contract.get("iv")),
             score=contract_card.score,
             contractConfidence=contract_card.status,
             contractBreakdown=ContractScoreBreakdown(

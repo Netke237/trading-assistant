@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas import OptionContract, RrModel, TradeEntry, TradeExit
 from app.data.market import fetch_option_chain_async, fetch_contract_quote_async, fetch_price_async, fetch_candles_async
-from app.data.augment import _augment
+from app.data.augment import _augment, opt_float, opt_int
 from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.trade_plan import build_trade_plan
@@ -33,7 +33,12 @@ class ContractQuoteResponse(BaseModel):
     price: float   # mid price
     delta: float
     theta: float
-    ivRank: int
+    # A TRUE PERCENTILE, or None when no rank source answered -- which is the
+    # common case, and was already reachable before the Phase A split via
+    # fetch_contract_quote_async's price-only fallback path
+    # (PHASE-A-NULL-IVRANK-2026-09-06). The absolute level rides in `iv`.
+    ivRank: Optional[int] = None
+    iv: Optional[float] = None
     spread: float
     volume: int
 
@@ -116,8 +121,14 @@ async def get_contracts(
             price=float(c.get("price", 0)),
             delta=float(augmented.get("delta", 0)),
             theta=float(c.get("theta", 0)),
-            ivRank=int(augmented.get("iv_rank", 0)),
-            ivPercentile=int(c.get("ivPercentile", 0)),
+            # Send the two quantities RAW and unresolved: `ivRank` only ever
+            # a percentile, `iv` only ever an absolute level, either or both
+            # None. `augmented["iv_rank"]` is the RESOLVED figure the scorer
+            # needed and would blur the two back together on the wire
+            # (PHASE-A-NULL-IVRANK-2026-09-06).
+            ivRank=opt_int(c.get("ivRank")),
+            iv=opt_float(c.get("iv")),
+            ivPercentile=opt_int(c.get("ivPercentile")),
             spread=float(c.get("spread", 0)),
             volume=int(c.get("volume", 0)),
             score=score_card.score,
@@ -158,7 +169,8 @@ async def get_option_quote(
         price=float(quote["price"]),
         delta=float(quote["delta"]),
         theta=float(quote["theta"]),
-        ivRank=int(quote["ivRank"]),
+        ivRank=opt_int(quote.get("ivRank")),
+        iv=opt_float(quote.get("iv")),
         spread=float(quote["spread"]),
         volume=int(quote["volume"]),
     )

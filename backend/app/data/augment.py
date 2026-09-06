@@ -9,6 +9,23 @@ from __future__ import annotations
 from app.models.black_scholes import bs_delta
 
 
+def opt_int(v) -> int | None:
+    """Round an optional numeric to int, preserving None.
+
+    `ivRank` is None on every chain where neither IBKR nor tastytrade answered
+    -- the common case -- and `int(chain.get("ivRank", 50))` raised TypeError
+    on it, because the key is PRESENT and holds None so the 50 default never
+    applied (PHASE-A-NULL-IVRANK-2026-09-06). None must survive to the wire:
+    it is what tells the UI it has no percentile to show.
+    """
+    return None if v is None else int(round(float(v)))
+
+
+def opt_float(v) -> float | None:
+    """Round an optional numeric to 1dp, preserving None. See opt_int."""
+    return None if v is None else round(float(v), 1)
+
+
 def _augment(c: dict, stock_price: float = 0.0) -> dict:
     """
     Enrich a raw contract dict with computed fields required by validate_contract().
@@ -22,7 +39,11 @@ def _augment(c: dict, stock_price: float = 0.0) -> dict:
         New dict with all original keys plus:
           - bid / ask  (derived from price ± spread/2)
           - delta      (from greeks or BS approximation)
-          - iv_rank    (snake_case alias of ivRank for contract_validator)
+          - iv_rank    (the resolved volatility figure for contract_validator --
+                        a percentile when one exists, otherwise the absolute
+                        level; None when neither does)
+          - iv_basis   ("rank" | "absolute" | "none") -- WHICH quantity iv_rank
+                        holds, and therefore which threshold set may judge it
     """
     mid = float(c.get("price", 0))
     spread = float(c.get("spread", 0))
@@ -38,11 +59,42 @@ def _augment(c: dict, stock_price: float = 0.0) -> dict:
         if computed != 0.0:
             delta = round(computed, 4)
 
+    # ── Resolve the volatility figure (PHASE-A-NULL-IVRANK-2026-09-06) ───────
+    # `ivRank` and `iv` are TWO DIFFERENT QUANTITIES and usually only one is
+    # present:
+    #   ivRank -- a TRUE PERCENTILE (where today's IV sits in this name's own
+    #             52-week range), supplied only when IBKR or tastytrade
+    #             answered.
+    #   iv     -- ABSOLUTE implied volatility, 0-100, from Tradier per strike,
+    #             the yfinance backfill, or scan.py's Black-Scholes inversion.
+    # Prefer the rank, exactly as routers/scan.py does: a percentile says where
+    # this vol sits FOR THIS NAME, which an absolute level cannot. `iv_basis`
+    # records which one won so contract_validator judges it against the
+    # matching thresholds -- scoring a 45% absolute IV as though it were the
+    # 45th percentile is the defect this split exists to prevent.
+    #
+    # Note the deliberate asymmetry, matching scan.py's resolution: a rank of
+    # 0.0 is MEANINGFUL (bottom of the 52-week range) so it is tested with
+    # `is not None`, whereas an absolute IV of 0 is a missing-data sentinel and
+    # is tested for truthiness.
+    _rank = c.get("ivRank")
+    _abs = c.get("iv")
+    if _rank is not None:
+        iv_value: float | None = round(float(_rank), 1)
+        iv_basis = "rank"
+    elif _abs:
+        iv_value, iv_basis = round(float(_abs), 1), "absolute"
+    else:
+        iv_value, iv_basis = None, "none"
+
+    _pct = c.get("ivPercentile")
+
     return {
         **c,
         "bid": round(max(0.01, mid - spread / 2), 2),
         "ask": round(mid + spread / 2, 2),
         "delta": delta,
-        "iv_rank":       round(float(c.get("ivRank", 0)), 1),       # snake_case alias for contract_validator
-        "iv_percentile": round(float(c.get("ivPercentile", 0)), 1),  # forwarded for future scoring rules
+        "iv_rank":       iv_value,   # snake_case alias for contract_validator
+        "iv_basis":      iv_basis,
+        "iv_percentile": round(float(_pct), 1) if _pct is not None else None,
     }

@@ -37,7 +37,12 @@ export function applyPickedContract(card: TradeCardData, picked: OptionContract 
       mid:          picked.price,
       delta:        picked.delta,
       theta:        picked.theta,
+      // Carry BOTH quantities across the override — `ivRank` is null on any
+      // chain without a rank source, and dropping `iv` would blank the card's
+      // IV readout for the contract the user just picked
+      // (PHASE-A-NULL-IVRANK-2026-09-06).
       ivRank:       picked.ivRank,
+      iv:           picked.iv,
       ivPercentile: picked.ivPercentile,
       dte:          picked.dte,
     },

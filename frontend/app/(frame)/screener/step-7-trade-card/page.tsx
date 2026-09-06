@@ -139,7 +139,12 @@ function positionFromOrder(
     premiumStopDollar,
     targets:       c.exit.targets,
     status:        c.finalStatus,
+    // Both quantities travel to the position, kept apart
+    // (PHASE-A-NULL-IVRANK-2026-09-06). Dropping `iv` here would blank the
+    // portfolio's IV column for every position opened from a card until a
+    // live quote happened to refill it.
     ivRank:        cd?.ivRank,
+    iv:            cd?.iv,
     delta:         cd?.delta,
     theta:         cd?.theta,
     vega:          0.20,
@@ -437,7 +442,7 @@ export default function Step7Page() {
    * every path, including the next early return someone adds: a quote whose
    * key does not match the card on screen is not this card's quote, and
    * `liveQuoteForCard` below is the only thing any consumer may read. */
-  const [liveQuote,      setLiveQuote]        = useState<{ key: string; price: number; delta: number; theta: number; ivRank: number; spread: number; volume: number } | null>(null);
+  const [liveQuote,      setLiveQuote]        = useState<{ key: string; price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number } | null>(null);
   const [liveStockPrice, setLiveStockPrice]   = useState<{ symbol: string; price: number } | null>(null);
   const [fetchingQuote,  setFetchingQuote]    = useState(false);
   // Recomputed Entry/Exit/RR/targets, per SYMBOL, for every overridden contract —
@@ -862,6 +867,7 @@ export default function Step7Page() {
       targets:       card.exit.targets,
       status:        card.finalStatus,
       ivRank:        cd?.ivRank,
+      iv:            cd?.iv,
       delta:         cd?.delta,
       theta:         cd?.theta,
       vega:          0.20,

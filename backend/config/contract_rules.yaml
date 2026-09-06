@@ -22,6 +22,22 @@ hard_reject:
   max_delta: 0.85               # absolute delta — above this = too deep ITM
   min_dte: 21                   # calendar days to expiry — below this = too short
   max_dte: 90                   # calendar days to expiry — above this = too long
+  # TWO HARD-REJECT CEILINGS, because the volatility figure reaching
+  # contract_validator can be either of two different quantities and only one
+  # of them is usually available (PHASE-A-NULL-IVRANK-2026-09-06). Which one
+  # applies is decided by `iv_basis`, set in app/data/augment.py:
+  #   max_iv_abs  judges ABSOLUTE implied volatility 0-100 (Tradier per strike,
+  #               the yfinance backfill, or scan.py's Black-Scholes inversion).
+  #   max_iv_rank judges a TRUE PERCENTILE, available only when IBKR or
+  #               tastytrade answered.
+  # 70 is the number this ceiling has ACTUALLY been applying all along, to an
+  # absolute level mislabelled as a rank, so it moves to max_iv_abs and
+  # behaviour is unchanged for every chain without a rank source.
+  max_iv_abs: 70                # long-premium strategy: never buy when absolute IV > 70%
+  # UNMEASURED — seeded from the absolute ceiling above. Nobody has checked
+  # whether a percentile deserves the same cut-off; a name at the 75th
+  # percentile of its own range is a genuinely different claim from one at 75%
+  # IV. Same standing as the iv_rank_* thresholds in scoring_rules.yaml.
   max_iv_rank: 70               # long-premium strategy: never buy when IV rank > 70
   max_soft_fail_count: 3        # reject if this many soft rules fail
   min_stock_score: 55           # contracts only recommended when the underlying's stock score is at least this
@@ -45,6 +61,11 @@ soft_rank:
                                       # apart from min_dte without revisiting dte_window.py first —
                                       # see contract_validator.py's _score_dte for the mechanics.
   preferred_dte_max: 60              # above this = soft penalty
+  # Two soft ceilings for the same reason as max_iv_abs / max_iv_rank above —
+  # `iv_basis` picks which one scores the contract. 55 is what has actually
+  # been applied to absolute IV, so it moves to preferred_iv_abs_max.
+  preferred_iv_abs_max: 55           # above this = soft penalty (expensive premium)
+  # UNMEASURED — seeded from the absolute ceiling above.
   preferred_iv_rank_max: 55          # above this = soft penalty (expensive premium)
 
 # Weights for scoring (must sum to 1.0)

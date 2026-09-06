@@ -75,8 +75,14 @@ export function deltaDetailText(d?: DeltaDetail): string | undefined {
 
 export function ivDetailText(d?: IvRankDetail): string | undefined {
   if (!d) return undefined;
-  if (d.iv_rank == null) return 'No IV rank data';
-  return `IV Rank ${d.iv_rank.toFixed(0)} · pref ≤${d.preferred_max.toFixed(0)}`;
+  if (d.iv_rank == null) return 'No implied-volatility data';
+  // `iv_rank` may hold a percentile OR an absolute IV, and only `iv_basis`
+  // says which — printing an absolute level as "IV Rank" is the exact defect
+  // Phase A exists to fix (PHASE-A-NULL-IVRANK-2026-09-06). Responses
+  // predating the split carried an absolute level, so that is the default.
+  const label = d.iv_basis === 'rank' ? 'IV Rank' : 'IV';
+  const unit  = d.iv_basis === 'rank' ? '' : '%';
+  return `${label} ${d.iv_rank.toFixed(0)}${unit} · pref ≤${d.preferred_max.toFixed(0)}${unit}`;
 }
 
 export function liquidityDetailText(d?: LiquidityDetail): string | undefined {

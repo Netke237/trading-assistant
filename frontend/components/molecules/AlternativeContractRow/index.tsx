@@ -1,6 +1,7 @@
 import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { statusForScore } from '@/lib/status';
+import { resolveIv, formatIv } from '@/lib/ivBasis';
 import { contractBreakdownTooltip } from '@/lib/statusTooltips';
 import type { AlternativeContract } from '@/types/domain';
 import styles from './AlternativeContractRow.module.css';
@@ -35,7 +36,12 @@ export function AlternativeContractRow({ alt, rank }: AlternativeContractRowProp
         <Metric label="Mid" value={`$${alt.mid.toFixed(2)}`} />
         <Metric label="Δ" value={alt.delta.toFixed(2)} />
         <Metric label="θ" value={`$${alt.theta.toFixed(2)}`} />
-        <Metric label="IV rank" value={`${alt.ivRank}`} />
+        {/* Label follows the figure — see lib/ivBasis.ts
+            (PHASE-A-NULL-IVRANK-2026-09-06). */}
+        <Metric
+          label={resolveIv(alt).basis === 'rank' ? 'IV rank' : 'IV'}
+          value={formatIv(resolveIv(alt), alt.symbol).text}
+        />
         <Metric label="R/R" value={`${alt.rrRatio.toFixed(1)}×`} tone={rrTone} />
       </div>
 

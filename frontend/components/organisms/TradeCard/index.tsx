@@ -13,6 +13,7 @@ import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk, formatStopLossHeadline, formatStopLossBadge, stopLossIsTotalOnPrintedFigures } from '@/lib/risk';
+import { resolveIv, formatIv } from '@/lib/ivBasis';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -1750,7 +1751,15 @@ export function TradeCard({
               <DetailCell label="Mid" value={`$${data.contractDetails.mid.toFixed(2)}`} />
               <DetailCell label="Δ" value={data.contractDetails.delta.toFixed(2)} mono />
               <DetailCell label="Θ / day" value={`$${data.contractDetails.theta.toFixed(2)}`} mono />
-              <DetailCell label="IV rank" value={`${data.contractDetails.ivRank}`} mono />
+              {/* A percentile when a rank source answered, otherwise the
+                  ABSOLUTE implied volatility — the label follows the figure,
+                  because printing 45% IV as "IV rank 45" is the misreading
+                  Phase A exists to end (PHASE-A-NULL-IVRANK-2026-09-06). */}
+              <DetailCell
+                label={resolveIv(data.contractDetails).basis === 'rank' ? 'IV rank' : 'IV'}
+                value={formatIv(resolveIv(data.contractDetails), data.symbol).text}
+                mono
+              />
               <DetailCell label="DTE" value={`${data.contractDetails.dte}d`} mono />
               <DetailCell label="CaR" value={`$${car.toFixed(0)}`} mono />
             </div>

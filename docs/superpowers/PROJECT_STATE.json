@@ -1,7 +1,7 @@
 {
  "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree.",
  "updated": "2026-09-06",
- "updated_by": "session_01Rg4ZBTUexLsDZTwZV8CgW7 (round-12 user-visible batch, audit rounds 1-2)",
+ "updated_by": "Phase A, frontend half + the backend defects it exposed",
  "main": "3ecf2a91",
  "working_branch": "claude/dev-state-reconstruction-hzmzbi (restarted off main 3ecf2a91) -- Phase A. Reuse this branch NAME every time: it is the designated push target for this project. Restart it off main after each merge rather than inventing a new name. The old ref still exists on origin; the remote refuses ref deletions and it is fully merged, so it is harmless.",
  "audit_rule": "NOTHING counts as done until an adversarial round comes back clean AT THE AGREED SEVERITY GATE. As of AUDIT-EXIT-CRITERION-2026-09-05 that gate is: no finding that can put a wrong number in front of a user or on a broker order, and no finding that corrupts persisted data. MEDIUM and below are logged as follow-ups against main, NOT fixed in-branch -- fixing them inside the audit target is what made ten rounds unable to converge. audit_rounds counts rounds RUN; audit_clean is true only when a round clears that gate. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is.",
@@ -9,19 +9,22 @@
   {
    "id": "A",
    "name": "Contract iv field",
-   "status": "in_progress",
+   "status": "shipped_unaudited",
    "audit_rounds": 0,
    "audit_clean": false,
    "blocks": [
     "B",
     "C"
    ],
-   "note": "BACKEND HALF ONLY -- NOT MERGEABLE. market.py's async chain now emits `iv` (absolute, per strike) and leaves `ivRank` None unless IBKR/tastytrade answered; scan.py resolves (value, basis) preferring the rank; _rule_vol picks iv_abs_* vs iv_rank_* by basis; scoring_rules.yaml carries both sets on all three horizons. Backend suite 2004 passed. THE FRONTEND HALF IS OUTSTANDING: types/domain.ts still declares `ivRank: number` non-nullable in four places and carries no `iv` field, so the wire now sends null where the UI expects a number -- step-6-contracts:218 renders {c.ivRank} bare and would show a blank IV RANK column. Shipping the backend alone is a user-visible regression, i.e. GATE by the project's own severity rule. ~16 files reference ivRank; the real display sites are step-5-vol-events (already null-tolerant) and step-6-contracts (not).",
+   "note": "BUILT BOTH HALVES, NEVER AUDITED. `iv` (absolute implied volatility) and `ivRank` (a true percentile) are now separate fields end to end: schemas, both routers, both scorers, the config endpoint, the wire types and every display site. Backend suite green, frontend typecheck clean, 104 suites / 1260 tests green. WHAT THE SECOND HALF FOUND, beyond the frontend work the handoff scoped: (1) the backend half alone was a 500, not a blank column -- market.py writes `\"ivRank\": None`, and `int(chain.get(\"ivRank\", 50))` raises TypeError because the key is PRESENT holding None so the 50 default never applied. Three sites in scan.py plus `float(...)` in augment.py, i.e. every options scan and every /api/contracts call in the default configuration. The 2004-test suite passed because nothing drove the async chain into either scorer. (2) contract_validator.py had never been converted -- the handoff's own worked example (a 75% IV hard-rejected at max_iv_rank: 70) lives there at line 98, not in stock_scorer, so only half the defect had been fixed. It is now basis-aware the same way _rule_vol is, and contract_rules.yaml carries max_iv_abs / preferred_iv_abs_max alongside the percentile keys. (3) /api/config/iv-thresholds served one unqualified `pass_max` that the client applied to whatever figure it held; it now serves abs_* and rank_* and no bare name at all. Resolution ('prefer the rank, fall back to the absolute level, else none', with rank 0 meaningful and absolute 0 a missing-data sentinel) is defined ONCE per side -- backend/app/data/augment.py and frontend/lib/ivBasis.ts -- deliberately, because duplicated arithmetic in two editors is this project's recurring regression class. opt_int/opt_float likewise live in augment.py and are imported by scan.py, contracts.py and portfolio.py rather than re-derived. Both threshold sets are seeded equal, so NO verdict changes today; what changed is which set applies, so the percentile numbers can be measured without moving the absolute ones. OUTSTANDING: one report-only adversarial round at the severity gate. Not mergeable until that comes back clean.",
    "verify": {
-    "kind": "absent",
-    "pattern": "^    iv:",
-    "path": "backend/app/schemas/__init__.py"
-   }
+    "kind": "present",
+    "pattern": "iv_basis",
+    "path": "backend/app/data/augment.py"
+   },
+   "commits": [
+    "aabcf026"
+   ]
   },
   {
    "id": "B",
@@ -386,7 +389,9 @@
   "Should Current price accept 0? The 2026-09-06 batch refuses it because the field advertised 0 as a CLEAR and a typed 0 writes pnlPct: -100. But 0 is what a long option that expired worthless IS, and fromBackend writes exactly that when the backend has no quote -- so a worthless position can now only be marked $0.01. Allow 0 here, or route 'mark worthless' through Close? (R1-8)",
   "The GLOBAL premium stop is selectable at 100% (Settings step 0.05, risk_settings.py le=1.0), at which every inheriting position previews 'Fires at premium $0.00' and alertEngine can never fire PREMIUM_STOP (it needs currentPrice > 0). Bound the global at PREMIUM_STOP_MAX_PCT too? (R1-10, and the live half of F2)",
   "The editors' 10%-99% band cannot be an invariant on STORED values: the backend derives the ratio against the FILL, not the mid the card bounded the dollar against, so an in-band typed dollar stores out-of-band routinely. Clamp the ratio server-side and log it, or accept that the band governs editors only (as premiumStop.ts now documents)? (R1-3)",
-  "Phase A percentile thresholds are UNMEASURED: iv_rank_pass_max/caution_max were seeded from the absolute set (34/55 swing, 44/65 position) because nobody has checked whether a percentile deserves the same cut-offs as an IV level. The absolute numbers are evidence-backed only in the sense that they are what the rule was already applying. Same standing as Q7."
+  "Phase A percentile thresholds are UNMEASURED: iv_rank_pass_max/caution_max were seeded from the absolute set (34/55 swing, 44/65 position) because nobody has checked whether a percentile deserves the same cut-offs as an IV level. The absolute numbers are evidence-backed only in the sense that they are what the rule was already applying. Same standing as Q7.",
+  "Phase A left the e2e fixtures (frontend/e2e/fixtures/api-mocks.ts) with ivRank: 42 and no `iv`, so every e2e row resolves to basis 'rank' -- the RARE path. The common path (ivRank null, iv present) has unit coverage on both sides but no e2e coverage. Worth a fixture carrying the absolute shape before trusting an e2e green on this area.",
+  "Step 5 previously treated an IV RANK OF 0 as missing (`rank != null && rank > 0`), which the backend never did -- augment.py and scan.py both read a rank of 0 as a real reading (IV at the bottom of the name's own 52-week range, i.e. very cheap premium, a strong PASS). frontend/lib/ivBasis.ts now follows the backend. Nobody has confirmed the old frontend behaviour was not deliberate."
  ],
  "authoritative_documents": [
   {
@@ -415,11 +420,11 @@
   },
   {
    "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-12.md",
-   "role": "Handoff #12 — the reconstruction, the plan, and Piece 4."
+   "role": "Handoff #12 \u2014 the reconstruction, the plan, and Piece 4."
   },
   {
    "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-13.md",
-   "role": "LATEST handoff — live Barrier Race verification, state tracking, stop-cost notation."
+   "role": "LATEST handoff \u2014 live Barrier Race verification, state tracking, stop-cost notation."
   },
   {
    "path": "docs/superpowers/STATE_TRACKING.md",
