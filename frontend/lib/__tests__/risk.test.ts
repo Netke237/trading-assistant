@@ -419,12 +419,14 @@ describe('stopPremiumRisk', () => {
     expect(r.rawLoss).toBeCloseTo(0.7995, 4);
   });
 
-  it('lands CAUTION exactly at the 80% threshold, PASS just below', () => {
-    // stockMove * delta / premium == 0.80 exactly: 8.0 * 0.50 / 5.00
-    expect(stopPremiumRisk(92.0, 100.0, 0.50, 5.00)!.status).toBe('CAUTION');
-    // A CLOSER stop (92.1, not 91.9) is the cheaper one -- less distance to the
-    // stop means less loss: 7.9 * 0.50 / 5.00 = 0.79.
-    expect(stopPremiumRisk(92.1, 100.0, 0.50, 5.00)!.status).toBe('PASS');
+  it('lands CAUTION exactly at the 70% threshold, PASS just below', () => {
+    // The module default mirrors the Swing line, which Q7 moved from 0.80 to
+    // 0.70 with the gate's basis (2026-09-02-gate-basis-spec.md §1).
+    // stockMove * delta / premium == 0.70 exactly: 7.0 * 0.50 / 5.00
+    expect(stopPremiumRisk(93.0, 100.0, 0.50, 5.00)!.status).toBe('CAUTION');
+    // A CLOSER stop (93.1, not 92.9) is the cheaper one -- less distance to the
+    // stop means less loss: 6.9 * 0.50 / 5.00 = 0.69.
+    expect(stopPremiumRisk(93.1, 100.0, 0.50, 5.00)!.status).toBe('PASS');
   });
 
   it('never emits REJECT — the gate sorts candidates, it does not refuse them', () => {
@@ -751,15 +753,15 @@ describe('stopPremiumRisk — configurable thresholds', () => {
     // The per-run override in Step 3 is user-editable, so these are reachable
     // inputs. Above 1.0 is meaningless -- the loss caps at the premium, so
     // nothing could exceed it and CAUTION would be unreachable.
-    const at70 = [93.0, 100.0, 0.50, 5.00] as const;   // 70% loss
+    const at60 = [94.0, 100.0, 0.50, 5.00] as const;   // 60% loss
     const at85 = [91.5, 100.0, 0.50, 5.00] as const;   // 85% loss
     for (const bad of [{ pass_max_fraction: 1.5 }, { pass_max_fraction: 0 },
                        { pass_max_fraction: -0.5 }, { pass_max_fraction: NaN }]) {
-      expect(stopPremiumRisk(...at70, bad)!.status).toBe('PASS');      // 0.80 default
+      expect(stopPremiumRisk(...at60, bad)!.status).toBe('PASS');      // 0.70 default
       expect(stopPremiumRisk(...at85, bad)!.status).toBe('CAUTION');
     }
     // ...and omitting it entirely still gates, at the Swing default.
-    expect(stopPremiumRisk(...at70)!.status).toBe('PASS');
+    expect(stopPremiumRisk(...at60)!.status).toBe('PASS');
     expect(stopPremiumRisk(...at85)!.status).toBe('CAUTION');
   });
 });

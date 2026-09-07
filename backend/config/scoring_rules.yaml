@@ -146,7 +146,14 @@ horizons:
       # gate sorts candidates into "the stop is survivable on this contract" and
       # "it isn't", so the cheaper-to-be-wrong trades surface early. It is not a
       # verdict on the trade and it blocks nothing, so it never paints red.
-      pass_max_fraction: 0.8
+      # Q7 (2026-09-02): re-derived WITH the Black-Scholes-at-today basis, not
+      # against it. The old numbers (0.85 / 0.80 / 0.70) were set against a
+      # delta-linear ruler running 17-29 points pessimistic; on the reference
+      # chain the WORST contract reads 77% under the new basis, so keeping
+      # them would silence the gate permanently. Taken as proposed rather than
+      # measured against a real universe -- Kenneth's explicit call. Revisit
+      # only if the observed flag rate looks wrong; one edit either way.
+      pass_max_fraction: 0.7   # Swing -- PASS means >=30% of premium still there
   intraday:
     weights:
       trend: 0.35
@@ -241,7 +248,14 @@ horizons:
       # gate sorts candidates into "the stop is survivable on this contract" and
       # "it isn't", so the cheaper-to-be-wrong trades surface early. It is not a
       # verdict on the trade and it blocks nothing, so it never paints red.
-      pass_max_fraction: 0.85
+      # Q7 (2026-09-02): re-derived WITH the Black-Scholes-at-today basis, not
+      # against it. The old numbers (0.85 / 0.80 / 0.70) were set against a
+      # delta-linear ruler running 17-29 points pessimistic; on the reference
+      # chain the WORST contract reads 77% under the new basis, so keeping
+      # them would silence the gate permanently. Taken as proposed rather than
+      # measured against a real universe -- Kenneth's explicit call. Revisit
+      # only if the observed flag rate looks wrong; one edit either way.
+      pass_max_fraction: 0.8   # Intraday -- PASS means >=20% of premium still there
   position:
     weights:
       trend: 0.30
@@ -348,7 +362,14 @@ horizons:
       # gate sorts candidates into "the stop is survivable on this contract" and
       # "it isn't", so the cheaper-to-be-wrong trades surface early. It is not a
       # verdict on the trade and it blocks nothing, so it never paints red.
-      pass_max_fraction: 0.7
+      # Q7 (2026-09-02): re-derived WITH the Black-Scholes-at-today basis, not
+      # against it. The old numbers (0.85 / 0.80 / 0.70) were set against a
+      # delta-linear ruler running 17-29 points pessimistic; on the reference
+      # chain the WORST contract reads 77% under the new basis, so keeping
+      # them would silence the gate permanently. Taken as proposed rather than
+      # measured against a real universe -- Kenneth's explicit call. Revisit
+      # only if the observed flag rate looks wrong; one edit either way.
+      pass_max_fraction: 0.6   # Position -- PASS means >=40% of premium still there
 entry_quality:
   spread_tolerance_pct: 0.10
   max_slippage_pct: 0.03

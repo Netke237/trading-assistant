@@ -7,6 +7,9 @@ import { api } from '@/lib/api';
 
 jest.mock('@/lib/api');
 
+// Deliberately NOT the live YAML's values (0.80 / 0.70 / 0.60 since Q7) — this
+// fixture stands in for "whatever the backend served" and has to differ from
+// FALLBACK for the resolution-order tests below to mean anything.
 const YAML_LIKE = {
   Intraday: { pass_max_fraction: 0.85 },
   Swing:    { pass_max_fraction: 0.80 },

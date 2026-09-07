@@ -30,17 +30,18 @@
     {
       "id": "B",
       "name": "Gate basis -- Black-Scholes at today's date (Q3/Q7)",
-      "status": "not_started",
+      "status": "in_progress",
       "audit_rounds": 0,
       "audit_clean": false,
       "depends_on": [
         "A"
       ],
-      "note": "APPROVED by Kenneth 2026-09-04. Reuse market.py:928 _compute_iv_bs, do NOT write a new solver. Thresholds 0.80/0.70/0.60 replace shipped 0.8/0.85/0.7.",
+      "note": "APPROVED by Kenneth 2026-09-04. BATCH 1 of 3 IS BUILT (spec §2.1-2.2, tests 3-8): app/scoring/stop_cost.py prices the contract AT the stop with Black-Scholes at TODAY's remaining life (no theta), backing the IV out of the mid with the BRACKETED _compute_iv_bs (NOT bs_iv -- 2026-09-03-bs-iv-convergence-findings.md measured that Newton loop returning None on 60-69% of the quotable OTM wing, exactly the half of the chain this gate ranks); StopCostOut rides on /contracts/structural-stop and /contracts/exit-plan; strike+dte+premium are all-or-nothing on structural-stop (a PARTIAL set is 422); scoring_rules.yaml carries Q7's 0.80/0.70/0.60 and the frontend FALLBACK mirror moved with it. TWO DEVIATIONS FROM THE SPEC'S LITERAL TEXT, both deliberate: (1) `iv` is optional INSIDE the contract set rather than a fourth member of it -- the gate now runs server-side where the premium is already in hand, so requiring it would 422 every contract whose vendor quote carries no IV, for a number one inversion recovers; (2) the requests gained `horizon_preset`, which the spec never mentions but pass_max_fraction is per-horizon and had to come from somewhere (absent = Swing, the FirstPassageRequest convention). STILL OUTSTANDING: B2, the frontend presenter rewrite (§3, tests 1-2), and B3, the ranking badge (§2.3, test 9) -- B3 is BLOCKED, see open_questions.",
       "verify": {
         "kind": "absent",
-        "pattern": "StopCostOut",
-        "path": "backend/app/routers/contracts.py"
+        "pattern": "stopPremiumRisk\\(c: StopCostOut",
+        "path": "frontend/lib/risk.ts",
+        "note": "Deliberately probes the REMAINING work, not the shipped half. Batch 1 put StopCostOut in backend/app/routers/contracts.py, so the old probe (absent:StopCostOut there) now reports the phase shipped when two thirds of it is not built. The presenter signature is the phase's real finish line: while stopPremiumRisk still computes delta-linear arithmetic instead of rendering a StopCostOut, the card on screen is on the OLD basis whatever the endpoints return."
       }
     },
     {
@@ -452,11 +453,11 @@
     },
     {
       "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-12.md",
-      "role": "Handoff #12 \u2014 the reconstruction, the plan, and Piece 4."
+      "role": "Handoff #12 — the reconstruction, the plan, and Piece 4."
     },
     {
       "path": "docs/superpowers/plans/2026-09-04-stop-model-handoff-round-13.md",
-      "role": "LATEST handoff \u2014 live Barrier Race verification, state tracking, stop-cost notation."
+      "role": "LATEST handoff — live Barrier Race verification, state tracking, stop-cost notation."
     },
     {
       "path": "docs/superpowers/STATE_TRACKING.md",
@@ -546,6 +547,6 @@
     "commit": "f0dc8150",
     "note": "Round 2 of the measurement batch ran against this commit and returned zero gate-level findings, which under audit_rule v2 ends the loop -- HEAD is NOT beyond it for this batch. This supersedes the c8152847 entry, which was Phase D's round-3 commit and is still true of PHASE D: that phase's audit_clean=true refers to round 13 on its pre-batch code, not to any HEAD."
   },
-  "active_phase": null,
-  "active_phase_note": "NULL ON PURPOSE, and it is the next session's job to set it. This branch is not building a phase right now: it carries the finished measurement batch (see already_shipped 'Scan IV thresholds on /scan/last-run'), whose round 1 commit subject the audit-bookkeeping probe would otherwise read as an unrecorded round against Phase B. The round IS recorded -- 2 rounds, clean, audited_through f0dc8150 -- just not against a phase, because a batch is not one. SET THIS TO \"B\" the moment Phase B work starts on this branch, or the probe stays silent through the whole phase and stops catching the thing it exists to catch."
+  "active_phase": "B",
+  "active_phase_note": "Phase B is being built on this branch, batch 1 first (see the phase note). SET at the start of that batch so the audit-bookkeeping probe is live: it scopes this branch's `round N` commit subjects to the active phase, and with active_phase null it stays silent through the whole phase and stops catching the thing it exists to catch. Leave it as \"B\" until B2 and B3 are done or the branch moves to another phase."
 }

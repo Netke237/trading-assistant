@@ -31,10 +31,13 @@ export interface StopPremiumThresholdsState {
   setOverride:   (o: HorizonStopPremiumThresholds | null) => void;
 }
 
+// Q7's re-derived lines, moved with the gate's basis (docs/superpowers/plans/
+// 2026-09-02-gate-basis-spec.md §1). PASS means at least 20% / 30% / 40% of the
+// premium is still there when the stop hits.
 export const FALLBACK: Record<string, HorizonStopPremiumThresholds> = {
-  Intraday: { pass_max_fraction: 0.85 },
-  Swing:    { pass_max_fraction: 0.80 },
-  Position: { pass_max_fraction: 0.70 },
+  Intraday: { pass_max_fraction: 0.80 },
+  Swing:    { pass_max_fraction: 0.70 },
+  Position: { pass_max_fraction: 0.60 },
 };
 
 export const useStopPremiumThresholdsStore = create<StopPremiumThresholdsState>((set) => ({

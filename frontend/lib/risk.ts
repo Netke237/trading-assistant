@@ -51,7 +51,7 @@ export function exposurePct(notional: number, portfolioValue: number): number {
  *  trades up front; it is not a verdict on the trade and it blocks nothing.
  *  REJECT is the red badge in this design system, and a red badge on a
  *  contract the user may perfectly well want to trade reads as a refusal. */
-export const STOP_PREMIUM_PASS_MAX_FRACTION = 0.8;
+export const STOP_PREMIUM_PASS_MAX_FRACTION = 0.7;
 
 export interface StopPremiumRisk {
   stockMove: number;   // $ from the underlying's price to the stop
