@@ -56,9 +56,15 @@ class _StubResult:
 
 class _StubDb:
     """Minimal stand-in for the AsyncSession /api/tradecards uses — it only ever
-    executes one SELECT and reads one row."""
+    executes one SELECT and reads one row.
+
+    Doubles as a stand-in for `AsyncSessionLocal`: restore_from_db takes NO
+    session argument, it opens its own with `async with AsyncSessionLocal()`,
+    so the seam there is the session *factory*, not a parameter."""
     def __init__(self, row): self._row = row
     async def execute(self, _stmt): return _StubResult(self._row)
+    async def __aenter__(self): return self
+    async def __aexit__(self, *exc): return False
 
 
 def _card(symbol: str, **contract_details) -> dict:
@@ -78,6 +84,16 @@ def _card(symbol: str, **contract_details) -> dict:
         "entry": {"limit": 2.0, "maxFill": 2.1, "orderType": "Limit"},
         "exit": {"invalidation": 180.0, "premiumStop": 1.0, "timeStopDays": 30,
                  "target": 200.0, "targets": []},
+        # Required on TradeCardData, and omitting them made this fixture a trap.
+        # get_tradecards swallows a validation error into [], the SAME empty list
+        # the refusal returns -- so an invalid card made the pre-split test below
+        # pass without the refusal ever running, while the post-split test failed
+        # for a reason that had nothing to do with vintage. Every field the model
+        # demands is supplied here so the only thing either test can be measuring
+        # is schema_version.
+        "rrRatio": 2.0,
+        "rrModel": "BS repriced (IV-derived)",
+        "finalStatus": "PASS",
     }
 
 
@@ -114,21 +130,21 @@ async def test_restore_from_db_drops_a_pre_split_result_but_keeps_the_status():
     from app.routers import scan as scan_module
 
     orig_result = scan_module._last_result
+    orig_factory = scan_module.AsyncSessionLocal
+    orig_status = scan_module._last_status
+    orig_updated = scan_module._last_updated_at
     scan_module._last_result = None
 
-    class _Sess:
-        async def execute(self, _stmt):
-            return _StubResult(type("R", (), {
-                "last_result_json": json.dumps(_blob(candidates=[_card("AAPL", ivRank=45)])),
-                "last_request_json": None,
-                "status": "complete",
-                "updated_at": None,
-            })())
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): return False
+    row = type("R", (), {
+        "last_result_json": json.dumps(_blob(candidates=[_card("AAPL", ivRank=45)])),
+        "last_request_json": None,
+        "status": "complete",
+        "updated_at": None,
+    })()
+    scan_module.AsyncSessionLocal = lambda: _StubDb(row)
 
     try:
-        status = await scan_module.restore_from_db(_Sess())
+        status = await scan_module.restore_from_db()
         assert status == "complete"
         assert scan_module._last_result is None, (
             "restoring it would put the mislabelled figure on /scan/last, which "
@@ -137,3 +153,48 @@ async def test_restore_from_db_drops_a_pre_split_result_but_keeps_the_status():
         )
     finally:
         scan_module._last_result = orig_result
+        scan_module.AsyncSessionLocal = orig_factory
+        # restore_from_db writes these two as a side effect; leaving "complete"
+        # behind would hand the next test a scan it never ran.
+        scan_module._last_status = orig_status
+        scan_module._last_updated_at = orig_updated
+
+
+# ── The basis must survive the branch that does not SCORE the figure ─────────
+#
+# Found while confirming the three round-3 failures, not reported by a round.
+# `_rule_vol` returns early when the horizon leaves the vol threshold unset
+# (Intraday always, and the stock-scan path), and that branch used to omit
+# `iv_basis` from its detail dict. Not scoring the figure does not stop it being
+# rendered: `_safe(VolDetail, ...)` keeps `iv_rank`, `volDetailText` prints it,
+# and with the basis absent VolDetail's own default ("absolute") answered for it.
+# So a true percentile printed as "IV 45%" instead of "IV Rank 45" -- the same
+# mislabel PHASE-A-NULL-IVRANK-2026-09-06 removes, pointing the other way.
+
+def _rule_vol_detail(iv_basis: str, cfg_vol: dict) -> dict:
+    from app.scoring.stock_scorer import _rule_vol
+    return _rule_vol(45.0, {"vol": cfg_vol}, iv_basis=iv_basis).detail
+
+
+def test_the_unscored_branch_still_reports_which_quantity_it_holds():
+    detail = _rule_vol_detail("rank", {})          # no iv_rank_pass_max → unscored
+    assert detail["scored"] is False, "precondition: this is the early-return branch"
+    assert detail["iv_basis"] == "rank", (
+        "a rank that is merely unscored is still a rank; letting VolDetail's "
+        "'absolute' default answer prints 'IV 45%' for a 45th-percentile reading"
+    )
+
+
+def test_the_unscored_branch_reports_an_absolute_level_as_absolute():
+    detail = _rule_vol_detail("absolute", {})
+    assert detail["scored"] is False
+    assert detail["iv_basis"] == "absolute"
+
+
+def test_the_basis_reaches_the_wire_through_safe():
+    """_safe() drops unknown keys, so a field the model lacks is silently lost.
+    This is the assertion that `iv_basis` is not one of them."""
+    from app.routers.scan import _safe
+    from app.schemas import VolDetail
+    vd = _safe(VolDetail, _rule_vol_detail("rank", {}))
+    assert vd is not None and vd.iv_basis == "rank"

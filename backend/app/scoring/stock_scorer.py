@@ -901,7 +901,16 @@ def _rule_vol(
     if vc.get(pass_key) is None:
         # Threshold unset → skip vol scoring.
         # (Intraday always; Swing/Position in stock-scan path where no IV data is available)
-        return RuleResult("vol", "PASS", 90, {"iv_rank": iv_rank, "scored": False})
+        #
+        # `iv_basis` is carried even here. Not scoring the figure does not stop
+        # it being RENDERED: _safe(VolDetail, ...) keeps `iv_rank`, and
+        # volDetailText prints it. Omitting the basis let VolDetail's default
+        # answer instead, which reads "absolute" -- so a true percentile from a
+        # rank source printed as "IV 45%" rather than "IV Rank 45" whenever the
+        # horizon left iv_rank_pass_max unset. Same mislabel as
+        # PHASE-A-NULL-IVRANK-2026-09-06, pointing the other way.
+        return RuleResult("vol", "PASS", 90,
+                          {"iv_rank": iv_rank, "iv_basis": iv_basis, "scored": False})
     if iv_rank is None:
         return RuleResult("vol", "CAUTION", 50, {"reason": "no_iv_data"})
     compressed = vc.get(compressed_key)
