@@ -149,7 +149,28 @@ export function stripLegacyIvDetail(record: unknown): unknown {
   if (typeof record !== 'object' || record === null || Array.isArray(record)) return record;
   const r = record as Record<string, unknown>;
   if (r.iv_rank == null) return record;
-  return { ...r, iv_rank: null };
+  // ROUND 5 finding 2. Discriminate on `iv_basis`, do NOT rely on the store
+  // version alone. The backend stamps a basis on every detail block it emits
+  // post-split (including _rule_vol's unscored early return, per round 4), and
+  // nothing pre-split ever did — so its ABSENCE is the pre-split marker, and
+  // its presence means the figure is attributable and must be left alone.
+  //
+  // This is what makes the function safe to run at any version and twice: a
+  // v13 blob can hold EITHER pre-split details migrated by round-1 code or a
+  // genuine post-split percentile written by a later build, and a
+  // version-gated strip could not tell them apart. Stripping a real 62nd
+  // percentile is the same class of harm as printing an unattributable one.
+  if (r.iv_basis !== undefined) return record;
+  // ROUND 5 finding 12. Drop the VERDICT with the figure. `reason` on a vol
+  // detail is derived from the number ("compressed_vol" means it fell below the
+  // compressed band; "iv_too_high" means it broke the ceiling), so keeping it
+  // after refusing to show the figure asserts a conclusion about a quantity we
+  // have just declared unattributable. `no_iv_data` is not derived from any
+  // reading and stays.
+  const IV_DERIVED = new Set(['compressed_vol', 'iv_too_high', 'iv_rank_too_high']);
+  const out: Record<string, unknown> = { ...r, iv_rank: null };
+  if (typeof r.reason === 'string' && IV_DERIVED.has(r.reason)) delete out.reason;
+  return out;
 }
 
 export function stripLegacyIvFields(record: unknown): unknown {

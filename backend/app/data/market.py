@@ -614,7 +614,7 @@ def fetch_option_chain(
                 "theta": round(theta, 4),
                 # ⚠ SHAPE HAZARD — this is the DEAD sync twin of
                 # fetch_option_chain_async (nothing calls it; see Amendment A).
-                # It still writes RAW ABSOLUTE IV into `ivRank`, the pre-Phase-A
+                # It USED TO write raw absolute IV into `ivRank` (converted in round 4), the pre-Phase-A
                 # shape. ROUND 4 finding 7: this twin is dead code (verified --
                 # the only non-test references are its own def and two
                 # docstrings), and it was left on the PRE-SPLIT shape on that

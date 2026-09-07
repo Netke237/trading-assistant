@@ -12,6 +12,7 @@ stamped as already-migrated and never revisited on that browser.
 """
 import json
 
+import asyncio
 import pytest
 
 from app.schemas import ScanResult, SCAN_RESULT_SCHEMA_VERSION
@@ -38,57 +39,89 @@ def test_the_current_version_round_trips_through_json():
     assert again.schema_version == SCAN_RESULT_SCHEMA_VERSION
 
 
-def test_the_save_path_stamps_every_result_it_persists():
-    """ROUND 4 finding 4. This asserted `"SCAN_RESULT_SCHEMA_VERSION" in
-    inspect.getsource(scan_router)` and called that "a scan must not be able to
-    reach the DB unmarked". It measured nothing of the sort: the string was
-    present the whole time the SCHEDULER was writing unstamped rows into
-    scheduled_scan_runs (round 4 finding 3), and the assertion would have
-    survived the stamping expression being deleted outright so long as the
-    import line stayed.
-
-    Pin the actual invariant instead -- a ScanResult built by the code that
-    builds them carries the stamp -- by reading it off the object.
+@pytest.mark.asyncio
+async def test_the_save_path_stamps_every_result_it_persists():
+    """ROUND 5 finding 4. Rounds 4 and 5 both caught this test lying about
+    itself. It began as `assert "SCAN_RESULT_SCHEMA_VERSION" in
+    inspect.getsource(scan_router)` -- green the entire time the scheduler was
+    writing unstamped rows -- and round 4 "fixed" it by swapping in a NARROWER
+    grep while writing a docstring claiming it now read the stamp off the
+    object. It did not. So: actually run the producer and read the field.
     """
-    from app.routers.scan import _execute_scan_core
-    import inspect as _inspect
+    import app.routers.scan as scan_module
+    from tests.conftest import _TestSession
 
-    # The stamp is applied where the result is CONSTRUCTED, so every writer
-    # inherits it. Locate that construction and prove the field is set on it
-    # rather than trusting any single caller to remember.
-    src = _inspect.getsource(_execute_scan_core)
-    assert "schema_version=SCAN_RESULT_SCHEMA_VERSION" in src, (
-        "the scan result must be stamped where it is built; stamping at "
-        "individual write sites is what let the scheduler write unstamped rows"
+    # An empty universe exercises the construction without any network work;
+    # the stamp is applied at the ScanResult(...) call, not per candidate.
+    async with _TestSession() as db:
+        req = scan_module.ScanRequest(
+            universe=[], direction="Bullish", horizon="Swing", overrides={})
+        result = await scan_module._execute_scan_core(req, db, previous_result=None)
+
+    assert result.schema_version == SCAN_RESULT_SCHEMA_VERSION, (
+        "a result the scan BUILDS must carry the stamp, or every writer that "
+        "serialises it (the session upsert, the scheduler's "
+        "scheduled_scan_runs row, the in-memory _last_result) persists a blob "
+        "indistinguishable from a pre-split one"
     )
+    # It must survive serialisation, since that is how all three writers store it.
+    assert scan_module.ScanResult.model_validate_json(
+        result.model_dump_json()).schema_version == SCAN_RESULT_SCHEMA_VERSION
 
-    # And prove the marker still DISCRIMINATES: the default must stay None, or
-    # every pre-split blob parsed from JSON would claim to be current.
-    assert ScanResult(**_blob()).schema_version is None
-    assert ScanResult(**_blob()).model_copy(
-        update={"schema_version": SCAN_RESULT_SCHEMA_VERSION}
-    ).schema_version == SCAN_RESULT_SCHEMA_VERSION
+
+def test_every_scan_result_construction_in_the_router_is_stamped():
+    """ROUND 5 finding 4, second half. The execution test above covers the ONE
+    path an empty-universe scan takes. The failure mode it cannot see is a
+    second construction site added later -- an early return, an error branch --
+    that forgets the stamp while the covered path keeps it green. Walk the AST
+    instead of grepping, so this holds for every construction and does not
+    break when the value expression is refactored.
+    """
+    import ast
+    import inspect as _inspect
+    from app.routers import scan as scan_router
+
+    tree = ast.parse(_inspect.getsource(scan_router))
+    sites = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name) and node.func.id == "ScanResult"
+    ]
+    assert sites, "expected at least one ScanResult(...) construction to guard"
+    unstamped = [
+        node.lineno for node in sites
+        if not any(kw.arg == "schema_version" for kw in node.keywords)
+    ]
+    assert not unstamped, (
+        f"ScanResult constructed without schema_version at line(s) {unstamped}; "
+        "every construction must stamp, or that path writes a blob the vintage "
+        "refusal will discard as pre-split"
+    )
 
 
 def test_the_scheduler_does_not_write_an_unstamped_row():
-    """ROUND 4 finding 3. scheduled_scan_runs.result_json is a FOURTH
-    persistence layer holding a full ScanResult, written by
-    scan_schedule_scheduler and read straight back as `previous_result` on the
-    next fire. It was written from `result.model_dump_json()` with no stamp of
-    its own, so every scheduled row looked pre-split.
+    """ROUND 4 finding 3 / ROUND 5 finding 4. scheduled_scan_runs.result_json is
+    a FOURTH persistence layer, written by scan_schedule_scheduler and read
+    straight back as `previous_result` on the next fire. This too was a pair of
+    source greps; assert the actual round trip instead.
     """
-    import inspect as _inspect
-    from app.services import scan_schedule_scheduler as sched
+    import app.routers.scan as scan_module
+    from tests.conftest import _TestSession
 
-    src = _inspect.getsource(sched)
-    assert "result.model_dump_json()" in src, "guard below assumes this writer"
-    # The scheduler serialises whatever _execute_scan_core returns, so the
-    # stamp has to be on the object -- which is exactly what the test above
-    # pins. Assert the two are wired: the scheduler must not construct its own
-    # ScanResult, or it would bypass the stamp again.
-    assert "ScanResult(" not in src.replace("ScanResult.model_validate_json", ""), (
-        "the scheduler must serialise the core's stamped result, never build "
-        "its own -- building one would reintroduce the unstamped row"
+    async def _run():
+        async with _TestSession() as db:
+            req = scan_module.ScanRequest(
+                universe=[], direction="Bullish", horizon="Swing", overrides={})
+            return await scan_module._execute_scan_core(req, db, previous_result=None)
+
+    result = asyncio.get_event_loop_policy().new_event_loop().run_until_complete(_run())
+    # This is verbatim what the scheduler persists (scan_schedule_scheduler.py:145).
+    result_json = result.model_dump_json()
+    restored = scan_module.ScanResult.model_validate_json(result_json)
+    assert restored.schema_version == SCAN_RESULT_SCHEMA_VERSION, (
+        "the row the scheduler writes must be distinguishable from a pre-split "
+        "blob; unstamped, a future vintage guard on that table discards ALL of "
+        "them, since none would be marked"
     )
 
 
@@ -168,8 +201,13 @@ async def test_tradecards_still_serves_a_stamped_blob():
 
 
 @pytest.mark.asyncio
-async def test_restore_from_db_drops_a_pre_split_result_but_keeps_the_status():
-    """The status pill and the request survive; only the unattributable cards go."""
+async def test_restore_from_db_drops_a_pre_split_result_and_the_status_with_it():
+    """ROUND 5 finding 11. This used to assert `status == "complete"` and called
+    keeping it deliberate. It is not defensible: /scan/last-run then reported
+    COMPLETED at the old timestamp while /scan/last returned null, so the TopBar
+    pill claimed a finished scan with every table under it empty and the only
+    explanation in a server log the user never sees. The status describes the
+    result; when the result is refused the status goes with it."""
     from app.routers import scan as scan_module
 
     orig_result = scan_module._last_result
@@ -188,7 +226,15 @@ async def test_restore_from_db_drops_a_pre_split_result_but_keeps_the_status():
 
     try:
         status = await scan_module.restore_from_db()
-        assert status == "complete"
+        assert status == "idle", (
+            "a status of 'complete' with no result behind it renders a TopBar "
+            "pill asserting a scan the user cannot see the output of"
+        )
+        assert scan_module._last_status == "idle"
+        assert scan_module._last_updated_at is None, (
+            "a stale timestamp under an idle status dates a scan that no "
+            "longer exists"
+        )
         assert scan_module._last_result is None, (
             "restoring it would put the mislabelled figure on /scan/last, which "
             "StoreHydration then re-persists at the CURRENT store version — "

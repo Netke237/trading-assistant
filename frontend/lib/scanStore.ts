@@ -93,6 +93,38 @@ function normalizeLegacyPricingMethod(value: unknown): unknown {
  *  which does, is deliberately not persisted (see `partialize`). The other
  *  two are the snake_case score-detail blocks `stockBreakdown.volDetail` and
  *  `contractBreakdown.ivDetail` (round 4 finding 1) — see stripLegacyIvDetail. */
+/** ROUND 5 finding 2. The v14 pass must touch ONLY the two score-detail
+ *  blocks. `stripLegacyIvFields` nulls camelCase `ivRank`, which on a blob
+ *  written POST-split is a legitimate percentile from IBKR/tastytrade — so
+ *  re-running the full v13 walk at v14 would destroy good data on exactly the
+ *  stores this fix exists to reach. The detail blocks are safe because
+ *  stripLegacyIvDetail discriminates on `iv_basis`; contractDetails carries no
+ *  such marker (resolveIv derives the basis from which fields are present),
+ *  so there is nothing there to discriminate on and it is left alone. */
+function stripLegacyIvDetailsFromScanResult(value: unknown): unknown {
+  if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
+  return {
+    ...value,
+    candidates: value.candidates.map((candidate) => {
+      if (!isRecord(candidate)) return candidate;
+      const out: Record<string, unknown> = { ...candidate };
+      if (isRecord(candidate.stockBreakdown) && isRecord(candidate.stockBreakdown.volDetail)) {
+        out.stockBreakdown = {
+          ...candidate.stockBreakdown,
+          volDetail: stripLegacyIvDetail(candidate.stockBreakdown.volDetail),
+        };
+      }
+      if (isRecord(candidate.contractBreakdown) && isRecord(candidate.contractBreakdown.ivDetail)) {
+        out.contractBreakdown = {
+          ...candidate.contractBreakdown,
+          ivDetail: stripLegacyIvDetail(candidate.contractBreakdown.ivDetail),
+        };
+      }
+      return out;
+    }),
+  };
+}
+
 function stripLegacyIvFromScanResult(value: unknown): unknown {
   if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
   return {
@@ -353,7 +385,7 @@ export const useScanStore = create<ScanStoreState>()(
         return localStorage;
       }),
       skipHydration: true,
-       version: 13,
+       version: 14,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -414,6 +446,23 @@ export const useScanStore = create<ScanStoreState>()(
             ...s,
             scanResult: stripLegacyIvFromScanResult(s.scanResult),
             previousRun: stripLegacyIvFromScanResult(s.previousRun),
+          };
+        }
+        if (version < 14) {
+          // ROUND 5 finding 2. The two SCORE-DETAIL blocks were added to the
+          // `version < 13` branch above NINE COMMITS AFTER v13 shipped, so any
+          // browser that ran this branch in between holds a blob already
+          // stamped 13 — and zustand only calls migrate when the stored version
+          // DIFFERS from the configured one, so that fix could never reach the
+          // stores that needed it. Re-run under a new version.
+          //
+          // Safe on a blob written post-split, and safe to run twice:
+          // stripLegacyIvDetail strips only where `iv_basis` is absent, which
+          // no post-split writer emits. See lib/ivBasis.ts.
+          s = {
+            ...s,
+            scanResult: stripLegacyIvDetailsFromScanResult(s.scanResult),
+            previousRun: stripLegacyIvDetailsFromScanResult(s.previousRun),
           };
         }
         return s;

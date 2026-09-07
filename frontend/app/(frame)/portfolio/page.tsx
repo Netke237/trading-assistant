@@ -58,9 +58,13 @@ function rejectionMessage(detail: string): string {
  *  (PHASE-A-NULL-IVRANK-2026-09-06). */
 function ivTone(value: number | null, _basis: IvBasis): 'pass' | 'caution' | 'reject' | undefined {
   if (value == null) return undefined;
-  if (value >= 70) return 'reject';      // very rich
-  if (value >= 40) return 'caution';     // moderate
-  return 'pass';                         // cheap
+  // ROUND 5 finding 13. 70 is the hard ceiling (max_iv_abs / max_iv_rank), but
+  // 40 corresponded to NOTHING in config -- preferred_iv_*_max is 55 -- so this
+  // column tinted a 45% IV "caution" on a position the scorer calls PASS. 55 is
+  // the preferred ceiling the contract scorer actually uses.
+  if (value >= 70) return 'reject';      // above the hard ceiling
+  if (value >= 55) return 'caution';     // above preferred_iv_*_max
+  return 'pass';
 }
 
 /** IV cell for one open position. A percentile when a rank source answered,

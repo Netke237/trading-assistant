@@ -107,8 +107,19 @@ async def get_contracts(
     # number in front of a user, so the fallback is mirrored here rather than
     # left to the deferred de-duplication of the two resolvers (which would not
     # have closed this: what differs is the MISSING FALLBACK, not the arithmetic).
-    if raw_chain and price > 0 and not any(c.get("iv") for c in raw_chain):
-        _atm = min(raw_chain, key=lambda c: abs(float(c.get("strike", 0)) - price))
+    #
+    # ROUND 5 finding 1. The trigger must be the ATM CONTRACT's own lack of a
+    # reading, not the whole chain's. `not any(c.get("iv") ...)` fired only when
+    # EVERY strike was empty, so a chain whose yfinance backfill filled the wings
+    # but missed the ATM strike skipped the inversion here while the scan ran it
+    # -- reproducing the very Step-6-vs-Step-7 split round 4 recorded as closed
+    # (verified: Step 6 showed "IV —" with an IV sub-score of 50 against the
+    # card's 33.2% and 39, and picking that row copied the null onto the card).
+    _atm = (
+        min(raw_chain, key=lambda c: abs(float(c.get("strike", 0)) - price))
+        if raw_chain and price > 0 else None
+    )
+    if _atm is not None and _atm.get("ivRank") is None and not _atm.get("iv"):
         _iv_bs = _compute_iv_bs(
             mid=float(_atm.get("price", 0)),
             S=price,

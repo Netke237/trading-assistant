@@ -1111,6 +1111,7 @@ async def restore_from_db() -> str | None:
         row = result.scalar_one_or_none()
         if row is None:
             return None
+        _refused = False
         if row.last_result_json:
             _restored = ScanResult.model_validate_json(row.last_result_json)
             # A result stored before the IV basis split carries raw implied
@@ -1133,10 +1134,22 @@ async def restore_from_db() -> str | None:
                     "basis split, so its ivRank values have no recoverable basis. "
                     "Run a scan to repopulate."
                 )
+                # ROUND 5 finding 11. The STATUS must go with the result. Left
+                # set, /scan/last-run reported COMPLETED at the old timestamp
+                # while /scan/last returned null: the TopBar pill claimed a
+                # finished scan and every table underneath it was empty, with
+                # the only explanation in a server log the user never sees.
+                # "idle" is what the frontend already renders as "no scan yet",
+                # which is the true state once the result is gone.
+                _refused = True
             else:
                 _last_result = _restored
         if row.last_request_json:
             _last_request = ScanRequest.model_validate_json(row.last_request_json)
+        if _refused:
+            _last_status = "idle"
+            _last_updated_at = None
+            return _last_status
         _last_status = row.status
         _last_updated_at = row.updated_at.isoformat() if row.updated_at else None
         return row.status
@@ -1415,7 +1428,18 @@ async def _execute_scan_core(
         state = 'FAILED'
 
     deltas = _compute_deltas(
-        ScanResult(scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(), candidates=candidates, rejected=rejected),
+        # TRANSIENT -- built only to hand _compute_deltas a comparable shape,
+        # never persisted and never returned, so the stamp is functionally
+        # irrelevant here. Stamped anyway to keep the invariant TOTAL: "every
+        # ScanResult construction carries the version" is enforceable by the
+        # AST check in test_scan_result_vintage.py, whereas "every construction
+        # that might one day be persisted" is a judgement call that drifts --
+        # which is how the scheduler's write site went unstamped for two rounds.
+        ScanResult(
+            schema_version=SCAN_RESULT_SCHEMA_VERSION,
+            scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(),
+            candidates=candidates, rejected=rejected,
+        ),
         previous_result,
     )
 

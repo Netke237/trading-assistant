@@ -47,9 +47,9 @@ function legacyBlob() {
   };
 }
 
-describe('searchProfilesStore v1 → v2 (PHASE-A-SPREAD-BASIS-2026-09-06)', () => {
+describe('searchProfilesStore v1 → v3 (PHASE-A-SPREAD-BASIS-2026-09-06)', () => {
   it('is registered at the version the migration branch expects', () => {
-    expect(version).toBe(2);
+    expect(version).toBe(3);
   });
 
   it("seeds a profile's absolute threshold from THAT profile's own pre-split knob", () => {

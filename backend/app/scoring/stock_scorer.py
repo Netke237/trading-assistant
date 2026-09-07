@@ -921,7 +921,16 @@ def _rule_vol(
         return RuleResult("vol", "CAUTION", 50, {**detail, "reason": "compressed_vol"})
     if iv_rank <= pass_max:
         return RuleResult("vol", "PASS", 90, detail)
-    if iv_rank <= caution_max:
+    # ROUND 5 finding 8. `compressed` is guarded with `is not None` two lines up
+    # and `caution_max` was not, so a config with a pass ceiling but a null
+    # caution ceiling raised TypeError ('<=' between float and NoneType) -- a
+    # 500 on the scan, not a scoring error. Currently unreachable through the UI
+    # (handleHzChange replaces scanOverrides wholesale, so an IV ceiling cannot
+    # survive a switch to Intraday), but the diff added two migrations that
+    # SYNTHESISE iv_abs_pass_max into override dicts where it had never
+    # appeared, so the shape is now constructible. A missing caution ceiling
+    # means "no caution band", which is a REJECT above pass_max, not a crash.
+    if caution_max is not None and iv_rank <= caution_max:
         return RuleResult("vol", "CAUTION", 55, detail)
     return RuleResult("vol", "REJECT", 10, {**detail, "reason": "iv_too_high"})
 

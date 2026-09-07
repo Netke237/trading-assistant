@@ -63,10 +63,23 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 2,
+      version: 3,
       migrate: (persistedState, version) => {
         const st = { ...((persistedState ?? {}) as Record<string, unknown>) };
-        if (version < 2) {
+        // ROUND 5 finding 3. `seedOverrides` was appended to the `version < 2`
+        // branch AFTER v2 had already shipped (v2 landed with only the spreads
+        // knob at 038aa2d1; the overrides half arrived at d1ea97c9), and zustand
+        // calls migrate only when the stored version DIFFERS from the configured
+        // one — so a store already stamped 2 never re-entered it, and the
+        // user's `iv_rank_pass_max: 20` stayed inert on every chain without a
+        // rank source. Same defect shape as scanStore's (finding 2). Bumped to
+        // 3 so the seeding actually reaches those stores.
+        //
+        // Idempotent by construction: seedOverrides returns the input untouched
+        // unless `iv_rank_pass_max` is a number AND `iv_abs_pass_max` is absent,
+        // so running it at v2 and again at v3 cannot double-apply or overwrite a
+        // value the user has since set.
+        if (version < 3) {
           // PHASE-A-SPREAD-BASIS-2026-09-06 split the spread picker's single
           // sell-premium cut-off into a percentile knob and an absolute one.
           // settingsStore got a v23->v24 migration for the LIVE value; a profile

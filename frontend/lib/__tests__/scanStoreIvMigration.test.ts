@@ -45,10 +45,78 @@ function legacyBlob() {
   };
 }
 
-describe('scanStore persisted migrate(): v12 -> v13, the Phase A IV split', () => {
-  it('is registered at v13, so a v12 blob actually reaches the branch', () => {
+describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () => {
+  it('is registered at v14, so a v12 blob actually reaches the branch', () => {
     // Without the bump the branch is dead code and the defect ships intact.
-    expect(migrate.version).toBe(13);
+    //
+    // ROUND 5 finding 2: this pin is the ONLY assertion in this file that can
+    // catch the defect that shipped in round 4, and it is worth being precise
+    // about why. The detail-block strip was appended to the `version < 13`
+    // branch nine commits AFTER v13 shipped. zustand calls migrate only when
+    // the stored version differs from the configured one, so every browser
+    // holding a v13 blob skipped it entirely. The tests below cannot see that:
+    // they invoke `migrate.migrate(blob, n)` directly and so bypass the very
+    // version comparison that was the bug. They verify what the branch DOES;
+    // this pin is what verifies the branch is REACHED. Any new migration step
+    // needs a new version, and this assertion is what forces the pairing.
+    expect(migrate.version).toBe(14);
+  });
+
+  it('re-runs the score-detail strip for a blob ALREADY at v13', () => {
+    // ROUND 5 finding 2. Covers the v14 branch's CONTENT: a store coming from
+    // the previous version still gets the score-detail strip. It does NOT
+    // prove the branch is reached in a real browser — that is the version pin
+    // above, since calling migrate directly bypasses zustand's version check.
+    const v13Blob = {
+      scanResult: {
+        scan_id: 'S1',
+        timestamp: '2026-09-04T10:00:00',
+        rejected: [],
+        candidates: [{
+          symbol: 'MSFT',
+          // Already stripped by the v13 pass; the detail blocks were not.
+          contractDetails: { strike: 400, ivRank: null },
+          stockBreakdown: { volDetail: { iv_rank: 0, reason: 'compressed_vol' } },
+          contractBreakdown: { ivDetail: { iv_rank: 62, preferred_max: 55 } },
+        }],
+      },
+    };
+    const out = migrate.migrate(v13Blob, 13) as { scanResult: MigratedResult };
+    const c = out.scanResult.candidates[0]! as unknown as {
+      stockBreakdown: { volDetail: Record<string, unknown> };
+      contractBreakdown: { ivDetail: Record<string, unknown> };
+    };
+    // The impossible "IV 0%" and the mislabelled 62nd percentile both go.
+    expect(c.stockBreakdown.volDetail.iv_rank).toBeNull();
+    expect(c.contractBreakdown.ivDetail.iv_rank).toBeNull();
+  });
+
+  it('does NOT strip a post-split figure from a v13 blob', () => {
+    // The other half: a v13 blob written by post-split code holds a GENUINE
+    // percentile. The v14 pass must leave it alone — stripping a real 62nd
+    // percentile is the same harm as printing an unattributable one. This is
+    // why the strip discriminates on `iv_basis` rather than on the version.
+    const postSplit = {
+      scanResult: {
+        scan_id: 'S2',
+        timestamp: '2026-09-04T10:00:00',
+        rejected: [],
+        candidates: [{
+          symbol: 'AAPL',
+          contractDetails: { strike: 200, ivRank: 62 },
+          contractBreakdown: { ivDetail: { iv_rank: 62, iv_basis: 'rank', preferred_max: 55 } },
+        }],
+      },
+    };
+    const out = migrate.migrate(postSplit, 13) as { scanResult: MigratedResult };
+    const c = out.scanResult.candidates[0]! as unknown as {
+      contractBreakdown: { ivDetail: Record<string, unknown> };
+      contractDetails: Record<string, unknown>;
+    };
+    expect(c.contractBreakdown.ivDetail.iv_rank).toBe(62);
+    // And the v14 pass must not touch camelCase ivRank either — at v13 that is
+    // a legitimate percentile, and re-running the v13 walk would null it.
+    expect(c.contractDetails.ivRank).toBe(62);
   });
 
   it('drops the unattributable ivRank on the block the trade card renders', () => {
