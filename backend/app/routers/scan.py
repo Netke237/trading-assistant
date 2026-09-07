@@ -1169,13 +1169,37 @@ async def get_last_scan_status() -> ScanSessionStatus:
     """Return last-run metadata (status/timestamp/request params) for the
     manual-run UI slot. Part 3's scheduled runs never touch this — each has
     its own status/history reachable via GET /api/scan-schedule/{id}/runs
-    instead (see routers/scan_schedule.py)."""
+    instead (see routers/scan_schedule.py).
+
+    The request fields and `scan_id` are snapshotted TOGETHER under
+    `_state_lock`, the same lock run_scan writes the pair under. That is what
+    makes the returned scan_id a usable key: a client that fetches this
+    endpoint and /scan/last can compare the two and know whether the
+    thresholds it just read belong to the result it holds, or to a scan that
+    completed in between. Read unlocked, the request and the result could be
+    read from either side of a scan's write and quietly describe two runs.
+
+    `_last_status`/`_last_updated_at` are deliberately OUTSIDE that guarantee —
+    _upsert_session writes them without the lock, so they may lag the pair by a
+    scan. Nothing that consumes the thresholds depends on them."""
+    async with _state_lock:
+        req, res = _last_request, _last_result
     return ScanSessionStatus(
         status=_last_status,
         updated_at=_last_updated_at,
-        universe=_last_request.universe if _last_request else None,
-        direction=_last_request.direction if _last_request else None,
-        horizon=_last_request.horizon if _last_request else None,
+        universe=req.universe if req else None,
+        direction=req.direction if req else None,
+        horizon=req.horizon if req else None,
+        # None here is "no result to pair with", which includes the case where
+        # restore_from_db refused a pre-split blob and kept its request: the
+        # params below are then real, but they describe a scan whose rows this
+        # backend will not serve.
+        scan_id=res.scan_id if res else None,
+        # Post-validator values: ScanRequest._seed_pre_split_iv_knobs has
+        # already filled iv_abs_threshold on a pre-split body, so these are the
+        # numbers the run APPLIED, not the ones it happened to name.
+        iv_abs_threshold=req.iv_abs_threshold if req else None,
+        iv_rank_threshold=req.iv_rank_threshold if req else None,
     )
 
 

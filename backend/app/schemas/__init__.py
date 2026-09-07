@@ -728,6 +728,27 @@ class ScanSessionStatus(BaseModel):
     horizon: Optional[str] = None
     strategy: Optional[str] = None  # stock-mode only
 
+    # ── Options mode only; the three below are one block ──────────────────
+    # `scan_id` names the ScanResult that GET /api/scan/last returns at the
+    # same instant. It is here so a reader fetching both endpoints can tell
+    # whether the request fields above and the thresholds below describe the
+    # result it holds, or a scan that landed between the two calls — the two
+    # globals are snapshotted together under the router's state lock, so a
+    # matching scan_id is a real guarantee, not a hope. None in stock mode
+    # (which pairs no result) and whenever there is no last result, including
+    # after restore_from_db refuses a pre-split blob but keeps its request.
+    scan_id: Optional[str] = None
+    # The two IV cut-offs the last manual scan ran with, taken from the
+    # persisted ScanRequest AFTER its `_seed_pre_split_iv_knobs` validator, so
+    # a pre-split body reports the value that was actually applied rather than
+    # the class default. `iv_abs_threshold` is choose_primary's credit/debit
+    # line — the seeded number with real money behind it — and
+    # scripts/iv_basis_analysis.py records it against every sampled row so
+    # section 4 measures the line in force instead of assuming 50.
+    # None means UNKNOWN (no last request, or stock mode), never 50.
+    iv_abs_threshold: Optional[float] = None
+    iv_rank_threshold: Optional[float] = None
+
 
 # ── Portfolio persistence ─────────────────────────────────────────────────────
 

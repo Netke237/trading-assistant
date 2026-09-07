@@ -130,6 +130,21 @@ async def test_restore_stock_from_db_restores_globals():
 
 # ── Tests for /stock-scan/last-run and the running/idle status writes ────────
 
+def test_last_run_carries_no_iv_thresholds(stock_client, monkeypatch):
+    """Stock mode shares ScanSessionStatus with options mode, which added
+    scan_id/iv_abs_threshold/iv_rank_threshold for the IV-basis measurement
+    store. Stock scans have no IV cut-offs and pair no ScanResult here, so all
+    three must stay None rather than defaulting to a number a reader could
+    mistake for the line a scan ran with."""
+    import app.routers.stock_scan as stock_scan_module
+    monkeypatch.setattr(stock_scan_module, "_last_stock_request", None)
+    monkeypatch.setattr(stock_scan_module, "_last_stock_status", "idle")
+    body = stock_client.get("/api/stock-scan/last-run").json()
+    assert body["scan_id"] is None
+    assert body["iv_abs_threshold"] is None
+    assert body["iv_rank_threshold"] is None
+
+
 def test_last_run_idle_when_no_scan_yet(stock_client, monkeypatch):
     import app.routers.stock_scan as stock_scan_module
     monkeypatch.setattr(stock_scan_module, "_last_stock_request", None)

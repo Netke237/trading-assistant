@@ -152,6 +152,84 @@ def test_last_run_reflects_last_completed_scan(client):
     assert body["horizon"] == "Swing"
 
 
+def test_last_run_exposes_the_iv_thresholds_the_scan_applied(client):
+    """The spread line and the percentile line reach /scan/last-run, paired to
+    the result by scan_id — this is the whole point of the three fields:
+    iv_basis_analysis.py collecting over HTTP must measure section 4 against
+    the number the run used, not the schema default."""
+    r = client.post("/api/scan", json={
+        "universe": [],
+        "direction": "Bearish",
+        "horizon": "Swing",
+        "overrides": {},
+        "iv_abs_threshold": 62.5,
+        "iv_rank_threshold": 44.0,
+    })
+    assert r.status_code == 200
+    scan_id = r.json()["scan_id"]
+
+    body = client.get("/api/scan/last-run").json()
+    assert body["iv_abs_threshold"] == 62.5
+    assert body["iv_rank_threshold"] == 44.0
+    # Pairing: the id names the result /scan/last serves right now, so a
+    # collector can tell these thresholds describe THAT scan's rows.
+    assert body["scan_id"] == scan_id
+    assert client.get("/api/scan/last").json()["scan_id"] == scan_id
+
+
+def test_last_run_reports_the_seeded_abs_threshold_not_the_default(client):
+    """A PRE-SPLIT body names only iv_rank_threshold, and ScanRequest seeds the
+    absolute knob from it. The endpoint must report what was APPLIED (30.0),
+    because reporting the class default of 50 would put a threshold the scan
+    never used into the measurement store — the exact false measurement the
+    field exists to prevent."""
+    r = client.post("/api/scan", json={
+        "universe": [],
+        "direction": "Bearish",
+        "horizon": "Swing",
+        "overrides": {},
+        "iv_rank_threshold": 30.0,
+    })
+    assert r.status_code == 200
+
+    body = client.get("/api/scan/last-run").json()
+    assert body["iv_abs_threshold"] == 30.0
+    assert body["iv_rank_threshold"] == 30.0
+
+
+def test_last_run_thresholds_are_none_before_any_scan(client, monkeypatch):
+    """No request means UNKNOWN, not 50. observations() records None as "not
+    recoverable" and the report says so out loud; a 50 here would be indistin-
+    guishable from a scan that really ran at 50."""
+    import app.routers.scan as scan_module
+    monkeypatch.setattr(scan_module, "_last_request", None)
+    monkeypatch.setattr(scan_module, "_last_result", None)
+    monkeypatch.setattr(scan_module, "_last_status", "idle")
+    monkeypatch.setattr(scan_module, "_last_updated_at", None)
+    body = client.get("/api/scan/last-run").json()
+    assert body["scan_id"] is None
+    assert body["iv_abs_threshold"] is None
+    assert body["iv_rank_threshold"] is None
+
+
+def test_last_run_scan_id_is_none_when_the_result_was_refused(client, monkeypatch):
+    """restore_from_db drops a pre-split result but keeps its request. The
+    params are then real and there is nothing to pair them with, so scan_id
+    must be None — otherwise a collector would stamp thresholds onto rows this
+    backend cannot even serve."""
+    import app.routers.scan as scan_module
+    from app.schemas import ScanRequest
+    monkeypatch.setattr(scan_module, "_last_request", ScanRequest(
+        universe=["AAPL"], direction="Bearish", horizon="Swing",
+        iv_abs_threshold=62.5,
+    ))
+    monkeypatch.setattr(scan_module, "_last_result", None)
+    monkeypatch.setattr(scan_module, "_last_status", "idle")
+    body = client.get("/api/scan/last-run").json()
+    assert body["iv_abs_threshold"] == 62.5
+    assert body["scan_id"] is None
+
+
 def test_continuous_scan_endpoints_are_gone(client):
     """Part 3, §3.9: the retired single-slot continuous-scan endpoints must
     not exist any more — a schedule with zero entries now means "nothing

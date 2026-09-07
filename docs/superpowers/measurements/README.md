@@ -17,6 +17,14 @@ cd backend
 .venv/bin/python scripts/iv_basis_analysis.py report     # analyse the whole store
 ```
 
+Over `--url` the thresholds come from `GET /api/scan/last-run`, which returns
+them next to the `scan_id` of the result `/api/scan/last` is serving. The script
+records them only when the two ids agree, so a scan finishing mid-collect is
+caught rather than stamping one run's credit/debit line onto another run's rows.
+A backend too old to return `scan_id` records no threshold at all, and the
+report's section 4 says out loud that it is falling back to the schema default
+of 50 — rows collected that way measure the distribution, not the line.
+
 **It appends, and that is the point.** One scan is one day of one universe. The
 seeded thresholds it measures are not to be edited off a single session — let
 several accumulate, ideally across different volatility regimes, before anyone

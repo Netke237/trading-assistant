@@ -56,6 +56,8 @@ Sources, in the order auto-detection tries them:
     --json PATH     a saved ScanResult, or {"result": ..., "request": ...}
     --sqlite PATH   the scan_sessions row id='current' (aiosqlite dev.db)
     --url BASE      a running backend; GETs /api/scan/last and /api/scan/last-run
+                    (the latter supplies direction/horizon and the IV cut-offs
+                    the run applied, paired to the result on scan_id)
 
 Only PyYAML is needed beyond the stdlib (to read the two config files), so the
 backend venv is enough -- no app import, no engine, no settings.
@@ -179,17 +181,51 @@ def read_url(base: str) -> tuple[dict | None, dict | None, str]:
             raise SystemExit(f"{RED}GET {base}{path} failed: {exc}{RESET}")
         return json.loads(body) if body.strip() else None
 
+    # /scan/last-run carries what the ScanResult itself does not: the direction
+    # and horizon of the run, and the two IV cut-offs it applied -- including
+    # iv_abs_threshold, choose_primary's credit/debit line, which section 4
+    # used to have to assume was the schema default.
+    #
+    # Two GETs are two instants, so the pair is only worth recording when both
+    # saw the SAME scan. The endpoint returns the scan_id of the result it was
+    # paired with (snapshotted under the router's state lock), so a scan that
+    # lands between the calls is detectable rather than silently stamping one
+    # run's threshold onto another run's rows. One re-read settles it; a second
+    # mismatch is refused, because a wrong threshold here does not merely lose
+    # a measurement, it produces a false one.
     result = _get("/api/scan/last")
-    # /scan/last-run carries direction and horizon, which the ScanResult itself
-    # does not. It does NOT carry iv_abs_threshold -- only the persisted request
-    # has that -- so over HTTP the spread line falls back to the schema default.
     status = _get("/api/scan/last-run") or {}
+    sid = status.get("scan_id")
+    if sid is not None and (result or {}).get("scan_id") != sid:
+        result = _get("/api/scan/last")
+        if (result or {}).get("scan_id") != sid:
+            raise SystemExit(
+                f"{RED}A scan completed while collecting: /scan/last-run reports"
+                f" {sid} and /scan/last does not agree, twice. Nothing was written."
+                f" Re-run collect once the backend is idle.{RESET}"
+            )
     request = {
         "direction": status.get("direction"),
         "horizon": status.get("horizon"),
         "universe": status.get("universe"),
-        "_threshold_source": "default (not available over HTTP)",
     }
+    if sid is not None:
+        request["iv_abs_threshold"] = status.get("iv_abs_threshold")
+        request["iv_rank_threshold"] = status.get("iv_rank_threshold")
+        request["_threshold_source"] = (
+            f"{base}/api/scan/last-run, paired on scan_id {sid}"
+            if status.get("iv_abs_threshold") is not None else
+            f"not recorded: /scan/last-run pairs scan_id {sid} but carries no"
+            f" threshold (the backend holds a result whose request it lost)"
+        )
+    else:
+        # No scan_id means either nothing to pair (no last result) or a backend
+        # older than the field. Either way the thresholds are left absent --
+        # None, which observations() records as "not recoverable", never 50.
+        request["_threshold_source"] = (
+            "not recorded: this backend's /scan/last-run carries no scan_id to"
+            " pair on (upgrade it, or collect with --sqlite/--json)"
+        )
     return result, request, f"url {base}"
 
 
@@ -265,9 +301,10 @@ def observations(result: dict, request: dict | None, collected_at: str) -> list[
         "direction": req.get("direction"),
         "horizon": req.get("horizon"),
         "universe_size": len(req.get("universe") or []) or None,
-        # None means "not recoverable from this source", NOT 50. Over HTTP the
-        # persisted request is out of reach; the report says so rather than
-        # quietly measuring against a number this scan may not have used.
+        # None means "not recoverable from this source", NOT 50. Over HTTP that
+        # is now only the case when /scan/last-run gives no scan_id to pair the
+        # thresholds to the result; the report says so rather than quietly
+        # measuring against a number this scan may not have used.
         "iv_abs_threshold": iv_abs_thr,
         "iv_rank_threshold": iv_rank_thr,
         "shortlist_truncated": bool(result.get("shortlist_truncated")),
@@ -557,9 +594,11 @@ def report(rows: list[dict], thresholds: dict, args) -> None:
         print(f"  measured. Run a Bearish scan -- the counterfactual below is arithmetic on the")
         print(f"  absolute distribution, not evidence.{RESET}")
     if not thr_vals:
-        print(f"  {YELLOW}The threshold in force is NOT RECORDED in this sample (an HTTP-sourced")
-        print(f"  collect cannot reach the persisted request). Falling back to the schema")
-        print(f"  default of 50.0 for the split below.{RESET}")
+        print(f"  {YELLOW}The threshold in force is NOT RECORDED in this sample. Rows collected")
+        print(f"  over HTTP carry it only when /scan/last-run pairs a scan_id with the result")
+        print(f"  (older backends do not, and pre-2026-09-07 rows predate the field). Falling")
+        print(f"  back to the schema default of 50.0 for the split below -- re-collect against")
+        print(f"  an upgraded backend, or from the DB, to measure the real line.{RESET}")
     in_force = sorted(thr_vals) if thr_vals else [50.0]
     print(f"  threshold(s) {'recorded in the sample' if thr_vals else 'ASSUMED (schema default)'}: {in_force}")
     if len(in_force) > 1:
@@ -598,7 +637,7 @@ def report(rows: list[dict], thresholds: dict, args) -> None:
         for r in typed:
             t = r.get("iv_abs_threshold") if r["stock_basis"] == "absolute" else r.get("iv_rank_threshold")
             if t is None:
-                continue  # HTTP-sourced row: the threshold this scan ran with is unknown
+                continue  # the threshold this scan ran with was not recorded
             checked += 1
             expect = "bear_call" if r["stock_iv"] >= t else "bear_put"
             if expect != r["spread_type"]:
@@ -607,7 +646,7 @@ def report(rows: list[dict], thresholds: dict, args) -> None:
         print(f"\n    structure actually attached: {dict(st)} over {len(typed)} bearish row(s)")
         if not checked:
             print(f"    {YELLOW}none of them could be CHECKED against choose_primary: no row records"
-                  f" the threshold its scan ran with (collect from the DB, not over HTTP){RESET}")
+                  f" the threshold its scan ran with (see the note above){RESET}")
         elif bad:
             print(f"    {RED}{len(bad)} row(s) carry a structure the threshold does not imply:{RESET}")
             for s in bad[:5]:
@@ -720,6 +759,14 @@ def main() -> int:
                 append_store(store, rows)
                 print(f"{GREEN}Appended {len(rows)} observation(s) from scan {scan_id}{RESET}"
                       f" {DIM}({src}) -> {store}{RESET}")
+                # Say at COLLECT time whether the credit/debit line got
+                # recorded. The report only discovers it rows later, by which
+                # point the sample is already written and the run that could
+                # have been re-collected is gone.
+                thr_src = (request or {}).get("_threshold_source")
+                if thr_src:
+                    tone = YELLOW if thr_src.startswith("not recorded") else DIM
+                    print(f"  {tone}iv thresholds: {thr_src}{RESET}")
 
     if args.command in ("report", "both"):
         report(load_store(store), load_thresholds(), args)

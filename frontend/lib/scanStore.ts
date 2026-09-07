@@ -210,6 +210,16 @@ export interface ScanSessionStatus {
   direction?: string | null;
   horizon?: string | null;
   strategy?: string | null;
+  /** Options mode only. The scan_id of the result GET /api/scan/last returns at
+   *  the same instant, so the fields above and the two thresholds below can be
+   *  checked to belong to that result rather than to a scan that landed in
+   *  between. Null in stock mode and when there is no last result. Read by
+   *  backend/scripts/iv_basis_analysis.py; no UI consumes it today. */
+  scan_id?: string | null;
+  /** Options mode only. The IV cut-offs the last manual scan APPLIED (post
+   *  pre-split seeding server-side). Null means unknown — never 50. */
+  iv_abs_threshold?: number | null;
+  iv_rank_threshold?: number | null;
 }
 
 interface ScanStoreState {
