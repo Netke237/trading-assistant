@@ -9,6 +9,7 @@ import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 import type { HorizonKey } from './horizonPresets';
 import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsHorizon } from './horizonPresets';
 import { stripLegacyIvFields, stripLegacyIvDetail } from './ivBasis';
+import type { IvBasis } from './ivBasis';
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
@@ -101,6 +102,19 @@ function normalizeLegacyPricingMethod(value: unknown): unknown {
  *  stripLegacyIvDetail discriminates on `iv_basis`; contractDetails carries no
  *  such marker (resolveIv derives the basis from which fields are present),
  *  so there is nothing there to discriminate on and it is left alone. */
+/** ROUND 6 finding 2. Read the basis off the candidate's CONTRACT block, which
+ *  the same per-symbol resolution produced, so an unlabelled-but-valid detail
+ *  figure can be relabelled instead of destroyed. A blob written by a pre-split
+ *  backend has no `iv` key at all (the field entered the schema at 71e317e5),
+ *  and that absence is what still marks a figure as genuinely unattributable. */
+function inferredBasisFor(candidate: Record<string, unknown>): IvBasis | undefined {
+  const cd = candidate.contractDetails;
+  if (!isRecord(cd) || !('iv' in cd)) return undefined;  // pre-split: no marker
+  if (cd.ivRank != null) return 'rank';
+  if (cd.iv != null) return 'absolute';
+  return undefined;                                       // post-split, no reading
+}
+
 function stripLegacyIvDetailsFromScanResult(value: unknown): unknown {
   if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
   return {
@@ -108,16 +122,17 @@ function stripLegacyIvDetailsFromScanResult(value: unknown): unknown {
     candidates: value.candidates.map((candidate) => {
       if (!isRecord(candidate)) return candidate;
       const out: Record<string, unknown> = { ...candidate };
+      const inferred = inferredBasisFor(candidate);
       if (isRecord(candidate.stockBreakdown) && isRecord(candidate.stockBreakdown.volDetail)) {
         out.stockBreakdown = {
           ...candidate.stockBreakdown,
-          volDetail: stripLegacyIvDetail(candidate.stockBreakdown.volDetail),
+          volDetail: stripLegacyIvDetail(candidate.stockBreakdown.volDetail, inferred),
         };
       }
       if (isRecord(candidate.contractBreakdown) && isRecord(candidate.contractBreakdown.ivDetail)) {
         out.contractBreakdown = {
           ...candidate.contractBreakdown,
-          ivDetail: stripLegacyIvDetail(candidate.contractBreakdown.ivDetail),
+          ivDetail: stripLegacyIvDetail(candidate.contractBreakdown.ivDetail, inferred),
         };
       }
       return out;

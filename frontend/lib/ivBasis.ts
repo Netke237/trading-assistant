@@ -145,7 +145,7 @@ export function ivSortValue(src: IvSource | null | undefined): number | null {
  * survives minus the unattributable number. Version-gate this like the others —
  * it is not idempotent against a post-split record.
  */
-export function stripLegacyIvDetail(record: unknown): unknown {
+export function stripLegacyIvDetail(record: unknown, inferred?: IvBasis): unknown {
   if (typeof record !== 'object' || record === null || Array.isArray(record)) return record;
   const r = record as Record<string, unknown>;
   if (r.iv_rank == null) return record;
@@ -161,6 +161,23 @@ export function stripLegacyIvDetail(record: unknown): unknown {
   // version-gated strip could not tell them apart. Stripping a real 62nd
   // percentile is the same class of harm as printing an unattributable one.
   if (r.iv_basis !== undefined) return record;
+  // ROUND 6 finding 2. `iv_basis` absence is a PRE-ROUND-3 marker, not a
+  // pre-split one, and the comment above overstated it. VolDetail did not gain
+  // the field in the schema until d1ea97c9 (round 3) -- `_rule_vol` emitted it
+  // from 71e317e5 but `_safe` filters to model_fields and dropped it -- so a
+  // browser that scanned during rounds 1-2 holds a v13 blob whose volDetail
+  // carries a CORRECTLY RESOLVED post-split figure with no label. Stripping
+  // that destroys a good number, and the project's audit gate bars corrupting
+  // persisted data just as firmly as printing a wrong one.
+  //
+  // The basis is not lost, though, only unlabelled: the same per-symbol
+  // resolution fed the contract block, so `inferred` is READ off the sibling
+  // contractDetails rather than guessed, which is what keeps this inside
+  // PHASE-A-NULL-IVRANK-2026-09-06's "drop, do not guess" rule. When the
+  // sibling is silent too, the figure really is unattributable and goes.
+  if (inferred === 'rank' || inferred === 'absolute') {
+    return { ...r, iv_basis: inferred };
+  }
   // ROUND 5 finding 12. Drop the VERDICT with the figure. `reason` on a vol
   // detail is derived from the number ("compressed_vol" means it fell below the
   // compressed band; "iv_too_high" means it broke the ceiling), so keeping it

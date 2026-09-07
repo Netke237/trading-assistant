@@ -94,8 +94,32 @@ async def get_contracts(
             client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds
         ) or []
 
-        # 2. Fetch current stock price (None if unavailable — _augment handles 0.0 gracefully)
+        # 2. Fetch current stock price.
         price: float = await fetch_price_async(client, symbol.upper()) or 0.0
+
+    # ROUND 6 finding 1. Without a price this endpoint CANNOT agree with the scan,
+    # so it must not answer. The scan's twin of this path rejects the symbol
+    # outright on a missing price (`if not price or not candles` -> "no market
+    # data", scan.py:502) and never reaches its Black-Scholes resolution. Here the
+    # request used to continue with price 0.0, which disabled the ATM inversion
+    # AND _augment's BS-delta fallback, so every row came back iv=None ->
+    # iv_basis="none" -> _score_iv_rank's neutral 50. Nothing hard-rejects on a
+    # null IV, so the table was POPULATED, not empty: Step 6 listed "IV -" and a
+    # contract score points away from the card built by the scan, the user sorted
+    # and picked on it, and applyPickedContract copied that score and a null iv
+    # onto the trade card. Same user-visible defect this project ruled BLOCKING in
+    # rounds 4 and 5, reached through the price fetch instead of the chain.
+    #
+    # Failing loudly is the honest mirror of the scan's own behaviour: a degraded
+    # answer the user cannot distinguish from a good one is worse than no answer.
+    if price <= 0:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"No current price for {symbol.upper()}; contract IV and delta "
+                "cannot be computed consistently with the scan. Try again shortly."
+            ),
+        )
 
     # ROUND 4 finding 2. The SCAN inverts Black-Scholes for the ATM contract when
     # no vendor IV arrived and fills the strikes that have none (routers/scan.py's
@@ -117,7 +141,7 @@ async def get_contracts(
     # card's 33.2% and 39, and picking that row copied the null onto the card).
     _atm = (
         min(raw_chain, key=lambda c: abs(float(c.get("strike", 0)) - price))
-        if raw_chain and price > 0 else None
+        if raw_chain else None
     )
     if _atm is not None and _atm.get("ivRank") is None and not _atm.get("iv"):
         _iv_bs = _compute_iv_bs(

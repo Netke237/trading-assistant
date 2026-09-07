@@ -91,6 +91,57 @@ describe('scanStore persisted migrate(): v12 -> v14, the Phase A IV split', () =
     expect(c.contractBreakdown.ivDetail.iv_rank).toBeNull();
   });
 
+  it('RELABELS a rounds-1-2 figure instead of destroying it (round 6 finding 2)', () => {
+    // VolDetail did not gain `iv_basis` in the schema until round 3, so a
+    // browser that scanned during rounds 1-2 holds a v13 blob whose volDetail
+    // is correctly resolved but UNLABELLED. Treating the missing label as a
+    // pre-split marker destroyed a good number — data the user cannot get back
+    // without re-scanning, which the project's audit gate bars as firmly as it
+    // bars printing a wrong one. The basis is recoverable from the sibling
+    // contract block, so it is read, not guessed.
+    const roundsOneTwo = {
+      scanResult: {
+        scan_id: 'S3', timestamp: '2026-09-04T10:00:00', rejected: [],
+        candidates: [{
+          symbol: 'NVDA',
+          // `iv` PRESENT => written by a post-split backend; ivRank non-null
+          // => a rank source answered, so the vol figure is a percentile.
+          contractDetails: { strike: 900, iv: null, ivRank: 78.4 },
+          stockBreakdown: { volDetail: { iv_rank: 78.4, reason: 'iv_too_high' } },
+        }],
+      },
+    };
+    const out = migrate.migrate(roundsOneTwo, 13) as { scanResult: MigratedResult };
+    const vd = (out.scanResult.candidates[0] as unknown as {
+      stockBreakdown: { volDetail: Record<string, unknown> };
+    }).stockBreakdown.volDetail;
+    expect(vd.iv_rank).toBe(78.4);            // kept, not nulled
+    expect(vd.iv_basis).toBe('rank');         // and now labelled correctly
+    expect(vd.reason).toBe('iv_too_high');    // the verdict stands with its figure
+  });
+
+  it('still strips when the sibling contract block is pre-split too', () => {
+    // No `iv` key anywhere => a genuinely pre-split blob. The basis is not
+    // recoverable, so the figure is dropped, per PHASE-A-NULL-IVRANK.
+    const preSplit = {
+      scanResult: {
+        scan_id: 'S4', timestamp: '2026-09-04T10:00:00', rejected: [],
+        candidates: [{
+          symbol: 'INTC',
+          contractDetails: { strike: 30, ivRank: null },
+          stockBreakdown: { volDetail: { iv_rank: 45, reason: 'iv_too_high' } },
+        }],
+      },
+    };
+    const out = migrate.migrate(preSplit, 13) as { scanResult: MigratedResult };
+    const vd = (out.scanResult.candidates[0] as unknown as {
+      stockBreakdown: { volDetail: Record<string, unknown> };
+    }).stockBreakdown.volDetail;
+    expect(vd.iv_rank).toBeNull();
+    expect(vd.iv_basis).toBeUndefined();
+    expect(vd.reason).toBeUndefined();        // the verdict goes with the figure
+  });
+
   it('does NOT strip a post-split figure from a v13 blob', () => {
     // The other half: a v13 blob written by post-split code holds a GENUINE
     // percentile. The v14 pass must leave it alone — stripping a real 62nd
