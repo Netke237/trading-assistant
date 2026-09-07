@@ -615,16 +615,19 @@ def fetch_option_chain(
                 # ⚠ SHAPE HAZARD — this is the DEAD sync twin of
                 # fetch_option_chain_async (nothing calls it; see Amendment A).
                 # It still writes RAW ABSOLUTE IV into `ivRank`, the pre-Phase-A
-                # shape. app/data/augment.py reads a non-null `ivRank` as a TRUE
-                # PERCENTILE, so reviving this function as-is would silently
-                # restore the exact defect Phase A removed: a name at 45% IV
-                # scored as though it sat at its own 45th percentile, and one at
-                # 75% hard-rejected by a percentile ceiling. Before reviving it,
-                # port the async twin's split (~line 1286): emit the absolute
-                # level as `iv` and leave `ivRank` None unless IBKR or
-                # tastytrade answered (PHASE-A-NULL-IVRANK-2026-09-06).
-                "ivRank": int(round(iv * 100)),
-                "ivPercentile": 0,
+                # shape. ROUND 4 finding 7: this twin is dead code (verified --
+                # the only non-test references are its own def and two
+                # docstrings), and it was left on the PRE-SPLIT shape on that
+                # basis. The hazard was not the dead code itself but the GREEN
+                # TEST pinning `ivRank == int(round(iv*100))` and
+                # `ivPercentile == 0` as correct: anyone unifying the twins by
+                # copying the tested one would have restored the exact defect
+                # Phase A removed, with a passing suite. Converted to match the
+                # async twin so the repo holds no pre-split shape at all.
+                # It still has no callers -- see the note above.
+                "iv": round(iv * 100, 1) if iv > 0 else None,
+                "ivRank": None,
+                "ivPercentile": None,
                 "spread": spread,
                 "volume": volume,
                 "open_interest": oi,
@@ -656,14 +659,14 @@ def fetch_option_chain(
             except Exception:
                 pass  # keep existing fallback values
 
-        zero_iv = sum(1 for c in result if c["ivRank"] == 0)
+        zero_iv = sum(1 for c in result if not c.get("iv"))
         if zero_iv > len(result) * 0.5 and result:
             yf_iv = _yf_iv_for_chain(symbol, target_exp, option_type == "C")
             for c in result:
-                if c["ivRank"] == 0:
+                if not c.get("iv"):
                     yf_val = yf_iv.get(float(c["strike"]))
                     if yf_val:
-                        c["ivRank"] = int(round(yf_val * 100))
+                        c["iv"] = round(yf_val * 100, 1)
                         c["implied_volatility"] = round(yf_val, 4)
 
         seen: set[str] = set()

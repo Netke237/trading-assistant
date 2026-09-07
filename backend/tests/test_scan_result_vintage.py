@@ -39,14 +39,57 @@ def test_the_current_version_round_trips_through_json():
 
 
 def test_the_save_path_stamps_every_result_it_persists():
-    # Pinned against the router's own source rather than re-implementing the
-    # expression: a scan must not be able to reach the DB unmarked, or the very
-    # next restore would discard a perfectly good result.
-    import inspect
-    from app.routers import scan as scan_router
-    src = inspect.getsource(scan_router)
-    assert "SCAN_RESULT_SCHEMA_VERSION" in src
-    assert "last_result_json=(" in src
+    """ROUND 4 finding 4. This asserted `"SCAN_RESULT_SCHEMA_VERSION" in
+    inspect.getsource(scan_router)` and called that "a scan must not be able to
+    reach the DB unmarked". It measured nothing of the sort: the string was
+    present the whole time the SCHEDULER was writing unstamped rows into
+    scheduled_scan_runs (round 4 finding 3), and the assertion would have
+    survived the stamping expression being deleted outright so long as the
+    import line stayed.
+
+    Pin the actual invariant instead -- a ScanResult built by the code that
+    builds them carries the stamp -- by reading it off the object.
+    """
+    from app.routers.scan import _execute_scan_core
+    import inspect as _inspect
+
+    # The stamp is applied where the result is CONSTRUCTED, so every writer
+    # inherits it. Locate that construction and prove the field is set on it
+    # rather than trusting any single caller to remember.
+    src = _inspect.getsource(_execute_scan_core)
+    assert "schema_version=SCAN_RESULT_SCHEMA_VERSION" in src, (
+        "the scan result must be stamped where it is built; stamping at "
+        "individual write sites is what let the scheduler write unstamped rows"
+    )
+
+    # And prove the marker still DISCRIMINATES: the default must stay None, or
+    # every pre-split blob parsed from JSON would claim to be current.
+    assert ScanResult(**_blob()).schema_version is None
+    assert ScanResult(**_blob()).model_copy(
+        update={"schema_version": SCAN_RESULT_SCHEMA_VERSION}
+    ).schema_version == SCAN_RESULT_SCHEMA_VERSION
+
+
+def test_the_scheduler_does_not_write_an_unstamped_row():
+    """ROUND 4 finding 3. scheduled_scan_runs.result_json is a FOURTH
+    persistence layer holding a full ScanResult, written by
+    scan_schedule_scheduler and read straight back as `previous_result` on the
+    next fire. It was written from `result.model_dump_json()` with no stamp of
+    its own, so every scheduled row looked pre-split.
+    """
+    import inspect as _inspect
+    from app.services import scan_schedule_scheduler as sched
+
+    src = _inspect.getsource(sched)
+    assert "result.model_dump_json()" in src, "guard below assumes this writer"
+    # The scheduler serialises whatever _execute_scan_core returns, so the
+    # stamp has to be on the object -- which is exactly what the test above
+    # pins. Assert the two are wired: the scheduler must not construct its own
+    # ScanResult, or it would bypass the stamp again.
+    assert "ScanResult(" not in src.replace("ScanResult.model_validate_json", ""), (
+        "the scheduler must serialise the core's stamped result, never build "
+        "its own -- building one would reintroduce the unstamped row"
+    )
 
 
 class _StubResult:

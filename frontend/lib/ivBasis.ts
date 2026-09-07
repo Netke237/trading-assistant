@@ -122,6 +122,36 @@ export function ivSortValue(src: IvSource | null | undefined): number | null {
  * safe to apply on every rehydration — post-split records hold a genuine
  * `ivRank`/`ivPercentile` pair that this would throw away.
  */
+/* The SCORE-DETAIL sibling of stripLegacyIvFields below.
+ *
+ * ROUND 4 finding 1. The v13 migration stripped `contractDetails` and each
+ * `alternatives` entry and stopped there, but a persisted candidate carries the
+ * SAME ambiguous figure in two more places: `stockBreakdown.volDetail.iv_rank`
+ * and `contractBreakdown.ivDetail.iv_rank`. Those blocks use SNAKE_CASE, so
+ * stripLegacyIvFields could not have reached them even if it had been called —
+ * it tests `ivRank`.
+ *
+ * Left in place they are worse than the fields that were stripped, because
+ * `iv_basis` is optional and scoreDetailText defaults a missing basis to
+ * 'absolute' and appends '%'. A pre-split candidate whose Black-Scholes
+ * inversion failed stored `iv_rank: 0.0`, which then renders as "IV 0% ·
+ * compressed_vol" — an impossible implied volatility asserted as measured — and
+ * a pre-split IBKR/tastytrade row whose figure genuinely WAS a 62nd percentile
+ * renders as "IV 62%".
+ *
+ * Same remedy as everywhere else in this split: the basis is not recoverable,
+ * so the figure is DROPPED, not relabelled. scoreDetailText already omits the
+ * IV clause when `iv_rank` is null and keeps `reason`, so the detail line
+ * survives minus the unattributable number. Version-gate this like the others —
+ * it is not idempotent against a post-split record.
+ */
+export function stripLegacyIvDetail(record: unknown): unknown {
+  if (typeof record !== 'object' || record === null || Array.isArray(record)) return record;
+  const r = record as Record<string, unknown>;
+  if (r.iv_rank == null) return record;
+  return { ...r, iv_rank: null };
+}
+
 export function stripLegacyIvFields(record: unknown): unknown {
   if (typeof record !== 'object' || record === null || Array.isArray(record)) return record;
   const r = record as Record<string, unknown>;

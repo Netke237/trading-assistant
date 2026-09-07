@@ -448,13 +448,20 @@ def test_iv_enrichment_skipped_when_ibkr_returns_none():
     finally:
         ibkr_mod.fetch_iv_metrics_ibkr = original_fetch_iv
 
-    # When IBKR returns None, ivRank should be the raw Tradier value (int(round(0.30*100))=30)
-    # and ivPercentile should stay 0.
+    # ROUND 4 finding 7. This used to assert ivRank == 30 (int(round(0.30*100)))
+    # and ivPercentile == 0 -- the raw Tradier IV written under the PERCENTILE's
+    # name, plus the 0-means-absent sentinel, i.e. the exact conflation Phase A
+    # exists to remove, documented in a green test as correct behaviour.
+    # With IBKR returning None there is no rank source, so:
     assert len(result) == 1
-    assert result[0]["ivRank"] == 30, f"Expected ivRank=30 (fallback), got {result[0]['ivRank']}"
-    assert result[0]["ivPercentile"] == 0, (
-        f"Expected ivPercentile=0 (fallback), got {result[0]['ivPercentile']}"
+    assert result[0]["iv"] == 30.0, (
+        f"the ABSOLUTE level belongs in `iv`, got {result[0].get('iv')}"
     )
+    assert result[0]["ivRank"] is None, (
+        "ivRank is a TRUE PERCENTILE and no rank source answered; None is the "
+        f"distinct 'no rank' state, got {result[0]['ivRank']}"
+    )
+    assert result[0]["ivPercentile"] is None
 
 
 # ── O-1: Date-based candle cache TTL ─────────────────────────────────────────

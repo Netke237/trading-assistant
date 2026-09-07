@@ -119,9 +119,11 @@ def test_a_high_absolute_iv_is_no_longer_judged_as_a_percentile():
     """
     row = _augment(_chain_row(iv=75.0), 190.0)
     assert row["iv_basis"] == "absolute"
-    assert "iv_rank_too_high" in validate_contract(row, 70).reject_reasons
+    # ROUND 4 finding 10: reported under the ABSOLUTE name, since that is the
+    # quantity and the ceiling that judged it.
+    assert "iv_too_high" in validate_contract(row, 70).reject_reasons
     relaxed = validate_contract(row, 70, overrides={"max_iv_abs": 80})
-    assert "iv_rank_too_high" not in relaxed.reject_reasons
+    assert "iv_too_high" not in relaxed.reject_reasons
 
 
 def test_no_volatility_data_does_not_hard_reject():

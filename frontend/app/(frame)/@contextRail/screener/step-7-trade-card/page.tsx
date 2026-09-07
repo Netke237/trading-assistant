@@ -49,7 +49,19 @@ function buildChecklist(
   // all the gate is CAUTION, not PASS: an unknown IV is not a clean read, and
   // silently passing it is how a gate stops being a gate.
   const iv = resolveIv(candidate.contractDetails);
-  if (iv.basis === 'none') {
+  // ROUND 4 finding 14. The gate-disabled test has to come FIRST. Ordered the
+  // other way, an Intraday contract with no IV reading showed "CAUTION: the IV
+  // gate could not be applied" on a horizon where the IV gate is disabled by
+  // design — cautioning about the absence of a check that was never going to
+  // run. Nothing is missing there, so nothing is flagged.
+  const gateDisabled = getIvPassMax(horizonKey, ivThresholds, iv.basis === 'none' ? 'absolute' : iv.basis) === null;
+  if (gateDisabled) {
+    gates.push({
+      label: 'IV acceptable',
+      status: 'PASS',
+      detail: `No IV gate for ${horizonKey}.`,
+    });
+  } else if (iv.basis === 'none') {
     gates.push({
       label: 'IV acceptable',
       status: 'CAUTION',

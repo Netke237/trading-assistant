@@ -1004,10 +1004,15 @@ async def _process_symbol(
     # Append the alternative spread type (bear_call ↔ bear_put) if built
     if direction == "Bearish" and _alt_sp is not None:
         from app.schemas import OptionLeg as _OptionLeg
+        # ROUND 4 finding 9. choose_primary picks by iv_basis, and on most chains
+        # the deciding quantity is an ABSOLUTE IV against abs_threshold -- so
+        # naming "IV rank" here explained a credit-vs-debit choice, on the row
+        # the user may send to a broker, by the quantity that did not make it.
+        _iv_word = "IV rank" if iv_basis == "rank" else "IV"
         _spread_reason = (
-            "bear call spread — collects credit; better when IV rank is high"
+            f"bear call spread — collects credit; better when {_iv_word} is high"
             if _alt_sp.spread_type == "bear_call"
-            else "bear put spread — debit spread; better when IV rank is low"
+            else f"bear put spread — debit spread; better when {_iv_word} is low"
         )
         alts.append(AlternativeContract(
             symbol=symbol,
@@ -1415,6 +1420,21 @@ async def _execute_scan_core(
     )
 
     result = ScanResult(
+        # ROUND 4 findings 3 and 13. Stamped HERE, where the result is produced,
+        # rather than at each write site. _upsert_session stamped its own copy
+        # via model_copy, which left two holes: the scheduler wrote
+        # `result.model_dump_json()` straight into scheduled_scan_runs UNSTAMPED
+        # (so every scheduled row was indistinguishable from a pre-split blob,
+        # and any future attempt to enforce the vintage guard on that table
+        # would have discarded ALL of them), and the in-memory _last_result kept
+        # the unstamped original, so /api/scan/last reported schema_version null
+        # for a scan run in this process and 1 for the same scan after a
+        # restart. Stamping at production means a writer cannot forget.
+        #
+        # The field's DEFAULT must stay None: it is the pre-split marker, and a
+        # default of 1 would make every old blob parsed from JSON claim to be
+        # current, which is the whole thing the marker exists to detect.
+        schema_version=SCAN_RESULT_SCHEMA_VERSION,
         scan_id=scan_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
         candidates=candidates,

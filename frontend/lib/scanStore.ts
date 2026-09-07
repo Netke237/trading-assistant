@@ -8,7 +8,7 @@ import type { Direction, OptionContract, TradeCardData, DteWindow } from '@/type
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 import type { HorizonKey } from './horizonPresets';
 import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsHorizon } from './horizonPresets';
-import { stripLegacyIvFields } from './ivBasis';
+import { stripLegacyIvFields, stripLegacyIvDetail } from './ivBasis';
 
 export type ScanState = 'IDLE' | 'SCANNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL' | 'CANCELLED';
 
@@ -86,11 +86,13 @@ function normalizeLegacyPricingMethod(value: unknown): unknown {
  *  unattributable figure is dropped rather than relabelled
  *  (PHASE-A-NULL-IVRANK-2026-09-06).
  *
- *  Two places inside a persisted candidate carry the pair: `contractDetails`
+ *  FOUR places inside a persisted candidate carry the figure: `contractDetails`
  *  (the block the Step 7 trade card renders and the user acts from) and each
  *  `alternatives` entry. `pickedContracts` is a Record<string, string> of
  *  contract IDs and carries no volatility figure at all; `contractsBySymbol`,
- *  which does, is deliberately not persisted (see `partialize`). */
+ *  which does, is deliberately not persisted (see `partialize`). The other
+ *  two are the snake_case score-detail blocks `stockBreakdown.volDetail` and
+ *  `contractBreakdown.ivDetail` (round 4 finding 1) — see stripLegacyIvDetail. */
 function stripLegacyIvFromScanResult(value: unknown): unknown {
   if (!isRecord(value) || !Array.isArray(value.candidates)) return value;
   return {
@@ -103,6 +105,21 @@ function stripLegacyIvFromScanResult(value: unknown): unknown {
       }
       if (Array.isArray(candidate.alternatives)) {
         out.alternatives = candidate.alternatives.map(stripLegacyIvFields);
+      }
+      // ROUND 4 finding 1. The same figure also sits in the two SCORE-DETAIL
+      // blocks, in snake_case, where a missing `iv_basis` defaults to
+      // 'absolute' and renders with a '%'. See stripLegacyIvDetail.
+      if (isRecord(candidate.stockBreakdown) && isRecord(candidate.stockBreakdown.volDetail)) {
+        out.stockBreakdown = {
+          ...candidate.stockBreakdown,
+          volDetail: stripLegacyIvDetail(candidate.stockBreakdown.volDetail),
+        };
+      }
+      if (isRecord(candidate.contractBreakdown) && isRecord(candidate.contractBreakdown.ivDetail)) {
+        out.contractBreakdown = {
+          ...candidate.contractBreakdown,
+          ivDetail: stripLegacyIvDetail(candidate.contractBreakdown.ivDetail),
+        };
       }
       return out;
     }),

@@ -229,7 +229,7 @@ export function contractScoreTooltip(c: OptionContract): string {
   if (c.volume < CONTRACT_PREFERRED.volumeMin) {
     weaknesses.push(`volume ${c.volume.toLocaleString()} (prefer ≥${CONTRACT_PREFERRED.volumeMin.toLocaleString()})`);
   }
-  const base = 'Composite contract score — combines DTE fit, delta, IV rank, liquidity, and spread quality.';
+  const base = 'Composite contract score — combines DTE fit, delta, IV, liquidity, and spread quality.';
   if (weaknesses.length === 0) return `${base} All components are within their preferred ranges.`;
   return `${base} Weakest: ${weaknesses[0]}${weaknesses.length > 1 ? ` (+${weaknesses.length - 1} more)` : ''}.`;
 }
@@ -244,12 +244,16 @@ export function contractBreakdownTooltip(b: ContractScoreBreakdown): string {
   const components: Array<{ label: string; score: number; text?: string }> = [
     { label: 'DTE fit', score: b.dteFit, text: dteDetailText(b.dteDetail) },
     { label: 'delta', score: b.delta, text: deltaDetailText(b.deltaDetail) },
-    { label: 'IV rank', score: b.ivAttractiveness, text: ivDetailText(b.ivDetail) },
+    // ROUND 4 finding 8. Neutral, matching TradeCard/index.tsx: ivDetailText
+    // already labels the figure by its basis, so a hardcoded "IV rank" here
+    // produced a tooltip contradicting itself — "Weakest: IV rank — IV 45% ·
+    // pref ≤55%" — on the AlternativeContractRow badge.
+    { label: 'IV', score: b.ivAttractiveness, text: ivDetailText(b.ivDetail) },
     { label: 'liquidity', score: b.liquidity, text: liquidityDetailText(b.liquidityDetail) },
     { label: 'spread', score: b.spread, text: spreadDetailText(b.spreadDetail) },
   ];
   const weakest = components.reduce((min, c) => (c.score < min.score ? c : min), components[0]);
-  const base = 'Composite contract score — combines DTE fit, delta, IV rank, liquidity, and spread quality.';
+  const base = 'Composite contract score — combines DTE fit, delta, IV, liquidity, and spread quality.';
   return weakest.text
     ? `${base} Weakest: ${weakest.label} — ${weakest.text}.`
     : `${base} Weakest: ${weakest.label} (${weakest.score}/100).`;

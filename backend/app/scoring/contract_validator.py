@@ -107,7 +107,15 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     # so a hand-built cfg carrying only the old key still hard-rejects.
     max_iv = hr.get(_iv_key, hr.get("max_iv_rank"))
     if max_iv is not None and iv_rank is not None and iv_rank > max_iv:
-        reasons.append("iv_rank_too_high")
+        # ROUND 4 finding 10. The CEILING is picked by basis two lines up, but
+        # the reason was a fixed string, and scan.py aggregates these verbatim
+        # into the rejected-candidate list the user reads ("iv_rank_too_high(7)").
+        # On the default path that reported "absolute IV above max_iv_abs" under
+        # the percentile's name -- the same mislabel this phase exists to remove,
+        # in the text explaining why a candidate was thrown away.
+        reasons.append(
+            "iv_rank_too_high" if contract.get("iv_basis") == "rank" else "iv_too_high"
+        )
 
     return reasons
 

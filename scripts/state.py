@@ -146,10 +146,12 @@ def audit_bookkeeping_drift(state: dict) -> str | None:
 
     The evidence git actually holds is that a round produced commits. So: take
     the highest `round N` in this branch's commit subjects, compare it against
-    the highest `audit_rounds` declared for work that is still OPEN (not
-    audit_clean), and report only when git is ahead. Scoping to open work is
-    what makes the check mean anything -- Phase D's 13 clean rounds are the
-    global maximum, so a comparison against every entry could never fire.
+    the `audit_rounds` declared by `active_phase` -- the phase this branch is
+    building -- and report only when git is ahead. Scoping to that one phase is
+    what makes the check mean anything: Phase D's 13 clean rounds are the global
+    maximum, so comparing against every entry could never fire, and comparing
+    against merely-open work fires forever once the active phase goes clean
+    (round 4 finding 6).
 
     One-directional on purpose. A file claiming MORE rounds than git shows is
     not evidence of anything: rounds legitimately run without producing a
@@ -160,27 +162,33 @@ def audit_bookkeeping_drift(state: dict) -> str | None:
         return None
     git_max, subjects = evidence
 
-    entries: list[tuple[int, bool, str]] = []
-    for ph in state["phases"]:
-        entries.append((ph.get("audit_rounds") or 0, bool(ph.get("audit_clean")),
-                        f"Phase {ph['id']} ({ph['name']})"))
-    for item in state.get("already_shipped", []):
-        entries.append((item.get("audit_rounds") or 0, bool(item.get("audit_clean")),
-                        f"Shipped: {item['name']}"))
-    if not entries:
+    # ROUND 4 finding 6. The first version of this scoped to work that was still
+    # OPEN (not audit_clean), which fired a PERMANENT false positive on its own
+    # success path: the moment the one phase carrying rounds on this branch was
+    # marked clean, the open pool became the not-started phases, all declaring 0,
+    # so `git_max > 0` reported drift and exited non-zero on EVERY SessionStart.
+    # A red banner that cannot be cleared is worse than no banner -- it trains
+    # the reader to scroll past the real ones.
+    #
+    # Scoping to `active_phase` is what the comparison actually meant all along.
+    # Rounds counted from `main..HEAD` belong to the phase this branch is
+    # building; they say nothing about Phase D's 13 merged rounds, which is why
+    # a global maximum could never fire, and nothing about phases not started.
+    active = state.get("active_phase")
+    if not active:
+        return None  # no pointer: stay silent rather than guess a pool
+    ph = next((p for p in state["phases"] if p["id"] == active), None)
+    if ph is None:
+        return None  # names a phase that no longer exists; silent, not wrong
+
+    declared = ph.get("audit_rounds") or 0
+    if git_max <= declared:
         return None
 
-    open_work = [e for e in entries if not e[1]]
-    pool = open_work or entries
-    declared_max, _, holder = max(pool, key=lambda e: e[0])
-    if git_max <= declared_max:
-        return None
-
-    scope = "open (not audit_clean) work" if open_work else "any entry"
     shown = "; ".join(subjects[:3])
     return (
-        f"Audit bookkeeping: this branch's commit subjects reach round {git_max}, but the "
-        f"highest audit_rounds declared for {scope} is {declared_max} ({holder}). "
+        f"Audit bookkeeping: this branch's commit subjects reach round {git_max}, but "
+        f"Phase {ph['id']} ({ph['name']}) -- the active phase -- declares {declared}. "
         f"A round ran and was never written down — subjects: {shown}"
     )
 

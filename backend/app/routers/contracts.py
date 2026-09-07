@@ -9,7 +9,10 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.schemas import OptionContract, RrModel, TradeEntry, TradeExit
-from app.data.market import fetch_option_chain_async, fetch_contract_quote_async, fetch_price_async, fetch_candles_async
+from app.data.market import (
+    fetch_option_chain_async, fetch_contract_quote_async, fetch_price_async,
+    fetch_candles_async, _compute_iv_bs,
+)
 from app.data.augment import _augment, opt_float, opt_int
 from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
@@ -93,6 +96,33 @@ async def get_contracts(
 
         # 2. Fetch current stock price (None if unavailable — _augment handles 0.0 gracefully)
         price: float = await fetch_price_async(client, symbol.upper()) or 0.0
+
+    # ROUND 4 finding 2. The SCAN inverts Black-Scholes for the ATM contract when
+    # no vendor IV arrived and fills the strikes that have none (routers/scan.py's
+    # resolution block); this endpoint did not, and it feeds STEP 6's table while
+    # the scan feeds the STEP 7 card. Same contract, two different IVs and — via
+    # _score_iv_rank's neutral-50-on-None — two different CONTRACT SCORES: Step 6
+    # listed "IV —" and a score three points off the card the user then acts from.
+    # Ranking a table on a score that is not the scored contract's is a wrong
+    # number in front of a user, so the fallback is mirrored here rather than
+    # left to the deferred de-duplication of the two resolvers (which would not
+    # have closed this: what differs is the MISSING FALLBACK, not the arithmetic).
+    if raw_chain and price > 0 and not any(c.get("iv") for c in raw_chain):
+        _atm = min(raw_chain, key=lambda c: abs(float(c.get("strike", 0)) - price))
+        _iv_bs = _compute_iv_bs(
+            mid=float(_atm.get("price", 0)),
+            S=price,
+            K=float(_atm.get("strike", price)),
+            dte=int(_atm.get("dte", 30)),
+            is_call=(opt_type == "C"),
+        )
+        if _iv_bs is not None:
+            for c in raw_chain:
+                if not c.get("iv"):
+                    # An inversion yields an ABSOLUTE volatility, never a
+                    # percentile — it can only ever feed `iv`.
+                    c["iv"] = round(_iv_bs * 100, 1)
+                    c["implied_volatility"] = round(_iv_bs, 4)
 
     results: list[OptionContract] = []
     for c in raw_chain:
