@@ -25,6 +25,7 @@ import { scanPortfolio } from '@/lib/alertEngine';
 import { toHistoryCsv } from '@/lib/portfolioHistory';
 import { positionStatusTooltip } from '@/lib/statusTooltips';
 import type { PortfolioPosition } from '@/types/domain';
+import { resolveIv, formatIv, IV_COLUMN_LABEL, type IvBasis } from '@/lib/ivBasis';
 import styles from './page.module.css';
 import { EditDrawer } from './EditDrawer';
 
@@ -50,11 +51,35 @@ function rejectionMessage(detail: string): string {
   return mapped.length ? mapped.join(' ') : detail;
 }
 
-function ivRankTone(rk: number | undefined): 'pass' | 'caution' | 'reject' | undefined {
-  if (rk === undefined) return undefined;
-  if (rk >= 70) return 'reject';      // very rich
-  if (rk >= 40) return 'caution';     // moderate
-  return 'pass';                      // cheap
+/** Tone for the resolved volatility figure. The bands are the same numbers on
+ *  both bases today — 70 is `max_iv_abs`/`max_iv_rank` in contract_rules.yaml,
+ *  which are seeded equal — so one function serves both, but it takes the
+ *  basis so the split stays visible if those ever diverge
+ *  (PHASE-A-NULL-IVRANK-2026-09-06). */
+function ivTone(value: number | null, _basis: IvBasis): 'pass' | 'caution' | 'reject' | undefined {
+  if (value == null) return undefined;
+  // ROUND 5 finding 13. 70 is the hard ceiling (max_iv_abs / max_iv_rank), but
+  // 40 corresponded to NOTHING in config -- preferred_iv_*_max is 55 -- so this
+  // column tinted a 45% IV "caution" on a position the scorer calls PASS. 55 is
+  // the preferred ceiling the contract scorer actually uses.
+  if (value >= 70) return 'reject';      // above the hard ceiling
+  if (value >= 55) return 'caution';     // above preferred_iv_*_max
+  return 'pass';
+}
+
+/** IV cell for one open position. A percentile when a rank source answered,
+ *  otherwise the absolute implied volatility, labelled as such — this column
+ *  showed an absolute level under the heading "IV RK" before the split
+ *  (PHASE-A-NULL-IVRANK-2026-09-06). */
+function IvPositionCell({ position }: { position: PortfolioPosition }) {
+  const iv = resolveIv(position);
+  const shown = formatIv(iv, position.symbol);
+  return (
+    <Data size={12} className={styles.right} tone={ivTone(iv.value, iv.basis)} title={shown.title}>
+      {shown.text}
+      {shown.suffix !== '' && <Text size={10} tone="dim">{` ${shown.suffix}`}</Text>}
+    </Data>
+  );
 }
 
 const COLUMNS = '28px 72px 1.6fr 72px 1fr 110px 104px 60px 56px 60px 90px 40px';
@@ -323,7 +348,7 @@ export default function PortfolioPage() {
             <Text size={11} tone="dim">DTE</Text>
             <Text size={11} tone="dim" className={styles.right}>ENTRY → NOW</Text>
             <Text size={11} tone="dim" className={styles.right}>P&L</Text>
-            <Text size={11} tone="dim" className={styles.right}>IV RK</Text>
+            <Text size={11} tone="dim" className={styles.right}>{IV_COLUMN_LABEL}</Text>
             <Text size={11} tone="dim" className={styles.right}>Δ</Text>
             <Text size={11} tone="dim" className={styles.right}>Θ/DAY</Text>
             <Text size={11} tone="dim">STATUS</Text>
@@ -359,9 +384,7 @@ export default function PortfolioPage() {
                       {p.pnlPct > 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
                     </Data>
                   </div>
-                  <Data size={12} className={styles.right} tone={ivRankTone(p.ivRank)}>
-                    {p.ivRank !== undefined ? p.ivRank : '—'}
-                  </Data>
+                  <IvPositionCell position={p} />
                   <Data size={12} className={styles.right}>
                     {p.delta !== undefined ? p.delta.toFixed(2) : '—'}
                   </Data>

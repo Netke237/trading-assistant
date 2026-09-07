@@ -136,7 +136,7 @@ describe('scanSettings mode-asymmetry', () => {
       confidenceGate: { enabled: false, cautionBelow: 55, rejectBelow: 40, atrMult: DEFAULT_ATR_MULT_BY_HORIZON },
       fundamentalsGate: { enabled: false, cautionBelow: 60, rejectBelow: 50, deReject: 4.0 },
       shortlistMaxCandidates: 25,
-      spreads: { shortLegDelta: 0.25, widthPoints: 10, ivRankThreshold: 60, minCredit: 1.0, maxDebitPctOfWidth: 50 },
+      spreads: { shortLegDelta: 0.25, widthPoints: 10, ivRankThreshold: 60, ivAbsThreshold: 60, minCredit: 1.0, maxDebitPctOfWidth: 50 },
     });
     const captured = captureCurrentSnapshot('options');
     expect(captured.scanSettings.fundamentalsGate?.cautionBelow).toBe(60);
@@ -158,7 +158,7 @@ describe('scanSettings mode-asymmetry', () => {
       confidenceGate: { enabled: false, cautionBelow: 55, rejectBelow: 40, atrMult: DEFAULT_ATR_MULT_BY_HORIZON },
       fundamentalsGate: { enabled: false, cautionBelow: 60, rejectBelow: 50, deReject: 4.0 },
       shortlistMaxCandidates: 25,
-      spreads: { shortLegDelta: 0.25, widthPoints: 10, ivRankThreshold: 60, minCredit: 1.0, maxDebitPctOfWidth: 50 },
+      spreads: { shortLegDelta: 0.25, widthPoints: 10, ivRankThreshold: 60, ivAbsThreshold: 60, minCredit: 1.0, maxDebitPctOfWidth: 50 },
     });
     const captured = captureCurrentSnapshot('stocks');
     expect(captured.scanSettings.confidenceGate.cautionBelow).toBe(55);

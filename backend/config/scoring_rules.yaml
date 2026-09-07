@@ -111,8 +111,25 @@ horizons:
       reject_days: 21
       caution_days: 45
     vol:
+      # TWO THRESHOLD SETS, because `iv_rank` can hold either of two different
+      # quantities (PHASE-A-NULL-IVRANK-2026-09-06):
+      #   iv_abs_*  judge ABSOLUTE implied volatility 0-100 (Tradier per-strike,
+      #             or the Black-Scholes inversion). This is the path most
+      #             symbols take, since only Tradier returns a per-contract IV.
+      #   iv_rank_* judge a TRUE PERCENTILE, available only when IBKR or
+      #             tastytrade answered.
+      # The iv_abs_* numbers are the ones this rule has ACTUALLY been applying
+      # since before the split -- raw IV was written into a field named for a
+      # percentile -- so keeping them here preserves today's behaviour exactly
+      # rather than silently changing which candidates pass.
+      # The iv_rank_* numbers are seeded to match and are UNMEASURED: nobody has
+      # checked that a percentile deserves the same cut-offs as a level. Logged
+      # as an open question alongside Q7.
+      iv_abs_compressed_caution: 5
+      iv_abs_pass_max: 34      # IV <= this -> PASS; mirrors frontend ivThresholds.ts
+      iv_abs_caution_max: 55
       iv_rank_compressed_caution: 5
-      iv_rank_pass_max: 34     # IV rank <= this -> PASS; mirrors frontend ivThresholds.ts
+      iv_rank_pass_max: 34     # UNMEASURED — seeded from the absolute set
       iv_rank_caution_max: 55
 
     stop_premium:
@@ -200,6 +217,12 @@ horizons:
       reject_days: 1
       caution_days: 3
     vol:
+      # Intraday skips vol scoring entirely on BOTH paths — a null pass_max is
+      # what _rule_vol reads as "skip", and it must be null in each set or the
+      # basis would decide whether the rule runs at all.
+      iv_abs_compressed_caution: null
+      iv_abs_pass_max: null
+      iv_abs_caution_max: null
       iv_rank_compressed_caution: null
       iv_rank_pass_max: null
       iv_rank_caution_max: null
@@ -289,8 +312,25 @@ horizons:
       reject_days: 30
       caution_days: 60
     vol:
+      # TWO THRESHOLD SETS, because `iv_rank` can hold either of two different
+      # quantities (PHASE-A-NULL-IVRANK-2026-09-06):
+      #   iv_abs_*  judge ABSOLUTE implied volatility 0-100 (Tradier per-strike,
+      #             or the Black-Scholes inversion). This is the path most
+      #             symbols take, since only Tradier returns a per-contract IV.
+      #   iv_rank_* judge a TRUE PERCENTILE, available only when IBKR or
+      #             tastytrade answered.
+      # The iv_abs_* numbers are the ones this rule has ACTUALLY been applying
+      # since before the split -- raw IV was written into a field named for a
+      # percentile -- so keeping them here preserves today's behaviour exactly
+      # rather than silently changing which candidates pass.
+      # The iv_rank_* numbers are seeded to match and are UNMEASURED: nobody has
+      # checked that a percentile deserves the same cut-offs as a level. Logged
+      # as an open question alongside Q7.
+      iv_abs_compressed_caution: 5
+      iv_abs_pass_max: 44      # IV <= this -> PASS; mirrors frontend ivThresholds.ts
+      iv_abs_caution_max: 65
       iv_rank_compressed_caution: 5
-      iv_rank_pass_max: 44     # IV rank <= this -> PASS; mirrors frontend ivThresholds.ts
+      iv_rank_pass_max: 44     # UNMEASURED — seeded from the absolute set
       iv_rank_caution_max: 65
 
 # Entry quality thresholds (FR-45)

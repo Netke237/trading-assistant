@@ -606,6 +606,48 @@ describe('portfolioStore', () => {
       expect(migrated.positions[0]!.premiumStopDollar).toBe(2.0);
     });
 
+    it('v4 -> v5: drops the unattributable pre-split ivRank off a persisted row', () => {
+      // ROUND 1 finding (b). Before the Phase A split, `ivRank` held EITHER a
+      // true percentile (IBKR/tastytrade) OR raw IV x 100 (every other chain),
+      // with nothing saying which. Rehydrating one makes the portfolio table
+      // print "IV rank 45" for what is most likely a 45% absolute IV — the
+      // exact mislabel Phase A removes. The basis is not recoverable, so the
+      // figure is dropped, not guessed; see lib/ivBasis.ts.
+      //
+      // Worse here than in scanStore: syncFromBackend refreshes these fields
+      // only on rows the reconcile confirms, so on a row it keeps as
+      // pending/offline a stale figure would never be replaced.
+      const migrated = migratePortfolioPersist(
+        {
+          positions: [{
+            recId: 'LEGACY-IV', symbol: 'ABT', contract: 'ABT|97|2027-01-15|C',
+            syncStatus: 'pending', ivRank: 45, entryPrice: 10.45,
+          }],
+        },
+        4,
+      ) as { positions: Array<Record<string, unknown>> };
+      expect(migrated.positions[0]!.ivRank).toBeNull();
+      // Nothing else on the row is disturbed.
+      expect(migrated.positions[0]!.entryPrice).toBe(10.45);
+      expect(migrated.positions[0]!.syncStatus).toBe('pending');
+    });
+
+    it('v4 -> v5: the drop is VERSION-GATED, unlike every other branch here', () => {
+      // The other branches are idempotent and ignore the version. This one is
+      // destructive: a post-split row's `ivRank` IS a real percentile, so
+      // running it unconditionally would throw away good data on every load.
+      const migrated = migratePortfolioPersist(
+        {
+          positions: [{
+            recId: 'POST-SPLIT', symbol: 'ABT', contract: 'ABT|97|2027-01-15|C',
+            syncStatus: 'synced', ivRank: 62, iv: null,
+          }],
+        },
+        5,
+      ) as { positions: Array<Record<string, unknown>> };
+      expect(migrated.positions[0]!.ivRank).toBe(62);
+    });
+
     it('floors a stop/structuralStop of 0 already sitting in a pre-round-2 localStorage row', () => {
       // Round-5 audit finding: a row saved to localStorage before the
       // stop=0 fix (round 2) rehydrates straight into live state on every

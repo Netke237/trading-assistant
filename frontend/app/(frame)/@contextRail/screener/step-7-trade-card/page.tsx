@@ -12,7 +12,8 @@ import { Text } from '@/components/primitives';
 import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import { statusForScore } from '@/lib/status';
-import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
+import { useIvThresholdsStore, getIvPassMax, getIvCautionMax, type HorizonIvThresholds } from '@/lib/ivThresholdsStore';
+import { resolveIv, formatIv } from '@/lib/ivBasis';
 import { ScreenerStepGate } from '@/components/organisms/ScreenerStepGate';
 import type { TradeCardData, WatchlistRow } from '@/types/domain';
 import type { Status } from '@/lib/status';
@@ -31,7 +32,7 @@ function buildChecklist(
   wlRow: WatchlistRow | undefined,
   regime: Status,
   horizonKey: string,
-  ivThresholds: Record<string, { pass_max: number | null; caution_max: number | null }>,
+  ivThresholds: Record<string, HorizonIvThresholds>,
 ): Gate[] {
   const gates: Gate[] = [];
 
@@ -42,22 +43,47 @@ function buildChecklist(
     gates.push({ label: 'Regime PASS', status: regimeStatus, detail: `Current market regime: ${regime}.` });
   }
 
-  // IV rank acceptable — thresholds from ivThresholdsStore (fetched from backend)
-  const ivRank = candidate.contractDetails?.ivRank;
-  if (ivRank !== undefined) {
-    const ivPassMax    = getIvPassMax(horizonKey, ivThresholds);
-    const ivCautionMax = getIvCautionMax(horizonKey, ivThresholds);
+  // IV acceptable — thresholds from ivThresholdsStore (fetched from backend).
+  // The figure may be a percentile or an absolute IV, and each is judged by
+  // its own threshold set (PHASE-A-NULL-IVRANK-2026-09-06). With no figure at
+  // all the gate is CAUTION, not PASS: an unknown IV is not a clean read, and
+  // silently passing it is how a gate stops being a gate.
+  const iv = resolveIv(candidate.contractDetails);
+  // ROUND 4 finding 14. The gate-disabled test has to come FIRST. Ordered the
+  // other way, an Intraday contract with no IV reading showed "CAUTION: the IV
+  // gate could not be applied" on a horizon where the IV gate is disabled by
+  // design — cautioning about the absence of a check that was never going to
+  // run. Nothing is missing there, so nothing is flagged.
+  const gateDisabled = getIvPassMax(horizonKey, ivThresholds, iv.basis === 'none' ? 'absolute' : iv.basis) === null;
+  if (gateDisabled) {
+    gates.push({
+      label: 'IV acceptable',
+      status: 'PASS',
+      detail: `No IV gate for ${horizonKey}.`,
+    });
+  } else if (iv.basis === 'none') {
+    gates.push({
+      label: 'IV acceptable',
+      status: 'CAUTION',
+      detail: 'No implied-volatility data for this contract — the IV gate could not be applied.',
+    });
+  } else {
+    const ivValue      = iv.value as number;
+    const shown        = formatIv(iv, candidate.symbol);
+    const ivPassMax    = getIvPassMax(horizonKey, ivThresholds, iv.basis);
+    const ivCautionMax = getIvCautionMax(horizonKey, ivThresholds, iv.basis);
+    const noun         = iv.basis === 'rank' ? 'IV rank' : 'IV';
     const ivStatus: 'PASS' | 'CAUTION' | 'REJECT' =
       ivPassMax === null    ? 'PASS' :           // Intraday: no IV gate
-      ivRank <= ivPassMax   ? 'PASS' :
-      ivCautionMax !== null && ivRank <= ivCautionMax ? 'CAUTION' :
+      ivValue <= ivPassMax  ? 'PASS' :
+      ivCautionMax !== null && ivValue <= ivCautionMax ? 'CAUTION' :
       'REJECT';
     gates.push({
-      label: 'IV rank acceptable',
+      label: 'IV acceptable',
       status: ivStatus,
       detail: ivPassMax === null
-        ? `IV rank ${ivRank} — no IV gate for ${horizonKey}.`
-        : `IV rank ${ivRank} vs. pass ≤${ivPassMax}${ivCautionMax != null ? ` / caution ≤${ivCautionMax}` : ''}.`,
+        ? `${noun} ${shown.text} — no IV gate for ${horizonKey}.`
+        : `${noun} ${shown.text} vs. pass ≤${ivPassMax}${ivCautionMax != null ? ` / caution ≤${ivCautionMax}` : ''}.`,
     });
   }
 

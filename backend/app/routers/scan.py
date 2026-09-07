@@ -34,7 +34,7 @@ from app.schemas import (
     AlternativeContract, DteWindow, ScanSessionStatus,
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
-    SentimentData, FundamentalsOut,
+    SentimentData, FundamentalsOut, SCAN_RESULT_SCHEMA_VERSION,
 )
 from app.services.fundamentals_store import get_fundamentals, prefetch_universe as _prefetch_fundamentals
 from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
@@ -52,7 +52,7 @@ from app.data.market import (
     get_tradier_creds,
 )
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
-from app.data.augment import _augment
+from app.data.augment import _augment, opt_float, opt_int
 from app.scoring.stock_scorer import score_stock, StockScoreCard
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
@@ -355,6 +355,8 @@ async def _build_spreads(
     spread_width: float = 5.0,
     short_leg_delta: float = 0.30,
     iv_rank_threshold: float = 50.0,
+    iv_abs_threshold: float = 50.0,
+    iv_basis: str = "none",
     min_credit: float = 0.50,
     max_debit_pct: float = 40.0,
 ):
@@ -365,7 +367,10 @@ async def _build_spreads(
     if direction != "Bearish":
         return None, None
 
-    _primary_type = choose_primary(iv_rank=iv_rank or 0.0, threshold=iv_rank_threshold)
+    _primary_type = choose_primary(
+        iv=iv_rank, iv_basis=iv_basis,
+        rank_threshold=iv_rank_threshold, abs_threshold=iv_abs_threshold,
+    )
     try:
         async with sem:
             _puts_chain, _calls_chain = await asyncio.gather(
@@ -454,6 +459,7 @@ async def _process_symbol(
     spread_width: float = 5.0,
     short_leg_delta: float = 0.30,
     iv_rank_threshold: float = 50.0,
+    iv_abs_threshold: float = 50.0,
     min_credit: float = 0.50,
     max_debit_pct: float = 40.0,
 ) -> TradeCardData | RejectedCandidate:
@@ -593,13 +599,30 @@ async def _process_symbol(
         log_event("candidate_rejected", scan_id, {"symbol": symbol, "reason": "no option chain"})
         return RejectedCandidate(symbol=symbol, reason="no option chain")
 
-    # ── Final score with IV rank from chain ───────────────────────────────────
+    # ── Final score with the volatility figure from the chain ────────────────
+    # TWO DIFFERENT QUANTITIES, and which one we have decides which thresholds
+    # judge it (PHASE-A-NULL-IVRANK-2026-09-06):
+    #   ivRank -- a TRUE PERCENTILE, present only when IBKR or tastytrade
+    #             answered. Judged against the percentile thresholds.
+    #   iv     -- ABSOLUTE implied volatility, 0-100, from Tradier per strike
+    #             (or the Black-Scholes inversion below). Judged against the
+    #             absolute thresholds, which is what the 34/55/70 numbers have
+    #             actually been judging all along.
+    # Prefer the rank: a percentile says where this vol sits for THIS name,
+    # which an absolute level cannot.
     atm = sorted(chain, key=lambda c: abs(float(c.get("strike", 0)) - price))
-    iv_rank: float | None = float(atm[0]["ivRank"]) if atm else None
+    c0 = atm[0] if atm else None
+    iv_rank: float | None = None
+    iv_basis: str = "none"
+    if c0 is not None and c0.get("ivRank") is not None:
+        iv_rank, iv_basis = float(c0["ivRank"]), "rank"
+    elif c0 is not None and c0.get("iv"):
+        iv_rank, iv_basis = float(c0["iv"]), "absolute"
 
-    # Tradier returns implied_volatility=0 when no data — compute via Black-Scholes inversion
-    if (iv_rank is None or iv_rank == 0) and atm:
-        c0 = atm[0]
+    # No vendor IV at all — invert Black-Scholes for the ATM contract. This
+    # yields an ABSOLUTE volatility, never a percentile, so it can only ever
+    # feed the absolute path.
+    if iv_rank is None and c0 is not None:
         iv_bs = _compute_iv_bs(
             mid=float(c0.get("price", 0)),
             S=price,
@@ -608,10 +631,15 @@ async def _process_symbol(
             is_call=(option_type == "C"),
         )
         if iv_bs is not None:
-            iv_rank = round(iv_bs * 100, 1)
+            iv_rank, iv_basis = round(iv_bs * 100, 1), "absolute"
+            # Fill only strikes that have NO absolute IV of their own. The ATM
+            # figure is a stand-in for a missing number, not a correction to a
+            # present one -- broadcasting it over every strike (which this loop
+            # used to do into `ivRank`) flattened the smile and told the UI that
+            # a 20-delta wing carried the ATM's volatility.
             for c in chain:
-                if c.get("ivRank") is None or c.get("ivRank") == 0:
-                    c["ivRank"] = int(iv_rank)
+                if not c.get("iv"):
+                    c["iv"] = round(iv_bs * 100, 1)
                     c["implied_volatility"] = round(iv_bs, 4)
 
     # ── Signal confidence (cached; computed in a thread to avoid blocking loop) ─
@@ -637,6 +665,7 @@ async def _process_symbol(
         earnings_date=earnings_date,
         dividend_date=dividend_date,
         iv_rank=iv_rank,
+        iv_basis=iv_basis,
         overrides=overrides,
         confidence=_conf,
         confidence_gate=gate,
@@ -851,8 +880,9 @@ async def _process_symbol(
             mid=round(premium, 2),
             delta=float(contract.get("delta", 0.45)),
             theta=float(contract.get("theta", -0.05)),
-            ivRank=int(contract.get("ivRank", 50)),
-            ivPercentile=int(contract.get("ivPercentile", 0) or 0),
+            ivRank=opt_int(contract.get("ivRank")),
+            iv=opt_float(contract.get("iv")),
+            ivPercentile=opt_int(contract.get("ivPercentile")),
             dte=int(contract.get("dte", 30)),
         ),
         entry=TradeEntry(
@@ -893,6 +923,8 @@ async def _process_symbol(
         spread_width=spread_width,
         short_leg_delta=short_leg_delta,
         iv_rank_threshold=iv_rank_threshold,
+        iv_abs_threshold=iv_abs_threshold,
+        iv_basis=iv_basis,
         min_credit=min_credit,
         max_debit_pct=max_debit_pct,
     )
@@ -949,7 +981,8 @@ async def _process_symbol(
             mid=round(float(alt_c.get("price", 0)), 2),
             delta=round(float(alt_c.get("delta", 0.45)), 3),
             theta=round(float(alt_c.get("theta", -0.05)), 3),
-            ivRank=int(alt_c.get("ivRank", 50)),
+            ivRank=opt_int(alt_c.get("ivRank")),
+            iv=opt_float(alt_c.get("iv")),
             score=alt_card.score,
             contractConfidence=alt_card.status,
             contractBreakdown=ContractScoreBreakdown(
@@ -971,10 +1004,15 @@ async def _process_symbol(
     # Append the alternative spread type (bear_call ↔ bear_put) if built
     if direction == "Bearish" and _alt_sp is not None:
         from app.schemas import OptionLeg as _OptionLeg
+        # ROUND 4 finding 9. choose_primary picks by iv_basis, and on most chains
+        # the deciding quantity is an ABSOLUTE IV against abs_threshold -- so
+        # naming "IV rank" here explained a credit-vs-debit choice, on the row
+        # the user may send to a broker, by the quantity that did not make it.
+        _iv_word = "IV rank" if iv_basis == "rank" else "IV"
         _spread_reason = (
-            "bear call spread — collects credit; better when IV rank is high"
+            f"bear call spread — collects credit; better when {_iv_word} is high"
             if _alt_sp.spread_type == "bear_call"
-            else "bear put spread — debit spread; better when IV rank is low"
+            else f"bear put spread — debit spread; better when {_iv_word} is low"
         )
         alts.append(AlternativeContract(
             symbol=symbol,
@@ -985,7 +1023,8 @@ async def _process_symbol(
             mid=round(abs(_alt_sp.net_debit_credit), 2),
             delta=round(float(contract.get("delta", 0.30)), 3),
             theta=round(float(contract.get("theta", -0.05)), 3),
-            ivRank=int(contract.get("ivRank", 50)),
+            ivRank=opt_int(contract.get("ivRank")),
+            iv=opt_float(contract.get("iv")),
             score=contract_card.score,
             contractConfidence=contract_card.status,
             contractBreakdown=ContractScoreBreakdown(
@@ -1041,7 +1080,14 @@ async def _upsert_session(
         ScanSession(
             id="current",
             status=status,
-            last_result_json=result.model_dump_json() if result else None,
+            # Stamped on the way out so a later restore can tell a blob this
+            # code wrote from one written before the IV basis split
+            # (PHASE-A-NULL-IVRANK-2026-09-06). Set here rather than at every
+            # construction site so no scan can be persisted unmarked.
+            last_result_json=(
+                result.model_copy(update={"schema_version": SCAN_RESULT_SCHEMA_VERSION}).model_dump_json()
+                if result else None
+            ),
             last_request_json=req.model_dump_json() if req else None,
         )
     )
@@ -1065,10 +1111,45 @@ async def restore_from_db() -> str | None:
         row = result.scalar_one_or_none()
         if row is None:
             return None
+        _refused = False
         if row.last_result_json:
-            _last_result = ScanResult.model_validate_json(row.last_result_json)
+            _restored = ScanResult.model_validate_json(row.last_result_json)
+            # A result stored before the IV basis split carries raw implied
+            # volatility x100 under `ivRank`, the name of a percentile, and
+            # nothing on the record says so. Serving it puts "IV rank 45" on the
+            # trade card for a 45% absolute IV -- the exact defect Phase A
+            # removes -- and the frontend cannot repair it either: its own
+            # migration only reaches localStorage, and StoreHydration re-persists
+            # whatever /scan/last returns at the CURRENT store version, so the
+            # bad figure would be stamped as migrated and never revisited.
+            #
+            # Dropped rather than relabelled, for the same reason
+            # ivBasis.stripLegacyIvFields drops: the basis is not recoverable,
+            # and guessing "absolute" would be right for most rows and silently
+            # wrong for the rest. The cost is one re-scan of data that was stale
+            # market data anyway (PHASE-A-NULL-IVRANK-2026-09-06).
+            if _restored.schema_version is None:
+                _log.warning(
+                    "Discarding the persisted scan result: written before the IV "
+                    "basis split, so its ivRank values have no recoverable basis. "
+                    "Run a scan to repopulate."
+                )
+                # ROUND 5 finding 11. The STATUS must go with the result. Left
+                # set, /scan/last-run reported COMPLETED at the old timestamp
+                # while /scan/last returned null: the TopBar pill claimed a
+                # finished scan and every table underneath it was empty, with
+                # the only explanation in a server log the user never sees.
+                # "idle" is what the frontend already renders as "no scan yet",
+                # which is the true state once the result is gone.
+                _refused = True
+            else:
+                _last_result = _restored
         if row.last_request_json:
             _last_request = ScanRequest.model_validate_json(row.last_request_json)
+        if _refused:
+            _last_status = "idle"
+            _last_updated_at = None
+            return _last_status
         _last_status = row.status
         _last_updated_at = row.updated_at.isoformat() if row.updated_at else None
         return row.status
@@ -1243,6 +1324,7 @@ async def _execute_scan_core(
                 spread_width=req.spread_width,
                 short_leg_delta=req.short_leg_delta,
                 iv_rank_threshold=req.iv_rank_threshold,
+                iv_abs_threshold=req.iv_abs_threshold,
                 min_credit=req.min_credit,
                 max_debit_pct=req.max_debit_pct,
             )
@@ -1346,11 +1428,37 @@ async def _execute_scan_core(
         state = 'FAILED'
 
     deltas = _compute_deltas(
-        ScanResult(scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(), candidates=candidates, rejected=rejected),
+        # TRANSIENT -- built only to hand _compute_deltas a comparable shape,
+        # never persisted and never returned, so the stamp is functionally
+        # irrelevant here. Stamped anyway to keep the invariant TOTAL: "every
+        # ScanResult construction carries the version" is enforceable by the
+        # AST check in test_scan_result_vintage.py, whereas "every construction
+        # that might one day be persisted" is a judgement call that drifts --
+        # which is how the scheduler's write site went unstamped for two rounds.
+        ScanResult(
+            schema_version=SCAN_RESULT_SCHEMA_VERSION,
+            scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(),
+            candidates=candidates, rejected=rejected,
+        ),
         previous_result,
     )
 
     result = ScanResult(
+        # ROUND 4 findings 3 and 13. Stamped HERE, where the result is produced,
+        # rather than at each write site. _upsert_session stamped its own copy
+        # via model_copy, which left two holes: the scheduler wrote
+        # `result.model_dump_json()` straight into scheduled_scan_runs UNSTAMPED
+        # (so every scheduled row was indistinguishable from a pre-split blob,
+        # and any future attempt to enforce the vintage guard on that table
+        # would have discarded ALL of them), and the in-memory _last_result kept
+        # the unstamped original, so /api/scan/last reported schema_version null
+        # for a scan run in this process and 1 for the same scan after a
+        # restart. Stamping at production means a writer cannot forget.
+        #
+        # The field's DEFAULT must stay None: it is the pre-split marker, and a
+        # default of 1 would make every old blob parsed from JSON claim to be
+        # current, which is the whole thing the marker exists to detect.
+        schema_version=SCAN_RESULT_SCHEMA_VERSION,
         scan_id=scan_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
         candidates=candidates,

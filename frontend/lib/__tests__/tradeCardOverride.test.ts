@@ -53,6 +53,35 @@ describe('applyPickedContract', () => {
     expect(applyPickedContract(card, picked)).toBe(card);
   });
 
+  it('carries the picked contract\'s BREAKDOWN across, not the auto-picked one\'s', () => {
+    // ROUND 6 finding 8. The card used to show the picked contract's composite
+    // score over the auto-picked contract's five component scores and detail
+    // lines. Phase A made ivDetailText quantitative, so the two panels asserted
+    // a specific IV percentage for a strike the user was not looking at.
+    const card = makeCard();
+    const picked = makeOption({
+      breakdown: {
+        dteFit: 88, delta: 55, ivAttractiveness: 30, liquidity: 91, spread: 44,
+        ivDetail: { iv_rank: 68, iv_basis: 'rank', preferred_max: 55 },
+      },
+    });
+    const result = applyPickedContract(card, picked);
+    expect(result.contractBreakdown.ivAttractiveness).toBe(30);   // picked, not 68
+    expect(result.contractBreakdown.dteFit).toBe(88);             // picked, not 40
+    expect(result.contractBreakdown.ivDetail?.iv_rank).toBe(68);
+    // and the composite score it sits under is the picked contract's too
+    expect(result.contractScore).toBe(picked.score);
+  });
+
+  it('keeps the existing breakdown when the picked row carries none', () => {
+    // Older cached /api/contracts responses and chain rows that came from the
+    // scan have no breakdown. Falling back is the only option that satisfies the
+    // required field; nothing is invented.
+    const card = makeCard();
+    const result = applyPickedContract(card, makeOption());
+    expect(result.contractBreakdown).toEqual(card.contractBreakdown);
+  });
+
   it('swaps in the picked contract details and flags _userOverride', () => {
     const card = makeCard();
     const picked = makeOption();   // 375C — different from the card's auto-picked 330C

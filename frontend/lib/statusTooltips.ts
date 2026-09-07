@@ -23,6 +23,7 @@ import {
   spreadDetailText,
 } from '@/lib/scoreDetailText';
 import type { TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail } from '@/types/domain';
+import { resolveIv, type IvBasis } from '@/lib/ivBasis';
 
 /** Generic composite-score explanation — the fallback for any bare Status badge
  *  that has no richer domain-specific reason available at its call site. */
@@ -110,7 +111,10 @@ export function regimeNoDataTooltip(reason: 'insufficient_data' | 'unavailable' 
 /** Step 5 Vol+Events GATE badge — composes which of IV rank vs. event proximity
  *  drove the worst-status result, quoting the live per-horizon window. */
 export function eventVolGateTooltip(args: {
+  /** The resolved volatility figure — a percentile or an absolute IV
+   *  depending on `ivBasis`, or null when neither was available. */
   ivRank: number | null;
+  ivBasis?: IvBasis;
   ivStatus: Status;
   nextEventDays: number | null;
   proxStatus: Status;
@@ -118,15 +122,21 @@ export function eventVolGateTooltip(args: {
   evCaution: number;
   gate: Status;
 }): string {
-  const { ivRank, ivStatus, nextEventDays, proxStatus, evReject, evCaution, gate } = args;
+  const { ivRank, ivBasis, ivStatus, nextEventDays, proxStatus, evReject, evCaution, gate } = args;
+  // Name the quantity actually being judged. An absolute IV shown as "IV rank"
+  // is the misreading Phase A exists to end: 45% IV is not the 45th percentile
+  // of this name's own range (PHASE-A-NULL-IVRANK-2026-09-06).
+  const ivNoun = ivBasis === 'rank' ? 'IV rank' : 'IV';
   const ivPart = ivRank == null
-    ? 'IV rank: no data'
-    : `IV rank ${ivRank} (${ivStatus})`;
+    ? 'IV: no data'
+    : ivBasis === 'rank'
+      ? `IV rank ${ivRank} (${ivStatus})`
+      : `IV ${ivRank.toFixed(1)}% — an absolute level, no rank source available (${ivStatus})`;
   const evPart = nextEventDays == null
     ? 'no known upcoming event'
     : `next event in ${nextEventDays}d vs. this horizon's reject <${evReject}d / caution <${evCaution}d window (${proxStatus})`;
-  const driver = gate === ivStatus && gate !== proxStatus ? 'IV rank' : gate === proxStatus && gate !== ivStatus ? 'event proximity' : 'both';
-  return `Gate shows the worse of IV rank and event proximity. ${ivPart}; ${evPart}. Driven by: ${driver}.`;
+  const driver = gate === ivStatus && gate !== proxStatus ? ivNoun : gate === proxStatus && gate !== ivStatus ? 'event proximity' : 'both';
+  return `Gate shows the worse of ${ivNoun} and event proximity. ${ivPart}; ${evPart}. Driven by: ${driver}.`;
 }
 
 /** Bare win-rate cells that sit next to (but separately from) a GATE badge — several
@@ -185,6 +195,10 @@ export function stockScanGateTooltip(args: {
 const CONTRACT_PREFERRED = {
   dte: { min: 21, max: 60 },
   delta: { min: 0.30, max: 0.70 },
+  // Two ceilings, one per quantity — mirrors contract_rules.yaml's
+  // preferred_iv_abs_max / preferred_iv_rank_max
+  // (PHASE-A-NULL-IVRANK-2026-09-06).
+  ivAbsMax: 55,
   ivRankMax: 55,
   spreadPctMax: 0.08,
   volumeMin: 200,
@@ -203,8 +217,11 @@ export function contractScoreTooltip(c: OptionContract): string {
   if (Math.abs(c.delta) < CONTRACT_PREFERRED.delta.min || Math.abs(c.delta) > CONTRACT_PREFERRED.delta.max) {
     weaknesses.push(`delta ${c.delta.toFixed(2)} (preferred ${CONTRACT_PREFERRED.delta.min.toFixed(2)}-${CONTRACT_PREFERRED.delta.max.toFixed(2)})`);
   }
-  if (c.ivRank > CONTRACT_PREFERRED.ivRankMax) {
-    weaknesses.push(`IV rank ${c.ivRank} (prefer ≤${CONTRACT_PREFERRED.ivRankMax})`);
+  const iv = resolveIv(c);
+  if (iv.basis === 'rank' && (iv.value as number) > CONTRACT_PREFERRED.ivRankMax) {
+    weaknesses.push(`IV rank ${iv.value} (prefer ≤${CONTRACT_PREFERRED.ivRankMax})`);
+  } else if (iv.basis === 'absolute' && (iv.value as number) > CONTRACT_PREFERRED.ivAbsMax) {
+    weaknesses.push(`IV ${(iv.value as number).toFixed(1)}% (prefer ≤${CONTRACT_PREFERRED.ivAbsMax}%)`);
   }
   if (spreadPct > CONTRACT_PREFERRED.spreadPctMax) {
     weaknesses.push(`spread ${(spreadPct * 100).toFixed(1)}% of price (prefer ≤${(CONTRACT_PREFERRED.spreadPctMax * 100).toFixed(0)}%)`);
@@ -212,7 +229,7 @@ export function contractScoreTooltip(c: OptionContract): string {
   if (c.volume < CONTRACT_PREFERRED.volumeMin) {
     weaknesses.push(`volume ${c.volume.toLocaleString()} (prefer ≥${CONTRACT_PREFERRED.volumeMin.toLocaleString()})`);
   }
-  const base = 'Composite contract score — combines DTE fit, delta, IV rank, liquidity, and spread quality.';
+  const base = 'Composite contract score — combines DTE fit, delta, IV, liquidity, and spread quality.';
   if (weaknesses.length === 0) return `${base} All components are within their preferred ranges.`;
   return `${base} Weakest: ${weaknesses[0]}${weaknesses.length > 1 ? ` (+${weaknesses.length - 1} more)` : ''}.`;
 }
@@ -227,12 +244,16 @@ export function contractBreakdownTooltip(b: ContractScoreBreakdown): string {
   const components: Array<{ label: string; score: number; text?: string }> = [
     { label: 'DTE fit', score: b.dteFit, text: dteDetailText(b.dteDetail) },
     { label: 'delta', score: b.delta, text: deltaDetailText(b.deltaDetail) },
-    { label: 'IV rank', score: b.ivAttractiveness, text: ivDetailText(b.ivDetail) },
+    // ROUND 4 finding 8. Neutral, matching TradeCard/index.tsx: ivDetailText
+    // already labels the figure by its basis, so a hardcoded "IV rank" here
+    // produced a tooltip contradicting itself — "Weakest: IV rank — IV 45% ·
+    // pref ≤55%" — on the AlternativeContractRow badge.
+    { label: 'IV', score: b.ivAttractiveness, text: ivDetailText(b.ivDetail) },
     { label: 'liquidity', score: b.liquidity, text: liquidityDetailText(b.liquidityDetail) },
     { label: 'spread', score: b.spread, text: spreadDetailText(b.spreadDetail) },
   ];
   const weakest = components.reduce((min, c) => (c.score < min.score ? c : min), components[0]);
-  const base = 'Composite contract score — combines DTE fit, delta, IV rank, liquidity, and spread quality.';
+  const base = 'Composite contract score — combines DTE fit, delta, IV, liquidity, and spread quality.';
   return weakest.text
     ? `${base} Weakest: ${weakest.label} — ${weakest.text}.`
     : `${base} Weakest: ${weakest.label} (${weakest.score}/100).`;

@@ -858,6 +858,11 @@ def _rule_vol(
     iv_rank: float | None,
     cfg: dict,
     *,
+    # Which quantity iv_rank holds: "rank" (a true percentile),
+    # "absolute" (IV 0-100), or "none". Defaults to "absolute" because that is
+    # what every pre-2026-09-06 caller was in fact passing -- raw IV x 100
+    # written into a field named for a percentile.
+    iv_basis: str = "absolute",
     volumes: list[float] | None = None,
     scoring_mode: str = "options",
 ) -> RuleResult:
@@ -876,23 +881,56 @@ def _rule_vol(
             return RuleResult("vol", "CAUTION", 45, detail)
         return RuleResult("vol", "CAUTION", 20, detail)
 
-    # ── Options mode: IV rank (unchanged) ────────────────────────────────────
+    # ── Options mode: volatility ─────────────────────────────────────────────
+    # `iv_basis` says WHICH QUANTITY `iv_rank` holds, and therefore which
+    # thresholds may judge it (PHASE-A-NULL-IVRANK-2026-09-06):
+    #   "rank"     -- a true percentile from IBKR/tastytrade -> iv_rank_* keys
+    #   "absolute" -- absolute IV 0-100 from Tradier or the BS inversion
+    #                 -> iv_abs_* keys, which carry the numbers this rule has
+    #                    actually been applying all along
+    # Judging an absolute level against percentile thresholds is the defect
+    # this basis exists to prevent: a name at 45% IV is not at its own 45th
+    # percentile, and one at 75% is not automatically expensive.
     vc = cfg["vol"]
-    if vc["iv_rank_pass_max"] is None:
-        # iv_rank_pass_max is None → skip vol scoring
+    _rank = iv_basis == "rank"
+    pass_key = "iv_rank_pass_max" if _rank else "iv_abs_pass_max"
+    caution_key = "iv_rank_caution_max" if _rank else "iv_abs_caution_max"
+    compressed_key = (
+        "iv_rank_compressed_caution" if _rank else "iv_abs_compressed_caution"
+    )
+    if vc.get(pass_key) is None:
+        # Threshold unset → skip vol scoring.
         # (Intraday always; Swing/Position in stock-scan path where no IV data is available)
-        return RuleResult("vol", "PASS", 90, {"iv_rank": iv_rank, "scored": False})
+        #
+        # `iv_basis` is carried even here. Not scoring the figure does not stop
+        # it being RENDERED: _safe(VolDetail, ...) keeps `iv_rank`, and
+        # volDetailText prints it. Omitting the basis let VolDetail's default
+        # answer instead, which reads "absolute" -- so a true percentile from a
+        # rank source printed as "IV 45%" rather than "IV Rank 45" whenever the
+        # horizon left iv_rank_pass_max unset. Same mislabel as
+        # PHASE-A-NULL-IVRANK-2026-09-06, pointing the other way.
+        return RuleResult("vol", "PASS", 90,
+                          {"iv_rank": iv_rank, "iv_basis": iv_basis, "scored": False})
     if iv_rank is None:
         return RuleResult("vol", "CAUTION", 50, {"reason": "no_iv_data"})
-    compressed = vc["iv_rank_compressed_caution"]
-    pass_max = vc["iv_rank_pass_max"]
-    caution_max = vc["iv_rank_caution_max"]
-    detail = {"iv_rank": round(iv_rank, 1)}
+    compressed = vc.get(compressed_key)
+    pass_max = vc[pass_key]
+    caution_max = vc[caution_key]
+    detail = {"iv_rank": round(iv_rank, 1), "iv_basis": iv_basis}
     if compressed is not None and iv_rank < compressed:
         return RuleResult("vol", "CAUTION", 50, {**detail, "reason": "compressed_vol"})
     if iv_rank <= pass_max:
         return RuleResult("vol", "PASS", 90, detail)
-    if iv_rank <= caution_max:
+    # ROUND 5 finding 8. `compressed` is guarded with `is not None` two lines up
+    # and `caution_max` was not, so a config with a pass ceiling but a null
+    # caution ceiling raised TypeError ('<=' between float and NoneType) -- a
+    # 500 on the scan, not a scoring error. Currently unreachable through the UI
+    # (handleHzChange replaces scanOverrides wholesale, so an IV ceiling cannot
+    # survive a switch to Intraday), but the diff added two migrations that
+    # SYNTHESISE iv_abs_pass_max into override dicts where it had never
+    # appeared, so the shape is now constructible. A missing caution ceiling
+    # means "no caution band", which is a REJECT above pass_max, not a crash.
+    if caution_max is not None and iv_rank <= caution_max:
         return RuleResult("vol", "CAUTION", 55, detail)
     return RuleResult("vol", "REJECT", 10, {**detail, "reason": "iv_too_high"})
 
@@ -937,6 +975,7 @@ def score_stock(
     earnings_date: date | None = None,
     dividend_date: date | None = None,
     iv_rank: float | None = None,
+    iv_basis: str = "absolute",
     overrides: dict | None = None,
     benchmark_candles: list[dict] | None = None,
     confidence: int | None = None,
@@ -958,7 +997,10 @@ def score_stock(
         bars:              List of OHLCV dicts from fetch_candles()
         earnings_date:     Next earnings date (None if unknown)
         dividend_date:     Next ex-dividend date (None if unknown)
-        iv_rank:           Current IV rank 0–100 (None if unavailable)
+        iv_rank:           The volatility figure, 0–100 (None if unavailable)
+        iv_basis:          Which quantity iv_rank holds — "rank" (a true
+                           percentile) or "absolute" (IV level). Decides
+                           which threshold set judges it.
         overrides:         Optional dict of parameter overrides
         benchmark_candles: Optional OHLCV dicts for RS benchmark (e.g. NDX)
 
@@ -1009,7 +1051,19 @@ def score_stock(
             elif key == "atr_caution_max":         cfg["pullback"]["atr_caution_max"]        = float(val)
             elif key == "event_reject_days":       cfg["event"]["reject_days"]               = int(val)
             elif key == "event_caution_days":      cfg["event"]["caution_days"]              = int(val)
+            # Two thresholds, two quantities -- `_rule_vol` picks between them
+            # by `iv_basis`, so an override that names only one of them can
+            # only ever reach the basis it names
+            # (PHASE-A-NULL-IVRANK-2026-09-06). Until this second handler
+            # existed, `iv_rank_pass_max` was the sole knob and it wrote the
+            # PERCENTILE key, which `_rule_vol` reads only when a rank source
+            # answered -- so on the default path (no IBKR, no tastytrade, an
+            # ABSOLUTE IV) the user's ceiling was silently inert: set it to 20
+            # and a 30% absolute IV still returned PASS. Same shape as the
+            # `max_iv_abs` handler added alongside `max_iv_rank` in
+            # contract_validator.validate_contract.
             elif key == "iv_rank_pass_max":        cfg["vol"]["iv_rank_pass_max"]            = None if val is None else float(val)
+            elif key == "iv_abs_pass_max":         cfg["vol"]["iv_abs_pass_max"]             = None if val is None else float(val)
             elif key == "volume_lookback_bars":    cfg["trigger"]["volume_lookback_bars"]    = int(val)
             elif key == "volume_multiplier":       cfg["trigger"]["volume_multiplier"]       = float(val)
 
@@ -1027,6 +1081,7 @@ def score_stock(
     event_result            = _rule_event(earnings_date, dividend_date, cfg, scoring_mode=scoring_mode)
     vol_result              = _rule_vol(
         iv_rank, cfg,
+        iv_basis=iv_basis,
         volumes=volumes,
         scoring_mode=scoring_mode,
     )

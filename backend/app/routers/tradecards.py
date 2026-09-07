@@ -17,6 +17,17 @@ async def get_tradecards(db: AsyncSession = Depends(get_db)) -> list[TradeCardDa
         return []
     try:
         scan = ScanResult.model_validate_json(row.last_result_json)
-        return scan.candidates
     except Exception:
         return []
+    # This endpoint reads the row DIRECTLY rather than going through
+    # routers/scan.restore_from_db, so it needs the same refusal: a result
+    # persisted before the IV basis split carries raw implied volatility x100
+    # under `ivRank`, the name of a percentile, with nothing on the record
+    # saying so. Serving those cards puts "IV rank 45" on the card the user acts
+    # from for a 45% absolute IV -- the exact defect Phase A removes -- and the
+    # basis is not recoverable, so they are dropped rather than relabelled
+    # (PHASE-A-NULL-IVRANK-2026-09-06). Empty here means "run a scan", which is
+    # what the caller already renders when no scan has been run.
+    if scan.schema_version is None:
+        return []
+    return scan.candidates

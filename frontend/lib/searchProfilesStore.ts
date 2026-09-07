@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { SearchProfile, SearchProfileSnapshot } from '@/types/searchProfile';
 import { api } from '@/lib/api';
+import { DEFAULT_SPREADS } from '@/lib/settingsStore';
 import { resolveProfileToScanRequest } from '@/lib/scanScheduleResolve';
 
 function genId(): string {
@@ -62,7 +63,103 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 1,
+      version: 3,
+      migrate: (persistedState, version) => {
+        const st = { ...((persistedState ?? {}) as Record<string, unknown>) };
+        // ROUND 5 finding 3. `seedOverrides` was appended to the `version < 2`
+        // branch AFTER v2 had already shipped (v2 landed with only the spreads
+        // knob at 038aa2d1; the overrides half arrived at d1ea97c9), and zustand
+        // calls migrate only when the stored version DIFFERS from the configured
+        // one — so a store already stamped 2 never re-entered it, and the
+        // user's `iv_rank_pass_max: 20` stayed inert on every chain without a
+        // rank source. Same defect shape as scanStore's (finding 2). Bumped to
+        // 3 so the seeding actually reaches those stores.
+        //
+        // Idempotent by construction: seedOverrides returns the input untouched
+        // unless `iv_rank_pass_max` is a number AND `iv_abs_pass_max` is absent,
+        // so running it at v2 and again at v3 cannot double-apply or overwrite a
+        // value the user has since set.
+        if (version < 3) {
+          // PHASE-A-SPREAD-BASIS-2026-09-06 split the spread picker's single
+          // sell-premium cut-off into a percentile knob and an absolute one.
+          // settingsStore got a v23->v24 migration for the LIVE value; a profile
+          // carries its OWN frozen copy of the same block
+          // (searchProfileSnapshot.ts bakes in `spreads: { ...settings.spreads }`),
+          // and that copy was left at the pre-split shape.
+          //
+          // Applying it matters because the profile's copy is what
+          // resolveProfileToScanRequest re-resolves for a scheduled scan: with
+          // `ivAbsThreshold` undefined the key is omitted from the request body
+          // entirely, and on a Tradier-only chain that flips choose_primary from
+          // bear_put (debit, long premium) to bear_call (credit, short premium,
+          // assignment exposure). Round 1's finding (d), surviving in a store
+          // that was not migrated with the other two.
+          //
+          // Seeded from THAT PROFILE's own ivRankThreshold, not the constant and
+          // not the live setting, for the same reason settingsStore seeds from
+          // the user's own: whoever moved the old single knob meant it for the
+          // chains they actually see, which are the absolute ones. Reading the
+          // live setting here would let a later, unrelated change to Settings
+          // rewrite what a saved profile means.
+          //
+          // PHASE A MOVED TWO KNOBS, and a profile freezes BOTH. The second is
+          // the Step-3 execution parameter `iv_rank_pass_max`, captured into
+          // `scanOverrides` by searchProfileSnapshot.ts:23. Post-split the
+          // scorer reads `iv_abs_pass_max` whenever the basis is not 'rank'
+          // (stock_scorer._rule_vol), and the two keys deliberately do not leak
+          // across bases — so a stored `iv_rank_pass_max` is simply INERT on
+          // every chain without a rank source, i.e. most of them. That is round
+          // 1's finding (c) surviving in stored form: the user's own ceiling of
+          // 20 against a 30% absolute IV yields PASS 90 where they asked for
+          // CAUTION 55, a 35-point swing on a weighted component.
+          //
+          // Same seeding rule as the spread knob below, for the same reason.
+          const seedOverrides = (raw: unknown): unknown => {
+            if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw;
+            const ov = raw as Record<string, unknown>;
+            if (typeof ov.iv_rank_pass_max !== 'number') return raw;
+            if (ov.iv_abs_pass_max !== undefined) return raw;
+            return { ...ov, iv_abs_pass_max: ov.iv_rank_pass_max };
+          };
+
+          const profiles = Array.isArray(st.profiles) ? st.profiles : [];
+          st.profiles = profiles.map((profile) => {
+            if (typeof profile !== 'object' || profile === null) return profile;
+            const p = profile as Record<string, unknown>;
+
+            // Applies to STOCKS profiles too — the Step-3 panel is shared, so
+            // `scanOverrides` is frozen whatever the mode. Done before the
+            // spreads block, which returns early on a profile without one.
+            const overrides = seedOverrides(p.scanOverrides);
+            const withOverrides = overrides === p.scanOverrides
+              ? p
+              : { ...p, scanOverrides: overrides };
+
+            const scanSettings = withOverrides.scanSettings;
+            if (typeof scanSettings !== 'object' || scanSettings === null) return withOverrides;
+            const ss = scanSettings as Record<string, unknown>;
+            const spreads = ss.spreads;
+            // Stocks profiles carry no `spreads` block at all — leave them be
+            // rather than inventing one.
+            if (typeof spreads !== 'object' || spreads === null) return withOverrides;
+            const sp = spreads as Record<string, unknown>;
+            if (sp.ivAbsThreshold !== undefined) return withOverrides;
+            return {
+              ...withOverrides,
+              scanSettings: {
+                ...ss,
+                spreads: {
+                  ...sp,
+                  ivAbsThreshold: typeof sp.ivRankThreshold === 'number'
+                    ? sp.ivRankThreshold
+                    : DEFAULT_SPREADS.ivAbsThreshold,
+                },
+              },
+            };
+          });
+        }
+        return st as unknown as SearchProfilesState;
+      },
       partialize: (state) => ({ profiles: state.profiles }),
     },
   ),

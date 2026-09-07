@@ -58,7 +58,18 @@ export function eventDetailText(d?: EventDetail): string | undefined {
 export function volDetailText(d?: VolDetail): string | undefined {
   if (!d) return undefined;
   const parts = [];
-  if (d.iv_rank != null) parts.push(`IV Rank ${d.iv_rank.toFixed(0)}`);
+  if (d.iv_rank != null) {
+    // Same rule as ivDetailText above, and for the same reason: the STOCK
+    // score's volatility figure is a percentile ONLY when a rank source
+    // answered, which is the minority of chains. Labelling it "IV Rank"
+    // unconditionally asserted that every scanned name sat at that percentile
+    // of its own 52-week range — a claim nothing measured, on the default path
+    // (PHASE-A-NULL-IVRANK-2026-09-06). Responses predating the split carried
+    // an absolute level, so that is the default.
+    const label = d.iv_basis === 'rank' ? 'IV Rank' : 'IV';
+    const unit  = d.iv_basis === 'rank' ? '' : '%';
+    parts.push(`${label} ${d.iv_rank.toFixed(0)}${unit}`);
+  }
   if (d.reason) parts.push(d.reason);
   return parts.join(' · ') || undefined;
 }
@@ -75,8 +86,14 @@ export function deltaDetailText(d?: DeltaDetail): string | undefined {
 
 export function ivDetailText(d?: IvRankDetail): string | undefined {
   if (!d) return undefined;
-  if (d.iv_rank == null) return 'No IV rank data';
-  return `IV Rank ${d.iv_rank.toFixed(0)} · pref ≤${d.preferred_max.toFixed(0)}`;
+  if (d.iv_rank == null) return 'No implied-volatility data';
+  // `iv_rank` may hold a percentile OR an absolute IV, and only `iv_basis`
+  // says which — printing an absolute level as "IV Rank" is the exact defect
+  // Phase A exists to fix (PHASE-A-NULL-IVRANK-2026-09-06). Responses
+  // predating the split carried an absolute level, so that is the default.
+  const label = d.iv_basis === 'rank' ? 'IV Rank' : 'IV';
+  const unit  = d.iv_basis === 'rank' ? '' : '%';
+  return `${label} ${d.iv_rank.toFixed(0)}${unit} · pref ≤${d.preferred_max.toFixed(0)}${unit}`;
 }
 
 export function liquidityDetailText(d?: LiquidityDetail): string | undefined {

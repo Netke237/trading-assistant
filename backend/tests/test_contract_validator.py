@@ -31,17 +31,20 @@ def test_iv_rank_at_threshold_passes():
     assert "iv_rank_too_high" not in card.reject_reasons
 
 
+# These two run on the DEFAULT basis, which is absolute — hence `iv_too_high`.
+# The percentile-named reason is asserted by the ranked half of
+# test_the_two_iv_override_keys_do_not_cross below (round 4 finding 10).
 def test_iv_rank_above_threshold_hard_rejects():
     """IV rank > 70 must hard-reject — buying expensive premium is the worst options mistake."""
     card = validate_contract(_base_contract(iv_rank=71), stock_score=70)
     assert card.status == "REJECT"
-    assert "iv_rank_too_high" in card.reject_reasons
+    assert "iv_too_high" in card.reject_reasons
 
 
 def test_iv_rank_very_high_hard_rejects():
     card = validate_contract(_base_contract(iv_rank=90), stock_score=70)
     assert card.status == "REJECT"
-    assert "iv_rank_too_high" in card.reject_reasons
+    assert "iv_too_high" in card.reject_reasons
 
 
 def test_iv_rank_none_is_not_rejected():
@@ -75,14 +78,53 @@ def test_stock_score_just_below_new_threshold_rejects():
     assert "stock_score_below_threshold" in card.reject_reasons
 
 
-def test_override_raises_max_iv_rank():
-    """Caller can override the threshold to 80 via overrides dict."""
+def test_override_raises_max_iv_abs():
+    """Caller can raise the ABSOLUTE ceiling to 80 via the overrides dict.
+
+    `_base_contract` sets no `iv_basis`, so its `iv_rank` is read as an
+    absolute IV -- which is what every pre-2026-09-06 caller was in fact
+    passing. The override key that governs it is therefore `max_iv_abs`.
+    """
     card = validate_contract(
         _base_contract(iv_rank=75),
+        stock_score=70,
+        overrides={"max_iv_abs": 80},
+    )
+    assert "iv_rank_too_high" not in card.reject_reasons
+
+
+def test_override_raises_max_iv_rank_on_a_ranked_contract():
+    """The percentile ceiling governs a contract whose figure IS a percentile."""
+    card = validate_contract(
+        _base_contract(iv_rank=75, iv_basis="rank"),
         stock_score=70,
         overrides={"max_iv_rank": 80},
     )
     assert "iv_rank_too_high" not in card.reject_reasons
+
+
+def test_the_two_iv_override_keys_do_not_cross():
+    """Raising one basis's ceiling must not loosen the other's.
+
+    The keys name different quantities; a caller who means "allow a higher
+    percentile" has said nothing about how expensive an absolute IV may be.
+    """
+    absolute = validate_contract(
+        _base_contract(iv_rank=75),                  # basis defaults to absolute
+        stock_score=70,
+        overrides={"max_iv_rank": 80},               # wrong key for this basis
+    )
+    # ROUND 4 finding 10: the REASON is named by basis too, so an absolute IV
+    # over max_iv_abs no longer reports under the percentile's name.
+    assert "iv_too_high" in absolute.reject_reasons
+    assert "iv_rank_too_high" not in absolute.reject_reasons
+
+    ranked = validate_contract(
+        _base_contract(iv_rank=75, iv_basis="rank"),
+        stock_score=70,
+        overrides={"max_iv_abs": 80},                # wrong key for this basis
+    )
+    assert "iv_rank_too_high" in ranked.reject_reasons
 
 
 def test_override_lowers_min_stock_score():

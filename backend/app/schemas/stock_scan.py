@@ -44,7 +44,8 @@ class StockScanRequest(BaseModel):
     fundamentals_reject_below:   Optional[float] = None
     fundamentals_de_reject:      Optional[float] = None
     # Per-scan scorer overrides — keys map directly to stock_scorer.py override handlers.
-    # Options contract params and iv_rank_pass_max are excluded (irrelevant in stock mode).
+    # Options contract params and the two IV ceilings (iv_abs_pass_max,
+    # iv_rank_pass_max) are excluded (irrelevant in stock mode).
     overrides: dict[str, Any] = Field(default_factory=dict)
     # Confidence gate — caps a stock's verdict when signal backtest win-rate is low.
     # When None, the gate is disabled (backend falls back to scoring_rules.yaml defaults).

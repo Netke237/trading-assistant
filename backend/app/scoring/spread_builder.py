@@ -93,6 +93,29 @@ def build_bear_call(calls: list[dict], *, expiry: str, width: float, short_delta
     )
 
 
-def choose_primary(*, iv_rank: float, threshold: float) -> Literal["bear_call", "bear_put"]:
-    """High IV -> sell premium (credit / bear call). Low IV -> buy premium (debit / bear put)."""
-    return "bear_call" if iv_rank >= threshold else "bear_put"
+def choose_primary(
+    *,
+    iv: float | None,
+    iv_basis: str,
+    rank_threshold: float,
+    abs_threshold: float,
+) -> Literal["bear_call", "bear_put"]:
+    """High vol -> sell premium (credit / bear call). Low vol -> buy premium (debit / bear put).
+
+    WHICH threshold applies depends on WHICH QUANTITY `iv` holds
+    (PHASE-A-SPREAD-BASIS-2026-09-06). The two are not interchangeable:
+    `rank_threshold` is a PERCENTILE -- "vol is rich FOR THIS NAME, so sell it"
+    -- while `abs_threshold` is an IV LEVEL. Judging a 60% absolute IV against
+    a percentile cut-off, as this did until now, says nothing about whether
+    that name's premium is actually rich.
+
+    With no volatility reading at all, this returns bear_put: a debit spread
+    has defined risk and no short-premium assignment exposure, which is the
+    safer thing to be steered toward when the vol regime is unknown. That is a
+    DELIBERATE default, stated here rather than falling out of an `iv or 0.0`
+    that mapped "unknown" onto "the lowest possible vol".
+    """
+    if iv is None or iv_basis not in ("rank", "absolute"):
+        return "bear_put"
+    threshold = rank_threshold if iv_basis == "rank" else abs_threshold
+    return "bear_call" if iv >= threshold else "bear_put"

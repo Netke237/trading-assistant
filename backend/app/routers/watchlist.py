@@ -34,8 +34,20 @@ async def get_watchlist(db: AsyncSession = Depends(get_db)) -> list[WatchlistRow
     if sess_row and sess_row.last_result_json:
         try:
             scan = ScanResult.model_validate_json(sess_row.last_result_json)
-            for c in scan.candidates:
-                scan_lookup[c.symbol] = c
+            # ROUND 4 finding 5. THIRD reader of this same row. routers/scan.py's
+            # restore_from_db and routers/tradecards.py both refuse a blob
+            # written before the IV basis split; this one did not, so after an
+            # upgrade /scan/last and /api/tradecards correctly served nothing
+            # while /api/watchlist went on serving scores, statuses and
+            # `stockBreakdown` (which carries volDetail) out of the very blob
+            # they had just refused. Nothing on that record says which quantity
+            # its IV figure is, and the basis is not recoverable
+            # (PHASE-A-NULL-IVRANK-2026-09-06). Empty lookup degrades to the
+            # live-fetch path below, which is what an un-scanned watchlist
+            # already renders.
+            if scan.schema_version is not None:
+                for c in scan.candidates:
+                    scan_lookup[c.symbol] = c
         except Exception:
             pass
 

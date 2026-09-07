@@ -30,6 +30,19 @@ export function applyPickedContract(card: TradeCardData, picked: OptionContract 
     contract: picked.id,
     contractScore: picked.score,
     contractConfidence: picked.contractConfidence,
+    // ROUND 6 finding 8. The breakdown has to move with the contract. Without
+    // this, the card showed the PICKED contract's composite score and the
+    // AUTO-PICKED one's five component scores and detail lines beneath it —
+    // and since the Phase A split made ivDetailText quantitative ("IV 62% ·
+    // pref ≤55%"), the two panels visibly asserted a specific IV percentage
+    // for a strike the user was not looking at.
+    //
+    // Falls back to the existing breakdown only when the picked row carries
+    // none (an older cached /api/contracts response, or a chain row that came
+    // from the scan rather than the endpoint). Nothing is invented: the
+    // backend already computes this per contract and simply was not returning
+    // it.
+    contractBreakdown: picked.breakdown ?? card.contractBreakdown,
     contractDetails: {
       strike:       picked.strike,
       expiry:       picked.expiry,
@@ -37,7 +50,12 @@ export function applyPickedContract(card: TradeCardData, picked: OptionContract 
       mid:          picked.price,
       delta:        picked.delta,
       theta:        picked.theta,
+      // Carry BOTH quantities across the override — `ivRank` is null on any
+      // chain without a rank source, and dropping `iv` would blank the card's
+      // IV readout for the contract the user just picked
+      // (PHASE-A-NULL-IVRANK-2026-09-06).
       ivRank:       picked.ivRank,
+      iv:           picked.iv,
       ivPercentile: picked.ivPercentile,
       dte:          picked.dte,
     },

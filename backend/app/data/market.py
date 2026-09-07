@@ -612,8 +612,22 @@ def fetch_option_chain(
                 "price": mid,
                 "delta": round(delta, 4),
                 "theta": round(theta, 4),
-                "ivRank": int(round(iv * 100)),
-                "ivPercentile": 0,
+                # ⚠ SHAPE HAZARD — this is the DEAD sync twin of
+                # fetch_option_chain_async (nothing calls it; see Amendment A).
+                # It USED TO write raw absolute IV into `ivRank` (converted in round 4), the pre-Phase-A
+                # shape. ROUND 4 finding 7: this twin is dead code (verified --
+                # the only non-test references are its own def and two
+                # docstrings), and it was left on the PRE-SPLIT shape on that
+                # basis. The hazard was not the dead code itself but the GREEN
+                # TEST pinning `ivRank == int(round(iv*100))` and
+                # `ivPercentile == 0` as correct: anyone unifying the twins by
+                # copying the tested one would have restored the exact defect
+                # Phase A removed, with a passing suite. Converted to match the
+                # async twin so the repo holds no pre-split shape at all.
+                # It still has no callers -- see the note above.
+                "iv": round(iv * 100, 1) if iv > 0 else None,
+                "ivRank": None,
+                "ivPercentile": None,
                 "spread": spread,
                 "volume": volume,
                 "open_interest": oi,
@@ -645,14 +659,14 @@ def fetch_option_chain(
             except Exception:
                 pass  # keep existing fallback values
 
-        zero_iv = sum(1 for c in result if c["ivRank"] == 0)
+        zero_iv = sum(1 for c in result if not c.get("iv"))
         if zero_iv > len(result) * 0.5 and result:
             yf_iv = _yf_iv_for_chain(symbol, target_exp, option_type == "C")
             for c in result:
-                if c["ivRank"] == 0:
+                if not c.get("iv"):
                     yf_val = yf_iv.get(float(c["strike"]))
                     if yf_val:
-                        c["ivRank"] = int(round(yf_val * 100))
+                        c["iv"] = round(yf_val * 100, 1)
                         c["implied_volatility"] = round(yf_val, 4)
 
         seen: set[str] = set()
@@ -1274,8 +1288,22 @@ async def fetch_option_chain_async(
                 "price": mid,
                 "delta": round(delta, 4),
                 "theta": round(theta, 4),
-                "ivRank": int(round(iv * 100)),
-                "ivPercentile": 0,
+                # ABSOLUTE implied volatility for THIS strike, 0-100, or None.
+                # Tradier is the only vendor returning a per-contract IV; IBKR
+                # and tastytrade return a symbol-level RANK, a different
+                # quantity (where today's IV sits in its own 52-week range).
+                # Until 2026-09-06 this value was written into `ivRank`, so a
+                # name at 45% IV scored as though it sat at the 45th percentile
+                # of its own range -- failing iv_rank_pass_max: 34 -- and a name
+                # at 75% was HARD-REJECTED at max_iv_rank: 70 even when 75% is
+                # low for it. See PHASE-A-NULL-IVRANK-2026-09-06.
+                "iv": round(iv * 100, 1) if iv > 0 else None,
+                # A TRUE PERCENTILE, or None. None means "no rank source
+                # answered" -- a distinct state from any number, and what tells
+                # the scorer to judge `iv` against the ABSOLUTE thresholds
+                # instead. Only the IBKR and tastytrade branches below fill it.
+                "ivRank": None,
+                "ivPercentile": None,
                 "spread": spread,
                 "volume": volume,
                 "open_interest": oi,
@@ -1310,15 +1338,20 @@ async def fetch_option_chain_async(
             except Exception:
                 pass  # keep existing fallback values
 
-        zero_iv = sum(1 for c in result if c["ivRank"] == 0)
+        # Counts contracts with no ABSOLUTE IV, which is what the yfinance
+        # backfill below supplies. Reading `ivRank` was only correct while that
+        # field held raw IV; now that it holds a percentile or None, a
+        # Tradier-only chain would have read 0-of-N and skipped the backfill.
+        zero_iv = sum(1 for c in result if not c.get("iv"))
         if zero_iv > len(result) * 0.5 and result:
             async with _get_yf_sem():
                 yf_iv = await asyncio.to_thread(_yf_iv_for_chain, symbol, target_exp, option_type == "C")
             for c in result:
-                if c["ivRank"] == 0:
+                if not c.get("iv"):
                     yf_val = yf_iv.get(float(c["strike"]))
                     if yf_val:
-                        c["ivRank"] = int(round(yf_val * 100))
+                        # yfinance supplies an ABSOLUTE IV, never a percentile.
+                        c["iv"] = round(yf_val * 100, 1)
                         c["implied_volatility"] = round(yf_val, 4)
 
         seen: set[str] = set()

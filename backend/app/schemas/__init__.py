@@ -88,6 +88,15 @@ class EventDetail(BaseModel):
 
 class VolDetail(BaseModel):
     iv_rank: float | None = None
+    # Which quantity `iv_rank` holds, exactly as on IvRankDetail below. The
+    # STOCK score's volatility rule carries the same figure the CONTRACT rule
+    # does, and only the contract half was converted in the first pass -- so
+    # scoreDetailText printed "IV Rank 45" for a 45% ABSOLUTE IV on every
+    # default-path scan, which is the literal defect statement of
+    # PHASE-A-NULL-IVRANK-2026-09-06. stock_scorer._rule_vol has emitted the
+    # basis in its detail dict since that change; this is the field that lets
+    # it reach the wire instead of being dropped by _safe(VolDetail, ...).
+    iv_basis: Literal["rank", "absolute", "none"] = "absolute"
     reason:  str   | None = None
 
 
@@ -105,6 +114,11 @@ class DeltaDetail(BaseModel):
 
 class IvRankDetail(BaseModel):
     iv_rank: float | None = None
+    # Which quantity `iv_rank` holds: "rank" (a true percentile from IBKR or
+    # tastytrade), "absolute" (implied volatility 0-100), or "none". Lets the
+    # UI label the figure honestly rather than printing an absolute IV under
+    # the words "IV rank" (PHASE-A-NULL-IVRANK-2026-09-06).
+    iv_basis: Literal["rank", "absolute", "none"] = "absolute"
     preferred_max: float
 
 
@@ -182,8 +196,25 @@ class OptionContract(BaseModel):
     price: float
     delta: float
     theta: float
-    ivRank: int
-    ivPercentile: int
+    # TWO DIFFERENT QUANTITIES, either of which may be absent
+    # (PHASE-A-NULL-IVRANK-2026-09-06):
+    #   ivRank -- a TRUE PERCENTILE, where today's IV sits in this name's own
+    #             52-week range. Only IBKR and tastytrade supply one, so it is
+    #             None on most chains.
+    #   iv     -- ABSOLUTE implied volatility, 0-100, for THIS strike.
+    # Until 2026-09-06 the absolute figure was written into `ivRank`, so the UI
+    # printed a 45% IV as "IV rank 45". Consumers must prefer the rank, fall
+    # back to `iv`, and LABEL WHICH ONE they are showing.
+    # ROUND 6 finding 8. The per-component breakdown for THIS contract. The
+    # scorer already produces it (ContractScoreCard.breakdown) and /api/contracts
+    # discarded it, so a user who picked a contract in Step 6 got the new
+    # contract's composite score over the AUTO-PICKED one's five component
+    # scores and detail lines -- including a quantitative "IV 62% - pref <=55%"
+    # for a different strike. Returned so the override can carry it across.
+    breakdown: Optional[ContractScoreBreakdown] = None
+    ivRank: Optional[int] = None
+    iv: Optional[float] = None
+    ivPercentile: Optional[int] = None
     spread: float
     volume: int
     score: int
@@ -409,7 +440,10 @@ class ContractDetails(BaseModel):
     mid: float
     delta: float
     theta: float
-    ivRank: int
+    # See OptionContract above — a percentile when one exists, else None, with
+    # the absolute level in `iv` (PHASE-A-NULL-IVRANK-2026-09-06).
+    ivRank: Optional[int] = None
+    iv: Optional[float] = None
     ivPercentile: Optional[int] = None
     dte: int
 
@@ -450,7 +484,9 @@ class AlternativeContract(BaseModel):
     mid:                float
     delta:              float
     theta:              float
-    ivRank:             int
+    # See OptionContract above (PHASE-A-NULL-IVRANK-2026-09-06).
+    ivRank:             Optional[int] = None
+    iv:                 Optional[float] = None
     score:              int
     contractConfidence: Status
     contractBreakdown:  ContractScoreBreakdown
@@ -549,7 +585,22 @@ class ScanRequest(BaseModel):
     # Bearish spread construction params (used by Pass 2 for bearish candidates)
     spread_width:        float = 5.0
     short_leg_delta:     float = 0.30
-    iv_rank_threshold:   float = 50.0
+    iv_rank_threshold:   float = 50.0   # applies when a TRUE PERCENTILE is in hand
+    # Applies when only an ABSOLUTE IV is in hand, which is most chains. It is a
+    # separate knob because 50% IV and the 50th percentile are different claims.
+    # UNMEASURED, like the percentile seeds and Q7.
+    #
+    # None means ABSENT FROM THE REQUEST, not 50: a body built before
+    # PHASE-A-SPREAD-BASIS-2026-09-06 carries only `iv_rank_threshold`, and those
+    # bodies are still out there -- schedule entries persist a fully resolved
+    # request server-side (schemas/scan_schedule.py) and are only rewritten when
+    # the profile behind them is re-saved. Defaulting such a body to 50 would
+    # discard the user's own setting and, on a Tradier-only chain, flip
+    # choose_primary from bear_put (debit, long premium) to bear_call (credit,
+    # short premium, assignment exposure) -- round 1's finding (d) surviving in
+    # the one path that never re-resolves. `_seed_iv_abs_threshold` below applies
+    # exactly the rule settingsStore's v23->v24 migration applies client-side.
+    iv_abs_threshold:    Optional[float] = None
     min_credit:          float = 0.50
     max_debit_pct:       float = 40.0
 
@@ -560,6 +611,46 @@ class ScanRequest(BaseModel):
                 raise ValueError("hold_min_days and hold_max_days must be non-negative")
             if self.hold_max_days < self.hold_min_days:
                 raise ValueError("hold_max_days must be >= hold_min_days")
+        return self
+
+    @model_validator(mode="after")
+    def _seed_pre_split_iv_knobs(self) -> "ScanRequest":
+        """A pre-split request means its single knob for the chains it actually saw.
+
+        Before PHASE-A-SPREAD-BASIS/NULL-IVRANK-2026-09-06 one threshold was
+        applied to whichever figure was in hand, and on most chains that figure
+        is the ABSOLUTE one -- so a body naming only the rank knob was, in
+        practice, setting the absolute cut-off. Seeding preserves that intent;
+        falling back to the class default silently overrules a user who moved it.
+
+        `iv_abs_threshold` doubles as the PRE-SPLIT MARKER for this body. Every
+        current client sends it (the frontend type makes it required), so its
+        absence means the body was built before the split -- which matters
+        because the second knob cannot be tested for absence on its own:
+        `overrides` is a SPARSE dict, so a current client that edited only the
+        Step-3 "IV rank pass max" row legitimately sends `iv_rank_pass_max` with
+        no `iv_abs_pass_max`, and seeding that would apply a ceiling the user
+        never asked for. Gating on the marker keeps the seeding to bodies that
+        genuinely predate the split.
+
+        Why it is needed at all: a schedule entry persists a fully resolved
+        request server-side (schemas/scan_schedule.py) and rewrites it only when
+        the profile behind it is re-saved, so pre-split bodies keep running
+        unattended. `stock_scorer._rule_vol` reads `iv_abs_pass_max` whenever the
+        basis is not 'rank', and the two keys deliberately do not leak across
+        bases -- so a stored `iv_rank_pass_max` is simply inert on most chains.
+        """
+        if self.iv_abs_threshold is not None:
+            return self  # a current client; nothing to seed
+
+        self.iv_abs_threshold = self.iv_rank_threshold
+
+        ov = self.overrides
+        if isinstance(ov, dict):
+            rank_max = ov.get("iv_rank_pass_max")
+            if isinstance(rank_max, (int, float)) and not isinstance(rank_max, bool):
+                if ov.get("iv_abs_pass_max") is None:
+                    self.overrides = {**ov, "iv_abs_pass_max": rank_max}
         return self
 
 
@@ -586,9 +677,26 @@ class DteWindow(BaseModel):
     multiplier: float
 
 
+# Bumped when a change makes a PERSISTED ScanResult unreadable by the current
+# code -- i.e. when a stored blob's fields no longer mean what they say. 1 is
+# post-PHASE-A-NULL-IVRANK-2026-09-06; a stored result with no version at all
+# predates it and cannot be trusted (see ScanResult.schema_version).
+SCAN_RESULT_SCHEMA_VERSION = 1
+
+
 class ScanResult(BaseModel):
     scan_id: str
     timestamp: str
+    # Absent means PRE-SPLIT. A scan result is persisted to `scan_sessions`
+    # (routers/scan.py restore_from_db) and re-served by /scan/last and
+    # /api/tradecards, and one written before the split holds raw implied
+    # volatility x100 under `ivRank` -- the name of a percentile. Nothing on the
+    # record says which quantity it is, exactly as for the localStorage blobs
+    # round 1 addressed, and the basis is no more recoverable here. The frontend
+    # migration DROPS such a figure rather than relabelling it; the server does
+    # the same by refusing to restore the blob at all, because it is stale market
+    # data from before an upgrade and re-scanning costs nothing.
+    schema_version: Optional[int] = None
     candidates: list[TradeCardData]
     rejected: list[RejectedCandidate]
     state: ScanState = 'COMPLETED'
@@ -789,7 +897,13 @@ class PortfolioPositionSchema(BaseModel):
     dteRemaining: int = 0
     delta: Optional[float] = None
     theta: Optional[float] = None
+    # A TRUE PERCENTILE, or None when no rank source answered. Before
+    # 2026-09-06 this field carried the ABSOLUTE IV instead, so the portfolio
+    # table printed an absolute level under "IV RANK"; the absolute figure now
+    # rides in `iv` and the two are labelled apart
+    # (PHASE-A-NULL-IVRANK-2026-09-06).
     ivRank: Optional[int] = None
+    iv: Optional[float] = None
     # Exit-plan pipeline (docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
     # — Phase 0 scaffolding, populated by later phases.
     exitPlan: Optional[dict] = None

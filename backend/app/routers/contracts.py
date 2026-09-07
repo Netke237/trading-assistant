@@ -8,9 +8,15 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.schemas import OptionContract, RrModel, TradeEntry, TradeExit
-from app.data.market import fetch_option_chain_async, fetch_contract_quote_async, fetch_price_async, fetch_candles_async
-from app.data.augment import _augment
+from app.schemas import (
+    OptionContract, RrModel, TradeEntry, TradeExit, ContractScoreBreakdown,
+    DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
+)
+from app.data.market import (
+    fetch_option_chain_async, fetch_contract_quote_async, fetch_price_async,
+    fetch_candles_async, _compute_iv_bs,
+)
+from app.data.augment import _augment, opt_float, opt_int
 from app.scoring.contract_validator import dte_holding_multiplier, validate_contract
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.trade_plan import build_trade_plan
@@ -33,7 +39,12 @@ class ContractQuoteResponse(BaseModel):
     price: float   # mid price
     delta: float
     theta: float
-    ivRank: int
+    # A TRUE PERCENTILE, or None when no rank source answered -- which is the
+    # common case, and was already reachable before the Phase A split via
+    # fetch_contract_quote_async's price-only fallback path
+    # (PHASE-A-NULL-IVRANK-2026-09-06). The absolute level rides in `iv`.
+    ivRank: Optional[int] = None
+    iv: Optional[float] = None
     spread: float
     volume: int
 
@@ -41,6 +52,19 @@ class ContractQuoteResponse(BaseModel):
 class StockQuoteResponse(BaseModel):
     symbol: str
     price: float
+
+
+def _safe_detail(model_cls, raw):
+    """Mirror of scan.py's `_safe`: build a detail model from the scorer's raw
+    dict, keeping only the keys the model declares, and returning None rather
+    than raising when the scorer emitted nothing for that component."""
+    if not isinstance(raw, dict):
+        return None
+    fields = model_cls.model_fields
+    try:
+        return model_cls(**{k: v for k, v in raw.items() if k in fields})
+    except Exception:
+        return None
 
 
 @router.get('/contracts', response_model=list[OptionContract])
@@ -86,8 +110,70 @@ async def get_contracts(
             client, symbol.upper(), option_type=opt_type, dte_bounds=dte_bounds
         ) or []
 
-        # 2. Fetch current stock price (None if unavailable — _augment handles 0.0 gracefully)
+        # 2. Fetch current stock price.
         price: float = await fetch_price_async(client, symbol.upper()) or 0.0
+
+    # ROUND 6 finding 1. Without a price this endpoint CANNOT agree with the scan,
+    # so it must not answer. The scan's twin of this path rejects the symbol
+    # outright on a missing price (`if not price or not candles` -> "no market
+    # data", scan.py:502) and never reaches its Black-Scholes resolution. Here the
+    # request used to continue with price 0.0, which disabled the ATM inversion
+    # AND _augment's BS-delta fallback, so every row came back iv=None ->
+    # iv_basis="none" -> _score_iv_rank's neutral 50. Nothing hard-rejects on a
+    # null IV, so the table was POPULATED, not empty: Step 6 listed "IV -" and a
+    # contract score points away from the card built by the scan, the user sorted
+    # and picked on it, and applyPickedContract copied that score and a null iv
+    # onto the trade card. Same user-visible defect this project ruled BLOCKING in
+    # rounds 4 and 5, reached through the price fetch instead of the chain.
+    #
+    # Failing loudly is the honest mirror of the scan's own behaviour: a degraded
+    # answer the user cannot distinguish from a good one is worse than no answer.
+    if price <= 0:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"No current price for {symbol.upper()}; contract IV and delta "
+                "cannot be computed consistently with the scan. Try again shortly."
+            ),
+        )
+
+    # ROUND 4 finding 2. The SCAN inverts Black-Scholes for the ATM contract when
+    # no vendor IV arrived and fills the strikes that have none (routers/scan.py's
+    # resolution block); this endpoint did not, and it feeds STEP 6's table while
+    # the scan feeds the STEP 7 card. Same contract, two different IVs and — via
+    # _score_iv_rank's neutral-50-on-None — two different CONTRACT SCORES: Step 6
+    # listed "IV —" and a score three points off the card the user then acts from.
+    # Ranking a table on a score that is not the scored contract's is a wrong
+    # number in front of a user, so the fallback is mirrored here rather than
+    # left to the deferred de-duplication of the two resolvers (which would not
+    # have closed this: what differs is the MISSING FALLBACK, not the arithmetic).
+    #
+    # ROUND 5 finding 1. The trigger must be the ATM CONTRACT's own lack of a
+    # reading, not the whole chain's. `not any(c.get("iv") ...)` fired only when
+    # EVERY strike was empty, so a chain whose yfinance backfill filled the wings
+    # but missed the ATM strike skipped the inversion here while the scan ran it
+    # -- reproducing the very Step-6-vs-Step-7 split round 4 recorded as closed
+    # (verified: Step 6 showed "IV —" with an IV sub-score of 50 against the
+    # card's 33.2% and 39, and picking that row copied the null onto the card).
+    _atm = (
+        min(raw_chain, key=lambda c: abs(float(c.get("strike", 0)) - price))
+        if raw_chain else None
+    )
+    if _atm is not None and _atm.get("ivRank") is None and not _atm.get("iv"):
+        _iv_bs = _compute_iv_bs(
+            mid=float(_atm.get("price", 0)),
+            S=price,
+            K=float(_atm.get("strike", price)),
+            dte=int(_atm.get("dte", 30)),
+            is_call=(opt_type == "C"),
+        )
+        if _iv_bs is not None:
+            for c in raw_chain:
+                if not c.get("iv"):
+                    # An inversion yields an ABSOLUTE volatility, never a
+                    # percentile — it can only ever feed `iv`.
+                    c["iv"] = round(_iv_bs * 100, 1)
+                    c["implied_volatility"] = round(_iv_bs, 4)
 
     results: list[OptionContract] = []
     for c in raw_chain:
@@ -116,12 +202,34 @@ async def get_contracts(
             price=float(c.get("price", 0)),
             delta=float(augmented.get("delta", 0)),
             theta=float(c.get("theta", 0)),
-            ivRank=int(augmented.get("iv_rank", 0)),
-            ivPercentile=int(c.get("ivPercentile", 0)),
+            # Send the two quantities RAW and unresolved: `ivRank` only ever
+            # a percentile, `iv` only ever an absolute level, either or both
+            # None. `augmented["iv_rank"]` is the RESOLVED figure the scorer
+            # needed and would blur the two back together on the wire
+            # (PHASE-A-NULL-IVRANK-2026-09-06).
+            ivRank=opt_int(c.get("ivRank")),
+            iv=opt_float(c.get("iv")),
+            ivPercentile=opt_int(c.get("ivPercentile")),
             spread=float(c.get("spread", 0)),
             volume=int(c.get("volume", 0)),
             score=score_card.score,
             contractConfidence=score_card.status,
+            # ContractScoreCard.breakdown is the SCORER's dataclass (dte_score,
+            # iv_rank_score, ...), not the wire model. scan.py:864 already maps
+            # one to the other for the trade card; the same mapping is needed
+            # here, or the field is a validation error rather than a fix.
+            breakdown=ContractScoreBreakdown(
+                dteFit=score_card.breakdown.dte_score,
+                delta=score_card.breakdown.delta_score,
+                ivAttractiveness=score_card.breakdown.iv_rank_score,
+                liquidity=score_card.breakdown.liquidity_score,
+                spread=score_card.breakdown.spread_score,
+                dteDetail=      _safe_detail(DteDetail,       score_card.detail.get("dte")),
+                deltaDetail=    _safe_detail(DeltaDetail,     score_card.detail.get("delta")),
+                ivDetail=       _safe_detail(IvRankDetail,    score_card.detail.get("iv_rank")),
+                liquidityDetail=_safe_detail(LiquidityDetail, score_card.detail.get("liquidity")),
+                spreadDetail=   _safe_detail(SpreadDetail,    score_card.detail.get("spread")),
+            ),
         ))
 
     # 7. Sort by score descending (stable — preserves input order for ties)
@@ -158,7 +266,8 @@ async def get_option_quote(
         price=float(quote["price"]),
         delta=float(quote["delta"]),
         theta=float(quote["theta"]),
-        ivRank=int(quote["ivRank"]),
+        ivRank=opt_int(quote.get("ivRank")),
+        iv=opt_float(quote.get("iv")),
         spread=float(quote["spread"]),
         volume=int(quote["volume"]),
     )

@@ -161,7 +161,7 @@ Pre-Breakout is a single self-contained step 4 with no steps 5–7 (see below).
 |---|---|---|
 | 1 | `step-1-regime` | Market regime — Markov/HMM banner, SPX/NDX charts, EMA/VIX metric grid, horizon regime card, sector heatmap, market news |
 | 2 | `step-2-universe` | Universe picker (SP500, NDX100, DOW30, custom) + price/cap min-max filters |
-| 3 | `step-3-direction` | Direction (Bullish/Bearish) + horizon preset, Execution Parameters panel (62 param definitions), Run Scan button |
+| 3 | `step-3-direction` | Direction (Bullish/Bearish) + horizon preset, Execution Parameters panel (63 param definitions), Run Scan button |
 
 ### Options path (steps 4–7)
 

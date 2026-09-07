@@ -62,7 +62,22 @@ test.describe('Happy-path scan (mocked) @smoke', () => {
     // ── Step 5: Vol / Events ────────────────────────────────────────────────
     await screener.clickNext();
     await expect(page).toHaveURL(/step-5-vol-events/);
-    await expect(page.getByText(/iv rank|implied volatility/i).first()).toBeVisible();
+    // The mocked chain carries no IV rank (no rank source answered — the common
+    // production case), so this row must resolve to the ABSOLUTE basis and be
+    // labelled as such: "42.0%", not "42 rank". Asserting the rendered form and
+    // not merely "some IV text is present" is the point — the previous
+    // assertion, /iv rank|implied volatility/, passed on the pre-split fixture
+    // and would have kept passing had the basis split been broken
+    // (PHASE-A-NULL-IVRANK-2026-09-06).
+    // Matched on the cell's `title`, where formatIv() states the basis outright:
+    // "42.0%" as bare text also matches the cell's wrapper, and a plain getByText
+    // would fail Playwright's strict mode on the two hits.
+    await expect(page.locator('[title^="Implied volatility"]')).toContainText('42.0%');
+    // The absolute figure must NOT be dressed as a percentile. `rank` is the
+    // suffix formatIv() appends only on the rank basis.
+    await expect(page.locator('[title^="IV rank"]')).toHaveCount(0);
+    // And the threshold sentence must quote the absolute set, not the rank set.
+    await expect(page.getByText(/IV ≤ 34 → PASS/)).toBeVisible();
 
     // ── Step 6: Contracts ───────────────────────────────────────────────────
     await screener.clickNext();

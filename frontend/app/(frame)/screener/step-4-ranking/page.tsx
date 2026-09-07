@@ -131,7 +131,7 @@ export default function Step4Page() {
     { key: 'pullback',   label: 'Pullback',   desc: 'Healthy retracement to a supportive level — not extended, not broken.' },
     { key: 'trigger',    label: 'Trigger',    desc: 'Short-term entry signal — engulfing, volume expansion, breakout close.' },
     { key: 'event',      label: 'Event',      desc: 'Calendar gate — earnings / FOMC proximity. High = clear of events.' },
-    { key: 'volatility', label: 'Volatility', desc: 'IV rank sweet-spot — rich enough to earn premium, not blown-out.' },
+    { key: 'volatility', label: 'Volatility', desc: 'IV sweet-spot — rich enough to earn premium, not blown-out.' },
   ];
 
   useEffect(() => {

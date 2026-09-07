@@ -10,14 +10,31 @@ So every phase in PROJECT_STATE.json carries a `verify` probe: a pattern whose
 presence or absence in the real code proves the declared status. This script
 runs all of them and exits non-zero when a claim and the codebase disagree.
 
+One field pair is checked differently, because no code symbol could ever prove
+it: `audit_rounds` / `audit_clean`. See `audit_bookkeeping_drift`, which reads
+git history rather than source.
+
 WHAT IT CANNOT CATCH, stated so nobody reads a green "No drift" as more than it
-is: every probe is a regex PRESENCE test. It answers "does this symbol still
-exist?", never "does it still do what the document says". Round 7 found the
-worked example: the badge probe is `present:"formatStopLossHeadline"`, which
-passes no matter what that function returns -- and the schematic had meanwhile
-been amended to describe a badge string the code does not produce. Drift in
-BEHAVIOUR is what the adversarial rounds are for; this script only pins
-existence.
+is:
+
+1. BEHAVIOUR. Every `verify` probe is a regex PRESENCE test. It answers "does
+   this symbol still exist?", never "does it still do what the document says".
+   Round 7 found the worked example: the badge probe is
+   `present:"formatStopLossHeadline"`, which passes no matter what that
+   function returns -- and the schematic had meanwhile been amended to describe
+   a badge string the code does not produce. Drift in BEHAVIOUR is what the
+   adversarial rounds are for; this script only pins existence.
+
+2. AN AUDIT ROUND THAT LEFT NO COMMIT. The bookkeeping check's only evidence is
+   commit subjects on this branch. A round that found nothing, or whose fixes
+   were folded into a commit whose subject does not name a round, is invisible
+   to it. It is also scoped to the highest round declared for still-OPEN work,
+   so a round on a phase with a lower count than some other open phase will not
+   trip it either. It catches the case that actually happened; it is not a
+   proof that the count is right.
+
+3. `audit_clean` AT ALL. Nothing here can verify the assertion that a round came
+   back with zero findings. That claim rests entirely on whoever wrote it.
 
 Usage:
     python3 scripts/state.py           # render + verify (exit 1 on drift)
@@ -29,6 +46,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -76,6 +94,103 @@ def probe(v: dict) -> tuple[bool, str]:
     # `if kind == "absent" and means_shipped_if_present:` whose two branches
     # were character-for-character identical.
     return found, ("found " if found else "absent ") + where
+
+
+def _round_numbers_in_branch_subjects(base_ref: str | None) -> tuple[int, list[str]] | None:
+    """Highest `round N` mentioned in this branch's commit SUBJECTS.
+
+    Returns (max_n, matching_subjects), or None when there is no evidence to
+    read -- no git, no resolvable base, or a branch that is not ahead of it.
+    Degrading to None is deliberate: this probe runs on every SessionStart, and
+    a check that cries drift whenever git is unavailable would train the reader
+    to scroll past a red banner.
+
+    SUBJECTS ONLY, never bodies. Commit bodies here are full of legitimate
+    backward references ("round 12's follow-ups", "round 7 rejected finding 8")
+    that would fire this on every session.
+    """
+    if not base_ref or not re.fullmatch(r"[0-9A-Za-z._/-]+", base_ref):
+        return None
+    try:
+        proc = subprocess.run(
+            ["git", "log", "--format=%s", f"{base_ref}..HEAD"],
+            cwd=ROOT, capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+
+    best = 0
+    subjects: list[str] = []
+    for line in proc.stdout.splitlines():
+        hits = [int(m.group(1)) for m in re.finditer(r"\bround\s+(\d+)", line, re.I)]
+        if not hits:
+            continue
+        subjects.append(line.strip())
+        best = max(best, *hits)
+    if not best:
+        return None
+    return best, subjects
+
+
+def audit_bookkeeping_drift(state: dict) -> str | None:
+    """Check the ONE pair of fields no verify probe covers.
+
+    `audit_rounds` and `audit_clean` are read, rendered, and drive this
+    project's central rule -- nothing is done until a round comes back clean --
+    while every `verify` probe tests a code symbol instead. So the bookkeeping
+    itself was verified against nothing, and it drifted: three Phase A rounds
+    had run while the file said one, because round 2 recorded its findings in a
+    commit message and never here. This script printed "No drift" throughout.
+
+    The evidence git actually holds is that a round produced commits. So: take
+    the highest `round N` in this branch's commit subjects, compare it against
+    the `audit_rounds` declared by `active_phase` -- the phase this branch is
+    building -- and report only when git is ahead. Scoping to that one phase is
+    what makes the check mean anything: Phase D's 13 clean rounds are the global
+    maximum, so comparing against every entry could never fire, and comparing
+    against merely-open work fires forever once the active phase goes clean
+    (round 4 finding 6).
+
+    One-directional on purpose. A file claiming MORE rounds than git shows is
+    not evidence of anything: rounds legitimately run without producing a
+    commit, and merged history moves out of `main..HEAD`.
+    """
+    evidence = _round_numbers_in_branch_subjects(state.get("main"))
+    if evidence is None:
+        return None
+    git_max, subjects = evidence
+
+    # ROUND 4 finding 6. The first version of this scoped to work that was still
+    # OPEN (not audit_clean), which fired a PERMANENT false positive on its own
+    # success path: the moment the one phase carrying rounds on this branch was
+    # marked clean, the open pool became the not-started phases, all declaring 0,
+    # so `git_max > 0` reported drift and exited non-zero on EVERY SessionStart.
+    # A red banner that cannot be cleared is worse than no banner -- it trains
+    # the reader to scroll past the real ones.
+    #
+    # Scoping to `active_phase` is what the comparison actually meant all along.
+    # Rounds counted from `main..HEAD` belong to the phase this branch is
+    # building; they say nothing about Phase D's 13 merged rounds, which is why
+    # a global maximum could never fire, and nothing about phases not started.
+    active = state.get("active_phase")
+    if not active:
+        return None  # no pointer: stay silent rather than guess a pool
+    ph = next((p for p in state["phases"] if p["id"] == active), None)
+    if ph is None:
+        return None  # names a phase that no longer exists; silent, not wrong
+
+    declared = ph.get("audit_rounds") or 0
+    if git_max <= declared:
+        return None
+
+    shown = "; ".join(subjects[:3])
+    return (
+        f"Audit bookkeeping: this branch's commit subjects reach round {git_max}, but "
+        f"Phase {ph['id']} ({ph['name']}) -- the active phase -- declares {declared}. "
+        f"A round ran and was never written down — subjects: {shown}"
+    )
 
 
 def main() -> int:
@@ -150,6 +265,10 @@ def main() -> int:
                     f"Shipped item '{item['name']}': declared shipped but the code "
                     f"says NOT BUILT — {detail}"
                 )
+
+    bookkeeping = audit_bookkeeping_drift(state)
+    if bookkeeping:
+        drift.append(bookkeeping)
 
     if not quiet:
         print(f"\n  {DIM}SHIPPED* = code exists but has never survived an adversarial round.{RESET}")

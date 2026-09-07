@@ -249,8 +249,15 @@ const PARAM_DEFS: ParamDef[] = [
   { key: 'fomc_buffer_days',     label: 'FOMC buffer',     type: 'display', section: 'stocks', subGroup: 'Event', redundant: true },
   { key: 'div_buffer_days',      label: 'Div buffer',      type: 'display', section: 'stocks', subGroup: 'Event', redundant: true },
   // STOCKS — Volatility
-  { key: 'iv_rank_pass_max', label: 'IV rank pass max', type: 'number', section: 'options', subGroup: 'Volatility', min: 0, max: 100, step: 1,
-    hint: 'Max IV rank (0–100) for a PASS on options contracts. N/A on Intraday. ↑ Higher → elevated-IV stocks still qualify (more) · ↓ Lower → only calm-IV stocks pass (fewer). Per-horizon defaults are set in Settings → Scan.' },
+  // Two ceilings, because `ivRank` and `iv` are two different quantities and
+  // the scorer picks between them by basis (PHASE-A-NULL-IVRANK-2026-09-06).
+  // Only ONE of the two applies to any given contract, so both are exposed:
+  // with the percentile knob alone, a user's ceiling was silently inert on
+  // every chain where no rank source answered — which is nearly all of them.
+  { key: 'iv_abs_pass_max', label: 'IV pass max (absolute)', type: 'number', section: 'options', subGroup: 'Volatility', min: 0, max: 100, step: 1, unit: '%',
+    hint: 'Max ABSOLUTE implied volatility (0–100%) for a PASS. This is the one that applies on most chains — a true IV rank needs IBKR or tastytrade to answer, and otherwise the contract carries a raw IV instead. N/A on Intraday. ↑ Higher → elevated-IV contracts still qualify (more) · ↓ Lower → only calm-IV contracts pass (fewer).' },
+  { key: 'iv_rank_pass_max', label: 'IV rank pass max (percentile)', type: 'number', section: 'options', subGroup: 'Volatility', min: 0, max: 100, step: 1,
+    hint: 'Max IV RANK — where today\u2019s IV sits in the name\u2019s own 52-week range (0–100) — for a PASS. Applies ONLY when IBKR or tastytrade supplied a real rank; otherwise the absolute ceiling above is what judges the contract. N/A on Intraday. ↑ Higher → elevated-IV stocks still qualify (more) · ↓ Lower → only calm-IV stocks pass (fewer).' },
   { key: 'iv_rank_lookback', label: 'IV rank lookback', type: 'display', section: 'stocks', subGroup: 'Volatility',
     hint: 'Lookback window used to normalise current IV into a percentile rank (display only).' },
   { key: 'hv_lookback',      label: 'HV period',        type: 'display', section: 'stocks', subGroup: 'Volatility',
@@ -392,7 +399,7 @@ function ParamRow({
     );
   }
 
-  // N/A rows (Intraday iv_rank_pass_max)
+  // N/A rows (Intraday iv_abs_pass_max / iv_rank_pass_max)
   if (isNa) {
     return (
       <div className={formStyles.paramsRow} data-param-key={def.key}>

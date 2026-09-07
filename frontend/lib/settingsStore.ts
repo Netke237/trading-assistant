@@ -163,7 +163,12 @@ export const DEFAULT_SCHEDULE_CONFIG: ScheduleConfig = {
 export interface SpreadsConfig {
   shortLegDelta:      number;   // delta of the short leg (e.g. 0.30 = 30Δ)
   widthPoints:        number;   // spread width in strike points
-  ivRankThreshold:    number;   // minimum IV rank % to enter
+  ivRankThreshold:    number;   // sell-premium cut-off when a TRUE PERCENTILE is in hand
+  // Sell-premium cut-off when only an ABSOLUTE IV is in hand — which is most
+  // chains, since a real rank needs IBKR or tastytrade to answer. Separate from
+  // ivRankThreshold because "50% IV" and "the 50th percentile" are different
+  // claims; defaulted to the same 50 so nothing changed on the day it shipped.
+  ivAbsThreshold:     number;
   minCredit:          number;   // minimum credit received (credit spreads)
   maxDebitPctOfWidth: number;   // maximum debit as % of width (debit spreads)
 }
@@ -172,6 +177,7 @@ export const DEFAULT_SPREADS: SpreadsConfig = {
   shortLegDelta:      0.30,
   widthPoints:        5,
   ivRankThreshold:    50,
+  ivAbsThreshold:     50,
   minCredit:          0.50,
   maxDebitPctOfWidth: 40,
 };
@@ -367,6 +373,28 @@ export function migrateSettings(
     }
     next.confidenceGate = gate as ConfidenceGate;
   }
+  if (version < 24) {
+    // PHASE-A-SPREAD-BASIS-2026-09-06 split the spread picker's single
+    // sell-premium cut-off in two, because `ivRankThreshold` was being applied
+    // to an absolute IV on most chains -- "50% IV" judged as though it were
+    // "the 50th percentile". A blob persisted at <=23 has no ivAbsThreshold.
+    //
+    // Benign by luck (undefined omits the field, and the backend's own default
+    // is the same 50), and stated rather than left to be re-derived: CLAUDE.md
+    // asks for the bump and the branch, and this store is where round 10
+    // finding 16 caught the same omission before.
+    //
+    // Seeded from the user's OWN ivRankThreshold, not the constant: someone
+    // who moved the old single knob meant that for the chains they actually
+    // see, which are the absolute ones.
+    const sp = { ...(next.spreads ?? DEFAULT_SPREADS) } as Record<string, unknown>;
+    if (sp.ivAbsThreshold === undefined) {
+      sp.ivAbsThreshold = typeof sp.ivRankThreshold === 'number'
+        ? sp.ivRankThreshold
+        : DEFAULT_SPREADS.ivAbsThreshold;
+    }
+    next.spreads = sp as unknown as SpreadsConfig;
+  }
   return next as unknown as SettingsState;
 }
 
@@ -440,7 +468,7 @@ export const useSettingsStore = create<SettingsState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 23,
+      version: 24,
       partialize: (state) => ({
         broker:                  state.broker,
         alertDeduplicationHours: state.alertDeduplicationHours,

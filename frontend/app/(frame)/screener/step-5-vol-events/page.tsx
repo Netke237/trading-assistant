@@ -18,6 +18,7 @@ import { WatchStar } from '@/components/atoms/WatchStar';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { useScanStore } from '@/lib/scanStore';
 import { useIvThresholdsStore, getIvPassMax, getIvCautionMax } from '@/lib/ivThresholdsStore';
+import { resolveIv, formatIv, IV_COLUMN_LABEL, type IvBasis } from '@/lib/ivBasis';
 import { useEventThresholdsStore, getEventWindow } from '@/lib/eventThresholdsStore';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import { worstStatus, type Status } from '@/lib/status';
@@ -64,15 +65,61 @@ export default function Step5Page() {
   // matches the reject/caution window that already shaped the candidate's score.
   const { reject_days: evReject, caution_days: evCaution } = getEventWindow(horizonKey, eventThresholds);
 
-  const ivPassThreshold    = getIvPassMax(horizonKey, ivThresholds);
-  const ivCautionThreshold = getIvCautionMax(horizonKey, ivThresholds);
-
-  function ivStatus(rank: number): Status {
-    if (ivPassThreshold === null)    return 'PASS';   // Intraday: no IV gate
-    if (rank <= ivPassThreshold)    return 'PASS';
-    if (ivCautionThreshold !== null && rank <= ivCautionThreshold) return 'CAUTION';
+  // The volatility figure behind each row is EITHER a true percentile
+  // (`ivRank`, present only when IBKR or tastytrade answered) OR an absolute
+  // implied volatility (`iv`), and each is judged by its own threshold set
+  // (PHASE-A-NULL-IVRANK-2026-09-06). Thresholds are therefore resolved
+  // per row, by basis — not once for the page.
+  function ivStatusFor(value: number, basis: IvBasis): Status {
+    const passMax = getIvPassMax(horizonKey, ivThresholds, basis);
+    if (passMax === null) return 'PASS';   // Intraday: no IV gate
+    if (value <= passMax) return 'PASS';
+    const cautionMax = getIvCautionMax(horizonKey, ivThresholds, basis);
+    if (cautionMax !== null && value <= cautionMax) return 'CAUTION';
     return 'REJECT';
   }
+
+  // The header sentence can only quote the thresholds that actually apply to
+  // the rows on screen, so derive the bases present rather than assuming one.
+  const basesPresent = useMemo(() => {
+    const seen = new Set<IvBasis>();
+    for (const r of watchlist) {
+      const b = resolveIv(candidateMap[r.symbol]?.contractDetails).basis;
+      if (b !== 'none') seen.add(b);
+    }
+    return [...seen];
+  }, [watchlist, candidateMap]);
+
+  const thresholdSentences = basesPresent
+    .map((b) => {
+      const passMax = getIvPassMax(horizonKey, ivThresholds, b);
+      if (passMax === null) return null;
+      const cautionMax = getIvCautionMax(horizonKey, ivThresholds, b);
+      const noun = b === 'rank' ? 'IV rank' : 'IV';
+      return `${noun} ≤ ${passMax} → PASS; ≤ ${cautionMax ?? '—'} → CAUTION; above → REJECT.`;
+    })
+    .filter((x): x is string => x !== null)
+    .join(' ');
+
+  // Whether this horizon gates on IV at all is a property of the HORIZON, so it
+  // has to be asked of the thresholds directly. Deriving it from an empty
+  // `basesPresent` — as this line did when the sentence became row-derived in the
+  // Phase A split — made the page announce "IV gate disabled for this horizon"
+  // on Swing and Position whenever no candidate carried a reading, the empty
+  // page included. The gate is not disabled there; it has nothing in front of
+  // it yet, which is a different statement and the one the user needs.
+  const gateDisabled =
+    getIvPassMax(horizonKey, ivThresholds, 'absolute') === null &&
+    getIvPassMax(horizonKey, ivThresholds, 'rank') === null;
+
+  const gateSentence =
+    gateDisabled                ? 'IV gate disabled for this horizon.'
+    : candidates.length === 0   ? 'Run a scan to see the volatility and event gates.'
+    : thresholdSentences !== '' ? thresholdSentences
+    // Candidates are on screen but not one of them carries a volatility
+    // reading. Stated as the plain fact only: what an absent reading then does
+    // to the gate is decided per row below, and differs by horizon.
+    :                             'No volatility reading for these candidates.';
 
   return (
     <div className={styles.main}>
@@ -80,9 +127,7 @@ export default function Step5Page() {
         <Text size={11} tone="dim" weight={500}>STEP 5 OF 7</Text>
         <Title as="h1" size={24}>Volatility + Events</Title>
         <Text size={13} tone="secondary">
-          {ivPassThreshold !== null
-            ? `IV rank ≤ ${ivPassThreshold} → PASS; ≤ ${ivCautionThreshold ?? '—'} → CAUTION; above → REJECT.`
-            : 'IV gate disabled for this horizon.'}
+          {gateSentence}
           {' '}Earnings within {evCaution} days → CAUTION; within {evReject} days → REJECT.
           Gate = worst of IV and event proximity.
         </Text>
@@ -94,7 +139,7 @@ export default function Step5Page() {
           <span aria-hidden />
           <Text size={11} tone="dim">SYMBOL</Text>
           <Text size={11} tone="dim">NAME</Text>
-          <Text size={11} tone="dim">IV RANK</Text>
+          <Text size={11} tone="dim">{IV_COLUMN_LABEL}</Text>
           <Text size={11} tone="dim">IV PCTL</Text>
           <Text size={11} tone="dim">NEXT EVENT</Text>
           <Text size={11} tone="dim">GATE</Text>
@@ -102,15 +147,32 @@ export default function Step5Page() {
 
         {watchlist.map((r) => {
           const c = candidateMap[r.symbol];
-          const rank = c?.contractDetails?.ivRank;
           const pctl = c?.contractDetails?.ivPercentile;
-          const hasIv = rank != null && rank > 0;
+          // A percentile if one exists, otherwise the absolute IV — resolved
+          // through lib/ivBasis.ts so this page and the backend agree on which
+          // quantity is in hand (PHASE-A-NULL-IVRANK-2026-09-06). Note a rank
+          // of 0 is a REAL reading (bottom of the 52-week range, i.e. very
+          // cheap premium); only the absolute level treats 0 as missing.
+          const iv = resolveIv(c?.contractDetails);
+          const hasIv = iv.basis !== 'none';
+          const shownIv = formatIv(iv, r.symbol);
           // Unknown IV must not be treated as better than a clean read — this page's
           // own copy states "Gate = worst of IV and event proximity," so an unknown
-          // IV rank is downgraded to CAUTION (not NO_DATA) specifically so it always
+          // IV is downgraded to CAUTION (not NO_DATA) specifically so it always
           // participates correctly in worstStatus's PASS/CAUTION/REJECT comparison
           // instead of falling through to NO_DATA, which worstStatus ranks below PASS.
-          const ivSt: Status = hasIv ? ivStatus(rank) : 'CAUTION';
+          // ROUND 6 finding 3. When there IS a reading, ivStatusFor already returns
+          // PASS on a horizon with no IV gate. With no reading this short-circuited
+          // straight to CAUTION and never asked the question, so on Intraday — where
+          // the gate is disabled by design — this page cautioned about a check that
+          // was never going to run while the Step 7 rail, fixed for exactly this in
+          // round 4, said PASS. Two screens, one candidate, contradicting verdicts.
+          // `gateDisabled` above is the page-level answer and is stricter than the
+          // rail's (it requires BOTH bases to be ungated rather than substituting
+          // one), so it is the right thing to consult here.
+          const ivSt: Status = hasIv
+            ? ivStatusFor(iv.value as number, iv.basis)
+            : gateDisabled ? 'PASS' : 'CAUTION';
           // Gate must use THIS scan's horizon-specific window (evCaution/evReject,
           // already fetched above via useEventThresholdsStore) — not a fixed cutoff. The
           // generic eventProximity() helper (frontend/lib/date.ts) is intentionally
@@ -136,19 +198,32 @@ export default function Step5Page() {
               <Text size={12} tone="secondary">{r.company}</Text>
 
               {/* IV rank + inline mini bar */}
-              <div className={pageStyles.ivRankCell}>
-                <Data size={13} weight={500}>{hasIv ? rank : '—'}</Data>
+              <div className={pageStyles.ivRankCell} title={shownIv.title}>
+                <Data size={13} weight={500}>{shownIv.text}</Data>
+                {shownIv.suffix !== '' && (
+                  <Text size={10} tone="dim">{shownIv.suffix}</Text>
+                )}
                 {hasIv && (
                   <div className={pageStyles.ivTrack}>
                     <div
                       className={`${pageStyles.ivFill} ${pageStyles[`ivFill_${ivSt}`]}`}
-                      style={{ width: `${(rank / 100) * 120}px` }}
+                      style={{ width: `${Math.min(1, (iv.value as number) / 100) * 120}px` }}
                     />
                   </div>
                 )}
               </div>
 
-              <Data size={13} weight={500}>{pctl !== undefined && pctl > 0 ? pctl : '—'}</Data>
+              {/* `!= null` only. A percentile of 0 is a REAL reading — the bottom of
+                  this name's own 52-week range, i.e. the cheapest premium it gets —
+                  and only an ABSOLUTE IV treats 0 as a missing-data sentinel
+                  (PHASE-A-NULL-IVRANK-2026-09-06; the asymmetry is stated in
+                  lib/ivBasis.ts and pinned in its tests). The old `&& pctl > 0`
+                  guard dated from when a pre-split ivPercentile DEFAULTED to the
+                  literal 0 that meant "no rank source answered"; market.py now
+                  writes null for that, so the guard had nothing left to catch and
+                  only destroyed information. step-6-contracts already gets this
+                  right, so the two pages disagreed about one field. */}
+              <Data size={13} weight={500}>{pctl != null ? pctl : '—'}</Data>
 
               {r.nextEventDays != null
                 ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />
@@ -157,7 +232,8 @@ export default function Step5Page() {
               <StatusBadge
                 status={gate}
                 tooltip={eventVolGateTooltip({
-                  ivRank: hasIv ? rank : null,
+                  ivRank: iv.value,
+                  ivBasis: iv.basis,
                   ivStatus: ivSt,
                   nextEventDays: r.nextEventDays ?? null,
                   proxStatus,

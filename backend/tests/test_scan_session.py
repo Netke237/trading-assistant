@@ -14,7 +14,7 @@ import json
 import pytest
 
 from app.models.scan_session import ScanSession
-from app.schemas import ScanRequest, ScanResult
+from app.schemas import ScanRequest, ScanResult, SCAN_RESULT_SCHEMA_VERSION
 
 # Re-use the test engine / session factory from conftest so we can query
 # the same in-memory SQLite DB that the client fixture writes to.
@@ -86,11 +86,20 @@ async def test_restore_from_db_restores_globals():
                     last_request_json=ScanRequest(
                         universe=["AAPL"], direction="Bullish", horizon="Swing"
                     ).model_dump_json(),
+                    # Stamped, because the only sanctioned writer stamps: _persist
+                    # sets schema_version on every result it saves, so a row this
+                    # code wrote is never unmarked. Hand-building the row here
+                    # bypassed that and produced a blob restore_from_db correctly
+                    # refuses as pre-IV-basis-split (PHASE-A-NULL-IVRANK-2026-09-06).
+                    # The refusal itself is pinned in test_scan_result_vintage.py;
+                    # what THIS test is about is the happy path.
                     last_result_json=ScanResult(
                         scan_id="REC-20260101-TESTTEST",
                         timestamp="2026-01-01T00:00:00+00:00",
                         candidates=[],
                         rejected=[],
+                    ).model_copy(
+                        update={"schema_version": SCAN_RESULT_SCHEMA_VERSION}
                     ).model_dump_json(),
                 )
             )

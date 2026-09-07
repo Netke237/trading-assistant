@@ -10,6 +10,7 @@ from sqlalchemy import select, delete, func
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 
 from app.database import get_db
+from app.data.augment import opt_float, opt_int
 from app.data.market import fetch_price_async
 from app.models.portfolio import PortfolioPositionModel
 from app.models.closed_position import ClosedPositionModel, EquitySnapshotModel
@@ -113,7 +114,12 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
             schema.currentPrice = quote.get("price") or 0.0
             schema.delta        = quote.get("delta")
             schema.theta        = quote.get("theta")
-            schema.ivRank       = int(round(iv)) if (iv := quote.get("ivRank")) is not None else None
+            # Two quantities, kept apart. `ivRank` is a percentile and is
+            # usually absent; `iv` is the absolute level, which is what this
+            # row in fact showed before 2026-09-06
+            # (PHASE-A-NULL-IVRANK-2026-09-06).
+            schema.ivRank       = opt_int(quote.get("ivRank"))
+            schema.iv           = opt_float(quote.get("iv"))
             if schema.entryPrice:
                 mult = _contract_multiplier(schema.contract)
                 schema.pnlDollar = round(
