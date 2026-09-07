@@ -1537,7 +1537,20 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 _portfolio_snapshot,
                 None,  # fire() reads portfolio_value from strategy under lock
             )
-    await _upsert_session(db, req=_last_request, result=result, status="complete")
+    # `req`, not `_last_request`. The global is read AFTER the auto-trade block
+    # above, whose `await asyncio.to_thread(...)` is a synchronous broker call —
+    # a window measured in seconds. A second overlapping manual scan (nothing
+    # serializes two of them; see this function's docstring) completing inside
+    # it replaces `_last_request` with ITS request, and this line would then
+    # persist THIS scan's result beside THAT scan's request. The crossed row
+    # survives a restart: restore_from_db rebuilds the globals from it, and
+    # /scan/last-run would report the pair as verified — a matching scan_id
+    # next to a threshold the scan never applied, which
+    # scripts/iv_basis_analysis.py stamps into the measurement store as
+    # measured. The in-memory pair is already atomic (both globals are written
+    # together under _state_lock); passing the local request makes the
+    # PERSISTED pair atomic too. Found by Phase-A-batch round 1.
+    await _upsert_session(db, req=req, result=result, status="complete")
     return result
 
 

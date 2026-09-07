@@ -237,3 +237,68 @@ def test_continuous_scan_endpoints_are_gone(client):
     assert client.post("/api/scan/continuous", json={"enabled": True, "cadence_minutes": 30}).status_code == 404
     assert client.delete("/api/scan/continuous").status_code == 404
     assert client.get("/api/scan/continuous/status").status_code == 404
+
+
+# ── The persisted (request, result) pair must not cross ───────────────────────
+
+@pytest.mark.asyncio
+async def test_persisted_request_is_the_one_this_scan_ran(monkeypatch):
+    """run_scan must persist ITS OWN request, not whatever `_last_request`
+    holds by the time the row is written.
+
+    The gap is real, not theoretical: the auto-trade block between the state
+    write and the persist ends in `await asyncio.to_thread(...)` around a
+    synchronous broker call, and nothing serializes two manual scans. A second
+    scan completing inside that window replaces the global, and the row would
+    pair THIS scan's result with THAT scan's request. restore_from_db rebuilds
+    the globals from that row, so /scan/last-run would then serve a matching
+    scan_id beside an iv_abs_threshold the scan never applied — which
+    scripts/iv_basis_analysis.py records as a MEASURED credit/debit line.
+
+    Driven deterministically here: the stub auto-trader overwrites the global
+    from inside the worker thread, exactly where the real overlap lands.
+    """
+    from types import SimpleNamespace
+    import app.routers.scan as scan_module
+    import app.services.auto_trader as auto_trader_module
+
+    mine = ScanRequest(universe=["AAPL"], direction="Bearish", horizon="Swing",
+                       iv_abs_threshold=62.5)
+    theirs = ScanRequest(universe=["MSFT"], direction="Bearish", horizon="Swing",
+                         iv_abs_threshold=30.0)
+    my_result = SimpleNamespace(scan_id="REC-MINE",
+                                candidates=[SimpleNamespace(finalStatus="PASS")])
+
+    async def _fake_core(req, db, *, previous_result):
+        return my_result
+
+    persisted: list[tuple] = []
+
+    async def _fake_upsert(db, req, result, status):
+        persisted.append((req, result))
+
+    def _overlapping_scan_lands(*_args, **_kwargs):
+        # Scan B finishing while this one is inside the broker call.
+        scan_module._last_request = theirs
+        scan_module._last_result = SimpleNamespace(scan_id="REC-THEIRS", candidates=[])
+
+    class _FakeDb:
+        async def execute(self, _q):
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: []))
+
+    monkeypatch.setattr(scan_module, "_execute_scan_core", _fake_core)
+    monkeypatch.setattr(scan_module, "_upsert_session", _fake_upsert)
+    monkeypatch.setattr(scan_module, "_last_request", None)
+    monkeypatch.setattr(scan_module, "_last_result", None)
+    monkeypatch.setattr(auto_trader_module, "auto_trader", SimpleNamespace(
+        get_state=lambda: SimpleNamespace(armed=True),
+        maybe_fire_on_scan=_overlapping_scan_lands,
+    ))
+
+    await scan_module.run_scan(mine, _FakeDb())
+
+    assert len(persisted) == 1
+    req, result = persisted[0]
+    assert result is my_result
+    assert req is mine, "persisted the overlapping scan's request beside this scan's result"
+    assert req.iv_abs_threshold == 62.5
