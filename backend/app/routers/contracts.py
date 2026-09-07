@@ -8,7 +8,10 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.schemas import OptionContract, RrModel, TradeEntry, TradeExit
+from app.schemas import (
+    OptionContract, RrModel, TradeEntry, TradeExit, ContractScoreBreakdown,
+    DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
+)
 from app.data.market import (
     fetch_option_chain_async, fetch_contract_quote_async, fetch_price_async,
     fetch_candles_async, _compute_iv_bs,
@@ -49,6 +52,19 @@ class ContractQuoteResponse(BaseModel):
 class StockQuoteResponse(BaseModel):
     symbol: str
     price: float
+
+
+def _safe_detail(model_cls, raw):
+    """Mirror of scan.py's `_safe`: build a detail model from the scorer's raw
+    dict, keeping only the keys the model declares, and returning None rather
+    than raising when the scorer emitted nothing for that component."""
+    if not isinstance(raw, dict):
+        return None
+    fields = model_cls.model_fields
+    try:
+        return model_cls(**{k: v for k, v in raw.items() if k in fields})
+    except Exception:
+        return None
 
 
 @router.get('/contracts', response_model=list[OptionContract])
@@ -198,6 +214,22 @@ async def get_contracts(
             volume=int(c.get("volume", 0)),
             score=score_card.score,
             contractConfidence=score_card.status,
+            # ContractScoreCard.breakdown is the SCORER's dataclass (dte_score,
+            # iv_rank_score, ...), not the wire model. scan.py:864 already maps
+            # one to the other for the trade card; the same mapping is needed
+            # here, or the field is a validation error rather than a fix.
+            breakdown=ContractScoreBreakdown(
+                dteFit=score_card.breakdown.dte_score,
+                delta=score_card.breakdown.delta_score,
+                ivAttractiveness=score_card.breakdown.iv_rank_score,
+                liquidity=score_card.breakdown.liquidity_score,
+                spread=score_card.breakdown.spread_score,
+                dteDetail=      _safe_detail(DteDetail,       score_card.detail.get("dte")),
+                deltaDetail=    _safe_detail(DeltaDetail,     score_card.detail.get("delta")),
+                ivDetail=       _safe_detail(IvRankDetail,    score_card.detail.get("iv_rank")),
+                liquidityDetail=_safe_detail(LiquidityDetail, score_card.detail.get("liquidity")),
+                spreadDetail=   _safe_detail(SpreadDetail,    score_card.detail.get("spread")),
+            ),
         ))
 
     # 7. Sort by score descending (stable — preserves input order for ties)

@@ -205,6 +205,13 @@ class OptionContract(BaseModel):
     # Until 2026-09-06 the absolute figure was written into `ivRank`, so the UI
     # printed a 45% IV as "IV rank 45". Consumers must prefer the rank, fall
     # back to `iv`, and LABEL WHICH ONE they are showing.
+    # ROUND 6 finding 8. The per-component breakdown for THIS contract. The
+    # scorer already produces it (ContractScoreCard.breakdown) and /api/contracts
+    # discarded it, so a user who picked a contract in Step 6 got the new
+    # contract's composite score over the AUTO-PICKED one's five component
+    # scores and detail lines -- including a quantitative "IV 62% - pref <=55%"
+    # for a different strike. Returned so the override can carry it across.
+    breakdown: Optional[ContractScoreBreakdown] = None
     ivRank: Optional[int] = None
     iv: Optional[float] = None
     ivPercentile: Optional[int] = None

@@ -161,7 +161,18 @@ export default function Step5Page() {
           // IV is downgraded to CAUTION (not NO_DATA) specifically so it always
           // participates correctly in worstStatus's PASS/CAUTION/REJECT comparison
           // instead of falling through to NO_DATA, which worstStatus ranks below PASS.
-          const ivSt: Status = hasIv ? ivStatusFor(iv.value as number, iv.basis) : 'CAUTION';
+          // ROUND 6 finding 3. When there IS a reading, ivStatusFor already returns
+          // PASS on a horizon with no IV gate. With no reading this short-circuited
+          // straight to CAUTION and never asked the question, so on Intraday — where
+          // the gate is disabled by design — this page cautioned about a check that
+          // was never going to run while the Step 7 rail, fixed for exactly this in
+          // round 4, said PASS. Two screens, one candidate, contradicting verdicts.
+          // `gateDisabled` above is the page-level answer and is stricter than the
+          // rail's (it requires BOTH bases to be ungated rather than substituting
+          // one), so it is the right thing to consult here.
+          const ivSt: Status = hasIv
+            ? ivStatusFor(iv.value as number, iv.basis)
+            : gateDisabled ? 'PASS' : 'CAUTION';
           // Gate must use THIS scan's horizon-specific window (evCaution/evReject,
           // already fetched above via useEventThresholdsStore) — not a fixed cutoff. The
           // generic eventProximity() helper (frontend/lib/date.ts) is intentionally

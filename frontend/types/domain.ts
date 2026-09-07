@@ -598,6 +598,10 @@ export interface OptionContract {
   volume:       number;
   score:        number;
   contractConfidence: Status;
+  /** Per-component breakdown for THIS contract, when the backend supplied it
+   *  (/api/contracts does). Optional because older cached responses and the
+   *  scan's own chain rows do not carry it. See applyPickedContract. */
+  breakdown?: ContractScoreBreakdown;
 }
 
 export function contractId(symbol: string, strike: number, expiry: string, right: OptionRight): string {
