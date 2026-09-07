@@ -88,6 +88,15 @@ class EventDetail(BaseModel):
 
 class VolDetail(BaseModel):
     iv_rank: float | None = None
+    # Which quantity `iv_rank` holds, exactly as on IvRankDetail below. The
+    # STOCK score's volatility rule carries the same figure the CONTRACT rule
+    # does, and only the contract half was converted in the first pass -- so
+    # scoreDetailText printed "IV Rank 45" for a 45% ABSOLUTE IV on every
+    # default-path scan, which is the literal defect statement of
+    # PHASE-A-NULL-IVRANK-2026-09-06. stock_scorer._rule_vol has emitted the
+    # basis in its detail dict since that change; this is the field that lets
+    # it reach the wire instead of being dropped by _safe(VolDetail, ...).
+    iv_basis: Literal["rank", "absolute", "none"] = "absolute"
     reason:  str   | None = None
 
 
@@ -598,20 +607,43 @@ class ScanRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _seed_iv_abs_threshold(self) -> "ScanRequest":
+    def _seed_pre_split_iv_knobs(self) -> "ScanRequest":
         """A pre-split request means its single knob for the chains it actually saw.
 
-        Before the split one threshold was applied to whichever figure was in
-        hand, and on most chains that figure is the ABSOLUTE one -- so a body
-        that names only `iv_rank_threshold` was, in practice, setting the
-        absolute cut-off. Seeding from it preserves that intent; falling back to
-        the class default would silently overrule a user who moved the knob.
+        Before PHASE-A-SPREAD-BASIS/NULL-IVRANK-2026-09-06 one threshold was
+        applied to whichever figure was in hand, and on most chains that figure
+        is the ABSOLUTE one -- so a body naming only the rank knob was, in
+        practice, setting the absolute cut-off. Seeding preserves that intent;
+        falling back to the class default silently overrules a user who moved it.
 
-        Every current client sends the field explicitly, so this fires only for
-        request bodies persisted before the split.
+        `iv_abs_threshold` doubles as the PRE-SPLIT MARKER for this body. Every
+        current client sends it (the frontend type makes it required), so its
+        absence means the body was built before the split -- which matters
+        because the second knob cannot be tested for absence on its own:
+        `overrides` is a SPARSE dict, so a current client that edited only the
+        Step-3 "IV rank pass max" row legitimately sends `iv_rank_pass_max` with
+        no `iv_abs_pass_max`, and seeding that would apply a ceiling the user
+        never asked for. Gating on the marker keeps the seeding to bodies that
+        genuinely predate the split.
+
+        Why it is needed at all: a schedule entry persists a fully resolved
+        request server-side (schemas/scan_schedule.py) and rewrites it only when
+        the profile behind it is re-saved, so pre-split bodies keep running
+        unattended. `stock_scorer._rule_vol` reads `iv_abs_pass_max` whenever the
+        basis is not 'rank', and the two keys deliberately do not leak across
+        bases -- so a stored `iv_rank_pass_max` is simply inert on most chains.
         """
-        if self.iv_abs_threshold is None:
-            self.iv_abs_threshold = self.iv_rank_threshold
+        if self.iv_abs_threshold is not None:
+            return self  # a current client; nothing to seed
+
+        self.iv_abs_threshold = self.iv_rank_threshold
+
+        ov = self.overrides
+        if isinstance(ov, dict):
+            rank_max = ov.get("iv_rank_pass_max")
+            if isinstance(rank_max, (int, float)) and not isinstance(rank_max, bool):
+                if ov.get("iv_abs_pass_max") is None:
+                    self.overrides = {**ov, "iv_abs_pass_max": rank_max}
         return self
 
 
@@ -638,9 +670,26 @@ class DteWindow(BaseModel):
     multiplier: float
 
 
+# Bumped when a change makes a PERSISTED ScanResult unreadable by the current
+# code -- i.e. when a stored blob's fields no longer mean what they say. 1 is
+# post-PHASE-A-NULL-IVRANK-2026-09-06; a stored result with no version at all
+# predates it and cannot be trusted (see ScanResult.schema_version).
+SCAN_RESULT_SCHEMA_VERSION = 1
+
+
 class ScanResult(BaseModel):
     scan_id: str
     timestamp: str
+    # Absent means PRE-SPLIT. A scan result is persisted to `scan_sessions`
+    # (routers/scan.py restore_from_db) and re-served by /scan/last and
+    # /api/tradecards, and one written before the split holds raw implied
+    # volatility x100 under `ivRank` -- the name of a percentile. Nothing on the
+    # record says which quantity it is, exactly as for the localStorage blobs
+    # round 1 addressed, and the basis is no more recoverable here. The frontend
+    # migration DROPS such a figure rather than relabelling it; the server does
+    # the same by refusing to restore the blob at all, because it is stale market
+    # data from before an upgrade and re-scanning costs nothing.
+    schema_version: Optional[int] = None
     candidates: list[TradeCardData]
     rejected: list[RejectedCandidate]
     state: ScanState = 'COMPLETED'

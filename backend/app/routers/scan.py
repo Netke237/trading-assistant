@@ -34,7 +34,7 @@ from app.schemas import (
     AlternativeContract, DteWindow, ScanSessionStatus,
     TrendDetail, PullbackDetail, TriggerDetail, EventDetail, VolDetail,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
-    SentimentData, FundamentalsOut,
+    SentimentData, FundamentalsOut, SCAN_RESULT_SCHEMA_VERSION,
 )
 from app.services.fundamentals_store import get_fundamentals, prefetch_universe as _prefetch_fundamentals
 from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
@@ -1075,7 +1075,14 @@ async def _upsert_session(
         ScanSession(
             id="current",
             status=status,
-            last_result_json=result.model_dump_json() if result else None,
+            # Stamped on the way out so a later restore can tell a blob this
+            # code wrote from one written before the IV basis split
+            # (PHASE-A-NULL-IVRANK-2026-09-06). Set here rather than at every
+            # construction site so no scan can be persisted unmarked.
+            last_result_json=(
+                result.model_copy(update={"schema_version": SCAN_RESULT_SCHEMA_VERSION}).model_dump_json()
+                if result else None
+            ),
             last_request_json=req.model_dump_json() if req else None,
         )
     )
@@ -1100,7 +1107,29 @@ async def restore_from_db() -> str | None:
         if row is None:
             return None
         if row.last_result_json:
-            _last_result = ScanResult.model_validate_json(row.last_result_json)
+            _restored = ScanResult.model_validate_json(row.last_result_json)
+            # A result stored before the IV basis split carries raw implied
+            # volatility x100 under `ivRank`, the name of a percentile, and
+            # nothing on the record says so. Serving it puts "IV rank 45" on the
+            # trade card for a 45% absolute IV -- the exact defect Phase A
+            # removes -- and the frontend cannot repair it either: its own
+            # migration only reaches localStorage, and StoreHydration re-persists
+            # whatever /scan/last returns at the CURRENT store version, so the
+            # bad figure would be stamped as migrated and never revisited.
+            #
+            # Dropped rather than relabelled, for the same reason
+            # ivBasis.stripLegacyIvFields drops: the basis is not recoverable,
+            # and guessing "absolute" would be right for most rows and silently
+            # wrong for the rest. The cost is one re-scan of data that was stale
+            # market data anyway (PHASE-A-NULL-IVRANK-2026-09-06).
+            if _restored.schema_version is None:
+                _log.warning(
+                    "Discarding the persisted scan result: written before the IV "
+                    "basis split, so its ivRank values have no recoverable basis. "
+                    "Run a scan to repopulate."
+                )
+            else:
+                _last_result = _restored
         if row.last_request_json:
             _last_request = ScanRequest.model_validate_json(row.last_request_json)
         _last_status = row.status

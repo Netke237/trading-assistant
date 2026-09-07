@@ -101,3 +101,47 @@ def test_an_explicit_zero_is_honoured_rather_than_read_as_absent():
     # `if self.iv_abs_threshold is None`, not a truthiness test: 0 means "never
     # sell premium on an absolute reading", which is a real setting.
     assert _req(iv_rank_threshold=70.0, iv_abs_threshold=0.0).iv_abs_threshold == 0.0
+
+
+# ── The pre-split marker also gates the SECOND knob Phase A moved ─────────────
+#
+# Round 3 finding 3. `overrides` is a SPARSE dict, so `iv_abs_pass_max` being
+# absent is perfectly normal for a current client that edited only the Step-3
+# "IV rank pass max" row — seeding on that alone would apply a ceiling the user
+# never set. `iv_abs_threshold`'s absence is the unambiguous marker (the
+# frontend type makes it required), so both seedings key off it.
+
+def test_a_pre_split_body_gets_its_stale_ceiling_seeded():
+    r = _req(iv_rank_threshold=70.0, overrides={"iv_rank_pass_max": 20})
+    assert r.overrides["iv_abs_pass_max"] == 20, (
+        "stock_scorer._rule_vol reads iv_abs_pass_max whenever the basis is not "
+        "'rank', and the two keys deliberately do not leak — so without this the "
+        "user's own ceiling is simply inert on every chain without a rank source"
+    )
+    # The rank key is kept: it is still the right ceiling on a chain that HAS a
+    # rank source, and this migration is not a rename.
+    assert r.overrides["iv_rank_pass_max"] == 20
+
+
+def test_a_current_client_editing_only_the_rank_row_is_left_alone():
+    # THE case that makes blanket seeding wrong. iv_abs_threshold present means
+    # a post-split client, and it deliberately set a percentile ceiling only.
+    r = _req(iv_abs_threshold=50.0, overrides={"iv_rank_pass_max": 20})
+    assert "iv_abs_pass_max" not in r.overrides
+
+
+def test_seeding_never_overwrites_an_absolute_ceiling_already_present():
+    r = _req(overrides={"iv_rank_pass_max": 20, "iv_abs_pass_max": 44})
+    assert r.overrides["iv_abs_pass_max"] == 44
+
+
+def test_a_pre_split_body_with_no_ceiling_override_gains_no_key():
+    r = _req(overrides={"trend_weight": 30})
+    assert "iv_abs_pass_max" not in r.overrides
+
+
+def test_a_bool_is_not_mistaken_for_a_ceiling():
+    # bool is a subclass of int in Python; True as a ceiling would score every
+    # absolute IV above 1 as CAUTION.
+    r = _req(overrides={"iv_rank_pass_max": True})
+    assert "iv_abs_pass_max" not in r.overrides

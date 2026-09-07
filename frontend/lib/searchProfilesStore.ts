@@ -88,21 +88,51 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
           // chains they actually see, which are the absolute ones. Reading the
           // live setting here would let a later, unrelated change to Settings
           // rewrite what a saved profile means.
+          //
+          // PHASE A MOVED TWO KNOBS, and a profile freezes BOTH. The second is
+          // the Step-3 execution parameter `iv_rank_pass_max`, captured into
+          // `scanOverrides` by searchProfileSnapshot.ts:23. Post-split the
+          // scorer reads `iv_abs_pass_max` whenever the basis is not 'rank'
+          // (stock_scorer._rule_vol), and the two keys deliberately do not leak
+          // across bases — so a stored `iv_rank_pass_max` is simply INERT on
+          // every chain without a rank source, i.e. most of them. That is round
+          // 1's finding (c) surviving in stored form: the user's own ceiling of
+          // 20 against a 30% absolute IV yields PASS 90 where they asked for
+          // CAUTION 55, a 35-point swing on a weighted component.
+          //
+          // Same seeding rule as the spread knob below, for the same reason.
+          const seedOverrides = (raw: unknown): unknown => {
+            if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw;
+            const ov = raw as Record<string, unknown>;
+            if (typeof ov.iv_rank_pass_max !== 'number') return raw;
+            if (ov.iv_abs_pass_max !== undefined) return raw;
+            return { ...ov, iv_abs_pass_max: ov.iv_rank_pass_max };
+          };
+
           const profiles = Array.isArray(st.profiles) ? st.profiles : [];
           st.profiles = profiles.map((profile) => {
             if (typeof profile !== 'object' || profile === null) return profile;
             const p = profile as Record<string, unknown>;
-            const scanSettings = p.scanSettings;
-            if (typeof scanSettings !== 'object' || scanSettings === null) return profile;
+
+            // Applies to STOCKS profiles too — the Step-3 panel is shared, so
+            // `scanOverrides` is frozen whatever the mode. Done before the
+            // spreads block, which returns early on a profile without one.
+            const overrides = seedOverrides(p.scanOverrides);
+            const withOverrides = overrides === p.scanOverrides
+              ? p
+              : { ...p, scanOverrides: overrides };
+
+            const scanSettings = withOverrides.scanSettings;
+            if (typeof scanSettings !== 'object' || scanSettings === null) return withOverrides;
             const ss = scanSettings as Record<string, unknown>;
             const spreads = ss.spreads;
             // Stocks profiles carry no `spreads` block at all — leave them be
             // rather than inventing one.
-            if (typeof spreads !== 'object' || spreads === null) return profile;
+            if (typeof spreads !== 'object' || spreads === null) return withOverrides;
             const sp = spreads as Record<string, unknown>;
-            if (sp.ivAbsThreshold !== undefined) return profile;
+            if (sp.ivAbsThreshold !== undefined) return withOverrides;
             return {
-              ...p,
+              ...withOverrides,
               scanSettings: {
                 ...ss,
                 spreads: {

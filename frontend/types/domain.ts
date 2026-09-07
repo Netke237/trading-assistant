@@ -49,6 +49,11 @@ export interface EventDetail {
 }
 export interface VolDetail {
   iv_rank?: number;
+  /** Which quantity `iv_rank` holds — the STOCK score's volatility rule carries
+   *  the same ambiguous figure the contract rule does. Absent on a response
+   *  predating the split, which carried an absolute level, so 'absolute' is the
+   *  default. See lib/ivBasis.ts. */
+  iv_basis?: 'rank' | 'absolute' | 'none';
   reason?:  string;
 }
 
