@@ -51,6 +51,11 @@ export interface AlertReason {
   direction?: Direction;
   contract?: string;
   note?: string;
+  /** PREMIUM_STOP only — the fraction this fire actually used, so the Alerts
+   *  page can label the row with the threshold that fired rather than whatever
+   *  the position resolves to when the row is later looked at
+   *  (ALERT-THRESHOLD-STAMP-2026-09-05). */
+  premiumStopPct?: number;
 }
 
 export interface ScanOptions {
@@ -281,6 +286,14 @@ export function scanPortfolio(
         // -- 2.6816 from the backend, 2.68164 from here -- decided by nothing
         // more than which engine happened to fire first.
         referenceValue: Math.round(premiumStopPrice * 10000) / 10000,
+        // The RESOLVED fraction, the same one the comparison above used and
+        // the same one the backend logs as `thresholdPct` -- never the global,
+        // which would misreport why a pinned position fired
+        // (ALERT-THRESHOLD-STAMP-2026-09-05). Unrounded: the Alerts page
+        // trims it for display through premiumStopPctLabel, and a
+        // server-derived fraction like 0.7554 must not lose precision on the
+        // way into storage the way the label's old Math.round did.
+        premiumStopPct: resolvedPremiumStopPct,
         direction: p.direction,
         contract: p.contract,
       });

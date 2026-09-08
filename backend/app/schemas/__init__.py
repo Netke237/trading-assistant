@@ -357,6 +357,17 @@ class AlertItem(BaseModel):
     referenceValue: Optional[float] = None
     direction: Optional[str] = None
     contract: Optional[str] = None
+    # PREMIUM_STOP only -- the premium-stop fraction this alert actually fired
+    # at (ALERT-THRESHOLD-STAMP-2026-09-05). `referenceValue` already carries
+    # the threshold PRICE; this is the percentage beside it, and it is the
+    # RESOLVED per-position value, never the global. Matches the frontend
+    # engine's `ToastItem.premiumStopPct` and the `thresholdPct` this generator
+    # already writes to the event log, so a row cannot mean one thing depending
+    # on which engine produced it.
+    #
+    # None on every other alert type, and on any PREMIUM_STOP predating this
+    # field -- the Alerts page falls back to resolving it live for those.
+    premiumStopPct: Optional[float] = None
 
 
 # ── Events ───────────────────────────────────────────────────────────────────

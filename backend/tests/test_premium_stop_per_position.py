@@ -870,3 +870,60 @@ def test_order_schemas_still_accept_a_real_limit_and_an_omitted_one():
         broker="tradier_paper", symbol="AAPL", action="BUY", effect="OPEN",
         quantity=1, order_type="MKT",
     ).limit_price is None
+
+
+# ── ALERT-THRESHOLD-STAMP-2026-09-05 ─────────────────────────────────────────
+#
+# The alert now carries the fraction it fired at, not just the threshold price.
+# Mirrors the frontend engine's ToastItem.premiumStopPct (see
+# frontend/lib/__tests__/alertEngine.test.ts) -- the two engines write the same
+# field so a row cannot mean one thing depending on which produced it.
+
+@pytest.mark.asyncio
+async def test_alert_carries_the_resolved_pct_for_a_pinned_position():
+    """The stamp must be the position's own fraction, never the global.
+
+    Distinct from test_logged_threshold_pct_* above: those assert the AUDIT LOG
+    payload. This one asserts the field on the alert that actually reaches a
+    client, which is what the Alerts page labels the row from.
+    """
+    alerts = await _alerts(
+        _position(premium_stop_pct=0.30),
+        {"AAPL": 180.0}, {"AAPL|190|2026-05-16|C": 3.40},
+    )
+    prem = [a for a in alerts if a.alertType == "PREMIUM_STOP"][0]
+    assert prem.premiumStopPct == pytest.approx(0.30)
+
+
+@pytest.mark.asyncio
+async def test_alert_carries_the_global_pct_for_an_inheriting_position():
+    alerts = await _alerts(
+        _position(premium_stop_pct=None),
+        {"AAPL": 180.0}, {"AAPL|190|2026-05-16|C": 1.90},
+    )
+    prem = [a for a in alerts if a.alertType == "PREMIUM_STOP"][0]
+    assert prem.premiumStopPct == pytest.approx(PREMIUM_STOP_PCT_FALLBACK)
+
+
+@pytest.mark.asyncio
+async def test_the_stamped_pct_and_the_threshold_price_describe_one_stop():
+    """A row whose two halves disagreed would describe two different stops."""
+    alerts = await _alerts(
+        _position(premium_stop_pct=0.30),
+        {"AAPL": 180.0}, {"AAPL|190|2026-05-16|C": 3.40},
+    )
+    prem = [a for a in alerts if a.alertType == "PREMIUM_STOP"][0]
+    assert prem.referenceValue == pytest.approx(5.00 * (1 - prem.premiumStopPct))
+
+
+@pytest.mark.asyncio
+async def test_no_other_alert_type_carries_a_premium_stop_pct():
+    """Only PREMIUM_STOP has a threshold percentage; a stamp anywhere else is a
+    number with no meaning."""
+    alerts = await _alerts(
+        _position(premium_stop_pct=0.30),
+        {"AAPL": 180.0}, {"AAPL|190|2026-05-16|C": 3.40},
+    )
+    for a in alerts:
+        if a.alertType != "PREMIUM_STOP":
+            assert a.premiumStopPct is None, a.alertType
