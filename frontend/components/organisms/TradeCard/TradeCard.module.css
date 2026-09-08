@@ -11,6 +11,29 @@
   border-radius: var(--radius-lg);
 }
 
+/* SymbolHeader plus the card-level "edited" indicator. SymbolHeader's own row
+   wraps, so it takes the free space and the badge stays pinned right. */
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* EDITED-FLAG-2026-09-04. Caution-tinted rather than reject: departing from
+   the plan is a thing to notice, not a failure. Same color-mix tint recipe the
+   status chips use, so it reads as part of the same system in both themes. */
+.editedBadge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--caution) 40%, var(--bg-surface));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--caution) 12%, var(--bg-surface));
+  white-space: nowrap;
+}
+
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

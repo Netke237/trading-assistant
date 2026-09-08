@@ -3674,3 +3674,116 @@ describe('the race gates, mutation-pinned', () => {
     expect(screen.queryByText(/unaffected by the premium stop/)).not.toBeInTheDocument();
   });
 });
+
+// ── EDITED-FLAG-2026-09-04 — the card-level "edited" indicator ──────────────
+//
+// The rule itself is unit-tested in lib/__tests__/tradeCardEdits.test.ts, where
+// the mergePlan regression is pinned against a sabotaged value-only rule. These
+// tests pin the WIRING: that the card feeds that rule its real overlay, its
+// real plan, and a record of edits that patch() and revert() both maintain.
+describe('TradeCard — the card-level edited indicator', () => {
+  beforeEach(() => localStorage.clear());
+
+  const badge = () => screen.queryByText('Edited');
+  // The badge's OWN tooltip, by its own opening words — `getByRole('tooltip')`
+  // is ambiguous the moment the ladder is expanded and the card's other
+  // tooltips mount.
+  const badgeTip = () => screen.getByText(/^Edited on this card/);
+  const typeInto = (label: string, v: string) => {
+    fireEvent.click(screen.getByLabelText(`Edit ${label}`));
+    const input = screen.getByLabelText(`Edit ${label}`) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: v } });
+    fireEvent.blur(input);
+  };
+
+  it('does not render on a card nobody has touched', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('appears once a field is edited, and names that field', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    typeInto('Contracts', '3');
+    expect(badge()).toBeInTheDocument();
+    expect(badgeTip()).toHaveTextContent('Contracts');
+  });
+
+  it('names several edited fields at once, in card order', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    expandLadder();
+    typeInto('Premium stop', '0.9');
+    typeInto('Limit', '2.1');
+    typeInto('Contracts', '4');
+    expect(badgeTip()).toHaveTextContent('Entry limit, Contracts, Premium stop');
+  });
+
+  it('does NOT appear when mergePlan moves the plan under an untouched card', () => {
+    // THE REGRESSION, through the card. Same contract, recomputed exit — the
+    // window the contract-change reset does not cover. Every one of these four
+    // fields lacks a follow-the-seed effect, so the overlay keeps its old seed
+    // while `data` moves; a value-only indicator would call this "Edited".
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    const merged: TradeCardData = {
+      ...mockTradeCard,
+      entry: { ...mockTradeCard.entry, limit: 3.4, maxFill: 3.6 },
+      exit: {
+        ...mockTradeCard.exit,
+        premiumStop: 0.8,
+        invalidation: 171.2,
+        timeStopDays: 21,
+        targets: [{ ...mockTradeCard.exit.targets[0], targetPrice: 211.5, stockPrice: 211.5 }],
+      },
+    };
+    rerender(<TradeCard data={merged} />);
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('clears when the user clears the input back to inheriting the plan', () => {
+    // CLEAR-TO-INHERIT-2026-09-05's gesture, which this badge exists to make
+    // discoverable: an empty field means "follow the plan again".
+    render(<TradeCard data={mockTradeCard} />);
+    expandLadder();
+    typeInto('Premium stop', '0.9');
+    expect(badge()).toBeInTheDocument();
+    typeInto('Premium stop', '');
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('clears when the user retypes the plan value by hand', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    typeInto('Contracts', '3');
+    expect(badge()).toBeInTheDocument();
+    typeInto('Contracts', '1');
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('appears on mount for an edit the parent restored from its cache', () => {
+    render(<TradeCard data={mockTradeCard} initialEntryLimit={2.71} />);
+    expect(badge()).toBeInTheDocument();
+    expect(badgeTip()).toHaveTextContent('Entry limit');
+  });
+
+  it('does not appear for a restored value that matches the plan anyway', () => {
+    // Restored-and-identical is inheriting, whatever the cache says.
+    render(<TradeCard data={mockTradeCard} initialEntryLimit={mockTradeCard.entry.limit} />);
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('resets with the card when the user navigates to another candidate', () => {
+    const { rerender } = render(<TradeCard data={mockTradeCard} />);
+    typeInto('Contracts', '3');
+    expect(badge()).toBeInTheDocument();
+    const other: TradeCardData = { ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT|400|2026-05-16|C' };
+    rerender(<TradeCard data={other} />);
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('measures Contracts against the size the parent seeded, not a hardcoded 1', () => {
+    render(<TradeCard data={mockTradeCard} contracts={4} />);
+    expect(badge()).not.toBeInTheDocument();
+    typeInto('Contracts', '4');
+    expect(badge()).not.toBeInTheDocument();
+    typeInto('Contracts', '5');
+    expect(badge()).toBeInTheDocument();
+  });
+});

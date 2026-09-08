@@ -11,6 +11,7 @@ import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthC
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
 import BarrierRaceCard from '@/components/organisms/BarrierRaceCard';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { Tooltip } from '@/components/atoms/Tooltip';
 import { LabeledStatusBadge } from '@/components/molecules/LabeledStatusBadge';
 import { capitalAtRisk, maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw, stopPremiumRisk, formatStopPremiumRisk, formatStopLossHeadline, formatStopLossBadge, stopLossIsTotalOnPrintedFigures } from '@/lib/risk';
 import { resolveIv, formatIv } from '@/lib/ivBasis';
@@ -22,6 +23,15 @@ import { resolveParamsHorizon, presetByKey } from '@/lib/horizonPresets';
 import { premiumStopPctFromDollars, money } from '@/lib/barrierRace';
 import { premiumStopDollarBounds } from '@/lib/premiumStop';
 import { horizonFieldsFrom } from '@/lib/tradeCardOverride';
+import {
+  type EditOverlay,
+  type EditedFields,
+  FIELD_LABELS,
+  editedFields as editedFieldsAgainstPlan,
+  markEdited,
+  planOverlay,
+  restoredEdits,
+} from '@/lib/tradeCardEdits';
 import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride, StopCostOut } from '@/types/domain';
 import {
   triggerDetailText,
@@ -37,15 +47,11 @@ import {
 } from '@/lib/scoreDetailText';
 import styles from './TradeCard.module.css';
 
-interface EditOverlay {
-  entryLimit: number;
-  maxFill: number;
-  invalidation: number;
-  premiumStop: number;
-  timeStopDays: number;
-  targets: number[];
-  contracts: number;
-}
+// `EditOverlay` now lives in lib/tradeCardEdits.ts alongside the card-level
+// "edited" comparison that has to agree with it field-for-field
+// (EDITED-FLAG-2026-09-04). Re-exported here because the type is part of this
+// component's public surface — `onEditsChange` hands one to the parent, and
+// the re-export at the bottom of this file keeps that import path working.
 
 /** Which overlay fields the user has actually EDITED, as opposed to fields
  *  still carrying the seed `defaultOverlay` put there.
@@ -455,6 +461,23 @@ export function TradeCard({
     invalidation: initialInvalidation != null,
     premiumStop: initialPremiumStop != null,
   });
+  /** The card-level "edited" indicator's half of the same question
+   *  (EDITED-FLAG-2026-09-04): which overlay fields has the user changed?
+   *
+   *  Kept SEPARATE from `touchedRef` rather than replacing it, on purpose.
+   *  `touchedRef` covers only the three fields a send path reads, is reported
+   *  to the parent, and is read SYNCHRONOUSLY inside effects and send handlers
+   *  that do not depend on it — turning it into state would hand those reads a
+   *  stale closure, which is precisely the failure mode this file has been
+   *  bitten by before. This one is display-only, so it must be state (a ref
+   *  would not re-render the badge) and it covers every overlay field. The
+   *  three they share are written in the same statements below, so they cannot
+   *  drift apart. */
+  const [edited, setEdited] = useState<EditedFields>(() => restoredEdits({
+    entryLimit: initialEntryLimit,
+    invalidation: initialInvalidation,
+    premiumStop: initialPremiumStop,
+  }));
   // Feature 5 — pre-trade max-loss override, seeded from the page-level cache
   // (keyed by symbol there; this local state just mirrors whatever the parent
   // resolved for the CURRENT candidate). Reset alongside overlay/structuralStop/
@@ -622,6 +645,13 @@ export function TradeCard({
         invalidation: initialInvalidation != null,
         premiumStop: initialPremiumStop != null,
       };
+      // Same reset, same basis — a new candidate inherits the incoming card's
+      // plan everywhere except the fields the parent restored an edit for.
+      setEdited(restoredEdits({
+        entryLimit: initialEntryLimit,
+        invalidation: initialInvalidation,
+        premiumStop: initialPremiumStop,
+      }));
       setOverlay({
         ...defaultOverlay(data),
         contracts: initialContracts,
@@ -1465,6 +1495,11 @@ export function TradeCard({
           touchedRef.current = { ...touchedRef.current, [k]: true };
         }
       }
+      // The card-level indicator's record, folded from the SAME partial under
+      // the same "only a CHANGE counts" rule (markEdited), just across every
+      // overlay field instead of the three above. Written here, next to the
+      // `touchedRef` loop, so the two cannot be updated apart.
+      setEdited((prev) => markEdited(prev, partial, overlay));
       const next = { ...overlay, ...partial };
       setOverlay(next);
       onEditsChange?.(next, { touched: touchedRef.current });
@@ -1500,11 +1535,25 @@ export function TradeCard({
         : data.exit.premiumStop;
       if (!touchedRef.current[key] && overlay[key] === seed) return;
       touchedRef.current = { ...touchedRef.current, [key]: false };
+      // Clearing the input means "inherit the plan again", so it clears the
+      // card-level flag too — this is the gesture EDITED-FLAG's indicator
+      // exists to make discoverable (CLEAR-TO-INHERIT-2026-09-05).
+      setEdited((prev) => (prev[key] ? { ...prev, [key]: false } : prev));
       const next = { ...overlay, [key]: seed };
       setOverlay(next);
       onEditsChange?.(next, { touched: touchedRef.current });
     },
     [overlay, onEditsChange, data.entry.limit, data.exit.invalidation, data.exit.premiumStop],
+  );
+
+  /** Card-level "edited" indicator (EDITED-FLAG-2026-09-04). Names the fields
+   *  the user has changed AND left differing from the plan's CURRENT value —
+   *  see lib/tradeCardEdits.ts for why both halves are required. Empty means
+   *  the card is inheriting everywhere and the badge does not render. */
+  const editedLabels = useMemo(
+    () => editedFieldsAgainstPlan(overlay, planOverlay(data, initialContracts), edited)
+      .map((f) => FIELD_LABELS[f]),
+    [overlay, data, initialContracts, edited],
   );
 
   const displayRecId = useMemo(() => propRecId ?? generateRecId(), [propRecId]);
@@ -1790,15 +1839,34 @@ export function TradeCard({
     <div className={styles.wrap}>
       {/* 1. Header */}
       <div className={styles.headerCard}>
-        <SymbolHeader
-          ticker={data.symbol}
-          company={data.company}
-          price={data.price}
-          direction={data.direction}
-          status={data.status}
-          size={24}
-          showChartButton
-        />
+        <div className={styles.headerRow}>
+          <SymbolHeader
+            ticker={data.symbol}
+            company={data.company}
+            price={data.price}
+            direction={data.direction}
+            status={data.status}
+            size={24}
+            showChartButton
+          />
+          {/* Card-level "edited" indicator (EDITED-FLAG-2026-09-04). A
+              READOUT, not a control: the schematic governs this card's
+              layout, and nothing here is clickable. It states only THAT the
+              card departs from the plan and WHICH fields — deliberately no
+              before/after numbers, which would be a second place for the
+              card's figures to disagree with the rest of it. */}
+          {editedLabels.length > 0 && (
+            <Tooltip
+              text={`Edited on this card, so it no longer matches the scan's plan: ${editedLabels.join(', ')}. Clearing a field's input restores the planned value.`}
+              align="right"
+              position="bottom"
+            >
+              <span className={styles.editedBadge}>
+                <Text size={11} weight={500} tone="caution">Edited</Text>
+              </span>
+            </Tooltip>
+          )}
+        </div>
       </div>
 
       <div className={styles.grid}>
