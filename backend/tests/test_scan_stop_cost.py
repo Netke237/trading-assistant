@@ -232,34 +232,59 @@ def test_verdict_and_percentage_agree_with_the_horizon_line(client):
         assert status == expected, f"{pct}% graded {status} against a {pass_max * 100:.0f}% line"
 
 
-def test_a_decimal_convention_iv_is_refused_not_repriced_at_it(client):
-    """`iv` is ABSOLUTE volatility in PERCENT everywhere in this codebase. A
-    vendor sending the decimal convention (0.35 for 35%) repriced at 0.35% vol
-    reports almost the whole premium as lost at any stop -- a confident,
-    plausible, badly wrong CAUTION. The structural-stop ENDPOINT refuses that
-    input outright (gt=1.0); a scan cannot 422, so it must drop the number and
-    invert the mid instead.
+@pytest.mark.parametrize("planted_iv", [0.35, 25.0, 90.0, 400.0])
+def test_contract_iv_never_moves_the_gate(client, planted_iv):
+    """The gate ALWAYS inverts this contract's own mid. No value of
+    `contract["iv"]` may move the answer.
+
+    This replaces two earlier tests that pinned the opposite, one of which
+    asserted an in-band `iv` MUST change the result. That was the defect, not
+    the contract. `contract["iv"]` is not reliably this contract's volatility:
+    when the chain carries no vendor IV, the ATM fill in `_process_symbol`
+    (~scan.py:640) broadcasts the ATM's inverted vol into EVERY strike lacking
+    one, so a 20-delta wing is handed the ATM's number. It is in-band, so no
+    range guard can catch it, and it flattens exactly the smile this gate
+    exists to read.
+
+    The invariant that makes the gate coherent is arithmetic, not a range:
+    `loss = premium - BS(stop, K, T, r, iv)` only subtracts like from like
+    when `iv` reproduces the very mid `premium` came from. Inverting that mid
+    guarantees it by construction; any supplied number can only break it.
+
+    The parameters span the decimal-convention slip (0.35), a plausible ATM
+    broadcast (25.0), a high but in-band reading (90.0) and an absurd one
+    (400.0). All four must be inert.
     """
-    suspect = _candidates(client, strike_mult=0.70, iv=0.35)[0][0]
-    honest = _candidates(client, strike_mult=0.70)[0][0]
-
-    assert suspect["stopCostPct"] is not None, "the gate must still answer, not go dark"
-    # Identical to the no-vendor-IV path: the suspect number was dropped, not used.
-    assert suspect["stopCostPct"] == pytest.approx(honest["stopCostPct"])
-    assert suspect["stopCostStatus"] == honest["stopCostStatus"]
-    # And positively: 0.35% vol on a deep-ITM call would price it at nearly
-    # pure intrinsic and report a large loss share. It must not read that way.
-    assert suspect["stopCostPct"] < 60.0, (
-        "priced at 0.35% vol -- the decimal convention was taken at face value"
-    )
-
-
-def test_a_plausible_percent_iv_is_still_used(client):
-    """The guard must not throw away real readings. A vendor IV well inside the
-    band has to change the answer, or the band is just a disguised `iv=None`."""
-    high = _candidates(client, strike_mult=0.70, iv=90.0)[0][0]
+    planted = _candidates(client, strike_mult=0.70, iv=planted_iv)[0][0]
     solved = _candidates(client, strike_mult=0.70)[0][0]
-    assert high["stopCostPct"] is not None
-    assert high["stopCostPct"] != pytest.approx(solved["stopCostPct"]), (
-        "an in-band vendor IV was ignored -- the guard is dropping good input too"
+
+    assert planted["stopCostPct"] is not None, "the gate must still answer, not go dark"
+    assert planted["stopCostPct"] == pytest.approx(solved["stopCostPct"]), (
+        f"contract['iv']={planted_iv} moved the gate -- it is being used instead of "
+        "the contract's own mid, so a broadcast ATM vol can misprice this row"
     )
+    assert planted["stopCostStatus"] == solved["stopCostStatus"]
+
+
+def test_supplying_an_iv_would_have_changed_the_answer(client):
+    """Proves the test above is not vacuous.
+
+    If `compute_stop_cost` happened to ignore `iv_pct`, every assertion above
+    would pass while the scan still shipped the bug. This pins that the
+    argument IS load-bearing at the unit boundary -- so the scan's choice to
+    pass None is a real decision, and a future caller reinstating it would be
+    reintroducing a measurable error rather than a no-op.
+
+    The figures are the reviewed scenario: 200/210C, 30 DTE, $4.41 mid, stop
+    $192, Swing. The ATM's 25% reads 81% CAUTION; the contract's own mid reads
+    50% PASS -- 31 points and an inverted verdict, on the sorted column.
+    """
+    common = dict(stop_price=192.00, stock_price=200.0, strike=210.0, dte=30,
+                  premium=4.41, is_call=True, horizon_preset="Swing")
+    with_atm_vol = compute_stop_cost(**common, iv_pct=25.0)
+    from_own_mid = compute_stop_cost(**common, iv_pct=None)
+
+    assert with_atm_vol is not None and from_own_mid is not None
+    assert round(with_atm_vol.fraction * 100, 1) == pytest.approx(81.0, abs=0.5)
+    assert round(from_own_mid.fraction * 100, 1) == pytest.approx(50.0, abs=0.5)
+    assert with_atm_vol.status == "CAUTION" and from_own_mid.status == "PASS"

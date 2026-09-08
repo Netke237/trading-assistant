@@ -850,24 +850,6 @@ async def _process_symbol(
         # zero-distance stop as a real reading. Refuse instead: "not computed"
         # is an honest answer and a PASS is not. Same guard, same reason, as
         # the exit-plan endpoint's (routers/contracts.py).
-        # `iv` is ABSOLUTE volatility in PERCENT (0-100) everywhere in this
-        # codebase -- market.py writes round(iv * 100, 1) and so does the
-        # Black-Scholes inversion above. A vendor sending the DECIMAL
-        # convention (0.35 for 35%) would otherwise be repriced at 0.35% vol,
-        # which reports almost the whole premium as lost at any stop: a
-        # confident, plausible, badly wrong CAUTION on every affected row.
-        # The structural-stop endpoint refuses that input outright (its field
-        # is gt=1.0, le=500.0); a scan cannot 422, so it drops the suspect
-        # number instead and lets compute_stop_cost invert the mid, which
-        # cannot disagree with the quote it came from.
-        _scan_iv_pct = opt_float(contract.get("iv"))
-        if _scan_iv_pct is not None and not (1.0 < _scan_iv_pct <= 500.0):
-            _log.warning(
-                "%s: ignoring out-of-band contract IV %r (expected absolute percent 1-500); "
-                "inverting the mid instead", symbol, _scan_iv_pct,
-            )
-            _scan_iv_pct = None
-
         _scan_atr = _atr(candles, 14)
         if _scan_atr > 0:
             _scan_stop = compute_final_stop(
@@ -883,13 +865,29 @@ async def _process_symbol(
                 dte=int(contract.get("dte", 30)),
                 premium=premium,
                 is_call=(direction == "Bullish"),
-                # The contract's OWN absolute IV when the chain carried one,
-                # else None, which makes compute_stop_cost invert the mid with
-                # the bracketed solver. Never `iv_rank`: that variable holds a
-                # PERCENTILE whenever iv_basis == "rank", and feeding a
-                # percentile to a function documented as taking absolute
-                # volatility is exactly the conflation Phase A existed to end.
-                iv_pct=_scan_iv_pct,
+                # ALWAYS None -- invert this contract's OWN mid with the
+                # bracketed solver, which is compute_stop_cost's normal basis.
+                #
+                # Passing `contract["iv"]` here was WRONG, and confidently so.
+                # The gate is `loss = premium - BS(stop, K, T, r, iv)`, and
+                # that subtraction is only coherent when the vol reproduces
+                # the very mid `premium` came from. `contract["iv"]` does not
+                # when the ATM fill above (~line 640) fired: on a chain with
+                # no vendor IV, that loop broadcasts the ATM's inverted vol
+                # into EVERY strike lacking one, so a 20-delta wing is handed
+                # the ATM's volatility. It is in-band, so no range guard can
+                # catch it, and it flattens the smile the gate exists to read.
+                # Measured on a 200/210C, 30 DTE, $4.41 mid, stop $192: the
+                # ATM's 25% priced 81% CAUTION where the contract's own mid
+                # gives 50% PASS -- 31 points and an inverted verdict, on the
+                # column the table sorts by. compute_stop_cost's own docstring
+                # names the hazard: "a caller-supplied iv_pct need not
+                # reproduce the contract's own mid".
+                #
+                # Never `iv_rank` either: it holds a PERCENTILE whenever
+                # iv_basis == "rank", and feeding a percentile to a function
+                # taking absolute volatility is the conflation Phase A ended.
+                iv_pct=None,
                 horizon_preset=horizon_preset,
             )
             if _scan_cost is not None:
