@@ -16,7 +16,7 @@ import {
   stopLossIsTotalOnPrintedFigures,
   formatStopLossPct,
 } from '@/lib/risk';
-import type { PortfolioPosition, RiskLimits, TradeCardData, ExitPlan } from '@/types/domain';
+import type { PortfolioPosition, RiskLimits, TradeCardData, ExitPlan, StopCostOut } from '@/types/domain';
 
 const DEFAULT_LIMITS: RiskLimits = {
   maxSingleTradeExposurePct: 0.05,
@@ -357,610 +357,191 @@ describe('formatRecommendedContractSizeRaw', () => {
   });
 });
 
-describe('stopPremiumRisk', () => {
-  // The CVX contract that produced this gate: stock $201.86, swing-low stop
-  // $185.87, delta 0.30, premium $5.20. Uncapped loss 15.99 * 0.30 = $4.797,
-  // which is 92% of the premium -- the stop works, but only just.
-  it('reports the real fraction of premium a stop costs, with every input', () => {
-    const r = stopPremiumRisk(185.87, 201.86, 0.30, 5.20)!;
-    expect(r.stockMove).toBeCloseTo(15.99, 2);
-    expect(r.delta).toBe(0.30);
-    expect(r.rawLoss).toBeCloseTo(4.797, 3);
-    expect(r.loss).toBeCloseTo(4.797, 3);
-    expect(r.fraction).toBeCloseTo(0.9225, 4);
-    expect(r.capped).toBe(false);
+/* ── Stop-vs-premium gate (B2) ─────────────────────────────────────────────
+ *
+ * `stopPremiumRisk` is a PRESENTER now. It renders the block the endpoint that
+ * produced the stop already priced with Black-Scholes at today's date; it does
+ * no arithmetic of its own. The delta-linear estimator these tests used to
+ * exercise — `|stop − spot| × |delta|`, capped at the premium — is deleted, so
+ * the cases that pinned its rounding, its cap and its threshold handling are
+ * gone with it rather than rewritten against a function that no longer does
+ * any of those things. What survives is what still has meaning: that the
+ * printed figures agree with each other and with the verdict.
+ *
+ * Spec: docs/superpowers/plans/2026-09-02-gate-basis-spec.md §3, tests 1-2.
+ */
+
+/** The spec's own worked example (§3): the CVX contract that produced this
+ *  gate, priced at its swing-low stop. Server-shaped — every figure per share
+ *  and quantized to cents, as `compute_stop_cost` emits them. */
+function block(over: Partial<StopCostOut> = {}): StopCostOut {
+  return {
+    premium:         5.20,
+    valueAtStop:     1.49,
+    lossDollar:      3.71,
+    stopPrice:       185.87,
+    fraction:        0.71,      // round(3.71 / 5.20, 2)
+    status:          'CAUTION', // 0.71 >= the Swing line of 0.70
+    passMaxFraction: 0.70,
+    basis:           'bs_today',
+    ...over,
+  };
+}
+
+describe('stopPremiumRisk — the presenter (spec test 1)', () => {
+  it('renders a StopCostOut unchanged', () => {
+    const r = stopPremiumRisk(block())!;
+    expect(r.premium).toBe(5.20);
+    expect(r.valueAtStop).toBe(1.49);
+    expect(r.loss).toBe(3.71);
+    expect(r.stopPrice).toBe(185.87);
+    expect(r.fraction).toBe(0.71);
+    expect(r.passMaxFraction).toBe(0.70);
     expect(r.status).toBe('CAUTION');
+    expect(r.basis).toBe('bs_today');
   });
 
-  it('flags CAUTION (never REJECT) when the stop is at or beyond a total loss', () => {
-    // Same stop, same premium, but a higher-delta contract: 15.99 * 0.60 =
-    // $9.59 against a $5.20 premium. You cannot lose $9.59 on a $5.20 option,
-    // so the loss caps -- and the cap is the whole point: the stop sits past
-    // the point where there is anything left to protect.
-    const r = stopPremiumRisk(185.87, 201.86, 0.60, 5.20)!;
-    expect(r.rawLoss).toBeCloseTo(9.594, 3);
-    expect(r.loss).toBe(5.20);        // capped at premium
-    expect(r.fraction).toBe(1);
-    expect(r.capped).toBe(true);
-    // Two states by design: a total-loss stop is the same verdict as an 85%
-    // one. `capped` and the percentage carry the magnitude the badge doesn't.
-    expect(r.status).toBe('CAUTION');
+  it('null in → null out', () => {
+    expect(stopPremiumRisk(null)).toBeNull();
   });
 
-  it('PASSes when the contract keeps meaningful value at the stop', () => {
-    // A tight stop $2 away on the same delta: 2 * 0.30 = $0.60 of $5.20 = 12%.
-    const r = stopPremiumRisk(199.86, 201.86, 0.30, 5.20)!;
-    expect(r.fraction).toBeCloseTo(0.1154, 4);
+  it('takes ONE argument — the delta-linear signature is gone', () => {
+    // The old call was (stopPrice, stockPrice, delta, premium, thresholds).
+    // Pinned by arity because a five-argument version reappearing is precisely
+    // how the frontend would start answering a different question than the
+    // gate it prints a verdict for.
+    expect(stopPremiumRisk).toHaveLength(1);
+  });
+
+  it('does NOT re-grade the verdict — the server decided it', () => {
+    // A block whose status disagrees with a naive fraction-vs-threshold read.
+    // The server cannot emit this, and that is the point: if the presenter
+    // ever recomputes, two rulers are back on one screen. The whole reason the
+    // gate moved server-side is that the client cannot price the contract, so
+    // it must not be able to overrule the price either.
+    const r = stopPremiumRisk(block({ fraction: 0.85, status: 'PASS' }))!;
     expect(r.status).toBe('PASS');
+    expect(formatStopLossBadge(r)).toContain('PASS');
   });
 
-  it('is contract-specific -- the same stop and stock price give different verdicts per contract', () => {
-    // This is the property the two rejected R:R designs did NOT have: their
-    // reward and risk were both proportional to premium, so premium cancelled
-    // and every contract scored identically. Here it genuinely discriminates.
-    const cheapOtm = stopPremiumRisk(185.87, 201.86, 0.30, 5.20)!;
-    const richerItm = stopPremiumRisk(185.87, 201.86, 0.30, 20.00)!;
-    expect(cheapOtm.fraction).not.toBeCloseTo(richerItm.fraction, 4);
-    expect(cheapOtm.status).toBe('CAUTION');
-    expect(richerItm.status).toBe('PASS');   // 4.797 / 20.00 = 24%
-  });
-
-  it('works bearish -- a stop above the current price is the same distance', () => {
-    const bullish = stopPremiumRisk(185.87, 201.86, 0.30, 5.20)!;
-    const bearish = stopPremiumRisk(217.85, 201.86, -0.30, 5.20)!;
-    expect(bearish.stockMove).toBeCloseTo(bullish.stockMove, 2);
-    expect(bearish.delta).toBe(0.30);        // |delta|
-    expect(bearish.fraction).toBeCloseTo(bullish.fraction, 4);
-  });
-
-  it('floors a near-zero delta rather than reporting "no risk at the stop"', () => {
-    const r = stopPremiumRisk(185.87, 201.86, 0.001, 5.20)!;
-    expect(r.delta).toBe(0.05);
-    expect(r.rawLoss).toBeCloseTo(0.7995, 4);
-  });
-
-  it('lands CAUTION exactly at the 80% threshold, PASS just below', () => {
-    // stockMove * delta / premium == 0.80 exactly: 8.0 * 0.50 / 5.00
-    expect(stopPremiumRisk(92.0, 100.0, 0.50, 5.00)!.status).toBe('CAUTION');
-    // A CLOSER stop (92.1, not 91.9) is the cheaper one -- less distance to the
-    // stop means less loss: 7.9 * 0.50 / 5.00 = 0.79.
-    expect(stopPremiumRisk(92.1, 100.0, 0.50, 5.00)!.status).toBe('PASS');
-  });
-
-  it('never emits REJECT — the gate sorts candidates, it does not refuse them', () => {
-    // Sweep from a trivial stop to one at twice the premium: only ever PASS or
-    // CAUTION. REJECT is the red badge in this design system and a red badge on
-    // a tradeable contract reads as a refusal.
-    for (const stop of [99.9, 95, 92.1, 92.0, 90.1, 90.0, 80, 50]) {
-      expect(stopPremiumRisk(stop, 100.0, 0.50, 5.00)!.status).not.toBe('REJECT');
-    }
-    expect(stopPremiumRisk(90.0, 100.0, 0.50, 5.00)!.capped).toBe(true);   // still detectable
-  });
-
-  it('returns null when there is no meaningful answer', () => {
-    expect(stopPremiumRisk(185.87, 185.87, 0.30, 5.20)).toBeNull();  // stop == price
-    expect(stopPremiumRisk(185.87, 201.86, 0.30, 0)).toBeNull();     // no premium
-    expect(stopPremiumRisk(185.87, 201.86, 0.30, -1)).toBeNull();
-    expect(stopPremiumRisk(NaN, 201.86, 0.30, 5.20)).toBeNull();
-    expect(stopPremiumRisk(185.87, Infinity, 0.30, 5.20)).toBeNull();
-    expect(stopPremiumRisk(185.87, 201.86, NaN, 5.20)).toBeNull();
+  it('is "not computed" where the arithmetic has no honest answer', () => {
+    // Same rule as compute_stop_cost's, repeated at the one place a block can
+    // arrive from somewhere other than a live endpoint: a persisted ExitPlan
+    // restored from a blob written before B2.
+    expect(stopPremiumRisk(block({ premium: 0.009, lossDollar: 0.009, valueAtStop: 0 }))).toBeNull();
+    expect(stopPremiumRisk(block({ premium: NaN }))).toBeNull();
+    expect(stopPremiumRisk(block({ valueAtStop: Infinity }))).toBeNull();
+    expect(stopPremiumRisk(block({ stopPrice: NaN }))).toBeNull();
+    // A premium of exactly one cent still has a printable card.
+    expect(stopPremiumRisk(block({ premium: 0.01, valueAtStop: 0.00, lossDollar: 0.01 }))).not.toBeNull();
   });
 });
 
-describe('the printed equation reconciles', () => {
-  // The bug this replaced: delta printed at 2dp while the loss was computed
-  // from full precision, so `$15.41 × Δ0.54 = $8.24` -- 15.41 × 0.54 is 8.32.
-  // Kenneth checked it by hand and got a different answer than the card, on a
-  // card whose entire premise is showing arithmetic you can verify.
-  it('multiplies out to the printed loss at the printed precision', () => {
-    const r = stopPremiumRisk(312.80, 328.21, 0.5347, 18.90, { pass_max_fraction: 0.80 })!;
-    const printed = formatStopPremiumRisk(r);
-    const m = printed.match(/\$([\d.]+) away × Δ([\d.]+) = \$([\d.]+)/)!;
-    const [away, delta, loss] = [Number(m[1]), Number(m[2]), Number(m[3])];
-    // Rounded to the cent, the printed factors must produce the printed answer.
-    expect(Math.abs(away * delta - loss)).toBeLessThan(0.005);
+describe('formatStopPremiumRisk (spec test 2)', () => {
+  it("prints the spec's worked line", () => {
+    expect(formatStopPremiumRisk(stopPremiumRisk(block())!))
+      .toBe('$5.20 premium − $1.49 at $185.87 = $3.71 of $5.20 premium · Black-Scholes, priced today');
   });
 
-  it('multiplies out ACROSS A RANGE, not just on the one triple that was hand-picked', () => {
-    // The test above passed on a single input the whole time the equation was
-    // still wrong for about 6% of inputs -- 15.41 × 0.5347 happens to land
-    // inside tolerance. Three factors are rounded independently (move to
-    // cents, delta to 3dp, loss to cents), so no amount of delta precision
-    // could close it; the printed product is now computed FROM the printed
-    // factors. Only the uncapped rows are checked: when the cap binds, the
-    // equation prints the premium and the "(uncapped $…)" tail carries the
-    // product, which is the one place the two legitimately differ.
-    const failures: string[] = [];
-    for (let move = 0.13; move <= 42; move += 0.07) {
-      for (const delta of [0.05, 0.2508, 0.3333, 0.4567, 0.5, 0.5347, 0.789, 0.9999]) {
-        for (const premium of [0.35, 2.0, 6.51, 18.9]) {
-          const r = stopPremiumRisk(200 - move, 200, delta, premium);
-          if (!r) continue;
-          const printed = formatStopPremiumRisk(r);
-          const m = printed.match(/\$([\d.]+) away × Δ([\d.]+) = \$([\d.]+) of \$([\d.]+)/)!;
-          const [away, d, loss, premiumShown] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
-          // EXACT, not an epsilon: the printed loss must be the printed factors
-          // multiplied and rounded to the cent, which is what a hand-check
-          // produces. An epsilon of half a cent passes 0.13 × 0.500 = 0.065
-          // against a printed $0.07 either way and would hide a real drift.
-          //
-          // HALF-UP, deliberately re-derived here rather than imported: this is
-          // the arithmetic a person does on paper, and it is the whole claim
-          // the line makes. `toFixed(2)` used to stand in for it and silently
-          // disagreed on exact half-cents (8.01 × 0.500 = 4.005 printed $4.00),
-          // because it breaks the tie on the binary value. Importing
-          // `roundCentsOfProduct` would make this assert that the code agrees
-          // with itself; spelling the rule out keeps it asserting that the code
-          // agrees with the hand-check.
-          //
-          // ROUND 7: this line USED to be
-          // `Math.round(away * d * 100 + Number.EPSILON) / 100`, which is the
-          // same broken idiom the implementation carried -- EPSILON is 2.22e-16
-          // and one ULP at a product of 2036.5 is ~4.5e-13, so the nudge cannot
-          // move a double sitting one ULP below the .5 split. It marked the
-          // CORRECT value wrong: 40.73 × 0.500 is exactly 20.365, a hand-check
-          // gives $20.37, and this line expected $20.36. A test that re-derives
-          // the rule using the implementation's own bug is not an independent
-          // check of it.
-          //
-          // Done in integers instead, where there is no binary split to lose:
-          // `away` is printed at 2dp and `d` at 3dp, so scaling them to whole
-          // numbers is exact and the half-up decision is an integer comparison.
-          //
-          // ROUND 8: derived from the printed TEXT, in exact decimal
-          // arithmetic, with no float and no shared idiom. The previous
-          // version scaled to integers exactly as `roundCentsOfProduct` does,
-          // which made this a reimplementation of the code it checks -- any
-          // shared misconception (that half-up on pre-rounded factors is the
-          // rule at all, that `move` is always 2dp) would have been invisible
-          // to it. This version multiplies the digit strings the card actually
-          // printed, which is literally the hand-check being claimed.
-          const product = (() => {
-            const exact = (text: string): bigint => {
-              const [whole, frac = ''] = text.split('.');
-              // Scale every factor to a fixed 6dp so their product is 12dp.
-              return BigInt(whole + frac.padEnd(6, '0').slice(0, 6));
-            };
-            const scaled = exact(m[1]) * exact(m[2]);          // 1e-12 dollars
-            // Half-up to cents: the split is at 5 x 1e-11.
-            return Number((scaled + 5_000_000_000n) / 10_000_000_000n) / 100;
-          })();
-          const expected = Math.min(product, premiumShown);
-          if (loss !== expected) failures.push(`${printed} (expected $${expected})`);
-          // CAPPED ROWS ARE CHECKED TOO. This used to `continue` past them, and
-          // that skip hid a whole class: `r.capped` is decided at full
-          // precision while the line is printed at 3dp on the delta, so the two
-          // disagreed in both directions -- an "(uncapped)" figure BELOW the
-          // capped one, and a clamp with no tail at all. The clamp is no longer
-          // "the one legitimate exception"; the tail is what the reader is owed
-          // whenever the product and the printed loss differ, and it is
-          // present exactly then.
-          const tail = printed.match(/\(uncapped \$([\d.]+)\)/);
-          if (product > premiumShown) {
-            if (!tail) failures.push(`clamped with no tail: ${printed}`);
-            else if (Number(tail[1]) !== product) {
-              failures.push(`tail is not the printed product: ${printed}`);
-            }
-          } else if (tail) {
-            failures.push(`tail on a row that multiplies out: ${printed}`);
-          }
-        }
-      }
+  it('names the basis, so it cannot be read against the barrier race', () => {
+    // The race reprices AT THE HORIZON (theta included) and drives sizing;
+    // this prices at today's remaining life and drives only the verdict. The
+    // two legitimately disagree about "what is this worth at the stop", and
+    // the suffix is what stops that reading as a contradiction.
+    expect(formatStopPremiumRisk(stopPremiumRisk(block())!)).toContain('Black-Scholes, priced today');
+    expect(formatStopPremiumRisk(stopPremiumRisk(block())!)).not.toContain('delta-linear');
+  });
+
+  it('carries no cap disclosure — Black-Scholes cannot exceed the premium', () => {
+    const total = block({ valueAtStop: 0.00, lossDollar: 5.20, fraction: 1.00 });
+    expect(formatStopPremiumRisk(stopPremiumRisk(total)!)).not.toMatch(/uncapped/);
+  });
+});
+
+describe('the printed figures agree with each other and with the verdict', () => {
+  it('the equation subtracts exactly as printed', () => {
+    const r = stopPremiumRisk(block())!;
+    const line = formatStopPremiumRisk(r);
+    const [, premium, value, loss] = line.match(
+      /\$([\d.]+) premium − \$([\d.]+) at \$[\d.]+ = \$([\d.]+)/,
+    )!;
+    expect(Number(premium) - Number(value)).toBeCloseTo(Number(loss), 10);
+  });
+
+  it('"left" on the badge IS the value at the stop', () => {
+    // premium − loss === valueAtStop by construction, so the badge's
+    // dollars-left and the arithmetic line's middle term are one quantity
+    // printed twice. If they ever diverge, one of them was rounded twice.
+    for (const b of [block(), block({ premium: 18.90, valueAtStop: 8.24, lossDollar: 10.66, fraction: 0.56, status: 'PASS' })]) {
+      const r = stopPremiumRisk(b)!;
+      expect(formatStopLossBadge(r)).toContain(`$${b.valueAtStop.toFixed(2)}/share left`);
     }
-    expect(failures).toEqual([]);
   });
 
-  it('the badge tooltip agrees with the badge and the headline beside it', () => {
-    // The tooltip used `r.capped` (full precision) while the label and the
-    // headline came from the printed figures, so one element could call the
-    // contract a total loss while the two next to it showed money left. Found
-    // by sweep at $55.92 away × Δ0.1622 on a $9.07 premium: "99% OF PREMIUM"
-    // and "$906 ... $1 left" under "the contract is a total loss".
-    const contradictions: string[] = [];
-    for (const away of [0.41, 8.01, 35.24, 55.92, 57.93, 70.02, 70.10]) {
-      for (const d of [0.1622, 0.25, 0.3753, 0.5, 0.5342, 0.5505, 0.7495]) {
-        for (const premium of [0.35, 2.0, 6.51, 9.07, 18.9, 21.74, 38.59, 52.48]) {
-          const r = stopPremiumRisk(200 - away, 200, d, premium);
-          if (!r) continue;
-          const saysTotal = stopLossIsTotalOnPrintedFigures(r);
-          const badgeSaysTotal = formatStopLossPct(r) === '100%';
-          const headline = formatStopLossHeadline(r);
-          const headlineSaysTotal = / \$0 left$/.test(headline);
-          if (saysTotal !== badgeSaysTotal || saysTotal !== headlineSaysTotal) {
-            contradictions.push(
-              `${away}/${d}/${premium}: tooltip=${saysTotal} badge=${badgeSaysTotal} headline="${headline}"`,
-            );
-          }
-        }
-      }
-    }
-    expect(contradictions).toEqual([]);
+  it('the headline is the per-share pair × 100, and its three figures add up', () => {
+    const r = stopPremiumRisk(block())!;
+    expect(formatStopLossHeadline(r)).toBe('$371 per contract — of the $520 premium, $149 left');
+    expect(371 + 149).toBe(520);
   });
 
-  it('never prints an "uncapped" figure below the capped one', () => {
-    // $70.10 away × Δ0.5505 on a $38.59 premium read
-    // "= $38.59 of $38.59 premium (uncapped $38.55)". `loss` is
-    // min(rawLoss, premium) by construction, so an uncapped estimate BELOW it
-    // cannot happen -- unless the two figures come from two precisions, which
-    // is what `r.capped` (full) against `product` (printed) was doing.
-    const r = stopPremiumRisk(100.00, 170.10, 0.5505, 38.59)!;
-    expect(r.capped).toBe(true);              // still true at full precision
-    expect(formatStopPremiumRisk(r)).toBe(
-      '$70.10 away × Δ0.550 = $38.56 of $38.59 premium · delta-linear, priced today',
-    );
+  it('the badge percentage is the number the verdict was decided on', () => {
+    const r = stopPremiumRisk(block())!;
+    expect(formatStopLossPct(r)).toBe('71%');
+    expect(formatStopLossBadge(r)).toBe('CAUTION · 71% of premium · $1.49/share left');
   });
 
-  it('carries the tail when the printed product clears the premium', () => {
-    // The mirror image: `r.capped` is FALSE (rawLoss 52.47999 < 52.48) but the
-    // printed factors give $52.52. It printed "= $52.48 of $52.48 premium" with
-    // nothing to explain the 4c, above a headline claiming "$0 left" for a stop
-    // the code itself did not classify as a total loss.
-    const r = stopPremiumRisk(100.00, 170.02, 0.7495, 52.48)!;
-    expect(r.capped).toBe(false);
-    expect(formatStopPremiumRisk(r)).toBe(
-      '$70.02 away × Δ0.750 = $52.48 of $52.48 premium (uncapped $52.52) · delta-linear, priced today',
-    );
-  });
-
-  it('the badge percentage never contradicts the money beside it', () => {
-    // The badge read `(r.fraction * 100).toFixed(0)` -- full precision -- while
-    // the headline scaled from the printed pair, so the two disagreed by a
-    // point on ~1.4% of inputs and flatly contradicted each other at the top of
-    // the range: "100% OF PREMIUM" printed beside "$8 left".
-    const r = stopPremiumRisk(164.76, 200, 0.5342, 18.90)!;
-    expect(formatStopLossHeadline(r)).toBe(
-      '$1,882 per contract — of the $1,890 premium, $8 left',
-    );
+  it('100% is reserved for an actual total loss on the printed cents', () => {
+    // `fraction` is rounded to hundredths server-side, so a contract with one
+    // cent of a $5.20 premium left arrives as 1.00. Printing "100% of premium"
+    // beside "$0.01/share left" asserts something the money contradicts.
+    const nearlyTotal = block({ valueAtStop: 0.01, lossDollar: 5.19, fraction: 1.00 });
+    const r = stopPremiumRisk(nearlyTotal)!;
     expect(formatStopLossPct(r)).toBe('99%');
+    expect(stopLossIsTotalOnPrintedFigures(r)).toBe(false);
 
-    const failures: string[] = [];
-    for (let move = 0.11; move <= 42; move += 0.03) {
-      for (const delta of [0.05, 0.2508, 0.5, 0.5342, 0.5347, 0.789, 0.9999]) {
-        for (const premium of [0.35, 2.0, 6.51, 18.9]) {
-          const x = stopPremiumRisk(200 - move, 200, delta, premium);
-          if (!x) continue;
-          const head = formatStopLossHeadline(x);
-          const h = head.match(/\$([\d,]+) per contract — of the \$([\d,]+) premium, \$(-?[\d,]+) left/)!;
-          const num = (v: string) => Number(v.replace(/,/g, ''));
-          const [perContract, premiumTotal, left] = [num(h[1]), num(h[2]), num(h[3])];
-          const badge = formatStopLossPct(x);
-          // 100% is reserved for an actual total loss on the printed figures.
-          if (badge === '100%' && left !== 0) failures.push(`${badge} beside ${head}`);
-          if (left === 0 && perContract > 0 && badge !== '100%') {
-            failures.push(`${badge} beside a total loss: ${head}`);
-          }
-          // And it stays within a point of the ratio the reader can compute.
-          const implied = Math.round((perContract / premiumTotal) * 100);
-          if (Math.abs(Number(badge.replace('%', '')) - implied) > 1) {
-            failures.push(`${badge} vs computed ${implied}%: ${head}`);
-          }
-        }
-      }
-    }
-    expect(failures).toEqual([]);
+    const total = stopPremiumRisk(block({ valueAtStop: 0.00, lossDollar: 5.20, fraction: 1.00 }))!;
+    expect(formatStopLossPct(total)).toBe('100%');
+    expect(stopLossIsTotalOnPrintedFigures(total)).toBe(true);
+    expect(formatStopLossBadge(total)).toContain('$0.00/share left');
   });
 
-  it('the headline sums, and agrees with the per-share line beneath it', () => {
-    // $8.01 away × Δ0.500 on a $6.51 premium printed "$401 per contract — of
-    // the $651 premium, $251 left" (401 + 251 = 652) two lines above
-    // "= $4.00", whose hundred is $400. Three figures rounded independently
-    // from full precision; they are now all scaled from one rounded pair.
-    const failures: string[] = [];
-    for (let move = 0.11; move <= 42; move += 0.07) {
-      for (const delta of [0.05, 0.2508, 0.5, 0.5347, 0.789, 0.9999]) {
-        for (const premium of [0.35, 2.0, 6.51, 18.9]) {
-          const r = stopPremiumRisk(200 - move, 200, delta, premium);
-          if (!r) continue;
-          const head = formatStopLossHeadline(r);
-          const h = head.match(/\$([\d,]+) per contract — of the \$([\d,]+) premium, \$(-?[\d,]+) left/)!;
-          const num = (x: string) => Number(x.replace(/,/g, ''));
-          const [perContract, premiumTotal, left] = [num(h[1]), num(h[2]), num(h[3])];
-          if (perContract + left !== premiumTotal) failures.push(`sum: ${head}`);
-          const line = formatStopPremiumRisk(r);
-          const lossPerShare = Number(line.match(/= \$([\d.]+) of/)![1]);
-          if (Math.abs(lossPerShare * 100 - perContract) > 0.5) {
-            failures.push(`headline vs line: ${head} || ${line}`);
-          }
-        }
-      }
-    }
-    expect(failures).toEqual([]);
+  it('0% is NOT reserved the same way, deliberately', () => {
+    // "0% of premium" beside "$9.99/share left" asserts nothing false — it is a
+    // percentage rounded to a whole point, like every other figure on the
+    // badge. Forcing it up to 1% would break the stronger property that the
+    // printed percentage is within half a point of the true fraction.
+    const r = stopPremiumRisk(block({ premium: 10.00, valueAtStop: 9.99, lossDollar: 0.01, fraction: 0.00, status: 'PASS' }))!;
+    expect(formatStopLossPct(r)).toBe('0%');
+    expect(formatStopLossBadge(r)).toContain('$9.99/share left');
   });
 
-  it('the audit case itself: $8.01 away, Δ0.500, $6.51 premium', () => {
-    const r = stopPremiumRisk(191.99, 200, 0.5, 6.51)!;
-    // 8.01 × 0.500 is exactly 4.005. Half-up gives $4.01, which is what a
-    // reader multiplying the two printed factors gets; `toFixed(2)` gave $4.00
-    // off the binary representation and this assertion used to pin THAT.
-    expect(formatStopLossHeadline(r)).toBe('$401 per contract — of the $651 premium, $250 left');
-    expect(formatStopPremiumRisk(r)).toContain('$8.01 away × Δ0.500 = $4.01 of $6.51 premium');
-    // Still reconciles -- parsed back OUT of the rendered string, so this
-    // actually exercises the formatter. `expect(401 + 250).toBe(651)` compared
-    // two literals and could not have failed if the headline changed.
-    const [, per, prem, left] = formatStopLossHeadline(r)
-      .match(/\$([\d,]+) per contract — of the \$([\d,]+) premium, \$([\d,]+) left/)!
-      .map((v) => Number(String(v).replace(/,/g, '')));
-    expect(per + left).toBe(prem);
-  });
-
-  it('names its basis, so it cannot be confused with the Barrier Race figure', () => {
-    // Two cards print a stop loss for the same stop and they legitimately
-    // differ -- this one is priced today, the race's at the median day to the
-    // barrier. Unlabelled they read as a contradiction.
-    const r = stopPremiumRisk(312.80, 328.21, 0.5347, 18.90, { pass_max_fraction: 0.80 })!;
-    expect(formatStopPremiumRisk(r)).toContain('delta-linear, priced today');
-  });
-});
-
-describe('formatStopLossHeadline', () => {
-  it('gives per-contract dollars and what is left', () => {
-    const r = stopPremiumRisk(312.80, 328.21, 0.5347, 18.90, { pass_max_fraction: 0.80 })!;
-    // 8.24/share -> $824 of the $1,890 paid, $1,066 left.
-    expect(formatStopLossHeadline(r)).toBe(
-      '$824 per contract — of the $1,890 premium, $1,066 left',
-    );
-  });
-
-  it('reads $0 left when the stop costs the whole premium', () => {
-    const capped = stopPremiumRisk(100, 200, 0.9, 5.00, { pass_max_fraction: 0.80 })!;
-    expect(capped.capped).toBe(true);
-    expect(formatStopLossHeadline(capped)).toContain('$0 left');
-  });
-});
-
-describe('formatStopPremiumRisk', () => {
-  it('puts every input on one line so the verdict is auditable', () => {
-    const r = stopPremiumRisk(185.87, 201.86, 0.30, 5.20)!;
-    expect(formatStopPremiumRisk(r)).toBe(
-      '$15.99 away × Δ0.300 = $4.80 of $5.20 premium · delta-linear, priced today',
-    );
-  });
-
-  it('appends the uncapped loss only when the cap actually bound', () => {
-    const capped = stopPremiumRisk(185.87, 201.86, 0.60, 5.20)!;
-    // Without the tail, `loss` is pinned to `premium` and the reader cannot see
-    // HOW far past a total loss the stop sits -- $9.59 on a $5.20 contract.
-    expect(formatStopPremiumRisk(capped)).toBe(
-      '$15.99 away × Δ0.600 = $5.20 of $5.20 premium (uncapped $9.59)'
-      + ' · delta-linear, priced today',
-    );
-
-    const uncapped = stopPremiumRisk(199.86, 201.86, 0.30, 5.20)!;
-    expect(formatStopPremiumRisk(uncapped)).not.toMatch(/uncapped/);
-  });
-});
-
-describe('stopPremiumRisk — configurable thresholds', () => {
-  // The gate's bands are per-horizon in scoring_rules.yaml and overridable per
-  // run from Step 3, so the helper must take them rather than own them.
-  it('uses the caller-supplied threshold instead of the module default', () => {
-    // 70% loss: CAUTION under the Position band (0.70), PASS under Swing (0.80).
-    const args = [93.0, 100.0, 0.50, 5.00] as const;   // 7.0 * 0.50 / 5.00 = 0.70
-    expect(stopPremiumRisk(...args, { pass_max_fraction: 0.70 })!.status).toBe('CAUTION');
-    expect(stopPremiumRisk(...args, { pass_max_fraction: 0.80 })!.status).toBe('PASS');
-  });
-
-  it('honours a tightened pass line', () => {
-    // 50% loss passes at the 0.80 default, fails once the line drops to 0.40.
-    const args = [95.0, 100.0, 0.50, 5.00] as const;   // 5.0 * 0.50 / 5.00 = 0.50
-    expect(stopPremiumRisk(...args, { pass_max_fraction: 0.80 })!.status).toBe('PASS');
-    expect(stopPremiumRisk(...args, { pass_max_fraction: 0.40 })!.status).toBe('CAUTION');
-  });
-
-  it('falls back to the default when the threshold is out of range or non-finite', () => {
-    // The per-run override in Step 3 is user-editable, so these are reachable
-    // inputs. Above 1.0 is meaningless -- the loss caps at the premium, so
-    // nothing could exceed it and CAUTION would be unreachable.
-    const at70 = [93.0, 100.0, 0.50, 5.00] as const;   // 70% loss
-    const at85 = [91.5, 100.0, 0.50, 5.00] as const;   // 85% loss
-    for (const bad of [{ pass_max_fraction: 1.5 }, { pass_max_fraction: 0 },
-                       { pass_max_fraction: -0.5 }, { pass_max_fraction: NaN }]) {
-      expect(stopPremiumRisk(...at70, bad)!.status).toBe('PASS');      // 0.80 default
-      expect(stopPremiumRisk(...at85, bad)!.status).toBe('CAUTION');
-    }
-    // ...and omitting it entirely still gates, at the Swing default.
-    expect(stopPremiumRisk(...at70)!.status).toBe('PASS');
-    expect(stopPremiumRisk(...at85)!.status).toBe('CAUTION');
-  });
-});
-
-describe('the badge, the verdict and the money beside them agree', () => {
-  // Round 5. The badge percentage moved to the printed pair while `status` --
-  // the badge's COLOUR and tooltip -- was still decided at full precision, so
-  // the two straddled the threshold in opposite directions.
-  it('does not print a CAUTION-line percentage in PASS green', () => {
-    // $1.77 away x 0.789 = 1.39653 -> fraction 0.69827, under a 0.70 pass line
-    // at full precision. The printed pair is exactly $1.40 of $2.00 = 70%,
-    // which IS the caution line. The badge used to read "70% OF PREMIUM" in
-    // PASS green under the PASS tooltip ("still holds meaningful value"),
-    // directly above an equation a reader resolves by hand to 70%.
-    const r = stopPremiumRisk(198.23, 200, 0.789, 2.0, { pass_max_fraction: 0.7 })!;
-    expect(r).not.toBeNull();
-    expect(formatStopLossBadge(r)).toContain('CAUTION · 70% of premium');
-    expect(r.status).toBe('CAUTION');
-  });
-
-  it('agrees across a sweep of ordinary inputs, at both pass lines', () => {
-    // The invariant is the verdict against the EXACT printed pair -- the same
-    // $X of $Y the equation line beneath the badge prints -- not against the
-    // badge's rounded integer. The integer is a summary and rounds to the
-    // nearest point, so at a 0.70 line a printed 69.5% legitimately reads "70%"
-    // in PASS green: a reader hand-checking the equation gets 69.5%, under the
-    // line. What must never happen again is the two being computed at
-    // DIFFERENT PRECISIONS, which is what let 0.69827 wear PASS while the
-    // printed pair was exactly 70.0%.
-    const roundCents = (n: number) => Math.round(n * 100 + Number.EPSILON) / 100;
-    for (const passMax of [0.7, 0.8]) {
-      for (let move = 0.25; move <= 40; move += 0.37) {
-        for (let delta = 0.05; delta <= 0.95; delta += 0.07) {
-          for (let premium = 0.35; premium <= 25; premium += 1.13) {
-            const r = stopPremiumRisk(200 - move, 200, delta, premium, { pass_max_fraction: passMax });
-            if (!r) continue;
-            const pMove = Number(Math.abs(move).toFixed(2));
-            const pDelta = Number(Math.max(delta, 0.05).toFixed(3));
-            const pPremium = Number(premium.toFixed(2));
-            const printedFraction = Math.min(roundCents(pMove * pDelta), pPremium) / pPremium;
-            expect({ move, delta, premium, passMax, status: r.status }).toMatchObject({
-              status: printedFraction < passMax ? 'PASS' : 'CAUTION',
-            });
-            // ...and the badge's integer is a faithful rounding of that same
-            // fraction, so the number and the colour come from one quantity.
-            const pct = parseInt(formatStopLossBadge(r).split('·')[1].trim(), 10);
-            if (pct !== 99 && pct !== 100) {
-              // 0.005 + a float epsilon: a fraction sitting exactly on the
-              // rounding boundary computes as 0.005000000000000001 in IEEE754.
-              expect(Math.abs(pct / 100 - printedFraction)).toBeLessThanOrEqual(0.00500001);
-            }
-          }
-        }
-      }
-    }
-  });
-
-  it('badge dollars-left reconciles with the headline, in the other unit', () => {
-    const r = stopPremiumRisk(188.5, 200, 0.45, 20, { pass_max_fraction: 0.8 })!;
-    const badge = formatStopLossBadge(r);        // per SHARE
-    const headline = formatStopLossHeadline(r);  // per CONTRACT
-    const perShareLeft = Number(badge.match(/\$([\d.]+)\/share left/)![1]);
-    const perContractLeft = Number(headline.match(/\$([\d,]+) left/)![1].replace(/,/g, ''));
-    // The same quantity in two units, a foot apart on the card. They must be
-    // exactly a factor of 100 apart or the card contradicts itself.
-    expect(Math.round(perShareLeft * 100)).toBe(perContractLeft);
-  });
-
-  it('never prints a dollar left over under a 100% badge, or $0.00 left under 99%', () => {
-    for (let move = 0.25; move <= 60; move += 0.29) {
-      for (let delta = 0.05; delta <= 0.95; delta += 0.05) {
-        for (let premium = 0.35; premium <= 30; premium += 0.91) {
-          const r = stopPremiumRisk(200 - move, 200, delta, premium);
-          if (!r) continue;
-          const badge = formatStopLossBadge(r);
-          const left = Number(badge.match(/\$([\d.]+)\/share left/)![1]);
-          if (badge.includes('· 100% of premium')) expect(left).toBe(0);
-          else expect(left).toBeGreaterThan(0);
-        }
-      }
-    }
-  });
-});
-
-describe('the badge is not ambiguous near the pass line', () => {
-  // ROUND 6. The percentage is rounded to a whole point; the verdict is not.
-  // So two cards can legitimately print the same percentage with opposite
-  // verdicts, and a badge carrying ONLY the percentage leaves colour as the
-  // single distinguishing mark. StatusBadge renders `label ?? STATUS_LABEL`,
-  // so supplying a label REPLACES the verdict word -- which is why the
-  // schematic leads the badge with it.
-  it('leads with the verdict word, so two 70% cards are distinguishable', () => {
-    const pass = stopPremiumRisk(197.22, 200, 0.5, 2.0, { pass_max_fraction: 0.7 })!;
-    const caution = stopPremiumRisk(197.2, 200, 0.5, 2.0, { pass_max_fraction: 0.7 })!;
-    expect(pass.status).toBe('PASS');
-    expect(caution.status).toBe('CAUTION');
-    // Same rounded percentage...
-    expect(formatStopLossBadge(pass)).toContain('70% of premium');
-    expect(formatStopLossBadge(caution)).toContain('70% of premium');
-    // ...but not the same badge.
-    expect(formatStopLossBadge(pass)).not.toBe(formatStopLossBadge(caution));
-    expect(formatStopLossBadge(pass)).toBe('PASS · 70% of premium · $0.61/share left');
-    expect(formatStopLossBadge(caution)).toBe('CAUTION · 70% of premium · $0.60/share left');
-  });
-
-  it('never renders a badge whose verdict word disagrees with its status', () => {
-    for (let move = 0.25; move <= 40; move += 0.53) {
-      for (let delta = 0.05; delta <= 0.95; delta += 0.11) {
-        for (let premium = 0.35; premium <= 25; premium += 1.7) {
-          const r = stopPremiumRisk(200 - move, 200, delta, premium);
-          if (!r) continue;
-          expect(formatStopLossBadge(r).startsWith(`${r.status} · `)).toBe(true);
-        }
-      }
-    }
-  });
-});
-
-describe('a premium too small to print', () => {
-  // Round 5. `stopPremiumRisk` guarded `premium <= 0`, but every figure on the
-  // card is rendered from the pair rounded to CENTS, so a sub-cent premium
-  // produced a card of mutually contradictory zeroes: a "0%" badge beside a
-  // tooltip calling the contract a total loss, above "$0 per contract -- of the
-  // $0 premium, $0 left".
-  it('returns null rather than a card of contradictory zeroes', () => {
-    expect(stopPremiumRisk(190, 200, 0.5, 0.004)).toBeNull();
-    expect(stopPremiumRisk(190, 200, 0.5, 0.0049)).toBeNull();
-  });
-
-  it('rejects half a cent, which used to slip through and print a 2x contradiction', () => {
-    // The guard was `<= 0` on the rounded premium, so $0.005 survived and the
-    // card printed "$1 per contract -- of the $1 premium" for a contract whose
-    // CaR row read $0.50. The test that pinned this was titled "at exactly one
-    // cent" while passing 0.005, which is half of one.
-    expect(stopPremiumRisk(190, 200, 0.5, 0.005)).toBeNull();
-    expect(stopPremiumRisk(190, 200, 0.5, 0.0099)).toBeNull();
-  });
-
-  it('still answers at exactly one cent', () => {
-    const r = stopPremiumRisk(190, 200, 0.5, 0.01);
-    expect(r).not.toBeNull();
-    expect(formatStopLossBadge(r!)).toBe('CAUTION · 100% of premium · $0.00/share left');
-  });
-});
-
-describe('the verdict at the exact pass line', () => {
-  // ROUND 9 finding 3. Round 5 moved the verdict onto the printed pair, which
-  // was right, and then compared that pair with `printed.loss / printed.premium`
-  // -- the one operation that puts float error back. At the exact threshold the
-  // quotient lands a hair below it (0.16 / 0.20 === 0.7999999999999999, while
-  // 16 / 20 === 0.8), so a card printing exactly the pass line rendered PASS.
-  //
-  // These cases are chosen so the printed equation is EXACTLY passMax, which is
-  // the CAUTION side: the line is `< passMax`, not `<=`.
-
-  it('a card printing exactly 80% of premium is CAUTION, not PASS', () => {
-    // $0.32 away x d0.500 = $0.16 of a $0.20 premium.
-    const r = stopPremiumRisk(99.68, 100, 0.5, 0.20, { pass_max_fraction: 0.80 });
-    expect(r).not.toBeNull();
-    // The equation a reader hand-checks:
-    expect(r!.loss).toBeCloseTo(0.16, 10);
-    expect(r!.premium).toBeCloseTo(0.20, 10);
-    // 16/20 is exactly the pass line, so the verdict must be CAUTION.
-    expect(r!.status).toBe('CAUTION');
-    // And the float quotient this replaced would have said otherwise --
-    // asserted so the test names the actual mechanism rather than a symptom.
-    expect(r!.loss / r!.premium).toBeLessThan(0.80);
-  });
-
-  it('one cent below the line is still PASS', () => {
-    // $0.30 away x d0.500 = $0.15 of $0.20 -- 75%, genuinely under 80%.
-    const r = stopPremiumRisk(99.70, 100, 0.5, 0.20, { pass_max_fraction: 0.80 });
-    expect(r!.loss).toBeCloseTo(0.15, 10);
-    expect(r!.status).toBe('PASS');
-  });
-
-  it('no exact-boundary cent pair reads PASS, at any configured pass line', () => {
-    // The general property, swept rather than sampled: whenever the printed
-    // loss over the printed premium is EXACTLY the pass line, the verdict is
-    // CAUTION. The auditor counted 412 such pairs at 0.80 alone.
-    let boundaryCases = 0;
-    for (const passMax of [0.70, 0.75, 0.80, 0.85]) {
-      for (let premiumCents = 1; premiumCents <= 400; premiumCents++) {
-        const lossCents = passMax * premiumCents;
-        if (!Number.isInteger(lossCents)) continue;   // not an exact boundary
-        if (lossCents < 1) continue;
+  it('sweep: badge, headline and percentage never contradict each other', () => {
+    let checked = 0;
+    for (let premiumCents = 1; premiumCents <= 4000; premiumCents += 7) {
+      for (let lossCents = 0; lossCents <= premiumCents; lossCents += Math.max(1, Math.floor(premiumCents / 9))) {
         const premium = premiumCents / 100;
-        // Pick a move that multiplies out to exactly `lossCents` at d0.500.
-        const move = (lossCents / 100) / 0.5;
-        const r = stopPremiumRisk(100 - move, 100, 0.5, premium, { pass_max_fraction: passMax });
+        const loss = lossCents / 100;
+        const r = stopPremiumRisk(block({
+          premium,
+          lossDollar:  loss,
+          valueAtStop: Math.round((premiumCents - lossCents)) / 100,
+          fraction:    Math.round((lossCents / premiumCents) * 100) / 100,
+          status:      'CAUTION',
+        }));
         if (r == null) continue;
-        if (Math.round(r.loss * 100) !== lossCents) continue;      // cap bound, skip
-        if (Math.round(r.premium * 100) !== premiumCents) continue;
-        boundaryCases++;
-        expect(r.status).toBe('CAUTION');
+        checked++;
+        const pct = Number(formatStopLossPct(r).replace('%', ''));
+        const isTotal = stopLossIsTotalOnPrintedFigures(r);
+        // 100% if and only if nothing is left.
+        expect(pct === 100).toBe(isTotal);
+        // The dollars-left on the badge and in the headline are one number.
+        const left = premiumCents - lossCents;
+        expect(formatStopLossBadge(r)).toContain(`$${(left / 100).toFixed(2)}/share left`);
+        expect(formatStopLossHeadline(r)).toContain(`$${left.toLocaleString('en-US')} left`);
+        // The percentage never claims more loss than the money shows.
+        if (left > 0) expect(pct).toBeLessThanOrEqual(99);
       }
     }
-    // The sweep must actually have found the cases it claims to pin. 233 with
-    // the delta held at 0.500; the auditor counted 412 at the 0.80 line alone
-    // by varying the delta too. The floor is what makes this a sweep rather
-    // than a loop that quietly matched nothing.
-    expect(boundaryCases).toBeGreaterThan(200);
+    expect(checked).toBeGreaterThan(2000);
   });
 });

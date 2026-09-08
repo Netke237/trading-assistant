@@ -161,7 +161,13 @@ class TestEndpoint:
                 "symbol": "AAPL", "direction": "Bullish", "stock_price": 100,
             })
         assert r.status_code == 200, r.text
-        assert r.json() == {"available": False, "price": None, "source": None, "confidence": None, "distancePct": None}
+        assert r.json() == {
+            "available": False, "price": None, "source": None, "confidence": None,
+            "distancePct": None,
+            # No level to price against, so no stop-cost gate — "not computed",
+            # which the card must never render as a PASS.
+            "stopCost": None,
+        }
 
     def test_rejects_nonpositive_stock_price(self):
         r = self._client().post("/api/contracts/structural-stop", json={

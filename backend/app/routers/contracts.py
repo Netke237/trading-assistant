@@ -6,7 +6,7 @@ from typing import Literal, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas import (
     OptionContract, RrModel, TradeEntry, TradeExit, ContractScoreBreakdown,
@@ -21,6 +21,7 @@ from app.scoring.contract_validator import dte_holding_multiplier, validate_cont
 from app.scoring.dte_window import resolve_dte_bounds, widen_contract_overrides_for_dte
 from app.scoring.trade_plan import build_trade_plan
 from app.scoring.structural_stop import find_structural_stop
+from app.scoring.stop_cost import compute_stop_cost
 from app.scoring.first_passage import estimate_first_passage
 from app.scoring.exit_plan import compute_final_stop, compute_target_row
 from app.scoring.reward_risk import estimate_rr
@@ -395,10 +396,100 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     )
 
 
+class StopCostOut(BaseModel):
+    """What this contract's own stop costs, priced with Black-Scholes at
+    today's remaining life (spec §2.1, docs/superpowers/plans/
+    2026-09-02-gate-basis-spec.md). Every figure the card prints is here, so
+    the card renders and never computes.
+
+    `passMaxFraction` is echoed for auditability: the threshold moved with the
+    basis (0.80 / 0.70 / 0.60), and a badge that showed only a verdict would
+    leave no way to tell which line produced it.
+    """
+    lossDollar:      float    # premium − valueAtStop, per share
+    valueAtStop:     float    # BS(stop, K, today's dte, r, iv) — the printed input
+    fraction:        float    # lossDollar / premium, clamped to [0, 1]
+    status:          Literal["PASS", "CAUTION"]
+    passMaxFraction: float
+    # ECHOED INPUTS, both per share and quantized to cents. The presenter takes
+    # this block and nothing else (spec §3), so the premium the gate priced at
+    # and the stop it priced to have to travel with the verdict — otherwise the
+    # card composes its equation from `contractDetails.mid` and whatever
+    # `sharedStop` holds at render time, which are not necessarily the two
+    # numbers this block was computed from.
+    premium:         float
+    stopPrice:       float
+    basis:           Literal["bs_today"]
+
+
+def _stop_cost_out(cost) -> Optional[StopCostOut]:
+    """Adapt app.scoring.stop_cost.StopCost onto the wire model. None in →
+    None out: `stopCost: null` is the card's "not computed" state, which must
+    never render as a silent PASS."""
+    if cost is None:
+        return None
+    return StopCostOut(
+        lossDollar=cost.loss_dollar,
+        valueAtStop=cost.value_at_stop,
+        fraction=cost.fraction,
+        status=cost.status,
+        passMaxFraction=cost.pass_max_fraction,
+        premium=cost.premium,
+        stopPrice=cost.stop_price,
+        basis=cost.basis,
+    )
+
+
 class StructuralStopRequest(BaseModel):
     symbol:      str
     direction:   Literal["Bullish", "Bearish"]
     stock_price: float = Field(..., gt=0)
+
+    # The contract, OPTIONAL — this endpoint is not options-specific (see the
+    # handler's docstring) and the stocks-mode card calls it with no contract
+    # at all, so the stop-cost block is simply omitted there.
+    #
+    # `strike`, `dte` and `premium` are present together or not at all: a
+    # PARTIAL set is a 422, never a silently skipped gate, because a contract
+    # with no verdict reads exactly like an unremarkable one (spec §2.1).
+    #
+    # `iv` sits INSIDE that set but stays independently optional, which is the
+    # one place this departs from the spec's literal four-field grouping. The
+    # spec's §2.4 reason for shipping the contract's IV was that the gate
+    # needs it; under the chosen architecture the gate runs HERE, where the
+    # premium is already in hand and one bracketed inversion recovers the IV
+    # (app.scoring.stop_cost). Requiring it would have meant 422-ing every
+    # contract whose vendor quote carries no IV — the common case — for a
+    # number this endpoint can derive.
+    strike:  Optional[float] = Field(default=None, gt=0)
+    dte:     Optional[int]   = Field(default=None, ge=0)
+    premium: Optional[float] = Field(default=None, gt=0)
+    # ABSOLUTE implied volatility in PERCENT, 0-100 — the unit of
+    # ContractDetails.iv and ContractQuoteResponse.iv, which is what a caller
+    # actually holds, NOT the decimal Black-Scholes takes. Bounded well above
+    # 1.0 so a decimal-convention slip (0.35 for 35%) is a loud 422 rather
+    # than a silent 0.35%-vol reprice, which would report almost the whole
+    # premium as lost at any stop.
+    iv:      Optional[float] = Field(default=None, gt=1.0, le=500.0)
+    # Picks the horizon whose pass_max_fraction applies. Absent means Swing,
+    # the app's own default preset — same convention as FirstPassageRequest.
+    # Either domain is accepted (the seven presets or the three scoring
+    # horizons, labels and display strings included); app.scoring.stop_cost's
+    # horizon_key collapses them the same way the card does.
+    horizon_preset: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _contract_set_is_all_or_nothing(self) -> "StructuralStopRequest":
+        present = [f for f in ("strike", "dte", "premium") if getattr(self, f) is not None]
+        if present and len(present) != 3:
+            missing = [f for f in ("strike", "dte", "premium") if getattr(self, f) is None]
+            raise ValueError(
+                "strike, dte and premium must be sent together or not at all; "
+                f"missing {', '.join(missing)}"
+            )
+        if self.iv is not None and not present:
+            raise ValueError("iv requires strike, dte and premium")
+        return self
 
 
 class StructuralStopResponse(BaseModel):
@@ -407,6 +498,10 @@ class StructuralStopResponse(BaseModel):
     source:      Optional[Literal["order_block", "swing_low", "swing_high"]] = None
     confidence:  Optional[int] = None
     distancePct: Optional[float] = None
+    # None whenever the gate has no honest answer: no contract was sent, no
+    # structural level was found, or the arithmetic refused (unsolvable IV,
+    # sub-cent premium, expiring contract). "Not computed", never a PASS.
+    stopCost:    Optional[StopCostOut] = None
 
 
 @router.post('/contracts/structural-stop', response_model=StructuralStopResponse)
@@ -430,12 +525,33 @@ async def structural_stop(req: StructuralStopRequest) -> StructuralStopResponse:
     if stop is None:
         return StructuralStopResponse(available=False)
 
+    stop_price = round(stop.price, 2)
+
+    # Priced at the ROUNDED stop, the one the card prints. The equation on the
+    # badge reads "$5.20 premium − $1.49 at $185.87": pricing at a level half a
+    # cent away from the one printed beside it would make that line not add up.
+    cost = None
+    # All three or none — the validator above guarantees it; spelled out here
+    # so the guard does not silently depend on a rule enforced elsewhere.
+    if req.strike is not None and req.dte is not None and req.premium is not None:
+        cost = compute_stop_cost(
+            stop_price=stop_price,
+            stock_price=req.stock_price,
+            strike=req.strike,
+            dte=req.dte,
+            premium=req.premium,
+            is_call=(req.direction == "Bullish"),
+            iv_pct=req.iv,
+            horizon_preset=req.horizon_preset,
+        )
+
     return StructuralStopResponse(
         available=True,
-        price=round(stop.price, 2),
+        price=stop_price,
         source=stop.source,
         confidence=stop.confidence,
         distancePct=round(stop.distance_pct, 2),
+        stopCost=_stop_cost_out(cost),
     )
 
 
@@ -717,6 +833,12 @@ class ExitPlanRequest(BaseModel):
     dte:         int = Field(..., ge=0)
     premium:     float = Field(..., gt=0)
     trend_score: float = Field(..., ge=0, le=100)
+    # The contract is already mandatory here, so there is no all-or-nothing
+    # set to police — only these two are new. Same units and same meaning as
+    # on StructuralStopRequest: `iv` is ABSOLUTE volatility in PERCENT and is
+    # solved from the premium when absent; an absent preset means Swing.
+    iv:             Optional[float] = Field(default=None, gt=1.0, le=500.0)
+    horizon_preset: Optional[str] = None
 
 
 class ExitPlanStopOut(BaseModel):
@@ -729,6 +851,17 @@ class ExitPlanStopOut(BaseModel):
     structuralPrice:      Optional[float] = None
     atrFloorPrice:        float
     distanceDollar:       Optional[float] = None
+    # The same gate as /contracts/structural-stop's, evaluated against THIS
+    # stop — the wider of the structural level and the ATR floor. The two
+    # endpoints disagreeing is correct, not a bug: a wider stop costs more of
+    # the premium, and this is the number that applies once an Arithmetic Plan
+    # has been run (spec §2.2).
+    #
+    # Note `contractPrice` above answers a DIFFERENT question and cannot serve
+    # this one: it is the exit-plan pipeline's repriced value at the stop, from
+    # estimate_rr — Heston-or-BS, at the horizon the pipeline reprices to.
+    # This block is deliberately Black-Scholes at TODAY's date, no theta.
+    stopCost:             Optional[StopCostOut] = None
 
 
 class ExitPlanTargetRowOut(BaseModel):
@@ -820,8 +953,20 @@ async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
     structural_price = round(final_stop.structural.price, 2) if final_stop.structural else None
     atr_floor_price = round(final_stop.atr_floor_price, 2)
 
+    stop_price = round(final_stop.price, 2)
+    stop_cost = compute_stop_cost(
+        stop_price=stop_price,
+        stock_price=req.entry_price,
+        strike=req.strike,
+        dte=req.dte,
+        premium=req.premium,
+        is_call=is_call,
+        iv_pct=req.iv,
+        horizon_preset=req.horizon_preset,
+    )
+
     stop_out = ExitPlanStopOut(
-        price=round(final_stop.price, 2),
+        price=stop_price,
         source=final_stop.source,
         contractPrice=stop_priced.estimated_exit_premium,
         rrModel=stop_priced.model_used,
@@ -830,6 +975,7 @@ async def exit_plan(req: ExitPlanRequest) -> ExitPlanResponse:
         structuralPrice=structural_price,
         atrFloorPrice=atr_floor_price,
         distanceDollar=abs(structural_price - atr_floor_price) if structural_price is not None else None,
+        stopCost=_stop_cost_out(stop_cost),
     )
 
     targets_out: list[ExitPlanTargetRowOut] = []

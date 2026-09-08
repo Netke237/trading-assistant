@@ -536,6 +536,26 @@ class TradeCardData(BaseModel):
     maxLoss:           Optional[float] = None
     breakeven:         Optional[float] = None
 
+    # ── The stop-vs-premium gate, priced at SCAN time (Phase B3) ─────────────
+    # docs/superpowers/plans/2026-09-02-gate-basis-spec.md §2.3. TWO fields,
+    # not five, and this is load-bearing rather than terse: `WatchlistRow`
+    # carries no contract data at all, so shipping strike/dte/premium/iv/delta
+    # down to let the ranking table price the gate itself would be the
+    # rejected "Black-Scholes in TypeScript" decision arriving by the back
+    # door. The badge renders a verdict the backend already reached.
+    #
+    # They describe the AUTO-PICKED contract, which a Step 6 override can
+    # later replace -- the ranking table must say so, because after such an
+    # override the row's badge and the card's badge legitimately describe two
+    # different contracts.
+    #
+    # None means NOT COMPUTED and must never render as a PASS: no structural
+    # or ATR stop could be formed (a flat or too-short candle feed), the IV
+    # would not invert out of the mid, the contract expires inside a day, or
+    # the row was restored from a scan session written before this shipped.
+    stopCostPct:    Optional[float] = None
+    stopCostStatus: Optional[Literal["PASS", "CAUTION"]] = None
+
 
 # ── Scan ─────────────────────────────────────────────────────────────────────
 

@@ -27,6 +27,8 @@ import { exportToXlsx } from '@/lib/export';
 import { useScanStore } from '@/lib/scanStore';
 import { cardToRow } from './cardToRow';
 import { trendDetailText, pullbackDetailText, triggerDetailText, eventDetailText, volDetailText } from '@/components/organisms/TradeCard';
+import { Tooltip } from '@/components/atoms/Tooltip';
+import { rankingStopCost } from '@/lib/risk';
 import { GENERIC_STATUS_TOOLTIP } from '@/lib/statusTooltips';
 import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import type { Candle } from '@/types/chart';
@@ -34,8 +36,8 @@ import styles from './page.module.css';
 
 const PAGE_SIZE = 10;
 
-// icon(star+chart) | SYMBOL | NAME | HORIZON | Δ RNK | Δ SCR | SCORE | CONF | NEXT
-const COLUMNS = '44px 56px 1fr 60px 52px 50px 56px 68px 80px';
+// icon(star+chart) | SYMBOL | NAME | HORIZON | Δ RNK | Δ SCR | SCORE | CONF | STOP | NEXT
+const COLUMNS = '44px 56px 1fr 60px 52px 50px 56px 68px 64px 80px';
 
 const HORIZON_WEIGHTS: Record<string, { trend: number; pullback: number; trigger: number; event: number; volatility: number }> = {
   Intraday: { trend: 35, pullback: 20, trigger: 30, event: 5,  volatility: 10 },
@@ -58,7 +60,7 @@ function signalLabel(s: Signal): string {
   return s === 'pos' ? 'Positive' : s === 'neg' ? 'Negative' : 'Neutral';
 }
 
-type SortKey = 'symbol' | 'rankDelta' | 'scoreDelta' | 'score' | 'nextEventDays';
+type SortKey = 'symbol' | 'rankDelta' | 'scoreDelta' | 'score' | 'stopCostPct' | 'nextEventDays';
 type SortDir = 'asc' | 'desc';
 
 const DEFAULT_SORT: Record<SortKey, SortDir> = {
@@ -66,6 +68,9 @@ const DEFAULT_SORT: Record<SortKey, SortDir> = {
   rankDelta:    'desc',
   scoreDelta:   'desc',
   score:        'desc',
+  // Ascending: the CHEAPEST stop first. A high share means the stop costs most
+  // of the premium, which is the candidate you want to see last, not first.
+  stopCostPct:  'asc',
   nextEventDays: 'asc',
 };
 
@@ -78,6 +83,10 @@ function sortRows(rows: WatchlistRow[], key: SortKey, dir: SortDir): WatchlistRo
       case 'rankDelta':     av = a.rankDelta;           bv = b.rankDelta;           break;
       case 'scoreDelta':    av = a.scoreDelta ?? 0;     bv = b.scoreDelta ?? 0;     break;
       case 'score':         av = a.score;               bv = b.score;               break;
+      // Not-computed sorts to the END on either direction's natural reading by
+      // being the worst possible share -- an ungraded candidate must not float
+      // to the top of a "cheapest stop first" sort and read as the best one.
+      case 'stopCostPct':   av = a.stopCostPct ?? 101;  bv = b.stopCostPct ?? 101;  break;
       case 'nextEventDays': av = a.nextEventDays ?? 9999; bv = b.nextEventDays ?? 9999; break;
     }
     if (av < bv) return dir === 'asc' ? -1 : 1;
@@ -238,6 +247,7 @@ export default function Step4Page() {
             <SortHeader label="Δ SCR"    sortKey="scoreDelta"    currentKey={sortKey} dir={sortDir} onSort={handleSort} />
             <SortHeader label="SCORE"    sortKey="score"         currentKey={sortKey} dir={sortDir} onSort={handleSort} />
             <Text size={11} tone="dim">CONF</Text>
+            <SortHeader label="STOP"     sortKey="stopCostPct"   currentKey={sortKey} dir={sortDir} onSort={handleSort} />
             <SortHeader label="NEXT"     sortKey="nextEventDays" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
           </div>
           {/* role="table" marks this as the ranked-candidates table for screen readers and for
@@ -275,6 +285,15 @@ export default function Step4Page() {
                 <RankDelta value={row.scoreDelta ?? 0}    context="score pt" />
                 <Data size={13} weight={500}>{row.score}</Data>
                 <ConfidenceBadge confidence={row.confidence} title={row.confidenceText ?? undefined} />
+                {(() => {
+                  // Phase B3. The scan-time stop-vs-premium gate. `status: null`
+                  // means NOT COMPUTED and renders as dim text, never as a badge
+                  // -- a badge with no verdict in it reads as a passing one.
+                  const sc = rankingStopCost(row.stopCostPct, row.stopCostStatus);
+                  return sc.status
+                    ? <StatusBadge status={sc.status} label={sc.label} tooltip={sc.tooltip} />
+                    : <Tooltip text={sc.tooltip}><Text size={11} tone="dim">{sc.label}</Text></Tooltip>;
+                })()}
                 {row.nextEventDays != null
                   ? <EventFlag days={row.nextEventDays} title={row.nextEventLabel ?? undefined} />
                   : <Text size={11} tone="dim">—</Text>}
