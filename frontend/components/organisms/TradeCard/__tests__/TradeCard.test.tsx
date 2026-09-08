@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import * as React from 'react';
 import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
@@ -3778,12 +3779,68 @@ describe('TradeCard — the card-level edited indicator', () => {
     expect(badge()).not.toBeInTheDocument();
   });
 
-  it('measures Contracts against the size the parent seeded, not a hardcoded 1', () => {
-    render(<TradeCard data={mockTradeCard} contracts={4} />);
+  // ── ROUND 1 FINDING: the Contracts round-trip ───────────────────────────
+  //
+  // step-7-trade-card/page.tsx writes `orderContractsBySymbol` from
+  // `handleEditsChange` UNCONDITIONALLY and feeds it straight back as the
+  // card's `contracts` prop — unlike the three caches beside it, which write
+  // `null` unless `meta.touched` says the user typed. A baseline taken from
+  // that prop is therefore the user's own edit, and can never differ from
+  // itself: the badge stayed silent on the one field whose count reaches a
+  // broker order. `ParentHarness` reproduces that wiring; without it the
+  // gesture passes and the defect is invisible, which is exactly how it
+  // shipped past the first round of tests.
+  function ParentHarness({ data = mockTradeCard }: { data?: TradeCardData }) {
+    const [orderContractsBySymbol, setMap] = React.useState<Record<string, number>>({});
+    return (
+      <TradeCard
+        data={data}
+        contracts={orderContractsBySymbol[data.symbol] ?? 1}
+        onEditsChange={(overlay) => {
+          setMap((prev) => (prev[data.symbol] === overlay.contracts
+            ? prev
+            : { ...prev, [data.symbol]: overlay.contracts }));
+        }}
+      />
+    );
+  }
+
+  it('raises on a Contracts edit even when the parent echoes it back as the prop', () => {
+    render(<ParentHarness />);
     expect(badge()).not.toBeInTheDocument();
-    typeInto('Contracts', '4');
-    expect(badge()).not.toBeInTheDocument();
-    typeInto('Contracts', '5');
+    typeInto('Contracts', '7');
     expect(badge()).toBeInTheDocument();
+    expect(badgeTip()).toHaveTextContent('Contracts');
+  });
+
+  it('clears again when the user types the planned size back, echo and all', () => {
+    render(<ParentHarness />);
+    typeInto('Contracts', '7');
+    expect(badge()).toBeInTheDocument();
+    typeInto('Contracts', '1');
+    expect(badge()).not.toBeInTheDocument();
+  });
+
+  it('still raises for the threaded fields under the same wiring', () => {
+    // A control: the round-trip is specific to `contracts`, and fixing it must
+    // not have been a change to how the other fields are measured.
+    render(<ParentHarness />);
+    typeInto('Limit', '3.1');
+    expect(badge()).toBeInTheDocument();
+    expect(badgeTip()).toHaveTextContent('Entry limit');
+  });
+
+  it('treats a card mounted at a non-default size as resuming that edit', () => {
+    // The count reaches the card only through `orderContractsBySymbol`, whose
+    // sole writer is a user edit — so a restored 4 IS an edit, the same
+    // reading initialEntryLimit gets.
+    render(<TradeCard data={mockTradeCard} contracts={4} />);
+    expect(badge()).toBeInTheDocument();
+    expect(badgeTip()).toHaveTextContent('Contracts');
+  });
+
+  it('does not raise on a card mounted at the planned size', () => {
+    render(<TradeCard data={mockTradeCard} contracts={1} />);
+    expect(badge()).not.toBeInTheDocument();
   });
 });

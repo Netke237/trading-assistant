@@ -9,6 +9,7 @@
  * value-only rule.
  */
 import {
+  DEFAULT_CONTRACTS,
   EDITABLE_FIELDS,
   FIELD_LABELS,
   NO_EDITS,
@@ -28,7 +29,7 @@ const PLAN: EditOverlay = {
   premiumStop: 2.40,
   timeStopDays: 18,
   targets: [190, 200],
-  contracts: 2,
+  contracts: DEFAULT_CONTRACTS,
 };
 
 const overlayOf = (over: Partial<EditOverlay> = {}): EditOverlay => ({ ...PLAN, ...over });
@@ -48,19 +49,19 @@ describe('planOverlay', () => {
   } as unknown as TradeCardData;
 
   it('reads the plan out of the card CURRENT data, targetPrice winning over stockPrice', () => {
-    expect(planOverlay(data, 2)).toEqual(PLAN);
+    expect(planOverlay(data)).toEqual(PLAN);
   });
 
-  it('takes contracts from initialContracts, not a hardcoded 1', () => {
-    // The parent seeds a shared per-symbol size. Comparing against 1 would flag
-    // every card the parent had sized — the reason the deleted isDirty took
-    // this as a parameter too.
-    expect(planOverlay(data, 5).contracts).toBe(5);
-    expect(planOverlay(data, 1).contracts).toBe(1);
+  it('measures contracts against the constant, NOT the parent-supplied size', () => {
+    // ROUND 1 FINDING. step-7-trade-card/page.tsx writes
+    // orderContractsBySymbol from handleEditsChange unconditionally and feeds
+    // it straight back as the `contracts` prop, so a baseline taken from that
+    // prop is the user's own edit and can never differ from itself.
+    expect(planOverlay(data).contracts).toBe(DEFAULT_CONTRACTS);
   });
 
   it('falls back to stockPrice when the backend sent no targetPrice', () => {
-    expect(planOverlay(data, 2).targets).toEqual([190, 200]);
+    expect(planOverlay(data).targets).toEqual([190, 200]);
   });
 });
 
@@ -165,25 +166,35 @@ describe('markEdited', () => {
 // ── restoredEdits ───────────────────────────────────────────────────────────
 
 describe('restoredEdits', () => {
+  const restore = (over: Partial<Parameters<typeof restoredEdits>[0]> = {}) => restoredEdits({
+    entryLimit: null, invalidation: null, premiumStop: null, contracts: DEFAULT_CONTRACTS, ...over,
+  });
+
   it('treats a restored cached value as a previous edit, like touchedRef does', () => {
-    const got = restoredEdits({ entryLimit: 3.5, invalidation: null, premiumStop: undefined });
+    const got = restore({ entryLimit: 3.5, invalidation: null, premiumStop: undefined });
     expect(got.entryLimit).toBe(true);
     expect(got.invalidation).toBe(false);
     expect(got.premiumStop).toBe(false);
   });
 
-  it('leaves every non-threaded field clear — nothing else round-trips', () => {
-    const got = restoredEdits({ entryLimit: 1, invalidation: 2, premiumStop: 3 });
+  it('leaves every field with no cache of its own clear', () => {
+    const got = restore({ entryLimit: 1, invalidation: 2, premiumStop: 3 });
     expect(got.maxFill).toBe(false);
     expect(got.timeStopDays).toBe(false);
     expect(got.targets).toBe(false);
-    expect(got.contracts).toBe(false);
   });
 
   it('treats a restored 0 as an edit, not as absent', () => {
     // `!= null`, not falsiness — the same character-for-character check
     // touchedRef seeds with.
-    expect(restoredEdits({ entryLimit: 0, invalidation: 0, premiumStop: 0 }))
+    expect(restore({ entryLimit: 0, invalidation: 0, premiumStop: 0 }))
       .toEqual({ ...NO_EDITS, entryLimit: true, invalidation: true, premiumStop: true });
+  });
+
+  it('restores contracts BY VALUE, since its cache carries no null sentinel', () => {
+    // The count is only ever written by a user edit, so a card mounting at
+    // anything but the default is resuming one.
+    expect(restore({ contracts: DEFAULT_CONTRACTS }).contracts).toBe(false);
+    expect(restore({ contracts: 7 }).contracts).toBe(true);
   });
 });

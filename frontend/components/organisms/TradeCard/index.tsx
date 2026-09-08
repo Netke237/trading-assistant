@@ -26,6 +26,7 @@ import { horizonFieldsFrom } from '@/lib/tradeCardOverride';
 import {
   type EditOverlay,
   type EditedFields,
+  DEFAULT_CONTRACTS,
   FIELD_LABELS,
   editedFields as editedFieldsAgainstPlan,
   markEdited,
@@ -81,7 +82,7 @@ function defaultOverlay(data: TradeCardData): EditOverlay {
     premiumStop: data.exit.premiumStop,
     timeStopDays: data.exit.timeStopDays,
     targets: data.exit.targets.map((t) => t.targetPrice ?? t.stockPrice),
-    contracts: 1,
+    contracts: DEFAULT_CONTRACTS,
   };
 }
 
@@ -477,6 +478,7 @@ export function TradeCard({
     entryLimit: initialEntryLimit,
     invalidation: initialInvalidation,
     premiumStop: initialPremiumStop,
+    contracts: initialContracts,
   }));
   // Feature 5 — pre-trade max-loss override, seeded from the page-level cache
   // (keyed by symbol there; this local state just mirrors whatever the parent
@@ -651,6 +653,7 @@ export function TradeCard({
         entryLimit: initialEntryLimit,
         invalidation: initialInvalidation,
         premiumStop: initialPremiumStop,
+        contracts: initialContracts,
       }));
       setOverlay({
         ...defaultOverlay(data),
@@ -1551,9 +1554,9 @@ export function TradeCard({
    *  see lib/tradeCardEdits.ts for why both halves are required. Empty means
    *  the card is inheriting everywhere and the badge does not render. */
   const editedLabels = useMemo(
-    () => editedFieldsAgainstPlan(overlay, planOverlay(data, initialContracts), edited)
+    () => editedFieldsAgainstPlan(overlay, planOverlay(data), edited)
       .map((f) => FIELD_LABELS[f]),
-    [overlay, data, initialContracts, edited],
+    [overlay, data, edited],
   );
 
   const displayRecId = useMemo(() => propRecId ?? generateRecId(), [propRecId]);

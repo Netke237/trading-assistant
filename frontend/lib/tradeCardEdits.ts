@@ -91,6 +91,12 @@ export const FIELD_LABELS: Record<EditableField, string> = {
   targets:      'Targets',
 };
 
+/** The contract count the scan plans. There is no scan-supplied size — the
+ *  backend never sends one — so the plan is the card's own default, and
+ *  TradeCard's `defaultOverlay` seeds from this same constant so the two
+ *  cannot drift. */
+export const DEFAULT_CONTRACTS = 1;
+
 /**
  * The plan the overlay is measured against: the card's CURRENT data, not the
  * data it mounted with. That is deliberate — `mergePlan` is allowed to move
@@ -98,13 +104,30 @@ export const FIELD_LABELS: Record<EditableField, string> = {
  * a touched field is compared against the new plan (so the flag reflects what
  * the user would actually be overriding now).
  *
- * `contracts` comes from `initialContracts` rather than a literal 1: the
- * parent seeds a shared per-symbol size, and `defaultOverlay`'s 1 is only the
- * fallback when it does not. Comparing against 1 would flag every card the
- * parent had sized. (The deleted `isDirty` took the same parameter for the
- * same reason.)
+ * `contracts` IS NOT `initialContracts`, and that is the whole point.
+ *
+ * ROUND 1 FINDING. It was, briefly, on the reasoning the deleted `isDirty`
+ * recorded: the parent seeds a shared per-symbol size, so comparing against a
+ * literal 1 would flag a card the parent had sized. That reasoning belonged to
+ * `isDirty`'s pure value comparison and does not survive the touched half of
+ * this rule — but taking `initialContracts` as the baseline broke the field
+ * outright, because of where that prop comes from.
+ *
+ * `step-7-trade-card/page.tsx` writes `orderContractsBySymbol` from
+ * `handleEditsChange` UNCONDITIONALLY (`{ ...prev, [symbol]: overlay.contracts }`),
+ * unlike the three caches beside it, which write `null` unless `meta.touched`
+ * says the user typed. It then feeds that map straight back in as this very
+ * prop. So the moment the user edits Contracts, the "plan" became the edit:
+ * overlay 7 vs baseline 7, no difference, no badge — for the one field whose
+ * count reaches a broker order. The card was silent on the edit it exists to
+ * announce.
+ *
+ * Comparing against the constant is safe here precisely because a value alone
+ * never raises the flag: a card that MOUNTS at 7 has `edited.contracts` set by
+ * `restoredEdits` instead, which is truthful, since the user is the only thing
+ * that ever writes a count into that map.
  */
-export function planOverlay(data: TradeCardData, initialContracts: number): EditOverlay {
+export function planOverlay(data: TradeCardData): EditOverlay {
   return {
     entryLimit:   data.entry.limit,
     maxFill:      data.entry.maxFill,
@@ -112,7 +135,7 @@ export function planOverlay(data: TradeCardData, initialContracts: number): Edit
     premiumStop:  data.exit.premiumStop,
     timeStopDays: data.exit.timeStopDays,
     targets:      data.exit.targets.map((t) => t.targetPrice ?? t.stockPrice),
-    contracts:    initialContracts,
+    contracts:    DEFAULT_CONTRACTS,
   };
 }
 
@@ -171,13 +194,18 @@ export function markEdited(
 /**
  * The record a card mounts (or resets) with. A cached value arriving from the
  * parent IS a previous edit on this card restored — the same reading
- * `touchedRef` applies to the very same three props — so it starts flagged,
- * and `editedFields` then decides whether it still differs from the plan.
+ * `touchedRef` applies to the same three props — so it starts flagged, and
+ * `editedFields` then decides whether it still differs from the plan.
+ *
+ * `contracts` is carried here too, though `touchedRef` does not track it: see
+ * `planOverlay` for why its baseline is the constant and its restore is by
+ * value.
  */
 export function restoredEdits(restored: {
   entryLimit: number | null | undefined;
   invalidation: number | null | undefined;
   premiumStop: number | null | undefined;
+  contracts: number;
 }): EditedFields {
   // `!= null` (loose), matching `touchedRef`'s own seeding character for
   // character — the two are seeded from the SAME three props, and a card that
@@ -188,5 +216,11 @@ export function restoredEdits(restored: {
     entryLimit:   restored.entryLimit != null,
     invalidation: restored.invalidation != null,
     premiumStop:  restored.premiumStop != null,
+    // `contracts` restores by VALUE rather than by a null sentinel, because
+    // its cache has none: `orderContractsBySymbol` holds a bare number and is
+    // written on every patch. A count other than the default can only have got
+    // there through a user edit, so a card mounting at one is resuming that
+    // edit — the same reading the three above apply to their own caches.
+    contracts:    restored.contracts !== DEFAULT_CONTRACTS,
   };
 }
